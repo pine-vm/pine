@@ -1370,7 +1370,7 @@ public static class FormatCSharpFile
         // the type and the identifier.
         if (decl.Variables.Count > 0 &&
             (SpansMultipleLines(decl.Type) ||
-             LineOf(decl.Variables[0].Identifier) > EndLineOf(decl.Type)))
+            LineOf(decl.Variables[0].Identifier) > EndLineOf(decl.Type)))
         {
             decl = decl.WithType(decl.Type.WithTrailingTrivia());
             var firstVar = decl.Variables[0];
@@ -2518,6 +2518,10 @@ public static class FormatCSharpFile
         {
             var a = node.Arguments[i];
             var fmtExpr = (ExpressionSyntax)FormatNode(a.Expression, ctx);
+
+            if (i > 0)
+                fmtExpr = ReindentRawStringLiterals(fmtExpr, ctx.IndentLevel);
+
             a = a.WithExpression(fmtExpr);
 
             if (i > 0)
@@ -2555,7 +2559,7 @@ public static class FormatCSharpFile
         if (ShouldParamListBeMultiLine(node))
             return FormatParamListMultiLine(node, ctx);
 
-        var result = FormatParamListSingleLine(node);
+        var result = FormatParamListSingleLine(node, ctx.IndentLevel + 1);
 
         // If the first parameter was on a different line from the open paren
         // (dedicated-line layout), preserve that line break.
@@ -2621,7 +2625,9 @@ public static class FormatCSharpFile
     }
 
     /// <summary>Formats a parameter list on a single line with normalized spacing.</summary>
-    private static ParameterListSyntax FormatParamListSingleLine(ParameterListSyntax node)
+    private static ParameterListSyntax FormatParamListSingleLine(
+        ParameterListSyntax node,
+        int? parameterIndent = null)
     {
         var ps = new List<SyntaxNode>();
 
@@ -2629,9 +2635,7 @@ public static class FormatCSharpFile
         {
             var p = node.Parameters[i];
             p = i is 0 ? p.WithLeadingTrivia() : p.WithLeadingTrivia(s_space);
-
-            if (p.Type is not null)
-                p = p.WithType(p.Type.WithTrailingTrivia(s_space));
+            p = FormatParameterTypeIdentifierTrivia(p, parameterIndent);
 
             p = p.WithTrailingTrivia();
             ps.Add(p);
@@ -2658,9 +2662,7 @@ public static class FormatCSharpFile
         {
             var p = node.Parameters[i];
             p = p.WithLeadingTrivia(s_lineFeed, Indent(pIndent));
-
-            if (p.Type is not null)
-                p = p.WithType(p.Type.WithTrailingTrivia(s_space));
+            p = FormatParameterTypeIdentifierTrivia(p, pIndent);
 
             p = p.WithTrailingTrivia();
             ps.Add(p);
@@ -2675,6 +2677,45 @@ public static class FormatCSharpFile
             .WithOpenParenToken(node.OpenParenToken.WithTrailingTrivia())
             .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia())
             .WithParameters(SyntaxFactory.SeparatedList(ps.Cast<ParameterSyntax>(), seps));
+    }
+
+    /// <summary>Normalizes spacing between a parameter type and identifier while preserving comments.</summary>
+    private static ParameterSyntax FormatParameterTypeIdentifierTrivia(
+        ParameterSyntax parameter,
+        int? parameterIndent)
+    {
+        if (parameter.Type is null)
+            return parameter;
+
+        var originalTrivia =
+            parameter.Type.GetTrailingTrivia()
+            .AddRange(parameter.Identifier.LeadingTrivia);
+
+        SyntaxTriviaList typeTrailingTrivia;
+
+        if (parameterIndent is { } indent &&
+            EndLineOf(parameter.Type) < LineOf(parameter.Identifier))
+        {
+            typeTrailingTrivia = RebuildLeading(originalTrivia, indent);
+        }
+        else
+        {
+            var preservedTrivia = StripWhitespace(originalTrivia);
+            typeTrailingTrivia = new SyntaxTriviaList(s_space);
+
+            if (preservedTrivia.Count > 0)
+            {
+                typeTrailingTrivia = typeTrailingTrivia.AddRange(preservedTrivia);
+
+                if (!IsLineBreak(typeTrailingTrivia[^1]))
+                    typeTrailingTrivia = typeTrailingTrivia.Add(s_space);
+            }
+        }
+
+        return
+            parameter
+            .WithIdentifier(parameter.Identifier.WithLeadingTrivia())
+            .WithType(parameter.Type.WithTrailingTrivia(typeTrailingTrivia));
     }
 
     // ──────────────────────────────────────────────────────────
@@ -2894,7 +2935,15 @@ public static class FormatCSharpFile
         // position, which may not reflect the formatted layout.
         var initIsMultiLine = SpansMultipleLines(fmtInit.ToFullString());
         var withTrailing = initIsMultiLine ? [] : new SyntaxTriviaList(s_space);
-        var withKw = node.WithKeyword.WithLeadingTrivia(s_space).WithTrailingTrivia(withTrailing);
+
+        var withLeading =
+            EndLineOf(node.Expression) < LineOf(node.WithKeyword)
+            ?
+            new SyntaxTriviaList(s_lineFeed, Indent(ctx.IndentLevel))
+            :
+            new SyntaxTriviaList(s_space);
+
+        var withKw = node.WithKeyword.WithLeadingTrivia(withLeading).WithTrailingTrivia(withTrailing);
 
         return node.Update(fmtExpr, withKw, fmtInit);
     }
@@ -4567,10 +4616,84 @@ public static class FormatCSharpFile
     {
         var targetColumn = indent * IndentSize;
 
-        return
+        var withReindentedLiteralTokens =
             node.ReplaceTokens(
                 node.DescendantTokens().Where(t => t.IsKind(SyntaxKind.MultiLineRawStringLiteralToken)),
                 (original, _) => ReindentRawStringToken(original, targetColumn));
+
+        return
+            (T)withReindentedLiteralTokens.ReplaceNodes(
+                withReindentedLiteralTokens
+                .DescendantNodesAndSelf()
+                .OfType<InterpolatedStringExpressionSyntax>()
+                .Where(
+                    expression =>
+                    expression.StringStartToken.IsKind(SyntaxKind.InterpolatedMultiLineRawStringStartToken)),
+                (_, rewritten) => ReindentInterpolatedRawStringExpression(rewritten, targetColumn));
+    }
+
+    /// <summary>
+    /// Re-indents a multiline interpolated raw string expression so its content and
+    /// closing delimiter move with its opening delimiter.
+    /// </summary>
+    private static InterpolatedStringExpressionSyntax ReindentInterpolatedRawStringExpression(
+        InterpolatedStringExpressionSyntax node,
+        int targetColumn)
+    {
+        var text = node.ToString();
+        var lines = text.Split('\n');
+
+        if (lines.Length < 2)
+            return node;
+
+        var closingLine = lines[^1];
+        var currentColumn = closingLine.Length - closingLine.TrimStart().Length;
+        var delta = targetColumn - currentColumn;
+
+        if (delta is 0)
+            return node;
+
+        var result = new System.Text.StringBuilder();
+        result.Append(lines[0]);
+
+        for (var i = 1; i < lines.Length; i++)
+        {
+            result.Append('\n');
+            var line = lines[i];
+            var hasCarriageReturn = line.EndsWith('\r');
+            var lineContent = hasCarriageReturn ? line[..^1] : line;
+
+            if (string.IsNullOrWhiteSpace(lineContent) && i < lines.Length - 1)
+            {
+                result.Append(lineContent);
+
+                if (hasCarriageReturn)
+                    result.Append('\r');
+
+                continue;
+            }
+
+            if (delta > 0)
+            {
+                result.Append(new string(' ', delta));
+                result.Append(lineContent);
+            }
+            else
+            {
+                var removeCount = Math.Min(-delta, lineContent.Length - lineContent.TrimStart().Length);
+                result.Append(lineContent.AsSpan(removeCount));
+            }
+
+            if (hasCarriageReturn)
+                result.Append('\r');
+        }
+
+        return
+            SyntaxFactory.ParseExpression(result.ToString()) is InterpolatedStringExpressionSyntax parsed
+            ?
+            parsed.WithTriviaFrom(node)
+            :
+            node;
     }
 
     /// <summary>

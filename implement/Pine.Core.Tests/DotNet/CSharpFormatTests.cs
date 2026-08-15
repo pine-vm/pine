@@ -6410,4 +6410,127 @@ public class CSharpFormatTests
 
         AssertFormattedSyntax(input, input, scriptMode: true);
     }
+
+    [Fact]
+    public void Format_tuple_containing_interpolated_string_literal()
+    {
+        var input =
+            """"
+            virtualModule =
+                (
+                    virtualModulePath,
+                    $"""
+                    module {virtualModuleName} exposing (main)
+
+                    import {string.Join('.', entryPointModuleName)}
+
+
+                    main =
+                        {string.Join('.', entryPointModuleName)}.{entryPointDeclarationName}
+                    """);
+            """";
+
+        var expected =
+            """"            
+            virtualModule =
+                (virtualModulePath,
+                $"""
+                module {virtualModuleName} exposing (main)
+
+                import {string.Join('.', entryPointModuleName)}
+
+
+                main =
+                    {string.Join('.', entryPointModuleName)}.{entryPointDeclarationName}
+                """);
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_with_keyword_on_separate_line()
+    {
+        var input =
+            """"
+            return
+                childEnvBeforeMapping
+                with
+                {
+                    RootEnvClass = new ExpressionEnvClass.UnconstrainedEnv()
+                };
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_parameter_name_with_default_on_new_line()
+    {
+        var input =
+            """"
+            public static EvaluateExpressionProfilingTask StartEvaluateExpressionTask(
+                IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
+                IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>?
+                compiledParseExpressionOverrides = null)
+            {
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_comment_between_parameter_type_and_name()
+    {
+        var input =
+            """"
+            public static void Method(
+                IReadOnlyDictionary<string, string>?
+                // Describes the optional values.
+                values = null)
+            {
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_CRLF_in_interpolated_raw_string_when_reindenting_tuple()
+    {
+        var input =
+            """"
+            virtualModule =
+                (
+                    virtualModulePath,
+                    $"""
+                    first line
+                    second line
+                    """);
+            """"
+            .ReplaceLineEndings("\r\n");
+
+        var formatted = FormatCSharpScriptOrThrow(input);
+
+        var formattedInterpolatedString =
+            SyntaxFactory.ParseSyntaxTree(
+                formatted,
+                options: new CSharpParseOptions().WithKind(SourceCodeKind.Script))
+            .GetRoot()
+            .DescendantNodes()
+            .OfType<InterpolatedStringExpressionSyntax>()
+            .Single();
+
+        var expectedInterpolatedString =
+            """"
+            $"""
+                first line
+                second line
+                """
+            """"
+            .ReplaceLineEndings("\r\n");
+
+        formattedInterpolatedString.ToString().Should().Be(expectedInterpolatedString);
+    }
 }
