@@ -25,7 +25,8 @@ public abstract record ProcessWithLog<LogEntryT, ResultT>
 
             Result result => continuation(result.Value),
 
-            _ => throw new NotImplementedException()
+            _ =>
+            throw new NotImplementedException()
         };
 
     public ProcessWithLog<LogEntryT, NewResultT> MapResult<NewResultT>(
@@ -38,9 +39,10 @@ public abstract record ProcessWithLog<LogEntryT, ResultT>
 
     public ProcessWithLog<LogEntryT, ResultT> WithLogEntryFromResultAdded(
         Func<ResultT, LogEntryT> logEntry) =>
-        Continue(result => new LogEntry(
-            logEntry(result),
-            () => new Result(result)));
+        Continue(
+            result => new LogEntry(
+                logEntry(result),
+                () => new Result(result)));
 }
 
 public static class ProcessWithLogExtension
@@ -63,11 +65,13 @@ public static class ProcessWithLogExtension
     public static ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>> ResultAndThenContinue<LogEntryT, ErrT, OkT, NewOkT>(
         this ProcessWithLog<LogEntryT, Result<ErrT, OkT>> orig,
         Func<OkT, ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>>> andThen) =>
-        orig.Continue(previousResult =>
-        previousResult
-        .Unpack(
-            fromErr: error => new ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>>.Result(Result<ErrT, NewOkT>.err(error)),
-            fromOk: ok => andThen(ok)));
+        orig.Continue(
+            previousResult =>
+            previousResult
+            .Unpack(
+                fromErr:
+                error => new ProcessWithLog<LogEntryT, Result<ErrT, NewOkT>>.Result(Result<ErrT, NewOkT>.err(error)),
+                fromOk: ok => andThen(ok)));
 
     public static ProcessWithLog<LogEntryT, Result<ErrT, OkT>> ResultAddLogEntryIfOk<LogEntryT, ErrT, OkT>(
         this ProcessWithLog<LogEntryT, Result<ErrT, OkT>> orig,
@@ -86,8 +90,10 @@ public static class ProcessWithLogExtension
             ok => addLogEntries(ok)
             .Reverse()
             .Aggregate(
-                seed: (ProcessWithLog<LogEntryT, Result<ErrT, OkT>>)new ProcessWithLog<LogEntryT, Result<ErrT, OkT>>.Result(Result<ErrT, OkT>.ok(ok)),
-                func: (prev, logEntry) => new ProcessWithLog<LogEntryT, Result<ErrT, OkT>>.LogEntry(logEntry, () => prev)));
+                seed:
+                (ProcessWithLog<LogEntryT, Result<ErrT, OkT>>)new ProcessWithLog<LogEntryT, Result<ErrT, OkT>>.Result(Result<ErrT, OkT>.ok(ok)),
+                func:
+                (prev, logEntry) => new ProcessWithLog<LogEntryT, Result<ErrT, OkT>>.LogEntry(logEntry, () => prev)));
 
     public static ResultT LogToActions<LogEntryT, ResultT>(
         this ProcessWithLog<LogEntryT, ResultT> firstStep,
@@ -106,14 +112,16 @@ public static class ProcessWithLogExtension
 
             ProcessWithLog<LogEntryT, ResultT>.Result result => result.Value,
 
-            _ => throw new NotImplementedException()
+            _ =>
+            throw new NotImplementedException()
         };
     }
 
     public static (IImmutableList<LogEntryT> log, ResultT result) LogToList<LogEntryT, ResultT>(
-         this ProcessWithLog<LogEntryT, ResultT> firstStep)
+        this ProcessWithLog<LogEntryT, ResultT> firstStep)
     {
-        (IImmutableList<LogEntryT> log, ResultT result) continueWithLogEntry(ProcessWithLog<LogEntryT, ResultT>.LogEntry logEntry)
+        (IImmutableList<LogEntryT> log, ResultT result) continueWithLogEntry(
+            ProcessWithLog<LogEntryT, ResultT>.LogEntry logEntry)
         {
             var (log, result) = LogToList(logEntry.nextStep());
 
@@ -126,7 +134,8 @@ public static class ProcessWithLogExtension
 
             ProcessWithLog<LogEntryT, ResultT>.Result result => (ImmutableList<LogEntryT>.Empty, result.Value),
 
-            _ => throw new NotImplementedException()
+            _ =>
+            throw new NotImplementedException()
         };
     }
 }

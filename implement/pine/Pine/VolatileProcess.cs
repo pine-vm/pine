@@ -22,31 +22,35 @@ public class VolatileProcess
 
         var executableFileFromCacheOrLink =
             BlobLibrary.GetBlobWithSHA256Cached(
-            hash,
-            getIfNotCached: () =>
-            {
-                if (hintUrls is null)
-                    return null;
-
-                return
-                DependenciesLoader.GetBlobFromHashAndHintUrlsCached(loadedTreesFromUrl, hash, hintUrls)
-                .Unpack(
-                    fromErr: err =>
-                    {
-                        errorFromHintUrl = err;
-
+                hash,
+                getIfNotCached: () =>
+                {
+                    if (hintUrls is null)
                         return null;
-                    },
-                    fromOk: ok => ok);
-            });
+
+                    return
+                        DependenciesLoader.GetBlobFromHashAndHintUrlsCached(loadedTreesFromUrl, hash, hintUrls)
+                        .Unpack(
+                            fromErr: err =>
+                            {
+                                errorFromHintUrl = err;
+
+                                return null;
+                            },
+                            fromOk: ok => ok);
+                });
 
         Result<string, ReadOnlyMemory<byte>> returnError(string? error)
         {
             var errorFromDictionary =
-                errorFromHintUrl is null ? null
+                errorFromHintUrl is null
+                ?
+                null
                 :
                 "Failed loading from " + errorFromHintUrl.Count + " hint URL(s):\n" +
-                string.Join("\n", errorFromHintUrl.Select(hintUrlAndError => hintUrlAndError.Key + ": " + hintUrlAndError.Value));
+                string.Join(
+                    "\n",
+                    errorFromHintUrl.Select(hintUrlAndError => hintUrlAndError.Key + ": " + hintUrlAndError.Value));
 
             return
                 Result<string, ReadOnlyMemory<byte>>.err(

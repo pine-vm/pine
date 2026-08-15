@@ -34,8 +34,9 @@ public class PineVMResettingCache : IPineVM
     public static PineVMResettingCache Create(
         int? resetCacheEntriesThresholdDefault)
     {
-        return new PineVMResettingCache(
-            resetCacheEntriesThresholdDefault: resetCacheEntriesThresholdDefault);
+        return
+            new PineVMResettingCache(
+                resetCacheEntriesThresholdDefault: resetCacheEntriesThresholdDefault);
     }
 
     public Result<string, PineValue> EvaluateExpression(Expression expression, PineValue environment)

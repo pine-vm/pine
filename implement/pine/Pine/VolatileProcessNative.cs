@@ -56,35 +56,39 @@ public class VolatileProcessNative : VolatileProcess, IDisposable
             executableFile,
             makeExecutable: true);
 
-        process = new Process
-        {
-            StartInfo = new ProcessStartInfo
+        process =
+            new Process
             {
-                WorkingDirectory = containerDirectory,
-                FileName = mainExecutableFilePathAbsolute,
-                Arguments = createRequest.Arguments,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                RedirectStandardInput = true,
-                CreateNoWindow = true,
-            },
-        };
+                StartInfo =
+                new ProcessStartInfo
+                {
+                    WorkingDirectory = containerDirectory,
+                    FileName = mainExecutableFilePathAbsolute,
+                    Arguments = createRequest.Arguments,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    RedirectStandardInput = true,
+                    CreateNoWindow = true,
+                },
+            };
 
         foreach (var envString in createRequest.EnvironmentVariables)
             process.StartInfo.Environment[envString.Key] = envString.Value;
 
         process.Start();
 
-        Task.Run(() => ReadFromStreamToQueueLoopAsync(
-            stdOutQueue,
-            process.StandardOutput.BaseStream,
-            cancellationToken: disposedCancellationTokenSource.Token));
+        Task.Run(
+            () => ReadFromStreamToQueueLoopAsync(
+                stdOutQueue,
+                process.StandardOutput.BaseStream,
+                cancellationToken: disposedCancellationTokenSource.Token));
 
-        Task.Run(() => ReadFromStreamToQueueLoopAsync(
-            stdErrQueue,
-            process.StandardError.BaseStream,
-            cancellationToken: disposedCancellationTokenSource.Token));
+        Task.Run(
+            () => ReadFromStreamToQueueLoopAsync(
+                stdErrQueue,
+                process.StandardError.BaseStream,
+                cancellationToken: disposedCancellationTokenSource.Token));
     }
 
     public void WriteToStdIn(ReadOnlyMemory<byte> data)

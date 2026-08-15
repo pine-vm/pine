@@ -83,71 +83,89 @@ public class VolatileProcessCSharp : VolatileProcess
                     {
                         var metadataNotFoundErrorsReports =
                             metadataNotFoundErrors
-                            .Select(error =>
-                            {
-                                var referencesCandidates =
-                                    error.GetMessage()
-                                    /*
-                                     * 2023-04-16 samples:
-                                     * 未能找到元数据文件“sha256:9c6dac74d50062c63d9df5e6d5c23a4da6ae64cf1898138cb0b5982de2869ce7”
-                                     * 
-                                     * Metadata file 'sha256:11111111ac74d50062c63d9df5e6d5c23a4da6ae64cf1898138cb0b5982de286' could not be found
-                                     * */
-                                    .Split('\'', '“', '”')
-                                    .Where(c => !c.Contains(' ') && 0 < c.Trim().Length)
-                                    .ToImmutableList();
+                            .Select(
+                                error =>
+                                {
+                                    var referencesCandidates =
+                                        error.GetMessage()
+                                        /*
+                                         * 2023-04-16 samples:
+                                         * 未能找到元数据文件“sha256:9c6dac74d50062c63d9df5e6d5c23a4da6ae64cf1898138cb0b5982de2869ce7”
+                                         * 
+                                         * Metadata file 'sha256:11111111ac74d50062c63d9df5e6d5c23a4da6ae64cf1898138cb0b5982de286' could not be found
+                                         * */
+                                        .Split('\'', '“', '”')
+                                        .Where(c => !c.Contains(' ') && 0 < c.Trim().Length)
+                                        .ToImmutableList();
 
-                                var referencesCandidatesDetails =
-                                    referencesCandidates
-                                    .Select(referenceCandidate =>
-                                    {
-                                        var referenceResolutions =
-                                            MetadataResolver.ResolutionsFromAssemblyReference(referenceCandidate)
-                                            .ToImmutableList();
+                                    var referencesCandidatesDetails =
+                                        referencesCandidates
+                                        .Select(
+                                            referenceCandidate =>
+                                            {
+                                                var referenceResolutions =
+                                                    MetadataResolver.ResolutionsFromAssemblyReference(
+                                                        referenceCandidate)
+                                                    .ToImmutableList();
 
-                                        return
-                                        string.Join("\n",
-                                            "Found " + referenceResolutions.Count + " resolution report(s) for reference " + referenceCandidate + ":\n",
-                                            string.Join("\n", referenceResolutions.Select(DescribeAssemblyResolutionForErrorMessage)).Trim('\n'))
-                                        .Trim('\n');
+                                                return
+                                                    string.Join(
+                                                        "\n",
+                                                        "Found " + referenceResolutions.Count +
+                                                        " resolution report(s) for reference " +
+                                                        referenceCandidate +
+                                                        ":\n",
+                                                        string.Join(
+                                                            "\n",
+                                                            referenceResolutions.Select(
+                                                                DescribeAssemblyResolutionForErrorMessage))
+                                                        .Trim('\n'))
+                                                    .Trim('\n');
 
-                                    }).ToImmutableList();
+                                            }).ToImmutableList();
 
-                                return string.Join("\n",
-                                    "Details on error regarding reference resolution:",
-                                    error.GetMessage(),
-                                    "Found " + referencesCandidates.Count + " candidate(s) for references: " + string.Join(", ", referencesCandidates),
-                                    string.Join("\n", referencesCandidatesDetails));
-                            });
+                                    return
+                                        string.Join(
+                                            "\n",
+                                            "Details on error regarding reference resolution:",
+                                            error.GetMessage(),
+                                            "Found " + referencesCandidates.Count + " candidate(s) for references: " +
+                                            string.Join(", ", referencesCandidates),
+                                            string.Join("\n", referencesCandidatesDetails));
+                                });
 
                         metadataNotFoundErrorsDetails = string.Join("\n", metadataNotFoundErrorsReports);
                     }
                 }
 
                 var detailsComposition =
-                    string.Join("\n",
-                    new[] { (title: nameof(metadataNotFoundErrorsDetails), detailsString: metadataNotFoundErrorsDetails) }
-                    .Where(namedDetail => namedDetail.detailsString != null)
-                    .Select(namedDetail => namedDetail.title + ":\n" + namedDetail.detailsString));
+                    string.Join(
+                        "\n",
+                        new[] { (title: nameof(metadataNotFoundErrorsDetails), detailsString: metadataNotFoundErrorsDetails) }
+                        .Where(namedDetail => namedDetail.detailsString != null)
+                        .Select(namedDetail => namedDetail.title + ":\n" + namedDetail.detailsString));
 
-                return new RunResult
-                {
-                    Exception = new Exception(detailsComposition, e)
-                };
+                return
+                    new RunResult
+                    {
+                        Exception = new Exception(detailsComposition, e)
+                    };
             }
 
-            return new RunResult
-            {
-                Exception = scriptState.Exception,
-                ReturnValue = scriptState.ReturnValue,
-            };
+            return
+                new RunResult
+                {
+                    Exception = scriptState.Exception,
+                    ReturnValue = scriptState.ReturnValue,
+                };
         }
     }
 
     private static string DescribeAssemblyResolutionForErrorMessage(
         MetadataResolver.AssemblyReferenceResolutionReport resolution)
     {
-        static string composeHashResolutionReport(Result<string, ImmutableArray<PortableExecutableReference>> hashResolutionResult) =>
+        static string composeHashResolutionReport(
+            Result<string, ImmutableArray<PortableExecutableReference>> hashResolutionResult) =>
             hashResolutionResult
             .Unpack(
                 fromErr:
@@ -159,12 +177,15 @@ public class VolatileProcessCSharp : VolatileProcess
             resolution.HashSHA256Base16 switch
             {
                 { } hashBase16 =>
-                resolution.HashResolution is null ?
+                resolution.HashResolution is null
+                ?
                 "Missing resolution report for hash: " + hashBase16
                 :
-                "resolution report for hash " + hashBase16 + ":\n" + composeHashResolutionReport(resolution.HashResolution),
+                "resolution report for hash " + hashBase16 + ":\n" +
+                composeHashResolutionReport(resolution.HashResolution),
 
-                _ => "No hash reference"
+                _ =>
+                "No hash reference"
             };
     }
 
@@ -190,7 +211,8 @@ public class VolatileProcessCSharp : VolatileProcess
 
         private ImmutableList<AssemblyMetadata> resolvedAssemblies = [];
 
-        private static readonly ConcurrentBag<(AssemblyMetadata metadata, byte[] assembly)> globalResolvedAssemblies = [];
+        private static readonly ConcurrentBag<(AssemblyMetadata metadata, byte[] assembly)> globalResolvedAssemblies =
+            [];
 
         private static readonly ConcurrentDictionary<string, Assembly> appdomainResolvedAssemblies = new();
 
@@ -211,7 +233,8 @@ public class VolatileProcessCSharp : VolatileProcess
                 [];
         }
 
-        public static IEnumerable<AssemblyReferenceResolutionReport> ResolutionsFromAssemblyReference(string assemblyReference)
+        public static IEnumerable<AssemblyReferenceResolutionReport> ResolutionsFromAssemblyReference(
+            string assemblyReference)
         {
             foreach (var requestAndReport in resolveReferenceCache)
             {
@@ -251,7 +274,9 @@ public class VolatileProcessCSharp : VolatileProcess
                      * */
 
                     if (new[] { assemblySimpleName + ".dll", assemblySimpleName + ".exe" }
-                        .Any(expectedModuleName => string.Equals(expectedModuleName, module.Name, StringComparison.InvariantCultureIgnoreCase)))
+                        .Any(
+                        expectedModuleName =>
+                        string.Equals(expectedModuleName, module.Name, StringComparison.InvariantCultureIgnoreCase)))
                     {
                         var assembly = Assembly.Load(resolvedAssembly.assembly);
 
@@ -273,7 +298,9 @@ public class VolatileProcessCSharp : VolatileProcess
         private record struct ResolveReferenceRequest
         {
             public string reference;
+
             public string? baseFilePath;
+
             public MetadataReferenceProperties properties;
         }
 
@@ -294,12 +321,13 @@ public class VolatileProcessCSharp : VolatileProcess
         {
             //  Implement cache to avoid more memory usage (https://github.com/dotnet/roslyn/issues/33304)
 
-            var request = new ResolveReferenceRequest
-            {
-                reference = reference,
-                baseFilePath = baseFilePath,
-                properties = properties
-            };
+            var request =
+                new ResolveReferenceRequest
+                {
+                    reference = reference,
+                    baseFilePath = baseFilePath,
+                    properties = properties
+                };
 
             var resolutionReport =
                 resolveReferenceCache
@@ -324,9 +352,12 @@ public class VolatileProcessCSharp : VolatileProcess
                 var sha256Match = Regex.Match(request.reference, "sha256:([\\d\\w]+)", RegexOptions.IgnoreCase);
 
                 if (!sha256Match.Success)
-                    return new AssemblyReferenceResolutionReport(
-                        HashSHA256Base16: null,
-                        HashResolution: null);
+                {
+                    return
+                        new AssemblyReferenceResolutionReport(
+                            HashSHA256Base16: null,
+                            HashResolution: null);
+                }
 
                 var hintUrls =
                     hintUrlsFromAssemblyReference.GetOrAdd(
@@ -349,17 +380,18 @@ public class VolatileProcessCSharp : VolatileProcess
             return
                 LoadBlob(loadedTreesFromUrl, getFileFromHashSHA256, hashBase16, hintUrls)
                 .Map(a => a.ToArray())
-                .Map(assembly =>
-                {
-                    var assemblyMetadata = AssemblyMetadata.CreateFromImage(assembly);
+                .Map(
+                    assembly =>
+                    {
+                        var assemblyMetadata = AssemblyMetadata.CreateFromImage(assembly);
 
-                    resolvedAssemblies = resolvedAssemblies.Add(assemblyMetadata);
+                        resolvedAssemblies = resolvedAssemblies.Add(assemblyMetadata);
 
-                    globalResolvedAssemblies.Add((assemblyMetadata, assembly));
+                        globalResolvedAssemblies.Add((assemblyMetadata, assembly));
 
-                    return
-                        ImmutableArray.Create(MetadataReference.CreateFromImage(assembly));
-                })
+                        return
+                            ImmutableArray.Create(MetadataReference.CreateFromImage(assembly));
+                    })
                 .MapError(err => "Failed to load assembly image: " + err);
         }
 
@@ -390,7 +422,8 @@ public class VolatileProcessCSharp : VolatileProcess
 
             var commentsBeforeReference =
                 tokensContainingReference
-                .SelectMany(tokenContainingRef =>
+                .SelectMany(
+                    tokenContainingRef =>
                     allCommentsByLocation
                     .Where(c => c.SpanStart < tokenContainingRef.SpanStart)
                     .TakeLast(1)).ToImmutableList();

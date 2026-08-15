@@ -28,6 +28,7 @@ public class DelegatingEqualityComparer<T>(
     : IEqualityComparer<T>
 {
     private readonly Func<T?, T?, bool> _equals = equals;
+
     private readonly Func<T, int> _getHashCode = getHashCode;
 
     public bool Equals(T? x, T? y) =>
@@ -68,56 +69,57 @@ public class CodeAnalysis
         var parseSubexpressions =
             Expression.EnumerateSelfAndDescendants(expression)
             .OfType<Expression.Eval>()
-            .Select(parseAndEvalExpr =>
-            {
-                PineValue? expressionValue = null;
+            .Select(
+                parseAndEvalExpr =>
+                {
+                    PineValue? expressionValue = null;
 
-                if (Core.CodeAnalysis.CodeAnalysis.TryParseAsLiteral(parseAndEvalExpr.Encoded) is { } literalValue)
-                {
-                    expressionValue = literalValue;
-                }
-                else
-                {
-                    if (Core.CodeAnalysis.CodeAnalysis.TryParseExprAsPathInEnv(parseAndEvalExpr.Encoded) is { } path)
+                    if (Core.CodeAnalysis.CodeAnalysis.TryParseAsLiteral(parseAndEvalExpr.Encoded) is { } literalValue)
                     {
-                        expressionValue = environment.TryGetValue(path);
+                        expressionValue = literalValue;
+                    }
+                    else
+                    {
+                        if (Core.CodeAnalysis.CodeAnalysis.TryParseExprAsPathInEnv(parseAndEvalExpr.Encoded) is { } path)
+                        {
+                            expressionValue = environment.TryGetValue(path);
 
-                        return
+                            return
+                                new ParseSubExpression(
+                                    parseAndEvalExpr,
+                                    ExpressionPath: path,
+                                    expressionValue,
+                                    ParsedExpr: null);
+                        }
+                    }
+
+                    if (expressionValue is null)
+                    {
+                        /*
+                        if (Expression.IsIndependent(parseAndEvalExpr.expression))
+                        {
+                            expressionValue =
+                            new PineVM().EvaluateExpressionDefault(parseAndEvalExpr.environment, environment)
+                            .WithDefault(null);
+                        }
+                        */
+                    }
+
+                    var parsedExpr =
+                        expressionValue is null
+                        ?
+                        null
+                        :
+                        parseCache.ParseExpression(expressionValue)
+                        .WithDefault(null);
+
+                    return
                         new ParseSubExpression(
                             parseAndEvalExpr,
-                            ExpressionPath: path,
+                            ExpressionPath: null,
                             expressionValue,
-                            ParsedExpr: null);
-                    }
-                }
-
-                if (expressionValue is null)
-                {
-                    /*
-                    if (Expression.IsIndependent(parseAndEvalExpr.expression))
-                    {
-                        expressionValue =
-                        new PineVM().EvaluateExpressionDefault(parseAndEvalExpr.environment, environment)
-                        .WithDefault(null);
-                    }
-                    */
-                }
-
-                var parsedExpr =
-                    expressionValue is null
-                    ?
-                    null
-                    :
-                    parseCache.ParseExpression(expressionValue)
-                    .WithDefault(null);
-
-                return
-                    new ParseSubExpression(
-                        parseAndEvalExpr,
-                        ExpressionPath: null,
-                        expressionValue,
-                        ParsedExpr: parsedExpr);
-            })
+                            ParsedExpr: parsedExpr);
+                })
             .ToImmutableArray();
 
         var parseSubexpressionsToIntegrate =
@@ -167,7 +169,9 @@ public class CodeAnalysis
                 addValueFactory: _ =>
                 new ExprAnalysis(
                     EnvDict: ImmutableDictionary.CreateRange(
-                        [new KeyValuePair<PineValueClass, RecursiveAnalysisResult>(environment, recursiveAnalysisResult)])),
+                        [
+                        new KeyValuePair<PineValueClass, RecursiveAnalysisResult>(environment, recursiveAnalysisResult)
+                        ])),
                 updateValueFactory: (expr, oldAnalysis) =>
                 new ExprAnalysis(oldAnalysis.EnvDict.SetItem(environment, recursiveAnalysisResult)));
 
@@ -189,11 +193,12 @@ public class CodeAnalysis
             var exprOnRecursionPath =
                 stack
                 .SkipWhile(stackItem => stackItem != recursionRoot)
-                .Select(stackItem => new ExprOnRecursionPathEntry(
-                    RootConstraint: recursionRoot.EnvConstraintId,
-                    RootExpr: recursionRoot.Expression,
-                    Constraint: stackItem.EnvConstraintId,
-                    Expr: stackItem.Expression))
+                .Select(
+                    stackItem => new ExprOnRecursionPathEntry(
+                        RootConstraint: recursionRoot.EnvConstraintId,
+                        RootExpr: recursionRoot.Expression,
+                        Constraint: stackItem.EnvConstraintId,
+                        Expr: stackItem.Expression))
                 .ToImmutableHashSet();
 
             return
@@ -226,19 +231,22 @@ public class CodeAnalysis
             try
             {
                 childEnvValue =
-                evalVM
-                /*
-                 * Evaluation of the environment expression can fail here, since we are looking into all branches,
-                 * including ones that are not reachable in the actual execution.
-                 * In this case, classify the environment as unconstrained.
-                 * */
-                .EvaluateExpressionOnCustomStack(
-                    parseSubExpr.ParseAndEvalExpr.Environment,
-                    PineValueClassExtensions.CreateMinimalValue(environment),
-                    config: new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(InvocationCountLimit: 100, LoopIterationCountLimit: null, StackDepthLimit: null))
-                .Unpack(
-                    fromErr: _ => null,
-                    fromOk: ok => ok.ReturnValue.Evaluate());
+                    evalVM
+                    /*
+                     * Evaluation of the environment expression can fail here, since we are looking into all branches,
+                     * including ones that are not reachable in the actual execution.
+                     * In this case, classify the environment as unconstrained.
+                     * */
+                    .EvaluateExpressionOnCustomStack(
+                        parseSubExpr.ParseAndEvalExpr.Environment,
+                        PineValueClassExtensions.CreateMinimalValue(environment),
+                        config: new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(
+                            InvocationCountLimit: 100,
+                            LoopIterationCountLimit: null,
+                            StackDepthLimit: null))
+                    .Unpack(
+                        fromErr: _ => null,
+                        fromOk: ok => ok.ReturnValue.Evaluate());
             }
             catch
             {
@@ -282,8 +290,7 @@ public class CodeAnalysis
             if (parsedEnvItemsMapped.Contains(null))
             {
                 return
-                    childEnvBeforeMapping
-                    with
+                    childEnvBeforeMapping with
                     {
                         RootEnvClass = new ExpressionEnvClass.UnconstrainedEnv()
                     };
@@ -291,21 +298,22 @@ public class CodeAnalysis
 
             var parsedEnvItemsMappedPaths =
                 parsedEnvItemsMapped
-                .SelectMany(parsedEnvItemMapped =>
-                parsedEnvItemMapped switch
-                {
-                    ExprMappedToParentEnv.LiteralInParentEnv =>
-                    (IReadOnlyList<IReadOnlyList<int>>)[],
+                .SelectMany(
+                    parsedEnvItemMapped =>
+                    parsedEnvItemMapped switch
+                    {
+                        ExprMappedToParentEnv.LiteralInParentEnv =>
+                        (IReadOnlyList<IReadOnlyList<int>>)[],
 
-                    ExprMappedToParentEnv.PathInParentEnv pathInParentEnv =>
-                    [pathInParentEnv.Path],
+                        ExprMappedToParentEnv.PathInParentEnv pathInParentEnv =>
+                        [pathInParentEnv.Path],
 
-                    null =>
-                    throw new NullReferenceException(),
+                        null =>
+                        throw new NullReferenceException(),
 
-                    _ =>
-                    throw new NotImplementedException(parsedEnvItemMapped.ToString())
-                })
+                        _ =>
+                        throw new NotImplementedException(parsedEnvItemMapped.ToString())
+                    })
                 .ToImmutableArray();
 
             var childConstraintId =
@@ -329,7 +337,8 @@ public class CodeAnalysis
 
         var descendantsConstrainedEnv =
             descendantsEnvUsages
-            .Select(descendantEnvUsage => descendantEnvUsage.childAnalysis.RootEnvClass as ExpressionEnvClass.ConstrainedEnv)
+            .Select(
+                descendantEnvUsage => descendantEnvUsage.childAnalysis.RootEnvClass as ExpressionEnvClass.ConstrainedEnv)
             .WhereNotNull()
             .ToImmutableArray();
 
@@ -352,17 +361,18 @@ public class CodeAnalysis
 
         var usagesCompleteForRecursion =
             mergedExprOnRecursionPath
-            .SelectMany(entry =>
-            {
-                if (entry.RootExpr == expression &&
-                    entry.RootConstraint.SatisfiedByConstraint(mergedConstraintId) &&
-                    entry.Constraint.SatisfiedByConstraint(mergedConstraintId))
+            .SelectMany(
+                entry =>
                 {
-                    return (IEnumerable<(Expression, PineValueClass)>)[(entry.Expr, mergedConstraintId)];
-                }
+                    if (entry.RootExpr == expression &&
+                        entry.RootConstraint.SatisfiedByConstraint(mergedConstraintId) &&
+                        entry.Constraint.SatisfiedByConstraint(mergedConstraintId))
+                    {
+                        return (IEnumerable<(Expression, PineValueClass)>)[(entry.Expr, mergedConstraintId)];
+                    }
 
-                return [];
-            })
+                    return [];
+                })
             .ToImmutableHashSet();
 
         var mergedEnvClass =
@@ -388,9 +398,9 @@ public class CodeAnalysis
         ExprMappedToParentEnv? TryMapPathToParentEnvironment(IReadOnlyList<int> path)
         {
             var matchingEnvMappings =
-            envMappings
-            .Where(envMapping => envMapping.Key.SequenceEqual(path.Take(envMapping.Key.Count)))
-            .ToImmutableArray();
+                envMappings
+                .Where(envMapping => envMapping.Key.SequenceEqual(path.Take(envMapping.Key.Count)))
+                .ToImmutableArray();
 
             if (matchingEnvMappings.Length is 0)
                 return null;
@@ -436,11 +446,13 @@ public class CodeAnalysis
             return
                 [
                 ..envListExpr.Items
-                .SelectMany((childExpr, childIndex) =>
-                EnvItemsMappingsFromChildToParent(childExpr)
-                .Select(childMapping => new KeyValuePair<IReadOnlyList<int>, ExprMappedToParentEnv>(
-                    [childIndex, .. childMapping.Key],
-                    childMapping.Value)))
+                .SelectMany(
+                    (childExpr, childIndex) =>
+                    EnvItemsMappingsFromChildToParent(childExpr)
+                    .Select(
+                        childMapping => new KeyValuePair<IReadOnlyList<int>, ExprMappedToParentEnv>(
+                            [childIndex, .. childMapping.Key],
+                            childMapping.Value)))
                 ];
         }
 
@@ -583,7 +595,9 @@ public class CodeAnalysis
 
         var simplifiedClassesRanked =
             simplifiedClasses
-            .Select(envClass => (envClass, matchCount: invocationsInputs.Count(input => envClass.SatisfiedByConstraint(input.ToValueClass()))))
+            .Select(
+                envClass =>
+                (envClass, matchCount: invocationsInputs.Count(input => envClass.SatisfiedByConstraint(input.ToValueClass()))))
             .Where(envClassAndMatchCount => classUsageCountMin <= envClassAndMatchCount.matchCount)
             .OrderByDescending(envClassAndMatchCount => envClassAndMatchCount.matchCount)
             .Select(envClassAndMatchCount => envClassAndMatchCount.envClass)
@@ -805,21 +819,26 @@ public class CodeAnalysis
 
         var classes =
             distinctValues
-            .SelectMany(value =>
-            {
-                return
-                SubsequenceWithEvenDistribution(
-                    [.. values.Where(otherValue => otherValue != value)],
-                    limitIntersectionCountPerValue)
-                .Select(otherValue => PineValueClass.CreateIntersection(value, otherValue, depthLimit: classDepthLimit));
-            })
+            .SelectMany(
+                value =>
+                {
+                    return
+                        SubsequenceWithEvenDistribution(
+                            [.. values.Where(otherValue => otherValue != value)],
+                            limitIntersectionCountPerValue)
+                        .Select(
+                            otherValue =>
+                            PineValueClass.CreateIntersection(value, otherValue, depthLimit: classDepthLimit));
+                })
             .Where(envClass => envClass.ParsedItems.Any())
             .ToImmutableArray();
 
         return
-            [..classes
+            [
+            ..classes
             .Distinct()
-            .Select(envClass => (envClass, values.Count(value => envClass.SatisfiedByValue(value))))];
+            .Select(envClass => (envClass, values.Count(value => envClass.SatisfiedByValue(value))))
+            ];
     }
 
     public static IReadOnlyList<T> SubsequenceWithEvenDistribution<T>(
@@ -829,10 +848,12 @@ public class CodeAnalysis
         ?
         source
         :
-        [..source
+        [
+        ..source
         .Chunk(source.Count / limitSampleCount)
         .Select(chunk => chunk.First())
-        .Take(limitSampleCount)];
+        .Take(limitSampleCount)
+        ];
 
     /// <summary>
     /// Filtering out some expressions known to lead to pathological cases with the current combination of interpreter and compiler.
