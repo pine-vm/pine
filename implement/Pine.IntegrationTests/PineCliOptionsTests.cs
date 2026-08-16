@@ -14,7 +14,7 @@ public class PineCliOptionsTests
         var result = RunPine("-V");
 
         result.ExitCode.Should().Be(0);
-        result.StandardOutput.Trim().Should().Be("pine " + ElmTime.Program.AppVersionId);
+        result.StandardOutput.Trim().Should().Be("pine " + global::Pine.CLI.PineCliCommand.AppVersionId);
         result.StandardError.Should().BeEmpty();
     }
 

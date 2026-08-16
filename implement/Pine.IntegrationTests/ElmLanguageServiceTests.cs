@@ -183,7 +183,7 @@ public class ElmLanguageServiceTests
 
         var languageService =
             LanguageServerComposition.InitLanguageServiceState(
-                ElmTime.Program.AppVersionId)
+                global::Pine.CLI.PineCliCommand.AppVersionId)
             .Extract(err => throw new Exception(err));
 
         MutateServiceAddingFiles(mergedWorkspace, languageService);
@@ -246,7 +246,7 @@ public class ElmLanguageServiceTests
 
         var languageService =
             LanguageServerComposition.InitLanguageServiceState(
-                ElmTime.Program.AppVersionId)
+                global::Pine.CLI.PineCliCommand.AppVersionId)
             .Extract(err => throw new Exception(err));
 
         var mergedWorkspaceBefore =

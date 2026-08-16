@@ -2,6 +2,7 @@ using ElmTime.Platform.WebService;
 using Pine.Core;
 using Pine.Core.DotNet;
 using Pine.Core.Files;
+using Pine.CLI;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -20,7 +21,7 @@ public class MakeGuiCache
             LoadGuiElmProgramCodeFiles()
             .AndThen(
                 elmProgramCodeFiles =>
-                Program.Make(
+                MakeCommand.Make(
                     sourceFiles: elmProgramCodeFiles,
                     workingDirectoryRelative: null,
                     pathToFileWithElmEntryPoint: ["src", "Frontend", "Main.elm"],

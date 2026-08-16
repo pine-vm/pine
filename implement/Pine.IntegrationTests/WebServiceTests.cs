@@ -1564,7 +1564,7 @@ public class WebServiceTests
     {
         var testDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
-        var deployReport = ElmTime.Program.DeployApp(
+        var deployReport = global::Pine.CLI.DeployCommand.DeployApp(
             sourcePath: "./../../../../example-apps/docker-image-default-app",
             site: testDirectory,
             siteDefaultPassword: null,

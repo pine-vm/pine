@@ -1,4 +1,3 @@
-using ElmTime;
 using AwesomeAssertions;
 using Pine.Core;
 using System;
@@ -8,6 +7,7 @@ using System.Linq;
 using System.Text;
 using Xunit;
 using Pine.Core.Files;
+using Pine.CLI;
 
 namespace Pine.IntegrationTests;
 
@@ -152,7 +152,7 @@ public class ProgramCommandMakeTests
         IReadOnlyList<string> entryPointFilePath)
     {
         var makeResult =
-            Program.Make(
+            MakeCommand.Make(
                 sourceFiles: projectFiles,
                 workingDirectoryRelative: null,
                 pathToFileWithElmEntryPoint: entryPointFilePath,
