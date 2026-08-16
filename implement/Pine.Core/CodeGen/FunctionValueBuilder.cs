@@ -360,8 +360,10 @@ public static class FunctionValueBuilder
                     replaceLiteral:
                     literal =>
                     literal.Value == placeholder
-                    ? EncodeLitral(Expression.EnvironmentInstance)
-                    : null,
+                    ?
+                    EncodeLitral(Expression.EnvironmentInstance)
+                    :
+                    null,
                     evalIndependentToLiteral: false);
         }
 
@@ -693,12 +695,13 @@ public static class FunctionValueBuilder
                 EncodeLitral(nextLevelEncodingExpr)
                 ]);
 
-        return EncodeList(
-            [
-            EncodeLitral(s_evalTag),
-            nextLevelLiteralEncoding,
-            EncodeExpressionAsListExpression(envStructureEncoding)
-            ]);
+        return
+            EncodeList(
+                [
+                EncodeLitral(s_evalTag),
+                nextLevelLiteralEncoding,
+                EncodeExpressionAsListExpression(envStructureEncoding)
+                ]);
     }
 
     /// <summary>
@@ -708,11 +711,12 @@ public static class FunctionValueBuilder
     /// </summary>
     private static Expression BuildLevel0EnvStructureEncodingStatic()
     {
-        return EncodeList(
-            [
-            EncodeLitral(Expression.ListInst([Expression.EnvironmentInstance])),
-            EncodeEnvironment()
-            ]);
+        return
+            EncodeList(
+                [
+                EncodeLitral(Expression.ListInst([Expression.EnvironmentInstance])),
+                EncodeEnvironment()
+                ]);
     }
 
     /// <summary>
@@ -727,11 +731,12 @@ public static class FunctionValueBuilder
         var currentArgExpr = ExpressionBuilder.BuildExpressionForPathInExpression([1], Expression.EnvironmentInstance);
         var newCapturedExpr = BuiltinAppConcatBinary(capturedSoFarExpr, Expression.ListInst([currentArgExpr]));
 
-        return EncodeList(
-            [
-            EncodeLitral(newCapturedExpr),
-            EncodeEnvironment()
-            ]);
+        return
+            EncodeList(
+                [
+                EncodeLitral(newCapturedExpr),
+                EncodeEnvironment()
+                ]);
     }
 
     /// <summary>
@@ -1075,6 +1080,7 @@ public static class FunctionValueBuilder
             EncodeLitral(encodedBodyExpr);
 
         var envFuncEncodings = EncodeLitrals(envFunctionsExprs);
+
         var envFuncsListEncoding =
             EncodeList(envFuncEncodings);
 
@@ -1096,6 +1102,7 @@ public static class FunctionValueBuilder
             EncodeLitral(encodedBodyExpr);
 
         var envFuncEncodings = EncodeLitrals(envFunctionsExprs);
+
         var envFuncsListEncoding =
             EncodeList(envFuncEncodings);
 
@@ -1141,6 +1148,7 @@ public static class FunctionValueBuilder
             EncodeLitral(encodedBodyExpr);
 
         var envFuncEncodings = EncodeLitrals(envFunctionsExprs);
+
         var envFuncsListEncoding =
             EncodeList(envFuncEncodings);
 

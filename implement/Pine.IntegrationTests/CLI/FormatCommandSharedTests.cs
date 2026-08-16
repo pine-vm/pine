@@ -405,11 +405,11 @@ public class FormatCommandSharedTests
                     ColorSystem = ColorSystemSupport.Standard,
                     Interactive = InteractionSupport.No,
                     Out =
-                        isTerminal
-                        ?
-                        new TestConsoleOutput(output)
-                        :
-                        new AnsiConsoleOutput(output),
+                    isTerminal
+                    ?
+                    new TestConsoleOutput(output)
+                    :
+                    new AnsiConsoleOutput(output),
                 });
 
         return (console, output);

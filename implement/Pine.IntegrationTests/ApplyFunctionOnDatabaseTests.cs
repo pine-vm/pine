@@ -23,9 +23,10 @@ public class ApplyFunctionOnDatabaseTests
     {
         var adminPassword = "test";
 
-        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-            deployAppAndInitElmState: ElmWebServiceAppTests.CounterWebApp,
-            adminPassword: adminPassword);
+        using var testSetup =
+            WebHostAdminInterfaceTestSetup.Setup(
+                deployAppAndInitElmState: ElmWebServiceAppTests.CounterWebApp,
+                adminPassword: adminPassword);
 
         var expectedCounter = 0;
 
@@ -47,7 +48,9 @@ public class ApplyFunctionOnDatabaseTests
 
                 expectedCounter += additionViaPublicInterface;
 
-                httpResponseContent.Should().Be(expectedCounter.ToString(), "response content should match expected counter");
+                httpResponseContent.Should().Be(
+                    expectedCounter.ToString(),
+                    "response content should match expected counter");
             }
 
             {
@@ -59,7 +62,9 @@ public class ApplyFunctionOnDatabaseTests
                             serializedArgumentsJson: [17.ToString()],
                             commitResultingState: false));
 
-                ((int)applyFunctionResponse.StatusCode).Should().Be(200, "applyFunctionResponse.StatusCode should be OK");
+                ((int)applyFunctionResponse.StatusCode).Should().Be(
+                    200,
+                    "applyFunctionResponse.StatusCode should be OK");
             }
 
             {
@@ -67,7 +72,9 @@ public class ApplyFunctionOnDatabaseTests
 
                 var httpResponseContent = await httpResponse.Content.ReadAsStringAsync();
 
-                httpResponseContent.Should().Be(expectedCounter.ToString(), "response content should match expected counter");
+                httpResponseContent.Should().Be(
+                    expectedCounter.ToString(),
+                    "response content should match expected counter");
             }
 
             {
@@ -83,7 +90,9 @@ public class ApplyFunctionOnDatabaseTests
 
                 expectedCounter += additionViaAdminInterface;
 
-                ((int)applyFunctionResponse.StatusCode).Should().Be(200, "applyFunctionResponse.StatusCode should be OK");
+                ((int)applyFunctionResponse.StatusCode).Should().Be(
+                    200,
+                    "applyFunctionResponse.StatusCode should be OK");
             }
 
             {
@@ -91,7 +100,9 @@ public class ApplyFunctionOnDatabaseTests
 
                 var httpResponseContent = await httpResponse.Content.ReadAsStringAsync();
 
-                httpResponseContent.Should().Be(expectedCounter.ToString(), "response content should match expected counter");
+                httpResponseContent.Should().Be(
+                    expectedCounter.ToString(),
+                    "response content should match expected counter");
             }
         }
 
@@ -104,7 +115,9 @@ public class ApplyFunctionOnDatabaseTests
 
                 var httpResponseContent = await httpResponse.Content.ReadAsStringAsync();
 
-                httpResponseContent.Should().Be(expectedCounter.ToString(), "response content should match expected counter");
+                httpResponseContent.Should().Be(
+                    expectedCounter.ToString(),
+                    "response content should match expected counter");
             }
         }
     }
@@ -114,9 +127,10 @@ public class ApplyFunctionOnDatabaseTests
     {
         var adminPassword = "test";
 
-        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-            deployAppAndInitElmState: ElmWebServiceAppTests.CalculatorWebApp,
-            adminPassword: adminPassword);
+        using var testSetup =
+            WebHostAdminInterfaceTestSetup.Setup(
+                deployAppAndInitElmState: ElmWebServiceAppTests.CalculatorWebApp,
+                adminPassword: adminPassword);
 
         var expectedResultingNumber = 0;
 
@@ -134,7 +148,8 @@ public class ApplyFunctionOnDatabaseTests
             var httpResponse =
                 await publicClient.PostAsync(
                     "",
-                    JsonContent.Create<CalculatorOperation>(new CalculatorOperation.AddOperation(additionViaPublicInterface)));
+                    JsonContent.Create<CalculatorOperation>(
+                        new CalculatorOperation.AddOperation(additionViaPublicInterface)));
 
             var httpResponseContent = await httpResponse.Content.ReadAsStringAsync();
 
@@ -191,9 +206,10 @@ public class ApplyFunctionOnDatabaseTests
     {
         var adminPassword = "test";
 
-        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-            deployAppAndInitElmState: ElmWebServiceAppTests.CalculatorWebApp,
-            adminPassword: adminPassword);
+        using var testSetup =
+            WebHostAdminInterfaceTestSetup.Setup(
+                deployAppAndInitElmState: ElmWebServiceAppTests.CalculatorWebApp,
+                adminPassword: adminPassword);
 
         using var server = testSetup.StartWebHost();
 
@@ -289,8 +305,9 @@ public class ApplyFunctionOnDatabaseTests
 
         var exposedFunctionApplyCalculatorOp =
             exposedFunctions
-            .FirstOrDefault(exposedFunction =>
-            exposedFunction.Key is "Backend.ExposeFunctionsToAdmin.applyCalculatorOperation")
+            .FirstOrDefault(
+                exposedFunction =>
+                exposedFunction.Key is "Backend.ExposeFunctionsToAdmin.applyCalculatorOperation")
             .Value;
 
         exposedFunctionApplyCalculatorOp.Should().NotBeNull(
@@ -317,13 +334,13 @@ public class ApplyFunctionOnDatabaseTests
 
         var exposedFunctionCustomUsageReport =
             exposedFunctions
-            .FirstOrDefault(exposedFunction =>
-            exposedFunction.Key is "Backend.ExposeFunctionsToAdmin.customUsageReport")
+            .FirstOrDefault(
+                exposedFunction =>
+                exposedFunction.Key is "Backend.ExposeFunctionsToAdmin.customUsageReport")
             .Value;
 
         exposedFunctionCustomUsageReport.Should().NotBeNull(
             "Exposed function 'customUsageReport' not found in the app.");
-
 
         {
             /*

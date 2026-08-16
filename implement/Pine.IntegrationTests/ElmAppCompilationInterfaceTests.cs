@@ -14,25 +14,29 @@ public class ElmAppCompilationInterfaceTests
     [Fact]
     public void Compilation_interface_with_file_paths_from_multiple_source_directories()
     {
-        var defaultAppSourceFiles = TestSetup.GetElmAppFromSubdirectoryName("compilation-interface-multiple-source-dir");
+        var defaultAppSourceFiles =
+            TestSetup.GetElmAppFromSubdirectoryName("compilation-interface-multiple-source-dir");
 
-        var demoFiles = new[]
-        {
-            new
+        var demoFiles =
+            new[]
             {
-                path= ImmutableList.Create("demo-file.mp3"),
-                content= (ReadOnlyMemory<byte>)Enumerable.Range(0, 10_000).SelectMany(elem => BitConverter.GetBytes((ushort)elem))
+                new
+                {
+                    path= ImmutableList.Create("demo-file.mp3"),
+                    content=
+                    (ReadOnlyMemory<byte>)Enumerable.Range(0, 10_000)
+                    .SelectMany(elem => BitConverter.GetBytes((ushort)elem))
                     .Concat(System.Text.Encoding.UTF8.GetBytes("Default static file content from String\nAnother line"))
                     .Concat(Enumerable.Range(0, 100_000).SelectMany(elem => BitConverter.GetBytes((ushort)elem)))
                     .ToImmutableList()
                     .ToArray()
-            },
-            new
-            {
-                path= ImmutableList.Create("alpha", "beta","demo-file-gamma.text"),
-                content= (ReadOnlyMemory<byte>)System.Text.Encoding.UTF8.GetBytes("Some file content")
-            }
-        };
+                },
+                new
+                {
+                    path= ImmutableList.Create("alpha", "beta", "demo-file-gamma.text"),
+                    content= (ReadOnlyMemory<byte>)System.Text.Encoding.UTF8.GetBytes("Some file content")
+                }
+            };
 
         var webAppSourceFiles =
             demoFiles
@@ -73,7 +77,8 @@ public class ElmAppCompilationInterfaceTests
 
             var responseContent = httpResponse.Content.ReadAsStringAsync().Result;
 
-            responseContent.Should().Be("A text file we will integrate using UTF8 encoding ⚓\nNewline and special chars:\"'");
+            responseContent.Should().Be(
+                "A text file we will integrate using UTF8 encoding ⚓\nNewline and special chars:\"'");
         }
 
         {

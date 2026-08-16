@@ -40,7 +40,9 @@ public class ElmWebServiceAppTests
 
         var eventsAndExpectedResponsesBatches = eventsAndExpectedResponses.Batch(3).ToList();
 
-        eventsAndExpectedResponsesBatches.Should().HaveCountGreaterThan(2, "More than two batches of events to test with.");
+        eventsAndExpectedResponsesBatches.Should().HaveCountGreaterThan(
+            2,
+            "More than two batches of events to test with.");
 
         using var testSetup =
             WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: CounterWebApp);

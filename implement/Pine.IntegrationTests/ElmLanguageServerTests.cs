@@ -415,7 +415,7 @@ public class ElmLanguageServerTests
                         ]
                 """,
                 ExpectedEdits: null
-            ),
+                ),
             ];
 
         for (var testCaseIndex = 0; testCaseIndex < testCases.Count; testCaseIndex++)

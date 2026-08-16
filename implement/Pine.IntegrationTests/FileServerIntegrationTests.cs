@@ -21,22 +21,30 @@ public class FileServerIntegrationTests
     private class TestSetup : IDisposable
     {
         public string TempDirectory { get; }
+
         public int Port { get; }
+
         public Process? ServerProcess { get; private set; }
+
         public HttpClient HttpClient { get; }
 
         public TestSetup()
         {
-            TempDirectory = Path.Combine(Path.GetTempPath(), "pine-fileserver-test-" + Guid.NewGuid().ToString("N")[..8]);
+            TempDirectory =
+                Path.Combine(
+                    Path.GetTempPath(),
+                    "pine-fileserver-test-" + Guid.NewGuid().ToString("N")[..8]);
+
             Directory.CreateDirectory(TempDirectory);
 
             // Find an available port
             Port = GetAvailablePort();
 
-            HttpClient = new HttpClient
-            {
-                Timeout = TimeSpan.FromSeconds(30)
-            };
+            HttpClient =
+                new HttpClient
+                {
+                    Timeout = TimeSpan.FromSeconds(30)
+                };
         }
 
         public async Task StartServerAsync(string? authPassword = null, bool useFileStore = true)
@@ -57,15 +65,16 @@ public class FileServerIntegrationTests
                 args.Append($" --auth-password \"{authPassword}\"");
             }
 
-            var processStartInfo = new ProcessStartInfo
-            {
-                FileName = pineExecutablePath,
-                Arguments = args.ToString(),
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
+            var processStartInfo =
+                new ProcessStartInfo
+                {
+                    FileName = pineExecutablePath,
+                    Arguments = args.ToString(),
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
 
             ServerProcess = Process.Start(processStartInfo);
 
@@ -126,6 +135,7 @@ public class FileServerIntegrationTests
             // This avoids proxy/HTTP interception issues seen with HTTP probing.
             var listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start();
+
             try
             {
                 return ((IPEndPoint)listener.LocalEndpoint).Port;
@@ -151,6 +161,7 @@ public class FileServerIntegrationTests
                 {
                     // Ignore errors during cleanup
                 }
+
                 ServerProcess?.Dispose();
             }
 
@@ -243,10 +254,13 @@ public class FileServerIntegrationTests
         using (var content = new ByteArrayContent(appendContent))
         {
             content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
-            var request = new HttpRequestMessage(HttpMethod.Post, $"http://localhost:{setup.Port}/files/{filePath}")
-            {
-                Content = content
-            };
+
+            var request =
+                new HttpRequestMessage(HttpMethod.Post, $"http://localhost:{setup.Port}/files/{filePath}")
+                {
+                    Content = content
+                };
+
             request.Headers.Add("X-Operation", "append");
 
             var response = await setup.HttpClient.SendAsync(request);
@@ -287,7 +301,8 @@ public class FileServerIntegrationTests
 
         // Request with wrong authentication should fail
         setup.HttpClient.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Basic",
+            new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Basic",
                 Convert.ToBase64String(Encoding.UTF8.GetBytes("user:wrong-password")));
 
         response = await setup.HttpClient.GetAsync($"http://localhost:{setup.Port}/files/test.txt");
@@ -295,7 +310,8 @@ public class FileServerIntegrationTests
 
         // Request with correct authentication should succeed (even if file doesn't exist)
         setup.HttpClient.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Basic",
+            new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Basic",
                 Convert.ToBase64String(Encoding.UTF8.GetBytes($"user:{Password}")));
 
         response = await setup.HttpClient.GetAsync($"http://localhost:{setup.Port}/files/test.txt");
@@ -313,7 +329,8 @@ public class FileServerIntegrationTests
 
         // Set up authentication
         setup.HttpClient.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Basic",
+            new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Basic",
                 Convert.ToBase64String(Encoding.UTF8.GetBytes($"testuser:{Password}")));
 
         var filePath = "authenticated/file.txt";
@@ -332,10 +349,13 @@ public class FileServerIntegrationTests
         using (var content = new ByteArrayContent(appendContent))
         {
             content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
-            var request = new HttpRequestMessage(HttpMethod.Post, $"http://localhost:{setup.Port}/files/{filePath}")
-            {
-                Content = content
-            };
+
+            var request =
+                new HttpRequestMessage(HttpMethod.Post, $"http://localhost:{setup.Port}/files/{filePath}")
+                {
+                    Content = content
+                };
+
             request.Headers.Add("X-Operation", "append");
 
             var response = await setup.HttpClient.SendAsync(request);

@@ -42,13 +42,14 @@ public class DatabaseScaleTests
         {
             var entriesToPost =
                 Enumerable
-                .Range(0, entriesCount).Select(entryIndexInBatch => new
-                {
-                    entryId = lastEntryIndex + entryIndexInBatch.ToString(),
-                    entryContent =
-                    RandomNumberGenerator.GetBytes(
-                        entrySizeMin + RandomNumberGenerator.GetInt32(0, entrySizeRandom))
-                })
+                .Range(0, entriesCount).Select(
+                    entryIndexInBatch => new
+                    {
+                        entryId = lastEntryIndex + entryIndexInBatch.ToString(),
+                        entryContent =
+                        RandomNumberGenerator.GetBytes(
+                            entrySizeMin + RandomNumberGenerator.GetInt32(0, entrySizeRandom))
+                    })
                 .ToImmutableList();
 
             foreach (var item in entriesToPost)
@@ -60,7 +61,8 @@ public class DatabaseScaleTests
             {
                 var getResponse = await apiGetEntryAsync(item.entryId);
 
-                ((int)getResponse.StatusCode).Should().Be(200,
+                ((int)getResponse.StatusCode).Should().Be(
+                    200,
                     "Check status code of entry " + item.entryId);
 
                 var responseContentAsByteArray =

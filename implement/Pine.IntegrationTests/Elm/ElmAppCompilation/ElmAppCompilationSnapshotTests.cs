@@ -44,14 +44,14 @@ public class ElmAppCompilationSnapshotTests
 
                     // Merge expected overwritten files into source files
                     var expectedFiles =
-                    overwrittenFiles.Aggregate(
-                        seed: sourceFiles,
-                        func: (files, next) => files.SetItem(next.Key, next.Value));
+                        overwrittenFiles.Aggregate(
+                            seed: sourceFiles,
+                            func: (files, next) => files.SetItem(next.Key, next.Value));
 
                     var differences =
-                    DescribeFilesDifferences(
-                        actual: FilterForElmModules(compiledFiles),
-                        expected: FilterForElmModules(expectedFiles));
+                        DescribeFilesDifferences(
+                            actual: FilterForElmModules(compiledFiles),
+                            expected: FilterForElmModules(expectedFiles));
 
                     if (differences is not null)
                     {
@@ -550,7 +550,8 @@ public class ElmAppCompilationSnapshotTests
             System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile.Span);
 
         IReadOnlyList<IReadOnlyList<string>> elmJsonSourceDirectories =
-            [..elmJsonFileParsed?.SourceDirectories
+            [
+            ..elmJsonFileParsed?.SourceDirectories
             .Select(flat => flat.Split('/', '\\'))
             ];
 
@@ -581,7 +582,8 @@ public class ElmAppCompilationSnapshotTests
             .Unpack(
                 fromErr: compilationError =>
                 {
-                    var errorMessage = "\n" + ElmTime.ElmAppCompilation.CompileCompilationErrorsDisplayText(compilationError) + "\n";
+                    var errorMessage =
+                        "\n" + ElmTime.ElmAppCompilation.CompileCompilationErrorsDisplayText(compilationError) + "\n";
 
                     Console.WriteLine(errorMessage);
 

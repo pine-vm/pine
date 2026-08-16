@@ -64,23 +64,17 @@ public class ElmWebServiceUsingVolatileProcessNativeTest
             DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         webServiceApp.EventHttpRequest(
-            new WebServiceInterface.HttpRequestEventStruct
-            (
+            new WebServiceInterface.HttpRequestEventStruct(
                 HttpRequestId: formatHttpRequestId,
                 PosixTimeMilli: posixTimeMilli(),
-                RequestContext: new WebServiceInterface.HttpRequestContext
-                (
-                    ClientAddress: null
-                ),
-                Request: new WebServiceInterface.HttpRequestProperties
-                (
+                RequestContext: new WebServiceInterface.HttpRequestContext(
+                    ClientAddress: null),
+                Request: new WebServiceInterface.HttpRequestProperties(
                     Method: "POST",
                     Uri: "http://demohost/api",
                     Body:
                     System.Text.Encoding.UTF8.GetBytes("[ 1,  3, 4 ]\n"),
-                    Headers: []
-                )
-            ));
+                    Headers: [])));
 
         for (var i = 0; i < 15; i++)
         {

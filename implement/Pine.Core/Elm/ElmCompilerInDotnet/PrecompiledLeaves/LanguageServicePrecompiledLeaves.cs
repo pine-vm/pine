@@ -250,6 +250,7 @@ public static class LanguageServicePrecompiledLeaves
         }
 
         var endRowIndex = endRow - 1;
+
         var lastLine =
             endRowIndex < textLines.Items.Length
             ?

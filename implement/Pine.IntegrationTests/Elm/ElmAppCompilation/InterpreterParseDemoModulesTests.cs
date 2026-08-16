@@ -1,8 +1,8 @@
 using AwesomeAssertions;
 using Pine.Core;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmSyntax;
-using Pine.Core.CodeAnalysis;
 using Pine.Core.Internal;
 using System.IO;
 using System.Linq;
@@ -22,7 +22,9 @@ public class InterpreterParseDemoModulesTests
     private static string DemoDir(string leaf) =>
         Path.Combine(
             TestResultSummary.FindTestDataDirectory("ElmAppCompilationSnapshot"),
-            "demo-backend-state", leaf, "src");
+            "demo-backend-state",
+            leaf,
+            "src");
 
     private static ElmSyntaxInterpreter.Prepared Prepared =>
         ElmTime.ElmAppCompilation.CompilerModulesPreparedForInterpreter.Value;
@@ -75,7 +77,9 @@ public class InterpreterParseDemoModulesTests
         var file =
             Path.Combine(
                 DemoDir("expected"),
-                "Backend", "InterfaceToHost_Root", "Generated_JsonConverters.elm");
+                "Backend",
+                "InterfaceToHost_Root",
+                "Generated_JsonConverters.elm");
 
         var err = InterpretParseError(File.ReadAllText(file));
 

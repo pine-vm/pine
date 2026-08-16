@@ -122,15 +122,15 @@ public class ScreenshotCommandTests
                 ("elm.json", FileTree.File(Encoding.UTF8.GetBytes(elmJson))),
                 ("embedded-image.png", FileTree.File(embeddedImageBytes)),
                 ("src",
+                FileTree.SortedDirectory(
+                    [
+                    ("CompilationInterface",
                     FileTree.SortedDirectory(
                         [
-                        ("CompilationInterface",
-                            FileTree.SortedDirectory(
-                                [
-                                ("SourceFiles.elm", FileTree.File(Encoding.UTF8.GetBytes(sourceFilesModule))),
-                                ])),
-                        ("Main.elm", FileTree.File(Encoding.UTF8.GetBytes(mainModule))),
+                        ("SourceFiles.elm", FileTree.File(Encoding.UTF8.GetBytes(sourceFilesModule))),
                         ])),
+                    ("Main.elm", FileTree.File(Encoding.UTF8.GetBytes(mainModule))),
+                    ])),
                 ]);
 
         var screenshotBytes =
@@ -158,7 +158,7 @@ public class ScreenshotCommandTests
                 screenshot[
                     cellX * CellSize + CellSize / 2,
                     cellY * CellSize + CellSize / 2]
-                .Should().Be(cellColors[cellY, cellX]);
+                    .Should().Be(cellColors[cellY, cellX]);
             }
         }
     }

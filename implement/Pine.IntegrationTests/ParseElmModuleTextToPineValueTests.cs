@@ -260,9 +260,10 @@ public class ParseElmModuleTextToPineValueTests
 
         var declarations =
             declarationsList.Items.Cast<ElmValue.ElmTag>()
-            .OrderBy(declarationNode =>
-            ((ElmValue.ElmInteger)
-            ((ElmValue.ElmRecord)((ElmValue.ElmRecord)declarationNode.Arguments[0])["start"]!)["row"]!).Value)
+            .OrderBy(
+                declarationNode =>
+                ((ElmValue.ElmInteger)
+                ((ElmValue.ElmRecord)((ElmValue.ElmRecord)declarationNode.Arguments[0])["start"]!)["row"]!).Value)
             .ToImmutableArray();
 
         declarations.Should().HaveCount(16, "There should be 4 declarations in the module.");
@@ -1856,7 +1857,6 @@ public class ParseElmModuleTextToPineValueTests
             decl =
                 "🤖"
             """",
-
             ];
 
         var pineVM = CreateVMWithCache();
@@ -1956,7 +1956,8 @@ public class ParseElmModuleTextToPineValueTests
             catch (Exception e)
             {
                 throw new Exception(
-                    "Failed for test case source: " + sourceDirectory, e);
+                    "Failed for test case source: " + sourceDirectory,
+                    e);
             }
         }
 
@@ -2079,11 +2080,12 @@ public class ParseElmModuleTextToPineValueTests
     {
         var pineVM = CreateVMWithCache();
 
-        return TestParsingModuleText(
-            elmModuleText,
-            expectedExpressionStringChunks,
-            alsoTestDotnetParser,
-            pineVM);
+        return
+            TestParsingModuleText(
+                elmModuleText,
+                expectedExpressionStringChunks,
+                alsoTestDotnetParser,
+                pineVM);
     }
 
     public static ElmValue TestParsingModuleText(
@@ -2174,16 +2176,17 @@ public class ParseElmModuleTextToPineValueTests
     }
 
     private static readonly Lazy<ElmCompilerInElm> s_bundledElmCompiler =
-        new(() =>
-        {
-            var elmCompilerFromBundle =
-                BundledElmEnvironments.BundledElmCompilerCompiledEnvValue();
+        new(
+            () =>
+            {
+                var elmCompilerFromBundle =
+                    BundledElmEnvironments.BundledElmCompilerCompiledEnvValue();
 
-            elmCompilerFromBundle.Should().NotBeNull(
-                because: "Elm compiler environment not found in bundled environments");
+                elmCompilerFromBundle.Should().NotBeNull(
+                    because: "Elm compiler environment not found in bundled environments");
 
-            return
-            ElmCompilerInElm.ElmCompilerFromEnvValue(elmCompilerFromBundle)
-            .Extract(err => throw new Exception(err));
-        });
+                return
+                    ElmCompilerInElm.ElmCompilerFromEnvValue(elmCompilerFromBundle)
+                    .Extract(err => throw new Exception(err));
+            });
 }

@@ -41,7 +41,8 @@ public class ElmCommandLineAppTests
 
             var outputTexts =
                 outputBatches
-                .Select(outputBatch =>
+                .Select(
+                    outputBatch =>
                     System.Text.Encoding.UTF8.GetString(outputBatch.Span))
                 .ToImmutableArray();
 
@@ -57,7 +58,8 @@ public class ElmCommandLineAppTests
 
             var outputTexts =
                 outputBatches
-                .Select(outputBatch =>
+                .Select(
+                    outputBatch =>
                     System.Text.Encoding.UTF8.GetString(outputBatch.Span))
                 .ToImmutableArray();
 
@@ -73,13 +75,13 @@ public class ElmCommandLineAppTests
 
             var outputTexts =
                 outputBatches
-                .Select(outputBatch =>
+                .Select(
+                    outputBatch =>
                     System.Text.Encoding.UTF8.GetString(outputBatch.Span))
                 .ToImmutableArray();
 
             string.Concat(outputTexts).Should().Be(" app!");
         }
-
 
         {
             mutatingCliApp.EventStdIn(
@@ -90,7 +92,8 @@ public class ElmCommandLineAppTests
 
             var outputTexts =
                 outputBatches
-                .Select(outputBatch =>
+                .Select(
+                    outputBatch =>
                     System.Text.Encoding.UTF8.GetString(outputBatch.Span))
                 .ToImmutableArray();
 

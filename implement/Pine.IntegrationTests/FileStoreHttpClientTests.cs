@@ -19,9 +19,13 @@ public class FileStoreHttpClientTests
     private sealed class TestSetup : IAsyncDisposable
     {
         public WebApplication App { get; }
+
         public TestServer Server { get; }
+
         public HttpClient HttpClient { get; }
+
         public IFileStore ServerFileStore { get; }
+
         public FileStoreHttpClient Client { get; }
 
         public TestSetup()
@@ -237,11 +241,15 @@ public class FileStoreHttpClientTests
         var content = "New file content"u8.ToArray();
 
         // Act - Make direct HTTP request with lowercase verb
-        var request = new HttpRequestMessage(new HttpMethod("put"), "/files/new/file.txt")
-        {
-            Content = new ByteArrayContent(content)
-        };
-        request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        var request =
+            new HttpRequestMessage(new HttpMethod("put"), "/files/new/file.txt")
+            {
+                Content = new ByteArrayContent(content)
+            };
+
+        request.Content.Headers.ContentType =
+            new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+
         var response = await setup.HttpClient.SendAsync(request);
 
         // Assert
@@ -263,11 +271,15 @@ public class FileStoreHttpClientTests
         var appendContent = " World"u8.ToArray();
 
         // Act - Make direct HTTP request with lowercase verb
-        var request = new HttpRequestMessage(new HttpMethod("post"), "/files/append/file.txt")
-        {
-            Content = new ByteArrayContent(appendContent)
-        };
-        request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        var request =
+            new HttpRequestMessage(new HttpMethod("post"), "/files/append/file.txt")
+            {
+                Content = new ByteArrayContent(appendContent)
+            };
+
+        request.Content.Headers.ContentType =
+            new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+
         request.Headers.Add("X-Operation", "append");
         var response = await setup.HttpClient.SendAsync(request);
 

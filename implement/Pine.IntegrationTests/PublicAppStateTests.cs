@@ -1,5 +1,5 @@
-using ElmTime.Platform.WebService;
 using AwesomeAssertions;
+using ElmTime.Platform.WebService;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,23 +21,30 @@ public class PublicAppStateTests
     public async Task HttpRequestHandler_can_be_used_independently_with_minimal_API()
     {
         var requestCount = 0;
-        var receivedRequests = new System.Collections.Concurrent.ConcurrentQueue<WebServiceInterface.HttpRequestEventStruct>();
+
+        var receivedRequests =
+            new System.Collections.Concurrent.ConcurrentQueue<WebServiceInterface.HttpRequestEventStruct>();
 
         // Create a mock process function
-        async Task<WebServiceInterface.HttpResponse> MockProcessRequest(WebServiceInterface.HttpRequestEventStruct requestEvent)
+        async Task<WebServiceInterface.HttpResponse> MockProcessRequest(
+            WebServiceInterface.HttpRequestEventStruct requestEvent)
         {
             Interlocked.Increment(ref requestCount);
             receivedRequests.Enqueue(requestEvent);
 
             // Simple echo response
-            var responseBody = Encoding.UTF8.GetBytes($"Echo: {requestEvent.Request.Method} {requestEvent.Request.Uri}");
+            var responseBody =
+                Encoding.UTF8.GetBytes($"Echo: {requestEvent.Request.Method} {requestEvent.Request.Uri}");
 
-            return await Task.FromResult(new WebServiceInterface.HttpResponse(
-                StatusCode: 200,
-                Body: responseBody,
-                HeadersToAdd: [
-                    new WebServiceInterface.HttpHeader("Content-Type", ["text/plain"])
-                ]));
+            return
+                await Task.FromResult(
+                    new WebServiceInterface.HttpResponse(
+                        StatusCode: 200,
+                        Body: responseBody,
+                        HeadersToAdd:
+                        [
+                        new WebServiceInterface.HttpHeader("Content-Type", ["text/plain"])
+                        ]));
         }
 
         // Create HttpRequestHandler
@@ -53,11 +60,13 @@ public class PublicAppStateTests
 
         // Build minimal WebApplication manually
         var builder = WebApplication.CreateBuilder();
-        builder.Services.AddLogging(logging =>
-        {
-            logging.AddConsole();
-            logging.SetMinimumLevel(LogLevel.Warning); // Reduce test noise
-        });
+
+        builder.Services.AddLogging(
+            logging =>
+            {
+                logging.AddConsole();
+                logging.SetMinimumLevel(LogLevel.Warning); // Reduce test noise
+            });
 
         // Register the DateTimeOffset service that Asp middleware expects
         builder.Services.AddSingleton(GetDateTimeOffset);
@@ -125,14 +134,17 @@ public class PublicAppStateTests
         var requestProcessed = false;
 
         // Create a mock process function
-        async Task<WebServiceInterface.HttpResponse> MockProcessRequest(WebServiceInterface.HttpRequestEventStruct requestEvent)
+        async Task<WebServiceInterface.HttpResponse> MockProcessRequest(
+            WebServiceInterface.HttpRequestEventStruct requestEvent)
         {
             requestProcessed = true;
 
-            return await Task.FromResult(new WebServiceInterface.HttpResponse(
-                StatusCode: 200,
-                Body: Encoding.UTF8.GetBytes("OK"),
-                HeadersToAdd: []));
+            return
+                await Task.FromResult(
+                    new WebServiceInterface.HttpResponse(
+                        StatusCode: 200,
+                        Body: Encoding.UTF8.GetBytes("OK"),
+                        HeadersToAdd: []));
         }
 
         // Create HttpRequestHandler with very small size limit
@@ -168,7 +180,8 @@ public class PublicAppStateTests
             var largeContent =
                 new StringContent(
                     new string('x', PublicAppState.HttpRequestEventSizeLimitDefault + 1_000),
-                    Encoding.UTF8, "text/plain");
+                    Encoding.UTF8,
+                    "text/plain");
 
             var response = await httpClient.PostAsync($"{baseUrl}/test", largeContent);
 
@@ -190,14 +203,16 @@ public class PublicAppStateTests
     [Fact]
     public void EstimateHttpRequestEventSize_calculates_size_correctly()
     {
-        var httpRequest = new WebServiceInterface.HttpRequestProperties(
-            Method: "POST",
-            Uri: "https://example.com/api/test",
-            Body: Encoding.UTF8.GetBytes("test body"),
-            Headers: [
+        var httpRequest =
+            new WebServiceInterface.HttpRequestProperties(
+                Method: "POST",
+                Uri: "https://example.com/api/test",
+                Body: Encoding.UTF8.GetBytes("test body"),
+                Headers:
+                [
                 new WebServiceInterface.HttpHeader("Content-Type", ["application/json"]),
                 new WebServiceInterface.HttpHeader("Authorization", ["Bearer", "token123"])
-            ]);
+                ]);
 
         var estimatedSize = PublicAppState.EstimateHttpRequestEventSize(httpRequest);
 

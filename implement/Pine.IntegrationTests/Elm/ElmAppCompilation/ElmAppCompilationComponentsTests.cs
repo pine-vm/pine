@@ -77,7 +77,8 @@ public class ElmAppCompilationComponentsTests
         var asString =
             ElmValue.RenderAsElmExpression(parsedElmValue);
 
-        asString.expressionString.Should().Be("""Ok { sourceDirectories = [ "src", "elm-syntax/src", "elm-syntax-encode-json/src" ] }""");
+        asString.expressionString.Should().Be(
+            """Ok { sourceDirectories = [ "src", "elm-syntax/src", "elm-syntax-encode-json/src" ] }""");
     }
 
     [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]

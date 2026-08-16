@@ -27,7 +27,8 @@ public class CompilePineToDotNetTests
     [Fact]
     public void Test_sort_pine_value_for_declaration()
     {
-        Value_d597fb92e5.ContainsInListTransitive(Value_299b7decef).Should().BeTrue("value should contain value_299b7decef in list transitive");
+        Value_d597fb92e5.ContainsInListTransitive(Value_299b7decef).Should().BeTrue(
+            "value should contain value_299b7decef in list transitive");
 
         var listBeforeOrdering =
             new[]
@@ -53,7 +54,8 @@ public class CompilePineToDotNetTests
                 StringEncoding.ValueFromString("Err"),
                 Value_299b7decef,
                 Value_d597fb92e5
-            ], options => options.WithStrictOrdering());
+            ],
+            options => options.WithStrictOrdering());
     }
 
     [Fact]
@@ -86,7 +88,8 @@ public class CompilePineToDotNetTests
                 typeof(IReadOnlyDictionary<PineValue, string>),
                 usings: []);
 
-        syntax.ToFullString().Should().Be("System.Collections.Generic.IReadOnlyDictionary<Pine.Core.PineValue,System.String>");
+        syntax.ToFullString().Should().Be(
+            "System.Collections.Generic.IReadOnlyDictionary<Pine.Core.PineValue,System.String>");
     }
 
     [Fact]
@@ -268,10 +271,12 @@ public class CompilePineToDotNetTests
                         ArgumentEvalGenericName: "eval"),
                     CompilationUnit: new CompilationUnitEnv(
                         AvailableExpr: ImmutableDictionary<Expression, CompilationUnitEnvExprEntry>.Empty,
-                        DefaultInterface: new ExprFunctionCompilationInterface(EnvItemsParamNames: [], ArgumentEvalGenericName: "eval")),
+                        DefaultInterface:
+                        new ExprFunctionCompilationInterface(EnvItemsParamNames: [], ArgumentEvalGenericName: "eval")),
                     DeclarationSyntaxContext: new DeclarationSyntaxContext([])));
 
-        var expectedSyntaxText = """
+        var expectedSyntaxText =
+            """
             environment switch
             {
                 PineValue.ListValue listValue =>
@@ -333,62 +338,63 @@ public class CompilePineToDotNetTests
     [Fact]
     public void Test_CompileEnvItemsPathsForExprFunction()
     {
-        var testCases = new[]
-        {
-            new
+        var testCases =
+            new[]
             {
-                expr =
-                (Expression)
-                new Expression.Environment(),
+                new
+                {
+                    expr =
+                    (Expression)
+                    new Expression.Environment(),
 
-                envConstraint =
-                PineValueClass.Create(
-                    observedPart: new ExpressionEnvClass.ConstrainedEnv([]),
-                    PineValue.EmptyList,
-                    skipUnavailableItems: false),
+                    envConstraint =
+                    PineValueClass.Create(
+                        observedPart: new ExpressionEnvClass.ConstrainedEnv([]),
+                        PineValue.EmptyList,
+                        skipUnavailableItems: false),
 
-                expectedPaths = (IReadOnlyList<IReadOnlyList<int>>)[[]]
-            },
-            new
-            {
-                expr =
-                (Expression)
-                Expression.BuiltinInst(
-                    function: nameof(BuiltinFunction.head),
-                    input: new Expression.Environment()),
-
-                envConstraint =
-                PineValueClass.Create(
-                    observedPart: new ExpressionEnvClass.ConstrainedEnv([]),
-                    PineValue.EmptyList,
-                    skipUnavailableItems: false),
-
-                expectedPaths = (IReadOnlyList<IReadOnlyList<int>>)[[0]]
-            },
-            new
-            {
-                expr =
-                (Expression)
-                Expression.BuiltinInst(
-                    function: nameof(BuiltinFunction.head),
-                    input:
+                    expectedPaths = (IReadOnlyList<IReadOnlyList<int>>)[[]]
+                },
+                new
+                {
+                    expr =
+                    (Expression)
                     Expression.BuiltinInst(
-                        function:"skip",
-                        input: Expression.ListInst(
-                            [
-                            Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(13)),
-                            new Expression.Environment()
-                            ]))),
+                        function: nameof(BuiltinFunction.head),
+                        input: new Expression.Environment()),
 
-                envConstraint =
-                PineValueClass.Create(
-                    observedPart: new ExpressionEnvClass.ConstrainedEnv([]),
-                    PineValue.EmptyList,
-                    skipUnavailableItems: false),
+                    envConstraint =
+                    PineValueClass.Create(
+                        observedPart: new ExpressionEnvClass.ConstrainedEnv([]),
+                        PineValue.EmptyList,
+                        skipUnavailableItems: false),
 
-                expectedPaths = (IReadOnlyList<IReadOnlyList<int>>)[[13]]
-            },
-        };
+                    expectedPaths = (IReadOnlyList<IReadOnlyList<int>>)[[0]]
+                },
+                new
+                {
+                    expr =
+                    (Expression)
+                    Expression.BuiltinInst(
+                        function: nameof(BuiltinFunction.head),
+                        input:
+                        Expression.BuiltinInst(
+                            function:"skip",
+                            input: Expression.ListInst(
+                                [
+                                Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(13)),
+                                new Expression.Environment()
+                                ]))),
+
+                    envConstraint =
+                    PineValueClass.Create(
+                        observedPart: new ExpressionEnvClass.ConstrainedEnv([]),
+                        PineValue.EmptyList,
+                        skipUnavailableItems: false),
+
+                    expectedPaths = (IReadOnlyList<IReadOnlyList<int>>)[[13]]
+                },
+            };
 
         foreach (var testCase in testCases)
         {
@@ -401,7 +407,10 @@ public class CompilePineToDotNetTests
 
             for (var i = 0; i < testCase.expectedPaths.Count; i++)
             {
-                paths[i].Should().BeEquivalentTo(testCase.expectedPaths[i], options => options.WithStrictOrdering(), $"Path {i} should match expected path");
+                paths[i].Should().BeEquivalentTo(
+                    testCase.expectedPaths[i],
+                    options => options.WithStrictOrdering(),
+                    $"Path {i} should match expected path");
             }
         }
     }
@@ -436,133 +445,128 @@ public class CompilePineToDotNetTests
             """;
 
         IReadOnlyList<TestCase> testCases =
-        [
-            new TestCase
-            (
-                InputModuleText:
-                """
-                module Common exposing (..)
+            [
+                new TestCase(
+                    InputModuleText:
+                    """
+                    module Common exposing (..)
 
 
-                simpleFunction : Int -> Int
-                simpleFunction n =
-                    n + 1
+                    simpleFunction : Int -> Int
+                    simpleFunction n =
+                        n + 1
 
-                """,
+                    """,
 
-                ExpectedText:
-                """
-                using Pine.Core;
-                using Pine.Core.CodeAnalysis;
-                using Pine.PineVM;
-                using System;
-                using System.Collections.Generic;
-                using System.Collections.Immutable;
-                using System.Linq;
+                    ExpectedText:
+                    """
+                    using Pine.Core;
+                    using Pine.Core.CodeAnalysis;
+                    using Pine.PineVM;
+                    using System;
+                    using System.Collections.Generic;
+                    using System.Collections.Immutable;
+                    using System.Linq;
 
-                public static class Common
-                {
-                    public static PineValue simpleFunction(PineValue env)
+                    public static class Common
                     {
-                        var env_1 =
-                            BuiltinFunction.head(
-                                BuiltinFunction.skip(1, env));
-
-                        var env_1_0 =
-                            BuiltinFunction.head(env_1);
-
-                        return simpleFunction_uparam(env_1_0);
-                    }
-
-
-                    public static PineValue simpleFunction_uparam(PineValue env_1_0)
-                    {
-                        var env_1_0_as_int =
-                            BuiltinFunction.SignedIntegerFromValueRelaxed(env_1_0);
-
-                        var stack_3_as_int =
-                            env_1_0_as_int + 1L;
-
-                        PineValue stack_3 =
-                            PineValue.EmptyList;
-
-                        if (stack_3_as_int is { } stack_3_as_int_not_null)
+                        public static PineValue simpleFunction(PineValue env)
                         {
-                            stack_3 =
-                                IntegerEncoding.EncodeSignedInteger(stack_3_as_int_not_null);
+                            var env_1 =
+                                BuiltinFunction.head(
+                                    BuiltinFunction.skip(1, env));
+
+                            var env_1_0 =
+                                BuiltinFunction.head(env_1);
+
+                            return simpleFunction_uparam(env_1_0);
                         }
 
-                        return stack_3;
-                    }
-                }
-                """
-            ),
 
-            new TestCase
-            (
-                InputModuleText:
-                """
-                module Common exposing (..)
-
-
-                simpleFunction : Int -> Int
-                simpleFunction n =
-                    n * 3 + 1
-
-                """,
-
-                ExpectedText:
-                """
-                using Pine.Core;
-                using Pine.Core.CodeAnalysis;
-                using Pine.PineVM;
-                using System;
-                using System.Collections.Generic;
-                using System.Collections.Immutable;
-                using System.Linq;
-
-                public static class Common
-                {
-                    public static PineValue simpleFunction(PineValue env)
-                    {
-                        var env_1 =
-                            BuiltinFunction.head(
-                                BuiltinFunction.skip(1, env));
-
-                        var env_1_0 =
-                            BuiltinFunction.head(env_1);
-
-                        return simpleFunction_uparam(env_1_0);
-                    }
-
-
-                    public static PineValue simpleFunction_uparam(PineValue env_1_0)
-                    {
-                        var env_1_0_as_int =
-                            BuiltinFunction.SignedIntegerFromValueRelaxed(env_1_0);
-
-                        var stack_3_as_int =
-                            env_1_0_as_int * 3L;
-
-                        var stack_4_as_int =
-                            stack_3_as_int + 1L;
-
-                        PineValue stack_4 =
-                            PineValue.EmptyList;
-
-                        if (stack_4_as_int is { } stack_4_as_int_not_null)
+                        public static PineValue simpleFunction_uparam(PineValue env_1_0)
                         {
-                            stack_4 =
-                                IntegerEncoding.EncodeSignedInteger(stack_4_as_int_not_null);
+                            var env_1_0_as_int =
+                                BuiltinFunction.SignedIntegerFromValueRelaxed(env_1_0);
+
+                            var stack_3_as_int =
+                                env_1_0_as_int + 1L;
+
+                            PineValue stack_3 =
+                                PineValue.EmptyList;
+
+                            if (stack_3_as_int is { } stack_3_as_int_not_null)
+                            {
+                                stack_3 =
+                                    IntegerEncoding.EncodeSignedInteger(stack_3_as_int_not_null);
+                            }
+
+                            return stack_3;
+                        }
+                    }
+                    """),
+
+                new TestCase(
+                    InputModuleText:
+                    """
+                    module Common exposing (..)
+
+
+                    simpleFunction : Int -> Int
+                    simpleFunction n =
+                        n * 3 + 1
+
+                    """,
+
+                    ExpectedText:
+                    """
+                    using Pine.Core;
+                    using Pine.Core.CodeAnalysis;
+                    using Pine.PineVM;
+                    using System;
+                    using System.Collections.Generic;
+                    using System.Collections.Immutable;
+                    using System.Linq;
+
+                    public static class Common
+                    {
+                        public static PineValue simpleFunction(PineValue env)
+                        {
+                            var env_1 =
+                                BuiltinFunction.head(
+                                    BuiltinFunction.skip(1, env));
+
+                            var env_1_0 =
+                                BuiltinFunction.head(env_1);
+
+                            return simpleFunction_uparam(env_1_0);
                         }
 
-                        return stack_4;
-                    }
-                }
-                """
-            ),
 
-        ];
+                        public static PineValue simpleFunction_uparam(PineValue env_1_0)
+                        {
+                            var env_1_0_as_int =
+                                BuiltinFunction.SignedIntegerFromValueRelaxed(env_1_0);
+
+                            var stack_3_as_int =
+                                env_1_0_as_int * 3L;
+
+                            var stack_4_as_int =
+                                stack_3_as_int + 1L;
+
+                            PineValue stack_4 =
+                                PineValue.EmptyList;
+
+                            if (stack_4_as_int is { } stack_4_as_int_not_null)
+                            {
+                                stack_4 =
+                                    IntegerEncoding.EncodeSignedInteger(stack_4_as_int_not_null);
+                            }
+
+                            return stack_4;
+                        }
+                    }
+                    """),
+            ];
 
         for (var testCaseIndex = 0; testCaseIndex < testCases.Count; ++testCaseIndex)
         {
@@ -607,8 +611,8 @@ public class CompilePineToDotNetTests
                     SyntaxFactory.CompilationUnit()
                     .WithUsings([.. compiledModuleCommonCSharp.UsingDirectives])
                     .WithMembers(
-                    SyntaxFactory.List<MemberDeclarationSyntax>(
-                        [compiledModuleCommonCSharp.ClassDeclarationSyntax]));
+                        SyntaxFactory.List<MemberDeclarationSyntax>(
+                            [compiledModuleCommonCSharp.ClassDeclarationSyntax]));
 
                 var formattedNode =
                     FormatCSharpFile.FormatCompilationUnit(

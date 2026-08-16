@@ -140,14 +140,15 @@ public class ElmValueJsonValueEncodingTests
                                     ElmValue.ListInstance(
                                         [
                                             ElmValue.StringInstance("Nothing"),
-                                            ElmValue.TagInstance("ArrayValue",
-                                            [ElmValue.ListInstance([])])
+                                            ElmValue.TagInstance(
+                                                "ArrayValue",
+                                                [ElmValue.ListInstance([])])
                                         ])
                                 ])
                         ]),
 
-                        expectedJsonString =
-                        "{\"Nothing\":[]}"
+                    expectedJsonString =
+                    "{\"Nothing\":[]}"
                 },
 
                 new
@@ -160,33 +161,33 @@ public class ElmValueJsonValueEncodingTests
                             ElmValue.Integer(42)
                         ]),
 
-                        expectedLibJsonValue =
-                        ElmValue.TagInstance(
-                            "ObjectValue",
-                            [
-                                ElmValue.ListInstance(
-                                    [
-                                        ElmValue.ListInstance(
-                                            [
-                                                ElmValue.StringInstance("Just"),
-                                                ElmValue.TagInstance(
-                                                    "ArrayValue",
-                                                    [
-                                                        ElmValue.ListInstance(
-                                                            [
-                                                                ElmValue.TagInstance(
-                                                                    "IntValue",
-                                                                    [
-                                                                        ElmValue.Integer(42)
-                                                                    ])
-                                                            ])
-                                                    ])
-                                            ])
-                                    ])
-                            ]),
+                    expectedLibJsonValue =
+                    ElmValue.TagInstance(
+                        "ObjectValue",
+                        [
+                            ElmValue.ListInstance(
+                                [
+                                    ElmValue.ListInstance(
+                                        [
+                                            ElmValue.StringInstance("Just"),
+                                            ElmValue.TagInstance(
+                                                "ArrayValue",
+                                                [
+                                                    ElmValue.ListInstance(
+                                                        [
+                                                            ElmValue.TagInstance(
+                                                                "IntValue",
+                                                                [
+                                                                    ElmValue.Integer(42)
+                                                                ])
+                                                        ])
+                                                ])
+                                        ])
+                                ])
+                        ]),
 
-                            expectedJsonString =
-                            "{\"Just\":[42]}"
+                    expectedJsonString =
+                    "{\"Just\":[42]}"
                 },
 
                 new
@@ -199,36 +200,36 @@ public class ElmValueJsonValueEncodingTests
                             ("age", ElmValue.Integer(42))
                         ]),
 
-                        expectedLibJsonValue =
-                        ElmValue.TagInstance(
-                            "ObjectValue",
-                            [
-                                ElmValue.ListInstance(
-                                    [
-                                        ElmValue.ListInstance(
-                                            [
-                                                ElmValue.StringInstance("name"),
-                                                ElmValue.TagInstance(
-                                                    "StringValue",
-                                                    [
-                                                        ElmValue.StringInstance("Alice")
-                                                    ])
-                                            ]),
-
-                                        ElmValue.ListInstance(
+                    expectedLibJsonValue =
+                    ElmValue.TagInstance(
+                        "ObjectValue",
+                        [
+                            ElmValue.ListInstance(
+                                [
+                                    ElmValue.ListInstance(
                                         [
-                                            ElmValue.StringInstance("age"),
+                                            ElmValue.StringInstance("name"),
                                             ElmValue.TagInstance(
-                                                "IntValue",
+                                                "StringValue",
                                                 [
-                                                    ElmValue.Integer(42)
+                                                    ElmValue.StringInstance("Alice")
                                                 ])
-                                        ])
-                                    ])
-                            ]),
+                                        ]),
 
-                            expectedJsonString =
-                            "{\"name\":\"Alice\",\"age\":42}"
+                                    ElmValue.ListInstance(
+                                    [
+                                        ElmValue.StringInstance("age"),
+                                        ElmValue.TagInstance(
+                                            "IntValue",
+                                            [
+                                                ElmValue.Integer(42)
+                                            ])
+                                    ])
+                                ])
+                        ]),
+
+                    expectedJsonString =
+                    "{\"name\":\"Alice\",\"age\":42}"
                 },
 
                 new
@@ -272,8 +273,8 @@ public class ElmValueJsonValueEncodingTests
                                 ])
                         ]),
 
-                        expectedJsonString =
-                        "{\"AsBase64\":\"VGVzdA==\"}"
+                    expectedJsonString =
+                    "{\"AsBase64\":\"VGVzdA==\"}"
                 },
 
                 new
@@ -291,8 +292,8 @@ public class ElmValueJsonValueEncodingTests
                             ElmValue.StringInstance("0.25")
                         ]),
 
-                        expectedJsonString =
-                        "0.25"
+                    expectedJsonString =
+                    "0.25"
                 },
             };
 
@@ -412,7 +413,8 @@ public class ElmValueJsonValueEncodingTests
             catch (Exception e)
             {
                 throw new Exception(
-                    $"Test case {i} failed: {e.Message} (" + testCase.input.ToString() + ")", e);
+                    $"Test case {i} failed: {e.Message} (" + testCase.input.ToString() + ")",
+                    e);
             }
         }
     }

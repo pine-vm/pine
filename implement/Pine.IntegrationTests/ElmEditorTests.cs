@@ -21,7 +21,8 @@ namespace Pine.IntegrationTests
             var webAppSource =
                 ExampleAppsTests.ExampleAppValueFromExampleName("elm-editor");
 
-            var elmModuleTextBeforeFormatting = @"
+            var elmModuleTextBeforeFormatting =
+                @"
 module Common exposing (..)
 
 a =
@@ -34,7 +35,8 @@ a =
     b   +      c
 ";
 
-            var expectedElmModuleTextAfterFormatting = @"
+            var expectedElmModuleTextAfterFormatting =
+                @"
 module Common exposing (..)
 
 
@@ -48,15 +50,14 @@ a =
     in
     b + c
 ";
+
             using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: webAppSource);
             using var server = testSetup.StartWebHost();
             using var publicAppClient = testSetup.BuildPublicAppHttpClient();
 
             var formatRequest =
-                new ElmEditorApi.ElmEditorApiRequestStructure
-                (
-                    FormatElmModuleTextRequest: [elmModuleTextBeforeFormatting]
-                );
+                new ElmEditorApi.ElmEditorApiRequestStructure(
+                    FormatElmModuleTextRequest: [elmModuleTextBeforeFormatting]);
 
             var httpResponse =
                 publicAppClient
@@ -75,7 +76,8 @@ a =
             responseStructure.ErrorResponse.Should().BeNull(
                 "responseStructure.ErrorResponse should be null.\n" + responseStructure.ErrorResponse);
 
-            NormalizeStringTestingElmFormat(responseStructure
+            NormalizeStringTestingElmFormat(
+                responseStructure
                 ?.FormatElmModuleTextResponse
                 ?.FirstOrDefault()?.formattedText
                 .WithDefaultBuilder(() => throw new ArgumentNullException())!).Should().Be(

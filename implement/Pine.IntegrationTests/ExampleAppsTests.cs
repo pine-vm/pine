@@ -66,22 +66,16 @@ public class ExampleAppsTests
 
         var eventResponse =
             webServiceApp.EventHttpRequest(
-                new WebServiceInterface.HttpRequestEventStruct
-                (
+                new WebServiceInterface.HttpRequestEventStruct(
                     HttpRequestId: "1",
                     PosixTimeMilli: 0,
-                    RequestContext: new WebServiceInterface.HttpRequestContext
-                    (
-                        ClientAddress: null
-                    ),
-                    Request: new WebServiceInterface.HttpRequestProperties
-                    (
+                    RequestContext: new WebServiceInterface.HttpRequestContext(
+                        ClientAddress: null),
+                    Request: new WebServiceInterface.HttpRequestProperties(
                         Method: "GET",
                         Uri: "/",
                         Body: null,
-                        Headers: []
-                    )
-                ));
+                        Headers: [])));
 
         var responseCommand = eventResponse.ResponseCommands.Single();
 
@@ -165,22 +159,16 @@ public class ExampleAppsTests
 
         var formatRequestEventResponse =
             webServiceApp.EventHttpRequest(
-                new WebServiceInterface.HttpRequestEventStruct
-                (
+                new WebServiceInterface.HttpRequestEventStruct(
                     HttpRequestId: "1",
                     PosixTimeMilli: 0,
-                    RequestContext: new WebServiceInterface.HttpRequestContext
-                    (
-                        ClientAddress: null
-                    ),
-                    Request: new WebServiceInterface.HttpRequestProperties
-                    (
+                    RequestContext: new WebServiceInterface.HttpRequestContext(
+                        ClientAddress: null),
+                    Request: new WebServiceInterface.HttpRequestProperties(
                         Method: "POST",
                         Uri: "http://demohost/api",
                         Body: null,
-                        Headers: []
-                    )
-                ));
+                        Headers: [])));
 
         for (var i = 0; i < 10; i++)
         {
@@ -196,24 +184,18 @@ public class ExampleAppsTests
                 FormatElmModuleTextRequest: [elmModuleTextBeforeFormatting]);
 
         webServiceApp.EventHttpRequest(
-            new WebServiceInterface.HttpRequestEventStruct
-            (
+            new WebServiceInterface.HttpRequestEventStruct(
                 HttpRequestId: formatHttpRequestId,
                 PosixTimeMilli: 0,
-                RequestContext: new WebServiceInterface.HttpRequestContext
-                (
-                    ClientAddress: null
-                ),
-                Request: new WebServiceInterface.HttpRequestProperties
-                (
+                RequestContext: new WebServiceInterface.HttpRequestContext(
+                    ClientAddress: null),
+                Request: new WebServiceInterface.HttpRequestProperties(
                     Method: "POST",
                     Uri: "http://demohost/api",
                     Body:
                     System.Text.Encoding.UTF8.GetBytes(
                         System.Text.Json.JsonSerializer.Serialize(formatRequest)),
-                    Headers: []
-                )
-            ));
+                    Headers: [])));
 
         for (var i = 0; i < 10; i++)
         {

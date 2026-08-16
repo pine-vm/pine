@@ -1,8 +1,8 @@
 using AwesomeAssertions;
 using Pine.Core;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmSyntax;
-using Pine.Core.CodeAnalysis;
 using Pine.Core.Internal;
 using System.Text;
 using Xunit;
@@ -51,11 +51,15 @@ public class InterpreterDeepNestingParseTests
         sb.AppendLine();
         sb.AppendLine("decoder =");
         sb.Append("    f");
+
         for (var i = 0; i < depth; ++i)
             sb.Append(" (g");
+
         sb.Append(" x");
+
         for (var i = 0; i < depth; ++i)
             sb.Append(')');
+
         sb.AppendLine();
         return sb.ToString();
     }
@@ -70,11 +74,15 @@ public class InterpreterDeepNestingParseTests
         sb.AppendLine("module Test exposing (..)");
         sb.AppendLine();
         sb.Append("decoder =\n    ");
+
         for (var i = 0; i < depth; ++i)
             sb.Append('(');
+
         sb.Append('x');
+
         for (var i = 0; i < depth; ++i)
             sb.Append(')');
+
         sb.AppendLine();
         return sb.ToString();
     }

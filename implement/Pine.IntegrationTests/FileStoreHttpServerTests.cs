@@ -21,7 +21,9 @@ public class FileStoreHttpServerTests
     private sealed class TestSetup : IAsyncDisposable
     {
         public WebApplication App { get; private set; }
+
         public HttpClient Client { get; private set; }
+
         public IFileStore FileStore { get; private set; }
 
         public TestSetup()
@@ -186,10 +188,12 @@ public class FileStoreHttpServerTests
         var appendContent = " World"u8.ToArray();
 
         // Act
-        var request = new HttpRequestMessage(HttpMethod.Post, "/files/append/file.txt")
-        {
-            Content = new ByteArrayContent(appendContent)
-        };
+        var request =
+            new HttpRequestMessage(HttpMethod.Post, "/files/append/file.txt")
+            {
+                Content = new ByteArrayContent(appendContent)
+            };
+
         request.Headers.Add("X-Operation", "append");
         var response = await setup.Client.SendAsync(request);
 
@@ -240,10 +244,12 @@ public class FileStoreHttpServerTests
         var newContent = "should not be saved"u8.ToArray();
 
         // Act
-        var request = new HttpRequestMessage(HttpMethod.Put, "/files/existing/file.txt")
-        {
-            Content = new ByteArrayContent(newContent)
-        };
+        var request =
+            new HttpRequestMessage(HttpMethod.Put, "/files/existing/file.txt")
+            {
+                Content = new ByteArrayContent(newContent)
+            };
+
         request.Headers.Add("If-None-Match", "*");
         var response = await setup.Client.SendAsync(request);
 
@@ -302,10 +308,11 @@ public class FileStoreHttpServerTests
         var content = "some content"u8.ToArray();
 
         // Act
-        var request = new HttpRequestMessage(HttpMethod.Post, "/files/test/file.txt")
-        {
-            Content = new ByteArrayContent(content)
-        };
+        var request =
+            new HttpRequestMessage(HttpMethod.Post, "/files/test/file.txt")
+            {
+                Content = new ByteArrayContent(content)
+            };
         // Don't add X-Operation header
         var response = await setup.Client.SendAsync(request);
 
@@ -314,5 +321,6 @@ public class FileStoreHttpServerTests
     }
 
     private record DirectoryListingResponse(DirectoryEntry[] Entries);
+
     private record DirectoryEntry(string Name, string Type);
 }

@@ -218,11 +218,11 @@ public class ElmLanguageServiceTests
 
             var addFileResult =
                 languageServiceState.HandleRequest(
-                new LanguageServiceInterface.Request.AddWorkspaceFileRequest(
-                    FilePath: string.Join("/", file.path),
-                    Blob: new LanguageServiceInterface.FileTreeBlobNode(
-                        AsBase64: asBase64,
-                        AsText: asText)));
+                    new LanguageServiceInterface.Request.AddWorkspaceFileRequest(
+                        FilePath: string.Join("/", file.path),
+                        Blob: new LanguageServiceInterface.FileTreeBlobNode(
+                            AsBase64: asBase64,
+                            AsText: asText)));
 
             if (addFileResult.IsErrOrNull() is { } err)
                 throw new Exception(err);

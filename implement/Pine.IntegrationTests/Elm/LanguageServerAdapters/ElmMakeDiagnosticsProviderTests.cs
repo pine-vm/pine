@@ -80,7 +80,8 @@ public class ElmMakeDiagnosticsProviderTests
                 new Uri(entryPointPath).AbsoluteUri,
                 CancellationToken.None);
 
-        var diagnostics = result
+        var diagnostics =
+            result
             .Should().BeOfType<Result<DiagnosticsProviderError, IReadOnlyList<DocumentDiagnostics>>.Ok>()
             .Which.Value;
 
@@ -117,7 +118,8 @@ public class ElmMakeDiagnosticsProviderTests
 
             var result = await provider.GetDiagnosticsAsync(entryPointUri, CancellationToken.None);
 
-            return result
+            return
+                result
                 .Should().BeOfType<Result<DiagnosticsProviderError, IReadOnlyList<DocumentDiagnostics>>.Err>()
                 .Which.Value;
         }
@@ -139,6 +141,7 @@ public class ElmMakeDiagnosticsProviderTests
     public async Task Cancellation_does_not_invoke_elm_make()
     {
         var invoked = false;
+
         var provider =
             new ElmMakeDiagnosticsProvider(
                 _ => "/workspace/elm.json",

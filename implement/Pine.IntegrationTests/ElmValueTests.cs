@@ -12,34 +12,43 @@ public class ElmValueTests
     [Fact]
     public void Elm_value_encoding_roundtrips()
     {
-        var testCases = (IReadOnlyList<ElmValue>)[
+        var testCases =
+            (IReadOnlyList<ElmValue>)[
             ElmValue.CharInstance('a'),
             ElmValue.Integer(42),
             ElmValue.StringInstance("Hello, world!"),
-            new ElmValue.ElmList([
+            new ElmValue.ElmList(
+                [
                 ElmValue.Integer(31),
                 ElmValue.Integer(37),
-                ElmValue.Integer(39)]),
-            new ElmValue.ElmRecord([
+                ElmValue.Integer(39)
+                ]),
+            new ElmValue.ElmRecord(
+                [
                 ("alfa", ElmValue.Integer(1)),
                 ("beta", ElmValue.Integer(2)),
                 ("gamma", ElmValue.Integer(3)),
-            ]),
+                ]),
 
             ElmValue.StringInstance("Hello, world 👋"),
 
             ElmValue.TagInstance("True", []),
             ElmValue.TagInstance("False", []),
 
-            new ElmValue.ElmList([
-                new ElmValue.ElmList([
+            new ElmValue.ElmList(
+                [
+                new ElmValue.ElmList(
+                    [
                     ElmValue.Integer(7),
-                    ElmValue.Integer(13)]),
-                new ElmValue.ElmList([
+                    ElmValue.Integer(13)
+                    ]),
+                new ElmValue.ElmList(
+                    [
                     ElmValue.Integer(41),
                     ElmValue.Integer(43),
-                    ElmValue.Integer(47)]),
-            ]),
+                    ElmValue.Integer(47)
+                    ]),
+                ]),
 
             new ElmValue.ElmBytes(System.ReadOnlyMemory<byte>.Empty),
             new ElmValue.ElmBytes((byte[])[0]),
@@ -50,7 +59,7 @@ public class ElmValueTests
             ElmValue.ElmFloat.Convert(0.3),
             ElmValue.ElmFloat.Convert(1.7),
             ElmValue.ElmFloat.Convert(-0.5),
-        ];
+            ];
 
         foreach (var testCase in testCases)
         {
@@ -76,16 +85,20 @@ public class ElmValueTests
 
                 (ElmValue.StringInstance("Hello, world!"), "\"Hello, world!\""),
 
-                (new ElmValue.ElmList([
-                ElmValue.Integer(31),
+                (new ElmValue.ElmList(
+                    [
+                    ElmValue.Integer(31),
                     ElmValue.Integer(37),
-                    ElmValue.Integer(39)]),
-                    "[ 31, 37, 39 ]"),
+                    ElmValue.Integer(39)
+                    ]),
+                "[ 31, 37, 39 ]"),
 
-                (new ElmValue.ElmRecord([
-                ("alfa", ElmValue.Integer(1)),
+                (new ElmValue.ElmRecord(
+                    [
+                    ("alfa", ElmValue.Integer(1)),
                     ("beta", ElmValue.Integer(2)),
-                    ("gamma", ElmValue.Integer(3))]),
+                    ("gamma", ElmValue.Integer(3))
+                    ]),
                 "{ alfa = 1, beta = 2, gamma = 3 }"),
 
                 (ElmValue.TagInstance("Just", [ElmValue.Integer(43)]),
@@ -144,11 +157,13 @@ public class ElmValueTests
     [Fact]
     public void Shallow_parsing_as_record()
     {
-        var elmRecord = new ElmValue.ElmRecord(
-            [("alfa", ElmValue.Integer(11)),
-             ("beta", ElmValue.Integer(13)),
-             ("gamma", ElmValue.Integer(17))
-             ]);
+        var elmRecord =
+            new ElmValue.ElmRecord(
+                [
+                ("alfa", ElmValue.Integer(11)),
+                ("beta", ElmValue.Integer(13)),
+                ("gamma", ElmValue.Integer(17))
+                ]);
 
         var asPineValue = ElmValueEncoding.ElmValueAsPineValue(elmRecord);
 

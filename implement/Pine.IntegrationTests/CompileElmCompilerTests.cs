@@ -69,20 +69,26 @@ public class CompileElmCompilerTests
                 pineVM,
                 modByFunction,
                 arguments:
-                [IntegerEncoding.EncodeSignedInteger(13),
-                    IntegerEncoding.EncodeSignedInteger(17)]);
+                [
+                IntegerEncoding.EncodeSignedInteger(13),
+                    IntegerEncoding.EncodeSignedInteger(17)
+                ]);
 
-        modByApplicationResult.Extract(err => throw new Exception(err)).Should().Be(IntegerEncoding.EncodeSignedInteger(4));
+        modByApplicationResult.Extract(err => throw new Exception(err)).Should()
+            .Be(IntegerEncoding.EncodeSignedInteger(4));
 
         modByApplicationResult =
             ElmInteractiveEnvironment.ApplyFunction(
                 pineVM,
                 modByFunction,
                 arguments:
-                [IntegerEncoding.EncodeSignedInteger(41),
-                    IntegerEncoding.EncodeSignedInteger(47)]);
+                [
+                IntegerEncoding.EncodeSignedInteger(41),
+                    IntegerEncoding.EncodeSignedInteger(47)
+                ]);
 
-        modByApplicationResult.Extract(err => throw new Exception(err)).Should().Be(IntegerEncoding.EncodeSignedInteger(6));
+        modByApplicationResult.Extract(err => throw new Exception(err)).Should()
+            .Be(IntegerEncoding.EncodeSignedInteger(6));
     }
 
     [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
@@ -176,9 +182,10 @@ public class CompileElmCompilerTests
 
         var declarations =
             declarationsList.Items.Cast<ElmValue.ElmTag>()
-            .OrderBy(declarationNode =>
-            ((ElmValue.ElmInteger)
-            ((ElmValue.ElmRecord)((ElmValue.ElmRecord)declarationNode.Arguments[0])["start"]!)["row"]!).Value)
+            .OrderBy(
+                declarationNode =>
+                ((ElmValue.ElmInteger)
+                ((ElmValue.ElmRecord)((ElmValue.ElmRecord)declarationNode.Arguments[0])["start"]!)["row"]!).Value)
             .ToImmutableArray();
 
         declarations.Length.Should().Be(6);
@@ -302,8 +309,10 @@ public class CompileElmCompilerTests
                 pineVM,
                 stringSplitFunction,
                 arguments:
-                [ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance(",")),
-                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("pizza,risotto,focaccia"))]);
+                [
+                ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance(",")),
+                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("pizza,risotto,focaccia"))
+                ]);
 
         var stringSplitResultElmValue =
             ElmValueEncoding.PineValueAsElmValue(
@@ -314,9 +323,11 @@ public class CompileElmCompilerTests
 
         stringSplitResultElmValue.Should().BeEquivalentTo(
             new ElmValue.ElmList(
-                [ElmValue.StringInstance("pizza"),
+                [
+                ElmValue.StringInstance("pizza"),
                     ElmValue.StringInstance("risotto"),
-                    ElmValue.StringInstance("focaccia")]));
+                    ElmValue.StringInstance("focaccia")
+                ]));
     }
 
     [Fact(Skip = "Productive side not ready yet")]
@@ -341,8 +352,9 @@ public class CompileElmCompilerTests
         var compilerPackageSourcesFiles =
             compilerPackageSourcesTrees
             .SelectMany(tree => tree.tree.EnumerateFilesTransitive())
-            .Where(blobAtPath =>
-            blobAtPath.path.First() == "src" && blobAtPath.path.Last().ToLower().EndsWith(".elm"));
+            .Where(
+                blobAtPath =>
+                blobAtPath.path.First() == "src" && blobAtPath.path.Last().ToLower().EndsWith(".elm"));
 
         var compilerAppCodeSourceFiles =
             compilerProgram.EnumerateFilesTransitive()
@@ -464,11 +476,14 @@ public class CompileElmCompilerTests
             return
                 Core.Elm.ElmSyntax.ElmModule.ParseModuleName(moduleText)
                 .MapError(err => "Failed parsing name for module " + moduleText.Split('\n', '\r').FirstOrDefault())
-                .AndThen(moduleName =>
-                bundledElmCompiler.ParseElmModuleText(moduleText, pineVM)
-                .MapError(err => "Failed parsing module " + moduleName + ": " + err)
-                .Map(parsedModule => new KeyValuePair<IReadOnlyList<string>, (string moduleText, PineValue parsed)>(
-                    moduleName, (moduleText, parsedModule))));
+                .AndThen(
+                    moduleName =>
+                    bundledElmCompiler.ParseElmModuleText(moduleText, pineVM)
+                    .MapError(err => "Failed parsing module " + moduleName + ": " + err)
+                    .Map(
+                        parsedModule => new KeyValuePair<IReadOnlyList<string>, (string moduleText, PineValue parsed)>(
+                            moduleName,
+                            (moduleText, parsedModule))));
         }
 
         var elmModulesTextsForElmCompilerIncludingCore =

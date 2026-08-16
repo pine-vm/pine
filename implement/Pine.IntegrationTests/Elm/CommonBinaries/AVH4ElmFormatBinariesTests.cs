@@ -9,7 +9,8 @@ public class AVH4ElmFormatBinariesTests
     [Fact]
     public void Format_elm_module_text()
     {
-        var elmModuleTextBeforeFormatting = @"
+        var elmModuleTextBeforeFormatting =
+            @"
 module Common exposing (..)
 
 a =
@@ -21,7 +22,8 @@ a =
     b   +      c
 ";
 
-        var expectedElmModuleTextAfterFormatting = @"
+        var expectedElmModuleTextAfterFormatting =
+            @"
 module Common exposing (..)
 
 

@@ -11,9 +11,11 @@ namespace Pine.IntegrationTests;
 
 public class ElmInteractiveTests
 {
-    private static string PathToCoreScenariosDirectory => @"./../../../../test-and-train/elm-interactive-scenarios-core";
+    private static string PathToCoreScenariosDirectory =>
+        @"./../../../../test-and-train/elm-interactive-scenarios-core";
 
-    private static string PathToKernelScenariosDirectory => @"./../../../../test-and-train/elm-interactive-scenarios-kernel";
+    private static string PathToKernelScenariosDirectory =>
+        @"./../../../../test-and-train/elm-interactive-scenarios-kernel";
 
     public static FileTree CompileElmProgramCodeFiles =>
         Core.Elm.ElmInElm.BundledFiles.CompilerSourceContainerFilesDefault.Value;
@@ -31,26 +33,30 @@ public class ElmInteractiveTests
                 PathToKernelScenariosDirectory
             }
             .SelectMany(Directory.EnumerateDirectories)
-            .SelectMany(scenarioDirectory =>
-            {
-                var scenarioName = Path.GetFileName(scenarioDirectory);
-
-                if (!Directory.EnumerateFiles(scenarioDirectory, "*", searchOption: SearchOption.AllDirectories).Any())
+            .SelectMany(
+                scenarioDirectory =>
                 {
-                    // Do not stumble over empty directory here. It could be a leftover after git checkout.
-                    return [];
-                }
+                    var scenarioName = Path.GetFileName(scenarioDirectory);
 
-                return ImmutableList.Create((scenarioName, scenarioDirectory));
-            })
+                    if (!Directory.EnumerateFiles(scenarioDirectory, "*", searchOption: SearchOption.AllDirectories).Any())
+                    {
+                        // Do not stumble over empty directory here. It could be a leftover after git checkout.
+                        return [];
+                    }
+
+                    return ImmutableList.Create((scenarioName, scenarioDirectory));
+                })
             .ToImmutableList();
 
         var scenariosTree =
             FileTree.SortedDirectory(
-                [.. scenarios
-                .Select(scenario =>
-                (name: scenario.scenarioName,
-                component: LoadFromLocalFilesystem.LoadSortedTreeFromPath(scenario.scenarioDirectory)!))]);
+                [
+                .. scenarios
+                .Select(
+                    scenario =>
+                    (name: scenario.scenarioName,
+                    component: LoadFromLocalFilesystem.LoadSortedTreeFromPath(scenario.scenarioDirectory)!))
+                ]);
 
         var parsedScenarios =
             ElmTime.ElmInteractive.TestElmInteractive.ParseElmInteractiveScenarios(scenariosTree, console);
@@ -121,7 +127,8 @@ public class ElmInteractiveTests
             {
                 console.WriteLine(
                     "Failed step '" + failedStep.step.name + "':\n" +
-                    failedStep.step.result.Unpack(fromErr: err => err, fromOk: _ => throw new NotImplementedException()).errorAsText,
+                    failedStep.step.result.Unpack(fromErr: err => err, fromOk: _ => throw new NotImplementedException())
+                    .errorAsText,
                     color: IConsole.TextColor.Red);
             }
         }

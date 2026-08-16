@@ -36,6 +36,7 @@ public class ConcreteCanonicalizationTests
         canonicalized.Imports.Should().Equal(parsed.Imports);
         canonicalized.Comments.Should().Equal(parsed.Comments);
         canonicalized.IncompleteDeclarations.Should().Equal(parsed.IncompleteDeclarations);
+
         canonicalized.Declarations.Select(declaration => declaration.Range)
             .Should().Equal(parsed.Declarations.Select(declaration => declaration.Range));
 
@@ -53,12 +54,13 @@ public class ConcreteCanonicalizationTests
             canonicalizedValue.Declaration.Value.Expression.Value
             .Should().BeOfType<SyntaxModel.Expression.ListExpr>().Which;
 
-        canonicalizedList.Elements.Should().BeOfType<SyntaxModel.SeparatedSyntaxList<SyntaxModel.Node<SyntaxModel.Expression>>.NonEmpty>()
+        canonicalizedList.Elements
+            .Should().BeOfType<SyntaxModel.SeparatedSyntaxList<SyntaxModel.Node<SyntaxModel.Expression>>.NonEmpty>()
             .Which.Rest.Select(item => item.SeparatorLocation)
             .Should().Equal(
-                parsedList.Elements
-                .Should().BeOfType<SyntaxModel.SeparatedSyntaxList<SyntaxModel.Node<SyntaxModel.Expression>>.NonEmpty>()
-                .Which.Rest.Select(item => item.SeparatorLocation));
+            parsedList.Elements
+            .Should().BeOfType<SyntaxModel.SeparatedSyntaxList<SyntaxModel.Node<SyntaxModel.Expression>>.NonEmpty>()
+            .Which.Rest.Select(item => item.SeparatorLocation));
 
         canonicalizedList.Elements.Last().Value
             .Should().Be(new SyntaxModel.Expression.IntegerLiteral("0x2A"));

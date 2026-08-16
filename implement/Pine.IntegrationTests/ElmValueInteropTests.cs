@@ -12,12 +12,13 @@ public class ElmValueInteropTests
     [Fact]
     public void Pine_value_encoded_as_in_elm_compiler_roundtrips()
     {
-        var testCases = (IReadOnlyList<PineValue>)[
+        var testCases =
+            (IReadOnlyList<PineValue>)[
             PineValue.EmptyList,
             PineValue.EmptyBlob,
 
             StringEncoding.ValueFromString("Hello, world!"),
-        ];
+            ];
 
         foreach (var testCase in testCases)
         {

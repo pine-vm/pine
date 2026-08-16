@@ -10,8 +10,9 @@ public class ProcessWithLogTests
     [Fact]
     public void Process_with_log_build_and_unpack()
     {
-        var testCases = new[]
-        {
+        var testCases =
+            new[]
+            {
                 new
                 {
                     process = AsProcessWithStringLog(5678),
@@ -48,5 +49,6 @@ public class ProcessWithLogTests
         }
     }
 
-    private static ProcessWithLog<string, T> AsProcessWithStringLog<T>(T result) => new ProcessWithLog<string, T>.Result(result);
+    private static ProcessWithLog<string, T> AsProcessWithStringLog<T>(T result) =>
+        new ProcessWithLog<string, T>.Result(result);
 }

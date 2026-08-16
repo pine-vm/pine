@@ -65,6 +65,7 @@ public class ElmDocumentFormattersTests
     public async Task Avh4_formatter_delegates_and_converts_tool_failure()
     {
         var receivedText = "";
+
         var formatter =
             new Avh4ElmDocumentFormatter(
                 (sourceText, cancellationToken) =>
@@ -105,6 +106,7 @@ public class ElmDocumentFormattersTests
     public async Task Avh4_formatter_propagates_cancellation()
     {
         var invoked = false;
+
         var formatter =
             new Avh4ElmDocumentFormatter(
                 (sourceText, cancellationToken) =>

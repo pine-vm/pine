@@ -54,8 +54,8 @@ public class PineExecutableBundleTests
                     "\n",
                     [
                         ..CompileElmCompilerTests.CompareCompiledEnvironmentsAndAssertEqual(
-                        expectedEnv: freshEnvironment,
-                        actualEnv: elmCompilerFromBundleValue)
+                            expectedEnv: freshEnvironment,
+                            actualEnv: elmCompilerFromBundleValue)
                     ]));
         }
 

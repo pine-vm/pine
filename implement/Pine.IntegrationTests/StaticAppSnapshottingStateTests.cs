@@ -67,7 +67,8 @@ public class StaticAppSnapshottingStateTests
             await appInstance.HandleRequestAsync(context, LogMessage);
 
             // Verify that the async continuation completed
-            logMessages.Should().NotBeEmpty("HandleRequestAsync should have logged something from the async continuation");
+            logMessages.Should().NotBeEmpty(
+                "HandleRequestAsync should have logged something from the async continuation");
 
             logMessages.Should().ContainMatch("*App state snapshot updated*");
 
@@ -139,7 +140,9 @@ public class StaticAppSnapshottingStateTests
             logMessages.Should().ContainMatch("*App state snapshot file found*");
 
             var allLogs = string.Join(", ", logMessages);
-            (allLogs.Contains("Failed to deserialize app state snapshot") || allLogs.Contains("Failed to set app state from snapshot"))
+
+            (allLogs.Contains("Failed to deserialize app state snapshot") ||
+            allLogs.Contains("Failed to set app state from snapshot"))
                 .Should().BeTrue("Expected either deserialization failure or state setting failure");
 
             logMessages.Clear();
@@ -246,7 +249,9 @@ public class StaticAppSnapshottingStateTests
 
             await appInstance.HandleRequestAsync(context, LogMessage);
 
-            context.Response.StatusCode.Should().Be(413, "Large HTTP request should be rejected with 413 Request Entity Too Large");
+            context.Response.StatusCode.Should().Be(
+                413,
+                "Large HTTP request should be rejected with 413 Request Entity Too Large");
 
             context.Response.Body.Seek(0, SeekOrigin.Begin);
             using var reader = new StreamReader(context.Response.Body);
@@ -270,12 +275,17 @@ public class StaticAppSnapshottingStateTests
 
             await appInstance.HandleRequestAsync(context, LogMessage);
 
-            context.Response.StatusCode.Should().Be(200, "Small HTTP request should succeed after large request rejection");
+            context.Response.StatusCode.Should().Be(
+                200,
+                "Small HTTP request should succeed after large request rejection");
 
             context.Response.Body.Seek(0, SeekOrigin.Begin);
             using var reader = new StreamReader(context.Response.Body);
             var responseBody = reader.ReadToEnd();
-            responseBody.Should().Be("4", "Counter app should return 1 + 3 = 4 (large request was rejected so counter state is preserved)");
+
+            responseBody.Should().Be(
+                "4",
+                "Counter app should return 1 + 3 = 4 (large request was rejected so counter state is preserved)");
         }
     }
 
@@ -318,7 +328,8 @@ public class StaticAppSnapshottingStateTests
         // Prepare incoming request headers: add one, remove one
         WebServiceInterface.HttpRequestProperties PrepareRequest(WebServiceInterface.HttpRequestProperties req)
         {
-            var headers = req.Headers
+            var headers =
+                req.Headers
                 .Where(h => !h.Name.Equals("X-Remove-Me", System.StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
@@ -331,13 +342,15 @@ public class StaticAppSnapshottingStateTests
         WebServiceInterface.HttpResponse FinalizeResponse(WebServiceInterface.HttpResponse resp)
         {
             var contentType =
-                resp.HeadersToAdd.FirstOrDefault(h => h.Name.Equals("content-type", System.StringComparison.OrdinalIgnoreCase));
+                resp.HeadersToAdd.FirstOrDefault(
+                    h => h.Name.Equals("content-type", System.StringComparison.OrdinalIgnoreCase));
 
             var others =
                 resp.HeadersToAdd
-                .Where(h =>
-                !h.Name.Equals("response-header-name", System.StringComparison.OrdinalIgnoreCase) &&
-                !h.Name.Equals("content-type", System.StringComparison.OrdinalIgnoreCase))
+                .Where(
+                    h =>
+                    !h.Name.Equals("response-header-name", System.StringComparison.OrdinalIgnoreCase) &&
+                    !h.Name.Equals("content-type", System.StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
             // Add our custom header before content-type so it is applied
@@ -351,14 +364,21 @@ public class StaticAppSnapshottingStateTests
             return resp with { HeadersToAdd = others };
         }
 
-        await appInstance.HandleRequestAsync(context, LogMessage, prepareRequest: PrepareRequest, finalizeResponse: FinalizeResponse);
+        await appInstance.HandleRequestAsync(
+            context,
+            LogMessage,
+            prepareRequest: PrepareRequest,
+            finalizeResponse: FinalizeResponse);
 
         // Validate status
         context.Response.StatusCode.Should().Be(200);
 
         // Validate response headers reflect finalizeResponse configuration
-        context.Response.Headers.ContainsKey("response-header-name").Should().BeFalse("finalizeResponse should remove this header");
-        context.Response.Headers["X-Added-Response"].ToString().Should().Be("42", "finalizeResponse should add this header");
+        context.Response.Headers.ContainsKey("response-header-name").Should().BeFalse(
+            "finalizeResponse should remove this header");
+
+        context.Response.Headers["X-Added-Response"].ToString().Should()
+            .Be("42", "finalizeResponse should add this header");
 
         // Validate the app saw configured request headers via JSON body echo
         context.Response.Body.Seek(0, SeekOrigin.Begin);
@@ -373,13 +393,21 @@ public class StaticAppSnapshottingStateTests
 
         bool HasHeader(string name) =>
             headersArray.EnumerateArray()
-                .Any(h => h.TryGetProperty("name", out var n) && n.GetString()?.Equals(name, System.StringComparison.OrdinalIgnoreCase) == true);
+            .Any(
+                h =>
+                h.TryGetProperty("name", out var n) &&
+                n.GetString()?.Equals(name, System.StringComparison.OrdinalIgnoreCase) == true);
 
         string[]? GetHeaderValues(string name) =>
-            [.. headersArray
-                .EnumerateArray()
-                .Where(h => h.TryGetProperty("name", out var n) && n.GetString()?.Equals(name, System.StringComparison.OrdinalIgnoreCase) == true)
-                .SelectMany(h => h.GetProperty("values").EnumerateArray().Select(v => v.GetString() ?? string.Empty))];
+            [
+            .. headersArray
+            .EnumerateArray()
+            .Where(
+                h =>
+                h.TryGetProperty("name", out var n) &&
+                n.GetString()?.Equals(name, System.StringComparison.OrdinalIgnoreCase) == true)
+            .SelectMany(h => h.GetProperty("values").EnumerateArray().Select(v => v.GetString() ?? string.Empty))
+            ];
 
         HasHeader("X-Added-Request").Should().BeTrue("prepareRequest should add header visible to app");
 
@@ -414,7 +442,8 @@ public class StaticAppSnapshottingStateTests
                 logMessage: _ => { },
                 cancellationToken: cancellationTokenSource.Token);
 
-        async Task<(StaticAppSnapshottingState.HandleRequestReport report, string responseText, int status)> Send(int addition)
+        async Task<(StaticAppSnapshottingState.HandleRequestReport report, string responseText, int status)> Send(
+            int addition)
         {
             var ctx = new DefaultHttpContext();
             ctx.Request.Method = "POST";

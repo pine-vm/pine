@@ -970,9 +970,11 @@ public abstract record Expression
             Expression tagged)
         {
             LabelValue = labelValue;
+
             Tag =
                 StringEncoding.StringFromValue(labelValue).IsOkOrNull() ??
                 labelValue.ToString();
+
             Tagged = tagged;
 
             SubexpressionCount = tagged.SubexpressionCount + 1;
