@@ -2163,8 +2163,23 @@ public static class FormatCSharpFile
         if (node.Expression is null)
             return node;
 
-        var fmtExpr = (ExpressionSyntax)FormatNode(node.Expression, ctx);
-        return node.WithThrowKeyword(node.ThrowKeyword.WithTrailingTrivia(s_space)).WithExpression(fmtExpr);
+        var originalOnNewLine = LineOf(node.Expression) > LineOf(node.ThrowKeyword);
+        var expressionContext = originalOnNewLine ? ctx.Indented() : ctx;
+        var fmtExpr = (ExpressionSyntax)FormatNode(node.Expression, expressionContext);
+        fmtExpr = fmtExpr.WithLeadingTrivia(StripWhitespace(fmtExpr.GetLeadingTrivia()));
+
+        if (originalOnNewLine)
+        {
+            fmtExpr =
+                fmtExpr.WithLeadingTrivia(
+                    EnsureLeadingBreaks(node.Expression.GetLeadingTrivia(), 1, ctx.IndentLevel + 1));
+
+            return node.WithThrowKeyword(node.ThrowKeyword.WithTrailingTrivia()).WithExpression(fmtExpr);
+        }
+
+        return
+            node.WithThrowKeyword(node.ThrowKeyword.WithTrailingTrivia(s_space))
+            .WithExpression(fmtExpr.WithLeadingTrivia());
     }
 
     /// <summary>Formats a throw expression with correct keyword spacing.</summary>
@@ -2438,11 +2453,8 @@ public static class FormatCSharpFile
             a = a.WithTrailingTrivia(StripWhitespace(a.GetTrailingTrivia()));
             // Re-indent multiline raw string literals so their content and closing
             // delimiter line up with the new argument indent (token text is otherwise
-            // opaque to leading-trivia changes). Collection-expression arguments are
-            // skipped here because they already re-indent their own element raw string
-            // literals relative to each element's (possibly deeper) indentation.
-            if (a is not ArgumentSyntax { Expression: CollectionExpressionSyntax })
-                a = ReindentRawStringLiterals(a, effectiveArgIndent);
+            // opaque to leading-trivia changes).
+            a = ReindentRawStringLiterals(a, effectiveArgIndent);
 
             // For named arguments, normalize the expression's indent when it starts
             // on a new line after the colon.
@@ -2489,10 +2501,19 @@ public static class FormatCSharpFile
                 [.. node.Arguments.GetSeparators()],
                 node.Arguments.Count - 1);
 
+        var closeParen =
+            LineOf(node.OpenParenToken) == LineOf(node.OpenParenToken.GetPreviousToken()) &&
+            LineOf(node.CloseParenToken) > EndLineOf(node.Arguments[^1])
+            ?
+            node.CloseParenToken.WithLeadingTrivia(
+                EnsureLeadingBreaks(node.CloseParenToken.LeadingTrivia, 1, argIndent))
+            :
+            node.CloseParenToken.WithLeadingTrivia();
+
         return
             node
             .WithOpenParenToken(node.OpenParenToken.WithLeadingTrivia().WithTrailingTrivia())
-            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia())
+            .WithCloseParenToken(closeParen.WithTrailingTrivia())
             .WithArguments(SyntaxFactory.SeparatedList(args.Cast<ArgumentSyntax>(), seps));
     }
 
@@ -2889,7 +2910,15 @@ public static class FormatCSharpFile
                     StripWhitespace(node.Elements[i].GetTrailingTrivia()));
 
             e = e.WithTrailingTrivia(trailingTrivia);
-            e = ReindentRawStringLiterals(e, elemIndent);
+
+            if (e is ExpressionElementSyntax { Expression: LiteralExpressionSyntax literal } &&
+                literal.Token.IsKind(SyntaxKind.MultiLineRawStringLiteralToken) ||
+                e is ExpressionElementSyntax { Expression: InterpolatedStringExpressionSyntax interpolated } &&
+                interpolated.StringStartToken.IsKind(SyntaxKind.InterpolatedMultiLineRawStringStartToken))
+            {
+                e = ReindentRawStringLiterals(e, elemIndent);
+            }
+
             elems.Add(e);
         }
 
@@ -2967,11 +2996,17 @@ public static class FormatCSharpFile
         var exprs = new List<SyntaxNode>();
 
         var origInitSeps = node.Expressions.GetSeparators().ToList();
+        var sourceMultiLine = LineOf(node.OpenBraceToken) != LineOf(node.CloseBraceToken);
 
         for (var i = 0; i < node.Expressions.Count; i++)
         {
             var origLeading = node.Expressions[i].GetLeadingTrivia();
             var minBreaks = 1;
+
+            var sameLineAsPrevious =
+                sourceMultiLine &&
+                i > 0 &&
+                LineOf(node.Expressions[i].GetFirstToken()) == EndLineOf(node.Expressions[i - 1]);
 
             // Preserve existing blank lines from original source
             if (i > 0)
@@ -2986,7 +3021,14 @@ public static class FormatCSharpFile
             }
 
             var e = (ExpressionSyntax)FormatNode(node.Expressions[i], ci);
-            e = e.WithLeadingTrivia(EnsureLeadingBreaks(origLeading, minBreaks, ci));
+
+            e =
+                e.WithLeadingTrivia(
+                    sameLineAsPrevious
+                    ?
+                    new SyntaxTriviaList(s_space)
+                    :
+                    EnsureLeadingBreaks(origLeading, minBreaks, ci));
 
             e =
                 e.WithTrailingTrivia(
@@ -4618,19 +4660,28 @@ public static class FormatCSharpFile
 
         var withReindentedLiteralTokens =
             node.ReplaceTokens(
-                node.DescendantTokens().Where(t => t.IsKind(SyntaxKind.MultiLineRawStringLiteralToken)),
+                node
+                .DescendantTokens(descendIntoChildren: ShouldDescendWhenReindentingRawStrings)
+                .Where(t => t.IsKind(SyntaxKind.MultiLineRawStringLiteralToken)),
                 (original, _) => ReindentRawStringToken(original, targetColumn));
 
         return
             (T)withReindentedLiteralTokens.ReplaceNodes(
                 withReindentedLiteralTokens
-                .DescendantNodesAndSelf()
+                .DescendantNodesAndSelf(descendIntoChildren: ShouldDescendWhenReindentingRawStrings)
                 .OfType<InterpolatedStringExpressionSyntax>()
                 .Where(
                     expression =>
                     expression.StringStartToken.IsKind(SyntaxKind.InterpolatedMultiLineRawStringStartToken)),
                 (_, rewritten) => ReindentInterpolatedRawStringExpression(rewritten, targetColumn));
     }
+
+    private static bool ShouldDescendWhenReindentingRawStrings(SyntaxNode node) =>
+        node is not (
+            ArgumentListSyntax or
+            CollectionExpressionSyntax or
+            InitializerExpressionSyntax or
+            TupleExpressionSyntax);
 
     /// <summary>
     /// Re-indents a multiline interpolated raw string expression so its content and

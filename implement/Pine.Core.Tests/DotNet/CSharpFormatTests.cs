@@ -6533,4 +6533,109 @@ public class CSharpFormatTests
 
         formattedInterpolatedString.ToString().Should().Be(expectedInterpolatedString);
     }
+
+    [Fact]
+    public void Preserve_throw_statement_expression_on_new_line_containing_method_invocations()
+    {
+        var input =
+            """"
+            try
+            {
+                unrelated();
+            }
+            catch (Exception exception)
+            {
+                throw
+                    new WebBrowserOperationException(
+                        "Waiting for the page readiness expression",
+                        await GetDiagnosticsAsync(CancellationToken.None).ConfigureAwait(false),
+                        exception);
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_2d_array_initializer_items_on_same_line()
+    {
+        var input =
+            """"
+            var cellColors =
+                new Rgba32[,]
+                {
+                    {
+                        new(230, 25, 75), new(60, 180, 75), new(255, 225, 25), new(0, 130, 200),
+                    },
+                    {
+                        new(245, 130, 48), new(145, 30, 180), new(70, 240, 240), new(240, 50, 230),
+                    },
+                    {
+                        new(210, 245, 60), new(250, 190, 212), new(0, 128, 128), new(220, 190, 255),
+                    },
+                    {
+                        new(170, 110, 40), new(255, 250, 200), new(128, 0, 0), new(0, 0, 128),
+                    },
+                };
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_collection_item_implicit_constructor_indent_in_multiline_string_literal_aligned_to_delimiter()
+    {
+        var input =
+            """"
+            IReadOnlyList<FormatDocumentTestCase> testCases =
+                [
+                new(
+                    OriginalText:
+                    """
+                    decl =
+                        func
+                            [ 
+                                argA
+                            , argB
+                            ]
+                    """,
+                    NewText:
+                    """
+                    decl =
+                        func
+                            [ argA
+                            , argB
+                            ]
+                    """,
+                    ExpectedEdits: null
+                    )
+                ];
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_invocation_argument_nested_argument_indent_in_multiline_string_literal_aligned_to_delimiter()
+    {
+        var input =
+            """"
+            var canonicalized =
+                Canonicalize(
+                    Parse(
+                        """
+                        module Test exposing (..)
+
+                        helper x =
+                            x
+
+
+                        value x =
+                            ( helper x, 0x2A )
+                        """));
+
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
 }
