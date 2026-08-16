@@ -8,10 +8,13 @@ import Frontend.Visuals as Visuals
 
 view : Element.Element e
 view =
-    [ "Run Elm Everywhere"
+    [ "Grow What’s Next"
         |> headingElementFromLevel 2
-    , "Pine is a free, open-source, cross-platform Elm runtime environment that lets developers create servers, web apps, and command line tools."
+    , "Build web services, full-stack web apps, games, and command-line tools in Elm. Pine runs Elm natively on .NET across Linux, Windows, and macOS."
         |> View.paragraphFromText
+        |> Element.el
+            [ Element.Font.bold
+            ]
     ]
         |> Element.column
             [ Element.spacing (Visuals.defaultFontSize * 2)
