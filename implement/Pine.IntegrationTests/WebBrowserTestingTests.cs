@@ -246,10 +246,10 @@ public class WebBrowserTestingTests
                 [
                 ("elm.json", FileTree.File(Encoding.UTF8.GetBytes(elmJson))),
                 ("src",
-                    FileTree.SortedDirectory(
-                        [
-                        ("Counter.elm", FileTree.File(Encoding.UTF8.GetBytes(elmModule))),
-                        ])),
+                FileTree.SortedDirectory(
+                    [
+                    ("Counter.elm", FileTree.File(Encoding.UTF8.GetBytes(elmModule))),
+                    ])),
                 ]);
 
         await using var browser =
@@ -289,12 +289,75 @@ public class WebBrowserTestingTests
         (await status.GetTextAsync()).Should().Be("Count: 2; Name: Elm");
     }
 
+    [Fact(Timeout = 1000 * 60 * 4)]
+    public async Task Render_wait_failure_reports_image_and_page_diagnostics()
+    {
+        await using var browser =
+            await WebBrowserInstance.StartAsync(
+                executionMode: TestWebBrowserExecutionMode());
+
+        await using var page = await browser.CreatePageAsync();
+
+        var html =
+            """
+            <!doctype html>
+            <html>
+            <head><title>Broken image diagnostics</title></head>
+            <body><img src="/missing-image.png" alt="missing"></body>
+            </html>
+            """;
+
+        await page.LoadHtmlAsync(Encoding.UTF8.GetBytes(html));
+
+        Func<Task> takeScreenshot = async () => await page.TakeScreenshotAsync();
+
+        var exception =
+            await takeScreenshot.Should().ThrowAsync<WebBrowserOperationException>();
+
+        exception.Which.Message.Should().Contain("Images failed to load or decode");
+        exception.Which.Diagnostics.CollectionErrors.Should().BeEmpty();
+        exception.Which.Diagnostics.Document.Should().NotBeNull();
+        exception.Which.Diagnostics.Document!.Title.Should().Be("Broken image diagnostics");
+        exception.Which.Diagnostics.Document.Images.Should().ContainSingle();
+        exception.Which.Diagnostics.Document.Images[0].Complete.Should().BeTrue();
+        exception.Which.Diagnostics.Document.Images[0].NaturalWidth.Should().Be(0);
+
+        exception.Which.Diagnostics.RequestFailures
+            .Should()
+            .Contain(request => request.Url.EndsWith("/missing-image.png", StringComparison.Ordinal));
+    }
+
+    [Fact(Timeout = 1000 * 60 * 4)]
+    public async Task Failure_artifact_capture_keeps_diagnostics_when_visual_artifacts_fail()
+    {
+        await using var browser =
+            await WebBrowserInstance.StartAsync(
+                executionMode: TestWebBrowserExecutionMode());
+
+        await using var page = await browser.CreatePageAsync();
+        await page.AdvancedPage.CloseAsync();
+
+        var artifacts =
+            await page.CaptureFailureArtifactsAsync(
+                new WebBrowserFailureArtifactOptions
+                {
+                    CaptureTrace = false,
+                });
+
+        artifacts.DomSnapshot.Should().BeEmpty();
+        artifacts.Screenshot.Length.Should().Be(0);
+        artifacts.CaptureErrors.Should().Contain(error => error.StartsWith("DOM snapshot:"));
+        artifacts.CaptureErrors.Should().Contain(error => error.StartsWith("Screenshot:"));
+        artifacts.Diagnostics.PageClosed.Should().BeTrue();
+        artifacts.Diagnostics.CollectionErrors.Should().NotBeEmpty();
+    }
+
     internal static WebBrowserExecutionMode TestWebBrowserExecutionMode()
     {
         if (string.Equals(
             Environment.GetEnvironmentVariable("GITHUB_ACTIONS"),
-             "true",
-             StringComparison.OrdinalIgnoreCase))
+            "true",
+            StringComparison.OrdinalIgnoreCase))
         {
             if (Environment.OSVersion.Platform is not PlatformID.Unix)
             {

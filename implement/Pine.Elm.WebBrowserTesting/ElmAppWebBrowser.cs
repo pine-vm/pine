@@ -15,7 +15,8 @@ public static class ElmAppWebBrowser
         IReadOnlyList<string> entryPointFilePath,
         string? entryPointDeclarationName = null,
         WebBrowserContextOptions? browserContextOptions = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        WebBrowserRenderWaitOptions? renderWaitOptions = null)
     {
         ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(sourceFiles);
@@ -40,6 +41,9 @@ public static class ElmAppWebBrowser
             await page.WaitForReadyAsync(
                 "() => document.documentElement.dataset.elmAppReady === 'true'",
                 cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+            await page.WaitForRenderReadyAsync(renderWaitOptions, cancellationToken)
             .ConfigureAwait(false);
 
             return page;

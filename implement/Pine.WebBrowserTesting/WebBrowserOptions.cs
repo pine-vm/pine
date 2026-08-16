@@ -107,10 +107,69 @@ public sealed record WebBrowserScreenshotOptions
     public bool FullPage { get; init; }
 
     public bool OmitBackground { get; init; }
+
+    /// <summary>
+    /// Optional readiness checks to run immediately before capture.
+    /// Set to <see langword="null"/> to capture without an additional wait.
+    /// </summary>
+    public WebBrowserRenderWaitOptions? WaitForRender { get; init; } = new();
 }
 
 public enum WebBrowserScreenshotImageFormat
 {
     Png,
     Jpeg,
+}
+
+/// <summary>
+/// Configures the conditions that must be satisfied before content is considered renderable.
+/// </summary>
+public sealed record WebBrowserRenderWaitOptions
+{
+    /// <summary>
+    /// Optional JavaScript function or expression that must become truthy before resource checks begin.
+    /// </summary>
+    public string? ReadyExpression { get; init; }
+
+    /// <summary>
+    /// Optional argument passed to <see cref="ReadyExpression"/>.
+    /// </summary>
+    public object? ReadyExpressionArgument { get; init; }
+
+    /// <summary>
+    /// Wait for every image in the document to finish loading and decoding.
+    /// </summary>
+    public bool WaitForImages { get; init; } = true;
+
+    /// <summary>
+    /// Fail when a completed image has no decoded pixels.
+    /// </summary>
+    public bool FailOnImageError { get; init; } = true;
+
+    /// <summary>
+    /// Wait for the document font set, when available.
+    /// </summary>
+    public bool WaitForFonts { get; init; } = true;
+
+    /// <summary>
+    /// Number of animation frames to wait after all other conditions are satisfied.
+    /// </summary>
+    public int AnimationFrameCount { get; init; } = 2;
+
+    /// <summary>
+    /// Overrides the browser operation timeout for the complete render wait.
+    /// </summary>
+    public TimeSpan? Timeout { get; init; }
+}
+
+/// <summary>
+/// Selects which potentially expensive failure artifacts to capture.
+/// </summary>
+public sealed record WebBrowserFailureArtifactOptions
+{
+    public bool CaptureDomSnapshot { get; init; } = true;
+
+    public bool CaptureScreenshot { get; init; } = true;
+
+    public bool CaptureTrace { get; init; } = true;
 }
