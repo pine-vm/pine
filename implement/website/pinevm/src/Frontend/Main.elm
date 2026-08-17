@@ -372,7 +372,6 @@ weblinksElement =
     [ ( FontAwesome.Brands.github, linkToSourceCodeRepository )
     , ( FontAwesome.Brands.discord, "https://discord.gg/UEYUj3MXZf" )
     , ( FontAwesome.Brands.bluesky, "https://bsky.app/profile/pinevm.bsky.social" )
-    , ( FontAwesome.Brands.twitter, "https://twitter.com/PineVM" )
     ]
         |> List.map
             (\( icon, url ) ->
