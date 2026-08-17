@@ -1,4 +1,3 @@
-using Pine;
 using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.CommonEncodings;
@@ -36,7 +35,7 @@ public class InteractiveSessionPine : IInteractiveSession
         new LockingPineVM(
             new PineVMWithPersistentCache(
                 new FileStoreFromSystemIOFile(
-                    System.IO.Path.Combine(Filesystem.CacheDirectory, "elm-compiler-vm", Program.AppVersionId))));
+                    System.IO.Path.Combine(Filesystem.CacheDirectory, "elm-compiler-vm", Pine.CLI.PineCliCommand.AppVersionId))));
 
     /*
      * TODO: Move these caches to a dedicated scope to enable for better control over reuse/disposal.

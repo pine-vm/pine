@@ -535,7 +535,7 @@ public sealed class WebBrowserPage : IAsyncDisposable
             new WebBrowserDiagnostics(
                 consoleMessages,
                 pageErrors,
-                _requestFailures.ToArray(),
+                [.. _requestFailures],
                 document,
                 _context.Browser?.Version ?? "Unavailable",
                 _context.Browser?.IsConnected ?? false,

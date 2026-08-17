@@ -4,8 +4,6 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
-
 namespace Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 /// <summary>
@@ -220,7 +218,7 @@ public static class SyntaxAnalysis
 
             // Qualified Identifier references resolve to a module-level name and contribute
             // no free local variables.
-            case SyntaxTypes.Expression.Identifier:
+            case Expression.Identifier:
                 return [];
 
             case Expression.LambdaExpression lambdaExpr:
@@ -377,14 +375,14 @@ public static class SyntaxAnalysis
                 return CollectRemainingFreeVariables(recordAccess.Record);
 
             // Leaf variants with no nested Expression children and no binding semantics.
-            case SyntaxTypes.Expression.UnitExpr:
-            case SyntaxTypes.Expression.StringLiteral:
-            case SyntaxTypes.Expression.CharLiteral:
-            case SyntaxTypes.Expression.IntegerLiteral:
-            case SyntaxTypes.Expression.FloatLiteral:
-            case SyntaxTypes.Expression.PrefixOperator:
-            case SyntaxTypes.Expression.RecordAccessFunction:
-            case SyntaxTypes.Expression.GLSLExpression:
+            case Expression.UnitExpr:
+            case Expression.StringLiteral:
+            case Expression.CharLiteral:
+            case Expression.IntegerLiteral:
+            case Expression.FloatLiteral:
+            case Expression.PrefixOperator:
+            case Expression.RecordAccessFunction:
+            case Expression.GLSLExpression:
                 return [];
 
             default:
@@ -670,15 +668,15 @@ public static class SyntaxAnalysis
                 VisitApplications(negation.Expression, letRhsByName, bound, onApplication);
                 break;
 
-            case SyntaxTypes.Expression.UnitExpr:
-            case SyntaxTypes.Expression.StringLiteral:
-            case SyntaxTypes.Expression.CharLiteral:
-            case SyntaxTypes.Expression.IntegerLiteral:
-            case SyntaxTypes.Expression.FloatLiteral:
-            case SyntaxTypes.Expression.Identifier:
-            case SyntaxTypes.Expression.PrefixOperator:
-            case SyntaxTypes.Expression.RecordAccessFunction:
-            case SyntaxTypes.Expression.GLSLExpression:
+            case Expression.UnitExpr:
+            case Expression.StringLiteral:
+            case Expression.CharLiteral:
+            case Expression.IntegerLiteral:
+            case Expression.FloatLiteral:
+            case Expression.Identifier:
+            case Expression.PrefixOperator:
+            case Expression.RecordAccessFunction:
+            case Expression.GLSLExpression:
                 break;
 
             default:
@@ -805,15 +803,15 @@ public static class SyntaxAnalysis
                 break;
 
             // Leaf variants — already visited via onNode at the top.
-            case SyntaxTypes.Expression.Identifier:
-            case SyntaxTypes.Expression.UnitExpr:
-            case SyntaxTypes.Expression.StringLiteral:
-            case SyntaxTypes.Expression.CharLiteral:
-            case SyntaxTypes.Expression.IntegerLiteral:
-            case SyntaxTypes.Expression.FloatLiteral:
-            case SyntaxTypes.Expression.PrefixOperator:
-            case SyntaxTypes.Expression.RecordAccessFunction:
-            case SyntaxTypes.Expression.GLSLExpression:
+            case Expression.Identifier:
+            case Expression.UnitExpr:
+            case Expression.StringLiteral:
+            case Expression.CharLiteral:
+            case Expression.IntegerLiteral:
+            case Expression.FloatLiteral:
+            case Expression.PrefixOperator:
+            case Expression.RecordAccessFunction:
+            case Expression.GLSLExpression:
                 break;
         }
     }

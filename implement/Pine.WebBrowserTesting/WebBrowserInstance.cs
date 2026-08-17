@@ -61,7 +61,7 @@ public sealed class WebBrowserInstance : IAsyncDisposable
         try
         {
             playwright =
-                await Microsoft.Playwright.Playwright.CreateAsync()
+                await Playwright.CreateAsync()
                 .WaitAsync(options.StartupTimeout, cancellationToken)
                 .ConfigureAwait(false);
 
@@ -324,9 +324,9 @@ public sealed class WebBrowserInstance : IAsyncDisposable
             ColorScheme =
             options.ColorScheme switch
             {
-                WebBrowserColorScheme.NoPreference => Microsoft.Playwright.ColorScheme.NoPreference,
-                WebBrowserColorScheme.Light => Microsoft.Playwright.ColorScheme.Light,
-                WebBrowserColorScheme.Dark => Microsoft.Playwright.ColorScheme.Dark,
+                WebBrowserColorScheme.NoPreference => ColorScheme.NoPreference,
+                WebBrowserColorScheme.Light => ColorScheme.Light,
+                WebBrowserColorScheme.Dark => ColorScheme.Dark,
 
                 _ =>
                 throw new ArgumentOutOfRangeException(
@@ -337,9 +337,9 @@ public sealed class WebBrowserInstance : IAsyncDisposable
             ReducedMotion =
             options.ReducedMotion
             ?
-            Microsoft.Playwright.ReducedMotion.Reduce
+            ReducedMotion.Reduce
             :
-            Microsoft.Playwright.ReducedMotion.NoPreference,
+            ReducedMotion.NoPreference,
             ExtraHTTPHeaders = options.ExtraHttpHeaders,
         };
 

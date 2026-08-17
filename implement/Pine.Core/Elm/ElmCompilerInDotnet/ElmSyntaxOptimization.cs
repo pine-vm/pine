@@ -60,7 +60,7 @@ public partial class ElmSyntaxOptimization
             directReferences[functionName] = references;
         }
 
-        return ComputeRecursiveNodes(directReferences).ToImmutableHashSet();
+        return [.. ComputeRecursiveNodes(directReferences)];
     }
 
     /// <summary>

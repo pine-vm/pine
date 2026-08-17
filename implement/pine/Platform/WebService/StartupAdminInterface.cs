@@ -6,7 +6,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Pine;
 using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.CommonEncodings;
@@ -461,7 +460,7 @@ public class StartupAdminInterface
                 ImmutableList.Create(
                     new Gui.EventToElmApp.ReadAdminInterfaceConfigEvent(
                         new Gui.AdminInterfaceConfig(
-                            elmTimeVersionId: Program.AppVersionId,
+                            elmTimeVersionId: Pine.CLI.PineCliCommand.AppVersionId,
                             httpRoutes:
                             [.. apiRoutes.Select(apiRoute => new Gui.HttpRoute(
                                     path: apiRoute.path,
@@ -1025,7 +1024,7 @@ public class StartupAdminInterface
         return
             HtmlDocument(
                 HtmlFromLines(
-                    "Welcome to the Pine admin interface version " + Program.AppVersionId + ".",
+                    "Welcome to the Pine admin interface version " + Pine.CLI.PineCliCommand.AppVersionId + ".",
                     describeErrorElement));
     }
 

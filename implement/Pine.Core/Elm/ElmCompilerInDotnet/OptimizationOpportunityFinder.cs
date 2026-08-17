@@ -534,7 +534,7 @@ public static class OptimizationOpportunityFinder
     {
         var closedRecordAccessFunctions =
             new HashSet<SyntaxTypes.Expression.RecordAccessFunction>(
-                System.Collections.Generic.ReferenceEqualityComparer.Instance);
+                ReferenceEqualityComparer.Instance);
 
         var functionTypes =
             ImmutableDictionary.CreateBuilder<

@@ -166,7 +166,7 @@ internal static class LanguageServiceCompilation
         }
 
         var compileResult =
-            Core.Elm.ElmCompilerInDotnet.ElmCompiler.CompileInteractiveEnvironment(
+            ElmCompilerInDotnet.ElmCompiler.CompileInteractiveEnvironment(
                 appCodeTree: sourceTree,
                 rootFilePaths: rootFilePaths);
 

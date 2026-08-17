@@ -31,7 +31,7 @@ public static class Elm019Binaries
 
     public static IFileStore ElmMakeResultCacheFileStoreDefaultInit =>
         new FileStoreFromSystemIOFile(
-            Path.Combine(Filesystem.CacheDirectory, "elm-make-result-cache", Program.AppVersionId));
+            Path.Combine(Filesystem.CacheDirectory, "elm-make-result-cache", Pine.CLI.PineCliCommand.AppVersionId));
 
     public record ElmMakeOk(FileTree ProducedFiles);
 

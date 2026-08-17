@@ -267,7 +267,7 @@ public static class ElmAppCompilationToHtml
             }
         }
 
-        return entryPointFilePath.Take(modulePathStart).ToArray();
+        return [.. entryPointFilePath.Take(modulePathStart)];
     }
 
     private static void ValidateDeclarationName(string declarationName)
