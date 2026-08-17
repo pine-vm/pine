@@ -28,6 +28,17 @@ public class PineCliOptionsTests
         result.StandardError.Should().BeEmpty();
     }
 
+
+    [Fact]
+    public void Elm_command_exposes_test_subcommand()
+    {
+        var result = RunPine("elm", "--help");
+
+        result.ExitCode.Should().Be(0);
+        result.StandardOutput.Should().Contain("test");
+        result.StandardError.Should().BeEmpty();
+    }
+
     private static ProcessResult RunPine(params string[] arguments)
     {
         var executableName = OperatingSystem.IsWindows() ? "pine.exe" : "pine";

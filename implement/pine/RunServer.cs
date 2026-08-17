@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Pine;
 using Pine.Core.Addressing;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Files;
@@ -173,7 +172,7 @@ public class RunServer
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> LoadFilesForRestoreFromPathAndLogToConsole(
         string sourcePath, string? sourcePassword)
     {
-        if (!Program.LooksLikeLocalSite(sourcePath))
+        if (!Pine.CLI.PineCliCommand.LooksLikeLocalSite(sourcePath))
         {
             Console.WriteLine("Begin reading process history from '" + sourcePath + "' ...");
 

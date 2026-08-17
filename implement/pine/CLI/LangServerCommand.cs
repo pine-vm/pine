@@ -109,7 +109,7 @@ public static class LangServerCommand
                 Log("Pine version " + PineCliCommand.AppVersionId + " starting language server...");
 
                 var languageServer =
-                    Elm.LanguageServerAdapters.LanguageServerComposition.CreateLanguageServer(
+                    global::Pine.Elm.LanguageServerAdapters.LanguageServerComposition.CreateLanguageServer(
                         pineAppVersionId: PineCliCommand.AppVersionId,
                         logDelegate: Log);
 

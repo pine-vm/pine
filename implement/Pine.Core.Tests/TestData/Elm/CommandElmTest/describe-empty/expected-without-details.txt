@@ -1,0 +1,10 @@
+Running 1 test.
+
+
+    This `describe A Group` has no tests in it. Let's give it some!
+
+
+TEST RUN FAILED
+
+Passed:   0
+Failed:   1

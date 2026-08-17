@@ -72,10 +72,13 @@ public class PineCliCommand
         rootCommand.Add(InteractiveCommand.Create(dynamicPGOShare));
         rootCommand.Add(CompileCommand.Create());
         rootCommand.Add(ElmTestRsCommand.Create());
+
+        rootCommand.Add(ElmCommand.Create());
+
         rootCommand.Add(MakeCommand.Create());
-        rootCommand.Add(global::Pine.CLI.ScreenshotCommand.Create());
+        rootCommand.Add(ScreenshotCommand.Create());
         rootCommand.Add(ElmFormatCommand.CreateElmFormatCommand());
-        rootCommand.Add(global::Pine.CSharp.CLI.CSharpFormatCommand.CreateCSharpFormatCommand());
+        rootCommand.Add(CSharp.CLI.CSharpFormatCommand.CreateCSharpFormatCommand());
         rootCommand.Add(DescribeCommand.Create());
         rootCommand.Add(RunCacheServerCommand.Create());
         rootCommand.Add(RunFileServerCommand.Create());
