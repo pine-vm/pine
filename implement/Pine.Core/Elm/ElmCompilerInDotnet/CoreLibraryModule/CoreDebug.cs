@@ -19,6 +19,10 @@ public static class CoreDebug
         ExpressionEncoding.EncodeExpressionAsValue(
             Internal_IntToString(Expression.EnvironmentInstance));
 
+    private static PineValue FractionDigitsToStringFunctionValue() =>
+        ExpressionEncoding.EncodeExpressionAsValue(
+            Internal_FractionDigitsToString(Expression.EnvironmentInstance));
+
     private static Expression Internal_IntToString(Expression input)
     {
         var self = Path(0);
@@ -127,6 +131,166 @@ public static class CoreDebug
         return WrapString(content);
     }
 
+    private static Expression Internal_FractionDigitsToString(Expression input)
+    {
+        // The environment is [self, remainingPlaces, divisor, fractionValue, allDigits, trimmedDigits].
+        var self = Path(0);
+        var remainingPlaces = Path(1);
+        var divisor = Path(2);
+        var fractionValue = Path(3);
+        var allDigits = Path(4);
+        var trimmedDigits = Path(5);
+
+        var digit = CoreBasics.Int_div(fractionValue, divisor);
+        var remainingFraction = CoreBasics.Int_remainderBy(divisor, fractionValue);
+        var digitText = UnwrapString(ApplyUnary(IntToStringFunctionValue(), digit));
+        var nextAllDigits = BuiltinHelpers.ApplyBuiltinConcat([allDigits, digitText]);
+
+        var nextTrimmedDigits =
+            Expression.ConditionalInst(
+                condition: BuiltinHelpers.ApplyBuiltinEqualBinary(digit, LiteralInt(0)),
+                falseBranch: nextAllDigits,
+                trueBranch: trimmedDigits);
+
+        var recurse =
+            new Expression.Eval(
+                encoded: self,
+                environment:
+                Expression.ListInst(
+                    [
+                    self,
+                    BuiltinHelpers.ApplyBuiltinIntAdd([remainingPlaces, LiteralInt(-1)]),
+                    CoreBasics.Int_div(divisor, LiteralInt(10)),
+                    remainingFraction,
+                    nextAllDigits,
+                    nextTrimmedDigits
+                    ]));
+
+        return
+            Expression.ConditionalInst(
+                condition: BuiltinHelpers.ApplyBuiltinEqualBinary(remainingPlaces, LiteralInt(0)),
+                falseBranch: recurse,
+                trueBranch: trimmedDigits);
+    }
+
+    private static Expression Internal_FloatToString(Expression input)
+    {
+        var components =
+            BuiltinHelpers.ApplyBuiltinHead(
+                BuiltinHelpers.ApplyBuiltinSkip(1, input));
+
+        var numerator = BuiltinHelpers.ApplyBuiltinHead(components);
+
+        var denominator =
+            BuiltinHelpers.ApplyBuiltinHead(
+                BuiltinHelpers.ApplyBuiltinSkip(1, components));
+
+        var isNegative =
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                BuiltinHelpers.ApplyBuiltinHead(numerator),
+                LiteralByte(2));
+
+        var absoluteNumerator =
+            Expression.ConditionalInst(
+                condition: isNegative,
+                falseBranch: numerator,
+                trueBranch: BuiltinHelpers.ApplyBuiltinIntMul([LiteralInt(-1), numerator]));
+
+        var integerPart = CoreBasics.Int_div(absoluteNumerator, denominator);
+        var remainder = CoreBasics.Int_remainderBy(denominator, absoluteNumerator);
+        var scale = LiteralInt(10_000_000_000_000_000);
+        var scaledValue = BuiltinHelpers.ApplyBuiltinIntMul([remainder, scale]);
+        var scaledInteger = CoreBasics.Int_div(scaledValue, denominator);
+        var leftover = CoreBasics.Int_remainderBy(denominator, scaledValue);
+
+        var roundUp =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.int_is_sorted_asc),
+                Expression.ListInst(
+                    [
+                    denominator,
+                    BuiltinHelpers.ApplyBuiltinIntMul([leftover, LiteralInt(2)])
+                    ]));
+
+        var roundedFraction =
+            Expression.ConditionalInst(
+                condition: roundUp,
+                falseBranch: scaledInteger,
+                trueBranch: BuiltinHelpers.ApplyBuiltinIntAdd([scaledInteger, LiteralInt(1)]));
+
+        var overflowed =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.int_is_sorted_asc),
+                Expression.ListInst([scale, roundedFraction]));
+
+        var renderedInteger =
+            Expression.ConditionalInst(
+                condition: overflowed,
+                falseBranch: integerPart,
+                trueBranch: BuiltinHelpers.ApplyBuiltinIntAdd([integerPart, LiteralInt(1)]));
+
+        var fractionValue =
+            Expression.ConditionalInst(
+                condition: overflowed,
+                falseBranch: roundedFraction,
+                trueBranch: LiteralInt(0));
+
+        var fractionDigits =
+            new Expression.Eval(
+                encoded: Expression.LitralInst(FractionDigitsToStringFunctionValue()),
+                environment:
+                Expression.ListInst(
+                    [
+                    Expression.LitralInst(FractionDigitsToStringFunctionValue()),
+                    LiteralInt(16),
+                    LiteralInt(1_000_000_000_000_000),
+                    fractionValue,
+                    LiteralText(""),
+                    LiteralText("")
+                    ]));
+
+        var sign =
+            Expression.ConditionalInst(
+                condition: isNegative,
+                falseBranch: LiteralText(""),
+                trueBranch: LiteralText("-"));
+
+        var integerText =
+            UnwrapString(
+                ApplyUnary(IntToStringFunctionValue(), renderedInteger));
+
+        var unsignedContent =
+            Expression.ConditionalInst(
+                condition: BuiltinHelpers.ApplyBuiltinEqualBinary(fractionValue, LiteralInt(0)),
+                falseBranch:
+                BuiltinHelpers.ApplyBuiltinConcat(
+                    [integerText, LiteralText("."), fractionDigits]),
+                trueBranch: integerText);
+
+        var finiteContent =
+            BuiltinHelpers.ApplyBuiltinConcat([sign, unsignedContent]);
+
+        var infiniteContent =
+            Expression.ConditionalInst(
+                condition: isNegative,
+                falseBranch: LiteralText("Infinity"),
+                trueBranch: LiteralText("-Infinity"));
+
+        var nonFiniteContent =
+            Expression.ConditionalInst(
+                condition: BuiltinHelpers.ApplyBuiltinEqualBinary(numerator, LiteralInt(0)),
+                falseBranch: infiniteContent,
+                trueBranch: LiteralText("NaN"));
+
+        var content =
+            Expression.ConditionalInst(
+                condition: BuiltinHelpers.ApplyBuiltinEqualBinary(denominator, LiteralInt(0)),
+                falseBranch: finiteContent,
+                trueBranch: nonFiniteContent);
+
+        return WrapString(content);
+    }
+
     private static Expression Internal_ToString(Expression value)
     {
         // The list helper environment is [self, renderer, remaining].
@@ -207,6 +371,9 @@ public static class CoreDebug
         var stringResult =
             Internal_StringToString(rendererValue);
 
+        var floatResult =
+            Internal_FloatToString(rendererValue);
+
         var hasListItems =
             Expression.BuiltinInst(
                 nameof(BuiltinFunction.int_is_sorted_asc),
@@ -225,11 +392,24 @@ public static class CoreDebug
                     BuiltinHelpers.ApplyBuiltinHead(rendererValue),
                     Expression.LitralInst(ElmValue.ElmStringTypeTagNameAsValue)));
 
+        var isFloat =
+            Expression.ConditionalInst(
+                condition: hasListItems,
+                falseBranch: Expression.LitralInst(PineVM.PineKernelValues.FalseValue),
+                trueBranch:
+                BuiltinHelpers.ApplyBuiltinEqualBinary(
+                    BuiltinHelpers.ApplyBuiltinHead(rendererValue),
+                    Expression.LitralInst(ElmValue.ElmFloatTypeTagNameAsValue)));
+
         var nonBlobResult =
             Expression.ConditionalInst(
-                condition: isString,
-                falseBranch: listResult,
-                trueBranch: stringResult);
+                condition: isFloat,
+                falseBranch:
+                Expression.ConditionalInst(
+                    condition: isString,
+                    falseBranch: listResult,
+                    trueBranch: stringResult),
+                trueBranch: floatResult);
 
         var emptyBlob =
             Expression.LitralInst(PineValue.EmptyBlob);
@@ -295,6 +475,11 @@ public static class CoreDebug
             Expression.LitralInst(ElmValue.ElmStringTypeTagNameAsValue),
             Expression.ListInst([content])
             ]);
+
+    private static Expression UnwrapString(Expression value) =>
+        BuiltinHelpers.ApplyBuiltinHead(
+            BuiltinHelpers.ApplyBuiltinHead(
+                BuiltinHelpers.ApplyBuiltinSkip(1, value)));
 
     private static Expression Path(int index) =>
         ExpressionBuilder.BuildExpressionForPathInExpression(

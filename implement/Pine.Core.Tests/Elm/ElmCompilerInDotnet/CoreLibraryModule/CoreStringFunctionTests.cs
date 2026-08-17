@@ -627,6 +627,13 @@ public class CoreStringFunctionTests
     }
 
     [Fact]
+    public void ToFloat_scientific_notation_integer()
+    {
+        var result = ApplyUnary(GetStringFunction("toFloat"), String("3.5e2"));
+        result.Should().Be(JustOf(ElmValue.ElmFloat.Convert(350)));
+    }
+
+    [Fact]
     public void ToFloat_31a()
     {
         var result = ApplyUnary(GetStringFunction("toFloat"), String("31a"));
