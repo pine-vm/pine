@@ -425,7 +425,7 @@ public class CompilePineToDotNetTests
                 "source-directories": [
                     "src"
                 ],
-                "elm-version": "0.19.1",
+                "elm-version": "0.19.2",
                 "dependencies": {
                     "direct": {
                         "elm/bytes": "1.0.8",
