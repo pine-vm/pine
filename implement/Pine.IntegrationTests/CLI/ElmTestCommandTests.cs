@@ -142,7 +142,7 @@ public class ElmTestCommandTests
         {
             "type": "application",
             "source-directories": ["src"],
-            "elm-version": "0.19.1",
+            "elm-version": "0.19.2",
             "dependencies": {
                 "direct": {
                     "elm/core": "1.0.5"

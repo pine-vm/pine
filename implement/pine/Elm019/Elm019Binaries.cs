@@ -287,28 +287,28 @@ public static class Elm019Binaries
         ImmutableDictionary<OSPlatform, (string hash, string remoteSource)>.Empty
         .Add(
             /*
-            Loaded 2022-02-01 🐯 from
-            https://github.com/elm/compiler/releases/download/0.19.1/binary-for-linux-64-bit.gz
+            Loaded 2026-08-17 from
+            https://github.com/elm/compiler/releases/download/0.19.2/elm-0.19.2-linux-x64.gz
             */
             OSPlatform.Linux,
-            ("f8f12a61a61f64ac71a85d57284cc4d14fb81f1cbebb8b150839d9731034092e",
-            @"https://github.com/elm/compiler/releases/download/0.19.1/binary-for-linux-64-bit.gz"))
+            ("c4db5a7ef59fc582a1df29c16383520015e9cefb0802e6eb49955e49211d7948",
+            @"https://github.com/elm/compiler/releases/download/0.19.2/elm-0.19.2-linux-x64.gz"))
         .Add(
             /*
-            Loaded 2022-02-01 🐯 from
-            https://github.com/elm/compiler/releases/download/0.19.1/binary-for-windows-64-bit.gz
+            Loaded 2026-08-17 from
+            https://github.com/elm/compiler/releases/download/0.19.2/elm-0.19.2-windows-x64.gz
             */
             OSPlatform.Windows,
-            ("821e61ee150b660ca173584b66d1784b7be08b7107e7aa4977135686dc9d2fb2",
-            @"https://github.com/elm/compiler/releases/download/0.19.1/binary-for-windows-64-bit.gz"))
+            ("c99b337e9616c78e170a7b45aa35af4f7366d0658e3e0138ab8a31d27ed18863",
+            @"https://github.com/elm/compiler/releases/download/0.19.2/elm-0.19.2-windows-x64.gz"))
         .Add(
             /*
-            Loaded 2023-05-20 from
-            https://github.com/elm/compiler/releases/download/0.19.1/binary-for-mac-64-bit.gz
+            Loaded 2026-08-17 from
+            https://github.com/elm/compiler/releases/download/0.19.2/elm-0.19.2-mac-x64.gz
             */
             OSPlatform.OSX,
-            ("ae645d3ff3d2fbe87460c077f644d3d64de87b5c40e5dbadd8bb08978148a117",
-            @"https://github.com/elm/compiler/releases/download/0.19.1/binary-for-mac-64-bit.gz"));
+            ("221eed30ee5dd08e285316eb281727e9522bcaa0507fff365ec70f7869ef5261",
+            @"https://github.com/elm/compiler/releases/download/0.19.2/elm-0.19.2-mac-x64.gz"));
 
     public static string GetElmHomeDirectory()
     {

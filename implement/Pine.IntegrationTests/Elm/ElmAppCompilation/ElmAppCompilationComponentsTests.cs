@@ -22,7 +22,7 @@ public class ElmAppCompilationComponentsTests
                 "elm-syntax/src",
                 "elm-syntax-encode-json/src"
             ],
-            "elm-version": "0.19.1",
+            "elm-version": "0.19.2",
             "dependencies": {
                 "direct": {
                     "cmditch/elm-bigint": "2.0.1",

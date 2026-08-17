@@ -28,7 +28,7 @@ public class ProgramCommandMakeTests
                     "source-directories": [
                         "src"
                     ],
-                    "elm-version": "0.19.1",
+                    "elm-version": "0.19.2",
                     "dependencies": {
                         "direct": {
                             "TSFoster/elm-bytes-extra": "1.3.0",
@@ -90,7 +90,7 @@ public class ProgramCommandMakeTests
                     "source-directories": [
                         "src"
                     ],
-                    "elm-version": "0.19.1",
+                    "elm-version": "0.19.2",
                     "dependencies": {
                         "direct": {
                             "TSFoster/elm-bytes-extra": "1.3.0",
