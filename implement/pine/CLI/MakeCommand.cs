@@ -497,7 +497,7 @@ public static class MakeCommand
             }
 
             var parseFromEnvResult =
-                global::Pine.Core.CodeAnalysis.ElmInteractiveEnvironment.ParseFunctionFromElmModule(
+                Core.CodeAnalysis.ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                     interactiveEnvironment: compileOk,
                     moduleName: string.Join(".", entryPointModuleNameOk.ToArray()),
                     "blobMain",
@@ -526,7 +526,7 @@ public static class MakeCommand
                  * */
 
                 var applyMainResult =
-                    global::Pine.Core.CodeAnalysis.ElmInteractiveEnvironment.ApplyFunction(
+                    Core.CodeAnalysis.ElmInteractiveEnvironment.ApplyFunction(
                         pineVM,
                         functionRecord: parseFromEnvOk.functionRecord,
                         arguments: [PineValue.EmptyList]);

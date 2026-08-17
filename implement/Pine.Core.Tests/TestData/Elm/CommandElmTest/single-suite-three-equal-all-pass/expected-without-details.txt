@@ -1,0 +1,8 @@
+Running 3 tests.
+
+
+TEST RUN PASSED
+
+Duration: 0 ms
+Passed:   3
+Failed:   0

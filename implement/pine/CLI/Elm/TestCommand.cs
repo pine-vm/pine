@@ -1,0 +1,162 @@
+using Pine.Core.Elm.Testing;
+using Spectre.Console;
+using System;
+using System.CommandLine;
+using System.IO;
+using System.Linq;
+
+namespace Pine.CLI.Elm;
+
+public static class TestCommand
+{
+    public static Command Create()
+    {
+        var command =
+            new Command(
+                "test",
+                "Compile and run Elm tests.");
+
+        var sourceArgument =
+            new Argument<string?>("source")
+            {
+                Arity = ArgumentArity.ZeroOrOne,
+                Description = "Path to the Elm project. Defaults to the current directory.",
+            };
+
+        var colorOption = FormatCommandShared.CreateColorOption();
+
+        command.Add(sourceArgument);
+        command.Add(colorOption);
+
+        command.SetAction(
+            parseResult =>
+            Execute(
+                source: parseResult.GetValue(sourceArgument) ?? Environment.CurrentDirectory,
+                colorMode: parseResult.GetValue(colorOption)));
+
+        return command;
+    }
+
+
+    public static int Execute(
+        string source,
+        FormatCommandColorMode? colorMode = null,
+        IAnsiConsole? console = null,
+        IAnsiConsole? errorConsole = null)
+    {
+        FormatCommandColorMode resolvedColorMode;
+
+        try
+        {
+            resolvedColorMode =
+                FormatCommandShared.ResolveColorMode(
+                    colorMode,
+                    Environment.GetEnvironmentVariable(FormatCommandShared.ColorEnvironmentVariable));
+        }
+        catch (ArgumentException exception)
+        {
+            errorConsole ??=
+                CreateSystemConsole(
+                    Console.Error,
+                    FormatCommandColorMode.Auto);
+
+            errorConsole.Write(new Text("Error: ", TestCommandTheme.Failure));
+            errorConsole.WriteLine(exception.Message);
+
+            return 1;
+        }
+
+        console ??= CreateSystemConsole(Console.Out, resolvedColorMode);
+
+        var testRun =
+            ElmTestRunner.CompileAndRunTests(
+                source,
+                IntermediateVM.SetupVM.Create());
+
+        var output =
+            ElmTestRunner.RenderTestResults(
+                testRun.Tests,
+                includeTestDetails: true,
+                testRun.Duration);
+
+        if (resolvedColorMode is FormatCommandColorMode.Never)
+        {
+            console.Write(new Text(output.PlainText));
+        }
+        else
+        {
+            foreach (var fragment in output.Fragments)
+                console.Write(new Text(fragment.Text, StyleFor(fragment.Style)));
+        }
+
+        console.WriteLine();
+
+        return
+            testRun.Tests.All(test => test.Kind is CompletedTestKind.Passed)
+            ?
+            0
+            :
+            1;
+    }
+
+
+    private static Style StyleFor(TestOutputStyle style) =>
+        style switch
+        {
+            TestOutputStyle.Default => TestCommandTheme.Default,
+            TestOutputStyle.Dark => TestCommandTheme.Dark,
+            TestOutputStyle.Success => TestCommandTheme.Success,
+            TestOutputStyle.SuccessHeadline => TestCommandTheme.SuccessHeadline,
+            TestOutputStyle.Failure => TestCommandTheme.Failure,
+            TestOutputStyle.FailureHeadline => TestCommandTheme.FailureHeadline,
+            TestOutputStyle.Todo => TestCommandTheme.Todo,
+            TestOutputStyle.TodoHeadline => TestCommandTheme.TodoHeadline,
+            TestOutputStyle.Highlighted => TestCommandTheme.Highlighted,
+
+            _ =>
+            throw new ArgumentOutOfRangeException(nameof(style)),
+        };
+
+
+    private static IAnsiConsole CreateSystemConsole(
+        TextWriter writer,
+        FormatCommandColorMode colorMode) =>
+        AnsiConsole.Create(
+            new AnsiConsoleSettings
+            {
+                Ansi = FormatCommandShared.AnsiSupportForColorMode(colorMode),
+                ColorSystem = FormatCommandShared.ColorSystemSupportForColorMode(colorMode),
+                Out = new AnsiConsoleOutput(writer),
+            });
+
+
+    private static class TestCommandTheme
+    {
+        public static Style Default { get; } =
+            new(foreground: Color.Default);
+
+        public static Style Dark { get; } =
+            new(foreground: Color.Default, decoration: Decoration.Dim);
+
+        public static Style Success { get; } =
+            new(foreground: Color.Green);
+
+        public static Style SuccessHeadline { get; } =
+            new(foreground: Color.Green, decoration: Decoration.Underline);
+
+        public static Style Failure { get; } =
+            new(foreground: Color.Red);
+
+        public static Style FailureHeadline { get; } =
+            new(foreground: Color.Red, decoration: Decoration.Underline);
+
+        public static Style Todo { get; } =
+            new(foreground: Color.Yellow);
+
+        public static Style TodoHeadline { get; } =
+            new(foreground: Color.Yellow, decoration: Decoration.Underline);
+
+        public static Style Highlighted { get; } =
+            new(foreground: Color.Default, decoration: Decoration.Invert);
+    }
+}
