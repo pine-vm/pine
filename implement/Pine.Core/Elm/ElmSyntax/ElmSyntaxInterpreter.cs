@@ -1066,6 +1066,17 @@ public partial class ElmSyntaxInterpreter
                         currentExpr = null;
                         break;
 
+                    case ElmSyntaxAbstract.Expression.FloatLiteral floatLiteral:
+                        currentValue =
+                            PineValueInProcess.Create(
+                                ElmValueEncoding.ElmValueAsPineValue(
+                                    ElmValue.ElmFloat.NotNormalized(
+                                        floatLiteral.Numerator,
+                                        floatLiteral.Denominator)));
+
+                        currentExpr = null;
+                        break;
+
                     case ElmSyntaxAbstract.Expression.Negation negation:
                         kstack.Push(new Kont.Negate());
                         currentExpr = negation.Expression;
@@ -1484,9 +1495,13 @@ public partial class ElmSyntaxInterpreter
                             break;
                         }
 
+                    case ElmSyntaxAbstract.Expression.GLSLExpression:
+                        throw new System.NotImplementedException(
+                            "RunTrampoline does not handle expression variant: " + currentExpr.GetType().Name);
+
                     default:
                         throw new System.NotImplementedException(
-                            "Expression type not implemented: " + currentExpr.GetType().FullName);
+                            "RunTrampoline does not handle expression variant: " + currentExpr.GetType().Name);
                 }
             }
             else

@@ -60,6 +60,8 @@ public class BasicsEqualityAndArithmeticBuiltinTests
     [InlineData("Basics.eq ( 1, \"a\" ) ( 1, \"b\" )", "False")]
     [InlineData("Basics.eq { x = 1, y = 2 } { x = 1, y = 2 }", "True")]
     [InlineData("Basics.eq { x = 1, y = 2 } { x = 1, y = 3 }", "False")]
+    [InlineData("Basics.eq 71 71.0", "True")]
+    [InlineData("Basics.eq 41.0 41", "True")]
     public void Eq_matches_Elm_semantics(string expression, string expected) =>
         AssertEvaluatesEqual(expression, expected);
 
@@ -69,6 +71,7 @@ public class BasicsEqualityAndArithmeticBuiltinTests
     [InlineData("\"abc\" == \"abc\"", "True")]
     [InlineData("[ 1, 2 ] == [ 1, 2 ]", "True")]
     [InlineData("( 1, 2 ) == ( 1, 3 )", "False")]
+    [InlineData("( 31, 37 ) == ( 31, 37 )", "True")]
     public void Eq_infix_operator_matches_Elm_semantics(string expression, string expected) =>
         AssertEvaluatesEqual(expression, expected);
 
