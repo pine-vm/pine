@@ -1,0 +1,7 @@
+Running 12 tests.
+
+
+TEST RUN PASSED
+
+Passed:   12
+Failed:   0

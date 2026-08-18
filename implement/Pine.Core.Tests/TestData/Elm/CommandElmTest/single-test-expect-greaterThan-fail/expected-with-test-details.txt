@@ -1,0 +1,15 @@
+Running 1 test.
+
+✗ A Test Title
+
+    0
+    ╷
+    │ Expect.greaterThan
+    ╵
+    1
+
+
+TEST RUN FAILED
+
+Passed:   0
+Failed:   1

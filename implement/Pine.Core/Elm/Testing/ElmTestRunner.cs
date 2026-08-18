@@ -177,18 +177,19 @@ public static class ElmTestRunner
                 continue;
             }
 
-            if (expectationTag is "EqualFailure")
+            if (expectationTag is "ComparisonFailure")
             {
-                if (expectationArguments.Length is not 2)
-                    throw new InvalidOperationException("EqualFailure must contain two arguments");
+                if (expectationArguments.Length is not 3)
+                    throw new InvalidOperationException("ComparisonFailure must contain three arguments");
 
                 completedTests.Add(
                     new CompletedTest(
                         discoveredTest.Path,
                         CompletedTestKind.Failed,
                         new EqualityFailure(
-                            actual: ParseElmString(expectationArguments.Span[0]),
-                            expected: ParseElmString(expectationArguments.Span[1]))));
+                            description: ParseElmString(expectationArguments.Span[0]),
+                            actual: ParseElmString(expectationArguments.Span[1]),
+                            expected: ParseElmString(expectationArguments.Span[2]))));
 
                 continue;
             }
@@ -280,7 +281,7 @@ public static class ElmTestRunner
 
                             Append(
                                 "\n    ╷" +
-                                "\n    │ Expect.equal" +
+                                "\n    │ " + equalityFailure.Description +
                                 "\n    ╵" +
                                 "\n    ",
                                 TestOutputStyle.Default);
@@ -526,22 +527,40 @@ public static class ElmTestRunner
         module Expect exposing
             ( Expectation
             , all
+            , err
             , atLeast
             , atMost
             , equal
+            , equalDicts
+            , equalLists
+            , equalSets
             , fail
+            , FloatingPointTolerance(..)
             , greaterThan
             , lessThan
+            , notEqual
+            , notWithin
+            , ok
+            , onFail
             , pass
+            , within
             )
 
+        import Dict exposing (Dict)
         import Debug
+        import Set exposing (Set)
 
 
         type Expectation
             = Pass
-            | EqualFailure String String
+            | ComparisonFailure String String String
             | Fail String
+
+
+        type FloatingPointTolerance
+            = Absolute Float
+            | Relative Float
+            | AbsoluteOrRelative Float Float
 
 
         pass : Expectation
@@ -556,27 +575,97 @@ public static class ElmTestRunner
 
         equal : a -> a -> Expectation
         equal expected actual =
-            compareWith (==) expected actual
+            equateWith "Expect.equal" (==) expected actual
+
+
+        notEqual : a -> a -> Expectation
+        notEqual expected actual =
+            equateWith "Expect.notEqual" (/=) expected actual
 
 
         lessThan : comparable -> comparable -> Expectation
         lessThan expected actual =
-            compareWith (<) expected actual
+            compareWith "Expect.lessThan" (<) expected actual
 
 
         atMost : comparable -> comparable -> Expectation
         atMost expected actual =
-            compareWith (<=) expected actual
+            compareWith "Expect.atMost" (<=) expected actual
 
 
         greaterThan : comparable -> comparable -> Expectation
         greaterThan expected actual =
-            compareWith (>) expected actual
+            compareWith "Expect.greaterThan" (>) expected actual
 
 
         atLeast : comparable -> comparable -> Expectation
         atLeast expected actual =
-            compareWith (>=) expected actual
+            compareWith "Expect.atLeast" (>=) expected actual
+
+
+        within : FloatingPointTolerance -> Float -> Float -> Expectation
+        within tolerance expected actual =
+            validateTolerance tolerance "within" <|
+                compareWith
+                    ("Expect.within " ++ Debug.toString tolerance)
+                    (withinTolerance tolerance)
+                    expected
+                    actual
+
+
+        notWithin : FloatingPointTolerance -> Float -> Float -> Expectation
+        notWithin tolerance expected actual =
+            validateTolerance tolerance "notWithin" <|
+                compareWith
+                    ("Expect.notWithin " ++ Debug.toString tolerance)
+                    (\left right -> not (withinTolerance tolerance left right))
+                    expected
+                    actual
+
+
+        ok : Result error value -> Expectation
+        ok result =
+            case result of
+                Ok _ ->
+                    Pass
+
+                Err _ ->
+                    ComparisonFailure "Expect.ok" (Debug.toString result) "Ok _"
+
+
+        err : Result error value -> Expectation
+        err result =
+            case result of
+                Ok _ ->
+                    ComparisonFailure "Expect.err" (Debug.toString result) "Err _"
+
+                Err _ ->
+                    Pass
+
+
+        equalLists : List a -> List a -> Expectation
+        equalLists expected actual =
+            compareWith "Expect.equalLists" (==) expected actual
+
+
+        equalDicts : Dict comparable a -> Dict comparable a -> Expectation
+        equalDicts expected actual =
+            compareWith "Expect.equalDicts" (\left right -> Dict.toList left == Dict.toList right) expected actual
+
+
+        equalSets : Set comparable -> Set comparable -> Expectation
+        equalSets expected actual =
+            compareWith "Expect.equalSets" (\left right -> Set.toList left == Set.toList right) expected actual
+
+
+        onFail : String -> Expectation -> Expectation
+        onFail message expectation =
+            case expectation of
+                Pass ->
+                    Pass
+
+                _ ->
+                    Fail message
 
 
         all : List (subject -> Expectation) -> subject -> Expectation
@@ -604,13 +693,85 @@ public static class ElmTestRunner
                     failure
 
 
-        compareWith : (a -> a -> Bool) -> a -> a -> Expectation
-        compareWith comparison expected actual =
+        validateTolerance : FloatingPointTolerance -> String -> Expectation -> Expectation
+        validateTolerance tolerance name expectation =
+            let
+                absoluteTolerance =
+                    case tolerance of
+                        Absolute value ->
+                            value
+
+                        AbsoluteOrRelative value _ ->
+                            value
+
+                        Relative _ ->
+                            0
+
+                relativeTolerance =
+                    case tolerance of
+                        Relative value ->
+                            value
+
+                        AbsoluteOrRelative _ value ->
+                            value
+
+                        Absolute _ ->
+                            0
+            in
+            if absoluteTolerance < 0 && relativeTolerance < 0 then
+                Fail ("Expect." ++ name ++ " was given negative absolute and relative tolerances")
+
+            else if absoluteTolerance < 0 then
+                Fail ("Expect." ++ name ++ " was given a negative absolute tolerance")
+
+            else if relativeTolerance < 0 then
+                Fail ("Expect." ++ name ++ " was given a negative relative tolerance")
+
+            else
+                expectation
+
+
+        withinTolerance : FloatingPointTolerance -> Float -> Float -> Bool
+        withinTolerance tolerance left right =
+            case tolerance of
+                Absolute value ->
+                    abs (left - right) <= value
+
+                Relative value ->
+                    abs (left - right) <= max (abs left) (abs right) * value
+
+                AbsoluteOrRelative absoluteValue relativeValue ->
+                    abs (left - right) <= absoluteValue
+                        || abs (left - right) <= max (abs left) (abs right) * relativeValue
+
+
+        equateWith : String -> (a -> a -> Bool) -> a -> a -> Expectation
+        equateWith description comparison expected actual =
+            let
+                isFloat value =
+                    String.toFloat value /= Nothing && String.toInt value == Nothing
+
+                usesFloats =
+                    isFloat (Debug.toString actual) || isFloat (Debug.toString expected)
+            in
+            if usesFloats then
+                if description == "Expect.notEqual" then
+                    Fail "Do not use Expect.notEqual with floats. Use Expect.notWithin instead."
+
+                else
+                    Fail "Do not use Expect.equal with floats. Use Expect.within instead."
+
+            else
+                compareWith description comparison expected actual
+
+
+        compareWith : String -> (a -> a -> Bool) -> a -> a -> Expectation
+        compareWith description comparison expected actual =
             if comparison actual expected then
                 Pass
 
             else
-                EqualFailure (Debug.toString actual) (Debug.toString expected)
+                ComparisonFailure description (Debug.toString actual) (Debug.toString expected)
         """;
 
 
@@ -738,10 +899,24 @@ public sealed record EqualityFailure : TestFailure
     /// Creates a failed equality expectation.
     /// </summary>
     public EqualityFailure(string actual, string expected)
+        : this("Expect.equal", actual, expected)
     {
+    }
+
+    /// <summary>
+    /// Creates a failed comparison expectation.
+    /// </summary>
+    public EqualityFailure(string description, string actual, string expected)
+    {
+        Description = description;
         Actual = actual;
         Expected = expected;
     }
+
+    /// <summary>
+    /// Gets the expectation function description.
+    /// </summary>
+    public string Description { get; init; }
 
     /// <summary>
     /// Gets the actual value.
