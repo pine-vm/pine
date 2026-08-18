@@ -1,0 +1,15 @@
+Running 1 test.
+
+✗ A Test Title
+
+    { alfa = 31, beta = 43, gamma = 47 }
+    ╷
+    │ Expect.equal
+    ╵
+    { alfa = 31, beta = 41, gamma = 47 }
+
+
+TEST RUN FAILED
+
+Passed:   0
+Failed:   1

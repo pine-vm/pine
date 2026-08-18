@@ -37,6 +37,17 @@ public class DebugToStringTests
                 ]),
             "[\"one\",\"two\"]"
             ];
+
+        yield return
+            [
+            ElmValueEncoding.ElmRecordAsPineValue(
+                [
+                ("alfa", IntegerEncoding.EncodeSignedInteger(31)),
+                ("beta", IntegerEncoding.EncodeSignedInteger(43)),
+                ("gamma", IntegerEncoding.EncodeSignedInteger(47)),
+                ]),
+            "{ alfa = 31, beta = 43, gamma = 47 }"
+            ];
     }
 
     [Theory]
@@ -60,6 +71,9 @@ public class DebugToStringTests
     [InlineData("[ 11, 13, 17, 19 ]", "[11,13,17,19]")]
     [InlineData("[ \"one\", \"two\" ]", "[\"one\",\"two\"]")]
     [InlineData("[ [ 1, 2 ], [ 3 ] ]", "[[1,2],[3]]")]
+    [InlineData(
+        "{ alfa = 31, beta = 43, gamma = 47 }",
+        "{ alfa = 31, beta = 43, gamma = 47 }")]
     public void Compiles_and_evaluates_supported_values(
         string elmExpression,
         string expected)

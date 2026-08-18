@@ -348,6 +348,74 @@ public static class CoreDebug
         var encodedListHelperBody =
             ExpressionEncoding.EncodeExpressionAsValue(listBody);
 
+        var fieldName =
+            BuiltinHelpers.ApplyBuiltinHead(remaining);
+
+        var fieldValue =
+            BuiltinHelpers.ApplyBuiltinHead(
+                BuiltinHelpers.ApplyBuiltinSkip(1, remaining));
+
+        var renderedFieldValue =
+            new Expression.Eval(
+                encoded: renderer,
+                environment:
+                Expression.ListInst(
+                    [
+                    renderer,
+                    fieldValue
+                    ]));
+
+        var renderedFieldValueContent =
+            UnwrapString(renderedFieldValue);
+
+        var remainingRecordFields =
+            BuiltinHelpers.ApplyBuiltinSkip(2, remaining);
+
+        var renderedRemainingRecordFields =
+            new Expression.Eval(
+                encoded: self,
+                environment:
+                Expression.ListInst(
+                    [
+                    self,
+                    renderer,
+                    remainingRecordFields
+                    ]));
+
+        var remainingRecordFieldsIsEmpty =
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                BuiltinHelpers.ApplyBuiltinLength(remainingRecordFields),
+                zero);
+
+        var nonEmptyRecordContent =
+            Expression.ConditionalInst(
+                condition: remainingRecordFieldsIsEmpty,
+                falseBranch:
+                BuiltinHelpers.ApplyBuiltinConcat(
+                    [
+                    fieldName,
+                    LiteralText(" = "),
+                    renderedFieldValueContent,
+                    LiteralText(", "),
+                    renderedRemainingRecordFields
+                    ]),
+                trueBranch:
+                BuiltinHelpers.ApplyBuiltinConcat(
+                    [
+                    fieldName,
+                    LiteralText(" = "),
+                    renderedFieldValueContent
+                    ]));
+
+        var recordBody =
+            Expression.ConditionalInst(
+                condition: isEmpty,
+                falseBranch: nonEmptyRecordContent,
+                trueBranch: LiteralText(""));
+
+        var encodedRecordHelperBody =
+            ExpressionEncoding.EncodeExpressionAsValue(recordBody);
+
         // The renderer environment is [self, value].
         var rendererSelf = Path(0);
         var rendererValue = Path(1);
@@ -363,10 +431,26 @@ public static class CoreDebug
                     rendererValue
                     ]));
 
+        var recordContent =
+            new Expression.Eval(
+                encoded: Expression.LitralInst(encodedRecordHelperBody),
+                environment:
+                Expression.ListInst(
+                    [
+                    Expression.LitralInst(encodedRecordHelperBody),
+                    rendererSelf,
+                    BuiltinHelpers.ApplyBuiltinSkip(1, rendererValue)
+                    ]));
+
         var listResult =
             WrapString(
                 BuiltinHelpers.ApplyBuiltinConcat(
                     [LiteralText("["), listContent, LiteralText("]")]));
+
+        var recordResult =
+            WrapString(
+                BuiltinHelpers.ApplyBuiltinConcat(
+                    [LiteralText("{ "), recordContent, LiteralText(" }")]));
 
         var stringResult =
             Internal_StringToString(rendererValue);
@@ -401,13 +485,26 @@ public static class CoreDebug
                     BuiltinHelpers.ApplyBuiltinHead(rendererValue),
                     Expression.LitralInst(ElmValue.ElmFloatTypeTagNameAsValue)));
 
+        var isRecord =
+            Expression.ConditionalInst(
+                condition: hasListItems,
+                falseBranch: Expression.LitralInst(PineVM.PineKernelValues.FalseValue),
+                trueBranch:
+                BuiltinHelpers.ApplyBuiltinEqualBinary(
+                    BuiltinHelpers.ApplyBuiltinHead(rendererValue),
+                    Expression.LitralInst(ElmValue.ElmRecordTypeTagNameAsValue)));
+
         var nonBlobResult =
             Expression.ConditionalInst(
                 condition: isFloat,
                 falseBranch:
                 Expression.ConditionalInst(
                     condition: isString,
-                    falseBranch: listResult,
+                    falseBranch:
+                    Expression.ConditionalInst(
+                        condition: isRecord,
+                        falseBranch: listResult,
+                        trueBranch: recordResult),
                     trueBranch: stringResult),
                 trueBranch: floatResult);
 
