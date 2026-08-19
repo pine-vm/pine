@@ -425,4 +425,133 @@ public class PineVMTests
                 "Evaluated expression should match the expected value.");
         }
     }
+
+    [Fact]
+    public void EvalDirect_preserves_builtin_semantics()
+    {
+        var testCases =
+            new (Expression environmentExpression, PineValue environment, PineValue expected)[]
+            {
+                (Expression.BuiltinInst(
+                    function: nameof(BuiltinFunction.head),
+                    input:
+                    Expression.BuiltinInst(
+                        function: nameof(BuiltinFunction.skip),
+                        input: Expression.EnvironmentInstance)),
+                IntegerEncoding.EncodeSignedInteger(1),
+                PineValue.EmptyList),
+                (Expression.BuiltinInst(
+                    function: nameof(BuiltinFunction.head),
+                    input:
+                    Expression.BuiltinInst(
+                        function: nameof(BuiltinFunction.skip),
+                        input:
+                        Expression.ListInst(
+                            [
+                            Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(1)),
+                            Expression.EnvironmentInstance,
+                            ]))),
+                PineValue.Blob([11, 22]),
+                PineValue.BlobSingleByte(22)),
+                (Expression.BuiltinInst(
+                    function: nameof(BuiltinFunction.take),
+                    input:
+                    Expression.ListInst(
+                        [
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(-1)),
+                        Expression.EnvironmentInstance,
+                        ])),
+                PineValue.Blob([11, 22]),
+                PineValue.EmptyBlob),
+                (Expression.BuiltinInst(
+                    function: nameof(BuiltinFunction.skip),
+                    input:
+                    Expression.ListInst(
+                        [
+                        Expression.LitralInst(PineValue.EmptyList),
+                        Expression.EnvironmentInstance,
+                        ])),
+                PineValue.Blob([11, 22]),
+                PineValue.EmptyList),
+                (Expression.BuiltinInst(
+                    function: nameof(BuiltinFunction.concat),
+                    input:
+                    Expression.ListInst(
+                        [
+                        Expression.ListInst([Expression.LitralInst(PineValue.BlobSingleByte(11))]),
+                        Expression.ListInst([Expression.LitralInst(PineValue.BlobSingleByte(22))]),
+                        Expression.ListInst([Expression.LitralInst(PineValue.BlobSingleByte(33))]),
+                        ])),
+                PineValue.EmptyList,
+                PineValue.List(
+                    [
+                    PineValue.BlobSingleByte(11),
+                    PineValue.BlobSingleByte(22),
+                    PineValue.BlobSingleByte(33),
+                    ])),
+                (Expression.BuiltinInst(
+                    function: nameof(BuiltinFunction.length),
+                    input: Expression.EnvironmentInstance),
+                PineValue.Blob([11, 22, 33]),
+                IntegerEncoding.EncodeSignedInteger(3)),
+                (Expression.BuiltinInst(
+                    function: nameof(BuiltinFunction.equal),
+                    input:
+                    Expression.ListInst(
+                        [
+                        Expression.LitralInst(PineValue.BlobSingleByte(11)),
+                        Expression.LitralInst(PineValue.BlobSingleByte(11)),
+                        ])),
+                PineValue.EmptyList,
+                PineValue.BlobSingleByte(4)),
+                (Expression.BuiltinInst(
+                    function: nameof(BuiltinFunction.int_add),
+                    input:
+                    Expression.ListInst(
+                        [
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(2)),
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(3)),
+                        ])),
+                PineValue.EmptyList,
+                IntegerEncoding.EncodeSignedInteger(5)),
+            };
+
+        foreach (var testCase in testCases)
+        {
+            var innerEval =
+                new Expression.Eval(
+                    encoded:
+                    Expression.LitralInst(
+                        ExpressionEncoding.EncodeExpressionAsValue(Expression.EnvironmentInstance)),
+                    environment: testCase.environmentExpression);
+
+            var outerEval =
+                new Expression.Eval(
+                    encoded:
+                    Expression.LitralInst(
+                        ExpressionEncoding.EncodeExpressionAsValue(innerEval)),
+                    environment: Expression.EnvironmentInstance);
+
+            var pineVM =
+                Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
+                    evalCache: null,
+                    evaluationConfigDefault: null,
+                    reportFunctionApplication: null,
+                    compilationEnvClasses: null,
+                    disableReductionInCompilation: true,
+                    selectPrecompiled: null,
+                    skipInlineForExpression: _ => false,
+                    enableTailRecursionOptimization: false,
+                    parseCache: null,
+                    precompiledLeaves: null,
+                    reportEnterPrecompiledLeaf: null,
+                    reportExitPrecompiledLeaf: null,
+                    optimizationParametersSerial: null,
+                    cacheFileStore: null);
+
+            pineVM.EvaluateExpression(outerEval, testCase.environment)
+                .Should()
+                .Be(Result<string, PineValue>.ok(testCase.expected));
+        }
+    }
 }
