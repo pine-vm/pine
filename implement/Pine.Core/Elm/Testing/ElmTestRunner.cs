@@ -83,7 +83,7 @@ public static class ElmTestRunner
             .ToImmutableArray();
 
         if (testModules.Length is 0)
-            throw new InvalidOperationException("Did not find Elm test modules in " + appDirectory);
+            return new ElmTestRun.NoTestModules(appDirectory);
 
         var suiteDeclarationNames =
             testModules
@@ -215,7 +215,7 @@ public static class ElmTestRunner
 
         stopwatch.Stop();
 
-        return new ElmTestRun(completedTests, stopwatch.Elapsed);
+        return new ElmTestRun.Completed(completedTests, stopwatch.Elapsed);
     }
 
 
@@ -1087,33 +1087,18 @@ public sealed record StructuredTestOutput
 /// <summary>
 /// Contains the results of an Elm test run.
 /// </summary>
-public sealed record ElmTestRun
+public abstract record ElmTestRun
 {
     /// <summary>
-    /// Creates an Elm test run result.
+    /// Contains the results of a completed Elm test run.
     /// </summary>
-    public ElmTestRun(IReadOnlyList<CompletedTest> tests, TimeSpan duration)
-    {
-        Tests = tests;
-        Duration = duration;
-    }
+    public sealed record Completed(
+        IReadOnlyList<CompletedTest> Tests,
+        TimeSpan Duration)
+        : ElmTestRun;
 
     /// <summary>
-    /// Gets the completed tests.
+    /// Represents a test run for a project without Elm test modules.
     /// </summary>
-    public IReadOnlyList<CompletedTest> Tests { get; init; }
-
-    /// <summary>
-    /// Gets the test run duration.
-    /// </summary>
-    public TimeSpan Duration { get; init; }
-
-    /// <summary>
-    /// Deconstructs the Elm test run result.
-    /// </summary>
-    public void Deconstruct(out IReadOnlyList<CompletedTest> tests, out TimeSpan duration)
-    {
-        tests = Tests;
-        duration = Duration;
-    }
+    public sealed record NoTestModules(string AppDirectory) : ElmTestRun;
 }

@@ -99,6 +99,7 @@ public static class HelpCommand
             {
                 "interactive",
                 "compile",
+                "elm",
                 "elm-test-rs",
                 "make",
                 "screenshot",

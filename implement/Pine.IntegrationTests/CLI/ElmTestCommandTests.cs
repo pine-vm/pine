@@ -94,6 +94,62 @@ public class ElmTestCommandTests
     }
 
 
+    [Fact]
+    public void No_Elm_test_modules_reports_error()
+    {
+        var projectDirectory =
+            Path.Combine(
+                Path.GetTempPath(),
+                "pine-elm-test-command-tests",
+                Guid.NewGuid().ToString("N") + new string('a', 80));
+
+        Directory.CreateDirectory(projectDirectory);
+
+        var (errorConsole, errorOutput) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            var exitCode =
+                TestCommand.Execute(
+                    projectDirectory,
+                    colorMode: FormatCommandColorMode.Never,
+                    errorConsole: errorConsole);
+
+            exitCode.Should().Be(1);
+            errorOutput.ToString().Should().Contain("Error:");
+            errorOutput.ToString().Should().Contain("Did not find Elm test modules");
+            errorOutput.ToString().Should().Contain(projectDirectory);
+        }
+        finally
+        {
+            Directory.Delete(projectDirectory, recursive: true);
+        }
+    }
+
+
+    [Fact]
+    public void Unexpected_exception_from_Elm_test_runner_propagates()
+    {
+        var projectDirectory = CreateTestProject("This is not a valid Elm module.");
+
+        try
+        {
+            Action execute =
+                () =>
+                TestCommand.Execute(
+                    projectDirectory,
+                    colorMode: FormatCommandColorMode.Never);
+
+            execute.Should().Throw<InvalidOperationException>()
+                .WithMessage("Failed parsing Elm test module header:*");
+        }
+        finally
+        {
+            Directory.Delete(projectDirectory, recursive: true);
+        }
+    }
+
+
     private static string CreateTestProject(string testsModule)
     {
         var projectDirectory =
