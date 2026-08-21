@@ -727,21 +727,25 @@ public static class CoreDebug
                 nameof(BuiltinFunction.int_is_sorted_asc),
                 Expression.ListInst(
                     [
-                    LiteralInt(1),
+                    LiteralInt(4),
                     BuiltinHelpers.ApplyBuiltinLength(tagName)
                     ]));
 
-        var firstTagNameByte =
-            BuiltinHelpers.ApplyBuiltinHead(tagName);
+        var firstTagNameCodePoint =
+            BuiltinHelpers.ApplyBuiltinConcat(
+                [
+                LiteralByte(4),
+                BuiltinHelpers.ApplyBuiltinTake(4, tagName)
+                ]);
 
         var tagNameStartsUppercase =
             Expression.BuiltinInst(
                 nameof(BuiltinFunction.int_is_sorted_asc),
                 Expression.ListInst(
                     [
-                    LiteralByte((byte)'A'),
-                    firstTagNameByte,
-                    LiteralByte((byte)'Z')
+                    LiteralInt('A'),
+                    firstTagNameCodePoint,
+                    LiteralInt('Z')
                     ]));
 
         var tagNameIsReserved =
@@ -777,7 +781,7 @@ public static class CoreDebug
                             Expression.ConditionalInst(
                                 condition: tagNameStartsUppercase,
                                 falseBranch: falseValue,
-                                trueBranch: CoreBasics.Generic_Not(tagNameIsReserved)))));
+                                trueBranch: CoreBasics.Generic_Not(tagNameIsReserved))))));
     }
 
     private static Expression WrapString(Expression content) =>
