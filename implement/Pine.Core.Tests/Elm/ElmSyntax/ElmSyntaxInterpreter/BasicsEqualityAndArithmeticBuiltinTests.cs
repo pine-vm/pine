@@ -34,7 +34,8 @@ public class BasicsEqualityAndArithmeticBuiltinTests
                 "List.elm",
                 "Maybe.elm",
                 "Char.elm",
-                "Dict.elm"));
+                "Dict.elm",
+                "String.elm"));
 
     private static PineValue Evaluate(string expression) =>
         InterpreterTestHelper.EvaluateInModulesToPineValue(expression, s_prepared.Value);
@@ -62,6 +63,8 @@ public class BasicsEqualityAndArithmeticBuiltinTests
     [InlineData("Basics.eq { x = 1, y = 2 } { x = 1, y = 3 }", "False")]
     [InlineData("Basics.eq 71 71.0", "True")]
     [InlineData("Basics.eq 41.0 41", "True")]
+    [InlineData("Basics.eq 350 (Maybe.withDefault 0 (String.toFloat \"3.5e2\"))", "True")]
+    [InlineData("Basics.eq (Maybe.withDefault 0 (String.toFloat \"3.5e2\")) 350", "True")]
     public void Eq_matches_Elm_semantics(string expression, string expected) =>
         AssertEvaluatesEqual(expression, expected);
 

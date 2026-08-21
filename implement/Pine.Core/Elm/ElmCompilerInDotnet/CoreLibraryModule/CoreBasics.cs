@@ -2814,13 +2814,9 @@ public class CoreBasics
     ///     else
     ///         case ( a, b ) of
     ///             ( Elm_Float numA denomA, intB ) ->
-    ///                 if Pine_kernel.equal [ numA, intB ] then
-    ///                     Pine_kernel.equal [ denomA, 1 ]
-    ///                 else False
+    ///                 Pine_kernel.equal [ numA, Pine_kernel.int_mul [ denomA, intB ] ]
     ///             ( intA, Elm_Float numB denomB ) ->
-    ///                 if Pine_kernel.equal [ intA, numB ] then
-    ///                     Pine_kernel.equal [ denomB, 1 ]
-    ///                 else False
+    ///                 Pine_kernel.equal [ Pine_kernel.int_mul [ intA, denomB ], numB ]
     ///             _ ->
     ///                 if isPineBlob a then False
     ///                 else if Pine_kernel.equal [ Pine_kernel.length a, Pine_kernel.length b ] then
@@ -2943,20 +2939,20 @@ public class CoreBasics
 
         var eqFloatIntEqual =
             Expression.ConditionalInst(
-                condition: BuiltinHelpers.ApplyBuiltinEqualBinary(eqLeftNumerator, eqB),
-                trueBranch: Expression.ConditionalInst(
-                    condition: BuiltinHelpers.ApplyBuiltinEqualBinary(eqLeftDenominator, LiteralInt(1)),
-                    trueBranch: s_trueValue,
-                    falseBranch: s_falseValue),
+                condition:
+                BuiltinHelpers.ApplyBuiltinEqualBinary(
+                    eqLeftNumerator,
+                    BuiltinMul(eqLeftDenominator, eqB)),
+                trueBranch: s_trueValue,
                 falseBranch: s_falseValue);
 
         var eqIntFloatEqual =
             Expression.ConditionalInst(
-                condition: BuiltinHelpers.ApplyBuiltinEqualBinary(eqA, eqRightNumerator),
-                trueBranch: Expression.ConditionalInst(
-                    condition: BuiltinHelpers.ApplyBuiltinEqualBinary(eqRightDenominator, LiteralInt(1)),
-                    trueBranch: s_trueValue,
-                    falseBranch: s_falseValue),
+                condition:
+                BuiltinHelpers.ApplyBuiltinEqualBinary(
+                    BuiltinMul(eqA, eqRightDenominator),
+                    eqRightNumerator),
+                trueBranch: s_trueValue,
                 falseBranch: s_falseValue);
 
         var eqFloatFloatLeftProduct = BuiltinMul(eqLeftNumerator, eqRightDenominator);

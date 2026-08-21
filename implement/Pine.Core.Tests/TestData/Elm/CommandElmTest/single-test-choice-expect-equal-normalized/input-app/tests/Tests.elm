@@ -14,4 +14,8 @@ suite =
         \_ ->
             Expect.equal
                 (Floatable 350)
-                (Floatable 350.0)
+                (Floatable
+                    (Maybe.withDefault 0
+                        (String.toFloat "3.5e2")
+                    )
+                )

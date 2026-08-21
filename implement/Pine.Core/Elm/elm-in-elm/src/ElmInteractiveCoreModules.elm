@@ -124,18 +124,16 @@ eq a b =
     else
         case ( a, b ) of
             ( Elm_Float numA denomA, intB ) ->
-                if Pine_builtin.equal [ numA, intB ] then
-                    Pine_builtin.equal [ denomA, 1 ]
-
-                else
-                    False
+                Pine_builtin.equal
+                    [ numA
+                    , Pine_builtin.int_mul [ denomA, intB ]
+                    ]
 
             ( intA, Elm_Float numB denomB ) ->
-                if Pine_builtin.equal [ intA, numB ] then
-                    Pine_builtin.equal [ denomB, 1 ]
-
-                else
-                    False
+                Pine_builtin.equal
+                    [ Pine_builtin.int_mul [ intA, denomB ]
+                    , numB
+                    ]
 
             _ ->
                 if isPineBlob a then
