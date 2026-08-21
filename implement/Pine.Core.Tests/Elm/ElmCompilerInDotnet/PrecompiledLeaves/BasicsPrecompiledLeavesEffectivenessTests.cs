@@ -50,6 +50,11 @@ public class BasicsPrecompiledLeavesEffectivenessTests
             a == b
 
 
+        floatsEqual : Float -> Float -> Bool
+        floatsEqual a b =
+            a == b
+
+
         idivide : Int -> Int -> Int
         idivide a b =
             a // b
@@ -174,6 +179,24 @@ public class BasicsPrecompiledLeavesEffectivenessTests
         IntermediateVM.SetupVM.DefaultPrecompiledLeaves;
 
     // ---------- tests ----------
+
+    [Fact]
+    public void Basics_eq_matches_non_normalized_integer_valued_float_with_and_without_leaf()
+    {
+        var functionValue = GetTestFunction("floatsEqual");
+        var integer = ElmValue.Integer(350);
+        var nonNormalizedFloat = ElmValue.ElmFloat.NotNormalized(3500, 10);
+
+        foreach (var vm in new[]
+        {
+            CreateVM(ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty),
+            CreateVM(DefaultPrecompiledLeaves),
+        })
+        {
+            Apply(functionValue, integer, nonNormalizedFloat, vm).value.Should().Be(ElmValue.TrueValue);
+            Apply(functionValue, nonNormalizedFloat, integer, vm).value.Should().Be(ElmValue.TrueValue);
+        }
+    }
 
     /// <summary>
     /// 2 × 2 matrix, mirroring the structure of the analogous test in

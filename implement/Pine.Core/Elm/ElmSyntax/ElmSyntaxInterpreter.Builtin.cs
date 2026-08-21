@@ -23,6 +23,9 @@ namespace Pine.Core.Elm.ElmSyntax;
 /// </summary>
 public partial class ElmSyntaxInterpreter
 {
+    private static readonly PineValue s_integerZeroValue =
+        IntegerEncoding.EncodeSignedInteger(0);
+
     private static readonly ImmutableDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>> s_builtinFunctionResolvers =
         BuildBuiltinFunctionResolvers();
 
@@ -266,9 +269,6 @@ public partial class ElmSyntaxInterpreter
                 !ElmValuesEqual(arguments[0].Evaluate(), arguments[1].Evaluate()));
     }
 
-    private static readonly PineValue s_integerOneValue =
-        IntegerEncoding.EncodeSignedInteger(1);
-
     /// <summary>
     /// Structural Elm equality on <see cref="PineValue"/>, faithfully mirroring <c>eq</c> from
     /// <c>elm-kernel-modules/Basics.elm</c>: plain structural equality first, then float
@@ -285,12 +285,16 @@ public partial class ElmSyntaxInterpreter
 
         if (IsElmFloat(a, out var numA, out var denomA))
         {
-            return numA == b && denomA == s_integerOneValue;
+            return
+                denomA != s_integerZeroValue &&
+                numA == BuiltinFunctionSpecialized.int_mul(denomA, b);
         }
 
         if (IsElmFloat(b, out var numB, out var denomB))
         {
-            return a == numB && denomB == s_integerOneValue;
+            return
+                denomB != s_integerZeroValue &&
+                BuiltinFunctionSpecialized.int_mul(a, denomB) == numB;
         }
 
         // isPineBlob a: blobs that were not already equal can never be equal here.

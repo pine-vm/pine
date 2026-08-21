@@ -741,6 +741,34 @@ public class CoreBasicsFunctionTests
         resultValue.Should().Be(ElmValue.TrueValue);
     }
 
+    [Fact]
+    public void Eq_int_and_equivalent_non_normalized_float()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Eq_FunctionValue(),
+                [
+                ElmValue.Integer(350),
+                ElmValue.ElmFloat.NotNormalized(3500, 10)
+                ]);
+
+        resultValue.Should().Be(ElmValue.TrueValue);
+    }
+
+    [Fact]
+    public void Eq_non_normalized_float_and_equivalent_int()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Eq_FunctionValue(),
+                [
+                ElmValue.ElmFloat.NotNormalized(3500, 10),
+                ElmValue.Integer(350)
+                ]);
+
+        resultValue.Should().Be(ElmValue.TrueValue);
+    }
+
     // ========== Tests for neq ==========
 
     [Fact]

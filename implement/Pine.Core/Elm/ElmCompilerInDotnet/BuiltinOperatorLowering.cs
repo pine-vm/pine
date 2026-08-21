@@ -628,8 +628,8 @@ public static class BuiltinOperatorLowering
         TypeSupportsPrimitiveEquality(rightType, context, []);
 
     /// <summary>
-    /// Returns <c>true</c> when the given type is guaranteed to never contain a Dict or Set,
-    /// meaning Pine structural equality is sufficient for Elm <c>==</c>.
+    /// Returns <c>true</c> when Pine structural equality has the same semantics as Elm
+    /// <c>==</c> for the given type.
     /// <para>
     /// The <paramref name="visiting"/> set prevents infinite recursion when a choice type
     /// refers to itself (directly or indirectly).
@@ -643,15 +643,15 @@ public static class BuiltinOperatorLowering
         switch (type)
         {
             case TypeInference.InferredType.IntType:
-            case TypeInference.InferredType.FloatType:
             case TypeInference.InferredType.StringType:
             case TypeInference.InferredType.CharType:
             case TypeInference.InferredType.BoolType:
-            case TypeInference.InferredType.NumberType:
                 return true;
 
-            case TypeInference.InferredType.TypeVariable typeVariable:
-                return typeVariable.Constraint is not TypeVariableConstraint.None;
+            case TypeInference.InferredType.FloatType:
+            case TypeInference.InferredType.NumberType:
+            case TypeInference.InferredType.TypeVariable:
+                return false;
 
             case TypeInference.InferredType.TupleType tupleType:
                 return

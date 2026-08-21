@@ -19,7 +19,7 @@ public class OptimizeAndEmitStringFromIntTests
                 includeDeclaration:
                 declName =>
                 {
-                    return declName.FullName == "String.fromInt";
+                    return declName.FullName is "String.fromInt";
                 },
                 parseCache);
 
@@ -91,15 +91,18 @@ public class OptimizeAndEmitStringFromIntTests
                             :
                             (local_param_2_0 == CommonReusedValues.Blob_Str_Elm_Float
                             ?
-                            (PineValueExtension.ValueFromPathOrEmptyList(local_param_2_1, [0]) == PineValue.EmptyList
+                            (PineValueExtension.ValueFromPathOrEmptyList(local_param_2_1, [1]) == CommonReusedValues.Blob_Int_0
                             ?
-                            (PineValueExtension.ValueFromPathOrEmptyList(local_param_2_1, [1]) == CommonReusedValues.Blob_Int_1
+                            PineKernelValues.FalseValue
+                            :
+                            (PineValueExtension.ValueFromPathOrEmptyList(local_param_2_1, [0]) ==
+                            BuiltinFunctionSpecialized.int_mul(
+                                PineValueExtension.ValueFromPathOrEmptyList(local_param_2_1, [1]),
+                                PineValue.EmptyList)
                             ?
                             PineKernelValues.TrueValue
                             :
-                            PineKernelValues.FalseValue)
-                            :
-                            PineKernelValues.FalseValue)
+                            PineKernelValues.FalseValue))
                             :
                             (BuiltinFunctionSpecialized.take(0, PineValue.EmptyList) == PineValue.EmptyBlob
                             ?
@@ -141,7 +144,7 @@ public class OptimizeAndEmitStringFromIntTests
                             :
                             PineKernelValues.FalseValue)
                             :
-                            Global_Anonymous.zzz_anon_a25a170f_4c772da6(PineValue.EmptyList, PineValue.EmptyList))))
+                            Global_Anonymous.zzz_anon_a25a170f_527fa7ac(PineValue.EmptyList, PineValue.EmptyList))))
                             :
                             PineKernelValues.FalseValue)))) ==
                                 PineKernelValues.TrueValue)
@@ -328,7 +331,115 @@ public class OptimizeAndEmitStringFromIntTests
                     }
                 }
 
-                public static PineValue zzz_anon_7e82222d_dd15e40c(PineValue param_1_0, PineValue param_1_1)
+                public static PineValue zzz_anon_8c0c2941_b9b7f21b(PineValue param_1_0, PineValue param_1_1)
+                {
+                    if (param_1_0 == CommonReusedValues.Blob_Str_RBNode_elm_builtin)
+                    {
+                        return
+                            BuiltinFunction.concat(
+                                PineValue.List(
+                                    [
+                                    Global_Anonymous.zzz_anon_8c0c2941_b9b7f21b(
+                                        PineValueExtension.ValueFromPathOrEmptyList(
+                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [3]),
+                                            [
+                                            0
+                                            ]),
+                                        PineValueExtension.ValueFromPathOrEmptyList(
+                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [3]),
+                                            [
+                                            1
+                                            ])),
+                                    PineValue.List(
+                                        [
+                                        PineValue.List(
+                                            [
+                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [1]),
+                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [2])
+                                            ])
+                                        ]),
+                                    Global_Anonymous.zzz_anon_8c0c2941_b9b7f21b(
+                                        PineValueExtension.ValueFromPathOrEmptyList(
+                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [4]),
+                                            [
+                                            0
+                                            ]),
+                                        PineValueExtension.ValueFromPathOrEmptyList(
+                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [4]),
+                                            [
+                                            1
+                                            ]))
+                                    ]));
+                    }
+
+                    return PineValue.List([]);
+                }
+
+                public static PineValue zzz_anon_a25a170f_527fa7ac(PineValue param_1_0, PineValue param_1_1)
+                {
+                    ImmutableSliceBuilder local_param_1_0 = ImmutableSliceBuilder.Create(param_1_0);
+                    ImmutableSliceBuilder local_param_1_1 = ImmutableSliceBuilder.Create(param_1_1);
+
+                    while (true)
+                    {
+                        if (local_param_1_0.Evaluate() == PineValue.List([]))
+                        {
+                            return PineKernelValues.TrueValue;
+                        }
+
+                        if (Global_Anonymous.zzz_anon_eff3e538_ae827bad(local_param_1_0.GetHead(), local_param_1_1.GetHead()) ==
+                            PineKernelValues.TrueValue)
+                        {
+                            {
+                                local_param_1_0 = local_param_1_0.Skip(1);
+                                local_param_1_1 = local_param_1_1.Skip(1);
+                            }
+
+                            continue;
+                        }
+
+                        return PineKernelValues.FalseValue;
+                    }
+                }
+
+                public static PineValue zzz_anon_b489cdcc_3350540e(PineValue param_1_0, PineValue param_1_1)
+                {
+                    if (param_1_0 == CommonReusedValues.Blob_Str_RBNode_elm_builtin)
+                    {
+                        return
+                            BuiltinFunction.concat(
+                                PineValue.List(
+                                    [
+                                    Global_Anonymous.zzz_anon_b489cdcc_3350540e(
+                                        PineValueExtension.ValueFromPathOrEmptyList(
+                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [3]),
+                                            [
+                                            0
+                                            ]),
+                                        PineValueExtension.ValueFromPathOrEmptyList(
+                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [3]),
+                                            [
+                                            1
+                                            ])),
+                                    PineValue.List([PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [1])]),
+                                    Global_Anonymous.zzz_anon_b489cdcc_3350540e(
+                                        PineValueExtension.ValueFromPathOrEmptyList(
+                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [4]),
+                                            [
+                                            0
+                                            ]),
+                                        PineValueExtension.ValueFromPathOrEmptyList(
+                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [4]),
+                                            [
+                                            1
+                                            ]))
+                                    ]));
+                    }
+
+                    return PineValue.List([]);
+                }
+
+                public static PineValue zzz_anon_eff3e538_ae827bad(PineValue param_1_0, PineValue param_1_1)
                 {
                     if (param_1_0 == param_1_1)
                     {
@@ -342,18 +453,18 @@ public class OptimizeAndEmitStringFromIntTests
                     if (local_001 == CommonReusedValues.Blob_Str_Elm_Float)
                     {
                         PineValue local_005 = PineValueExtension.ValueFromPathOrEmptyList(param_1_0, [1]);
-                        PineValue local_006 = PineValueExtension.ValueFromPathOrEmptyList(local_005, [0]);
+                        PineValue local_006 = PineValueExtension.ValueFromPathOrEmptyList(local_005, [1]);
 
                         if (local_004 == PineKernelValues.TrueValue)
                         {
                             PineValue local_007 = PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [1]);
 
                             if (BuiltinFunctionSpecialized.int_mul(
-                                local_006,
+                                PineValueExtension.ValueFromPathOrEmptyList(local_005, [0]),
                                 PineValueExtension.ValueFromPathOrEmptyList(local_007, [1])) ==
                                 BuiltinFunctionSpecialized.int_mul(
                                     PineValueExtension.ValueFromPathOrEmptyList(local_007, [0]),
-                                    PineValueExtension.ValueFromPathOrEmptyList(local_005, [1])))
+                                    local_006))
                             {
                                 return PineKernelValues.TrueValue;
                             }
@@ -361,14 +472,15 @@ public class OptimizeAndEmitStringFromIntTests
                             return PineKernelValues.FalseValue;
                         }
 
-                        if (local_006 == param_1_1)
+                        if (local_006 == CommonReusedValues.Blob_Int_0)
                         {
-                            if (PineValueExtension.ValueFromPathOrEmptyList(local_005, [1]) == CommonReusedValues.Blob_Int_1)
-                            {
-                                return PineKernelValues.TrueValue;
-                            }
-
                             return PineKernelValues.FalseValue;
+                        }
+
+                        if (PineValueExtension.ValueFromPathOrEmptyList(local_005, [0]) ==
+                            BuiltinFunctionSpecialized.int_mul(local_006, param_1_1))
+                        {
+                            return PineKernelValues.TrueValue;
                         }
 
                         return PineKernelValues.FalseValue;
@@ -377,15 +489,17 @@ public class OptimizeAndEmitStringFromIntTests
                     if (local_004 == PineKernelValues.TrueValue)
                     {
                         PineValue local_008 = PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [1]);
+                        PineValue local_009 = PineValueExtension.ValueFromPathOrEmptyList(local_008, [1]);
 
-                        if (param_1_0 == PineValueExtension.ValueFromPathOrEmptyList(local_008, [0]))
+                        if (local_009 == CommonReusedValues.Blob_Int_0)
                         {
-                            if (PineValueExtension.ValueFromPathOrEmptyList(local_008, [1]) == CommonReusedValues.Blob_Int_1)
-                            {
-                                return PineKernelValues.TrueValue;
-                            }
-
                             return PineKernelValues.FalseValue;
+                        }
+
+                        if (BuiltinFunctionSpecialized.int_mul(param_1_0, local_009) ==
+                            PineValueExtension.ValueFromPathOrEmptyList(local_008, [0]))
+                        {
+                            return PineKernelValues.TrueValue;
                         }
 
                         return PineKernelValues.FalseValue;
@@ -450,118 +564,10 @@ public class OptimizeAndEmitStringFromIntTests
                             return PineKernelValues.FalseValue;
                         }
 
-                        return Global_Anonymous.zzz_anon_a25a170f_4c772da6(param_1_0, param_1_1);
+                        return Global_Anonymous.zzz_anon_a25a170f_527fa7ac(param_1_0, param_1_1);
                     }
 
                     return PineKernelValues.FalseValue;
-                }
-
-                public static PineValue zzz_anon_8c0c2941_b9b7f21b(PineValue param_1_0, PineValue param_1_1)
-                {
-                    if (param_1_0 == CommonReusedValues.Blob_Str_RBNode_elm_builtin)
-                    {
-                        return
-                            BuiltinFunction.concat(
-                                PineValue.List(
-                                    [
-                                    Global_Anonymous.zzz_anon_8c0c2941_b9b7f21b(
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [3]),
-                                            [
-                                            0
-                                            ]),
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [3]),
-                                            [
-                                            1
-                                            ])),
-                                    PineValue.List(
-                                        [
-                                        PineValue.List(
-                                            [
-                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [1]),
-                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [2])
-                                            ])
-                                        ]),
-                                    Global_Anonymous.zzz_anon_8c0c2941_b9b7f21b(
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [4]),
-                                            [
-                                            0
-                                            ]),
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [4]),
-                                            [
-                                            1
-                                            ]))
-                                    ]));
-                    }
-
-                    return PineValue.List([]);
-                }
-
-                public static PineValue zzz_anon_a25a170f_4c772da6(PineValue param_1_0, PineValue param_1_1)
-                {
-                    ImmutableSliceBuilder local_param_1_0 = ImmutableSliceBuilder.Create(param_1_0);
-                    ImmutableSliceBuilder local_param_1_1 = ImmutableSliceBuilder.Create(param_1_1);
-
-                    while (true)
-                    {
-                        if (local_param_1_0.Evaluate() == PineValue.List([]))
-                        {
-                            return PineKernelValues.TrueValue;
-                        }
-
-                        if (Global_Anonymous.zzz_anon_7e82222d_dd15e40c(local_param_1_0.GetHead(), local_param_1_1.GetHead()) ==
-                            PineKernelValues.TrueValue)
-                        {
-                            {
-                                local_param_1_0 = local_param_1_0.Skip(1);
-                                local_param_1_1 = local_param_1_1.Skip(1);
-                            }
-
-                            continue;
-                        }
-
-                        return PineKernelValues.FalseValue;
-                    }
-                }
-
-                public static PineValue zzz_anon_b489cdcc_3350540e(PineValue param_1_0, PineValue param_1_1)
-                {
-                    if (param_1_0 == CommonReusedValues.Blob_Str_RBNode_elm_builtin)
-                    {
-                        return
-                            BuiltinFunction.concat(
-                                PineValue.List(
-                                    [
-                                    Global_Anonymous.zzz_anon_b489cdcc_3350540e(
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [3]),
-                                            [
-                                            0
-                                            ]),
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [3]),
-                                            [
-                                            1
-                                            ])),
-                                    PineValue.List([PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [1])]),
-                                    Global_Anonymous.zzz_anon_b489cdcc_3350540e(
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [4]),
-                                            [
-                                            0
-                                            ]),
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [4]),
-                                            [
-                                            1
-                                            ]))
-                                    ]));
-                    }
-
-                    return PineValue.List([]);
                 }
             }
 
