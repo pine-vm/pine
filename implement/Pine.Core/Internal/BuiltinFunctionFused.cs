@@ -300,6 +300,33 @@ public class BuiltinFunctionFused
             "Unexpected argument type: " + argument.GetType());
     }
 
+    public static PineValue SkipAndHead(
+        int skipCount,
+        PineValue argument)
+    {
+        skipCount =
+            skipCount < 0 ? 0 : skipCount;
+
+        if (argument is PineValue.ListValue argumentList)
+        {
+            if (argumentList.Items.Length <= skipCount)
+                return PineValue.EmptyList;
+
+            return argumentList.Items.Span[skipCount];
+        }
+
+        if (argument is PineValue.BlobValue argumentBlob)
+        {
+            if (argumentBlob.Bytes.Length <= skipCount)
+                return PineValue.EmptyBlob;
+
+            return PineValue.BlobSingleByte(argumentBlob.Bytes.Span[skipCount]);
+        }
+
+        throw new NotImplementedException(
+            "Unexpected argument type: " + argument.GetType());
+    }
+
     public static PineValue TakeAndSkip(
         PineValue skipCountValue,
         PineValue takeCountValue,

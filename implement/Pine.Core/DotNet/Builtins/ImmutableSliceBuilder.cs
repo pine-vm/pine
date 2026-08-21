@@ -442,11 +442,9 @@ public record ImmutableSliceBuilder(
         if (FinalValue is { } finalValue)
         {
             return
-                BuiltinFunction.head(
-                    Internal.BuiltinFunctionFused.SkipAndTake(
-                        takeCount: 1,
-                        skipCount: index,
-                        finalValue));
+                Internal.BuiltinFunctionFused.SkipAndHead(
+                    skipCount: index,
+                    finalValue);
         }
 
         // Optimize: instead of materializing the slice, directly get the element at the index
@@ -454,11 +452,9 @@ public record ImmutableSliceBuilder(
         var actualSkipCount = checked(SkipCount + index);
 
         return
-            BuiltinFunction.head(
-                Internal.BuiltinFunctionFused.SkipAndTake(
-                    takeCount: 1,
-                    skipCount: actualSkipCount,
-                    Original));
+            Internal.BuiltinFunctionFused.SkipAndHead(
+                skipCount: actualSkipCount,
+                Original);
     }
 
     /// <summary>
