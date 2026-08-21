@@ -466,6 +466,9 @@ public static class CoreBasicsPrecompiledLeaves
     // recursive eqDeep expression built by CoreBasics.BuildEqEncodedBody, restated here to avoid
     // a project dependency from Pine.Core onto the pine project.
 
+    private static readonly PineValue s_integerZeroValue =
+        IntegerEncoding.EncodeSignedInteger(0);
+
     internal static PineValue BasicsEq(PineValue a, PineValue b) =>
         BasicsEqRecursive(a, b) ? PineKernelValues.TrueValue : PineKernelValues.FalseValue;
 
@@ -500,6 +503,7 @@ public static class CoreBasicsPrecompiledLeaves
             }
 
             return
+                denomA != s_integerZeroValue &&
                 numA ==
                 BuiltinFunctionSpecialized.int_mul(denomA, b);
         }
@@ -511,6 +515,7 @@ public static class CoreBasicsPrecompiledLeaves
             var denomB = bArgs.ValueFromPathOrEmptyList([1]);
 
             return
+                denomB != s_integerZeroValue &&
                 BuiltinFunctionSpecialized.int_mul(a, denomB) ==
                 numB;
         }
