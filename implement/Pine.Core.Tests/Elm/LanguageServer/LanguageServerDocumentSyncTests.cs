@@ -42,7 +42,8 @@ public class LanguageServerDocumentSyncTests
         IElmPackageSource? elmPackageSource = null,
         IDiagnosticsProvider? diagnosticsProvider = null,
         IDocumentFormatter? documentFormatter = null,
-        IDiagnosticsProvider? formattingDiagnosticsProvider = null) =>
+        IDiagnosticsProvider? formattingDiagnosticsProvider = null,
+        System.Action<string>? logDelegate = null) =>
         new(
             StubLanguageServiceSessionFactory.WithSession(session),
             workspace,
@@ -50,7 +51,7 @@ public class LanguageServerDocumentSyncTests
             diagnosticsProvider ?? new StubDiagnosticsProvider(),
             documentFormatter ?? new StubDocumentFormatter(text => text),
             new LanguageServerOptions(ServerVersion: "test"),
-            logDelegate: null,
+            logDelegate,
             formattingDiagnosticsProvider);
 
     private static async Task InitializeAsync(
@@ -77,10 +78,13 @@ public class LanguageServerDocumentSyncTests
             VirtualWorkspace.Create([(["Main.elm"], OriginalContent)]);
 
         var session = new RecordingLanguageServiceSession();
+        var logs = new List<string>();
 
-        var server = CreateServer(workspace, session);
+        var server = CreateServer(workspace, session, logDelegate: logs.Add);
 
         await InitializeAsync(server);
+
+        logs.Clear();
 
         var documentUri = VirtualWorkspace.DocumentUri("Main.elm");
 
@@ -102,6 +106,15 @@ public class LanguageServerDocumentSyncTests
             [new TextDocumentContentChangeEvent(Range: null, RangeLength: null, Text: changedContent)]);
 
         session.TryGetFile(documentUri).Should().Be(changedContent);
+
+        logs.Should().ContainSingle(
+            log =>
+            log.StartsWith(
+                "Processed file " + documentUri + " with " +
+                CommandLineInterface.FormatIntegerForDisplay(changedContent.Length) +
+                " chars in language service in ",
+                System.StringComparison.Ordinal) &&
+            log.EndsWith(" ms", System.StringComparison.Ordinal));
 
         /*
          * The contents from the client take precedence over the contents on the backing store.

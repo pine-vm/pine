@@ -618,7 +618,16 @@ public class LanguageServer(
             if (_clientTextDocumentVersions.TryGetValue(textDocumentUri, out var currentVersion) &&
                 currentVersion == textDocument.Version)
             {
+                var clock = System.Diagnostics.Stopwatch.StartNew();
+
                 languageServiceState.AddFile(textDocumentUri, newContent);
+
+                Log(
+                    "Processed file " + textDocumentUri + " with " +
+                    CommandLineInterface.FormatIntegerForDisplay(newContent.Length) +
+                    " chars in language service in " +
+                    CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) +
+                    " ms");
             }
         }
     }
