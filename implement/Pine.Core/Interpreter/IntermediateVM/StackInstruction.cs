@@ -437,12 +437,12 @@ public enum StackInstructionKind
     Blob_Trim_Leading_Zeros,
 
     /// <summary>
-    /// Pops the offset (top) and the source value (second) from the stack.
-    /// Checks whether the source value starting at the offset from the stack matches
-    /// the prefix from <see cref="StackInstruction.Literal"/>.
+    /// Pops the skip count (top) and the source value (second) from the stack.
+    /// Checks whether the source slice, skipping the variable count and taking the length
+    /// implied by <see cref="StackInstruction.Literal"/>, equals that literal.
     /// Pushes a boolean result.
     /// </summary>
-    Starts_With_Const_At_Offset_Var,
+    Slice_Skip_Var_Equal_Const,
 
     /// <summary>
     /// Analog to <see cref="Jump_If_Equal_Const"/>, pops the topmost value from the stack for equality checks,
@@ -1043,11 +1043,11 @@ public record StackInstruction(
         new(StackInstructionKind.Blob_Trim_Leading_Zeros, TakeCount: minRemainingCount);
 
     /// <summary>
-    /// Creates a <see cref="StackInstructionKind.Starts_With_Const_At_Offset_Var"/> instruction that checks
-    /// whether the source value starting at a variable offset matches the given prefix.
+    /// Creates a <see cref="StackInstructionKind.Slice_Skip_Var_Equal_Const"/> instruction that checks whether
+    /// the source slice, skipping a variable count and taking the literal's length, equals the given literal.
     /// </summary>
-    public static StackInstruction Starts_With_Const_At_Offset_Var(PineValue startValue) =>
-        new(StackInstructionKind.Starts_With_Const_At_Offset_Var, Literal: startValue);
+    public static StackInstruction Slice_Skip_Var_Equal_Const(PineValue literal) =>
+        new(StackInstructionKind.Slice_Skip_Var_Equal_Const, Literal: literal);
 
 
     /// <inheritdoc/>
@@ -1829,7 +1829,7 @@ public record StackInstruction(
                 PushCount: 1,
                 Display: InstructionDetails.DisplayNoDetails),
 
-            StackInstructionKind.Starts_With_Const_At_Offset_Var =>
+            StackInstructionKind.Slice_Skip_Var_Equal_Const =>
             new InstructionDetails(
                 PopCount: 2,
                 PushCount: 1,
@@ -1838,7 +1838,7 @@ public record StackInstruction(
                     literalDisplayString(
                         instruction.Literal
                         ??
-                        throw new Exception("Missing Literal for Starts_With_Const_At_Offset_Var instruction"))
+                        throw new Exception("Missing Literal for Slice_Skip_Var_Equal_Const instruction"))
                     ])),
 
             StackInstructionKind.Switch_Jump_If_Equal_Const =>

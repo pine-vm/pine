@@ -1622,20 +1622,21 @@ public class PineValueInProcess
     }
 
     /// <summary>
-    /// Checks if this value starts with a constant prefix at a variable offset.
+    /// Checks whether a slice of this value, skipping a variable count and taking the length
+    /// implied by a constant literal, equals that literal.
     /// </summary>
-    /// <param name="offset">The offset (in elements for lists, in bytes for blobs) at which to check for the prefix.</param>
-    /// <param name="prefix">The constant prefix value to check for.</param>
+    /// <param name="skipCount">The number of elements for lists, or bytes for blobs, to skip.</param>
+    /// <param name="literal">The constant value to compare with the slice.</param>
     /// <returns>
-    /// <c>true</c> if the value starts with the prefix at the given offset; otherwise, <c>false</c>.
+    /// <c>true</c> if the slice equals the literal; otherwise, <c>false</c>.
     /// </returns>
     /// <remarks>
     /// This method is optimized to avoid fully evaluating the value when possible.
     /// </remarks>
-    public bool StartsWithConstAtOffsetVar(int offset, PineValue prefix)
+    public bool SliceSkipVarEqualConst(int skipCount, PineValue literal)
     {
         // Check blob case
-        if (prefix is PineValue.BlobValue prefixBlob)
+        if (literal is PineValue.BlobValue literalBlob)
         {
             // Ensure this value is also a blob
             if (!IsBlob())
@@ -1646,9 +1647,9 @@ public class PineValueInProcess
             // For optimization, check length without full evaluation if possible
             var thisLength = GetLength();
 
-            var sliceLength = thisLength - offset;
+            var sliceLength = thisLength - skipCount;
 
-            if (sliceLength < prefixBlob.Bytes.Length)
+            if (sliceLength < literalBlob.Bytes.Length)
             {
                 return false;
             }
@@ -1664,8 +1665,8 @@ public class PineValueInProcess
                 var valueBytes = thisBlob.Bytes.Span;
 
                 if (valueBytes
-                    .Slice(start: offset, length: prefixBlob.Bytes.Length)
-                    .SequenceEqual(prefixBlob.Bytes.Span))
+                    .Slice(start: skipCount, length: literalBlob.Bytes.Length)
+                    .SequenceEqual(literalBlob.Bytes.Span))
                 {
                     return true;
                 }
@@ -1675,7 +1676,7 @@ public class PineValueInProcess
         }
 
         // Check list case
-        if (prefix is PineValue.ListValue prefixList)
+        if (literal is PineValue.ListValue literalList)
         {
             // Ensure this value is also a list
             if (!IsList())
@@ -1686,9 +1687,9 @@ public class PineValueInProcess
             // For optimization, check length without full evaluation if possible
             var thisLength = GetLength();
 
-            var sliceLength = thisLength - offset;
+            var sliceLength = thisLength - skipCount;
 
-            if (sliceLength < prefixList.Items.Length)
+            if (sliceLength < literalList.Items.Length)
             {
                 return false;
             }
@@ -1703,9 +1704,9 @@ public class PineValueInProcess
             {
                 var allItemsMatch = true;
 
-                for (var i = 0; i < prefixList.Items.Length; i++)
+                for (var i = 0; i < literalList.Items.Length; i++)
                 {
-                    if (thisList.Items.Span[i + offset] != prefixList.Items.Span[i])
+                    if (thisList.Items.Span[i + skipCount] != literalList.Items.Span[i])
                     {
                         allItemsMatch = false;
                         break;
@@ -1722,6 +1723,6 @@ public class PineValueInProcess
         }
 
         throw new NotImplementedException(
-            "Unsupported prefix type in StartsWithConstAtOffsetVar: " + prefix.GetType().FullName);
+            "Unsupported literal type in SliceSkipVarEqualConst: " + literal.GetType().FullName);
     }
 }

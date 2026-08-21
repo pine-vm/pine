@@ -2982,12 +2982,12 @@ public class PineVM : IPineVM
                             continue;
                         }
 
-                    case StackInstructionKind.Starts_With_Const_At_Offset_Var:
+                    case StackInstructionKind.Slice_Skip_Var_Equal_Const:
                         {
-                            var prefixValue =
+                            var literalValue =
                                 currentInstruction.Literal
                                 ??
-                                throw new Exception("Invalid operation form: Missing prefix value");
+                                throw new Exception("Invalid operation form: Missing literal value");
 
                             var skipCountValue = currentFrame.PopTopmostFromStack();
 
@@ -3001,14 +3001,14 @@ public class PineVM : IPineVM
                                     skipCount < 0 ? 0 : (int)skipCount;
 
                                 resultValue =
-                                    slicedValue.StartsWithConstAtOffsetVar(
-                                        offset: skipCountInt,
-                                        prefix: prefixValue);
+                                    slicedValue.SliceSkipVarEqualConst(
+                                        skipCount: skipCountInt,
+                                        literal: literalValue);
                             }
                             else
                             {
                                 resultValue =
-                                    prefixValue == PineValue.EmptyList;
+                                    literalValue == PineValue.EmptyList;
                             }
 
                             currentFrame.PushInstructionResult(

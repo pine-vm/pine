@@ -1281,7 +1281,7 @@ public class PineIRCompiler
                 return
                     afterSkipCount
                     .AppendInstruction(
-                        StackInstruction.Starts_With_Const_At_Offset_Var(startingWith.start));
+                        StackInstruction.Slice_Skip_Var_Equal_Const(startingWith.start));
             }
 
             {
@@ -1311,7 +1311,7 @@ public class PineIRCompiler
                     .AppendInstruction(
                         StackInstruction.Push_Literal(IntegerEncoding.EncodeSignedInteger(0)))
                     .AppendInstruction(
-                        StackInstruction.Starts_With_Const_At_Offset_Var(startingWith.start));
+                        StackInstruction.Slice_Skip_Var_Equal_Const(startingWith.start));
             }
         }
 
@@ -2350,7 +2350,7 @@ public class PineIRCompiler
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(0)))
                 .AppendInstruction(
-                    StackInstruction.Starts_With_Const_At_Offset_Var(PineValue.BlobSingleByte(isIntegerWithSign.sign)));
+                    StackInstruction.Slice_Skip_Var_Equal_Const(PineValue.BlobSingleByte(isIntegerWithSign.sign)));
         }
 
         if (input is Expression.List listExpr)

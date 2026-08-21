@@ -336,7 +336,7 @@ public class SequentialIREfficiencyTests
             9c660be2 (23):
              0: Local_Get (1)
              1: Push_Literal (Blob [2] (0x0400 | int 0))
-             2: Starts_With_Const_At_Offset_Var (Blob [1] (0x04))
+             2: Slice_Skip_Var_Equal_Const (Blob [1] (0x04))
              3: Jump_If_Equal_Const (Blob [1] (0x04) , 3)
              4: Push_Literal (Blob [1] (0x02))
              5: Return
