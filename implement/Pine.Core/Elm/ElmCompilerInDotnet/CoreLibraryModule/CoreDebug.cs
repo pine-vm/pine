@@ -348,6 +348,74 @@ public static class CoreDebug
         var encodedListHelperBody =
             ExpressionEncoding.EncodeExpressionAsValue(listBody);
 
+        var tagArgument = BuiltinHelpers.ApplyBuiltinHead(remaining);
+
+        var renderedTagArgument =
+            new Expression.Eval(
+                encoded: renderer,
+                environment:
+                Expression.ListInst(
+                    [
+                    renderer,
+                    tagArgument
+                    ]));
+
+        var renderedTagArgumentContent =
+            UnwrapString(renderedTagArgument);
+
+        var tagArgumentArguments =
+            BuiltinHelpers.ApplyBuiltinHead(
+                BuiltinHelpers.ApplyBuiltinSkip(1, tagArgument));
+
+        var tagArgumentNeedsParens =
+            Expression.ConditionalInst(
+                condition: IsChoiceTypeTag(tagArgument),
+                falseBranch: Expression.LitralInst(PineVM.PineKernelValues.FalseValue),
+                trueBranch:
+                Expression.BuiltinInst(
+                    nameof(BuiltinFunction.int_is_sorted_asc),
+                    Expression.ListInst(
+                        [
+                        LiteralInt(1),
+                        BuiltinHelpers.ApplyBuiltinLength(tagArgumentArguments)
+                        ])));
+
+        var formattedTagArgument =
+            Expression.ConditionalInst(
+                condition: tagArgumentNeedsParens,
+                falseBranch: renderedTagArgumentContent,
+                trueBranch:
+                BuiltinHelpers.ApplyBuiltinConcat(
+                    [LiteralText("("), renderedTagArgumentContent, LiteralText(")")]));
+
+        var renderedRemainingTagArguments =
+            new Expression.Eval(
+                encoded: self,
+                environment:
+                Expression.ListInst(
+                    [
+                    self,
+                    renderer,
+                    tail
+                    ]));
+
+        var nonEmptyTagArgumentsContent =
+            Expression.ConditionalInst(
+                condition: tailIsEmpty,
+                falseBranch:
+                BuiltinHelpers.ApplyBuiltinConcat(
+                    [formattedTagArgument, LiteralText(" "), renderedRemainingTagArguments]),
+                trueBranch: formattedTagArgument);
+
+        var tagArgumentsBody =
+            Expression.ConditionalInst(
+                condition: isEmpty,
+                falseBranch: nonEmptyTagArgumentsContent,
+                trueBranch: LiteralText(""));
+
+        var encodedTagArgumentsHelperBody =
+            ExpressionEncoding.EncodeExpressionAsValue(tagArgumentsBody);
+
         var fieldName =
             BuiltinHelpers.ApplyBuiltinHead(remaining);
 
@@ -442,6 +510,29 @@ public static class CoreDebug
                     BuiltinHelpers.ApplyBuiltinSkip(1, rendererValue)
                     ]));
 
+        var tagName =
+            BuiltinHelpers.ApplyBuiltinHead(rendererValue);
+
+        var tagArguments =
+            BuiltinHelpers.ApplyBuiltinHead(
+                BuiltinHelpers.ApplyBuiltinSkip(1, rendererValue));
+
+        var tagArgumentsContent =
+            new Expression.Eval(
+                encoded: Expression.LitralInst(encodedTagArgumentsHelperBody),
+                environment:
+                Expression.ListInst(
+                    [
+                    Expression.LitralInst(encodedTagArgumentsHelperBody),
+                    rendererSelf,
+                    tagArguments
+                    ]));
+
+        var tagArgumentsAreEmpty =
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                BuiltinHelpers.ApplyBuiltinLength(tagArguments),
+                zero);
+
         var listResult =
             WrapString(
                 BuiltinHelpers.ApplyBuiltinConcat(
@@ -451,6 +542,15 @@ public static class CoreDebug
             WrapString(
                 BuiltinHelpers.ApplyBuiltinConcat(
                     [LiteralText("{ "), recordContent, LiteralText(" }")]));
+
+        var tagResult =
+            WrapString(
+                Expression.ConditionalInst(
+                    condition: tagArgumentsAreEmpty,
+                    falseBranch:
+                    BuiltinHelpers.ApplyBuiltinConcat(
+                        [tagName, LiteralText(" "), tagArgumentsContent]),
+                    trueBranch: tagName));
 
         var stringResult =
             Internal_StringToString(rendererValue);
@@ -494,6 +594,9 @@ public static class CoreDebug
                     BuiltinHelpers.ApplyBuiltinHead(rendererValue),
                     Expression.LitralInst(ElmValue.ElmRecordTypeTagNameAsValue)));
 
+        var isChoiceTypeTag =
+            IsChoiceTypeTag(rendererValue);
+
         var nonBlobResult =
             Expression.ConditionalInst(
                 condition: isFloat,
@@ -503,7 +606,11 @@ public static class CoreDebug
                     falseBranch:
                     Expression.ConditionalInst(
                         condition: isRecord,
-                        falseBranch: listResult,
+                        falseBranch:
+                        Expression.ConditionalInst(
+                            condition: isChoiceTypeTag,
+                            falseBranch: listResult,
+                            trueBranch: tagResult),
                         trueBranch: recordResult),
                     trueBranch: stringResult),
                 trueBranch: floatResult);
@@ -564,6 +671,113 @@ public static class CoreDebug
                     Expression.LitralInst(encodedRendererBody),
                     value
                     ]));
+    }
+
+    private static Expression IsChoiceTypeTag(Expression value)
+    {
+        var falseValue =
+            Expression.LitralInst(PineVM.PineKernelValues.FalseValue);
+
+        var valueLength =
+            BuiltinHelpers.ApplyBuiltinLength(value);
+
+        var hasAtLeastTwoItems =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.int_is_sorted_asc),
+                Expression.ListInst([LiteralInt(2), valueLength]));
+
+        var hasAtLeastThreeItems =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.int_is_sorted_asc),
+                Expression.ListInst([LiteralInt(3), valueLength]));
+
+        var hasExactlyTwoItems =
+            Expression.ConditionalInst(
+                condition: hasAtLeastTwoItems,
+                falseBranch: falseValue,
+                trueBranch:
+                Expression.ConditionalInst(
+                    condition: hasAtLeastThreeItems,
+                    falseBranch: Expression.LitralInst(PineVM.PineKernelValues.TrueValue),
+                    trueBranch: falseValue));
+
+        var tagName =
+            BuiltinHelpers.ApplyBuiltinHead(value);
+
+        var tagArguments =
+            BuiltinHelpers.ApplyBuiltinHead(
+                BuiltinHelpers.ApplyBuiltinSkip(1, value));
+
+        var emptyBlob =
+            Expression.LitralInst(PineValue.EmptyBlob);
+
+        var tagNameIsBlob =
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                BuiltinHelpers.ApplyBuiltinTake(0, tagName),
+                emptyBlob);
+
+        var tagArgumentsAreList =
+            CoreBasics.Generic_Not(
+                BuiltinHelpers.ApplyBuiltinEqualBinary(
+                    BuiltinHelpers.ApplyBuiltinTake(0, tagArguments),
+                    emptyBlob));
+
+        var tagNameHasCharacters =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.int_is_sorted_asc),
+                Expression.ListInst(
+                    [
+                    LiteralInt(1),
+                    BuiltinHelpers.ApplyBuiltinLength(tagName)
+                    ]));
+
+        var firstTagNameByte =
+            BuiltinHelpers.ApplyBuiltinHead(tagName);
+
+        var tagNameStartsUppercase =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.int_is_sorted_asc),
+                Expression.ListInst(
+                    [
+                    LiteralByte((byte)'A'),
+                    firstTagNameByte,
+                    LiteralByte((byte)'Z')
+                    ]));
+
+        var tagNameIsReserved =
+            CoreBasics.Generic_Or(
+                BuiltinHelpers.ApplyBuiltinEqualBinary(
+                    tagName,
+                    Expression.LitralInst(ElmValue.ElmStringTypeTagNameAsValue)),
+                CoreBasics.Generic_Or(
+                    BuiltinHelpers.ApplyBuiltinEqualBinary(
+                        tagName,
+                        Expression.LitralInst(ElmValue.ElmFloatTypeTagNameAsValue)),
+                    BuiltinHelpers.ApplyBuiltinEqualBinary(
+                        tagName,
+                        Expression.LitralInst(ElmValue.ElmBytesTypeTagNameAsValue))));
+
+        return
+            Expression.ConditionalInst(
+                condition: hasExactlyTwoItems,
+                falseBranch: falseValue,
+                trueBranch:
+                Expression.ConditionalInst(
+                    condition: tagNameIsBlob,
+                    falseBranch: falseValue,
+                    trueBranch:
+                    Expression.ConditionalInst(
+                        condition: tagArgumentsAreList,
+                        falseBranch: falseValue,
+                        trueBranch:
+                        Expression.ConditionalInst(
+                            condition: tagNameHasCharacters,
+                            falseBranch: falseValue,
+                            trueBranch:
+                            Expression.ConditionalInst(
+                                condition: tagNameStartsUppercase,
+                                falseBranch: falseValue,
+                                trueBranch: CoreBasics.Generic_Not(tagNameIsReserved)))));
     }
 
     private static Expression WrapString(Expression content) =>

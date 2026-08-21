@@ -48,6 +48,43 @@ public class DebugToStringTests
                 ]),
             "{ alfa = 31, beta = 43, gamma = 47 }"
             ];
+
+        yield return
+            [
+            ElmValueEncoding.TagAsPineValue("NoArgs", []),
+            "NoArgs"
+            ];
+
+        yield return
+            [
+            ElmValueEncoding.TagAsPineValue(
+                "SingleArgInt",
+                [IntegerEncoding.EncodeSignedInteger(31)]),
+            "SingleArgInt 31"
+            ];
+
+        yield return
+            [
+            ElmValueEncoding.TagAsPineValue(
+                "TwoArgsStringAndInt",
+                [
+                ElmValueEncoding.StringAsPineValue("hello"),
+                IntegerEncoding.EncodeSignedInteger(42)
+                ]),
+            "TwoArgsStringAndInt \"hello\" 42"
+            ];
+
+        yield return
+            [
+            ElmValueEncoding.TagAsPineValue(
+                "Nested",
+                [
+                ElmValueEncoding.TagAsPineValue(
+                    "SingleArgInt",
+                    [IntegerEncoding.EncodeSignedInteger(31)])
+                ]),
+            "Nested (SingleArgInt 31)"
+            ];
     }
 
     [Theory]
@@ -84,6 +121,42 @@ public class DebugToStringTests
 
             rendered =
                 Debug.toString {{elmExpression}}
+            """;
+
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
+                [elmModuleText],
+                disableInlining: false).parsedEnv;
+
+        var value =
+            parsedEnv.Modules
+            .Single(module => module.moduleName is "Test")
+            .moduleContent.FunctionDeclarations["rendered"];
+
+        DecodeElmValue(value).Should().Be(ElmValue.StringInstance(expected));
+    }
+
+    [Theory]
+    [InlineData("NoArgs", "NoArgs")]
+    [InlineData("SingleArgInt 31", "SingleArgInt 31")]
+    [InlineData(
+        "TwoArgsStringAndInt \"hello\" 42",
+        "TwoArgsStringAndInt \"hello\" 42")]
+    public void Compiles_and_evaluates_choice_type_tags(
+        string elmExpression,
+        string expected)
+    {
+        var elmModuleText =
+            $$"""
+            module Test exposing (..)
+
+            type ChoiceType
+                = NoArgs
+                | SingleArgInt Int
+                | TwoArgsStringAndInt String Int
+
+            rendered =
+                Debug.toString ({{elmExpression}})
             """;
 
         var parsedEnv =
