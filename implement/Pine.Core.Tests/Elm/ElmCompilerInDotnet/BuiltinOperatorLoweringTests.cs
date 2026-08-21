@@ -752,7 +752,7 @@ public class BuiltinOperatorLoweringTests
     }
 
     [Fact]
-    public void Lowers_eq_for_number_inferred_from_literal()
+    public void Does_not_lower_eq_for_number_inferred_from_literal()
     {
         var loweredModule =
             LowerOperators(
@@ -764,12 +764,30 @@ public class BuiltinOperatorLoweringTests
                     value == 0
                 """);
 
-        RenderCanonicalized(loweredModule).Should().Be(
-            """
-            Test.isZero value =
-                Pine_builtin.equal
-                    [ value, 0 ]
-            """.Trim());
+        var rendered = RenderCanonicalized(loweredModule);
+
+        rendered.Should().NotContain("Pine_builtin.equal");
+        rendered.Should().Contain("Basics.eq");
+    }
+
+    [Fact]
+    public void Does_not_lower_eq_for_record_containing_Float()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                eqRecord : { value : Float } -> { value : Float } -> Bool
+                eqRecord left right =
+                    left == right
+                """);
+
+        var rendered = RenderCanonicalized(loweredModule);
+
+        rendered.Should().NotContain("Pine_builtin.equal");
+        rendered.Should().Contain("Basics.eq");
     }
 
     [Fact]
@@ -1048,6 +1066,30 @@ public class BuiltinOperatorLoweringTests
                 Pine_builtin.equal
                     [ left, right ]
             """.Trim());
+    }
+
+    [Fact]
+    public void Does_not_lower_eq_operator_application_for_choice_type_with_Float_arg()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                type NumericSyntax
+                    = Floatable Float
+
+
+                eqNumericSyntax : NumericSyntax -> NumericSyntax -> Bool
+                eqNumericSyntax left right =
+                    left == right
+                """);
+
+        var rendered = RenderCanonicalized(loweredModule);
+
+        rendered.Should().NotContain("Pine_builtin.equal");
+        rendered.Should().Contain("Basics.eq");
     }
 
     [Fact]
