@@ -12,6 +12,31 @@ namespace Pine.Core.Tests.Elm.ElmTest;
 public class ElmTestTests
 {
     [Fact]
+    public void No_Elm_test_modules_is_a_test_run_result()
+    {
+        var projectDirectory =
+            Path.Combine(
+                Path.GetTempPath(),
+                "pine-elm-test-runner-tests",
+                Guid.NewGuid().ToString("N"));
+
+        Directory.CreateDirectory(projectDirectory);
+
+        try
+        {
+            var testRun = ElmTestRunner.CompileAndRunTests(projectDirectory);
+
+            testRun.Should().BeOfType<ElmTestRun.NoTestModules>()
+                .Which.AppDirectory.Should().Be(Path.GetFullPath(projectDirectory));
+        }
+        finally
+        {
+            Directory.Delete(projectDirectory, recursive: true);
+        }
+    }
+
+
+    [Fact]
     public void Verify_elm_test_results_for_scenarios_from_files()
     {
         var results =
@@ -44,6 +69,9 @@ public class ElmTestTests
                 Path.Combine(caseDirectory, "input-app"),
                 ElmCompilerTestHelper.PineVMForProfiling(_ => { }));
 
+        if (testRun is not ElmTestRun.Completed completed)
+            throw new InvalidOperationException("Expected a completed Elm test run, got " + testRun.GetType());
+
         var expectedSections = new List<string>();
         var actualSections = new List<string>();
 
@@ -69,7 +97,7 @@ public class ElmTestTests
             actualSections.Add(
                 expectationFileName + "\n" +
                 ElmTestRunner.RenderTestResults(
-                    testRun.Tests,
+                    completed.Tests,
                     includeTestDetails)
                 .PlainText);
         }

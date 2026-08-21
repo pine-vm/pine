@@ -73,11 +73,25 @@ public static class TestCommand
                 source,
                 IntermediateVM.SetupVM.Create());
 
+        if (testRun is ElmTestRun.NoTestModules noTestModules)
+        {
+            errorConsole ??= CreateSystemConsole(Console.Error, resolvedColorMode);
+
+            errorConsole.Write(new Text("Error: ", TestCommandTheme.Failure));
+            errorConsole.WriteLine(
+                "Did not find Elm test modules in " + noTestModules.AppDirectory);
+
+            return 1;
+        }
+
+        if (testRun is not ElmTestRun.Completed completed)
+            throw new InvalidOperationException("Unexpected Elm test run type: " + testRun.GetType());
+
         var output =
             ElmTestRunner.RenderTestResults(
-                testRun.Tests,
+                completed.Tests,
                 includeTestDetails: true,
-                testRun.Duration);
+                completed.Duration);
 
         if (resolvedColorMode is FormatCommandColorMode.Never)
         {
@@ -92,7 +106,7 @@ public static class TestCommand
         console.WriteLine();
 
         return
-            testRun.Tests.All(test => test.Kind is CompletedTestKind.Passed)
+            completed.Tests.All(test => test.Kind is CompletedTestKind.Passed)
             ?
             0
             :

@@ -30,6 +30,17 @@ public class PineCliOptionsTests
 
 
     [Fact]
+    public void Help_lists_elm_command()
+    {
+        var result = RunPine("help");
+
+        result.ExitCode.Should().Be(0);
+        result.StandardOutput.Should().Contain("elm                            Elm development tools.");
+        result.StandardError.Should().BeEmpty();
+    }
+
+
+    [Fact]
     public void Elm_command_exposes_test_subcommand()
     {
         var result = RunPine("elm", "--help");
