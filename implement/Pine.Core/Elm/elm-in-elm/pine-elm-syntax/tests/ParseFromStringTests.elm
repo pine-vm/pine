@@ -390,8 +390,71 @@ expressionOkSuite =
     [ { input = """ 71 """
       , expectedOk = Expression.IntegerLiteral "71"
       }
+    , { input = """just_an_identifier"""
+      , expectedOk = Expression.Identifier [] "just_an_identifier"
+      }
+    , { input = """[]"""
+      , expectedOk = Expression.ListExpr SeparatedSyntaxList.Empty
+      }
+    , { input = """[ ]"""
+      , expectedOk = Expression.ListExpr SeparatedSyntaxList.Empty
+      }
+    , { input = """[ identifier_in_list ]"""
+      , expectedOk =
+            Expression.ListExpr
+                (SeparatedSyntaxList.NonEmpty
+                    (Node (range 1 3 1 21) (Expression.Identifier [] "identifier_in_list"))
+                    []
+                )
+      }
+    , { input = """[ 71 ]"""
+      , expectedOk =
+            Expression.ListExpr
+                (SeparatedSyntaxList.NonEmpty
+                    (Node (range 1 3 1 5) (Expression.IntegerLiteral "71"))
+                    []
+                )
+      }
+    , { input = """[ 71, 73 ]"""
+      , expectedOk =
+            Expression.ListExpr
+                (SeparatedSyntaxList.NonEmpty
+                    (Node (range 1 3 1 5) (Expression.IntegerLiteral "71"))
+                    [ ( location 1 5
+                      , Node (range 1 7 1 9) (Expression.IntegerLiteral "73")
+                      )
+                    ]
+                )
+      }
+    , { input = """[ 71 {- a comment -}, {- another comment -} 73 ]"""
+      , expectedOk =
+            Expression.ListExpr
+                (SeparatedSyntaxList.NonEmpty
+                    (Node (range 1 3 1 5) (Expression.IntegerLiteral "71"))
+                    [ ( location 1 21
+                      , Node (range 1 45 1 47) (Expression.IntegerLiteral "73")
+                      )
+                    ]
+                )
+      }
     , { input = "\n0xFF\n"
       , expectedOk = Expression.IntegerLiteral "0xFF"
+      }
+    , { input = "\"\""
+      , expectedOk = Expression.StringLiteral "" (Just "")
+      }
+    , { input = "\"hello world\""
+      , expectedOk = Expression.StringLiteral "hello world" (Just "hello world")
+      }
+    , { input = """{}"""
+      , expectedOk =
+            Expression.RecordExpr
+                SeparatedSyntaxList.Empty
+      }
+    , { input = """{ }"""
+      , expectedOk =
+            Expression.RecordExpr
+                SeparatedSyntaxList.Empty
       }
     , { input = "1.25"
       , expectedOk = Expression.FloatLiteral "1.25"
