@@ -121,8 +121,7 @@ public static class CoreDebug
     {
         var stringContent =
             BuiltinHelpers.ApplyBuiltinHead(
-                BuiltinHelpers.ApplyBuiltinHead(
-                    BuiltinHelpers.ApplyBuiltinSkip(1, input)));
+                BuiltinHelpers.ApplyBuiltinSkip(2, input));
 
         var content =
             BuiltinHelpers.ApplyBuiltinConcat(
@@ -175,15 +174,13 @@ public static class CoreDebug
 
     private static Expression Internal_FloatToString(Expression input)
     {
-        var components =
+        var numerator =
             BuiltinHelpers.ApplyBuiltinHead(
-                BuiltinHelpers.ApplyBuiltinSkip(1, input));
-
-        var numerator = BuiltinHelpers.ApplyBuiltinHead(components);
+                BuiltinHelpers.ApplyBuiltinSkip(2, input));
 
         var denominator =
             BuiltinHelpers.ApplyBuiltinHead(
-                BuiltinHelpers.ApplyBuiltinSkip(1, components));
+                BuiltinHelpers.ApplyBuiltinSkip(3, input));
 
         var isNegative =
             BuiltinHelpers.ApplyBuiltinEqualBinary(
@@ -316,10 +313,7 @@ public static class CoreDebug
                     BuiltinHelpers.ApplyBuiltinHead(remaining)
                     ]));
 
-        var renderedHeadContent =
-            BuiltinHelpers.ApplyBuiltinHead(
-                BuiltinHelpers.ApplyBuiltinHead(
-                    BuiltinHelpers.ApplyBuiltinSkip(1, renderedHead)));
+        var renderedHeadContent = UnwrapString(renderedHead);
 
         var renderedTail =
             new Expression.Eval(
@@ -364,8 +358,7 @@ public static class CoreDebug
             UnwrapString(renderedTagArgument);
 
         var tagArgumentArguments =
-            BuiltinHelpers.ApplyBuiltinHead(
-                BuiltinHelpers.ApplyBuiltinSkip(1, tagArgument));
+            BuiltinHelpers.ApplyBuiltinSkip(2, tagArgument);
 
         var tagArgumentNeedsParens =
             Expression.ConditionalInst(
@@ -511,11 +504,11 @@ public static class CoreDebug
                     ]));
 
         var tagName =
-            BuiltinHelpers.ApplyBuiltinHead(rendererValue);
-
-        var tagArguments =
             BuiltinHelpers.ApplyBuiltinHead(
                 BuiltinHelpers.ApplyBuiltinSkip(1, rendererValue));
+
+        var tagArguments =
+            BuiltinHelpers.ApplyBuiltinSkip(2, rendererValue);
 
         var tagArgumentsContent =
             new Expression.Eval(
@@ -573,7 +566,8 @@ public static class CoreDebug
                 falseBranch: Expression.LitralInst(PineVM.PineKernelValues.FalseValue),
                 trueBranch:
                 BuiltinHelpers.ApplyBuiltinEqualBinary(
-                    BuiltinHelpers.ApplyBuiltinHead(rendererValue),
+                    BuiltinHelpers.ApplyBuiltinHead(
+                        BuiltinHelpers.ApplyBuiltinSkip(1, rendererValue)),
                     Expression.LitralInst(ElmValue.ElmStringTypeTagNameAsValue)));
 
         var isFloat =
@@ -582,7 +576,8 @@ public static class CoreDebug
                 falseBranch: Expression.LitralInst(PineVM.PineKernelValues.FalseValue),
                 trueBranch:
                 BuiltinHelpers.ApplyBuiltinEqualBinary(
-                    BuiltinHelpers.ApplyBuiltinHead(rendererValue),
+                    BuiltinHelpers.ApplyBuiltinHead(
+                        BuiltinHelpers.ApplyBuiltinSkip(1, rendererValue)),
                     Expression.LitralInst(ElmValue.ElmFloatTypeTagNameAsValue)));
 
         var isRecord =
@@ -686,67 +681,9 @@ public static class CoreDebug
                 nameof(BuiltinFunction.int_is_sorted_asc),
                 Expression.ListInst([LiteralInt(2), valueLength]));
 
-        var hasAtLeastThreeItems =
-            Expression.BuiltinInst(
-                nameof(BuiltinFunction.int_is_sorted_asc),
-                Expression.ListInst([LiteralInt(3), valueLength]));
-
-        var hasExactlyTwoItems =
-            Expression.ConditionalInst(
-                condition: hasAtLeastTwoItems,
-                falseBranch: falseValue,
-                trueBranch:
-                Expression.ConditionalInst(
-                    condition: hasAtLeastThreeItems,
-                    falseBranch: Expression.LitralInst(PineVM.PineKernelValues.TrueValue),
-                    trueBranch: falseValue));
-
         var tagName =
-            BuiltinHelpers.ApplyBuiltinHead(value);
-
-        var tagArguments =
             BuiltinHelpers.ApplyBuiltinHead(
                 BuiltinHelpers.ApplyBuiltinSkip(1, value));
-
-        var emptyBlob =
-            Expression.LitralInst(PineValue.EmptyBlob);
-
-        var tagNameIsBlob =
-            BuiltinHelpers.ApplyBuiltinEqualBinary(
-                BuiltinHelpers.ApplyBuiltinTake(0, tagName),
-                emptyBlob);
-
-        var tagArgumentsAreList =
-            CoreBasics.Generic_Not(
-                BuiltinHelpers.ApplyBuiltinEqualBinary(
-                    BuiltinHelpers.ApplyBuiltinTake(0, tagArguments),
-                    emptyBlob));
-
-        var tagNameHasCharacters =
-            Expression.BuiltinInst(
-                nameof(BuiltinFunction.int_is_sorted_asc),
-                Expression.ListInst(
-                    [
-                    LiteralInt(4),
-                    BuiltinHelpers.ApplyBuiltinLength(tagName)
-                    ]));
-
-        var firstTagNameCodePoint =
-            BuiltinHelpers.ApplyBuiltinConcat(
-                [
-                LiteralByte(4),
-                BuiltinHelpers.ApplyBuiltinTake(4, tagName)
-                ]);
-
-        var tagNameStartsUppercase =
-            Expression.BuiltinInst(
-                nameof(BuiltinFunction.int_is_sorted_asc),
-                Expression.ListInst(
-                    [
-                    LiteralInt('A'),
-                    firstTagNameCodePoint,
-                    LiteralInt('Z')
-                    ]));
 
         var tagNameIsReserved =
             CoreBasics.Generic_Or(
@@ -763,38 +700,29 @@ public static class CoreDebug
 
         return
             Expression.ConditionalInst(
-                condition: hasExactlyTwoItems,
+                condition: hasAtLeastTwoItems,
                 falseBranch: falseValue,
                 trueBranch:
                 Expression.ConditionalInst(
-                    condition: tagNameIsBlob,
+                    condition:
+                    BuiltinHelpers.ApplyBuiltinEqualBinary(
+                        BuiltinHelpers.ApplyBuiltinHead(value),
+                        Expression.LitralInst(ElmValue.ElmChoiceTypeTagNameAsValue)),
                     falseBranch: falseValue,
-                    trueBranch:
-                    Expression.ConditionalInst(
-                        condition: tagArgumentsAreList,
-                        falseBranch: falseValue,
-                        trueBranch:
-                        Expression.ConditionalInst(
-                            condition: tagNameHasCharacters,
-                            falseBranch: falseValue,
-                            trueBranch:
-                            Expression.ConditionalInst(
-                                condition: tagNameStartsUppercase,
-                                falseBranch: falseValue,
-                                trueBranch: CoreBasics.Generic_Not(tagNameIsReserved))))));
+                    trueBranch: CoreBasics.Generic_Not(tagNameIsReserved)));
     }
 
     private static Expression WrapString(Expression content) =>
         Expression.ListInst(
             [
+            Expression.LitralInst(ElmValue.ElmChoiceTypeTagNameAsValue),
             Expression.LitralInst(ElmValue.ElmStringTypeTagNameAsValue),
-            Expression.ListInst([content])
+            content
             ]);
 
     private static Expression UnwrapString(Expression value) =>
         BuiltinHelpers.ApplyBuiltinHead(
-            BuiltinHelpers.ApplyBuiltinHead(
-                BuiltinHelpers.ApplyBuiltinSkip(1, value)));
+            BuiltinHelpers.ApplyBuiltinSkip(2, value));
 
     private static Expression Path(int index) =>
         ExpressionBuilder.BuildExpressionForPathInExpression(

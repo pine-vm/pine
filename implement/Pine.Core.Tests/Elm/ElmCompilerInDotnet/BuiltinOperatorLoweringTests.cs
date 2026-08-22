@@ -105,16 +105,12 @@ public class BuiltinOperatorLoweringTests
                 String.String
                     (Pine_builtin.concat
                         [ Pine_builtin.head
-                            (Pine_builtin.head
-                                (Pine_builtin.skip
-                                    [ 1, left ]
-                                )
+                            (Pine_builtin.skip
+                                [ 2, left ]
                             )
                         , Pine_builtin.head
-                            (Pine_builtin.head
-                                (Pine_builtin.skip
-                                    [ 1, right ]
-                                )
+                            (Pine_builtin.skip
+                                [ 2, right ]
                             )
                         ]
                     )
@@ -165,16 +161,12 @@ public class BuiltinOperatorLoweringTests
                 String.String
                     (Pine_builtin.concat
                         [ Pine_builtin.head
-                            (Pine_builtin.head
-                                (Pine_builtin.skip
-                                    [ 1, value ]
-                                )
+                            (Pine_builtin.skip
+                                [ 2, value ]
                             )
                         , Pine_builtin.head
-                            (Pine_builtin.head
-                                (Pine_builtin.skip
-                                    [ 1, "!" ]
-                                )
+                            (Pine_builtin.skip
+                                [ 2, "!" ]
                             )
                         ]
                     )

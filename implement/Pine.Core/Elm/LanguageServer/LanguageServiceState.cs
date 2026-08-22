@@ -1,5 +1,4 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.LanguageServer.LanguageServiceInterface;
 using Pine.Core.Elm.LanguageServer.MonacoEditor;
 using Pine.Core.Files;
@@ -438,24 +437,17 @@ public class LanguageServiceState(
         if (node is FileTreeNode<BlobT>.BlobNode blobNode)
         {
             return
-                PineValue.List(
-                    [
-                    StringEncoding.ValueFromString("BlobNode"),
-                    PineValue.List(
-                        [
-                        encodeBlob(blobNode.Blob)
-                        ])
-                    ]);
+                ElmValueEncoding.TagAsPineValue(
+                    "BlobNode",
+                    [encodeBlob(blobNode.Blob)]);
         }
 
         if (node is FileTreeNode<BlobT>.TreeNode treeNode)
         {
             return
-                PineValue.List(
+                ElmValueEncoding.TagAsPineValue(
+                    "TreeNode",
                     [
-                    StringEncoding.ValueFromString("TreeNode"),
-                    PineValue.List(
-                        [
                         PineValue.List(
                             [
                             ..treeNode.Children
@@ -467,7 +459,6 @@ public class LanguageServiceState(
                                     EncodeFileTreeNodeAsPineValue(e.node, encodeBlob)
                                     ]))
                             ])
-                        ])
                     ]);
         }
 

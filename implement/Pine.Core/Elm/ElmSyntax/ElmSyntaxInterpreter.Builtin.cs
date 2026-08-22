@@ -314,7 +314,13 @@ public partial class ElmSyntaxInterpreter
             return true;
         }
 
-        var tagA = listA.Items.Span[0];
+        var tagA =
+            listA.Items.Length >= 2 &&
+            listA.Items.Span[0] == ElmValue.ElmChoiceTypeTagNameAsValue
+            ?
+            listA.Items.Span[1]
+            :
+            null;
 
         if (tagA == ElmValue.ElmStringTypeTagNameAsValue)
         {
@@ -330,8 +336,8 @@ public partial class ElmSyntaxInterpreter
         if (tagA == ElmValue.ElmSetTypeTagNameAsValue)
         {
             return
-                DictKeysPine(a.ValueFromPathOrEmptyList([1, 0])) ==
-                DictKeysPine(b.ValueFromPathOrEmptyList([1, 0]));
+                DictKeysPine(a.ValueFromPathOrEmptyList([2])) ==
+                DictKeysPine(b.ValueFromPathOrEmptyList([2]));
         }
 
         // Default: element-wise recursive comparison (lists, tuples, records, custom tags).
@@ -359,16 +365,15 @@ public partial class ElmSyntaxInterpreter
         denominator = PineValue.EmptyList;
 
         if (value is not PineValue.ListValue list ||
-            list.Items.Length is not 2 ||
-            list.Items.Span[0] != ElmValue.ElmFloatTypeTagNameAsValue ||
-            list.Items.Span[1] is not PineValue.ListValue tagArgs ||
-            tagArgs.Items.Length is not 2)
+            list.Items.Length is not 4 ||
+            list.Items.Span[0] != ElmValue.ElmChoiceTypeTagNameAsValue ||
+            list.Items.Span[1] != ElmValue.ElmFloatTypeTagNameAsValue)
         {
             return false;
         }
 
-        numerator = tagArgs.Items.Span[0];
-        denominator = tagArgs.Items.Span[1];
+        numerator = list.Items.Span[2];
+        denominator = list.Items.Span[3];
 
         return true;
     }
@@ -391,22 +396,17 @@ public partial class ElmSyntaxInterpreter
         PineValue dict,
         List<PineValue> accumulator)
     {
-        if (dict is not PineValue.ListValue { Items: { Length: 2 } items } ||
-            items.Span[0] != ElmValue.ElmDictNotEmptyTagNameAsValue)
+        if (dict is not PineValue.ListValue { Items: { Length: 7 } items } ||
+            items.Span[0] != ElmValue.ElmChoiceTypeTagNameAsValue ||
+            items.Span[1] != ElmValue.ElmDictNotEmptyTagNameAsValue)
         {
             // RBEmpty_elm_builtin (or any non-node) contributes nothing.
             return;
         }
 
-        // RBNode_elm_builtin arguments: [ color, key, value, left, right ].
-        if (items.Span[1] is not PineValue.ListValue { Items: { Length: 5 } nodeArgs })
-        {
-            return;
-        }
-
-        CollectDictPairsPine(nodeArgs.Span[3], accumulator);
-        accumulator.Add(PineValue.List([nodeArgs.Span[1], nodeArgs.Span[2]]));
-        CollectDictPairsPine(nodeArgs.Span[4], accumulator);
+        CollectDictPairsPine(items.Span[5], accumulator);
+        accumulator.Add(PineValue.List([items.Span[3], items.Span[4]]));
+        CollectDictPairsPine(items.Span[6], accumulator);
     }
 
     /// <summary>
@@ -426,20 +426,16 @@ public partial class ElmSyntaxInterpreter
         PineValue dict,
         List<PineValue> accumulator)
     {
-        if (dict is not PineValue.ListValue { Items: { Length: 2 } items } ||
-            items.Span[0] != ElmValue.ElmDictNotEmptyTagNameAsValue)
+        if (dict is not PineValue.ListValue { Items: { Length: 7 } items } ||
+            items.Span[0] != ElmValue.ElmChoiceTypeTagNameAsValue ||
+            items.Span[1] != ElmValue.ElmDictNotEmptyTagNameAsValue)
         {
             return;
         }
 
-        if (items.Span[1] is not PineValue.ListValue { Items: { Length: 5 } nodeArgs })
-        {
-            return;
-        }
-
-        CollectDictKeysPine(nodeArgs.Span[3], accumulator);
-        accumulator.Add(nodeArgs.Span[1]);
-        CollectDictKeysPine(nodeArgs.Span[4], accumulator);
+        CollectDictKeysPine(items.Span[5], accumulator);
+        accumulator.Add(items.Span[3]);
+        CollectDictKeysPine(items.Span[6], accumulator);
     }
 
     /// <summary>
@@ -622,15 +618,15 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     private static System.ReadOnlyMemory<byte> AsStringCharsBytes(PineValue value, string operationName)
     {
-        if (value is PineValue.ListValue { Items: { Length: 2 } items } &&
-            items.Span[0] == ElmValue.ElmStringTypeTagNameAsValue &&
-            items.Span[1] is PineValue.ListValue { Items: { Length: 1 } charsArg })
+        if (value is PineValue.ListValue { Items: { Length: 3 } items } &&
+            items.Span[0] == ElmValue.ElmChoiceTypeTagNameAsValue &&
+            items.Span[1] == ElmValue.ElmStringTypeTagNameAsValue)
         {
-            return charsArg.Span[0] switch
+            return items.Span[2] switch
             {
                 PineValue.BlobValue blob => blob.Bytes,
 
-                _ when charsArg.Span[0] == PineValue.EmptyList =>
+                _ when items.Span[2] == PineValue.EmptyList =>
                 System.ReadOnlyMemory<byte>.Empty,
 
                 _ =>
@@ -649,7 +645,7 @@ public partial class ElmSyntaxInterpreter
 
     /// <summary>Builds an Elm <c>String</c> value (<c>String charsBlob</c>) from a UTF-32 blob.</summary>
     private static PineValueInProcess MakeElmString(PineValue.BlobValue charsBlob) =>
-        PineValueInProcess.CreateTagged(
+        ElmValueInProcess.CreateChoice(
             s_stringTagName,
             [PineValueInProcess.Create(charsBlob)]);
 
@@ -928,7 +924,7 @@ public partial class ElmSyntaxInterpreter
         }
 
         return
-            PineValueInProcess.CreateTagged(
+            ElmValueInProcess.CreateChoice(
                 s_maybeJustTagNameValue,
                 [PineValueInProcess.CreateInteger(accumulator)]);
     }
@@ -1295,10 +1291,10 @@ public partial class ElmSyntaxInterpreter
     private static PineValueInProcess MakeJustElmFloat(
         System.Numerics.BigInteger numerator,
         System.Numerics.BigInteger denominator) =>
-        PineValueInProcess.CreateTagged(
+        ElmValueInProcess.CreateChoice(
             s_maybeJustTagNameValue,
             [
-                PineValueInProcess.CreateTagged(
+                ElmValueInProcess.CreateChoice(
                     s_elmFloatTagName,
                     [
                         PineValueInProcess.CreateInteger(numerator),
@@ -1670,7 +1666,7 @@ public partial class ElmSyntaxInterpreter
 
     // The empty red-black tree (RBEmpty_elm_builtin with no arguments).
     private static readonly PineValueInProcess s_dictRBEmpty =
-        PineValueInProcess.CreateTagged(
+        ElmValueInProcess.CreateChoice(
             PineValueInProcess.Create(s_dictRBEmptyTagNameValue),
             []);
 
@@ -1680,12 +1676,12 @@ public partial class ElmSyntaxInterpreter
 
     // The NColor constructors, encoded as no-argument tagged values.
     private static readonly PineValueInProcess s_dictColorRed =
-        PineValueInProcess.CreateTagged(
+        ElmValueInProcess.CreateChoice(
             PineValueInProcess.Create(s_dictColorRedTagNameValue),
             []);
 
     private static readonly PineValueInProcess s_dictColorBlack =
-        PineValueInProcess.CreateTagged(
+        ElmValueInProcess.CreateChoice(
             PineValueInProcess.Create(StringEncoding.ValueFromString("Black")),
             []);
 
@@ -1701,7 +1697,7 @@ public partial class ElmSyntaxInterpreter
         PineValueInProcess.Create(StringEncoding.ValueFromString("Just"));
 
     private static readonly PineValueInProcess s_maybeNothingValue =
-        PineValueInProcess.CreateTagged(
+        ElmValueInProcess.CreateChoice(
             PineValueInProcess.Create(StringEncoding.ValueFromString("Nothing")),
             []);
 
@@ -1737,13 +1733,13 @@ public partial class ElmSyntaxInterpreter
         {
             var dictItems = AsListItems(currentDict);
 
-            if (dictItems is null || dictItems.Count is not 2)
+            if (dictItems is null || dictItems.Count < 2)
             {
                 throw new System.InvalidOperationException(
-                    "Dict.get: expected a Dict value (a two-element tagged value).");
+                    "Dict.get: expected a Dict choice value.");
             }
 
-            var tagNameValue = dictItems[0].Evaluate();
+            var tagNameValue = dictItems[1].Evaluate();
 
             if (tagNameValue == s_dictRBEmptyTagNameValue)
             {
@@ -1756,28 +1752,25 @@ public partial class ElmSyntaxInterpreter
                     "Dict.get: expected an RBNode_elm_builtin or RBEmpty_elm_builtin tag.");
             }
 
-            // RBNode_elm_builtin arguments: [ color, key, value, left, right ].
-            var nodeArgs = AsListItems(dictItems[1]);
-
-            if (nodeArgs is null || nodeArgs.Count is not 5)
+            if (dictItems.Count is not 7)
             {
                 throw new System.InvalidOperationException(
                     "Dict.get: malformed RBNode_elm_builtin (expected 5 arguments).");
             }
 
-            var order = CoreBasicsPrecompiledLeaves.BasicsCompare(targetKey, nodeArgs[1].Evaluate());
+            var order = CoreBasicsPrecompiledLeaves.BasicsCompare(targetKey, dictItems[3].Evaluate());
 
             if (order == s_orderLTValue)
             {
-                currentDict = nodeArgs[3];
+                currentDict = dictItems[5];
             }
             else if (order == s_orderGTValue)
             {
-                currentDict = nodeArgs[4];
+                currentDict = dictItems[6];
             }
             else
             {
-                return PineValueInProcess.CreateTagged(s_maybeJustTagNameValue, [nodeArgs[2]]);
+                return ElmValueInProcess.CreateChoice(s_maybeJustTagNameValue, [dictItems[4]]);
             }
         }
     }
@@ -1803,13 +1796,13 @@ public partial class ElmSyntaxInterpreter
     {
         var dictItems = AsListItems(dict);
 
-        if (dictItems is null || dictItems.Count is not 2)
+        if (dictItems is null || dictItems.Count < 2)
         {
             throw new System.InvalidOperationException(
-                operationName + ": expected a Dict value (a two-element tagged value).");
+                operationName + ": expected a Dict choice value.");
         }
 
-        var tagNameValue = dictItems[0].Evaluate();
+        var tagNameValue = dictItems[1].Evaluate();
 
         if (tagNameValue == s_dictRBEmptyTagNameValue)
         {
@@ -1822,16 +1815,13 @@ public partial class ElmSyntaxInterpreter
                 operationName + ": expected an RBNode_elm_builtin or RBEmpty_elm_builtin tag.");
         }
 
-        // RBNode_elm_builtin arguments: [ color, key, value, left, right ].
-        var nodeArgs = AsListItems(dictItems[1]);
-
-        if (nodeArgs is null || nodeArgs.Count is not 5)
+        if (dictItems.Count is not 7)
         {
             throw new System.InvalidOperationException(
                 operationName + ": malformed RBNode_elm_builtin (expected 5 arguments).");
         }
 
-        return new DictNode(nodeArgs[0], nodeArgs[1], nodeArgs[2], nodeArgs[3], nodeArgs[4]);
+        return new DictNode(dictItems[2], dictItems[3], dictItems[4], dictItems[5], dictItems[6]);
     }
 
     /// <summary>
@@ -1844,7 +1834,7 @@ public partial class ElmSyntaxInterpreter
         PineValueInProcess value,
         PineValueInProcess left,
         PineValueInProcess right) =>
-        PineValueInProcess.CreateTagged(
+        ElmValueInProcess.CreateChoice(
             s_dictRBNodeTagName,
             [color, key, value, left, right]);
 
@@ -1853,12 +1843,12 @@ public partial class ElmSyntaxInterpreter
     {
         var items = AsListItems(color);
 
-        if (items is null || items.Count < 1)
+        if (items is null || items.Count < 2)
         {
             return false;
         }
 
-        return items[0].Evaluate() == s_dictColorRedTagNameValue;
+        return items[1].Evaluate() == s_dictColorRedTagNameValue;
     }
 
     /// <summary>

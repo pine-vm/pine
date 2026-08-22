@@ -32,4 +32,56 @@ public class ElmValueInteropTests
             roundtrip.Should().Be(testCase);
         }
     }
+
+    [Fact]
+    public void Parse_Elm_Maybe_accepts_flat_and_2025_encodings()
+    {
+        var payload = IntegerEncoding.EncodeSignedInteger(17);
+
+        foreach (var encodeTag in ChoiceTagEncoders())
+        {
+            ElmValueInterop.ParseElmMaybeValue(
+                encodeTag("Nothing", []),
+                nothing: () => true,
+                just: _ => false,
+                invalid: error => throw new System.Exception(error))
+            .Should().BeTrue();
+
+            ElmValueInterop.ParseElmMaybeValue(
+                encodeTag("Just", [payload]),
+                nothing: () => null,
+                just: value => value,
+                invalid: error => throw new System.Exception(error))
+            .Should().Be(payload);
+        }
+    }
+
+    [Fact]
+    public void Parse_Elm_Result_accepts_flat_and_2025_encodings()
+    {
+        var payload = IntegerEncoding.EncodeSignedInteger(17);
+
+        foreach (var encodeTag in ChoiceTagEncoders())
+        {
+            ElmValueInterop.ParseElmResultValue(
+                encodeTag("Err", [payload]),
+                err: value => ("Err", value),
+                ok: value => ("Ok", value),
+                invalid: error => throw new System.Exception(error))
+            .Should().Be(("Err", payload));
+
+            ElmValueInterop.ParseElmResultValue(
+                encodeTag("Ok", [payload]),
+                err: value => ("Err", value),
+                ok: value => ("Ok", value),
+                invalid: error => throw new System.Exception(error))
+            .Should().Be(("Ok", payload));
+        }
+    }
+
+    private static IEnumerable<System.Func<string, IReadOnlyList<PineValue>, PineValue>> ChoiceTagEncoders()
+    {
+        yield return ElmValueEncoding.TagAsPineValue;
+        yield return ElmValueEncoding.TagAsPineValue_2025;
+    }
 }

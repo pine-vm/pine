@@ -12,6 +12,25 @@ To serve its role in connecting to other systems, an entry point must support in
 
 For parameters and return values of entry points, the encoding of Elm values follows the model established in the `ElmValueEncoding.cs` file. The definitions in `ElmValueEncoding.cs` cover the encoding of all Elm values except functions. Functions are encoded according to the model in FunctionValueBuilder.cs.
 
+### Choice values
+
+Elm custom-type constructors use this flat Pine list representation:
+
+```text
+[<Choice_Type>, tagName, arg0, arg1, ...]
+```
+
+The marker and constructor name occupy the first two items. A constructor with
+no arguments therefore has two items, and argument `N` is stored at index
+`N + 2`. `String`, `Bytes.Bytes`, and `Float` use the same choice layout with
+their established constructor names and payload encodings.
+
+Newly compiled Elm code consumes only this canonical representation. Host-side
+decoders in `ElmValueEncoding.cs` also accept the legacy 2025 representation
+`[tagName, [arg0, arg1, ...]]` so persisted values can still be inspected and
+migrated. The retired Elm-in-Elm compiler and the general Pine
+`Build_List_Tagged_Const` instruction are not part of this encoding change.
+
 ### Relation to Platforms
 
 When looking at the compilation of Elm programs to Pine, a platform is just a constraint on the type of the entry point. Since the platform is the system that translates between values and effects, it is outside the scope of the Elm app and this specification.

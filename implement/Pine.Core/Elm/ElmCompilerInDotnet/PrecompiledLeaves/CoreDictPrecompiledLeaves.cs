@@ -265,7 +265,7 @@ public static class CoreDictPrecompiledLeaves
     {
         while (true)
         {
-            var dictTag = dict.ValueFromPathOrEmptyList([0]);
+            var dictTag = dict.ValueFromPathOrEmptyList([1]);
 
             if (dictTag == ElmValue.ElmDictEmptyTagNameAsValue)
             {
@@ -277,12 +277,10 @@ public static class CoreDictPrecompiledLeaves
                 throw new ParseExpressionException("Unexpected dict tag");
             }
 
-            var nodeArgs = dict.ValueFromPathOrEmptyList([1]);
-
-            var key = nodeArgs.ValueFromPathOrEmptyList([1]);
-            var value = nodeArgs.ValueFromPathOrEmptyList([2]);
-            var left = nodeArgs.ValueFromPathOrEmptyList([3]);
-            var right = nodeArgs.ValueFromPathOrEmptyList([4]);
+            var key = dict.ValueFromPathOrEmptyList([3]);
+            var value = dict.ValueFromPathOrEmptyList([4]);
+            var left = dict.ValueFromPathOrEmptyList([5]);
+            var right = dict.ValueFromPathOrEmptyList([6]);
 
             var comparison = CoreBasicsPrecompiledLeaves.BasicsCompare(targetKey, key);
 
@@ -298,7 +296,7 @@ public static class CoreDictPrecompiledLeaves
                 continue;
             }
 
-            return PineValue.List([s_tag_Just_Name_Value, PineValue.List([value])]);
+            return ElmValueEncoding.TagAsPineValue("Just", [value]);
         }
     }
 
@@ -508,24 +506,22 @@ public static class CoreDictPrecompiledLeaves
     }
 
     private static bool IsEmpty(PineValue dict) =>
-        dict.ValueFromPathOrEmptyList([0]) == ElmValue.ElmDictEmptyTagNameAsValue;
+        dict.ValueFromPathOrEmptyList([1]) == ElmValue.ElmDictEmptyTagNameAsValue;
 
     private static DictNode ParseNode(PineValue dict)
     {
-        if (dict.ValueFromPathOrEmptyList([0]) != ElmValue.ElmDictNotEmptyTagNameAsValue)
+        if (dict.ValueFromPathOrEmptyList([1]) != ElmValue.ElmDictNotEmptyTagNameAsValue)
         {
             throw new ParseExpressionException("Unexpected dict tag");
         }
 
-        var args = dict.ValueFromPathOrEmptyList([1]);
-
         return
             new DictNode(
-                args.ValueFromPathOrEmptyList([0]),
-                args.ValueFromPathOrEmptyList([1]),
-                args.ValueFromPathOrEmptyList([2]),
-                args.ValueFromPathOrEmptyList([3]),
-                args.ValueFromPathOrEmptyList([4]));
+                dict.ValueFromPathOrEmptyList([2]),
+                dict.ValueFromPathOrEmptyList([3]),
+                dict.ValueFromPathOrEmptyList([4]),
+                dict.ValueFromPathOrEmptyList([5]),
+                dict.ValueFromPathOrEmptyList([6]));
     }
 
     private static PineValue Node(
@@ -534,9 +530,7 @@ public static class CoreDictPrecompiledLeaves
         PineValue value,
         PineValue left,
         PineValue right) =>
-        PineValue.List(
-            [
-            ElmValue.ElmDictNotEmptyTagNameAsValue,
-            PineValue.List([color, key, value, left, right]),
-            ]);
+        ElmValueEncoding.TagAsPineValue(
+            ElmValue.ElmDictNotEmptyTagName,
+            [color, key, value, left, right]);
 }

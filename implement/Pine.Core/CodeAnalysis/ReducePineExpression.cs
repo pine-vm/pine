@@ -916,7 +916,10 @@ public class ReducePineExpression
         var left = TryUnwrapSingleFieldTagFromAllBranches(input.Items[0], parseCache);
         var right = TryUnwrapSingleFieldTagFromAllBranches(input.Items[1], parseCache);
 
-        if (left is null || right is null || left.Value.tag != right.Value.tag)
+        if (left is null ||
+            right is null ||
+            left.Value.marker != right.Value.marker ||
+            left.Value.tag != right.Value.tag)
             return null;
 
         return
@@ -925,12 +928,24 @@ public class ReducePineExpression
                 Expression.ListInst([left.Value.inner, right.Value.inner]));
     }
 
-    private static (PineValue tag, Expression inner)? TryUnwrapSingleFieldTagFromAllBranches(
+    private static (PineValue? marker, PineValue tag, Expression inner)? TryUnwrapSingleFieldTagFromAllBranches(
         Expression expression,
         PineVMParseCache parseCache)
     {
         switch (expression)
         {
+            case Expression.List
+            {
+                Items.Count: 3,
+                Items:
+                [
+                    Expression.Litral marker,
+                    Expression.Litral tag,
+                    var inner
+                ]
+            }:
+                return (marker.Value, tag.Value, inner);
+
             case Expression.List
             {
                 Items.Count: 2,
@@ -940,7 +955,24 @@ public class ReducePineExpression
                     Expression.List { Items.Count: 1 } fields
                 ]
             }:
-                return (tag.Value, fields.Items[0]);
+                return (null, tag.Value, fields.Items[0]);
+
+            case Expression.Litral
+            {
+                Value: PineValue.ListValue
+                {
+                    Items.Length: 3
+                } taggedValue
+            }:
+                {
+                    var items = taggedValue.Items.Span;
+
+                    return
+                        (
+                            items[0],
+                            items[1],
+                            Expression.LitralInst(items[2]));
+                }
 
             case Expression.Litral
             {
@@ -955,7 +987,7 @@ public class ReducePineExpression
                     if (items[1] is not PineValue.ListValue { Items.Length: 1 } fields)
                         return null;
 
-                    return (items[0], Expression.LitralInst(fields.Items.Span[0]));
+                    return (null, items[0], Expression.LitralInst(fields.Items.Span[0]));
                 }
 
             case Expression.Conditional conditional:
@@ -972,13 +1004,15 @@ public class ReducePineExpression
 
                     if (trueBranch is null ||
                         falseBranch is null ||
+                        trueBranch.Value.marker != falseBranch.Value.marker ||
                         trueBranch.Value.tag != falseBranch.Value.tag)
                     {
                         return null;
                     }
 
                     return
-                        (trueBranch.Value.tag,
+                        (trueBranch.Value.marker,
+                        trueBranch.Value.tag,
                         Expression.ConditionalInst(
                             conditional.Condition,
                             falseBranch: falseBranch.Value.inner,
@@ -1006,7 +1040,8 @@ public class ReducePineExpression
                         ExpressionEncoding.EncodeExpressionAsValue(unwrapped.Value.inner);
 
                     return
-                        (unwrapped.Value.tag,
+                        (unwrapped.Value.marker,
+                        unwrapped.Value.tag,
                         new Expression.Eval(
                             Expression.LitralInst(specializedEncoded),
                             eval.Environment));
@@ -1021,7 +1056,8 @@ public class ReducePineExpression
                         return null;
 
                     return
-                        (unwrapped.Value.tag,
+                        (unwrapped.Value.marker,
+                        unwrapped.Value.tag,
                         new Expression.Label(label.Tag, unwrapped.Value.inner));
                 }
 

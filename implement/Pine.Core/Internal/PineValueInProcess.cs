@@ -349,7 +349,7 @@ public class PineValueInProcess
     /// <summary>
     /// Exposes the in-process child items of a value that is represented as a lazily constructed
     /// list (<see cref="CreateList"/>) or tagged value (<see cref="CreateTagged"/>), without forcing
-    /// evaluation. A tagged value is exposed in its canonical two-element <c>[tag, tagArgs]</c> shape.
+    /// evaluation. A tagged value is exposed in its legacy two-element <c>[tag, tagArgs]</c> shape.
     /// </summary>
     /// <remarks>
     /// Returns <c>null</c> for values that are not represented as an unevaluated list/tagged structure

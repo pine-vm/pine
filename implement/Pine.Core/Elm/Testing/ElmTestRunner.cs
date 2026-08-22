@@ -74,8 +74,7 @@ public static class ElmTestRunner
                                 "Failed parsing Elm test module header: " + error));
 
                     return
-                        (
-                        file.path,
+                        (file.path,
                         moduleName: moduleHeader.ModuleName,
                         moduleNameText: string.Join('.', moduleHeader.ModuleName));
                 })
@@ -485,13 +484,10 @@ public static class ElmTestRunner
     private static (string tag, ReadOnlyMemory<PineValue> arguments) ParseTaggedValue(PineValue value)
     {
         var tagged =
-            ElmInteractiveEnvironment.ParseTagged(value)
+            ElmValueEncoding.ParseAsTag(value)
             .Extract(error => throw new InvalidOperationException("Failed parsing tagged Elm value: " + error));
 
-        if (tagged.value is not PineValue.ListValue arguments)
-            throw new InvalidOperationException("Expected tagged Elm value arguments to be a list");
-
-        return (tagged.name, arguments.Items);
+        return (tagged.tagName, tagged.tagArguments);
     }
 
 

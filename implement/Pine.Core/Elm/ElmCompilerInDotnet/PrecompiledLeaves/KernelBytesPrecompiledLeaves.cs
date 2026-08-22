@@ -308,11 +308,9 @@ public static class KernelBytesPrecompiledLeaves
         }
 
         return
-            PineValue.List(
-                [
-                ElmValue.ElmStringTypeTagNameAsValue,
-                PineValue.List([PineValue.Blob(charsBytes)]),
-                ]);
+            ElmValueEncoding.TagAsPineValue(
+                ElmValue.ElmStringTypeTagName,
+                [PineValue.Blob(charsBytes)]);
     }
 
     private static byte ByteAtOrZero(ReadOnlySpan<byte> bytes, int index) =>

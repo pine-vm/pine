@@ -68,7 +68,7 @@ public partial class ElmSyntaxInterpreter
         var blobValue = PineValue.Blob(bytes);
 
         return
-            PineValueInProcess.CreateTagged(
+            ElmValueInProcess.CreateChoice(
                 s_bytesElmBytesTagName,
                 [PineValueInProcess.Create(blobValue)]);
     }
@@ -164,20 +164,15 @@ public partial class ElmSyntaxInterpreter
 
     private static void AppendEncoderBlob(PineValue encoder, System.IO.Stream output)
     {
-        if (encoder is not PineValue.ListValue { Items.Length: 2 } encoderList)
+        if (encoder is not PineValue.ListValue { Items.Length: >= 2 } encoderList ||
+            encoderList.Items.Span[0] != ElmValue.ElmChoiceTypeTagNameAsValue)
         {
             throw new System.InvalidOperationException(
                 "Bytes.Encode.encodeBlob: expected an Encoder tagged value.");
         }
 
-        var tagName = encoderList.Items.Span[0];
-
-        var tagArgs =
-            encoderList.Items.Span[1] is PineValue.ListValue argsList
-            ?
-            argsList.Items
-            :
-            System.ReadOnlyMemory<PineValue>.Empty;
+        var tagName = encoderList.Items.Span[1];
+        var tagArgs = encoderList.Items[2..];
 
         if (tagName == s_encoderI8TagNameValue || tagName == s_encoderU8TagNameValue)
         {
@@ -290,18 +285,19 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     private static bool IsLittleEndian(PineValue endianness) =>
         endianness is PineValue.ListValue { Items.Length: 2 } tagged &&
-        tagged.Items.Span[0] == s_endiannessLittleEndianTagNameValue;
+        tagged.Items.Span[0] == ElmValue.ElmChoiceTypeTagNameAsValue &&
+        tagged.Items.Span[1] == s_endiannessLittleEndianTagNameValue;
 
     /// <summary>
     /// Extracts the wrapped bytes blob from a <c>Bytes.Bytes</c> value (<c>Elm_Bytes blob</c>).
     /// </summary>
     private static System.ReadOnlyMemory<byte> AsBytesValueBlob(PineValue value, string operationName)
     {
-        if (value is PineValue.ListValue { Items.Length: 2 } items &&
-            items.Items.Span[0] == ElmValue.ElmBytesTypeTagNameAsValue &&
-            items.Items.Span[1] is PineValue.ListValue { Items.Length: 1 } blobArg)
+        if (value is PineValue.ListValue { Items.Length: 3 } items &&
+            items.Items.Span[0] == ElmValue.ElmChoiceTypeTagNameAsValue &&
+            items.Items.Span[1] == ElmValue.ElmBytesTypeTagNameAsValue)
         {
-            return AsRawBlobBytes(blobArg.Items.Span[0], operationName);
+            return AsRawBlobBytes(items.Items.Span[2], operationName);
         }
 
         throw new System.InvalidOperationException(operationName + ": expected a Bytes value.");
@@ -586,7 +582,7 @@ public partial class ElmSyntaxInterpreter
         }
 
         return
-            PineValueInProcess.CreateTagged(
+            ElmValueInProcess.CreateChoice(
                 s_maybeJustTagNameValue,
                 [MakeElmBytes(output.ToArray())]);
     }
@@ -668,7 +664,7 @@ public partial class ElmSyntaxInterpreter
         }
 
         return
-            PineValueInProcess.CreateTagged(
+            ElmValueInProcess.CreateChoice(
                 s_maybeJustTagNameValue,
                 [MakeElmString(output.ToArray())]);
     }

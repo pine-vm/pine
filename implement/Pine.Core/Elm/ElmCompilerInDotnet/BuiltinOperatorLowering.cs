@@ -1075,12 +1075,10 @@ public static class BuiltinOperatorLowering
         SyntaxTypes.Expression stringExpression) =>
         BuildBuiltinUnaryApplication(
             "head",
-            BuildBuiltinUnaryApplication(
-                "head",
-                BuildBuiltinApplication(
-                    "skip",
-                    BuildIntegerLiteral(1),
-                    stringExpression)));
+            BuildBuiltinApplication(
+                "skip",
+                BuildIntegerLiteral(2),
+                stringExpression));
 
     private static SyntaxTypes.Expression BuildBuiltinUnaryApplication(
         string builtinName,

@@ -450,8 +450,9 @@ public class ExpressionCompiler
                     return
                         Expression.ListInst(
                             [
+                            Expression.LitralInst(ElmValue.ElmChoiceTypeTagNameAsValue),
                             tagNameValue,
-                            Expression.ListInst(compiledArguments)
+                            ..compiledArguments
                             ]);
                 }
 
@@ -1840,8 +1841,9 @@ public class ExpressionCompiler
             return
                 Expression.ListInst(
                     [
+                    Expression.LitralInst(ElmValue.ElmChoiceTypeTagNameAsValue),
                     tagNameValue,
-                    Expression.ListInst(capturedArgExpressions)
+                    ..capturedArgExpressions
                     ]);
         }
 
@@ -1866,8 +1868,9 @@ public class ExpressionCompiler
         var choiceTypeValueExpr =
             Expression.ListInst(
                 [
+                Expression.LitralInst(ElmValue.ElmChoiceTypeTagNameAsValue),
                 tagNameLiteral,
-                Expression.ListInst(allArgExpressions)
+                ..allArgExpressions
                 ]);
 
         // Emit a compact template-based function value that only nests the remaining parameters and embeds
@@ -1882,7 +1885,8 @@ public class ExpressionCompiler
     /// <summary>
     /// Emits a function value for a choice type tag that accepts arguments, with no captured arguments.
     /// This is used when the tag is used as a function value without any application.
-    /// When fully applied, the function constructs the choice type value [TagName, [arg0, arg1, ...]].
+    /// When fully applied, the function constructs the choice type value
+    /// [ChoiceTypeMarker, TagName, arg0, arg1, ...].
     /// </summary>
     /// <param name="tagName">The name of the choice type tag.</param>
     /// <param name="argCount">The number of arguments the tag expects.</param>
@@ -1906,8 +1910,9 @@ public class ExpressionCompiler
         var choiceTypeValueExpr =
             Expression.ListInst(
                 [
+                Expression.LitralInst(ElmValue.ElmChoiceTypeTagNameAsValue),
                 tagNameExpr,
-                Expression.ListInst(argExpressions)
+                ..argExpressions
                 ]);
 
         // Build the function value that wraps this expression

@@ -404,11 +404,10 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     private static bool TryGetStringBytes(PineValue value, out ReadOnlyMemory<byte> bytes)
     {
         if (value is PineValue.ListValue stringValue &&
-            stringValue.Items.Length is 2 &&
-            stringValue.Items.Span[0] == ElmValue.ElmStringTypeTagNameAsValue &&
-            stringValue.Items.Span[1] is PineValue.ListValue arguments &&
-            arguments.Items.Length is 1 &&
-            arguments.Items.Span[0] is PineValue.BlobValue chars &&
+            stringValue.Items.Length is 3 &&
+            stringValue.Items.Span[0] == ElmValue.ElmChoiceTypeTagNameAsValue &&
+            stringValue.Items.Span[1] == ElmValue.ElmStringTypeTagNameAsValue &&
+            stringValue.Items.Span[2] is PineValue.BlobValue chars &&
             chars.Bytes.Length % 4 is 0)
         {
             bytes = chars.Bytes;
@@ -525,7 +524,7 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
         ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(value));
 
     private static PineValue Just(PineValue value) =>
-        PineValue.List([StringEncoding.ValueFromString("Just"), PineValue.List([value])]);
+        ElmValueEncoding.TagAsPineValue("Just", [value]);
 
     private static PineValue Tag(string name) =>
         ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance(name, []));

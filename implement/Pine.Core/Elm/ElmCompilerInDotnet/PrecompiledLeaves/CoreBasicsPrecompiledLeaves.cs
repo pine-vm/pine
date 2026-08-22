@@ -253,27 +253,23 @@ public static class CoreBasicsPrecompiledLeaves
             return s_tag_EQ_Value;
         }
 
-        var aTag = a.ValueFromPathOrEmptyList([0]);
-        var bTag = b.ValueFromPathOrEmptyList([0]);
+        var aTag = a.ValueFromPathOrEmptyList([1]);
+        var bTag = b.ValueFromPathOrEmptyList([1]);
 
         if (aTag == ElmValue.ElmStringTypeTagNameAsValue && bTag == ElmValue.ElmStringTypeTagNameAsValue)
         {
             return
                 CompareStrings(
-                    a.ValueFromPathOrEmptyList([1, 0]),
-                    b.ValueFromPathOrEmptyList([1, 0]));
+                    a.ValueFromPathOrEmptyList([2]),
+                    b.ValueFromPathOrEmptyList([2]));
         }
 
         if (aTag == ElmValue.ElmFloatTypeTagNameAsValue && bTag == ElmValue.ElmFloatTypeTagNameAsValue)
         {
-            var aTagArgs = a.ValueFromPathOrEmptyList([1]);
-            var bTagArgs = b.ValueFromPathOrEmptyList([1]);
-
-            var numA = aTagArgs.ValueFromPathOrEmptyList([0]);
-            var denomA = aTagArgs.ValueFromPathOrEmptyList([1]);
-
-            var numB = bTagArgs.ValueFromPathOrEmptyList([0]);
-            var denomB = bTagArgs.ValueFromPathOrEmptyList([1]);
+            var numA = a.ValueFromPathOrEmptyList([2]);
+            var denomA = a.ValueFromPathOrEmptyList([3]);
+            var numB = b.ValueFromPathOrEmptyList([2]);
+            var denomB = b.ValueFromPathOrEmptyList([3]);
 
             var leftProduct = BuiltinFunctionSpecialized.int_mul(numA, denomB);
             var rightProduct = BuiltinFunctionSpecialized.int_mul(numB, denomA);
@@ -294,10 +290,8 @@ public static class CoreBasicsPrecompiledLeaves
 
         if (aTag == ElmValue.ElmFloatTypeTagNameAsValue)
         {
-            var aTagArgs = a.ValueFromPathOrEmptyList([1]);
-
-            var numA = aTagArgs.ValueFromPathOrEmptyList([0]);
-            var denomA = aTagArgs.ValueFromPathOrEmptyList([1]);
+            var numA = a.ValueFromPathOrEmptyList([2]);
+            var denomA = a.ValueFromPathOrEmptyList([3]);
 
             var rightProduct = BuiltinFunctionSpecialized.int_mul(denomA, b);
 
@@ -316,10 +310,8 @@ public static class CoreBasicsPrecompiledLeaves
 
         if (bTag == ElmValue.ElmFloatTypeTagNameAsValue)
         {
-            var bTagArgs = b.ValueFromPathOrEmptyList([1]);
-
-            var numB = bTagArgs.ValueFromPathOrEmptyList([0]);
-            var denomB = bTagArgs.ValueFromPathOrEmptyList([1]);
+            var numB = b.ValueFromPathOrEmptyList([2]);
+            var denomB = b.ValueFromPathOrEmptyList([3]);
 
             var leftProduct = BuiltinFunctionSpecialized.int_mul(a, denomB);
 
@@ -479,23 +471,21 @@ public static class CoreBasicsPrecompiledLeaves
             return true;
         }
 
-        var aTag = a.ValueFromPathOrEmptyList([0]);
-        var bTag = b.ValueFromPathOrEmptyList([0]);
+        var aTag = a.ValueFromPathOrEmptyList([1]);
+        var bTag = b.ValueFromPathOrEmptyList([1]);
 
         var aIsFloat = aTag == ElmValue.ElmFloatTypeTagNameAsValue;
         var bIsFloat = bTag == ElmValue.ElmFloatTypeTagNameAsValue;
 
         if (aIsFloat)
         {
-            var aArgs = a.ValueFromPathOrEmptyList([1]);
-            var numA = aArgs.ValueFromPathOrEmptyList([0]);
-            var denomA = aArgs.ValueFromPathOrEmptyList([1]);
+            var numA = a.ValueFromPathOrEmptyList([2]);
+            var denomA = a.ValueFromPathOrEmptyList([3]);
 
             if (bIsFloat)
             {
-                var bArgs = b.ValueFromPathOrEmptyList([1]);
-                var numB = bArgs.ValueFromPathOrEmptyList([0]);
-                var denomB = bArgs.ValueFromPathOrEmptyList([1]);
+                var numB = b.ValueFromPathOrEmptyList([2]);
+                var denomB = b.ValueFromPathOrEmptyList([3]);
 
                 return
                     BuiltinFunctionSpecialized.int_mul(numA, denomB) ==
@@ -510,9 +500,8 @@ public static class CoreBasicsPrecompiledLeaves
 
         if (bIsFloat)
         {
-            var bArgs = b.ValueFromPathOrEmptyList([1]);
-            var numB = bArgs.ValueFromPathOrEmptyList([0]);
-            var denomB = bArgs.ValueFromPathOrEmptyList([1]);
+            var numB = b.ValueFromPathOrEmptyList([2]);
+            var denomB = b.ValueFromPathOrEmptyList([3]);
 
             return
                 denomB != s_integerZeroValue &&
@@ -548,8 +537,8 @@ public static class CoreBasicsPrecompiledLeaves
 
         if (aTag == ElmValue.ElmSetTypeTagNameAsValue)
         {
-            var dictA = a.ValueFromPathOrEmptyList([1, 0]);
-            var dictB = b.ValueFromPathOrEmptyList([1, 0]);
+            var dictA = a.ValueFromPathOrEmptyList([2]);
+            var dictB = b.ValueFromPathOrEmptyList([2]);
 
             var dictAKeys = DictKeysRecursive(dictA);
             var dictBKeys = DictKeysRecursive(dictB);
@@ -567,19 +556,17 @@ public static class CoreBasicsPrecompiledLeaves
 
     private static ReadOnlyMemory<PineValue> DictToListRecursive(PineValue dict)
     {
-        var tag = dict.ValueFromPathOrEmptyList([0]);
+        var tag = dict.ValueFromPathOrEmptyList([1]);
 
         if (tag != ElmValue.ElmDictNotEmptyTagNameAsValue)
         {
             return ReadOnlyMemory<PineValue>.Empty;
         }
 
-        var args = dict.ValueFromPathOrEmptyList([1]);
-
-        var key = args.ValueFromPathOrEmptyList([1]);
-        var value = args.ValueFromPathOrEmptyList([2]);
-        var left = args.ValueFromPathOrEmptyList([3]);
-        var right = args.ValueFromPathOrEmptyList([4]);
+        var key = dict.ValueFromPathOrEmptyList([3]);
+        var value = dict.ValueFromPathOrEmptyList([4]);
+        var left = dict.ValueFromPathOrEmptyList([5]);
+        var right = dict.ValueFromPathOrEmptyList([6]);
 
         var fromLeft = DictToListRecursive(left);
         var fromRight = DictToListRecursive(right);
@@ -597,18 +584,16 @@ public static class CoreBasicsPrecompiledLeaves
 
     private static ReadOnlyMemory<PineValue> DictKeysRecursive(PineValue dict)
     {
-        var tag = dict.ValueFromPathOrEmptyList([0]);
+        var tag = dict.ValueFromPathOrEmptyList([1]);
 
         if (tag != ElmValue.ElmDictNotEmptyTagNameAsValue)
         {
             return ReadOnlyMemory<PineValue>.Empty;
         }
 
-        var args = dict.ValueFromPathOrEmptyList([1]);
-
-        var key = args.ValueFromPathOrEmptyList([1]);
-        var left = args.ValueFromPathOrEmptyList([3]);
-        var right = args.ValueFromPathOrEmptyList([4]);
+        var key = dict.ValueFromPathOrEmptyList([3]);
+        var left = dict.ValueFromPathOrEmptyList([5]);
+        var right = dict.ValueFromPathOrEmptyList([6]);
 
         var fromLeft = DictKeysRecursive(left);
         var fromRight = DictKeysRecursive(right);

@@ -50,6 +50,7 @@ public static class PopularValues
 
         "Elm_Record",
         "<Record_Type>",
+        "<Choice_Type>",
         "Elm_Bytes",
         "Elm_Float",
 

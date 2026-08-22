@@ -214,22 +214,19 @@ public class OptimizeAndEmitValueFromStringTests
                     return
                         PineValue.List(
                             [
+                            CommonReusedValues.Blob_91938c50,
                             CommonReusedValues.Blob_Str_BlobValue,
-                            PineValue.List(
-                                [
-                                BuiltinFunction.concat(
-                                    Test.blobBytesFromChars(
-                                        PineValue.EmptyList,
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            String.toList(PineValueExtension.ValueFromPathOrEmptyList(PineValue.EmptyList, [1])),
-                                            [
-                                            0
-                                            ])))
-                                ])
+                            BuiltinFunction.concat(
+                                Test.blobBytesFromChars(
+                                    PineValue.EmptyList,
+                                    PineValueExtension.ValueFromPathOrEmptyList(
+                                        String.toList(PineValueExtension.ValueFromPathOrEmptyList(PineValue.EmptyList, [2])),
+                                        [
+                                        0
+                                        ])))
                             ]);
                 }
             }
-
             """".Trim());
 
         moduleGlobalAnonymousText.Trim().Should().Be(
@@ -317,7 +314,6 @@ public class OptimizeAndEmitValueFromStringTests
                     return BuiltinFunctionSpecialized.int_mul(-1, local_009);
                 }
             }
-
             """".Trim());
 
         var compileToAssemblyResult =
@@ -325,8 +321,9 @@ public class OptimizeAndEmitValueFromStringTests
                 asCSharp,
                 namespacePrefix: [],
                 optimizationLevel: Microsoft.CodeAnalysis.OptimizationLevel.Debug)
-            .Extract(err =>
-            throw new System.Exception("Compilation to assembly failed: " + err.ToString()));
+            .Extract(
+                err =>
+                throw new System.Exception("Compilation to assembly failed: " + err.ToString()));
 
         var compiledDictionary =
             compileToAssemblyResult.BuildCompiledExpressionsDictionary();
