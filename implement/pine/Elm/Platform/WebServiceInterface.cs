@@ -753,14 +753,9 @@ type alias LoadDependencyStruct =
         var (tagString, argValue) = DeconstructResult(result);
 
         return
-            PineValue.List(
-                [
-                StringEncoding.ValueFromString(tagString),
-                PineValue.List(
-                    [
-                    argValue
-                    ])
-                ]);
+            ElmValueEncoding.TagAsPineValue(
+                tagString,
+                [argValue]);
     }
 
     public static PineValue EncodeCreateVolatileProcessErrorStruct(

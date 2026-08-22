@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
+using Pine.Core.Elm;
 using Pine.Core.Internal;
 using System;
 using System.Collections.Generic;
@@ -83,17 +84,17 @@ public class DictBuiltinTests
 
     // The NColor constructors, encoded as no-argument tagged values, as the interpreter produces them.
     private static readonly PineValueInProcess s_colorRed =
-        PineValueInProcess.CreateTagged(TagNameValue("Red"), []);
+        ElmValueInProcess.CreateChoice(TagNameValue("Red"), []);
 
     private static readonly PineValueInProcess s_colorBlack =
-        PineValueInProcess.CreateTagged(TagNameValue("Black"), []);
+        ElmValueInProcess.CreateChoice(TagNameValue("Black"), []);
 
     private static readonly PineValueInProcess s_emptyDict =
-        PineValueInProcess.CreateTagged(TagNameValue("RBEmpty_elm_builtin"), []);
+        ElmValueInProcess.CreateChoice(TagNameValue("RBEmpty_elm_builtin"), []);
 
     /// <summary>
     /// Builds an <c>RBNode_elm_builtin</c> node in the same canonical
-    /// <c>[ tag, [ color, key, value, left, right ] ]</c> shape the interpreter produces.
+    /// <c>[ &lt;Choice_Type&gt;, tag, color, key, value, left, right ]</c> shape the interpreter produces.
     /// </summary>
     private static PineValueInProcess Node(
         PineValueInProcess color,
@@ -101,7 +102,7 @@ public class DictBuiltinTests
         PineValueInProcess value,
         PineValueInProcess left,
         PineValueInProcess right) =>
-        PineValueInProcess.CreateTagged(
+        ElmValueInProcess.CreateChoice(
             TagNameValue("RBNode_elm_builtin"),
             [color, key, value, left, right]);
 
@@ -126,14 +127,14 @@ public class DictBuiltinTests
         StringEncoding.ValueFromString("Nothing");
 
     private static bool IsNothing(PineValueInProcess result) =>
-        result.GetElementAt(0).Evaluate() == s_nothingTagNameValue;
+        result.GetElementAt(1).Evaluate() == s_nothingTagNameValue;
 
     private static bool IsJust(PineValueInProcess result) =>
-        result.GetElementAt(0).Evaluate() == s_justTagNameValue;
+        result.GetElementAt(1).Evaluate() == s_justTagNameValue;
 
     /// <summary>The single payload of a <c>Just</c> result, as the in-process value as stored.</summary>
     private static PineValueInProcess JustValue(PineValueInProcess result) =>
-        result.GetElementAt(1).GetElementAt(0);
+        result.GetElementAt(2);
 
     /// <summary>
     /// The structural items of an in-process list value, without forcing evaluation of the items.

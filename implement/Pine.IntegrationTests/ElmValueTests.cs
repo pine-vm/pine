@@ -34,6 +34,13 @@ public class ElmValueTests
 
             ElmValue.TagInstance("True", []),
             ElmValue.TagInstance("False", []),
+            ElmValue.TagInstance("Nothing", []),
+            ElmValue.TagInstance(
+                "Pair",
+                [
+                ElmValue.Integer(11),
+                ElmValue.TagInstance("Just", [ElmValue.StringInstance("nested")])
+                ]),
 
             new ElmValue.ElmList(
                 [
@@ -67,10 +74,106 @@ public class ElmValueTests
 
             var roundtrip =
                 ElmValueEncoding.PineValueAsElmValue(pineValue, null, null)
-                .Extract(err => throw new System.Exception(err));
+                .Extract(err => throw new System.Exception(err + " for " + testCase));
 
             roundtrip.Should().Be(testCase);
         }
+    }
+
+    [Fact]
+    public void Elm_choice_encoder_emits_flat_layout()
+    {
+        var encoded =
+            ElmValueEncoding.TagAsPineValue(
+                "Pair",
+                [
+                IntegerEncoding.EncodeSignedInteger(11),
+                ElmValueEncoding.TagAsPineValue("Nothing", [])
+                ]);
+
+        var items = ((PineValue.ListValue)encoded).Items;
+
+        items.Length.Should().Be(4);
+        items.Span[0].Should().Be(ElmValue.ElmChoiceTypeTagNameAsValue);
+        items.Span[1].Should().Be(StringEncoding.ValueFromString("Pair"));
+        items.Span[2].Should().Be(IntegerEncoding.EncodeSignedInteger(11));
+        items.Span[3].Should().Be(ElmValueEncoding.TagAsPineValue("Nothing", []));
+    }
+
+    [Fact]
+    public void Elm_special_value_encoders_emit_flat_choice_layout()
+    {
+        var values =
+            new ElmValue[]
+            {
+                ElmValue.StringInstance("hello"),
+                new ElmValue.ElmBytes(new byte[] { 1, 2, 3 }),
+                ElmValue.ElmFloat.Normalized(3, 2),
+            };
+
+        foreach (var value in values)
+        {
+            var items = ((PineValue.ListValue)ElmValueEncoding.ElmValueAsPineValue(value)).Items;
+
+            items.Span[0].Should().Be(ElmValue.ElmChoiceTypeTagNameAsValue);
+        }
+    }
+
+    [Fact]
+    public void Elm_choice_decoder_accepts_nested_2025_layout()
+    {
+        var legacyValue =
+            ElmValueEncoding.TagAsPineValue_2025(
+                "Just",
+                [
+                ElmValueEncoding.TagAsPineValue_2025("Nothing", [])
+                ]);
+
+        var decoded =
+            ElmValueEncoding.PineValueAsElmValue(legacyValue, null, null)
+            .Extract(err => throw new System.Exception(err));
+
+        decoded.Should().Be(
+            ElmValue.TagInstance(
+                "Just",
+                [
+                ElmValue.TagInstance("Nothing", [])
+                ]));
+    }
+
+    [Fact]
+    public void Elm_special_value_decoder_accepts_nested_2025_layout()
+    {
+        var values =
+            new ElmValue[]
+            {
+                ElmValue.StringInstance("hello"),
+                new ElmValue.ElmBytes(new byte[] { 1, 2, 3 }),
+                ElmValue.ElmFloat.Normalized(3, 2),
+            };
+
+        foreach (var value in values)
+        {
+            var encoded2025 = ElmValueEncoding.ElmValueAsPineValue_2025(value);
+
+            var decoded =
+                ElmValueEncoding.PineValueAsElmValue(encoded2025, null, null)
+                .Extract(err => throw new System.Exception(err));
+
+            decoded.Should().Be(value);
+        }
+    }
+
+    [Fact]
+    public void Choice_marker_without_tag_is_decoded_as_an_ordinary_list()
+    {
+        var malformedChoice = PineValue.List([ElmValue.ElmChoiceTypeTagNameAsValue]);
+
+        var decoded =
+            ElmValueEncoding.PineValueAsElmValue(malformedChoice, null, null)
+            .Extract(err => throw new System.Exception(err));
+
+        decoded.Should().BeOfType<ElmValue.ElmList>();
     }
 
     [Fact]

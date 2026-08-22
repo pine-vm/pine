@@ -2036,16 +2036,11 @@ public class CoreBasics
         // Check if the value is a float by checking if head(n) equals "Elm_Float"
         var isFloatCondition =
             BuiltinHelpers.ApplyBuiltinEqualBinary(
-                BuiltinHelpers.ApplyBuiltinHead(n),
+                ChoiceTagName(n),
                 s_elmFloatTypeTagNameLiteral);
 
-        // For float: access numerator and denominator from [Elm_Float, [numerator, denominator]]
-        // numerator is at path head(head(skip(1, n)))
-        // denominator is at path head(skip(1, head(skip(1, n))))
-        var tagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, n));
-
-        var numerator = BuiltinHelpers.ApplyBuiltinHead(tagArgs);
-        var denominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, tagArgs));
+        var numerator = ChoiceArgument(n, 0);
+        var denominator = ChoiceArgument(n, 1);
 
         // Negate the numerator
         var negatedNumerator =
@@ -2053,13 +2048,7 @@ public class CoreBasics
                 LiteralInt(-1),
                 numerator);
 
-        // Construct the negated float: [Elm_Float, [negatedNumerator, denominator]]
-        var negatedFloat =
-            Expression.ListInst(
-                [
-                s_elmFloatTypeTagNameLiteral,
-                Expression.ListInst([negatedNumerator, denominator])
-                ]);
+        var negatedFloat = BuildChoice(s_elmFloatTypeTagNameLiteral, [negatedNumerator, denominator]);
 
         // For non-float: just multiply by -1
         var negatedInt =
@@ -2114,14 +2103,11 @@ public class CoreBasics
         // Check if the value is a float by checking if head(n) equals "Elm_Float"
         var isFloatCondition =
             BuiltinHelpers.ApplyBuiltinEqualBinary(
-                BuiltinHelpers.ApplyBuiltinHead(n),
+                ChoiceTagName(n),
                 s_elmFloatTypeTagNameLiteral);
 
-        // For float: access numerator and denominator from [Elm_Float, [numerator, denominator]]
-        var tagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, n));
-
-        var numerator = BuiltinHelpers.ApplyBuiltinHead(tagArgs);
-        var denominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, tagArgs));
+        var numerator = ChoiceArgument(n, 0);
+        var denominator = ChoiceArgument(n, 1);
 
         // For float: abs means absolute value of numerator
         var isNumeratorNonNegative =
@@ -2133,12 +2119,7 @@ public class CoreBasics
                 trueBranch: numerator,
                 falseBranch: BuiltinMul(LiteralInt(-1), numerator));
 
-        var absFloat =
-            Expression.ListInst(
-                [
-                s_elmFloatTypeTagNameLiteral,
-                Expression.ListInst([absNumerator, denominator])
-                ]);
+        var absFloat = BuildChoice(s_elmFloatTypeTagNameLiteral, [absNumerator, denominator]);
 
         // For non-float: check if n >= 0
         var isNonNegative =
@@ -2205,14 +2186,11 @@ public class CoreBasics
         // Check if the value is a float by checking if head(n) equals "Elm_Float"
         var isFloatCondition =
             BuiltinHelpers.ApplyBuiltinEqualBinary(
-                BuiltinHelpers.ApplyBuiltinHead(n),
+                ChoiceTagName(n),
                 s_elmFloatTypeTagNameLiteral);
 
-        // For float: access numerator and denominator from [Elm_Float, [numerator, denominator]]
-        var tagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, n));
-
-        var numerator = BuiltinHelpers.ApplyBuiltinHead(tagArgs);
-        var denominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, tagArgs));
+        var numerator = ChoiceArgument(n, 0);
+        var denominator = ChoiceArgument(n, 1);
 
         // For float: integer division of numerator by denominator
         var floorFloat = Internal_Int_div(numerator, denominator);
@@ -2298,26 +2276,19 @@ public class CoreBasics
         // Check if augend is a float
         var augendIsFloat =
             BuiltinHelpers.ApplyBuiltinEqualBinary(
-                BuiltinHelpers.ApplyBuiltinHead(augend),
+                ChoiceTagName(augend),
                 s_elmFloatTypeTagNameLiteral);
 
         // Check if addend is a float
         var addendIsFloat =
             BuiltinHelpers.ApplyBuiltinEqualBinary(
-                BuiltinHelpers.ApplyBuiltinHead(addend),
+                ChoiceTagName(addend),
                 s_elmFloatTypeTagNameLiteral);
 
-        // Extract float components for augend
-        var augendTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, augend));
-
-        var augendNumerator = BuiltinHelpers.ApplyBuiltinHead(augendTagArgs);
-        var augendDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, augendTagArgs));
-
-        // Extract float components for addend
-        var addendTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, addend));
-
-        var addendNumerator = BuiltinHelpers.ApplyBuiltinHead(addendTagArgs);
-        var addendDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, addendTagArgs));
+        var augendNumerator = ChoiceArgument(augend, 0);
+        var augendDenominator = ChoiceArgument(augend, 1);
+        var addendNumerator = ChoiceArgument(addend, 0);
+        var addendDenominator = ChoiceArgument(addend, 1);
 
         // Int + Int case: use builtin addition
         var intAddition = BuiltinAdd(augend, addend);
@@ -2386,30 +2357,19 @@ public class CoreBasics
         // Check if multiplicand is a float
         var multiplicandIsFloat =
             BuiltinHelpers.ApplyBuiltinEqualBinary(
-                BuiltinHelpers.ApplyBuiltinHead(left),
+                ChoiceTagName(left),
                 s_elmFloatTypeTagNameLiteral);
 
         // Check if multiplier is a float
         var multiplierIsFloat =
             BuiltinHelpers.ApplyBuiltinEqualBinary(
-                BuiltinHelpers.ApplyBuiltinHead(right),
+                ChoiceTagName(right),
                 s_elmFloatTypeTagNameLiteral);
 
-        // Extract float components for multiplicand
-        var multiplicandTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, left));
-
-        var multiplicandNumerator = BuiltinHelpers.ApplyBuiltinHead(multiplicandTagArgs);
-
-        var multiplicandDenominator =
-            BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, multiplicandTagArgs));
-
-        // Extract float components for multiplier
-        var multiplierTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, right));
-
-        var multiplierNumerator = BuiltinHelpers.ApplyBuiltinHead(multiplierTagArgs);
-
-        var multiplierDenominator =
-            BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, multiplierTagArgs));
+        var multiplicandNumerator = ChoiceArgument(left, 0);
+        var multiplicandDenominator = ChoiceArgument(left, 1);
+        var multiplierNumerator = ChoiceArgument(right, 0);
+        var multiplierDenominator = ChoiceArgument(right, 1);
 
         // Int * Int case: use builtin multiplication
         var intMultiplication = BuiltinMul(left, right);
@@ -2469,28 +2429,19 @@ public class CoreBasics
         // Check if minuend is a float
         var minuendIsFloat =
             BuiltinHelpers.ApplyBuiltinEqualBinary(
-                BuiltinHelpers.ApplyBuiltinHead(minuend),
+                ChoiceTagName(minuend),
                 s_elmFloatTypeTagNameLiteral);
 
         // Check if subtrahend is a float
         var subtrahendIsFloat =
             BuiltinHelpers.ApplyBuiltinEqualBinary(
-                BuiltinHelpers.ApplyBuiltinHead(subtrahend),
+                ChoiceTagName(subtrahend),
                 s_elmFloatTypeTagNameLiteral);
 
-        // Extract float components for minuend
-        var minuendTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, minuend));
-
-        var minuendNumerator = BuiltinHelpers.ApplyBuiltinHead(minuendTagArgs);
-        var minuendDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, minuendTagArgs));
-
-        // Extract float components for subtrahend
-        var subtrahendTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, subtrahend));
-
-        var subtrahendNumerator = BuiltinHelpers.ApplyBuiltinHead(subtrahendTagArgs);
-
-        var subtrahendDenominator =
-            BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, subtrahendTagArgs));
+        var minuendNumerator = ChoiceArgument(minuend, 0);
+        var minuendDenominator = ChoiceArgument(minuend, 1);
+        var subtrahendNumerator = ChoiceArgument(subtrahend, 0);
+        var subtrahendDenominator = ChoiceArgument(subtrahend, 1);
 
         // Int - Int case (original implementation)
         var intSubtraction =
@@ -2651,13 +2602,7 @@ public class CoreBasics
         // Compute the quotient (numerator / denominator) for when it divides evenly
         var quotient = Int_div(numerator, denominator);
 
-        // Float result: [Elm_Float, [numerator, denominator]]
-        var floatResult =
-            Expression.ListInst(
-                [
-                s_elmFloatTypeTagNameLiteral,
-                Expression.ListInst([numerator, denominator])
-                ]);
+        var floatResult = BuildChoice(s_elmFloatTypeTagNameLiteral, [numerator, denominator]);
 
         // If denominator is 1, just return numerator as integer
         // If it divides evenly, return the quotient as integer
@@ -2733,6 +2678,9 @@ public class CoreBasics
             [1],
             Expression.EnvironmentInstance);
 
+    private static readonly Expression s_elmChoiceTypeTagNameLiteral =
+        Expression.LitralInst(ElmValue.ElmChoiceTypeTagNameAsValue);
+
     private static readonly Expression s_elmFloatTypeTagNameLiteral =
         Expression.LitralInst(ElmValue.ElmFloatTypeTagNameAsValue);
 
@@ -2744,6 +2692,22 @@ public class CoreBasics
 
     private static readonly Expression s_elmSetTypeTagNameLiteral =
         Expression.LitralInst(ElmValue.ElmSetTypeTagNameAsValue);
+
+    private static Expression ChoiceTagName(Expression value) =>
+        BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, value));
+
+    private static Expression ChoiceArgument(Expression value, int index) =>
+        BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(2 + index, value));
+
+    private static Expression BuildChoice(
+        Expression tagName,
+        IReadOnlyList<Expression> arguments) =>
+        Expression.ListInst(
+            [
+            s_elmChoiceTypeTagNameLiteral,
+            tagName,
+            ..arguments
+            ]);
 
     // ========== Internal Comparison Implementations ==========
 
@@ -2923,21 +2887,18 @@ public class CoreBasics
         // Float checks
         var eqLeftIsFloat =
             BuiltinHelpers.ApplyBuiltinEqualBinary(
-                BuiltinHelpers.ApplyBuiltinHead(eqA),
+                ChoiceTagName(eqA),
                 s_elmFloatTypeTagNameLiteral);
 
         var eqRightIsFloat =
             BuiltinHelpers.ApplyBuiltinEqualBinary(
-                BuiltinHelpers.ApplyBuiltinHead(eqB),
+                ChoiceTagName(eqB),
                 s_elmFloatTypeTagNameLiteral);
 
-        var eqLeftTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, eqA));
-        var eqLeftNumerator = BuiltinHelpers.ApplyBuiltinHead(eqLeftTagArgs);
-        var eqLeftDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, eqLeftTagArgs));
-
-        var eqRightTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, eqB));
-        var eqRightNumerator = BuiltinHelpers.ApplyBuiltinHead(eqRightTagArgs);
-        var eqRightDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, eqRightTagArgs));
+        var eqLeftNumerator = ChoiceArgument(eqA, 0);
+        var eqLeftDenominator = ChoiceArgument(eqA, 1);
+        var eqRightNumerator = ChoiceArgument(eqB, 0);
+        var eqRightDenominator = ChoiceArgument(eqB, 1);
 
         var eqFloatIntEqual =
             Expression.ConditionalInst(
@@ -2989,10 +2950,10 @@ public class CoreBasics
         var eqRightLength = BuiltinHelpers.ApplyBuiltinLength(eqB);
         var eqSameLengths = BuiltinHelpers.ApplyBuiltinEqualBinary(eqLeftLength, eqRightLength);
 
-        var eqLeftHead = BuiltinHelpers.ApplyBuiltinHead(eqA);
-        var eqLeftIsString = BuiltinHelpers.ApplyBuiltinEqualBinary(eqLeftHead, s_elmStringTypeTagNameLiteral);
-        var eqLeftIsDict = BuiltinHelpers.ApplyBuiltinEqualBinary(eqLeftHead, s_elmDictNotEmptyTagNameLiteral);
-        var eqLeftIsSet = BuiltinHelpers.ApplyBuiltinEqualBinary(eqLeftHead, s_elmSetTypeTagNameLiteral);
+        var eqLeftTagName = ChoiceTagName(eqA);
+        var eqLeftIsString = BuiltinHelpers.ApplyBuiltinEqualBinary(eqLeftTagName, s_elmStringTypeTagNameLiteral);
+        var eqLeftIsDict = BuiltinHelpers.ApplyBuiltinEqualBinary(eqLeftTagName, s_elmDictNotEmptyTagNameLiteral);
+        var eqLeftIsSet = BuiltinHelpers.ApplyBuiltinEqualBinary(eqLeftTagName, s_elmSetTypeTagNameLiteral);
 
         // Dict equality: dictToList both and compare with Pine_kernel.equal
         var eqDictToListLeft = DictToListExpression(eqA);
@@ -3005,14 +2966,8 @@ public class CoreBasics
                 trueBranch: s_trueValue,
                 falseBranch: s_falseValue);
 
-        // Set equality: extract inner dicts and compare keys
-        // Set_elm_builtin dictA → Pine tag: ["Set_elm_builtin", [dictA]]
-        // args = head(skip(1, set)) = [dictA]
-        // dictA = head(args)
-        var eqSetArgsA = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, eqA));
-        var eqSetDictA = BuiltinHelpers.ApplyBuiltinHead(eqSetArgsA);
-        var eqSetArgsB = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, eqB));
-        var eqSetDictB = BuiltinHelpers.ApplyBuiltinHead(eqSetArgsB);
+        var eqSetDictA = ChoiceArgument(eqA, 0);
+        var eqSetDictB = ChoiceArgument(eqB, 0);
         var eqDictKeysA = DictKeysExpression(eqSetDictA);
         var eqDictKeysB = DictKeysExpression(eqSetDictB);
         var eqSetKeysEqual = BuiltinHelpers.ApplyBuiltinEqualBinary(eqDictKeysA, eqDictKeysB);
@@ -3138,28 +3093,15 @@ public class CoreBasics
         var zero = LiteralInt(0);
         var emptyList = Expression.ListInst([]);
 
-        // Check if dict is empty: length(dict) == 0
-        // RBEmpty_elm_builtin is represented as ["RBEmpty_elm_builtin"]  (length 1)
-        // RBNode_elm_builtin is represented as ["RBNode_elm_builtin", [color, key, value, left, right]] (length 2)
-        // Actually, tags are [tagName, args...] so RBEmpty has length 1 and RBNode has length 6
-        // But we can check: head(dict) == "RBNode_elm_builtin"
         var isRBNode =
             BuiltinHelpers.ApplyBuiltinEqualBinary(
-                BuiltinHelpers.ApplyBuiltinHead(dictExpr),
+                ChoiceTagName(dictExpr),
                 s_elmDictNotEmptyTagNameLiteral);
 
-        // For RBNode_elm_builtin _ key value left right:
-        // Pine tag representation: ["RBNode_elm_builtin", [color, key, value, left, right]]
-        // args = head(skip(1, dict)) = [color, key, value, left, right]
-        // head(skip(1, args)) = key
-        // head(skip(2, args)) = value
-        // head(skip(3, args)) = left
-        // head(skip(4, args)) = right
-        var args = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, dictExpr));
-        var key = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, args));
-        var value = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(2, args));
-        var leftChild = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(3, args));
-        var rightChild = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(4, args));
+        var key = ChoiceArgument(dictExpr, 1);
+        var value = ChoiceArgument(dictExpr, 2);
+        var leftChild = ChoiceArgument(dictExpr, 3);
+        var rightChild = ChoiceArgument(dictExpr, 4);
 
         // tuple = [key, value]
         var tuple = Expression.ListInst([key, value]);
@@ -3239,15 +3181,12 @@ public class CoreBasics
 
         var isRBNode =
             BuiltinHelpers.ApplyBuiltinEqualBinary(
-                BuiltinHelpers.ApplyBuiltinHead(dictExpr),
+                ChoiceTagName(dictExpr),
                 s_elmDictNotEmptyTagNameLiteral);
 
-        // Pine tag representation: ["RBNode_elm_builtin", [color, key, value, left, right]]
-        // args = head(skip(1, dict)) = [color, key, value, left, right]
-        var args = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, dictExpr));
-        var key = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, args));
-        var leftChild = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(3, args));
-        var rightChild = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(4, args));
+        var key = ChoiceArgument(dictExpr, 1);
+        var leftChild = ChoiceArgument(dictExpr, 3);
+        var rightChild = ChoiceArgument(dictExpr, 4);
 
         static Expression RecursiveCall(
             Expression selfFunc,
@@ -3326,23 +3265,17 @@ public class CoreBasics
         // Check if left is a string (head equals "String")
         var leftIsString =
             BuiltinHelpers.ApplyBuiltinEqualBinary(
-                BuiltinHelpers.ApplyBuiltinHead(left),
+                ChoiceTagName(left),
                 s_elmStringTypeTagNameLiteral);
 
         // Check if right is a string
         var rightIsString =
             BuiltinHelpers.ApplyBuiltinEqualBinary(
-                BuiltinHelpers.ApplyBuiltinHead(right),
+                ChoiceTagName(right),
                 s_elmStringTypeTagNameLiteral);
 
-        // For strings: extract the actual string content (the bytes blob)
-        // String representation: ["String", [bytes]]
-        // So we need: head(head(skip(1, value))) to get the bytes blob
-        var leftStringWrapper = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, left));
-
-        var leftStringContent = BuiltinHelpers.ApplyBuiltinHead(leftStringWrapper);
-        var rightStringWrapper = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, right));
-        var rightStringContent = BuiltinHelpers.ApplyBuiltinHead(rightStringWrapper);
+        var leftStringContent = ChoiceArgument(left, 0);
+        var rightStringContent = ChoiceArgument(right, 0);
 
         // String comparison using recursive character-by-character comparison
         var stringCompare = CompareStringsRecursive(leftStringContent, rightStringContent);
@@ -3350,26 +3283,19 @@ public class CoreBasics
         // Check if left is a float
         var leftIsFloat =
             BuiltinHelpers.ApplyBuiltinEqualBinary(
-                BuiltinHelpers.ApplyBuiltinHead(left),
+                ChoiceTagName(left),
                 s_elmFloatTypeTagNameLiteral);
 
         // Check if right is a float
         var rightIsFloat =
             BuiltinHelpers.ApplyBuiltinEqualBinary(
-                BuiltinHelpers.ApplyBuiltinHead(right),
+                ChoiceTagName(right),
                 s_elmFloatTypeTagNameLiteral);
 
-        // Extract float components for left
-        var leftTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, left));
-
-        var leftNumerator = BuiltinHelpers.ApplyBuiltinHead(leftTagArgs);
-        var leftDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, leftTagArgs));
-
-        // Extract float components for right
-        var rightTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, right));
-
-        var rightNumerator = BuiltinHelpers.ApplyBuiltinHead(rightTagArgs);
-        var rightDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, rightTagArgs));
+        var leftNumerator = ChoiceArgument(left, 0);
+        var leftDenominator = ChoiceArgument(left, 1);
+        var rightNumerator = ChoiceArgument(right, 0);
+        var rightDenominator = ChoiceArgument(right, 1);
 
         // Float vs Float comparison: compare (numA * denomB) with (numB * denomA)
         var floatFloatLeftProduct = BuiltinMul(leftNumerator, rightDenominator);
@@ -3965,28 +3891,17 @@ public class CoreBasics
         // Check if left is a string (head equals "String" tag name)
         var leftIsString =
             BuiltinHelpers.ApplyBuiltinEqualBinary(
-                BuiltinHelpers.ApplyBuiltinHead(left),
+                ChoiceTagName(left),
                 s_elmStringTypeTagNameLiteral);
 
-        // String case: extract string contents, concat, and wrap in String tag
-        // String representation: ["String", [contentBlob]]
-        // Content is at: head(head(skip(1, value)))
-        var leftStringWrapper = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, left));
-
-        var leftStringContent = BuiltinHelpers.ApplyBuiltinHead(leftStringWrapper);
-        var rightStringWrapper = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, right));
-        var rightStringContent = BuiltinHelpers.ApplyBuiltinHead(rightStringWrapper);
+        var leftStringContent = ChoiceArgument(left, 0);
+        var rightStringContent = ChoiceArgument(right, 0);
 
         var concattedStringContent =
             BuiltinHelpers.ApplyBuiltinConcat(
                 [leftStringContent, rightStringContent]);
 
-        var stringResult =
-            Expression.ListInst(
-                [
-                s_elmStringTypeTagNameLiteral,
-                Expression.ListInst([concattedStringContent])
-                ]);
+        var stringResult = BuildChoice(s_elmStringTypeTagNameLiteral, [concattedStringContent]);
 
         // List case: just concat the two lists
         var listResult =

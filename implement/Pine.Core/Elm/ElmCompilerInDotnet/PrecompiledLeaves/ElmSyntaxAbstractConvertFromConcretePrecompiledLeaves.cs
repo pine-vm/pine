@@ -153,11 +153,10 @@ public static class ElmSyntaxAbstractConvertFromConcretePrecompiledLeaves
                 }
 
                 if (setterRecord.Items.Span[index + 1] is PineValue.ListValue stringValue &&
-                    stringValue.Items.Length is 2 &&
-                    stringValue.Items.Span[0] == ElmValue.ElmStringTypeTagNameAsValue &&
-                    stringValue.Items.Span[1] is PineValue.ListValue arguments &&
-                    arguments.Items.Length is 1 &&
-                    arguments.Items.Span[0] is PineValue.BlobValue characters &&
+                    stringValue.Items.Length is 3 &&
+                    stringValue.Items.Span[0] == ElmValue.ElmChoiceTypeTagNameAsValue &&
+                    stringValue.Items.Span[1] == ElmValue.ElmStringTypeTagNameAsValue &&
+                    stringValue.Items.Span[2] is PineValue.BlobValue characters &&
                     characters.Bytes.Length % 4 is 0)
                 {
                     bytes = characters.Bytes;

@@ -831,20 +831,20 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
-            InvocationCount: 4_652
-            BuildListCount: 7_947
-            LoopIterationCount: 4_540
-            InstructionCount: 249_303
+            InvocationCount: 4_066
+            BuildListCount: 7_164
+            LoopIterationCount: 4_338
+            InstructionCount: 225_768
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
             """
-            CompiledExpressionCount: 156
-            InvocationCountTotal: 3_994
-            InvocationCountAverage: 26
+            CompiledExpressionCount: 148
+            InvocationCountTotal: 3_585
+            InvocationCountAverage: 24
             InvocationCountPercentile10: 1
             InvocationCountMedian: 4
-            InvocationCountPercentile90: 24
+            InvocationCountPercentile90: 23
             """);
     }
 
@@ -1169,20 +1169,20 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
-            InvocationCount: 11_869
-            BuildListCount: 20_160
-            LoopIterationCount: 13_920
-            InstructionCount: 672_700
+            InvocationCount: 10_967
+            BuildListCount: 18_900
+            LoopIterationCount: 13_976
+            InstructionCount: 646_227
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
             """
-            CompiledExpressionCount: 196
-            InvocationCountTotal: 10_325
-            InvocationCountAverage: 53
+            CompiledExpressionCount: 195
+            InvocationCountTotal: 9_842
+            InvocationCountAverage: 50
             InvocationCountPercentile10: 2
-            InvocationCountMedian: 8
-            InvocationCountPercentile90: 59
+            InvocationCountMedian: 6
+            InvocationCountPercentile90: 56
             """);
     }
 
@@ -1300,17 +1300,17 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
-            InvocationCount: 14_350
-            BuildListCount: 24_546
-            LoopIterationCount: 16_332
-            InstructionCount: 790_807
+            InvocationCount: 13_531
+            BuildListCount: 23_476
+            LoopIterationCount: 16_347
+            InstructionCount: 770_192
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
             """
-            CompiledExpressionCount: 199
-            InvocationCountTotal: 12_362
-            InvocationCountAverage: 62
+            CompiledExpressionCount: 195
+            InvocationCountTotal: 11_958
+            InvocationCountAverage: 61
             InvocationCountPercentile10: 2
             InvocationCountMedian: 8
             InvocationCountPercentile90: 64

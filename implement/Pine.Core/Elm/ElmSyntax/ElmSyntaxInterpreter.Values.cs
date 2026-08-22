@@ -235,7 +235,7 @@ public partial class ElmSyntaxInterpreter
     /// Reconstructs an <see cref="ElmValue"/> from an in-process value that embeds one or more
     /// opaque (function-bearing) child values and therefore has no concrete <see cref="PineValue"/>
     /// encoding. Only the structural Elm forms that can carry functions are possible here: a list, a
-    /// tuple (encoded as a list), a record or a custom-type tag. String/Float/Bytes/Int values carry
+    /// tuple (encoded as a list), a record or a choice-type tag. String/Float/Bytes/Int values carry
     /// only concrete leaves and never reach this method. The decoding mirrors
     /// <see cref="ElmValueEncoding.PineListValueAsElmValue"/> but recurses through <see cref="ToElm(PineValueInProcess)"/>
     /// so that opaque leaves are recovered as their original <see cref="ElmValue"/> form.
@@ -279,18 +279,19 @@ public partial class ElmSyntaxInterpreter
             return new ElmValue.ElmRecord(recordFields);
         }
 
-        // Custom-type tag: [tagName, [tagArgs...]].
-        if (items.Count is 2 &&
+        // Choice-type tag: [<Choice_Type>, tagName, tagArg0, ...].
+        if (items.Count >= 2 &&
             !IsOpaque(items[0]) &&
-            AsListItems(items[1]) is { } tagArgs &&
-            StringEncoding.StringFromValue(items[0].Evaluate()).IsOkOrNull() is { } tagName &&
+            items[0].Evaluate() == ElmValue.ElmChoiceTypeTagNameAsValue &&
+            !IsOpaque(items[1]) &&
+            StringEncoding.StringFromValue(items[1].Evaluate()).IsOkOrNull() is { } tagName &&
             ElmValueEncoding.StringIsValidTagName(tagName))
         {
-            var tagArguments = new ElmValue[tagArgs.Count];
+            var tagArguments = new ElmValue[items.Count - 2];
 
             for (var i = 0; i < tagArguments.Length; i++)
             {
-                tagArguments[i] = ToElm(tagArgs[i], visiting, renderClosuresForError);
+                tagArguments[i] = ToElm(items[2 + i], visiting, renderClosuresForError);
             }
 
             return ElmValue.TagInstance(tagName, tagArguments);
@@ -547,7 +548,7 @@ public partial class ElmSyntaxInterpreter
     }
 
     /// <summary>
-    /// Structural equality for two partially-applied custom-type tag constructors: the declaring
+    /// Structural equality for two partially-applied choice-type tag constructors: the declaring
     /// type, tag name, total arity and the arguments collected so far must all match.
     /// </summary>
     private static bool ChoiceTagConstructorsEqualInProcess(

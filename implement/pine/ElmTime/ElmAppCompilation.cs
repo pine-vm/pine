@@ -2,7 +2,6 @@ using ElmTime.Elm019;
 using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Files;
 using Pine.Core.Internal;
@@ -25,8 +24,6 @@ using CompilationResult =
         System.Collections.Generic.IReadOnlyList<ElmTime.ElmAppCompilation.LocatedCompilationError>,
         ElmTime.ElmAppCompilation.CompilationSuccess>;
 
-
-
 namespace ElmTime
 {
     public record ElmAppInterfaceConfig(IReadOnlyList<string> CompilationRootFilePath)
@@ -44,9 +41,11 @@ namespace ElmTime
 
     public class ElmAppCompilation
     {
-        private static readonly System.Diagnostics.Stopwatch cacheItemTimeSource = System.Diagnostics.Stopwatch.StartNew();
+        private static readonly System.Diagnostics.Stopwatch cacheItemTimeSource =
+            System.Diagnostics.Stopwatch.StartNew();
 
-        private static readonly ConcurrentDictionary<string, (CompilationResult compilationResult, TimeSpan lastUseTime)> ElmAppCompilationCache = new();
+        private static readonly ConcurrentDictionary<string, (CompilationResult compilationResult, TimeSpan lastUseTime)> ElmAppCompilationCache =
+            new();
 
         private static void ElmAppCompilationCacheRemoveOlderItems(long retainedSizeLimit) =>
             Cache.RemoveItemsToLimitRetainedSize(
@@ -196,7 +195,8 @@ namespace ElmTime
                             CompilationResult.ok(
                                 new CompilationSuccess(
                                     Result: compilationSuccess,
-                                    stack.Select(frame => frame.IterationReport).ToImmutableList().Add(currentIterationReport)));
+                                    stack.Select(frame => frame.IterationReport).ToImmutableList().Add(
+                                        currentIterationReport)));
                     },
                     fromErr: compilationErrors =>
                     {
@@ -222,10 +222,11 @@ namespace ElmTime
                         {
                             return
                                 (CompilationResult)
-                                otherErrors.Select(error =>
-                                new LocatedCompilationError(
-                                    error.Location,
-                                    error: CompilationError.AsCompilationError(error.Error))).ToImmutableList();
+                                otherErrors.Select(
+                                    error =>
+                                    new LocatedCompilationError(
+                                        error.Location,
+                                        error: CompilationError.AsCompilationError(error.Error))).ToImmutableList();
                         }
 
                         Result<string, ReadOnlyMemory<byte>> ElmMake(
@@ -645,50 +646,38 @@ namespace ElmTime
 
              * */
 
-            if (pineValue is not PineValue.ListValue list)
+            var parseTagResult = ElmValueEncoding.ParseAsTag(pineValue);
+
+            if (parseTagResult.IsErrOrNull() is { } parseTagError)
+                throw new Exception("Failed to parse Elm choice: " + parseTagError);
+
+            if (parseTagResult.IsOkOrNullable() is not { } tag)
             {
-                throw new Exception(
-                    "Expected list value, got: " + pineValue);
+                throw new NotImplementedException(
+                    "Unexpected result type: " + parseTagResult.GetType().FullName);
             }
 
-            if (list.Items.Length is not 2)
+            if (tag.tagName is not "LocatedInSourceFiles")
             {
                 throw new Exception(
-                    "Expected list with two elements, got: " + list.Items.Length);
+                    "Expected tag 'LocatedInSourceFiles', got: " + tag.tagName);
             }
 
-            var tagNameValue = list.Items.Span[0];
-
-            if (tagNameValue != ValueFromString_LocatedInSourceFiles &&
-                tagNameValue != ValueFromString_LocatedInSourceFiles_2024)
-            {
-                throw new Exception(
-                    "Expected first element to be 'LocatedInSourceFiles', got: " + tagNameValue);
-            }
-
-            var arguments = list.Items.Span[1];
-
-            if (arguments is not PineValue.ListValue argumentsList)
-            {
-                throw new Exception(
-                    "Expected second element to be a list, got: " + arguments);
-            }
-
-            if (argumentsList.Items.Length is not 2)
+            if (tag.tagArguments.Length is not 2)
             {
                 throw new Exception(
                     "Expected list with two elements in tag 'LocatedInSourceFiles', got: " +
-                    argumentsList.Items.Length);
+                    tag.tagArguments.Length);
             }
 
-            var locationInSourceFilesValue = argumentsList.Items.Span[0];
+            var locationInSourceFilesValue = tag.tagArguments.Span[0];
 
             var locationInSourceFiles =
                 ParseLocationInSourceFiles(
                     locationInSourceFilesValue,
                     elmCompilerCache);
 
-            var compilationErrorValue = argumentsList.Items.Span[1];
+            var compilationErrorValue = tag.tagArguments.Span[1];
 
             var compilationError =
                 ParseCompilationError(compilationErrorValue, elmCompilerCache);
@@ -763,53 +752,27 @@ namespace ElmTime
 
             * */
 
-            if (pineValue is not PineValue.ListValue list)
+            var parseTagResult = ElmValueEncoding.ParseAsTag(pineValue);
+
+            if (parseTagResult.IsErrOrNull() is { } parseTagError)
+                throw new Exception("Failed to parse Elm choice: " + parseTagError);
+
+            if (parseTagResult.IsOkOrNullable() is not { } tag)
             {
-                throw new Exception(
-                    "Expected list value, got: " + pineValue);
+                throw new NotImplementedException(
+                    "Unexpected result type: " + parseTagResult.GetType().FullName);
             }
 
-            if (list.Items.Length is not 2)
+            if (tag.tagName is "MissingDependencyError")
             {
-                throw new Exception(
-                    "Expected list with two elements, got: " + list.Items.Length);
-            }
-
-            var tagNameValue = list.Items.Span[0];
-
-            var tagNameResult = StringEncoding.StringFromValue(tagNameValue);
-
-            {
-                if (tagNameResult.IsErrOrNull() is { } err)
-                {
-                    throw new Exception("Failed parsing tag name: " + err);
-                }
-            }
-
-            if (tagNameResult.IsOkOrNull() is not { } tagName)
-            {
-                throw new Exception(
-                    "Unexpected result type: " + tagNameResult.GetType());
-            }
-
-            if (tagName is "MissingDependencyError")
-            {
-                var arguments = list.Items.Span[1];
-
-                if (arguments is not PineValue.ListValue argumentsList)
-                {
-                    throw new Exception(
-                        "Expected second element to be a list, got: " + arguments);
-                }
-
-                if (argumentsList.Items.Length is not 1)
+                if (tag.tagArguments.Length is not 1)
                 {
                     throw new Exception(
                         "Expected list with one element in tag 'MissingDependencyError', got: " +
-                        argumentsList.Items.Length);
+                        tag.tagArguments.Length);
                 }
 
-                var dependencyKeyValue = argumentsList.Items.Span[0];
+                var dependencyKeyValue = tag.tagArguments.Span[0];
 
                 var dependencyKey = ParseDependencyKey(dependencyKeyValue, elmCompilerCache);
 
@@ -829,12 +792,17 @@ namespace ElmTime
                         ]);
             }
 
-            if (tagName is "OtherCompilationError")
+            if (tag.tagName is "OtherCompilationError")
             {
-                var arguments = list.Items.Span[1];
+                if (tag.tagArguments.Length is not 1)
+                {
+                    throw new Exception(
+                        "Expected list with one element in tag 'OtherCompilationError', got: " +
+                        tag.tagArguments.Length);
+                }
 
                 var argumentAsElmValueResult =
-                    elmCompilerCache.PineValueDecodedAsElmValue(arguments);
+                    elmCompilerCache.PineValueDecodedAsElmValue(tag.tagArguments.Span[0]);
 
                 {
                     if (argumentAsElmValueResult.IsErrOrNull() is { } err)
@@ -848,23 +816,10 @@ namespace ElmTime
                     throw new Exception("Unexpected result type: " + argumentAsElmValueResult.GetType());
                 }
 
-                if (argumentAsElmValue is not ElmValue.ElmList asElmList)
+                if (argumentAsElmValue is not ElmValue.ElmString asElmString)
                 {
                     throw new Exception(
-                        "Expected Elm list value, got: " + argumentAsElmValue);
-                }
-
-                if (asElmList.Items.Count is not 1)
-                {
-                    throw new Exception(
-                        "Expected list with one element, got: " + asElmList.Items.Count);
-                }
-
-
-                if (asElmList.Items[0] is not ElmValue.ElmString asElmString)
-                {
-                    throw new Exception(
-                        "Expected Elm string value, got: " + asElmList.Items[0]);
+                        "Expected Elm string value, got: " + argumentAsElmValue);
                 }
 
                 return
@@ -872,7 +827,7 @@ namespace ElmTime
                         OtherCompilationError: [asElmString.Value]);
             }
 
-            throw new Exception("Unexpected tag name: " + tagName);
+            throw new Exception("Unexpected tag name: " + tag.tagName);
         }
 
         private static CompilerSerialInterface.DependencyKey ParseDependencyKey(
@@ -1075,43 +1030,31 @@ namespace ElmTime
             PineValue pineValue,
             ElmCompilerCache elmCompilerCache)
         {
-            if (pineValue is not PineValue.ListValue list)
+            var parseTagResult = ElmValueEncoding.ParseAsTag(pineValue);
+
+            if (parseTagResult.IsErrOrNull() is { } parseTagError)
+                throw new Exception("Failed to parse Elm choice: " + parseTagError);
+
+            if (parseTagResult.IsOkOrNullable() is not { } tag)
             {
-                throw new Exception(
-                    "Expected list value, got: " + pineValue);
+                throw new NotImplementedException(
+                    "Unexpected result type: " + parseTagResult.GetType().FullName);
             }
 
-            if (list.Items.Length is not 2)
+            if (tag.tagName is not "CompilationIterationSuccess")
             {
                 throw new Exception(
-                    "Expected list with two elements, got: " + list.Items.Length);
+                    "Expected tag 'CompilationIterationSuccess', got: " + tag.tagName);
             }
 
-            var tagNameValue = list.Items.Span[0];
-
-            if (tagNameValue != ValueFromString_CompilationIterationSuccess &&
-                tagNameValue != ValueFromString_CompilationIterationSuccess_2024)
-            {
-                throw new Exception(
-                    "Expected first element to be 'CompilationIterationSuccess', got: " + tagNameValue);
-            }
-
-            var arguments = list.Items.Span[1];
-
-            if (arguments is not PineValue.ListValue argumentsList)
-            {
-                throw new Exception(
-                    "Expected second element to be a list, got: " + arguments);
-            }
-
-            if (argumentsList.Items.Length is not 2)
+            if (tag.tagArguments.Length is not 2)
             {
                 throw new Exception(
                     "Expected list with two elements in tag 'CompilationIterationSuccess', got: " +
-                    argumentsList.Items.Length);
+                    tag.tagArguments.Length);
             }
 
-            var compiledFilesValue = argumentsList.Items.Span[0];
+            var compiledFilesValue = tag.tagArguments.Span[0];
 
             if (compiledFilesValue is not PineValue.ListValue compiledFilesList)
             {
@@ -1196,7 +1139,7 @@ namespace ElmTime
                     entry =>
                     entry.Value);
 
-            var rootModuleEntryPointKindValue = argumentsList.Items.Span[1];
+            var rootModuleEntryPointKindValue = tag.tagArguments.Span[1];
 
             var rootModuleEntryPointKindResult =
                 ParseElmMakeEntryPointKindResult(
@@ -1208,19 +1151,6 @@ namespace ElmTime
                     CompiledFiles: compiledFiles,
                     rootModuleEntryPointKindResult);
         }
-
-        private static readonly PineValue ValueFromString_CompilationIterationSuccess =
-            StringEncoding.BlobValueFromString("CompilationIterationSuccess");
-
-        private static readonly PineValue ValueFromString_LocatedInSourceFiles =
-            StringEncoding.BlobValueFromString("LocatedInSourceFiles");
-
-
-        private static readonly PineValue ValueFromString_CompilationIterationSuccess_2024 =
-            StringEncoding.ValueFromString_2024("CompilationIterationSuccess");
-
-        private static readonly PineValue ValueFromString_LocatedInSourceFiles_2024 =
-            StringEncoding.ValueFromString_2024("LocatedInSourceFiles");
 
         private static Result<string, CompilerSerialInterface.ElmMakeEntryPointKind> ParseElmMakeEntryPointKindResult(
             PineValue pineValue,
@@ -1348,7 +1278,8 @@ namespace ElmTime
 
             static IEnumerable<string> EnumerateElmModuleTexts(FileTree tree) =>
                 tree.EnumerateFilesTransitive()
-                .Where(file => file.path.Count > 0 && file.path[^1].EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
+                .Where(
+                    file => file.path.Count > 0 && file.path[^1].EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
                 .Select(file => Encoding.UTF8.GetString(file.fileContent.Span));
 
             var rootModuleText =
@@ -1366,7 +1297,8 @@ namespace ElmTime
                 EnumerateElmModuleTexts(kernelTree)
                 .Concat(
                     containerTree.EnumerateFilesTransitive()
-                    .Where(file =>
+                    .Where(
+                        file =>
                         file.path.Count > 0 &&
                         file.path[^1].EndsWith(".elm", StringComparison.OrdinalIgnoreCase) &&
                         file.path[0] is not "tests")

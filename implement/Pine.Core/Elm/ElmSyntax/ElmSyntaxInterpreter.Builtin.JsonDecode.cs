@@ -31,7 +31,7 @@ public partial class ElmSyntaxInterpreter
     // matching the generic choice-type-tag encoding the interpreter uses
     // (a tagged value [ <constructor-name-as-UTF32-blob>, [ args... ] ]).
     private static readonly PineValueInProcess s_jsonNullValue =
-        PineValueInProcess.CreateTagged(
+        ElmValueInProcess.CreateChoice(
             PineValueInProcess.Create(StringEncoding.ValueFromString("NullValue")),
             []);
 
@@ -60,10 +60,10 @@ public partial class ElmSyntaxInterpreter
         PineValueInProcess.Create(StringEncoding.ValueFromString("Err"));
 
     private static readonly PineValueInProcess s_jsonBoolTrueValue =
-        PineValueInProcess.CreateTagged(s_jsonBoolValueTagName, [PineValueInProcess.CreateBool(true)]);
+        ElmValueInProcess.CreateChoice(s_jsonBoolValueTagName, [PineValueInProcess.CreateBool(true)]);
 
     private static readonly PineValueInProcess s_jsonBoolFalseValue =
-        PineValueInProcess.CreateTagged(s_jsonBoolValueTagName, [PineValueInProcess.CreateBool(false)]);
+        ElmValueInProcess.CreateChoice(s_jsonBoolValueTagName, [PineValueInProcess.CreateBool(false)]);
 
     /// <summary>
     /// Result of parsing a JSON value: exactly one of <see cref="OkValue"/> / <see cref="ErrorMessage"/>
@@ -125,9 +125,9 @@ public partial class ElmSyntaxInterpreter
         var resultValue =
             parsed.ErrorMessage is { } errorMessage
             ?
-            PineValueInProcess.CreateTagged(s_resultErrTagName, [MakeElmStringFromDotnet(errorMessage)])
+            ElmValueInProcess.CreateChoice(s_resultErrTagName, [MakeElmStringFromDotnet(errorMessage)])
             :
-            PineValueInProcess.CreateTagged(s_resultOkTagName, [parsed.OkValue!]);
+            ElmValueInProcess.CreateChoice(s_resultOkTagName, [parsed.OkValue!]);
 
         return
             PineValueInProcess.CreateList(
@@ -344,7 +344,7 @@ public partial class ElmSyntaxInterpreter
 
             return
                 new JsonValueParse(
-                    PineValueInProcess.CreateTagged(s_jsonStringValueTagName, [MakeElmString(strBytes!)]),
+                    ElmValueInProcess.CreateChoice(s_jsonStringValueTagName, [MakeElmString(strBytes!)]),
                     null,
                     offset2);
         }
@@ -360,7 +360,7 @@ public partial class ElmSyntaxInterpreter
 
             return
                 new JsonValueParse(
-                    PineValueInProcess.CreateTagged(
+                    ElmValueInProcess.CreateChoice(
                         s_jsonArrayValueTagName,
                         [PineValueInProcess.CreateList(items!)]),
                     null,
@@ -378,7 +378,7 @@ public partial class ElmSyntaxInterpreter
 
             return
                 new JsonValueParse(
-                    PineValueInProcess.CreateTagged(
+                    ElmValueInProcess.CreateChoice(
                         s_jsonObjectValueTagName,
                         [PineValueInProcess.CreateList(fields!)]),
                     null,
@@ -466,14 +466,14 @@ public partial class ElmSyntaxInterpreter
 
             return
                 new JsonValueParse(
-                    PineValueInProcess.CreateTagged(s_jsonFloatValueTagName, [MakeElmString(sliceBytes)]),
+                    ElmValueInProcess.CreateChoice(s_jsonFloatValueTagName, [MakeElmString(sliceBytes)]),
                     null,
                     offset2);
         }
 
         return
             new JsonValueParse(
-                PineValueInProcess.CreateTagged(
+                ElmValueInProcess.CreateChoice(
                     s_jsonIntValueTagName,
                     [PineValueInProcess.CreateInteger(intValue!.Value)]),
                 null,

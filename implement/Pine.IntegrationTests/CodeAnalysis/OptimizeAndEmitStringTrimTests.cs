@@ -42,22 +42,17 @@ public class OptimizeAndEmitStringTrimTests
             """"
             public static class String
             {
-                public static PineValue trim(PineValue param_1_1)
+                public static PineValue trim(PineValue param_1_2)
                 {
-                    PineValue local_000 = PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [0]);
-
                     return
                         PineValue.List(
                             [
+                            CommonReusedValues.Blob_91938c50,
                             CommonReusedValues.Blob_Str_String,
-                            PineValue.List(
-                                [
-                                BuiltinFunctionFused.TakeAndSkip(
-                                    skipCountValue: String.trimLeftCountBytesTrimmed(CommonReusedValues.Blob_Int_0, local_000),
-                                    takeCountValue:
-                                    String.trimRightCountBytesRemaining(BuiltinFunction.length(local_000), local_000),
-                                    argument: local_000)
-                                ])
+                            BuiltinFunctionFused.TakeAndSkip(
+                                skipCountValue: String.trimLeftCountBytesTrimmed(CommonReusedValues.Blob_Int_0, param_1_2),
+                                takeCountValue: String.trimRightCountBytesRemaining(BuiltinFunction.length(param_1_2), param_1_2),
+                                argument: param_1_2)
                             ]);
                 }
 

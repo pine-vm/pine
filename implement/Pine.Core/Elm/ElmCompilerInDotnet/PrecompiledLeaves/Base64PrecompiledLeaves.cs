@@ -157,7 +157,7 @@ public static class Base64PrecompiledLeaves
         StringEncoding.ValueFromString("Just");
 
     private static PineValue JustValue(PineValue inner) =>
-        PineValue.List([s_tagJustNameValue, PineValue.List([inner])]);
+        ElmValueEncoding.TagAsPineValue("Just", [inner]);
 
     /// <summary>
     /// Short-circuit .NET implementation of <c>Base64.Encode.toBytes</c>
@@ -177,12 +177,12 @@ public static class Base64PrecompiledLeaves
 
         var stringArg = environment.ValueFromPathOrEmptyList([1]);
 
-        if (stringArg.ValueFromPathOrEmptyList([0]) != ElmValue.ElmStringTypeTagNameAsValue)
+        if (stringArg.ValueFromPathOrEmptyList([1]) != ElmValue.ElmStringTypeTagNameAsValue)
         {
             return null;
         }
 
-        if (stringArg.ValueFromPathOrEmptyList([1, 0]) is not PineValue.BlobValue stringCharsBlob)
+        if (stringArg.ValueFromPathOrEmptyList([2]) is not PineValue.BlobValue stringCharsBlob)
         {
             return null;
         }
@@ -200,11 +200,9 @@ public static class Base64PrecompiledLeaves
         }
 
         var bytesValue =
-            PineValue.List(
-                [
-                ElmValue.ElmBytesTypeTagNameAsValue,
-                PineValue.List([PineValue.Blob(dotnetBytesBuffer.AsMemory(start: 0, length: bytesWritten))])
-                ]);
+            ElmValueEncoding.TagAsPineValue(
+                ElmValue.ElmBytesTypeTagName,
+                [PineValue.Blob(dotnetBytesBuffer.AsMemory(start: 0, length: bytesWritten))]);
 
         return JustValue(bytesValue);
     }
@@ -226,12 +224,12 @@ public static class Base64PrecompiledLeaves
 
         var bytesArg = environment.ValueFromPathOrEmptyList([1]);
 
-        if (bytesArg.ValueFromPathOrEmptyList([0]) != ElmValue.ElmBytesTypeTagNameAsValue)
+        if (bytesArg.ValueFromPathOrEmptyList([1]) != ElmValue.ElmBytesTypeTagNameAsValue)
         {
             return null;
         }
 
-        if (bytesArg.ValueFromPathOrEmptyList([1, 0]) is not PineValue.BlobValue bytesBlob)
+        if (bytesArg.ValueFromPathOrEmptyList([2]) is not PineValue.BlobValue bytesBlob)
         {
             return null;
         }

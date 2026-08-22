@@ -209,6 +209,33 @@ public class ReducePineExpressionTests
     }
 
     [Fact]
+    public void Equal_flat_single_field_tags_unwraps_inner_values()
+    {
+        var marker = PineValue.Blob([1]);
+        var tag = PineValue.Blob([2]);
+        var leftInner = Expression.EnvironmentInstance;
+        var rightInner = Expression.LitralInst(PineValue.Blob([3]));
+
+        var equality =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.equal),
+                Expression.ListInst(
+                    [
+                    FlatTagged(marker, tag, leftInner),
+                    FlatTagged(marker, tag, rightInner)
+                    ]));
+
+        ReducePineExpression.SearchForExpressionReduction(
+            equality,
+            envConstraintId: null,
+            s_parseCache)
+            .Should().Be(
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.equal),
+                Expression.ListInst([leftInner, rightInner])));
+    }
+
+    [Fact]
     public void Equal_single_field_tags_does_not_rewrite_different_tags()
     {
         var equality =
@@ -218,6 +245,48 @@ public class ReducePineExpressionTests
                     [
                     Tagged(PineValue.Blob([1]), Expression.EnvironmentInstance),
                     Tagged(PineValue.Blob([2]), Expression.EnvironmentInstance)
+                    ]));
+
+        ReducePineExpression.SearchForExpressionReduction(
+            equality,
+            envConstraintId: null,
+            s_parseCache)
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void Equal_flat_single_field_tags_does_not_rewrite_different_markers()
+    {
+        var tag = PineValue.Blob([1]);
+
+        var equality =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.equal),
+                Expression.ListInst(
+                    [
+                    FlatTagged(PineValue.Blob([2]), tag, Expression.EnvironmentInstance),
+                    FlatTagged(PineValue.Blob([3]), tag, Expression.EnvironmentInstance)
+                    ]));
+
+        ReducePineExpression.SearchForExpressionReduction(
+            equality,
+            envConstraintId: null,
+            s_parseCache)
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void Equal_single_field_tags_does_not_rewrite_mixed_encodings()
+    {
+        var tag = PineValue.Blob([1]);
+
+        var equality =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.equal),
+                Expression.ListInst(
+                    [
+                    Tagged(tag, Expression.EnvironmentInstance),
+                    FlatTagged(PineValue.Blob([2]), tag, Expression.EnvironmentInstance)
                     ]));
 
         ReducePineExpression.SearchForExpressionReduction(
@@ -259,6 +328,14 @@ public class ReducePineExpressionTests
             [
             Expression.LitralInst(tag),
             Expression.ListInst([inner])
+            ]);
+
+    private static Expression FlatTagged(PineValue marker, PineValue tag, Expression inner) =>
+        Expression.ListInst(
+            [
+            Expression.LitralInst(marker),
+            Expression.LitralInst(tag),
+            inner
             ]);
 
     [Fact]

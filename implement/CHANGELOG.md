@@ -1,5 +1,18 @@
 # Pine Changelog - Implement
 
+## 2026-08-21 - Elm Compiler - Migrate Elm choice encoding to flat `<Choice_Type>` layout
+
+Elm choice values now use the canonical flat layout
+`[<Choice_Type>, tagName, arg0, arg1, ...]`. This includes the specialized
+`String`, `Elm_Bytes`, and `Elm_Float` wrappers. The compiler, interpreter,
+precompiled leaves, and maintained host producers use the new representation.
+
+Unsuffixed `ElmValueEncoding` writers emit only the flat layout. Host-side
+decoders accept both the new layout and the legacy 2025
+`[tagName, [arg0, arg1, ...]]` layout; explicit `_2025` writers remain available
+for compatibility tests and migrations. Newly compiled Elm patterns
+intentionally match only the flat representation.
+
 ## 2026-05-09 - Elm Compiler - Migrate Elm record encoding to flat `<Record_Type>` layout
 
 Switched the canonical encoding of Elm records from the legacy nested shape

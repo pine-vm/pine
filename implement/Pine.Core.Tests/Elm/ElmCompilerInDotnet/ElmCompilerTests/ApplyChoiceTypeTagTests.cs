@@ -59,17 +59,17 @@ public class ApplyChoiceTypeTagTests
 
 
             Test.beta param_1_0 =
-                [ SingleArgInt
-                , [ param_1_0
-                  ]
+                [ Blob 0x0000003c00000043000000680000006f0000006900000063000000650000005f000000540000007900000070000000650000003e
+                , SingleArgInt
+                , param_1_0
                 ]
 
 
             Test.gamma param_1_0 param_1_1 =
-                [ TwoArgsStringAndInt
-                , [ param_1_1
-                  , param_1_0
-                  ]
+                [ Blob 0x0000003c00000043000000680000006f0000006900000063000000650000005f000000540000007900000070000000650000003e
+                , TwoArgsStringAndInt
+                , param_1_1
+                , param_1_0
                 ]
             
             """"

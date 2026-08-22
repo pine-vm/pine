@@ -3701,6 +3701,12 @@ public partial class ElmSyntaxInterpreter
                     if (value.GetLength() != itemPatterns.Count)
                         return false;
 
+                    if (value.GetLength() >= 2 &&
+                        value.GetElementAt(0).EvaluatedOrNull == ElmValue.ElmChoiceTypeTagNameAsValue)
+                    {
+                        return false;
+                    }
+
                     for (var i = 0; i < itemPatterns.Count; i++)
                     {
                         if (!TryMatchPattern(itemPatterns[i], value.GetElementAt(i), bindings))
@@ -3720,31 +3726,16 @@ public partial class ElmSyntaxInterpreter
 
                     var tagEncoded = StringEncoding.ValueFromString(namedPattern.Name.Name);
 
-                    var firstItem = value.GetElementAt(0);
+                    var tagNameItem = value.GetElementAt(1);
 
-                    if (!PineValueInProcess.AreEqual(firstItem, tagEncoded))
+                    if (!PineValueInProcess.AreEqual(tagNameItem, tagEncoded))
                     {
                         return false;
                     }
 
-                    var tagArguments = value.GetElementAt(1);
-
-                    var tagArgumentsLength = tagArguments.GetLength();
-
-                    if (namedPattern.Arguments.Count != tagArgumentsLength)
-                    {
-                        throw new System.InvalidOperationException(
-                            "Named pattern '"
-                            + namedPattern.Name.Name
-                            + "' has "
-                            + namedPattern.Arguments.Count
-                            + " arguments, but tag value has "
-                            + tagArgumentsLength + ".");
-                    }
-
                     for (var i = 0; i < namedPattern.Arguments.Count; i++)
                     {
-                        var argumentValue = tagArguments.GetElementAt(i);
+                        var argumentValue = value.GetElementAt(2 + i);
 
                         if (!TryMatchPattern(namedPattern.Arguments[i], argumentValue, bindings))
                             return false;
@@ -3859,9 +3850,9 @@ public partial class ElmSyntaxInterpreter
 
                     var tagEncoded = StringEncoding.ValueFromString(namedPattern.Name.Name);
 
-                    var firstItem = value.GetElementAt(0);
+                    var tagNameItem = value.GetElementAt(1);
 
-                    if (!PineValueInProcess.AreEqual(firstItem, tagEncoded))
+                    if (!PineValueInProcess.AreEqual(tagNameItem, tagEncoded))
                     {
                         throw new System.InvalidOperationException(
                             "Cannot bind named pattern '"
@@ -3870,24 +3861,9 @@ public partial class ElmSyntaxInterpreter
                             + value.GetType().FullName + ".");
                     }
 
-                    var tagArguments = value.GetElementAt(1);
-
-                    var tagArgumentsLength = tagArguments.GetLength();
-
-                    if (namedPattern.Arguments.Count != tagArgumentsLength)
-                    {
-                        throw new System.InvalidOperationException(
-                            "Named pattern '"
-                            + namedPattern.Name.Name
-                            + "' has "
-                            + namedPattern.Arguments.Count
-                            + " arguments, but tag value has "
-                            + tagArgumentsLength + ".");
-                    }
-
                     for (var i = 0; i < namedPattern.Arguments.Count; i++)
                     {
-                        BindPattern(namedPattern.Arguments[i], tagArguments.GetElementAt(i), bindings);
+                        BindPattern(namedPattern.Arguments[i], value.GetElementAt(2 + i), bindings);
                     }
 
                     break;
@@ -4310,7 +4286,7 @@ public partial class ElmSyntaxInterpreter
         PineValueInProcess tagValue,
         IReadOnlyList<PineValueInProcess> arguments)
     {
-        var taggedValue = PineValueInProcess.CreateTagged(tagValue, arguments);
+        var taggedValue = ElmValueInProcess.CreateChoice(tagValue, arguments);
 
         return taggedValue;
     }

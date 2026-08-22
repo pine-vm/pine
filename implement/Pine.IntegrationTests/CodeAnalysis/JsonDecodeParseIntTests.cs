@@ -201,29 +201,11 @@ public class JsonDecodeParseIntTests
                         ]
                 then
                     if
-                        if
-                            Pine_kernel.equal
-                                [ Pine_kernel.length
-                                    (Pine_kernel.head
-                                        (Pine_kernel.skip
-                                            [ 1
-                                            , Pine_kernel.head
-                                                (Test.parseUnsignedInt
-                                                    param_1
-                                                    (Pine_kernel.int_add
-                                                        [ param_2
-                                                        , 4
-                                                        ]
-                                                    ))
-                                            ]
-                                        )
-                                    )
-                                , 1
-                                ]
-                        then
-                            Pine_kernel.equal
-                                [ Pine_kernel.head
-                                    (Pine_kernel.head
+                        Pine_kernel.equal
+                            [ Pine_kernel.head
+                                (Pine_kernel.skip
+                                    [ 1
+                                    , Pine_kernel.head
                                         (Test.parseUnsignedInt
                                             param_1
                                             (Pine_kernel.int_add
@@ -231,33 +213,29 @@ public class JsonDecodeParseIntTests
                                                 , 4
                                                 ]
                                             ))
-                                    )
-                                , Ok
-                                ]
-
-                        else
-                            False
-                    then
-                        [ [ Ok
-                          , [ Pine_kernel.int_mul
-                                [ -1
-                                , Pine_kernel.head
-                                    (Pine_kernel.head
-                                        (Pine_kernel.skip
-                                            [ 1
-                                            , Pine_kernel.head
-                                                (Test.parseUnsignedInt
-                                                    param_1
-                                                    (Pine_kernel.int_add
-                                                        [ param_2
-                                                        , 4
-                                                        ]
-                                                    ))
-                                            ]
-                                        )
-                                    )
-                                ]
+                                    ]
+                                )
+                            , Ok
                             ]
+                    then
+                        [ [ Blob 0x0000003c00000043000000680000006f0000006900000063000000650000005f000000540000007900000070000000650000003e
+                          , Ok
+                          , Pine_kernel.int_mul
+                              [ -1
+                              , Pine_kernel.head
+                                  (Pine_kernel.skip
+                                      [ 2
+                                      , Pine_kernel.head
+                                          (Test.parseUnsignedInt
+                                              param_1
+                                              (Pine_kernel.int_add
+                                                  [ param_2
+                                                  , 4
+                                                  ]
+                                              ))
+                                      ]
+                                  )
+                              ]
                           ]
                         , Pine_kernel.head
                             (Pine_kernel.skip
@@ -274,23 +252,21 @@ public class JsonDecodeParseIntTests
                         ]
 
                     else
-                        [ [ Err
-                          , [ Pine_kernel.head
-                                (Pine_kernel.head
-                                    (Pine_kernel.skip
-                                        [ 1
-                                        , Pine_kernel.head
-                                            (Test.parseUnsignedInt
-                                                param_1
-                                                (Pine_kernel.int_add
-                                                    [ param_2
-                                                    , 4
-                                                    ]
-                                                ))
-                                        ]
-                                    )
-                                )
-                            ]
+                        [ [ Blob 0x0000003c00000043000000680000006f0000006900000063000000650000005f000000540000007900000070000000650000003e
+                          , Err
+                          , Pine_kernel.head
+                              (Pine_kernel.skip
+                                  [ 2
+                                  , Pine_kernel.head
+                                      (Test.parseUnsignedInt
+                                          param_1
+                                          (Pine_kernel.int_add
+                                              [ param_2
+                                              , 4
+                                              ]
+                                          ))
+                                  ]
+                              )
                           ]
                         , Pine_kernel.head
                             (Pine_kernel.skip
@@ -806,13 +782,12 @@ public class JsonDecodeParseIntTests
                         )
 
                 else
-                    [ [ Ok
-                      , [ param_1
-                        ]
+                    [ [ Blob 0x0000003c00000043000000680000006f0000006900000063000000650000005f000000540000007900000070000000650000003e
+                      , Ok
+                      , param_1
                       ]
                     , param_3
                     ]
-            
             """".Trim());
 
         var asCSharp =
@@ -842,19 +817,18 @@ public class JsonDecodeParseIntTests
                         PineValue local_003 = Test.parseUnsignedInt(param_1, local_001);
                         PineValue local_004 = PineValueExtension.ValueFromPathOrEmptyList(local_003, [0]);
                         PineValue local_008 = PineValueExtension.ValueFromPathOrEmptyList(local_003, [1]);
-                        PineValue local_010 = PineValueExtension.ValueFromPathOrEmptyList(local_004, [1]);
-                        PineValue local_011 = PineValueExtension.ValueFromPathOrEmptyList(local_010, [0]);
+                        PineValue local_010 = PineValueExtension.ValueFromPathOrEmptyList(local_004, [2]);
 
-                        if ((BuiltinFunctionSpecialized.length_as_int(local_010) == 1) &&
-                            (PineValueExtension.ValueFromPathOrEmptyList(local_004, [0]) == CommonReusedValues.Blob_Str_Ok))
+                        if (PineValueExtension.ValueFromPathOrEmptyList(local_004, [1]) == CommonReusedValues.Blob_Str_Ok)
                         {
                             return
                                 PineValue.List(
                                     [
                                     PineValue.List(
                                         [
+                                        CommonReusedValues.Blob_91938c50,
                                         CommonReusedValues.Blob_Str_Ok,
-                                        PineValue.List([BuiltinFunctionSpecialized.int_mul(-1, local_011)])
+                                        BuiltinFunctionSpecialized.int_mul(-1, local_010)
                                         ]),
                                     local_008
                                     ]);
@@ -863,7 +837,7 @@ public class JsonDecodeParseIntTests
                         return
                             PineValue.List(
                                 [
-                                PineValue.List([CommonReusedValues.Blob_Str_Err, PineValue.List([local_011])]),
+                                PineValue.List([CommonReusedValues.Blob_91938c50, CommonReusedValues.Blob_Str_Err, local_010]),
                                 local_008
                                 ]);
                     }
@@ -878,7 +852,7 @@ public class JsonDecodeParseIntTests
 
                     if (local_000 == CommonReusedValues.Blob_Char_digit_0)
                     {
-                        return PineValue.List([CommonReusedValues.List_c3304aab, BuiltinFunctionSpecialized.int_add(4, param_2)]);
+                        return PineValue.List([CommonReusedValues.List_96cc501d, BuiltinFunctionSpecialized.int_add(4, param_2)]);
                     }
 
                     if (local_000 == CommonReusedValues.Blob_Char_digit_1)
@@ -962,7 +936,7 @@ public class JsonDecodeParseIntTests
                                 BuiltinFunctionSpecialized.int_add(4, param_2));
                     }
 
-                    return PineValue.List([CommonReusedValues.List_ae45bd54, param_2]);
+                    return PineValue.List([CommonReusedValues.List_26fbb59e, param_2]);
                 }
 
                 public static PineValue parseUnsignedIntRec(PineValue param_1, PineValue param_2, PineValue param_3)
@@ -1117,13 +1091,17 @@ public class JsonDecodeParseIntTests
                         return
                             PineValue.List(
                                 [
-                                PineValue.List([CommonReusedValues.Blob_Str_Ok, PineValue.List([local_param_1])]),
+                                PineValue.List(
+                                    [
+                                    CommonReusedValues.Blob_91938c50,
+                                    CommonReusedValues.Blob_Str_Ok,
+                                    local_param_1
+                                    ]),
                                 local_param_3
                                 ]);
                     }
                 }
             }
-            
             """".Trim());
 
         commonValuesClassText.Trim().Should().Be(
@@ -1196,8 +1174,6 @@ public class JsonDecodeParseIntTests
 
                 public static readonly PineValue Blob_Str_String = StringEncoding.ValueFromString("String");
 
-                public static readonly PineValue Blob_Str_length = StringEncoding.ValueFromString("length");
-
                 public static readonly PineValue Blob_Str_Builtin = StringEncoding.ValueFromString("Builtin");
 
                 public static readonly PineValue Blob_Str_int_add = StringEncoding.ValueFromString("int_add");
@@ -1208,15 +1184,11 @@ public class JsonDecodeParseIntTests
 
                 public static readonly PineValue Blob_Str_Environment = StringEncoding.ValueFromString("Environment");
 
+                public static readonly PineValue Blob_91938c50 = StringEncoding.ValueFromString("<Choice_Type>");
+
                 public static readonly PineValue Blob_cfca8ee1 = StringEncoding.ValueFromString("Expecting a digit");
 
-                public static readonly PineValue List_Single_Blob_Int_0 = PineValue.List([IntegerEncoding.EncodeSignedInteger(0)]);
-
-                public static readonly PineValue List_c3304aab = PineValue.List([Blob_Str_Ok, List_Single_Blob_Int_0]);
-
                 public static readonly PineValue List_476058cb = PineValue.List([Blob_Str_Litral, PineValue.EmptyList]);
-
-                public static readonly PineValue List_42fd7a4b = PineValue.List([Blob_Str_Litral, PineKernelValues.FalseValue]);
 
                 public static readonly PineValue List_d289000a = PineValue.List([Blob_Str_Litral, Blob_Int_neg_1]);
 
@@ -1266,11 +1238,13 @@ public class JsonDecodeParseIntTests
 
                 public static readonly PineValue List_fc06676b = PineValue.List([Blob_Str_Litral, Blob_Str_Err]);
 
-                public static readonly PineValue List_f9b6ed40 = PineValue.List([Blob_Str_Litral, List_c3304aab]);
-
                 public static readonly PineValue List_Single_Blob_Str_Environment = PineValue.List([Blob_Str_Environment]);
 
-                public static readonly PineValue List_Single_Blob_cfca8ee1 = PineValue.List([Blob_cfca8ee1]);
+                public static readonly PineValue List_96cc501d = PineValue.List([Blob_91938c50, Blob_Str_Ok, Blob_Int_0]);
+
+                public static readonly PineValue List_38e85e91 = PineValue.List([Blob_Str_Litral, Blob_91938c50]);
+
+                public static readonly PineValue List_bdc5c57b = PineValue.List([Blob_Str_Litral, List_96cc501d]);
 
                 public static readonly PineValue List_626e9e10 =
                     PineValue.List([Blob_Str_List, List_c2d2b628, List_Single_Blob_Str_Environment]);
@@ -1284,14 +1258,6 @@ public class JsonDecodeParseIntTests
                 public static readonly PineValue List_65eb76d7 =
                     PineValue.List([Blob_Str_Builtin, Blob_Str_head, List_Single_Blob_Str_Environment]);
 
-                public static readonly PineValue List_708c3c98 = PineValue.List([Blob_Str_String, List_Single_Blob_cfca8ee1]);
-
-                public static readonly PineValue List_Single_List_708c3c98 = PineValue.List([List_708c3c98]);
-
-                public static readonly PineValue List_ae45bd54 = PineValue.List([Blob_Str_Err, List_Single_List_708c3c98]);
-
-                public static readonly PineValue List_a3e45e10 = PineValue.List([Blob_Str_Litral, List_ae45bd54]);
-
                 public static readonly PineValue List_854f7611 = PineValue.List([Blob_Str_Builtin, Blob_Str_head, List_65eb76d7]);
 
                 public static readonly PineValue List_a6554f03 = PineValue.List([Blob_Str_Builtin, Blob_Str_skip, List_626e9e10]);
@@ -1300,13 +1266,15 @@ public class JsonDecodeParseIntTests
 
                 public static readonly PineValue List_f0f99078 = PineValue.List([Blob_Str_Builtin, Blob_Str_skip, List_4fe88b09]);
 
+                public static readonly PineValue List_49184a61 = PineValue.List([Blob_91938c50, Blob_Str_String, Blob_cfca8ee1]);
+
                 public static readonly PineValue List_e4f998f4 = PineValue.List([Blob_Str_Builtin, Blob_Str_head, List_a6554f03]);
 
                 public static readonly PineValue List_076751a5 = PineValue.List([Blob_Str_Builtin, Blob_Str_head, List_7a36ad92]);
 
                 public static readonly PineValue List_5f6bd89b = PineValue.List([Blob_Str_Builtin, Blob_Str_head, List_f0f99078]);
 
-                public static readonly PineValue List_c17c4e24 = PineValue.List([Blob_Str_List, List_e4f998f4]);
+                public static readonly PineValue List_26fbb59e = PineValue.List([Blob_91938c50, Blob_Str_Err, List_49184a61]);
 
                 public static readonly PineValue List_a4a8c1fa = PineValue.List([Blob_Str_List, List_e4f998f4, List_939614df]);
 
@@ -1314,7 +1282,7 @@ public class JsonDecodeParseIntTests
 
                 public static readonly PineValue List_a9d2bae4 = PineValue.List([Blob_Str_List, List_5f6bd89b, List_07612f6b]);
 
-                public static readonly PineValue List_66c4afc3 = PineValue.List([Blob_Str_List, List_921b24bb, List_c17c4e24]);
+                public static readonly PineValue List_5e9058dd = PineValue.List([Blob_Str_Litral, List_26fbb59e]);
 
                 public static readonly PineValue List_c105b7df =
                     PineValue.List([Blob_Str_Builtin, Blob_Str_int_add, List_8cfe2574]);
@@ -1324,6 +1292,9 @@ public class JsonDecodeParseIntTests
 
                 public static readonly PineValue List_c35c17da =
                     PineValue.List([Blob_Str_Builtin, Blob_Str_int_mul, List_a4a8c1fa]);
+
+                public static readonly PineValue List_5bd2c637 =
+                    PineValue.List([Blob_Str_List, List_38e85e91, List_921b24bb, List_e4f998f4]);
 
                 public static readonly PineValue List_5ac0b32e = PineValue.List([Blob_Str_List, List_c35c17da, List_c2d2b628]);
 
@@ -1342,10 +1313,6 @@ public class JsonDecodeParseIntTests
                 public static readonly PineValue List_01ebf17b = PineValue.List([Blob_Str_List, List_c35c17da, List_7dce08cb]);
 
                 public static readonly PineValue List_a8f5e1c1 = PineValue.List([Blob_Str_List, List_c35c17da, List_6dafb618]);
-
-                public static readonly PineValue List_9117e787 = PineValue.List([Blob_Str_List, List_a3e45e10, List_076751a5]);
-
-                public static readonly PineValue List_372a5e01 = PineValue.List([Blob_Str_List, List_f9b6ed40, List_c105b7df]);
 
                 public static readonly PineValue List_499507bf = PineValue.List([Blob_Str_List, List_076751a5, List_e4f998f4]);
 
@@ -1378,6 +1345,8 @@ public class JsonDecodeParseIntTests
                 public static readonly PineValue List_3c9216fe =
                     PineValue.List([Blob_Str_Builtin, Blob_Str_int_add, List_a8f5e1c1]);
 
+                public static readonly PineValue List_364c26a1 = PineValue.List([Blob_Str_List, List_bdc5c57b, List_c105b7df]);
+
                 public static readonly PineValue List_2fa7933b =
                     PineValue.List([Blob_Str_List, List_476058cb, List_e4f998f4, List_076751a5]);
 
@@ -1385,11 +1354,13 @@ public class JsonDecodeParseIntTests
 
                 public static readonly PineValue List_f7af2fe8 = PineValue.List([Blob_Str_Builtin, Blob_Str_skip, List_87999c0e]);
 
-                public static readonly PineValue List_f32481e1 = PineValue.List([Blob_Str_List, List_66c4afc3, List_5f6bd89b]);
+                public static readonly PineValue List_b75d4ff6 = PineValue.List([Blob_Str_List, List_5e9058dd, List_076751a5]);
 
                 public static readonly PineValue List_aae98c3b = PineValue.List([Blob_Str_List, List_07612f6b, List_4fc2bfdf]);
 
                 public static readonly PineValue List_072231f7 = PineValue.List([Blob_Str_List, List_07612f6b, List_f7af2fe8]);
+
+                public static readonly PineValue List_2b6cbe92 = PineValue.List([Blob_Str_List, List_5bd2c637, List_5f6bd89b]);
 
                 public static readonly PineValue List_fecc37ce =
                     PineValue.List([Blob_Str_List, List_476058cb, List_e4f998f4, List_c105b7df]);
@@ -1532,178 +1503,168 @@ public class JsonDecodeParseIntTests
 
                 public static readonly PineValue List_8064dbcc = PineValue.List([Blob_Str_Eval, List_854f7611, List_d0df29ee]);
 
-                public static readonly PineValue List_117476a5 =
-                    PineValue.List([Blob_Str_Conditional, List_adf15c2f, List_f32481e1, List_8064dbcc]);
+                public static readonly PineValue List_3237a1a0 =
+                    PineValue.List([Blob_Str_Conditional, List_adf15c2f, List_2b6cbe92, List_8064dbcc]);
 
-                public static readonly PineValue List_d1492a28 =
-                    PineValue.List([Blob_Str_Conditional, List_1613f4cb, List_117476a5, List_a5b897a8]);
+                public static readonly PineValue List_216b9cea =
+                    PineValue.List([Blob_Str_Conditional, List_1613f4cb, List_3237a1a0, List_a5b897a8]);
 
-                public static readonly PineValue List_78e4f0d9 =
-                    PineValue.List([Blob_Str_Conditional, List_6ca1069c, List_d1492a28, List_5305922b]);
+                public static readonly PineValue List_a2d48113 =
+                    PineValue.List([Blob_Str_Conditional, List_6ca1069c, List_216b9cea, List_5305922b]);
 
-                public static readonly PineValue List_33ad5562 =
-                    PineValue.List([Blob_Str_Conditional, List_3afceef3, List_78e4f0d9, List_11ee37d8]);
+                public static readonly PineValue List_901a5227 =
+                    PineValue.List([Blob_Str_Conditional, List_3afceef3, List_a2d48113, List_11ee37d8]);
 
-                public static readonly PineValue List_1acd2ebb =
-                    PineValue.List([Blob_Str_Conditional, List_4ccc3fdd, List_33ad5562, List_db586353]);
+                public static readonly PineValue List_5197487d =
+                    PineValue.List([Blob_Str_Conditional, List_4ccc3fdd, List_901a5227, List_db586353]);
 
-                public static readonly PineValue List_54f14df5 =
-                    PineValue.List([Blob_Str_Conditional, List_6524ad03, List_1acd2ebb, List_dd8a0d1b]);
+                public static readonly PineValue List_20697cef =
+                    PineValue.List([Blob_Str_Conditional, List_6524ad03, List_5197487d, List_dd8a0d1b]);
 
-                public static readonly PineValue List_7af0da15 =
-                    PineValue.List([Blob_Str_Conditional, List_5d629e06, List_54f14df5, List_fa11e587]);
+                public static readonly PineValue List_2deaa76f =
+                    PineValue.List([Blob_Str_Conditional, List_5d629e06, List_20697cef, List_fa11e587]);
 
-                public static readonly PineValue List_a4f2ccac =
-                    PineValue.List([Blob_Str_Conditional, List_e9042276, List_7af0da15, List_e195a162]);
+                public static readonly PineValue List_c3b97a8a =
+                    PineValue.List([Blob_Str_Conditional, List_e9042276, List_2deaa76f, List_e195a162]);
 
-                public static readonly PineValue List_a691634f =
-                    PineValue.List([Blob_Str_Conditional, List_e71f9935, List_a4f2ccac, List_077e2911]);
+                public static readonly PineValue List_d99cc17e =
+                    PineValue.List([Blob_Str_Conditional, List_e71f9935, List_c3b97a8a, List_077e2911]);
 
-                public static readonly PineValue List_243a1002 =
-                    PineValue.List([Blob_Str_Conditional, List_7ef07c84, List_a691634f, List_92043aa2]);
+                public static readonly PineValue List_8a7f77bd =
+                    PineValue.List([Blob_Str_Conditional, List_7ef07c84, List_d99cc17e, List_92043aa2]);
 
-                public static readonly PineValue List_Single_List_243a1002 = PineValue.List([List_243a1002]);
+                public static readonly PineValue List_Single_List_8a7f77bd = PineValue.List([List_8a7f77bd]);
 
-                public static readonly PineValue List_b7a01cd2 = PineValue.List([Blob_Str_Litral, List_243a1002]);
+                public static readonly PineValue List_5b91e6b5 = PineValue.List([Blob_Str_Litral, List_8a7f77bd]);
 
-                public static readonly PineValue List_51196425 = PineValue.List([Blob_Str_Litral, List_Single_List_243a1002]);
+                public static readonly PineValue List_2ba0bfe1 = PineValue.List([Blob_Str_Litral, List_Single_List_8a7f77bd]);
 
-                public static readonly PineValue List_674251ef =
-                    PineValue.List([Blob_Str_List, List_51196425, List_c2d2b628, List_e4f998f4, List_c105b7df]);
+                public static readonly PineValue List_77bf2c44 =
+                    PineValue.List([Blob_Str_List, List_2ba0bfe1, List_c2d2b628, List_e4f998f4, List_c105b7df]);
 
-                public static readonly PineValue List_03a332c0 =
-                    PineValue.List([Blob_Str_List, List_51196425, List_9a4bf642, List_e4f998f4, List_c105b7df]);
+                public static readonly PineValue List_738e193b =
+                    PineValue.List([Blob_Str_List, List_2ba0bfe1, List_9a4bf642, List_e4f998f4, List_c105b7df]);
 
-                public static readonly PineValue List_66e68972 =
-                    PineValue.List([Blob_Str_List, List_51196425, List_245be8ca, List_e4f998f4, List_c105b7df]);
+                public static readonly PineValue List_9e55e3a7 =
+                    PineValue.List([Blob_Str_List, List_2ba0bfe1, List_245be8ca, List_e4f998f4, List_c105b7df]);
 
-                public static readonly PineValue List_d8b59c14 =
-                    PineValue.List([Blob_Str_List, List_51196425, List_07612f6b, List_e4f998f4, List_c105b7df]);
+                public static readonly PineValue List_cfec5b71 =
+                    PineValue.List([Blob_Str_List, List_2ba0bfe1, List_07612f6b, List_e4f998f4, List_c105b7df]);
 
-                public static readonly PineValue List_bee8d39a =
-                    PineValue.List([Blob_Str_List, List_51196425, List_e76ffc54, List_e4f998f4, List_c105b7df]);
+                public static readonly PineValue List_ef220efd =
+                    PineValue.List([Blob_Str_List, List_2ba0bfe1, List_e76ffc54, List_e4f998f4, List_c105b7df]);
 
-                public static readonly PineValue List_0018be79 =
-                    PineValue.List([Blob_Str_List, List_51196425, List_015a080e, List_e4f998f4, List_c105b7df]);
+                public static readonly PineValue List_01ed96ca =
+                    PineValue.List([Blob_Str_List, List_2ba0bfe1, List_015a080e, List_e4f998f4, List_c105b7df]);
 
-                public static readonly PineValue List_c95a9837 =
-                    PineValue.List([Blob_Str_List, List_51196425, List_cff5f9a2, List_e4f998f4, List_c105b7df]);
+                public static readonly PineValue List_7fb93f2e =
+                    PineValue.List([Blob_Str_List, List_2ba0bfe1, List_cff5f9a2, List_e4f998f4, List_c105b7df]);
 
-                public static readonly PineValue List_2bfdbbb6 =
-                    PineValue.List([Blob_Str_List, List_51196425, List_7dce08cb, List_e4f998f4, List_c105b7df]);
+                public static readonly PineValue List_7604fe6c =
+                    PineValue.List([Blob_Str_List, List_2ba0bfe1, List_7dce08cb, List_e4f998f4, List_c105b7df]);
 
-                public static readonly PineValue List_9a5e474e =
-                    PineValue.List([Blob_Str_List, List_51196425, List_6dafb618, List_e4f998f4, List_c105b7df]);
+                public static readonly PineValue List_a5ae820a =
+                    PineValue.List([Blob_Str_List, List_2ba0bfe1, List_6dafb618, List_e4f998f4, List_c105b7df]);
 
-                public static readonly PineValue List_8aa87056 = PineValue.List([Blob_Str_Eval, List_b7a01cd2, List_674251ef]);
+                public static readonly PineValue List_fc5a863a = PineValue.List([Blob_Str_Eval, List_5b91e6b5, List_77bf2c44]);
 
-                public static readonly PineValue List_4c32565b = PineValue.List([Blob_Str_Eval, List_b7a01cd2, List_03a332c0]);
+                public static readonly PineValue List_ce08f44f = PineValue.List([Blob_Str_Eval, List_5b91e6b5, List_738e193b]);
 
-                public static readonly PineValue List_6db03886 = PineValue.List([Blob_Str_Eval, List_b7a01cd2, List_66e68972]);
+                public static readonly PineValue List_b8a2d94a = PineValue.List([Blob_Str_Eval, List_5b91e6b5, List_9e55e3a7]);
 
-                public static readonly PineValue List_58d8c672 = PineValue.List([Blob_Str_Eval, List_b7a01cd2, List_d8b59c14]);
+                public static readonly PineValue List_876d25f4 = PineValue.List([Blob_Str_Eval, List_5b91e6b5, List_cfec5b71]);
 
-                public static readonly PineValue List_62a4c654 = PineValue.List([Blob_Str_Eval, List_b7a01cd2, List_bee8d39a]);
+                public static readonly PineValue List_866afebb = PineValue.List([Blob_Str_Eval, List_5b91e6b5, List_ef220efd]);
 
-                public static readonly PineValue List_633af021 = PineValue.List([Blob_Str_Eval, List_b7a01cd2, List_0018be79]);
+                public static readonly PineValue List_feea4725 = PineValue.List([Blob_Str_Eval, List_5b91e6b5, List_01ed96ca]);
 
-                public static readonly PineValue List_117f3524 = PineValue.List([Blob_Str_Eval, List_b7a01cd2, List_c95a9837]);
+                public static readonly PineValue List_3f9c58c3 = PineValue.List([Blob_Str_Eval, List_5b91e6b5, List_7fb93f2e]);
 
-                public static readonly PineValue List_5bb5b602 = PineValue.List([Blob_Str_Eval, List_b7a01cd2, List_2bfdbbb6]);
+                public static readonly PineValue List_ea12c526 = PineValue.List([Blob_Str_Eval, List_5b91e6b5, List_7604fe6c]);
 
-                public static readonly PineValue List_208d0fc4 = PineValue.List([Blob_Str_Eval, List_b7a01cd2, List_9a5e474e]);
+                public static readonly PineValue List_482ba886 = PineValue.List([Blob_Str_Eval, List_5b91e6b5, List_a5ae820a]);
 
-                public static readonly PineValue List_a33996c2 =
-                    PineValue.List([Blob_Str_Conditional, List_3285fa15, List_9117e787, List_208d0fc4]);
+                public static readonly PineValue List_7312e88e =
+                    PineValue.List([Blob_Str_Conditional, List_3285fa15, List_b75d4ff6, List_482ba886]);
 
-                public static readonly PineValue List_815b0fa0 =
-                    PineValue.List([Blob_Str_Conditional, List_e6ee7110, List_a33996c2, List_5bb5b602]);
+                public static readonly PineValue List_3430922c =
+                    PineValue.List([Blob_Str_Conditional, List_e6ee7110, List_7312e88e, List_ea12c526]);
 
-                public static readonly PineValue List_7355c376 =
-                    PineValue.List([Blob_Str_Conditional, List_9733a7b0, List_815b0fa0, List_117f3524]);
+                public static readonly PineValue List_16c22420 =
+                    PineValue.List([Blob_Str_Conditional, List_9733a7b0, List_3430922c, List_3f9c58c3]);
 
-                public static readonly PineValue List_8c7a914e =
-                    PineValue.List([Blob_Str_Conditional, List_2cf23da2, List_7355c376, List_633af021]);
+                public static readonly PineValue List_bf54726a =
+                    PineValue.List([Blob_Str_Conditional, List_2cf23da2, List_16c22420, List_feea4725]);
 
-                public static readonly PineValue List_b7092e9a =
-                    PineValue.List([Blob_Str_Conditional, List_214b8649, List_8c7a914e, List_62a4c654]);
+                public static readonly PineValue List_f0d09f65 =
+                    PineValue.List([Blob_Str_Conditional, List_214b8649, List_bf54726a, List_866afebb]);
 
-                public static readonly PineValue List_416fcb9e =
-                    PineValue.List([Blob_Str_Conditional, List_3312740a, List_b7092e9a, List_58d8c672]);
+                public static readonly PineValue List_cf44c98a =
+                    PineValue.List([Blob_Str_Conditional, List_3312740a, List_f0d09f65, List_876d25f4]);
 
-                public static readonly PineValue List_bb58c96d =
-                    PineValue.List([Blob_Str_Conditional, List_851a342d, List_416fcb9e, List_6db03886]);
+                public static readonly PineValue List_5c6e5e1e =
+                    PineValue.List([Blob_Str_Conditional, List_851a342d, List_cf44c98a, List_b8a2d94a]);
 
-                public static readonly PineValue List_b0010d3c =
-                    PineValue.List([Blob_Str_Conditional, List_c13febb0, List_bb58c96d, List_4c32565b]);
+                public static readonly PineValue List_06261225 =
+                    PineValue.List([Blob_Str_Conditional, List_c13febb0, List_5c6e5e1e, List_ce08f44f]);
 
-                public static readonly PineValue List_3d522fb6 =
-                    PineValue.List([Blob_Str_Conditional, List_c9300bee, List_b0010d3c, List_8aa87056]);
+                public static readonly PineValue List_f29b19ec =
+                    PineValue.List([Blob_Str_Conditional, List_c9300bee, List_06261225, List_fc5a863a]);
 
-                public static readonly PineValue List_ba8fc3f6 =
-                    PineValue.List([Blob_Str_Conditional, List_cbd1266a, List_3d522fb6, List_372a5e01]);
+                public static readonly PineValue List_4eebb49c =
+                    PineValue.List([Blob_Str_Conditional, List_cbd1266a, List_f29b19ec, List_364c26a1]);
 
-                public static readonly PineValue List_b2fd2495 = PineValue.List([Blob_Str_Litral, List_ba8fc3f6]);
+                public static readonly PineValue List_a5711e5c = PineValue.List([Blob_Str_Litral, List_4eebb49c]);
 
-                public static readonly PineValue List_ccd0498b = PineValue.List([Blob_Str_Eval, List_b2fd2495, List_2fa7933b]);
+                public static readonly PineValue List_5342c8c0 = PineValue.List([Blob_Str_Eval, List_a5711e5c, List_2fa7933b]);
 
-                public static readonly PineValue List_f283fd13 = PineValue.List([Blob_Str_Eval, List_b2fd2495, List_fecc37ce]);
+                public static readonly PineValue List_cf04582c = PineValue.List([Blob_Str_Eval, List_a5711e5c, List_fecc37ce]);
 
-                public static readonly PineValue List_30395cbf = PineValue.List([Blob_Str_List, List_c2d2b628, List_f283fd13]);
+                public static readonly PineValue List_b4375125 = PineValue.List([Blob_Str_List, List_c2d2b628, List_cf04582c]);
 
-                public static readonly PineValue List_529e8bf7 = PineValue.List([Blob_Str_Builtin, Blob_Str_head, List_f283fd13]);
+                public static readonly PineValue List_0dc108ba = PineValue.List([Blob_Str_Builtin, Blob_Str_head, List_cf04582c]);
 
-                public static readonly PineValue List_f5846b01 = PineValue.List([Blob_Str_List, List_c2d2b628, List_529e8bf7]);
+                public static readonly PineValue List_1e2bf4c8 = PineValue.List([Blob_Str_List, List_c2d2b628, List_0dc108ba]);
 
-                public static readonly PineValue List_75c258c9 = PineValue.List([Blob_Str_Builtin, Blob_Str_head, List_529e8bf7]);
+                public static readonly PineValue List_b23d28d5 = PineValue.List([Blob_Str_List, List_9a4bf642, List_0dc108ba]);
 
-                public static readonly PineValue List_83438ffe = PineValue.List([Blob_Str_Builtin, Blob_Str_skip, List_30395cbf]);
+                public static readonly PineValue List_51d49a0c = PineValue.List([Blob_Str_Builtin, Blob_Str_skip, List_b4375125]);
 
-                public static readonly PineValue List_839316e8 = PineValue.List([Blob_Str_Builtin, Blob_Str_head, List_83438ffe]);
+                public static readonly PineValue List_37dac2be = PineValue.List([Blob_Str_Builtin, Blob_Str_head, List_51d49a0c]);
 
-                public static readonly PineValue List_2ae20486 = PineValue.List([Blob_Str_Builtin, Blob_Str_skip, List_f5846b01]);
+                public static readonly PineValue List_89bef055 = PineValue.List([Blob_Str_Builtin, Blob_Str_skip, List_1e2bf4c8]);
 
-                public static readonly PineValue List_dd347386 = PineValue.List([Blob_Str_List, List_75c258c9, List_921b24bb]);
+                public static readonly PineValue List_50e349ae = PineValue.List([Blob_Str_Builtin, Blob_Str_skip, List_b23d28d5]);
 
-                public static readonly PineValue List_9a047b09 = PineValue.List([Blob_Str_Builtin, Blob_Str_head, List_2ae20486]);
+                public static readonly PineValue List_578f9b3c = PineValue.List([Blob_Str_Builtin, Blob_Str_head, List_89bef055]);
 
-                public static readonly PineValue List_56ff0db4 = PineValue.List([Blob_Str_Builtin, Blob_Str_equal, List_dd347386]);
+                public static readonly PineValue List_31bf4276 = PineValue.List([Blob_Str_Builtin, Blob_Str_head, List_50e349ae]);
 
-                public static readonly PineValue List_ed5956ea = PineValue.List([Blob_Str_Builtin, Blob_Str_head, List_9a047b09]);
+                public static readonly PineValue List_79386396 = PineValue.List([Blob_Str_List, List_d289000a, List_31bf4276]);
 
-                public static readonly PineValue List_2e812a63 = PineValue.List([Blob_Str_Builtin, Blob_Str_length, List_9a047b09]);
+                public static readonly PineValue List_92389ad4 = PineValue.List([Blob_Str_List, List_578f9b3c, List_921b24bb]);
 
-                public static readonly PineValue List_d76922c9 = PineValue.List([Blob_Str_List, List_ed5956ea]);
+                public static readonly PineValue List_6276d09c = PineValue.List([Blob_Str_Builtin, Blob_Str_equal, List_92389ad4]);
 
-                public static readonly PineValue List_bbf63c86 = PineValue.List([Blob_Str_List, List_d289000a, List_ed5956ea]);
+                public static readonly PineValue List_477bd827 =
+                    PineValue.List([Blob_Str_Builtin, Blob_Str_int_mul, List_79386396]);
 
-                public static readonly PineValue List_f1c2e84b = PineValue.List([Blob_Str_List, List_2e812a63, List_c2d2b628]);
+                public static readonly PineValue List_e12a1a95 =
+                    PineValue.List([Blob_Str_List, List_38e85e91, List_fc06676b, List_31bf4276]);
 
-                public static readonly PineValue List_b49efcc6 = PineValue.List([Blob_Str_List, List_fc06676b, List_d76922c9]);
+                public static readonly PineValue List_a19c1a4b =
+                    PineValue.List([Blob_Str_List, List_38e85e91, List_921b24bb, List_477bd827]);
 
-                public static readonly PineValue List_7e7ccf9a = PineValue.List([Blob_Str_Builtin, Blob_Str_equal, List_f1c2e84b]);
+                public static readonly PineValue List_ae93070b = PineValue.List([Blob_Str_List, List_e12a1a95, List_37dac2be]);
 
-                public static readonly PineValue List_45be00a4 =
-                    PineValue.List([Blob_Str_Builtin, Blob_Str_int_mul, List_bbf63c86]);
+                public static readonly PineValue List_4cdb1ea9 = PineValue.List([Blob_Str_List, List_a19c1a4b, List_37dac2be]);
 
-                public static readonly PineValue List_e78d924d = PineValue.List([Blob_Str_List, List_45be00a4]);
+                public static readonly PineValue List_df45773f =
+                    PineValue.List([Blob_Str_Conditional, List_6276d09c, List_ae93070b, List_4cdb1ea9]);
 
-                public static readonly PineValue List_4eaef649 = PineValue.List([Blob_Str_List, List_921b24bb, List_e78d924d]);
-
-                public static readonly PineValue List_d10dfe7f = PineValue.List([Blob_Str_List, List_b49efcc6, List_839316e8]);
-
-                public static readonly PineValue List_8f4e1274 = PineValue.List([Blob_Str_List, List_4eaef649, List_839316e8]);
-
-                public static readonly PineValue List_ff003c5c =
-                    PineValue.List([Blob_Str_Conditional, List_7e7ccf9a, List_42fd7a4b, List_56ff0db4]);
-
-                public static readonly PineValue List_8f24a7e7 =
-                    PineValue.List([Blob_Str_Conditional, List_ff003c5c, List_d10dfe7f, List_8f4e1274]);
-
-                public static readonly PineValue List_4f9409dc =
-                    PineValue.List([Blob_Str_Conditional, List_af975ca0, List_ccd0498b, List_8f24a7e7]);
+                public static readonly PineValue List_7f2936bb =
+                    PineValue.List([Blob_Str_Conditional, List_af975ca0, List_5342c8c0, List_df45773f]);
             }
-
             """".Trim());
     }
 }

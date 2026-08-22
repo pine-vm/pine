@@ -625,38 +625,28 @@ public class ElmValueInterop
         Func<PineValue, T> just,
         Func<string, T> invalid)
     {
-        if (pineValue is not PineValue.ListValue listValue)
-        {
-            return invalid("Root is not a list");
-        }
+        var parseTagResult = ElmValueEncoding.ParseAsTag(pineValue);
 
-        if (listValue.Items.Length is not 2)
-        {
-            return invalid("Root list does not have 2 elements");
-        }
+        if (parseTagResult.IsErrOrNull() is { } parseTagError)
+            return invalid("Failed to parse Elm choice: " + parseTagError);
 
-        var tagValue = listValue.Items.Span[0];
+        if (parseTagResult.IsOkOrNullable() is not { } tag)
+            throw new NotImplementedException("Unexpected result type: " + parseTagResult.GetType().FullName);
 
-        if (tagValue == String_Nothing_Value)
+        if (tag.tagName is "Nothing")
         {
+            if (tag.tagArguments.Length is not 0)
+                return invalid("Nothing tag arguments does not have 0 elements");
+
             return nothing();
         }
 
-        if (tagValue == String_Just_Value)
+        if (tag.tagName is "Just")
         {
-            var tagArgumentsValue = listValue.Items.Span[1];
-
-            if (tagArgumentsValue is not PineValue.ListValue tagArgumentsListValue)
-            {
-                return invalid("Just tag arguments is not a list");
-            }
-
-            if (tagArgumentsListValue.Items.Length is not 1)
-            {
+            if (tag.tagArguments.Length is not 1)
                 return invalid("Just tag arguments does not have 1 element");
-            }
 
-            return just(tagArgumentsListValue.Items.Span[0]);
+            return just(tag.tagArguments.Span[0]);
         }
 
         return invalid("Not tagged with Nothing or Just");
@@ -677,56 +667,38 @@ public class ElmValueInterop
         Func<PineValue, T> ok,
         Func<string, T> invalid)
     {
-        if (pineValue is not PineValue.ListValue listValue)
+        var parseTagResult = ElmValueEncoding.ParseAsTag(pineValue);
+
+        if (parseTagResult.IsErrOrNull() is { } parseTagError)
+            return invalid("Failed to parse Elm choice: " + parseTagError);
+
+        if (parseTagResult.IsOkOrNullable() is not { } tag)
+            throw new NotImplementedException("Unexpected result type: " + parseTagResult.GetType().FullName);
+
+        if (tag.tagName is "Err")
         {
-            return invalid("Root is not a list");
-        }
-
-        if (listValue.Items.Length is not 2)
-        {
-            return invalid("Root list does not have 2 elements");
-        }
-
-        var tagValue = listValue.Items.Span[0];
-
-        if (tagValue == String_Err_Value)
-        {
-            var tagArgumentsValue = listValue.Items.Span[1];
-
-            if (tagArgumentsValue is not PineValue.ListValue tagArgumentsListValue)
-            {
-                return invalid("Tag 'Err' arguments is not a list");
-            }
-
-            if (tagArgumentsListValue.Items.Length is not 1)
+            if (tag.tagArguments.Length is not 1)
             {
                 return
                     invalid(
                         "Tag 'Err' arguments does not have 1 item, but " +
-                        tagArgumentsListValue.Items.Length);
+                        tag.tagArguments.Length);
             }
 
-            return err(tagArgumentsListValue.Items.Span[0]);
+            return err(tag.tagArguments.Span[0]);
         }
 
-        if (tagValue == String_Ok_Value)
+        if (tag.tagName is "Ok")
         {
-            var tagArgumentsValue = listValue.Items.Span[1];
-
-            if (tagArgumentsValue is not PineValue.ListValue tagArgumentsListValue)
-            {
-                return invalid("Tag 'Ok' arguments is not a list");
-            }
-
-            if (tagArgumentsListValue.Items.Length is not 1)
+            if (tag.tagArguments.Length is not 1)
             {
                 return
                     invalid(
                         "Tag 'Ok' arguments does not have 1 item, but " +
-                        tagArgumentsListValue.Items.Length);
+                        tag.tagArguments.Length);
             }
 
-            return ok(tagArgumentsListValue.Items.Span[0]);
+            return ok(tag.tagArguments.Span[0]);
         }
 
         return invalid("Not tagged with Err or Ok");

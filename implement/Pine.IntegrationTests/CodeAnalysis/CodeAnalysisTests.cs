@@ -177,7 +177,7 @@ public class CodeAnalysisTests
 
         wholeProgramText.Trim().Should().Be(
             """"
-            Test.dictToShuffledList param_1_1 =
+            Test.dictToShuffledList param_1_3 param_1_4 param_1_5 param_1_6 =
                 if
                     Pine_kernel.equal
                         [ []
@@ -189,11 +189,17 @@ public class CodeAnalysisTests
                 else
                     Pine_kernel.concat
                         [ Test.dictToShuffledList
-                            param_1_1[3][1]
+                            param_1_5[3]
+                            param_1_5[4]
+                            param_1_5[5]
+                            param_1_5[6]
                         , Test.dictToShuffledList
-                            param_1_1[4][1]
-                        , [ [ param_1_1[1]
-                            , param_1_1[2]
+                            param_1_6[3]
+                            param_1_6[4]
+                            param_1_6[5]
+                            param_1_6[6]
+                        , [ [ param_1_3
+                            , param_1_4
                             ]
                           ]
                         ]
@@ -2177,11 +2183,11 @@ public class CodeAnalysisTests
                         param_3
 
 
-            Test.hexStringToInt param_1_1 =
+            Test.hexStringToInt param_1_2 =
                 Test.hexStringBytesToInt
                     0
                     0
-                    param_1_1[0]
+                    param_1_2
             """"
             .Trim());
     }

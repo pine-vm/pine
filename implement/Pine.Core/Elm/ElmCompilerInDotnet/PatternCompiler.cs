@@ -833,7 +833,7 @@ public class PatternCompiler
             new List<PatternCondition>
             {
                 new PatternCondition.ItemCondition(
-                    s => GetListElementExpression(s, 0),
+                    s => GetListElementExpression(s, 1),
                     new PatternCondition.ValueEquals(expectedTagName))
             };
 
@@ -841,13 +841,6 @@ public class PatternCompiler
 
         if (namedPattern.Arguments.Count > 0)
         {
-            var argsListExpr = GetListElementExpression(scrutinee, 1);
-
-            conditions.Add(
-                new PatternCondition.ItemCondition(
-                    s => GetListElementExpression(s, 1),
-                    new PatternCondition.LengthEquals(namedPattern.Arguments.Count)));
-
             // Look up the constructor's argument types so that nested
             // record patterns inside choice-type arguments (for example
             // the inner record pattern of `Node { start } _` where
@@ -871,7 +864,7 @@ public class PatternCompiler
             for (var i = 0; i < namedPattern.Arguments.Count; i++)
             {
                 var argPattern = namedPattern.Arguments[i];
-                var argExpr = GetListElementExpression(argsListExpr, i);
+                var argExpr = GetListElementExpression(scrutinee, 2 + i);
 
                 var argType =
                     ctorArgTypes is not null && i < ctorArgTypes.Count
@@ -896,7 +889,7 @@ public class PatternCompiler
 
                     conditions.Add(
                         new PatternCondition.ItemCondition(
-                            s => GetListElementExpression(GetListElementExpression(s, 1), index),
+                            s => GetListElementExpression(s, 2 + index),
                             argAnalysis.Condition));
                 }
             }

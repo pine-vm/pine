@@ -121,11 +121,10 @@ public static class LanguageServicePrecompiledLeaves
     {
         if (!EnvironmentMatches(environment, "removeWrappingFromMultilineComment") ||
             environment.ValueFromPathOrEmptyList([1]) is not PineValue.ListValue stringValue ||
-            stringValue.Items.Length is not 2 ||
-            stringValue.Items.Span[0] != ElmValue.ElmStringTypeTagNameAsValue ||
-            stringValue.Items.Span[1] is not PineValue.ListValue arguments ||
-            arguments.Items.Length is not 1 ||
-            arguments.Items.Span[0] is not PineValue.BlobValue chars ||
+            stringValue.Items.Length is not 3 ||
+            stringValue.Items.Span[0] != ElmValue.ElmChoiceTypeTagNameAsValue ||
+            stringValue.Items.Span[1] != ElmValue.ElmStringTypeTagNameAsValue ||
+            stringValue.Items.Span[2] is not PineValue.BlobValue chars ||
             chars.Bytes.Length % 4 is not 0)
         {
             return null;
@@ -157,11 +156,9 @@ public static class LanguageServicePrecompiledLeaves
         var unwrappedChars = chars.Bytes.Slice(start, end - start);
 
         return
-            PineValue.List(
-                [
-                ElmValue.ElmStringTypeTagNameAsValue,
-                PineValue.List([PineValue.Blob(unwrappedChars)]),
-                ]);
+            ElmValueEncoding.TagAsPineValue(
+                ElmValue.ElmStringTypeTagName,
+                [PineValue.Blob(unwrappedChars)]);
     }
 
     /// <summary>
@@ -334,13 +331,12 @@ public static class LanguageServicePrecompiledLeaves
         out int endColumn)
     {
         if (value is PineValue.ListValue rangeValue &&
-            rangeValue.Items.Length is 2 &&
-            rangeValue.Items.Span[0] == s_rangeTagName &&
-            rangeValue.Items.Span[1] is PineValue.ListValue rangeArguments &&
-            rangeArguments.Items.Length is 2 &&
-            rangeArguments.Items.Span[0] is PineValue.ListValue start &&
+            rangeValue.Items.Length is 4 &&
+            rangeValue.Items.Span[0] == ElmValue.ElmChoiceTypeTagNameAsValue &&
+            rangeValue.Items.Span[1] == s_rangeTagName &&
+            rangeValue.Items.Span[2] is PineValue.ListValue start &&
             start.Items.Length is 2 &&
-            rangeArguments.Items.Span[1] is PineValue.ListValue end &&
+            rangeValue.Items.Span[3] is PineValue.ListValue end &&
             end.Items.Length is 2 &&
             TryParsePositiveInt(start.Items.Span[0], out startRow) &&
             TryParsePositiveInt(start.Items.Span[1], out startColumn) &&
@@ -376,11 +372,10 @@ public static class LanguageServicePrecompiledLeaves
         out ReadOnlyMemory<byte> chars)
     {
         if (value is PineValue.ListValue stringValue &&
-            stringValue.Items.Length is 2 &&
-            stringValue.Items.Span[0] == ElmValue.ElmStringTypeTagNameAsValue &&
-            stringValue.Items.Span[1] is PineValue.ListValue arguments &&
-            arguments.Items.Length is 1 &&
-            arguments.Items.Span[0] is PineValue.BlobValue charsBlob &&
+            stringValue.Items.Length is 3 &&
+            stringValue.Items.Span[0] == ElmValue.ElmChoiceTypeTagNameAsValue &&
+            stringValue.Items.Span[1] == ElmValue.ElmStringTypeTagNameAsValue &&
+            stringValue.Items.Span[2] is PineValue.BlobValue charsBlob &&
             charsBlob.Bytes.Length % 4 is 0)
         {
             chars = charsBlob.Bytes;
@@ -482,9 +477,7 @@ public static class LanguageServicePrecompiledLeaves
     }
 
     private static PineValue StringValue(ReadOnlyMemory<byte> chars) =>
-        PineValue.List(
-            [
-            ElmValue.ElmStringTypeTagNameAsValue,
-            PineValue.List([PineValue.Blob(chars)]),
-            ]);
+        ElmValueEncoding.TagAsPineValue(
+            ElmValue.ElmStringTypeTagName,
+            [PineValue.Blob(chars)]);
 }

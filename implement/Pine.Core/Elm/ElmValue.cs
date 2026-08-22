@@ -68,6 +68,11 @@ public abstract record ElmValue
     public const string ElmRecordTypeTagName = "<Record_Type>";
 
     /// <summary>
+    /// Marker at the start of the flat Pine representation of an Elm choice value.
+    /// </summary>
+    public const string ElmChoiceTypeTagName = "<Choice_Type>";
+
+    /// <summary>
     /// Legacy (pre-migration) tag name used to represent Elm records when encoding as <see cref="PineValue"/>.
     /// <para>
     /// In the legacy nested layout, a record was encoded as
@@ -118,6 +123,12 @@ public abstract record ElmValue
     /// </summary>
     public static readonly PineValue ElmRecordTypeTagNameAsValue =
         StringEncoding.ValueFromString(ElmRecordTypeTagName);
+
+    /// <summary>
+    /// Represents <see cref="ElmChoiceTypeTagName"/> as a <see cref="PineValue"/>.
+    /// </summary>
+    public static readonly PineValue ElmChoiceTypeTagNameAsValue =
+        StringEncoding.ValueFromString(ElmChoiceTypeTagName);
 
     /// <summary>
     /// Represents the legacy record tag name (<c>Elm_Record</c>) as a <see cref="PineValue"/> using the default string encoding.

@@ -582,11 +582,10 @@ public static class CoreStringPrecompiledLeaves
         out ReadOnlyMemory<byte> chars)
     {
         if (value is PineValue.ListValue stringValue &&
-            stringValue.Items.Length is 2 &&
-            stringValue.Items.Span[0] == ElmValue.ElmStringTypeTagNameAsValue &&
-            stringValue.Items.Span[1] is PineValue.ListValue arguments &&
-            arguments.Items.Length is 1 &&
-            arguments.Items.Span[0] is PineValue.BlobValue charsBlob &&
+            stringValue.Items.Length is 3 &&
+            stringValue.Items.Span[0] == ElmValue.ElmChoiceTypeTagNameAsValue &&
+            stringValue.Items.Span[1] == ElmValue.ElmStringTypeTagNameAsValue &&
+            stringValue.Items.Span[2] is PineValue.BlobValue charsBlob &&
             charsBlob.Bytes.Length % 4 is 0)
         {
             chars = charsBlob.Bytes;
@@ -619,11 +618,9 @@ public static class CoreStringPrecompiledLeaves
     }
 
     private static PineValue StringValue(ReadOnlyMemory<byte> chars) =>
-        PineValue.List(
-            [
-            ElmValue.ElmStringTypeTagNameAsValue,
-            PineValue.List([PineValue.Blob(chars)]),
-            ]);
+        ElmValueEncoding.TagAsPineValue(
+            ElmValue.ElmStringTypeTagName,
+            [PineValue.Blob(chars)]);
 
     /// <summary>
     /// Default precompiled-leaves dictionary contributed by the kernel <c>String</c> module.
