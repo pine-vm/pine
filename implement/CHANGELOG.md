@@ -13,6 +13,22 @@ decoders accept both the new layout and the legacy 2025
 for compatibility tests and migrations. Newly compiled Elm patterns
 intentionally match only the flat representation.
 
+## 2026-07-12 - Migrate expression encoding to the compact 2026 layout
+
+Pine expressions now use a denser, flat list representation
+`[tag, argument0, argument1, ...]`. In particular, list-expression items are
+stored directly after the `List` tag instead of in a nested list. The encoding
+also adopts the `Builtin` name, allows any Pine value as a
+`Label`, and deliberately spells the literal tag `Litral` so a root literal
+cannot be confused with its legacy encoding.
+
+The standard C# encoder and code generator emit the 2026 format, and the
+expression APIs, code analysis, interpreters, and generated snapshots were
+aligned with it. The standard parser continues to accept both the 2026 format
+and the legacy 2024 format, whose encoder and parser remain available through
+`ExpressionEncoding2024`. The Elm-based implementations continue to emit the
+legacy format and remain interoperable through this compatibility path.
+
 ## 2026-05-09 - Elm Compiler - Migrate Elm record encoding to flat `<Record_Type>` layout
 
 Switched the canonical encoding of Elm records from the legacy nested shape
