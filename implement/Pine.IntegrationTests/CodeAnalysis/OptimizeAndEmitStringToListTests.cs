@@ -123,8 +123,9 @@ public class OptimizeAndEmitStringToListTests
                 asCSharp,
                 namespacePrefix: [],
                 optimizationLevel: Microsoft.CodeAnalysis.OptimizationLevel.Debug)
-            .Extract(err =>
-            throw new System.Exception("Compilation to assembly failed: " + err.ToString()));
+            .Extract(
+                err =>
+                throw new System.Exception("Compilation to assembly failed: " + err.ToString()));
 
         var compiledDictionary =
             compileToAssemblyResult.BuildCompiledExpressionsDictionary();

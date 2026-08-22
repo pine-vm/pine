@@ -538,8 +538,9 @@ public class OptimizeAndEmitDictInsertTests
                 asCSharp,
                 namespacePrefix: [],
                 optimizationLevel: Microsoft.CodeAnalysis.OptimizationLevel.Release)
-            .Extract(err =>
-            throw new System.Exception("Compilation to assembly failed: " + err.ToString()));
+            .Extract(
+                err =>
+                throw new System.Exception("Compilation to assembly failed: " + err.ToString()));
 
 
     }

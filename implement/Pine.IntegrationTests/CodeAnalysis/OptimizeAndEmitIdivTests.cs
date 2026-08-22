@@ -655,8 +655,9 @@ public class OptimizeAndEmitIdivTests
                 asCSharp,
                 namespacePrefix: compilationNamespacePrefix,
                 optimizationLevel: Microsoft.CodeAnalysis.OptimizationLevel.Release)
-            .Extract(err =>
-            throw new System.Exception("Compilation to assembly failed: " + err.ToString()));
+            .Extract(
+                err =>
+                throw new System.Exception("Compilation to assembly failed: " + err.ToString()));
 
         var compiledDictionary =
             compileToAssemblyResult.BuildCompiledExpressionsDictionary();
@@ -669,8 +670,9 @@ public class OptimizeAndEmitIdivTests
 
         var idivFunctionRecord =
             FunctionRecord.ParseFunctionRecordTagged(idivDeclValue, parseCache)
-            .Extract(err => throw new System.Exception(
-                "Parsing function record for 'idiv' failed: " + err.ToString()));
+            .Extract(
+                err => throw new System.Exception(
+                    "Parsing function record for 'idiv' failed: " + err.ToString()));
 
         // Implementation detail: With the flat calling convention of the current
         // compiler, 'idiv' does not capture any environment functions.

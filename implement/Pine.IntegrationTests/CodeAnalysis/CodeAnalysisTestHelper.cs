@@ -19,23 +19,25 @@ public class CodeAnalysisTestHelper
 
     static DeclarationSyntaxContext BuildDeclarationSyntaxContext()
     {
-        var usingDirectivesTypes = new[]
-        {
-            typeof(BuiltinFunction),
-            typeof(BuiltinFunctionSpecialized),
-            typeof(BuiltinFunctionFused),
-            typeof(PineKernelValues),
-            typeof(IReadOnlyDictionary<,>),
-            typeof(IntegerEncoding),
-            typeof(StringEncoding),
-            typeof(ParseExpressionException),
-            typeof(Core.DotNet.Builtins.ImmutableConcatBuilder),
-            typeof(Core.DotNet.Builtins.ImmutableSliceBuilder),
-            typeof(Core.DotNet.Builtins.MutatingConcatBuilder),
-        };
+        var usingDirectivesTypes =
+            new[]
+            {
+                typeof(BuiltinFunction),
+                typeof(BuiltinFunctionSpecialized),
+                typeof(BuiltinFunctionFused),
+                typeof(PineKernelValues),
+                typeof(IReadOnlyDictionary<,>),
+                typeof(IntegerEncoding),
+                typeof(StringEncoding),
+                typeof(ParseExpressionException),
+                typeof(Core.DotNet.Builtins.ImmutableConcatBuilder),
+                typeof(Core.DotNet.Builtins.ImmutableSliceBuilder),
+                typeof(Core.DotNet.Builtins.MutatingConcatBuilder),
+            };
 
         IReadOnlyList<UsingDirectiveSyntax> usingDirectives =
-            [..usingDirectivesTypes
+            [
+            ..usingDirectivesTypes
             .Select(t => t.Namespace)
             .WhereNotNull()
             .Distinct()
