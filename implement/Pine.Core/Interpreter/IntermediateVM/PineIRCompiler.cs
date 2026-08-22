@@ -522,30 +522,36 @@ public class PineIRCompiler
                     StackInstruction.Push_Literal(PineValue.EmptyList));
         }
 
-        if (listExpr.Items.Count is 2 &&
-            TryEvalIndependent(listExpr.Items[0], parseCache) is { } tagLiteralValue &&
-            listExpr.Items[1] is Expression.List tagArgList)
+        var literalPrefix = new List<PineValue>();
+
+        while (literalPrefix.Count < listExpr.Items.Count &&
+            TryEvalIndependent(listExpr.Items[literalPrefix.Count], parseCache) is { } literalValue)
         {
-            var afterArgs = prior;
+            literalPrefix.Add(literalValue);
+        }
 
-            for (var i = 0; i < tagArgList.Items.Count; ++i)
-            {
-                var argExpr = tagArgList.Items[i];
+        var afterItems = prior;
 
-                afterArgs =
-                    CompileExpressionTransitive(
-                        argExpr,
-                        context,
-                        afterArgs,
-                        parseCache);
-            }
+        for (var i = literalPrefix.Count; i < listExpr.Items.Count; ++i)
+        {
+            var itemExpr = listExpr.Items[i];
 
+            afterItems =
+                CompileExpressionTransitive(
+                    itemExpr,
+                    context,
+                    afterItems,
+                    parseCache);
+        }
+
+        if (literalPrefix.Count is not 0)
+        {
             return
-                afterArgs
+                afterItems
                 .AppendInstruction(
-                    StackInstruction.Build_List_Tagged_Const(
-                        tagLiteralValue,
-                        tagArgList.Items.Count));
+                    StackInstruction.Build_List_With_Prefix(
+                        PineValue.List([.. literalPrefix]),
+                        listExpr.Items.Count - literalPrefix.Count));
         }
 
         /*
@@ -555,22 +561,8 @@ public class PineIRCompiler
          * we don't use a non-consuming instruction but use local_get instead to copy it)
          * */
 
-        var lastItemResult = prior;
-
-        for (var i = 0; i < listExpr.Items.Count; ++i)
-        {
-            var itemExpr = listExpr.Items[i];
-
-            lastItemResult =
-                CompileExpressionTransitive(
-                    itemExpr,
-                    context,
-                    lastItemResult,
-                    parseCache);
-        }
-
         return
-            lastItemResult
+            afterItems
             .AppendInstruction(
                 StackInstruction.Build_List(listExpr.Items.Count));
     }

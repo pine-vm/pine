@@ -29,7 +29,10 @@ Newly compiled Elm code consumes only this canonical representation. Host-side
 decoders in `ElmValueEncoding.cs` also accept the legacy 2025 representation
 `[tagName, [arg0, arg1, ...]]` so persisted values can still be inspected and
 migrated. The retired Elm-in-Elm compiler and the general Pine
-`Build_List_Tagged_Const` instruction are not part of this encoding change.
+sequential IR are separate from this encoding.
+
+The sequential IR compiler folds a list expression's leading constant items into
+the literal prefix of a `Build_List_With_Prefix` instruction.
 
 ### Relation to Platforms
 

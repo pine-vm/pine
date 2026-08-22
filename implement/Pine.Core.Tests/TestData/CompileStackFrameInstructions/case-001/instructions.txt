@@ -1,4 +1,4 @@
-Push_Literal (List [0] (0))
-Push_Literal (Blob [0] (0x))
-Build_List (2)
+Build_List_With_Prefix (2 , 0)
+  List [0] (0)
+  Blob [0] (0x)
 Return

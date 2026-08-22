@@ -2490,9 +2490,8 @@ public class PineValueInProcessTests
     }
 
     [Fact]
-    public void CreateTagged_matches_Build_List_Tagged_Const_behavior()
+    public void CreateTagged_matches_equivalent_list()
     {
-        // Simulate what Build_List_Tagged_Const does in the VM
         var tagValue = PineValue.Blob([42]);
         var arg1 = PineValueInProcess.Create(PineValue.Blob([1]));
         var arg2 = PineValueInProcess.Create(PineValue.Blob([2]));

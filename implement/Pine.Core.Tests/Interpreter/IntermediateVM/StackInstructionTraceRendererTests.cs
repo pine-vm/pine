@@ -21,7 +21,10 @@ public class StackInstructionTraceRendererTests
                     StackFrameDepth: 1,
                     InstructionPointer: 4,
                     EvaluationStackDepth: 0,
-                    Instruction: StackInstruction.Build_List_Tagged_Const(StringEncoding.ValueFromString("Literal"), 1),
+                    Instruction:
+                    StackInstruction.Build_List_With_Prefix(
+                        PineValue.List([StringEncoding.ValueFromString("Literal")]),
+                        1),
                     FrameExpression: Expression.EnvironmentInstance,
                     LoadFrameInput: () => StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob)),
                 new(
@@ -43,7 +46,8 @@ public class StackInstructionTraceRendererTests
 
         rendered.Should().Be(
             """
-             8. depth=1 ip=4 Build_List_Tagged_Const (Blob [28] (0x0000004c00000069000000740000006500000072000000610000006c | UTF32 "Literal") , 1)
+             8. depth=1 ip=4 Build_List_With_Prefix (1 , 1)
+              Blob [28] (0x0000004c00000069000000740000006500000072000000610000006c | UTF32 "Literal")
             12. depth=2 ip=0 Push_Literal (Blob [2] (0x0403 | int 3))
             """);
     }
@@ -138,7 +142,7 @@ public class StackInstructionTraceRendererTests
                     StackFrameDepth: 1,
                     InstructionPointer: 1,
                     EvaluationStackDepth: 0,
-                    Instruction: StackInstruction.Build_List_Tagged_Const(StringEncoding.ValueFromString("Literal"), 1),
+                    Instruction: StackInstruction.Push_Literal(StringEncoding.ValueFromString("Literal")),
                     FrameExpression: Expression.EnvironmentInstance,
                     LoadFrameInput: () => StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob))
                 ],
@@ -151,7 +155,7 @@ public class StackInstructionTraceRendererTests
 
         rendered.Should().Be(
             """
-            8. depth=1 ip=1 Build_List_Tagged_Const (Blob [28] (tag=0x0000004c00000069000000740000006500000072000000610000006c ; UTF32 "Literal") , 1)
+            8. depth=1 ip=1 Push_Literal (Blob [28] (tag=0x0000004c00000069000000740000006500000072000000610000006c ; UTF32 "Literal"))
             """);
     }
 

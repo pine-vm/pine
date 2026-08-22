@@ -583,7 +583,7 @@ public class ParserFastTests
             InvocationCount: 13
             BuildListCount: 9
             LoopIterationCount: 0
-            InstructionCount: 201
+            InstructionCount: 199
             """);
     }
 
@@ -603,7 +603,7 @@ public class ParserFastTests
             InvocationCount: 13
             BuildListCount: 9
             LoopIterationCount: 0
-            InstructionCount: 177
+            InstructionCount: 175
             """);
     }
 
@@ -623,7 +623,7 @@ public class ParserFastTests
             InvocationCount: 19
             BuildListCount: 21
             LoopIterationCount: 0
-            InstructionCount: 270
+            InstructionCount: 257
             """);
     }
 

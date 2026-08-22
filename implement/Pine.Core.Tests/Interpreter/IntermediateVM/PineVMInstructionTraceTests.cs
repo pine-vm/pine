@@ -53,8 +53,70 @@ public class PineVMInstructionTraceTests
         trace[0].InstructionIndex.Should().Be(0);
         trace[0].StackFrameDepth.Should().Be(1);
         trace[0].InstructionPointer.Should().Be(0);
-        trace[0].Instruction.Should().Be(StackInstruction.Push_Literal(IntegerEncoding.EncodeSignedInteger(3)));
+
+        trace[0].Instruction.Should().Be(
+            StackInstruction.Build_List_With_Prefix(
+                PineValue.List(
+                    [
+                    IntegerEncoding.EncodeSignedInteger(3),
+                    IntegerEncoding.EncodeSignedInteger(4)
+                    ]),
+                0));
+
         trace[^1].Instruction.Kind.Should().Be(StackInstructionKind.Return);
+    }
+
+    [Fact]
+    public void Build_List_With_Prefix_prepends_literal_items()
+    {
+        var trace = new List<ExecutedStackInstruction>();
+
+        var vm =
+            Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
+                evalCache: null,
+                evaluationConfigDefault: null,
+                reportFunctionApplication: null,
+                compilationEnvClasses: null,
+                disableReductionInCompilation: true,
+                selectPrecompiled: null,
+                skipInlineForExpression: _ => false,
+                enableTailRecursionOptimization: false,
+                parseCache: null,
+                precompiledLeaves: null,
+                reportEnterPrecompiledLeaf: null,
+                reportExitPrecompiledLeaf: null,
+                optimizationParametersSerial: null,
+                cacheFileStore: null,
+                reportExecutedStackInstruction:
+                (in executedStackInstruction) =>
+                trace.Add(executedStackInstruction));
+
+        var prefixItemOne = PineValue.Blob([1]);
+        var prefixItemTwo = PineValue.Blob([2]);
+        var environment = PineValue.Blob([3]);
+        var suffixLiteral = PineValue.Blob([4]);
+
+        var expression =
+            Expression.ListInst(
+                [
+                Expression.LitralInst(prefixItemOne),
+                Expression.LitralInst(prefixItemTwo),
+                Expression.EnvironmentInstance,
+                Expression.LitralInst(suffixLiteral)
+                ]);
+
+        var result = vm.EvaluateExpression(expression, environment);
+
+        result.IsOkOrNull().Should().Be(
+            PineValue.List([prefixItemOne, prefixItemTwo, environment, suffixLiteral]));
+
+        trace.Select(item => item.Instruction).Should().Equal(
+            StackInstruction.Local_Get(0),
+            StackInstruction.Push_Literal(suffixLiteral),
+            StackInstruction.Build_List_With_Prefix(
+                PineValue.List([prefixItemOne, prefixItemTwo]),
+                2),
+            StackInstruction.Return);
     }
 
     [Fact]

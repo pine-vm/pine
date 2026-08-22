@@ -43,7 +43,6 @@ public class PineValueInProcess
 
     /// <summary>
     /// Track a tagged value as a tuple of (tag, tagArgs).
-    /// This is a complement to the StackInstructionKind.Build_List_Tagged_Const IR instruction.
     /// Represents a 2-element list [tag, tagArgs] without forcing evaluation.
     /// </summary>
     private (PineValueInProcess tag, IReadOnlyList<PineValueInProcess> tagArgs)? _tagged;
@@ -173,7 +172,6 @@ public class PineValueInProcess
     /// <param name="tag">The tag value.</param>
     /// <param name="tagArgs">The list of tag arguments.</param>
     /// <remarks>
-    /// This is a complement to the StackInstructionKind.Build_List_Tagged_Const IR instruction.
     /// Represents a 2-element list [tag, tagArgs] without forcing evaluation.
     /// </remarks>
     /// <returns>A new <see cref="PineValueInProcess"/> representing the tagged value.</returns>

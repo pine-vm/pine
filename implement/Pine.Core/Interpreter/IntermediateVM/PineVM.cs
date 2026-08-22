@@ -1958,31 +1958,39 @@ public class PineVM : IPineVM
                             continue;
                         }
 
-                    case StackInstructionKind.Build_List_Tagged_Const:
+                    case StackInstructionKind.Build_List_With_Prefix:
                         {
-                            var tagValue =
+                            var prefixValue =
                                 currentInstruction.Literal
                                 ??
-                                throw new Exception("Invalid operation form: Missing literal tag value");
+                                throw new Exception("Invalid operation form: Missing literal prefix value");
+
+                            if (prefixValue is not PineValue.ListValue prefixList)
+                            {
+                                throw new Exception("Invalid operation form: Literal prefix value is not a list");
+                            }
 
                             var itemsCount =
                                 currentInstruction.TakeCount
                                 ??
                                 throw new Exception("Invalid operation form: Missing take count");
 
-                            var items = new PineValueInProcess[itemsCount];
+                            var prefixItems = prefixList.Items.Span;
+                            var items = new PineValueInProcess[prefixItems.Length + itemsCount];
+
+                            for (var i = 0; i < prefixItems.Length; ++i)
+                            {
+                                items[i] = PineValueInProcess.Create(prefixItems[i]);
+                            }
 
                             for (var i = 0; i < itemsCount; ++i)
                             {
-                                items[itemsCount - i - 1] = currentFrame.PopTopmostFromStack();
+                                items[items.Length - i - 1] = currentFrame.PopTopmostFromStack();
                             }
 
-                            var taggedListValue =
-                                PineValueInProcess.CreateTagged(
-                                    PineValueInProcess.Create(tagValue),
-                                    items);
+                            currentFrame.PushInstructionResult(
+                                PineValueInProcess.CreateList(items));
 
-                            currentFrame.PushInstructionResult(taggedListValue);
                             ++buildListCount;
                             continue;
                         }

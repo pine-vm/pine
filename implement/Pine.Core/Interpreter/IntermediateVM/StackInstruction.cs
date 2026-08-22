@@ -165,11 +165,11 @@ public enum StackInstructionKind
     Build_List,
 
     /// <summary>
-    /// Builds a tagged list by popping <see cref="StackInstruction.TakeCount"/> values from the stack,
-    /// prepending the tag from <see cref="StackInstruction.Literal"/> as the first element,
+    /// Builds a list by popping <see cref="StackInstruction.TakeCount"/> values from the stack,
+    /// prepending the items from the list in <see cref="StackInstruction.Literal"/>,
     /// and pushing the resulting list.
     /// </summary>
-    Build_List_Tagged_Const,
+    Build_List_With_Prefix,
 
     /// <summary>
     /// Check if the top two values on the stack are equal.
@@ -589,11 +589,11 @@ public record StackInstruction(
         new(StackInstructionKind.Build_List, TakeCount: takeCount);
 
     /// <summary>
-    /// Creates a <see cref="StackInstructionKind.Build_List_Tagged_Const"/> instruction that builds a tagged list
-    /// with the given tag and the given number of values from the stack.
+    /// Creates a <see cref="StackInstructionKind.Build_List_With_Prefix"/> instruction that builds a list
+    /// with the given literal prefix and the given number of values from the stack.
     /// </summary>
-    public static StackInstruction Build_List_Tagged_Const(PineValue tag, int takeCount) =>
-        new(StackInstructionKind.Build_List_Tagged_Const, Literal: tag, TakeCount: takeCount);
+    public static StackInstruction Build_List_With_Prefix(PineValue.ListValue prefix, int takeCount) =>
+        new(StackInstructionKind.Build_List_With_Prefix, Literal: prefix, TakeCount: takeCount);
 
     /// <summary>
     /// A pre-built <see cref="StackInstructionKind.Pop"/> instruction.
@@ -1435,23 +1435,15 @@ public record StackInstruction(
                         "Missing TakeCount for BuildList instruction")
                     ])),
 
-            StackInstructionKind.Build_List_Tagged_Const =>
+            StackInstructionKind.Build_List_With_Prefix =>
             new InstructionDetails(
                 PopCount:
                 instruction.TakeCount
                 ?? throw new Exception(
-                    "Missing TakeCount for BuildList instruction"),
+                    "Missing TakeCount for BuildListWithPrefix instruction"),
                 PushCount: 1,
-                Display: () => InstructionDisplay.WithoutDetailLines(
-                    [
-                    literalDisplayString(
-                        instruction.Literal
-                        ?? throw new Exception(
-                            "Missing Literal for EqualBinaryConst instruction")),
-                    instruction.TakeCount?.ToString()
-                    ?? throw new Exception(
-                        "Missing TakeCount for BuildList instruction")
-                    ])),
+                Display:
+                () => Render_Build_List_With_Prefix_Details(instruction, literalDisplayString)),
 
             StackInstructionKind.Equal_Binary =>
             new InstructionDetails(
@@ -1852,6 +1844,30 @@ public record StackInstruction(
             throw new NotImplementedException(
                 "Unknown StackInstructionKind: " + otherKind)
         };
+
+    private static InstructionDisplay Render_Build_List_With_Prefix_Details(
+        StackInstruction instruction,
+        Func<PineValue, string> literalDisplayString)
+    {
+        if (instruction.Literal is not PineValue.ListValue prefix)
+        {
+            throw new Exception("Literal for BuildListWithPrefix instruction is not a list");
+        }
+
+        var takeCount =
+            instruction.TakeCount
+            ?? throw new Exception("Missing TakeCount for BuildListWithPrefix instruction");
+
+        return
+            new InstructionDisplay(
+                Arguments:
+                [
+                prefix.Items.Length.ToString(),
+                takeCount.ToString()
+                ],
+                DetailLines:
+                [.. prefix.Items.Span.ToArray().Select(literalDisplayString)]);
+    }
 
     private static InstructionDisplay Render_Switch_Jump_If_Equal_Const_Details(
         StackInstruction instruction,

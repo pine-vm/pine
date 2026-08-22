@@ -6,7 +6,7 @@ namespace Pine.Core.Interpreter.IntermediateVM;
 /// Aggregated performance counters collected during expression evaluation.
 /// </summary>
 /// <param name="InvocationCount">The total number of runtime invocations performed, including parse-and-eval and direct stack-frame invocations.</param>
-/// <param name="BuildListCount">The total number of executed <c>Build_List</c> and <c>Build_List_Tagged_Const</c> instructions.</param>
+/// <param name="BuildListCount">The total number of executed <c>Build_List</c> and <c>Build_List_With_Prefix</c> instructions.</param>
 /// <param name="LoopIterationCount">The total number of loop iterations reported by the active stack frames.</param>
 /// <param name="InstructionCount">The total number of VM instructions executed.</param>
 public readonly record struct PerformanceCounters(
