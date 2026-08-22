@@ -94,6 +94,40 @@ public class ElmTestCommandTests
     }
 
 
+    [Theory]
+    [InlineData("SELECTED GROUP", 0, 2, 2, 0)]
+    [InlineData("UNIQUE TEST", 1, 1, 0, 1)]
+    public void Filter_is_case_insensitive_and_matches_test_or_group_name(
+        string filter,
+        int expectedExitCode,
+        int expectedTestCount,
+        int expectedPassedCount,
+        int expectedFailedCount)
+    {
+        var projectDirectory = CreateTestProject(FilterTestsModule);
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            var exitCode =
+                TestCommand.Execute(
+                    projectDirectory,
+                    colorMode: FormatCommandColorMode.Never,
+                    console: console,
+                    filter: filter);
+
+            exitCode.Should().Be(expectedExitCode);
+            output.ToString().Should().Contain($"Running {expectedTestCount} test");
+            output.ToString().Should().Contain($"Passed:   {expectedPassedCount}");
+            output.ToString().Should().Contain($"Failed:   {expectedFailedCount}");
+        }
+        finally
+        {
+            Directory.Delete(projectDirectory, recursive: true);
+        }
+    }
+
+
     [Fact]
     public void No_Elm_test_modules_reports_error()
     {
@@ -258,6 +292,34 @@ public class ElmTestCommandTests
                 [ Test.test "Test Title" <|
                     \_ ->
                         71 |> Expect.equal 71
+                ]
+        """;
+
+
+    private const string FilterTestsModule =
+        """
+        module Tests exposing (..)
+
+        import Expect
+        import Test exposing (Test)
+
+
+        suite : Test
+        suite =
+            Test.describe "Root"
+                [ Test.describe "Selected Group"
+                    [ Test.test "First" <|
+                        \_ ->
+                            1 |> Expect.equal 1
+                    , Test.test "Second" <|
+                        \_ ->
+                            2 |> Expect.equal 2
+                    ]
+                , Test.describe "Other Group"
+                    [ Test.test "Unique Test" <|
+                        \_ ->
+                            3 |> Expect.equal 4
+                    ]
                 ]
         """;
 }

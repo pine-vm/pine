@@ -27,7 +27,8 @@ public static class ElmTestRunner
     /// </summary>
     public static ElmTestRun CompileAndRunTests(
         string appDirectory,
-        IPineVM? pineVm = null)
+        IPineVM? pineVm = null,
+        string? filter = null)
     {
         appDirectory = Path.GetFullPath(appDirectory);
 
@@ -121,6 +122,14 @@ public static class ElmTestRunner
             }
 
             DiscoverTests(suiteValue, path: [], discoveredTests);
+        }
+
+        if (filter is { } filterText)
+        {
+            discoveredTests.RemoveAll(
+                test =>
+                !test.Path.Any(
+                    name => name.Contains(filterText, StringComparison.OrdinalIgnoreCase)));
         }
 
         var parseCache = new PineVMParseCache();

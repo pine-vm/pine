@@ -25,14 +25,23 @@ public static class TestCommand
 
         var colorOption = FormatCommandShared.CreateColorOption();
 
+        var filterOption =
+            new Option<string?>("--filter")
+            {
+                Description =
+                "Only run tests whose test or group name contains this value (case-insensitive)."
+            };
+
         command.Add(sourceArgument);
         command.Add(colorOption);
+        command.Add(filterOption);
 
         command.SetAction(
             parseResult =>
             Execute(
                 source: parseResult.GetValue(sourceArgument) ?? Environment.CurrentDirectory,
-                colorMode: parseResult.GetValue(colorOption)));
+                colorMode: parseResult.GetValue(colorOption),
+                filter: parseResult.GetValue(filterOption)));
 
         return command;
     }
@@ -42,7 +51,8 @@ public static class TestCommand
         string source,
         FormatCommandColorMode? colorMode = null,
         IAnsiConsole? console = null,
-        IAnsiConsole? errorConsole = null)
+        IAnsiConsole? errorConsole = null,
+        string? filter = null)
     {
         FormatCommandColorMode resolvedColorMode;
 
@@ -71,7 +81,8 @@ public static class TestCommand
         var testRun =
             ElmTestRunner.CompileAndRunTests(
                 source,
-                IntermediateVM.SetupVM.Create());
+                pineVm: IntermediateVM.SetupVM.Create(),
+                filter: filter);
 
         if (testRun is ElmTestRun.NoTestModules noTestModules)
         {
