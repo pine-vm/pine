@@ -18,7 +18,7 @@ The concrete syntax model contains:
 
 Modeling these details enables applications like code formatting to round-trip and preserve aspects of source code as users expect.
 
-For example, the `elm-format` subcommand is designed to be consistent with the `elm-format` tool by Aaron VonderHaar. [`avh4/elm-format`](https://github.com/avh4/elm-format) preserves redundant parens, for example, in some expressions and type annotations.
+For example, the `elm format` subcommand is designed to be consistent with the `elm-format` tool by Aaron VonderHaar. [`avh4/elm-format`](https://github.com/avh4/elm-format) preserves redundant parens, for example, in some expressions and type annotations.
 
 ## Abstract Syntax Model
 
@@ -55,3 +55,7 @@ The model is designed for an interpreter that operates over `PineValue`. To avoi
 ### Converting from the concrete model
 
 Use `ConvertFromConcrete` to obtain an abstract tree from a parsed concrete `SyntaxModel` tree. It exposes entry points for each major syntactic category (`FromFile`, `FromModule`, `FromImport`, `FromExposing`, `FromDeclaration`, `FromTypeAnnotation`, `FromPattern`, `FromExpression`). The converter performs the paren unwrapping, literal normalization, leading-dot stripping for record-access functions, and `PineValue` precomputation described above. Its behavior — including the literal normalizations — is covered by `ElmSyntaxAbstractTests.ConvertFromConcreteTests`.
+
+## Stil4mElmSyntax7
+
+The syntax model in the namespace `Stil4mElmSyntax7` was the first one implemented and originally used in more applications. Later, we split the syntax model into concrete and abstract forms, and since then `Stil4mElmSyntax7` has only been used for backward compatibility with certain tools.
