@@ -32,60 +32,69 @@ public class GitPartialForCommitServer
         app.Urls.Clear();
         urls.ToList().ForEach(app.Urls.Add);
 
-        var fileCache = new CacheByFileName
-        (
-            new FileStoreFromSystemIOFile(Path.Combine(fileCacheDirectory, ZipArchivePathPrefix.TrimStart('/')))
-        );
+        var fileCache =
+            new CacheByFileName(
+                new FileStoreFromSystemIOFile(Path.Combine(fileCacheDirectory, ZipArchivePathPrefix.TrimStart('/'))));
 
         /*
          * https://docs.microsoft.com/en-us/aspnet/core/fundamentals/minimal-apis?view=aspnetcore-6.0
          * */
 
-        app.MapGet(ZipArchivePathPrefix + "{commitId}", (string commitId, HttpRequest httpRequest) =>
-        {
-            using var bodyReader = new StreamReader(httpRequest.Body);
-
-            var bodyString = bodyReader.ReadToEndAsync().Result;
-
-            var cloneUrls = bodyString.Split(['\n', '\r'], System.StringSplitOptions.RemoveEmptyEntries);
-
-            var supportedCloneUrls =
-                cloneUrls
-                .Where(c => gitCloneUrlPrefixes.Any(prefix => c.ToLowerInvariant().StartsWith(prefix.ToLowerInvariant())))
-                .ToImmutableList();
-
-            if (!cloneUrls.Any())
+        app.MapGet(
+            ZipArchivePathPrefix + "{commitId}",
+            (string commitId, HttpRequest httpRequest) =>
             {
-                return Results.BadRequest("Missing clone URL. Use one line in the request body for each clone URL.");
-            }
+                using var bodyReader = new StreamReader(httpRequest.Body);
 
-            if (supportedCloneUrls.IsEmpty)
-            {
-                return Results.BadRequest(
-                    "None of the given clone URLs is enabled here. Only URLs with the following " +
-                    gitCloneUrlPrefixes.Count + " prefixes are supported: " + string.Join(", ", gitCloneUrlPrefixes));
-            }
+                var bodyString = bodyReader.ReadToEndAsync().Result;
 
-            System.ReadOnlyMemory<byte> loadWithFreshClone()
-            {
-                var files =
-                    LoadFromGitHubOrGitLab.GetRepositoryFilesPartialForCommitViaEnvironmentGitCheckout(
-                        cloneUrl: supportedCloneUrls[0],
-                        commit: commitId);
+                var cloneUrls = bodyString.Split(['\n', '\r'], System.StringSplitOptions.RemoveEmptyEntries);
 
-                var zipArchive = ZipArchive.ZipArchiveFromFiles(files);
+                var supportedCloneUrls =
+                    cloneUrls
+                    .Where(
+                        c =>
+                        gitCloneUrlPrefixes.Any(prefix => c.ToLowerInvariant().StartsWith(prefix.ToLowerInvariant())))
+                    .ToImmutableList();
 
-                System.Console.WriteLine(
-                    "Cloned for commit " + commitId + ": Got " + files.Count + " files. Size of zip archive: " + zipArchive.Length + " bytes.");
+                if (!cloneUrls.Any())
+                {
+                    return Results.BadRequest("Missing clone URL. Use one line in the request body for each clone URL.");
+                }
 
-                return zipArchive;
-            }
+                if (supportedCloneUrls.IsEmpty)
+                {
+                    return
+                        Results.BadRequest(
+                            "None of the given clone URLs is enabled here. Only URLs with the following " +
+                            gitCloneUrlPrefixes.Count +
+                            " prefixes are supported: " +
+                            string.Join(", ", gitCloneUrlPrefixes));
+                }
 
-            return Results.Bytes(
-                contents: fileCache.GetOrUpdate(commitId, loadWithFreshClone),
-                contentType: "application/zip",
-                fileDownloadName: "git-partial-for-commit-" + commitId + ".zip");
-        });
+                System.ReadOnlyMemory<byte> loadWithFreshClone()
+                {
+                    var files =
+                        LoadFromGitHubOrGitLab.GetRepositoryFilesPartialForCommitViaEnvironmentGitCheckout(
+                            cloneUrl: supportedCloneUrls[0],
+                            commit: commitId);
+
+                    var zipArchive = ZipArchive.ZipArchiveFromFiles(files);
+
+                    System.Console.WriteLine(
+                        "Cloned for commit " + commitId + ": Got " + files.Count + " files. Size of zip archive: " +
+                        zipArchive.Length +
+                        " bytes.");
+
+                    return zipArchive;
+                }
+
+                return
+                    Results.Bytes(
+                        contents: fileCache.GetOrUpdate(commitId, loadWithFreshClone),
+                        contentType: "application/zip",
+                        fileDownloadName: "git-partial-for-commit-" + commitId + ".zip");
+            });
 
         return app.RunAsync();
     }

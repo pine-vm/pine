@@ -2636,7 +2636,8 @@ internal static class ElmSyntaxTransformations
                         }
 
                         var freshDeclarations =
-                            new List<Node<SyntaxTypes.Expression.LetDeclaration>>(letExpression.Value.Declarations.Count);
+                            new List<Node<SyntaxTypes.Expression.LetDeclaration>>(
+                                letExpression.Value.Declarations.Count);
 
                         for (var declarationIndex = 0;
                             declarationIndex < letExpression.Value.Declarations.Count;

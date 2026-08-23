@@ -1,9 +1,9 @@
-using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
 using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 
 namespace Pine.CompilePineToDotNet;
 

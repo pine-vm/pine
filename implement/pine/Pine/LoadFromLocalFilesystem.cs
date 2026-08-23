@@ -1,9 +1,9 @@
-using System.Collections.Generic;
+using Pine.Core.Files;
+using Pine.Core.IO;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Pine.Core.IO;
-using Pine.Core.Files;
 
 namespace Pine;
 
@@ -19,9 +19,10 @@ public static class LoadFromLocalFilesystem
         if (!Directory.Exists(path))
             return null;
 
-        var blobs = Filesystem.GetAllFilesFromDirectory(
-            path,
-            ignoreFileOnIOException: ignoreFileOnIOException);
+        var blobs =
+            Filesystem.GetAllFilesFromDirectory(
+                path,
+                ignoreFileOnIOException: ignoreFileOnIOException);
 
         return FileTree.FromSetOfFilesWithStringPath(blobs);
     }
@@ -49,11 +50,13 @@ public static class LoadFromLocalFilesystem
             return true;
         }
 
-        return FileTree.SortedDirectory(
-            directoryContent:
-                [.. tree.Items
-                .Where(keepNode)
-                .Select(child => (child.name, RemoveNoiseFromTree(child.component, discardGitDirectory)))
+        return
+            FileTree.SortedDirectory(
+                directoryContent:
+                [
+                    .. tree.Items
+                    .Where(keepNode)
+                    .Select(child => (child.name, RemoveNoiseFromTree(child.component, discardGitDirectory)))
                 ]);
     }
 }

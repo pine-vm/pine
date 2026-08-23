@@ -1017,7 +1017,8 @@ public class Rendering
                 break;
 
             default:
-                throw new NotImplementedException($"TypeAnnotation type '{typeAnnotationNode.Value.GetType().Name}' not supported");
+                throw new NotImplementedException(
+                    $"TypeAnnotation type '{typeAnnotationNode.Value.GetType().Name}' not supported");
         }
     }
 

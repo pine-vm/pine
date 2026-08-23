@@ -1304,7 +1304,8 @@ public static class FileLocationEncoding
 
             if (elmPackageVersionIdentiferResult.IsOkOrNull() is not { } elmPackageVersionIdentifer)
             {
-                throw new System.NotImplementedException("Unexpected result type: " + elmPackageVersionIdentiferResult.GetType());
+                throw new System.NotImplementedException(
+                    "Unexpected result type: " + elmPackageVersionIdentiferResult.GetType());
             }
 
             if (tag.Arguments[1] is not ElmValue.ElmList modulePathList)

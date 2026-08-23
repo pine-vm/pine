@@ -41,7 +41,9 @@ public class StaticConsole : IConsole
                     IConsole.TextColor.Default => InitialForegroundColor,
                     IConsole.TextColor.Green => System.ConsoleColor.Green,
                     IConsole.TextColor.Red => System.ConsoleColor.Red,
-                    _ => throw new System.NotImplementedException()
+
+                    _ =>
+                    throw new System.NotImplementedException()
                 };
 
             System.Console.Write(text);

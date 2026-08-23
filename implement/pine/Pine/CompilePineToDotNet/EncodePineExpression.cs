@@ -17,8 +17,9 @@ public partial class CompileToCSharp
         Expression expression,
         Func<PineValue, ExpressionSyntax?> overrideDefaultExpressionForValue)
     {
-        var continueEncode = new Func<Expression, Result<string, ExpressionSyntax>>(
-            descendant => EncodePineExpressionAsCSharpExpression(descendant, overrideDefaultExpressionForValue));
+        var continueEncode =
+            new Func<Expression, Result<string, ExpressionSyntax>>(
+                descendant => EncodePineExpressionAsCSharpExpression(descendant, overrideDefaultExpressionForValue));
 
         return expression switch
         {
@@ -40,67 +41,76 @@ public partial class CompileToCSharp
             list.Items.Select(continueEncode)
             .ListCombine()
             .MapError(err => "Failed to encode list expression element: " + err)
-            .Map(elementsSyntaxes =>
-            NewConstructorOfExpressionVariant(
-                nameof(Expression.List),
-                SyntaxFactory.CollectionExpression(
-                    SyntaxFactory.SeparatedList<CollectionElementSyntax>(
-                        elementsSyntaxes
-                        .Select(SyntaxFactory.ExpressionElement))))),
+            .Map(
+                elementsSyntaxes =>
+                NewConstructorOfExpressionVariant(
+                    nameof(Expression.List),
+                    SyntaxFactory.CollectionExpression(
+                        SyntaxFactory.SeparatedList<CollectionElementSyntax>(
+                            elementsSyntaxes
+                            .Select(SyntaxFactory.ExpressionElement))))),
 
             Expression.Conditional conditionalExpression =>
-                continueEncode(conditionalExpression.Condition)
-                    .MapError(err => "Failed to encode condition: " + err)
-                    .AndThen(encodedCondition =>
-                        continueEncode(conditionalExpression.FalseBranch)
-                            .MapError(err => "Failed to encode falseBranch: " + err)
-                            .AndThen(encodedFalseBranch =>
-                                continueEncode(conditionalExpression.TrueBranch)
-                                    .MapError(err => "Failed to encode trueBranch: " + err)
-                                    .Map(encodedTrueBranch =>
-                                        NewConstructorOfExpressionVariant(
-                                            nameof(Expression.Conditional),
+            continueEncode(conditionalExpression.Condition)
+            .MapError(err => "Failed to encode condition: " + err)
+            .AndThen(
+                encodedCondition =>
+                continueEncode(conditionalExpression.FalseBranch)
+                .MapError(err => "Failed to encode falseBranch: " + err)
+                .AndThen(
+                    encodedFalseBranch =>
+                    continueEncode(conditionalExpression.TrueBranch)
+                    .MapError(err => "Failed to encode trueBranch: " + err)
+                    .Map(
+                        encodedTrueBranch =>
+                        NewConstructorOfExpressionVariant(
+                            nameof(Expression.Conditional),
 
-                                            SyntaxFactory.Argument(encodedCondition)
-                                            .WithNameColon(
-                                                SyntaxFactory.NameColon(nameof(Expression.Conditional.Condition))),
+                            SyntaxFactory.Argument(encodedCondition)
+                            .WithNameColon(
+                                SyntaxFactory.NameColon(nameof(Expression.Conditional.Condition))),
 
-                                            SyntaxFactory.Argument(encodedFalseBranch)
-                                            .WithNameColon(
-                                                SyntaxFactory.NameColon(nameof(Expression.Conditional.FalseBranch))),
+                            SyntaxFactory.Argument(encodedFalseBranch)
+                            .WithNameColon(
+                                SyntaxFactory.NameColon(nameof(Expression.Conditional.FalseBranch))),
 
-                                            SyntaxFactory.Argument(encodedTrueBranch)
-                                            .WithNameColon(
-                                                SyntaxFactory.NameColon(nameof(Expression.Conditional.TrueBranch))))))),
+                            SyntaxFactory.Argument(encodedTrueBranch)
+                            .WithNameColon(
+                                SyntaxFactory.NameColon(nameof(Expression.Conditional.TrueBranch))))))),
 
             Expression.Builtin kernelApplicationExpr =>
             continueEncode(kernelApplicationExpr.Input)
             .MapError(err => "Failed to encode input of kernel application: " + err)
-            .Map(encodedInput =>
-            NewConstructorOfExpressionVariant(
-                nameof(Expression.Builtin),
+            .Map(
+                encodedInput =>
+                NewConstructorOfExpressionVariant(
+                    nameof(Expression.Builtin),
 
-                SyntaxFactory.Argument(SyntaxFactory.LiteralExpression(
-                    SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(kernelApplicationExpr.Function)))
-                .WithNameColon(
-                    SyntaxFactory.NameColon(nameof(Expression.Builtin.Function))),
+                    SyntaxFactory.Argument(
+                        SyntaxFactory.LiteralExpression(
+                            SyntaxKind.StringLiteralExpression,
+                            SyntaxFactory.Literal(kernelApplicationExpr.Function)))
+                    .WithNameColon(
+                        SyntaxFactory.NameColon(nameof(Expression.Builtin.Function))),
 
-                SyntaxFactory.Argument(encodedInput)
-                .WithNameColon(
-                    SyntaxFactory.NameColon(nameof(Expression.Builtin.Input)))
-            )),
+                    SyntaxFactory.Argument(encodedInput)
+                    .WithNameColon(
+                        SyntaxFactory.NameColon(nameof(Expression.Builtin.Input)))
+                    )),
 
             Expression.Eval decodeAndEvaluate =>
             continueEncode(decodeAndEvaluate.Encoded)
             .MapError(err => "Failed to encode expression of decode and evaluate: " + err)
-            .AndThen(encodedExpression =>
-            continueEncode(decodeAndEvaluate.Environment)
-            .MapError(err => "Failed to encode environment of decode and evaluate: " + err)
-            .Map(encodedEnvironment =>
-            NewConstructorOfExpressionVariant(
-                nameof(Expression.Eval),
-                encodedExpression,
-                encodedEnvironment))),
+            .AndThen(
+                encodedExpression =>
+                continueEncode(decodeAndEvaluate.Environment)
+                .MapError(err => "Failed to encode environment of decode and evaluate: " + err)
+                .Map(
+                    encodedEnvironment =>
+                    NewConstructorOfExpressionVariant(
+                        nameof(Expression.Eval),
+                        encodedExpression,
+                        encodedEnvironment))),
 
             _ =>
             Result<string, ExpressionSyntax>.err("Expression type not implemented: " + expression.GetType().FullName)

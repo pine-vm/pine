@@ -49,14 +49,16 @@ public class PineKernelFunctionsInline
                         firstArgumentTakenZero,
                         compilationEnv,
                         createLetBindingsForCse: false)
-                    .Map(firstArgumentTakenZeroCompiled =>
-                    firstArgumentTakenZeroCompiled
                     .Map(
-                        environment: compilationEnv,
-                        firstArgumentTakenZeroCompiledOk =>
-                        CoreSyntaxFactory.PineValueFromBoolExpression(
-                            PineCSharpSyntaxFactory.BuildCSharpExpressionToCheckIsBlob(firstArgumentTakenZeroCompiledOk),
-                            compilationEnv.FunctionEnvironment.DeclarationSyntaxContext)));
+                        firstArgumentTakenZeroCompiled =>
+                        firstArgumentTakenZeroCompiled
+                        .Map(
+                            environment: compilationEnv,
+                            firstArgumentTakenZeroCompiledOk =>
+                            CoreSyntaxFactory.PineValueFromBoolExpression(
+                                PineCSharpSyntaxFactory.BuildCSharpExpressionToCheckIsBlob(
+                                    firstArgumentTakenZeroCompiledOk),
+                                compilationEnv.FunctionEnvironment.DeclarationSyntaxContext)));
             }
 
             if (secondArgument == Expression.LitralInst(PineValue.EmptyList))
@@ -66,14 +68,16 @@ public class PineKernelFunctionsInline
                         firstArgumentTakenZero,
                         compilationEnv,
                         createLetBindingsForCse: false)
-                    .Map(firstArgumentTakenZeroCompiled =>
-                    firstArgumentTakenZeroCompiled
                     .Map(
-                        environment: compilationEnv,
-                        firstArgumentTakenZeroCompiledOk =>
-                        CoreSyntaxFactory.PineValueFromBoolExpression(
-                            PineCSharpSyntaxFactory.BuildCSharpExpressionToCheckIsList(firstArgumentTakenZeroCompiledOk),
-                            compilationEnv.FunctionEnvironment.DeclarationSyntaxContext)));
+                        firstArgumentTakenZeroCompiled =>
+                        firstArgumentTakenZeroCompiled
+                        .Map(
+                            environment: compilationEnv,
+                            firstArgumentTakenZeroCompiledOk =>
+                            CoreSyntaxFactory.PineValueFromBoolExpression(
+                                PineCSharpSyntaxFactory.BuildCSharpExpressionToCheckIsList(
+                                    firstArgumentTakenZeroCompiledOk),
+                                compilationEnv.FunctionEnvironment.DeclarationSyntaxContext)));
             }
         }
 
@@ -88,21 +92,22 @@ public class PineKernelFunctionsInline
                     secondArgument,
                     compilationEnv,
                     createLetBindingsForCse: false)
-                .Map(compileSecondArgOk =>
-                compileFirstArgOk
-                .MapOrAndThen(
-                    compilationEnv,
-                    firstArgCs =>
-                    compileSecondArgOk
-                    .Map(
+                .Map(
+                    compileSecondArgOk =>
+                    compileFirstArgOk
+                    .MapOrAndThen(
                         compilationEnv,
-                        secondArgCs =>
-                        CoreSyntaxFactory.PineValueFromBoolExpression(
-                            SyntaxFactory.BinaryExpression(
-                                SyntaxKind.EqualsExpression,
-                                firstArgCs,
-                                secondArgCs),
-                            compilationEnv.FunctionEnvironment.DeclarationSyntaxContext)))));
+                        firstArgCs =>
+                        compileSecondArgOk
+                        .Map(
+                            compilationEnv,
+                            secondArgCs =>
+                            CoreSyntaxFactory.PineValueFromBoolExpression(
+                                SyntaxFactory.BinaryExpression(
+                                    SyntaxKind.EqualsExpression,
+                                    firstArgCs,
+                                    secondArgCs),
+                                compilationEnv.FunctionEnvironment.DeclarationSyntaxContext)))));
     }
 
     public static Expression? IsKernelAppTakingZeroFrom(Expression expression)
@@ -134,27 +139,29 @@ public class PineKernelFunctionsInline
                 argumentExpression,
                 compilationEnv,
                 createLetBindingsForCse: false)
-            .Map(compileOk =>
-            compileOk.Map(
-                compilationEnv,
-                argumentExpression =>
-                SyntaxFactory.InvocationExpression(
-                    SyntaxFactory.MemberAccessExpression(
-                        SyntaxKind.SimpleMemberAccessExpression,
-                        SyntaxFactory.IdentifierName(nameof(IntegerEncoding)),
-                        SyntaxFactory.IdentifierName(nameof(IntegerEncoding.EncodeSignedInteger))))
-                .WithArgumentList(
-                    SyntaxFactory.ArgumentList(
-                        SyntaxFactory.SingletonSeparatedList(
-                            SyntaxFactory.Argument(
-                                LengthFromPineValueExpressionAsInt(argumentExpression)))))));
+            .Map(
+                compileOk =>
+                compileOk.Map(
+                    compilationEnv,
+                    argumentExpression =>
+                    SyntaxFactory.InvocationExpression(
+                        SyntaxFactory.MemberAccessExpression(
+                            SyntaxKind.SimpleMemberAccessExpression,
+                            SyntaxFactory.IdentifierName(nameof(IntegerEncoding)),
+                            SyntaxFactory.IdentifierName(nameof(IntegerEncoding.EncodeSignedInteger))))
+                    .WithArgumentList(
+                        SyntaxFactory.ArgumentList(
+                            SyntaxFactory.SingletonSeparatedList(
+                                SyntaxFactory.Argument(
+                                    LengthFromPineValueExpressionAsInt(argumentExpression)))))));
     }
 
     public static ExpressionSyntax LengthFromPineValueExpressionAsInt(ExpressionSyntax argumentExpression) =>
         SyntaxFactory.SwitchExpression(argumentExpression)
         .WithArms(
             SyntaxFactory.SeparatedList<SwitchExpressionArmSyntax>(
-                new SyntaxNodeOrToken[]{
+                new SyntaxNodeOrToken[]
+                {
                     SyntaxFactory.SwitchExpressionArm(
                         SyntaxFactory.DeclarationPattern(
                             SyntaxFactory.QualifiedName(
@@ -197,50 +204,53 @@ public class PineKernelFunctionsInline
                 argumentExpression,
                 compilationEnv,
                 createLetBindingsForCse: false)
-            .Map(compileOk =>
-            compileOk.Map(
-                compilationEnv,
-                argumentExpression =>
-                SyntaxFactory.SwitchExpression(argumentExpression)
-                .WithArms(
-                    SyntaxFactory.SeparatedList<SwitchExpressionArmSyntax>(
-                        new SyntaxNodeOrToken[]
-                        {
-                            SyntaxFactory.SwitchExpressionArm(
-                                SyntaxFactory.DeclarationPattern(
-                                    SyntaxFactory.QualifiedName(
-                                        SyntaxFactory.IdentifierName("PineValue"),
-                                        SyntaxFactory.IdentifierName("ListValue")),
-                                    SyntaxFactory.SingleVariableDesignation(
-                                        SyntaxFactory.Identifier("listValue"))),
-                                SyntaxFactory.SwitchExpression(
-                                    SyntaxFactory.MemberAccessExpression(
-                                        SyntaxKind.SimpleMemberAccessExpression,
-                                        SyntaxFactory.IdentifierName("listValue"),
-                                        SyntaxFactory.IdentifierName("Elements")))
-                                .WithArms(
-                                    SyntaxFactory.SeparatedList<SwitchExpressionArmSyntax>(
-                                        new SyntaxNodeOrToken[] {
-                                            SyntaxFactory.SwitchExpressionArm(
-                                                SyntaxFactory.ListPattern(
-                                                    SyntaxFactory.SeparatedList<PatternSyntax>(
-                                                        new SyntaxNodeOrToken[] {
-                                                            SyntaxFactory.VarPattern(
-                                                                SyntaxFactory.SingleVariableDesignation(
-                                                                    SyntaxFactory.Identifier("head"))),
-                                                            SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                                            SyntaxFactory.SlicePattern()
-                                                        })),
-                                                SyntaxFactory.IdentifierName("head")),
-                                            SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                            SwitchExpressionArmDefaultToPineValueEmptyList(
-                                                compilationEnv.FunctionEnvironment.DeclarationSyntaxContext)
-                                        }))),
-                            SyntaxFactory.Token(SyntaxKind.CommaToken),
-                            SwitchExpressionArmDefaultToPineValueEmptyList(
-                                compilationEnv.FunctionEnvironment.DeclarationSyntaxContext)
-                        }
-                        ))));
+            .Map(
+                compileOk =>
+                compileOk.Map(
+                    compilationEnv,
+                    argumentExpression =>
+                    SyntaxFactory.SwitchExpression(argumentExpression)
+                    .WithArms(
+                        SyntaxFactory.SeparatedList<SwitchExpressionArmSyntax>(
+                            new SyntaxNodeOrToken[]
+                            {
+                                SyntaxFactory.SwitchExpressionArm(
+                                    SyntaxFactory.DeclarationPattern(
+                                        SyntaxFactory.QualifiedName(
+                                            SyntaxFactory.IdentifierName("PineValue"),
+                                            SyntaxFactory.IdentifierName("ListValue")),
+                                        SyntaxFactory.SingleVariableDesignation(
+                                            SyntaxFactory.Identifier("listValue"))),
+                                    SyntaxFactory.SwitchExpression(
+                                        SyntaxFactory.MemberAccessExpression(
+                                            SyntaxKind.SimpleMemberAccessExpression,
+                                            SyntaxFactory.IdentifierName("listValue"),
+                                            SyntaxFactory.IdentifierName("Elements")))
+                                    .WithArms(
+                                        SyntaxFactory.SeparatedList<SwitchExpressionArmSyntax>(
+                                            new SyntaxNodeOrToken[]
+                                            {
+                                                SyntaxFactory.SwitchExpressionArm(
+                                                    SyntaxFactory.ListPattern(
+                                                        SyntaxFactory.SeparatedList<PatternSyntax>(
+                                                            new SyntaxNodeOrToken[]
+                                                            {
+                                                                SyntaxFactory.VarPattern(
+                                                                    SyntaxFactory.SingleVariableDesignation(
+                                                                        SyntaxFactory.Identifier("head"))),
+                                                                SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                                                SyntaxFactory.SlicePattern()
+                                                            })),
+                                                    SyntaxFactory.IdentifierName("head")),
+                                                SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                                SwitchExpressionArmDefaultToPineValueEmptyList(
+                                                    compilationEnv.FunctionEnvironment.DeclarationSyntaxContext)
+                                            }))),
+                                SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                SwitchExpressionArmDefaultToPineValueEmptyList(
+                                    compilationEnv.FunctionEnvironment.DeclarationSyntaxContext)
+                            }
+                            ))));
     }
 
     public static Result<string, CompiledExpression>? TryInlineKernelFunction_Skip(
@@ -262,8 +272,7 @@ public class PineKernelFunctionsInline
                 [var firstArgument, var secondArgument] =>
                 firstArgument.AsLiteralInt64 switch
                 {
-                    { } count
-                    when count < int.MaxValue =>
+                    { } count when count < int.MaxValue =>
                     secondArgument.ArgumentSyntaxFromParameterType.GetValueOrDefault(
                         PineKernelFunctions.KernelFunctionParameterType.Generic) switch
                     {
@@ -302,7 +311,8 @@ public class PineKernelFunctionsInline
             SyntaxFactory.SwitchExpression(originalValue)
             .WithArms(
                 SyntaxFactory.SeparatedList<SwitchExpressionArmSyntax>(
-                    new SyntaxNodeOrToken[]{
+                    new SyntaxNodeOrToken[]
+                    {
                         SyntaxFactory.SwitchExpressionArm(
                             SyntaxFactory.DeclarationPattern(
                                 SyntaxFactory.QualifiedName(

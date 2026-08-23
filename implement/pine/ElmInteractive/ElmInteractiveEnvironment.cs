@@ -24,7 +24,8 @@ public static class ElmInteractiveEnvironment
                 moduleName: moduleName,
                 declarationName: declarationName,
                 pineVM.ParseCache)
-                .AndThen(functionValueAndRecord =>
+            .AndThen(
+                functionValueAndRecord =>
                 {
                     var combinedArguments =
                         functionValueAndRecord.functionRecord.ArgumentsAlreadyCollected
@@ -35,7 +36,7 @@ public static class ElmInteractiveEnvironment
                     if (combinedArguments.Length != functionValueAndRecord.functionRecord.ParameterCount)
                     {
                         return
-                        (Result<string, PineValue>)
+                            (Result<string, PineValue>)
                             ("Partial application not implemented yet. Got " +
                             combinedArguments.Length +
                             " arguments, expected " +
@@ -43,13 +44,16 @@ public static class ElmInteractiveEnvironment
                     }
 
                     var combinedEnvironment =
-                    PineValue.List([PineValue.List(functionValueAndRecord.functionRecord.EnvFunctions),
-                        PineValue.List(combinedArguments)]);
+                        PineValue.List(
+                            [
+                            PineValue.List(functionValueAndRecord.functionRecord.EnvFunctions),
+                            PineValue.List(combinedArguments)
+                            ]);
 
                     return
-                    pineVM.EvaluateExpression(
-                        functionValueAndRecord.functionRecord.InnerFunction,
-                        environment: combinedEnvironment);
+                        pineVM.EvaluateExpression(
+                            functionValueAndRecord.functionRecord.InnerFunction,
+                            environment: combinedEnvironment);
                 });
     }
 }

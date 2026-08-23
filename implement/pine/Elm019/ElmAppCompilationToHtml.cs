@@ -81,17 +81,16 @@ public static class ElmAppCompilationToHtml
                 .ToArray();
 
             virtualModule =
-                (
-                    virtualModulePath,
-                    $"""
-                    module {virtualModuleName} exposing (main)
+                (virtualModulePath,
+                $"""
+                module {virtualModuleName} exposing (main)
 
-                    import {string.Join('.', entryPointModuleName)}
+                import {string.Join('.', entryPointModuleName)}
 
 
-                    main =
-                        {string.Join('.', entryPointModuleName)}.{entryPointDeclarationName}
-                    """);
+                main =
+                    {string.Join('.', entryPointModuleName)}.{entryPointDeclarationName}
+                """);
 
             compilationEntryPointFilePath = virtualModulePath;
             entryPointModuleName = [virtualModuleName];

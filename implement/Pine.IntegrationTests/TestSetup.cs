@@ -22,7 +22,8 @@ public class TestSetup
     public static IEnumerable<(string serializedEvent, string expectedResponse)> CounterProcessTestEventsAndExpectedResponses(
         IEnumerable<(int addition, int expectedResponse)> additionsAndExpectedResponses) =>
         additionsAndExpectedResponses
-        .Select(additionAndExpectedResponse =>
+        .Select(
+            additionAndExpectedResponse =>
             (System.Text.Json.JsonSerializer.Serialize(new { addition = additionAndExpectedResponse.addition }),
             additionAndExpectedResponse.expectedResponse.ToString()));
 
@@ -57,13 +58,13 @@ public class TestSetup
         GetElmAppFromSubdirectoryName("string-builder-webapp");
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> CrossPropagateHttpHeadersToAndFromBodyElmWebApp =>
-       GetElmAppFromSubdirectoryName("cross-propagate-http-headers-to-and-from-body");
+        GetElmAppFromSubdirectoryName("cross-propagate-http-headers-to-and-from-body");
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> HttpProxyWebApp =>
-       GetElmAppFromSubdirectoryName("http-proxy");
+        GetElmAppFromSubdirectoryName("http-proxy");
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> VolatileProcessNativeWebApp =>
-       GetElmAppFromSubdirectoryName("volatile-process-native");
+        GetElmAppFromSubdirectoryName("volatile-process-native");
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetElmAppFromSubdirectoryName(
         string directoryName) => GetElmAppFromDirectoryPath(Path.Combine(PathToTestElmApps, directoryName));

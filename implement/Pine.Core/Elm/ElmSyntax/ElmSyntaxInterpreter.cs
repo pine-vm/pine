@@ -4202,7 +4202,8 @@ public partial class ElmSyntaxInterpreter
                             if (fieldNames.Count == application.Arguments.Count)
                             {
                                 var fields =
-                                    new List<(string FieldName, PineValue FieldNameValue, PineValueInProcess FieldValue)>(fieldNames.Count);
+                                    new List<(string FieldName, PineValue FieldNameValue, PineValueInProcess FieldValue)>(
+                                        fieldNames.Count);
 
                                 for (var i = 0; i < fieldNames.Count; i++)
                                 {
@@ -4210,7 +4211,9 @@ public partial class ElmSyntaxInterpreter
                                         (fieldNames[i].FieldName, fieldNames[i].FieldNameValue, application.Arguments[i]));
                                 }
 
-                                return new ApplicationResolution.Resolved(BuildRecordValue([.. fields.OrderBy(f => f.FieldName)]));
+                                return
+                                    new ApplicationResolution.Resolved(
+                                        BuildRecordValue([.. fields.OrderBy(f => f.FieldName)]));
                             }
 
                             // Partial application of a record-type-alias constructor: synthesise a

@@ -28,10 +28,9 @@ namespace ElmTime
 {
     public record ElmAppInterfaceConfig(IReadOnlyList<string> CompilationRootFilePath)
     {
-        public static ElmAppInterfaceConfig Default => new
-        (
-            CompilationRootFilePath: ["src", "Backend", "Main.elm"]
-        );
+        public static ElmAppInterfaceConfig Default =>
+            new(
+                CompilationRootFilePath: ["src", "Backend", "Main.elm"]);
     }
 
     public struct ElmAppInterfaceConvention
@@ -326,7 +325,9 @@ namespace ElmTime
                                             completeDependencyReport(new CompilationIterationDependencyReport(DependencyKeySummary: "ElmMake")));
                                     }
 
-                                    throw new Exception("Protocol error: Unknown type of dependency: " + DescribeCompilationError(error.error));
+                                    throw new Exception(
+                                        "Protocol error: Unknown type of dependency: " +
+                                        DescribeCompilationError(error.error));
                                 })
                             .ToImmutableList();
 
@@ -1435,7 +1436,11 @@ namespace ElmTime
                 var missingDependencyError = compilationError.MissingDependencyError?.FirstOrDefault();
 
                 if (missingDependencyError is { } dependencyError)
-                    return new CompilationError(DependencyError: "Missing dependency: " + DescribeCompilationError(compilationError));
+                {
+                    return
+                        new CompilationError(
+                            DependencyError: "Missing dependency: " + DescribeCompilationError(compilationError));
+                }
 
                 return new CompilationError(OtherError: compilationError.OtherCompilationError?.FirstOrDefault());
             }

@@ -25,7 +25,8 @@ public partial class CompileToCSharp
         Expression kernelAppInputExpr,
         ExpressionCompilationEnvironment environment)
     {
-        Result<string, IReadOnlyList<ParsedKernelApplicationArgumentExpression>> ContinueWithList(IEnumerable<Expression> list) =>
+        Result<string, IReadOnlyList<ParsedKernelApplicationArgumentExpression>> ContinueWithList(
+            IEnumerable<Expression> list) =>
             list
             .Select(e => ParseKernelApplicationArgument(e, environment))
             .ListCombine();
@@ -34,19 +35,21 @@ public partial class CompileToCSharp
             kernelAppInputExpr switch
             {
                 Expression.List listExpressionArgument =>
-                    ContinueWithList(listExpressionArgument.Items),
+                ContinueWithList(listExpressionArgument.Items),
 
                 Expression.Litral literalExpressionArgument =>
-                    literalExpressionArgument.Value switch
-                    {
-                        PineValue.ListValue literalList =>
-                            ContinueWithList(
-                                literalList.Items.ToArray().Select(Expression.LitralInst)),
+                literalExpressionArgument.Value switch
+                {
+                    PineValue.ListValue literalList =>
+                    ContinueWithList(
+                        literalList.Items.ToArray().Select(Expression.LitralInst)),
 
-                        _ => null
-                    },
+                    _ =>
+                    null
+                },
 
-                _ => null
+                _ =>
+                null
             };
     }
 
@@ -77,12 +80,13 @@ public partial class CompileToCSharp
                 argumentExpression,
                 environment,
                 createLetBindingsForCse: false)
-                .Map(csharpExpression =>
-                    new ParsedKernelApplicationArgumentExpression(
-                        ArgumentSyntaxFromParameterType:
-                        ImmutableDictionary<KernelFunctionParameterType, CompiledExpression>.Empty
-                            .SetItem(KernelFunctionParameterType.Generic, csharpExpression)
-                            .SetItems(dictionary),
-                        AsLiteralInt64: asLiteralInt64));
+            .Map(
+                csharpExpression =>
+                new ParsedKernelApplicationArgumentExpression(
+                    ArgumentSyntaxFromParameterType:
+                    ImmutableDictionary<KernelFunctionParameterType, CompiledExpression>.Empty
+                    .SetItem(KernelFunctionParameterType.Generic, csharpExpression)
+                    .SetItems(dictionary),
+                    AsLiteralInt64: asLiteralInt64));
     }
 }

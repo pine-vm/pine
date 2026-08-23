@@ -79,8 +79,9 @@ public class ProfilingPineVM
             exprUsageRecord.Value
             .Select(
                 envUsageRecord =>
-                new KeyValuePair<(Expression, PineValue), ExpressionEnvUsageRecord>
-                ((exprUsageRecord.Key, envUsageRecord.Key), envUsageRecord.Value)))
+                new KeyValuePair<(Expression, PineValue), ExpressionEnvUsageRecord>(
+                    (exprUsageRecord.Key, envUsageRecord.Key),
+                    envUsageRecord.Value)))
         .ToImmutableDictionary();
 
     public ProfilingPineVM(
@@ -104,8 +105,8 @@ public class ProfilingPineVM
                         return;
 
                     var originalExpression =
-                    ExpressionEncoding.ParseExpressionFromValue(funcApplReport.ExpressionValue)
-                    .Extract(err => throw new System.Exception(err));
+                        ExpressionEncoding.ParseExpressionFromValue(funcApplReport.ExpressionValue)
+                        .Extract(err => throw new System.Exception(err));
 
                     // if (DynamicPGOShare.ShouldIncludeExpressionInCompilation(expression))
                     // if (expression is Expression.ParseAndEvalExpression parseAndEval)
@@ -129,15 +130,16 @@ public class ProfilingPineVM
                                 finally
                                 {
                                     computeExpressionUsageTimes.Enqueue(
-                                        System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: analysisOuterStartTime));
+                                        System.Diagnostics.Stopwatch.GetElapsedTime(
+                                            startingTimestamp: analysisOuterStartTime));
                                 }
                             }
                         }
 
                         var exprUsageAlreadyInDict =
-                        expressionUsages.TryGetValue(
-                            key: originalExpression,
-                            out var exprUsageRecord);
+                            expressionUsages.TryGetValue(
+                                key: originalExpression,
+                                out var exprUsageRecord);
 
                         exprUsageRecord ??= [];
 
@@ -149,16 +151,19 @@ public class ProfilingPineVM
                                 key: funcInputMinimalValue,
                                 out var envContainer);
 
-                        envContainer ??= new ExpressionEnvUsageRecord(
-                            Environment: funcInputMinimalValue,
-                            OrigEvalInstructionCounts: [],
-                            Analysis: new System.Lazy<Result<string, IReadOnlyList<ExpressionUsageAnalysis>>>(RunAnalysis));
+                        envContainer ??=
+                            new ExpressionEnvUsageRecord(
+                                Environment: funcInputMinimalValue,
+                                OrigEvalInstructionCounts: [],
+                                Analysis:
+                                new System.Lazy<Result<string, IReadOnlyList<ExpressionUsageAnalysis>>>(RunAnalysis));
 
                         envContainer.OrigEvalInstructionCounts.Add(funcApplReport.InstructionCount);
 
-                        envContainer.ParseAndEvalCountMax = System.Math.Max(
-                            envContainer.ParseAndEvalCountMax,
-                            funcApplReport.InvocationCount);
+                        envContainer.ParseAndEvalCountMax =
+                            System.Math.Max(
+                                envContainer.ParseAndEvalCountMax,
+                                funcApplReport.InvocationCount);
 
                         if (!envUsageAlreadyInDict)
                         {
@@ -201,13 +206,16 @@ public class ProfilingPineVM
 
         var otherExprAnalysis =
             analysisResult.UsagesCompleteForRecursion
-            .Select(exprInRecursion => new ExpressionUsageAnalysis(exprInRecursion.expr, exprInRecursion.expandedConstraint))
+            .Select(
+                exprInRecursion => new ExpressionUsageAnalysis(exprInRecursion.expr, exprInRecursion.expandedConstraint))
             .ToImmutableList();
 
         var allExprReported =
             (IReadOnlyList<ExpressionUsageAnalysis>)
-            [new ExpressionUsageAnalysis(expression, rootConstraintId),
-            ..otherExprAnalysis];
+            [
+            new ExpressionUsageAnalysis(expression, rootConstraintId),
+            ..otherExprAnalysis
+            ];
 
         return [.. allExprReported];
     }
@@ -241,23 +249,25 @@ public class ProfilingPineVM
             expr =>
             {
                 var profiles =
-                    dictionaries.SelectMany(dict =>
-                    {
-                        if (!dict.TryGetValue(expr, out var result))
-                            return [];
+                    dictionaries.SelectMany(
+                        dict =>
+                        {
+                            if (!dict.TryGetValue(expr, out var result))
+                                return [];
 
-                        return ImmutableList.Create(result);
-                    })
+                            return ImmutableList.Create(result);
+                        })
                     .ToImmutableArray();
 
                 return
-                AggregateExpressionUsageProfiles(profiles);
+                    AggregateExpressionUsageProfiles(profiles);
             });
 
     static public ExpressionUsageProfile AggregateExpressionUsageProfiles(
         IReadOnlyList<ExpressionUsageProfile> profiles)
     {
-        return new ExpressionUsageProfile(
-            UsageCount: profiles.Sum(p => p.UsageCount));
+        return
+            new ExpressionUsageProfile(
+                UsageCount: profiles.Sum(p => p.UsageCount));
     }
 }

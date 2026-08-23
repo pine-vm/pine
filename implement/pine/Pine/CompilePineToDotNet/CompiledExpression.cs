@@ -20,7 +20,11 @@ public record CompiledExpression(
             .Prepend(Dependencies));
 
     public ImmutableDictionary<Expression, LetBinding> EnumerateLetBindingsTransitive() =>
-        Union([LetBindings, .. LetBindings.Values.Select(binding => binding.Expression.EnumerateLetBindingsTransitive())]);
+        Union(
+            [
+            LetBindings,
+            .. LetBindings.Values.Select(binding => binding.Expression.EnumerateLetBindingsTransitive())
+            ]);
 
     public static CompiledExpression WithTypeGenericValue(ExpressionSyntax syntax) =>
         WithTypeGenericValue(syntax, NoLetBindings, CompiledExpressionDependencies.Empty);
@@ -117,8 +121,10 @@ public record CompiledExpression(
             (CSharpSyntaxNode)
             SyntaxFactory.Block(
                 (StatementSyntax[])
-                [.. variableDeclarations.Select(b => b.declarationSyntax),
-                    SyntaxFactory.ReturnStatement(compiledExpression.Syntax)]
+                [
+                .. variableDeclarations.Select(b => b.declarationSyntax),
+                SyntaxFactory.ReturnStatement(compiledExpression.Syntax)
+                ]
                 );
 
         return (blockSyntax, aggregateDependencies);
@@ -150,23 +156,24 @@ public record CompiledExpression(
 
         return
             orderedBindings
-            .Select(letBinding =>
-            (letBinding,
-            SyntaxFactory.LocalDeclarationStatement(
-                SyntaxFactory.VariableDeclaration(
-                    SyntaxFactory.IdentifierName(
-                        SyntaxFactory.Identifier(
-                            SyntaxFactory.TriviaList(),
-                            SyntaxKind.VarKeyword,
-                            "var",
-                            "var",
-                            SyntaxFactory.TriviaList())))
-                .WithVariables(
-                    variables: SyntaxFactory.SingletonSeparatedList(
-                        SyntaxFactory.VariableDeclarator(
-                            SyntaxFactory.Identifier(letBinding.DeclarationName))
-                        .WithInitializer(
-                            SyntaxFactory.EqualsValueClause(letBinding.Expression.Syntax)))))))
+            .Select(
+                letBinding =>
+                (letBinding,
+                SyntaxFactory.LocalDeclarationStatement(
+                    SyntaxFactory.VariableDeclaration(
+                        SyntaxFactory.IdentifierName(
+                            SyntaxFactory.Identifier(
+                                SyntaxFactory.TriviaList(),
+                                SyntaxKind.VarKeyword,
+                                "var",
+                                "var",
+                                SyntaxFactory.TriviaList())))
+                    .WithVariables(
+                        variables: SyntaxFactory.SingletonSeparatedList(
+                            SyntaxFactory.VariableDeclarator(
+                                SyntaxFactory.Identifier(letBinding.DeclarationName))
+                            .WithInitializer(
+                                SyntaxFactory.EqualsValueClause(letBinding.Expression.Syntax)))))))
             .ToImmutableArray();
     }
 
@@ -194,12 +201,13 @@ public record CompiledExpression(
         ExpressionCompilationEnvironment environment,
         Func<ExpressionSyntax, ExpressionSyntax> map)
     {
-        return MapOrAndThen(
-            environment,
-            inner => new CompiledExpression(
-            map(inner),
-            LetBindings: NoLetBindings,
-            CompiledExpressionDependencies.Empty));
+        return
+            MapOrAndThen(
+                environment,
+                inner => new CompiledExpression(
+                    map(inner),
+                    LetBindings: NoLetBindings,
+                    CompiledExpressionDependencies.Empty));
     }
 
     public ExpressionSyntax AsCsWithTypeGenericValue()
@@ -260,16 +268,18 @@ public record CompiledExpressionDependencies(
     IImmutableSet<(string hash, Expression expression)> Expressions,
     IImmutableDictionary<Expression, CompiledExpressionId> ExpressionFunctions)
 {
-    public static readonly CompiledExpressionDependencies Empty = new(
-        Values: [],
-        Expressions: [],
-        ExpressionFunctions:
-        ImmutableDictionary<Expression, CompiledExpressionId>.Empty);
+    public static readonly CompiledExpressionDependencies Empty =
+        new(
+            Values: [],
+            Expressions: [],
+            ExpressionFunctions:
+            ImmutableDictionary<Expression, CompiledExpressionId>.Empty);
 
     public static (T, CompiledExpressionDependencies) WithNoDependencies<T>(T other) => (other, Empty);
 
     public CompiledExpressionDependencies Union(CompiledExpressionDependencies other) =>
-        new(Values: Values.Union(other.Values),
+        new(
+            Values: Values.Union(other.Values),
             Expressions: Expressions.Union(other.Expressions),
             ExpressionFunctions: CompiledExpression.Union([ExpressionFunctions, other.ExpressionFunctions]));
 

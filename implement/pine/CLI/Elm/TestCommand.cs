@@ -94,6 +94,7 @@ public static class TestCommand
 
             if (errorConsole.Profile.Out.IsTerminal)
                 errorConsole.WriteLine(message);
+
             else
                 errorConsole.Profile.Out.Writer.WriteLine(message);
 

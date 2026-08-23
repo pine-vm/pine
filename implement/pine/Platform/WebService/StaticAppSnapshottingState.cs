@@ -175,75 +175,85 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
     {
         return
             Asp.AsInterfaceHttpRequestAsync(context.Request)
-            .ContinueWith(httpRequestTask =>
-            {
-                if (httpRequestTask.IsFaulted)
+            .ContinueWith(
+                httpRequestTask =>
                 {
-                    logMessage?.Invoke("Failed to convert HTTP request: " + httpRequestTask.Exception);
-
-                    context.Response.StatusCode = 500;
-                }
-
-                var httpRequestProperties = httpRequestTask.Result;
-
-                if (prepareRequest is not null)
-                {
-                    httpRequestProperties = prepareRequest(httpRequestProperties);
-                }
-
-                lock (_processAndStoreLock)
-                {
-                    var processReport =
-                        _publicAppState.HandleRequestAsync(
-                            httpRequestProperties,
-                            new WebServiceInterface.HttpRequestContext(
-                                ClientAddress: context.Connection.RemoteIpAddress?.ToString()),
-                            httpRequestEventSizeLimit: HttpRequestEventSizeLimitDefault,
-                            cancellationToken: context.RequestAborted).Result;
-
-                    var httpResponse = processReport.Response;
-
-                    if (finalizeResponse is not null)
+                    if (httpRequestTask.IsFaulted)
                     {
-                        httpResponse = finalizeResponse(httpResponse);
+                        logMessage?.Invoke("Failed to convert HTTP request: " + httpRequestTask.Exception);
+
+                        context.Response.StatusCode = 500;
                     }
 
-                    var persistReport = EnsurePersisted(logMessage);
+                    var httpRequestProperties = httpRequestTask.Result;
 
-                    return new HandleRequestReport(processReport.RequestEvent, StateChanged: persistReport.StateChanged, httpResponse);
-                }
-            })
-            .ContinueWith(reportTask =>
-            {
-                if (reportTask.IsFaulted)
-                {
-                    logMessage?.Invoke("Failed to handle HTTP request: " + reportTask.Exception);
-                    context.Response.StatusCode = 500;
+                    if (prepareRequest is not null)
+                    {
+                        httpRequestProperties = prepareRequest(httpRequestProperties);
+                    }
 
-                    return new HandleRequestReport(
-                        new WebServiceInterface.HttpRequestEventStruct(
-                            HttpRequestId: "failed",
-                            PosixTimeMilli: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                            new WebServiceInterface.HttpRequestContext(ClientAddress: context.Connection.RemoteIpAddress?.ToString()),
-                            Request: new WebServiceInterface.HttpRequestProperties(
-                                Method: context.Request.Method,
-                                Uri: context.Request.Path,
-                                Body: null,
-                                Headers: [])),
-                        StateChanged: false,
-                        Response: new WebServiceInterface.HttpResponse(
-                            StatusCode: 500,
-                            Body: System.Text.Encoding.UTF8.GetBytes("Failed to handle HTTP request."),
-                            HeadersToAdd: []));
-                }
-                else
+                    lock (_processAndStoreLock)
+                    {
+                        var processReport =
+                            _publicAppState.HandleRequestAsync(
+                                httpRequestProperties,
+                                new WebServiceInterface.HttpRequestContext(
+                                    ClientAddress: context.Connection.RemoteIpAddress?.ToString()),
+                                httpRequestEventSizeLimit: HttpRequestEventSizeLimitDefault,
+                                cancellationToken: context.RequestAborted).Result;
+
+                        var httpResponse = processReport.Response;
+
+                        if (finalizeResponse is not null)
+                        {
+                            httpResponse = finalizeResponse(httpResponse);
+                        }
+
+                        var persistReport = EnsurePersisted(logMessage);
+
+                        return
+                            new HandleRequestReport(
+                                processReport.RequestEvent,
+                                StateChanged: persistReport.StateChanged,
+                                httpResponse);
+                    }
+                })
+            .ContinueWith(
+                reportTask =>
                 {
-                    var report = reportTask.Result;
-                    return Asp.SendHttpResponseAsync(context, report.Response)
-                        .ContinueWith(_ => report)
-                        .Result;
-                }
-            });
+                    if (reportTask.IsFaulted)
+                    {
+                        logMessage?.Invoke("Failed to handle HTTP request: " + reportTask.Exception);
+                        context.Response.StatusCode = 500;
+
+                        return
+                            new HandleRequestReport(
+                                new WebServiceInterface.HttpRequestEventStruct(
+                                    HttpRequestId: "failed",
+                                    PosixTimeMilli: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                                    new WebServiceInterface.HttpRequestContext(
+                                        ClientAddress: context.Connection.RemoteIpAddress?.ToString()),
+                                    Request: new WebServiceInterface.HttpRequestProperties(
+                                        Method: context.Request.Method,
+                                        Uri: context.Request.Path,
+                                        Body: null,
+                                        Headers: [])),
+                                StateChanged: false,
+                                Response: new WebServiceInterface.HttpResponse(
+                                    StatusCode: 500,
+                                    Body: System.Text.Encoding.UTF8.GetBytes("Failed to handle HTTP request."),
+                                    HeadersToAdd: []));
+                    }
+                    else
+                    {
+                        var report = reportTask.Result;
+
+                        return
+                            Asp.SendHttpResponseAsync(context, report.Response)
+                            .ContinueWith(_ => report)
+                            .Result;
+                    }
+                });
     }
 
     private PersistenceReport EnsurePersisted(

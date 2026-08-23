@@ -1,13 +1,13 @@
-using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using System;
-using System.Linq;
-using System.Collections.Immutable;
 using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
 
 namespace Pine.CompilePineToDotNet;
 
@@ -34,7 +34,8 @@ public static class PineCSharpSyntaxFactory
         var branchInvocationBlock =
             SyntaxFactory.Block(
                 SyntaxFactory.SeparatedList(
-                    [..prependStatments ?? [],
+                    [
+                    ..prependStatments ?? [],
                     SyntaxFactory.ReturnStatement(branchInvocation.Syntax)
                     ]));
 
@@ -46,21 +47,23 @@ public static class PineCSharpSyntaxFactory
         var envListItemsConditionsExprs =
             envConstraint.ParsedItems
             .OrderBy(envListItem => envListItem.Key, IntPathComparer.Instance)
-            .Select(envListItem =>
-            {
-                var valueDeclName = CompileToCSharp.DeclarationNameForValue(envListItem.Value);
+            .Select(
+                envListItem =>
+                {
+                    var valueDeclName = CompileToCSharp.DeclarationNameForValue(envListItem.Value);
 
-                var currentEnvParam =
-                compilationEnv.SelfInterface.GetParamForEnvItemPath(envListItem.Key) ?? throw new ArgumentNullException();
+                    var currentEnvParam =
+                        compilationEnv.SelfInterface.GetParamForEnvItemPath(envListItem.Key) ??
+                        throw new ArgumentNullException();
 
-                return
-                SyntaxFactory.BinaryExpression(
-                    SyntaxKind.EqualsExpression,
-                    BuildCSharpExpressionToGetItemFromPathOrNull(
-                        SyntaxFactory.IdentifierName(currentEnvParam.paramName),
-                        path: currentEnvParam.pathFromParam),
-                    SyntaxFactory.IdentifierName(valueDeclName));
-            })
+                    return
+                        SyntaxFactory.BinaryExpression(
+                            SyntaxKind.EqualsExpression,
+                            BuildCSharpExpressionToGetItemFromPathOrNull(
+                                SyntaxFactory.IdentifierName(currentEnvParam.paramName),
+                                path: currentEnvParam.pathFromParam),
+                            SyntaxFactory.IdentifierName(valueDeclName));
+                })
             .ToImmutableArray();
 
         static ExpressionSyntax aggregateRecursive(
@@ -76,7 +79,8 @@ public static class PineCSharpSyntaxFactory
                         next),
                     [.. remaining.Skip(1)]),
 
-                _ => combined
+                _ =>
+                combined
             };
 
         var aggregateConditionExpr =
@@ -99,137 +103,141 @@ public static class PineCSharpSyntaxFactory
             SyntaxFactory.NullableType(
                 SyntaxFactory.IdentifierName("PineValue")),
             SyntaxFactory.Identifier(ValueFromPathInValueDeclarationName))
-                .WithModifiers(
-                    SyntaxFactory.TokenList(
-                        [
-                        SyntaxFactory.Token(SyntaxKind.PublicKeyword),
-                        SyntaxFactory.Token(SyntaxKind.StaticKeyword)
-                        ]))
-                .WithParameterList(
-                    SyntaxFactory.ParameterList(
-                        SyntaxFactory.SeparatedList<ParameterSyntax>(
-                            new SyntaxNodeOrToken[]{
-                                SyntaxFactory.Parameter(
-                                    SyntaxFactory.Identifier("environment"))
-                                .WithType(
-                                    SyntaxFactory.IdentifierName("PineValue")),
-                                SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                SyntaxFactory.Parameter(
-                                    SyntaxFactory.Identifier("path"))
-                                .WithType(
-                                    SyntaxFactory.GenericName(
+        .WithModifiers(
+            SyntaxFactory.TokenList(
+                [
+                SyntaxFactory.Token(SyntaxKind.PublicKeyword),
+                SyntaxFactory.Token(SyntaxKind.StaticKeyword)
+                ]))
+        .WithParameterList(
+            SyntaxFactory.ParameterList(
+                SyntaxFactory.SeparatedList<ParameterSyntax>(
+                    new SyntaxNodeOrToken[]
+                    {
+                        SyntaxFactory.Parameter(
+                            SyntaxFactory.Identifier("environment"))
+                        .WithType(
+                            SyntaxFactory.IdentifierName("PineValue")),
+                        SyntaxFactory.Token(SyntaxKind.CommaToken),
+                        SyntaxFactory.Parameter(
+                            SyntaxFactory.Identifier("path"))
+                        .WithType(
+                            SyntaxFactory.GenericName(
                                 SyntaxFactory.Identifier("ReadOnlySpan"))
-                                    .WithTypeArgumentList(
-                                        SyntaxFactory.TypeArgumentList(
-                                            SyntaxFactory.SingletonSeparatedList<TypeSyntax>(
-                                                SyntaxFactory.PredefinedType(
-                                                    SyntaxFactory.Token(SyntaxKind.IntKeyword))))))})))
-                .WithBody(
-                    SyntaxFactory.Block(
-                        SyntaxFactory.IfStatement(
+                            .WithTypeArgumentList(
+                                SyntaxFactory.TypeArgumentList(
+                                    SyntaxFactory.SingletonSeparatedList<TypeSyntax>(
+                                        SyntaxFactory.PredefinedType(
+                                            SyntaxFactory.Token(SyntaxKind.IntKeyword))))))
+                    })))
+        .WithBody(
+            SyntaxFactory.Block(
+                SyntaxFactory.IfStatement(
                     SyntaxFactory.IsPatternExpression(
-                                SyntaxFactory.MemberAccessExpression(
-                                    SyntaxKind.SimpleMemberAccessExpression,
-                                    SyntaxFactory.IdentifierName("path"),
+                        SyntaxFactory.MemberAccessExpression(
+                            SyntaxKind.SimpleMemberAccessExpression,
+                            SyntaxFactory.IdentifierName("path"),
                             SyntaxFactory.IdentifierName("Length")),
                         SyntaxFactory.ConstantPattern(
-                                SyntaxFactory.LiteralExpression(
-                                    SyntaxKind.NumericLiteralExpression,
+                            SyntaxFactory.LiteralExpression(
+                                SyntaxKind.NumericLiteralExpression,
                                 SyntaxFactory.Literal(0)))),
-                            SyntaxFactory.ReturnStatement(
-                                SyntaxFactory.IdentifierName("environment"))),
-                        SyntaxFactory.IfStatement(
-                            SyntaxFactory.IsPatternExpression(
-                                SyntaxFactory.IdentifierName("environment"),
-                                SyntaxFactory.UnaryPattern(
-                                    SyntaxFactory.DeclarationPattern(
-                                        SyntaxFactory.QualifiedName(
-                                            SyntaxFactory.IdentifierName("PineValue"),
-                                            SyntaxFactory.IdentifierName("ListValue")),
-                                        SyntaxFactory.SingleVariableDesignation(
-                                            SyntaxFactory.Identifier("listValue"))))),
-                            SyntaxFactory.ReturnStatement(
-                                SyntaxFactory.LiteralExpression(
-                                    SyntaxKind.NullLiteralExpression))),
-                        SyntaxFactory.IfStatement(
-                            SyntaxFactory.BinaryExpression(
-                                SyntaxKind.LessThanExpression,
-                                SyntaxFactory.ElementAccessExpression(
-                                    SyntaxFactory.IdentifierName("path"))
-                                .WithArgumentList(
-                                    SyntaxFactory.BracketedArgumentList(
-                                        SyntaxFactory.SingletonSeparatedList(
-                                            SyntaxFactory.Argument(
-                                                SyntaxFactory.LiteralExpression(
-                                                    SyntaxKind.NumericLiteralExpression,
-                                                    SyntaxFactory.Literal(0)))))),
-                                SyntaxFactory.LiteralExpression(
-                                    SyntaxKind.NumericLiteralExpression,
-                                    SyntaxFactory.Literal(0))),
-                            SyntaxFactory.ReturnStatement(
-                                SyntaxFactory.LiteralExpression(
-                                    SyntaxKind.NullLiteralExpression))),
-                        SyntaxFactory.IfStatement(
-                            SyntaxFactory.BinaryExpression(
-                                SyntaxKind.GreaterThanOrEqualExpression,
-                                SyntaxFactory.ElementAccessExpression(
-                                    SyntaxFactory.IdentifierName("path"))
-                                .WithArgumentList(
-                                    SyntaxFactory.BracketedArgumentList(
-                                        SyntaxFactory.SingletonSeparatedList(
-                                            SyntaxFactory.Argument(
-                                                SyntaxFactory.LiteralExpression(
-                                                    SyntaxKind.NumericLiteralExpression,
-                                                    SyntaxFactory.Literal(0)))))),
-                                SyntaxFactory.MemberAccessExpression(
-                                    SyntaxKind.SimpleMemberAccessExpression,
-                                    SyntaxFactory.MemberAccessExpression(
-                                        SyntaxKind.SimpleMemberAccessExpression,
-                                        SyntaxFactory.IdentifierName("listValue"),
-                                        SyntaxFactory.IdentifierName("Elements")),
-                                    SyntaxFactory.IdentifierName("Count"))),
-                            SyntaxFactory.ReturnStatement(
-                                SyntaxFactory.LiteralExpression(
-                                    SyntaxKind.NullLiteralExpression))),
-                        SyntaxFactory.ReturnStatement(
-                            SyntaxFactory.InvocationExpression(
-                                SyntaxFactory.IdentifierName(ValueFromPathInValueDeclarationName))
-                            .WithArgumentList(
-                                SyntaxFactory.ArgumentList(
-                                    SyntaxFactory.SeparatedList<ArgumentSyntax>(
-                                        new SyntaxNodeOrToken[]{
-                                            SyntaxFactory.Argument(
-                                                SyntaxFactory.ElementAccessExpression(
-                                                    SyntaxFactory.MemberAccessExpression(
-                                                        SyntaxKind.SimpleMemberAccessExpression,
-                                                        SyntaxFactory.IdentifierName("listValue"),
-                                                        SyntaxFactory.IdentifierName("Elements")))
-                                                .WithArgumentList(
-                                                    SyntaxFactory.BracketedArgumentList(
-                                                        SyntaxFactory.SingletonSeparatedList(
-                                                            SyntaxFactory.Argument(
-                                                                SyntaxFactory.ElementAccessExpression(
-                                                                    SyntaxFactory.IdentifierName("path"))
-                                                                .WithArgumentList(
-                                                                    SyntaxFactory.BracketedArgumentList(
-                                                                        SyntaxFactory.SingletonSeparatedList(
-                                                                            SyntaxFactory.Argument(
-                                                                                SyntaxFactory.LiteralExpression(
-                                                                                    SyntaxKind.NumericLiteralExpression,
-                                                                                    SyntaxFactory.Literal(0))))))))))),
-                                            SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                            SyntaxFactory.Argument(
+                    SyntaxFactory.ReturnStatement(
+                        SyntaxFactory.IdentifierName("environment"))),
+                SyntaxFactory.IfStatement(
+                    SyntaxFactory.IsPatternExpression(
+                        SyntaxFactory.IdentifierName("environment"),
+                        SyntaxFactory.UnaryPattern(
+                            SyntaxFactory.DeclarationPattern(
+                                SyntaxFactory.QualifiedName(
+                                    SyntaxFactory.IdentifierName("PineValue"),
+                                    SyntaxFactory.IdentifierName("ListValue")),
+                                SyntaxFactory.SingleVariableDesignation(
+                                    SyntaxFactory.Identifier("listValue"))))),
+                    SyntaxFactory.ReturnStatement(
+                        SyntaxFactory.LiteralExpression(
+                            SyntaxKind.NullLiteralExpression))),
+                SyntaxFactory.IfStatement(
+                    SyntaxFactory.BinaryExpression(
+                        SyntaxKind.LessThanExpression,
+                        SyntaxFactory.ElementAccessExpression(
+                            SyntaxFactory.IdentifierName("path"))
+                        .WithArgumentList(
+                            SyntaxFactory.BracketedArgumentList(
+                                SyntaxFactory.SingletonSeparatedList(
+                                    SyntaxFactory.Argument(
+                                        SyntaxFactory.LiteralExpression(
+                                            SyntaxKind.NumericLiteralExpression,
+                                            SyntaxFactory.Literal(0)))))),
+                        SyntaxFactory.LiteralExpression(
+                            SyntaxKind.NumericLiteralExpression,
+                            SyntaxFactory.Literal(0))),
+                    SyntaxFactory.ReturnStatement(
+                        SyntaxFactory.LiteralExpression(
+                            SyntaxKind.NullLiteralExpression))),
+                SyntaxFactory.IfStatement(
+                    SyntaxFactory.BinaryExpression(
+                        SyntaxKind.GreaterThanOrEqualExpression,
+                        SyntaxFactory.ElementAccessExpression(
+                            SyntaxFactory.IdentifierName("path"))
+                        .WithArgumentList(
+                            SyntaxFactory.BracketedArgumentList(
+                                SyntaxFactory.SingletonSeparatedList(
+                                    SyntaxFactory.Argument(
+                                        SyntaxFactory.LiteralExpression(
+                                            SyntaxKind.NumericLiteralExpression,
+                                            SyntaxFactory.Literal(0)))))),
+                        SyntaxFactory.MemberAccessExpression(
+                            SyntaxKind.SimpleMemberAccessExpression,
+                            SyntaxFactory.MemberAccessExpression(
+                                SyntaxKind.SimpleMemberAccessExpression,
+                                SyntaxFactory.IdentifierName("listValue"),
+                                SyntaxFactory.IdentifierName("Elements")),
+                            SyntaxFactory.IdentifierName("Count"))),
+                    SyntaxFactory.ReturnStatement(
+                        SyntaxFactory.LiteralExpression(
+                            SyntaxKind.NullLiteralExpression))),
+                SyntaxFactory.ReturnStatement(
+                    SyntaxFactory.InvocationExpression(
+                        SyntaxFactory.IdentifierName(ValueFromPathInValueDeclarationName))
+                    .WithArgumentList(
+                        SyntaxFactory.ArgumentList(
+                            SyntaxFactory.SeparatedList<ArgumentSyntax>(
+                                new SyntaxNodeOrToken[]
+                                {
+                                    SyntaxFactory.Argument(
+                                        SyntaxFactory.ElementAccessExpression(
+                                            SyntaxFactory.MemberAccessExpression(
+                                                SyntaxKind.SimpleMemberAccessExpression,
+                                                SyntaxFactory.IdentifierName("listValue"),
+                                                SyntaxFactory.IdentifierName("Elements")))
+                                        .WithArgumentList(
+                                            SyntaxFactory.BracketedArgumentList(
+                                                SyntaxFactory.SingletonSeparatedList(
+                                                    SyntaxFactory.Argument(
+                                                        SyntaxFactory.ElementAccessExpression(
+                                                            SyntaxFactory.IdentifierName("path"))
+                                                        .WithArgumentList(
+                                                            SyntaxFactory.BracketedArgumentList(
+                                                                SyntaxFactory.SingletonSeparatedList(
+                                                                    SyntaxFactory.Argument(
+                                                                        SyntaxFactory.LiteralExpression(
+                                                                            SyntaxKind.NumericLiteralExpression,
+                                                                            SyntaxFactory.Literal(0))))))))))),
+                                    SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                    SyntaxFactory.Argument(
                                         SyntaxFactory.ElementAccessExpression(
                                             SyntaxFactory.IdentifierName("path"))
-                                                            .WithArgumentList(
+                                        .WithArgumentList(
                                             SyntaxFactory.BracketedArgumentList(
-                                                                    SyntaxFactory.SingletonSeparatedList(
-                                                                        SyntaxFactory.Argument(
+                                                SyntaxFactory.SingletonSeparatedList(
+                                                    SyntaxFactory.Argument(
                                                         SyntaxFactory.RangeExpression()
                                                         .WithLeftOperand(
-                                                                            SyntaxFactory.LiteralExpression(
-                                                                                SyntaxKind.NumericLiteralExpression,
-                                                                SyntaxFactory.Literal(1))))))))}))))));
+                                                            SyntaxFactory.LiteralExpression(
+                                                                SyntaxKind.NumericLiteralExpression,
+                                                                SyntaxFactory.Literal(1))))))))
+                                }))))));
 
     public static readonly MethodDeclarationSyntax IsBlobDeclaration =
         SyntaxFactory.MethodDeclaration(
@@ -313,16 +321,16 @@ public static class PineCSharpSyntaxFactory
                     SyntaxKind.SimpleMemberAccessExpression,
                     evalInvocationExpression,
                     SyntaxFactory.IdentifierName("Extract")))
-                        .WithArgumentList(
-                            SyntaxFactory.ArgumentList(
-                                SyntaxFactory.SingletonSeparatedList(
-                                    SyntaxFactory.Argument(
-                                        SyntaxFactory.SimpleLambdaExpression(
-                                            SyntaxFactory.Parameter(
-                                                SyntaxFactory.Identifier("err")))
-                                        .WithExpressionBody(
-                                            ThrowGenericEvalRuntimeException(messageExpr: SyntaxFactory.IdentifierName("err"))
-                                            )))));
+            .WithArgumentList(
+                SyntaxFactory.ArgumentList(
+                    SyntaxFactory.SingletonSeparatedList(
+                        SyntaxFactory.Argument(
+                            SyntaxFactory.SimpleLambdaExpression(
+                                SyntaxFactory.Parameter(
+                                    SyntaxFactory.Identifier("err")))
+                            .WithExpressionBody(
+                                ThrowGenericEvalRuntimeException(messageExpr: SyntaxFactory.IdentifierName("err"))
+                                )))));
     }
 
     public static ExpressionSyntax ThrowGenericEvalRuntimeException(
@@ -403,11 +411,14 @@ public static class PineCSharpSyntaxFactory
                                 SyntaxFactory.CollectionExpression(
                                     SyntaxFactory.SeparatedList<CollectionElementSyntax>(
                                         path
-                                        .Select(pathItem =>
-                                        (SyntaxNodeOrToken)SyntaxFactory.ExpressionElement(SyntaxFactory.LiteralExpression(
-                                            SyntaxKind.NumericLiteralExpression,
-                                            SyntaxFactory.Literal(pathItem))))
-                                        .Intersperse(SyntaxFactory.Token(SyntaxKind.CommaToken)))))})));
+                                        .Select(
+                                            pathItem =>
+                                            (SyntaxNodeOrToken)SyntaxFactory.ExpressionElement(
+                                                SyntaxFactory.LiteralExpression(
+                                                    SyntaxKind.NumericLiteralExpression,
+                                                    SyntaxFactory.Literal(pathItem))))
+                                        .Intersperse(SyntaxFactory.Token(SyntaxKind.CommaToken)))))
+                        })));
     }
 
     public static ExpressionSyntax BuildCSharpExpressionToCheckIsBlob(

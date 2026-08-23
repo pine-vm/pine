@@ -1,13 +1,13 @@
 using AwesomeAssertions;
+using Pine.CLI;
 using Pine.Core;
+using Pine.Core.Files;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using Xunit;
-using Pine.Core.Files;
-using Pine.CLI;
 
 namespace Pine.IntegrationTests;
 
@@ -16,60 +16,65 @@ public class ProgramCommandMakeTests
     [Fact]
     public void TestCommandMake_with_blobMain()
     {
-        var projectFiles = new[]
-        {
-            new
+        var projectFiles =
+            new[]
             {
-                path = ImmutableList.Create("elm.json"),
-                content =
-                """
+                new
                 {
-                    "type": "application",
-                    "source-directories": [
-                        "src"
-                    ],
-                    "elm-version": "0.19.1",
-                    "dependencies": {
-                        "direct": {
-                            "TSFoster/elm-bytes-extra": "1.3.0",
-                            "elm/bytes": "1.0.8",
-                            "elm/core": "1.0.5",
-                            "elm/json": "1.1.3"
+                    path = ImmutableList.Create("elm.json"),
+                    content =
+                    """
+                    {
+                        "type": "application",
+                        "source-directories": [
+                            "src"
+                        ],
+                        "elm-version": "0.19.1",
+                        "dependencies": {
+                            "direct": {
+                                "TSFoster/elm-bytes-extra": "1.3.0",
+                                "elm/bytes": "1.0.8",
+                                "elm/core": "1.0.5",
+                                "elm/json": "1.1.3"
+                            },
+                            "indirect": {
+                            }
                         },
-                        "indirect": {
+                        "test-dependencies": {
+                            "direct": {},
+                            "indirect": {}
                         }
-                    },
-                    "test-dependencies": {
-                        "direct": {},
-                        "indirect": {}
                     }
-                }
-                """,
-            },
-            new
-            {
-                path = ImmutableList.Create("src","Build.elm"),
-                content =
-                """
-                module Build exposing (..)
+                    """,
+                },
+                new
+                {
+                    path = ImmutableList.Create("src", "Build.elm"),
+                    content =
+                    """
+                    module Build exposing (..)
 
-                import Bytes
-                import Bytes.Extra
+                    import Bytes
+                    import Bytes.Extra
 
 
-                blobMain : Bytes.Bytes
-                blobMain =
-                    Bytes.Extra.fromByteValues [ 0, 1, 3, 4, 71 ]
+                    blobMain : Bytes.Bytes
+                    blobMain =
+                        Bytes.Extra.fromByteValues [ 0, 1, 3, 4, 71 ]
 
-                """,
-            },
-        };
+                    """,
+                },
+            };
 
         var outputBlob =
             GetOutputFileContentForCommandMake(
                 projectFiles:
-                [.. projectFiles
-                .Select(file => ((IReadOnlyList<string>)file.path, (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(file.content)))],
+                [
+                    .. projectFiles
+                    .Select(
+                        file =>
+                        ((IReadOnlyList<string>)file.path, (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(file.content)))
+                ],
                 entryPointFilePath: ["src", "Build.elm"]);
 
         outputBlob.Span.ToArray().Should().Equal([0, 1, 3, 4, 71]);
@@ -78,60 +83,65 @@ public class ProgramCommandMakeTests
     [Fact]
     public void TestCommandMake_with_blobMain_as_thunk()
     {
-        var projectFiles = new[]
-        {
-            new
+        var projectFiles =
+            new[]
             {
-                path = ImmutableList.Create("elm.json"),
-                content =
-                """
+                new
                 {
-                    "type": "application",
-                    "source-directories": [
-                        "src"
-                    ],
-                    "elm-version": "0.19.1",
-                    "dependencies": {
-                        "direct": {
-                            "TSFoster/elm-bytes-extra": "1.3.0",
-                            "elm/bytes": "1.0.8",
-                            "elm/core": "1.0.5",
-                            "elm/json": "1.1.3"
+                    path = ImmutableList.Create("elm.json"),
+                    content =
+                    """
+                    {
+                        "type": "application",
+                        "source-directories": [
+                            "src"
+                        ],
+                        "elm-version": "0.19.1",
+                        "dependencies": {
+                            "direct": {
+                                "TSFoster/elm-bytes-extra": "1.3.0",
+                                "elm/bytes": "1.0.8",
+                                "elm/core": "1.0.5",
+                                "elm/json": "1.1.3"
+                            },
+                            "indirect": {
+                            }
                         },
-                        "indirect": {
+                        "test-dependencies": {
+                            "direct": {},
+                            "indirect": {}
                         }
-                    },
-                    "test-dependencies": {
-                        "direct": {},
-                        "indirect": {}
                     }
-                }
-                """,
-            },
-            new
-            {
-                path = ImmutableList.Create("src","Build.elm"),
-                content =
-                """
-                module Build exposing (..)
+                    """,
+                },
+                new
+                {
+                    path = ImmutableList.Create("src", "Build.elm"),
+                    content =
+                    """
+                    module Build exposing (..)
 
-                import Bytes
-                import Bytes.Extra
+                    import Bytes
+                    import Bytes.Extra
 
 
-                blobMain : () -> Bytes.Bytes
-                blobMain () =
-                    Bytes.Extra.fromByteValues [ 0, 13, 17, 31, 71 ]
+                    blobMain : () -> Bytes.Bytes
+                    blobMain () =
+                        Bytes.Extra.fromByteValues [ 0, 13, 17, 31, 71 ]
 
-                """,
-            },
-        };
+                    """,
+                },
+            };
 
         var outputBlob =
             GetOutputFileContentForCommandMake(
                 projectFiles:
-                [.. projectFiles
-                .Select(file => ((IReadOnlyList<string>)file.path, (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(file.content)))],
+                [
+                    .. projectFiles
+                    .Select(
+                        file =>
+                        ((IReadOnlyList<string>)file.path, (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(file.content)))
+                ],
                 entryPointFilePath: ["src", "Build.elm"]);
 
         outputBlob.Span.ToArray().Should().Equal([0, 13, 17, 31, 71]);

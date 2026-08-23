@@ -100,7 +100,8 @@ public class CompiledModulesFileCache(IFileStore fileStore)
                 ElmTime.ElmInteractive.ElmInteractive.CompilationCache.Empty);
 
         var environmentJsonString =
-            System.Text.Json.JsonSerializer.Serialize(environmentJson.json,
+            System.Text.Json.JsonSerializer.Serialize(
+                environmentJson.json,
                 options: ElmTime.ElmInteractive.ElmInteractive.compilerInterfaceJsonSerializerOptions);
 
         var fileContent = System.Text.Encoding.UTF8.GetBytes(environmentJsonString);

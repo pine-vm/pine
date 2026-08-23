@@ -223,48 +223,52 @@ public class Program
                 string.Join(
                     "  ",
                     [
-                        "compile-interactive-env"
-                        ,"--env-source=" + elmCompilerSourceZipArchivePath
-                        ,"--output-compact-build=compact-build.json"
-                        , ..ElmCompilerInElm.DefaultCompilerTreeRootModuleFilePaths
-                        .Select(rootFilePath => "--root-file-path=" + string.Join('/', rootFilePath))
-                        ,"--skip-lowering"
-                        ]);
+                        "compile-interactive-env",
+                        "--env-source=" + elmCompilerSourceZipArchivePath,
+                        "--output-compact-build=compact-build.json",
+                        ..ElmCompilerInElm.DefaultCompilerTreeRootModuleFilePaths
+                        .Select(rootFilePath => "--root-file-path=" + string.Join('/', rootFilePath)),
+                        "--skip-lowering"
+                    ]);
 
-            var process = new System.Diagnostics.Process
-            {
-                StartInfo = new System.Diagnostics.ProcessStartInfo
+            var process =
+                new System.Diagnostics.Process
                 {
-                    FileName = s_executableFilePathCached.Value,
-                    WorkingDirectory = Environment.CurrentDirectory,
-                    Arguments = processArguments,
-                    RedirectStandardInput = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    StandardOutputEncoding = Encoding.UTF8,
-                    StandardErrorEncoding = Encoding.UTF8
-                }
-            };
+                    StartInfo =
+                    new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = s_executableFilePathCached.Value,
+                        WorkingDirectory = Environment.CurrentDirectory,
+                        Arguments = processArguments,
+                        RedirectStandardInput = true,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        StandardOutputEncoding = Encoding.UTF8,
+                        StandardErrorEncoding = Encoding.UTF8
+                    }
+                };
 
-            process.OutputDataReceived += (sender, e) =>
-            {
-                // Only write if there is data
-                if (e.Data != null)
+            process.OutputDataReceived +=
+                (sender, e) =>
                 {
-                    Console.WriteLine(e.Data);
-                }
-            };
+                    // Only write if there is data
+                    if (e.Data != null)
+                    {
+                        Console.WriteLine(e.Data);
+                    }
+                };
 
-            process.ErrorDataReceived += (sender, e) =>
-            {
-                // Only write if there is data
-                if (e.Data != null)
+            process.ErrorDataReceived +=
+                (sender, e) =>
                 {
-                    Console.Error.WriteLine(e.Data);
-                }
-            };
+                    // Only write if there is data
+                    if (e.Data != null)
+                    {
+                        Console.Error.WriteLine(e.Data);
+                    }
+                };
 
             // Start the process
             process.Start();
@@ -328,26 +332,28 @@ public class Program
             ("34f0abf678f9d2b0f55aadf1f6c24a97b8a70c273f65f5dbf52e5bc342519c84",
             @"https://github.com/pine-vm/pine/releases/download/v0.4.24/pine-bin-v0.4.24-osx-x64.zip"));
 
-    private readonly static Lazy<string> s_executableFilePathCached = new(() =>
-    {
-        /*
-         * For now, we assume that the file stays the same for the lifetime of the current process.
-         * This approach will break if the persistent cache is cleared while the current process is running.
-         * We could make this more robust by checking if the file at the path still exists, and re-downloading if it doesn't.
-         * */
+    private readonly static Lazy<string> s_executableFilePathCached =
+        new(
+            () =>
+            {
+                /*
+                 * For now, we assume that the file stays the same for the lifetime of the current process.
+                 * This approach will break if the persistent cache is cleared while the current process is running.
+                 * We could make this more robust by checking if the file at the path still exists, and re-downloading if it doesn't.
+                 * */
 
-        var executableFile =
-            BlobLibrary.LoadFileForCurrentOs(ExecutableFileByOs)
-            ??
-            throw new Exception("Failed to load Pine executable file");
+                var executableFile =
+                    BlobLibrary.LoadFileForCurrentOs(ExecutableFileByOs)
+                    ??
+                    throw new Exception("Failed to load Pine executable file");
 
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            System.IO.File.SetUnixFileMode(
-                executableFile.cacheFilePath,
-                ExecutableFile.UnixFileModeForExecutableFile);
-        }
+                if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    System.IO.File.SetUnixFileMode(
+                        executableFile.cacheFilePath,
+                        ExecutableFile.UnixFileModeForExecutableFile);
+                }
 
-        return executableFile.cacheFilePath;
-    });
+                return executableFile.cacheFilePath;
+            });
 }

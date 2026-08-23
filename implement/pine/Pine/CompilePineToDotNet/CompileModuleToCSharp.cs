@@ -1,5 +1,6 @@
-using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine.CompilePineToDotNet;
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
@@ -7,11 +8,10 @@ using Pine.Core.CommonEncodings;
 using Pine.Core.DotNet;
 using Pine.Core.Interpreter.IntermediateVM;
 using Pine.PineVM;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System;
-using Microsoft.CodeAnalysis;
 using System.Text;
 
 namespace Pine.Pine.CompilePineToDotNet;
@@ -40,26 +40,28 @@ public static class CompileModuleToCSharp
 
         var functions =
             parsedModule.FunctionDeclarations
-            .SelectMany(function => BuildCSharpMethodsFromElmFunction(
-                FunctionRecord.ParseFunctionRecordTagged(
-                    function.Value,
-                    parseCache)
-                .Extract(err => throw new Exception(err)),
-                function.Key,
-                parseCache,
-                declarationSyntaxContext))
+            .SelectMany(
+                function => BuildCSharpMethodsFromElmFunction(
+                    FunctionRecord.ParseFunctionRecordTagged(
+                        function.Value,
+                        parseCache)
+                    .Extract(err => throw new Exception(err)),
+                    function.Key,
+                    parseCache,
+                    declarationSyntaxContext))
             .ToImmutableList();
 
-        var usingDirectivesTypes = new[]
-        {
-            typeof(PineValue),
-            typeof(ImmutableArray),
-            typeof(IReadOnlyDictionary<,>),
-            typeof(Func<,>),
-            typeof(Enumerable),
-            typeof(GenericEvalException),
-            typeof(ParseExpressionException),
-        };
+        var usingDirectivesTypes =
+            new[]
+            {
+                typeof(PineValue),
+                typeof(ImmutableArray),
+                typeof(IReadOnlyDictionary<,>),
+                typeof(Func<,>),
+                typeof(Enumerable),
+                typeof(GenericEvalException),
+                typeof(ParseExpressionException),
+            };
 
         var usingDirectives =
             usingDirectivesTypes
@@ -71,17 +73,17 @@ public static class CompileModuleToCSharp
             .ToImmutableList();
 
         return
-             new CompileCSharpClassResult(
-                 SyntaxContainerConfig: containerConfig,
-                 ClassDeclarationSyntax:
-                 SyntaxFactory.ClassDeclaration(containerConfig.ContainerTypeName)
+            new CompileCSharpClassResult(
+                SyntaxContainerConfig: containerConfig,
+                ClassDeclarationSyntax:
+                SyntaxFactory.ClassDeclaration(containerConfig.ContainerTypeName)
                 .WithMembers(
                     SyntaxFactory.List<MemberDeclarationSyntax>([.. functions]))
                 .WithModifiers(
-                     SyntaxFactory.TokenList(
-                         SyntaxFactory.Token(SyntaxKind.PublicKeyword),
-                         SyntaxFactory.Token(SyntaxKind.StaticKeyword))),
-                 UsingDirectives: usingDirectives);
+                    SyntaxFactory.TokenList(
+                        SyntaxFactory.Token(SyntaxKind.PublicKeyword),
+                        SyntaxFactory.Token(SyntaxKind.StaticKeyword))),
+                UsingDirectives: usingDirectives);
     }
 
     private const string UnpackedParamsMethodNameSuffix = "_uparam";
@@ -174,14 +176,16 @@ public static class CompileModuleToCSharp
                 .WithArgumentList(
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SeparatedList<ArgumentSyntax>(
-                            new SyntaxNodeOrToken[]{
+                            new SyntaxNodeOrToken[]
+                            {
                                 SyntaxFactory.Argument(
                                     SyntaxFactory.LiteralExpression(
                                         SyntaxKind.NumericLiteralExpression,
                                         SyntaxFactory.Literal(skipCount))),
                                 SyntaxFactory.Token(SyntaxKind.CommaToken),
                                 SyntaxFactory.Argument(
-                                    parentExpr)})));
+                                    parentExpr)
+                            })));
 
             var localExpr =
                 SyntaxFactory.InvocationExpression(
@@ -192,7 +196,8 @@ public static class CompileModuleToCSharp
                 .WithArgumentList(
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SeparatedList<ArgumentSyntax>(
-                            new SyntaxNodeOrToken[]{
+                            new SyntaxNodeOrToken[]
+                            {
                                 SyntaxFactory.Argument(skippedExpr)
                             })));
 
@@ -256,12 +261,12 @@ public static class CompileModuleToCSharp
                     SyntaxFactory.Token(SyntaxKind.PublicKeyword),
                     SyntaxFactory.Token(SyntaxKind.StaticKeyword)))
             .WithParameterList(
-            SyntaxFactory.ParameterList(
-                SyntaxFactory.SingletonSeparatedList(
-                    SyntaxFactory.Parameter(
-                        SyntaxFactory.Identifier(paramEnvName))
-                    .WithType(
-                        SyntaxFactory.IdentifierName(nameof(PineValue))))))
+                SyntaxFactory.ParameterList(
+                    SyntaxFactory.SingletonSeparatedList(
+                        SyntaxFactory.Parameter(
+                            SyntaxFactory.Identifier(paramEnvName))
+                        .WithType(
+                            SyntaxFactory.IdentifierName(nameof(PineValue))))))
             .WithBody(methodBody);
     }
 
@@ -296,10 +301,12 @@ public static class CompileModuleToCSharp
         {
             var usages =
                 ssaInstructions
-                .SelectMany(otherInstruction =>
-                otherInstruction.Dependencies.Where(dep =>
-                dep.source is SSAInstructionSource.Local localDep &&
-                localDep.Index == instruction.AssignmentIndex));
+                .SelectMany(
+                    otherInstruction =>
+                    otherInstruction.Dependencies.Where(
+                        dep =>
+                        dep.source is SSAInstructionSource.Local localDep &&
+                        localDep.Index == instruction.AssignmentIndex));
 
             var usagesTypes =
                 usages
@@ -349,8 +356,10 @@ public static class CompileModuleToCSharp
 
             var alsoUsedAsInt =
                 ssaInstructions
-                .Any(instruction =>
-                    instruction.Dependencies.Any(dep =>
+                .Any(
+                    instruction =>
+                    instruction.Dependencies.Any(
+                        dep =>
                         dep.source is SSAInstructionSource.Parameter paramDep &&
                         paramDep.EnvPath.Span.SequenceEqual(paramPath.Span)));
 
@@ -430,7 +439,8 @@ public static class CompileModuleToCSharp
 
         var parameterList =
             procedureInterface.ParamsPaths
-            .Select(path =>
+            .Select(
+                path =>
                 SyntaxFactory.Parameter(
                     SyntaxFactory.Identifier(DeclNameFromEnvPath(path)))
                 .WithType(
@@ -445,8 +455,8 @@ public static class CompileModuleToCSharp
                     SyntaxFactory.Token(SyntaxKind.PublicKeyword),
                     SyntaxFactory.Token(SyntaxKind.StaticKeyword)))
             .WithParameterList(
-            SyntaxFactory.ParameterList(
-                SyntaxFactory.SeparatedList(parameterList)))
+                SyntaxFactory.ParameterList(
+                    SyntaxFactory.SeparatedList(parameterList)))
             .WithBody(methodBody);
     }
 
@@ -579,14 +589,16 @@ public static class CompileModuleToCSharp
                 .WithArgumentList(
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SeparatedList<ArgumentSyntax>(
-                            new SyntaxNodeOrToken[]{
+                            new SyntaxNodeOrToken[]
+                            {
                                 SyntaxFactory.Argument(
                                     SyntaxFactory.LiteralExpression(
                                         SyntaxKind.NumericLiteralExpression,
                                         SyntaxFactory.Literal(skipCount))),
                                 SyntaxFactory.Token(SyntaxKind.CommaToken),
                                 SyntaxFactory.Argument(
-                                    SyntaxFactory.IdentifierName(argName))})));
+                                    SyntaxFactory.IdentifierName(argName))
+                            })));
         }
 
         if (stackInstruction.Kind is StackInstructionKind.Head_Generic)
@@ -698,7 +710,8 @@ public static class CompileModuleToCSharp
                 if (otherInstruction is null)
                     continue;
 
-                if (otherInstruction.Dependencies.Any(dep =>
+                if (otherInstruction.Dependencies.Any(
+                    dep =>
                     dep.source is SSAInstructionSource.Local loc &&
                     loc.Index == instruction.AssignmentIndex))
                 {
@@ -721,16 +734,17 @@ public static class CompileModuleToCSharp
 
             var mappedDependencies =
                 instruction.Dependencies
-                .Select(dep =>
-                {
-                    if (dep.source is SSAInstructionSource.Local loc &&
-                    replacements.TryGetValue(loc.Index, out var path))
+                .Select(
+                    dep =>
                     {
-                        return (new SSAInstructionSource.Parameter(path), dep.type);
-                    }
+                        if (dep.source is SSAInstructionSource.Local loc &&
+                            replacements.TryGetValue(loc.Index, out var path))
+                        {
+                            return (new SSAInstructionSource.Parameter(path), dep.type);
+                        }
 
-                    return dep;
-                })
+                        return dep;
+                    })
                 .ToList();
 
             instructionsMapped.Insert(
@@ -863,7 +877,7 @@ public static class CompileModuleToCSharp
                     [
                         (new SSAInstructionSource.Local(ssaOffset - 1), EmitType.Integer),
                         (new SSAInstructionSource.Local(ssaOffset), EmitType.Integer)
-                        ],
+                    ],
                     ReturnType: EmitType.Integer);
         }
 
@@ -884,7 +898,7 @@ public static class CompileModuleToCSharp
                     [
                         (new SSAInstructionSource.Local(ssaOffset - 1), EmitType.Integer),
                         (new SSAInstructionSource.Local(ssaOffset), EmitType.Integer)
-                        ],
+                    ],
                     ReturnType: EmitType.Integer);
         }
 

@@ -104,17 +104,19 @@ public class TestElmInteractive
                     ParseScenario(treeNode.component)
                     .Extract(err => throw new Exception("Failed parsing scenario: " + err))),
 
-                _ => throw new InvalidOperationException("Unexpected scenarios tree type: " + scenariosTree.GetType().FullName),
+                _ =>
+                throw new InvalidOperationException("Unexpected scenarios tree type: " + scenariosTree.GetType().FullName),
             };
 
         console.WriteLine(
             "Successfully loaded " + namedDistinctScenarios.Count +
             " distinct scenario(s) from composition " + scenariosTreeCompositionHash + ".");
 
-        return new ParsedScenarios(
-            ScenariosTree: scenariosTree,
-            ScenariosTreeCompositionHash: scenariosTreeCompositionHash,
-            NamedDistinctScenarios: namedDistinctScenarios);
+        return
+            new ParsedScenarios(
+                ScenariosTree: scenariosTree,
+                ScenariosTreeCompositionHash: scenariosTreeCompositionHash,
+                NamedDistinctScenarios: namedDistinctScenarios);
     }
 
     public static ImmutableDictionary<string, InteractiveScenarioTestReport> TestElmInteractiveScenarios(
@@ -150,13 +152,14 @@ public class TestElmInteractive
             .Select(scenario => scenario.Value.ElapsedTime)
             .Aggregate(seed: TimeSpan.Zero, func: (aggregate, scenarioTime) => aggregate + scenarioTime);
 
-        var overallStats = new[]
-        {
-            (label : "Failed", value : failedSteps.Count.ToString()),
-            (label : "Passed", value : passedSteps.Count.ToString()),
-            (label : "Total", value : allSteps.Count.ToString()),
-            (label : "Duration", value : CommandLineInterface.FormatIntegerForDisplay((long)aggregateDuration.TotalMilliseconds) + " ms"),
-        };
+        var overallStats =
+            new[]
+            {
+                (label : "Failed", value : failedSteps.Count.ToString()),
+                (label : "Passed", value : passedSteps.Count.ToString()),
+                (label : "Total", value : allSteps.Count.ToString()),
+                (label : "Duration", value : CommandLineInterface.FormatIntegerForDisplay((long)aggregateDuration.TotalMilliseconds) + " ms"),
+            };
 
         console.WriteLine(
             string.Join(
@@ -164,7 +167,11 @@ public class TestElmInteractive
                 (!failedSteps.IsEmpty ? "Failed" : "Passed") + "!",
                 string.Join(", ", overallStats.Select(stat => stat.label + ": " + stat.value)),
                 scenarios.ScenariosTreeCompositionHash[..10] +
-                " (Pine " + Pine.CLI.PineCliCommand.AppVersionId + " with Elm compiler " + interactiveConfig.CompilerId + ")"),
+                " (Pine " +
+                Pine.CLI.PineCliCommand.AppVersionId +
+                " with Elm compiler " +
+                interactiveConfig.CompilerId +
+                ")"),
             color: !failedSteps.IsEmpty ? IConsole.TextColor.Red : IConsole.TextColor.Green);
 
         var failedScenarios =
@@ -190,7 +197,8 @@ public class TestElmInteractive
             {
                 console.WriteLine(
                     "Failed step '" + failedStep.step.name + "':\n" +
-                    failedStep.step.result.Unpack(fromErr: error => error, fromOk: _ => throw new Exception()).errorAsText,
+                    failedStep.step.result.Unpack(fromErr: error => error, fromOk: _ => throw new Exception())
+                    .errorAsText,
                     color: IConsole.TextColor.Red);
             }
         }
@@ -211,21 +219,22 @@ public class TestElmInteractive
         scenarioContainers
         .AsParallel()
         .WithDegreeOfParallelism(3)
-        .Select(scenarioContainer =>
-        {
-            var (scenarioName, scenario) = getScenario(scenarioContainer);
+        .Select(
+            scenarioContainer =>
+            {
+                var (scenarioName, scenario) = getScenario(scenarioContainer);
 
-            return
-            (scenarioContainer,
-            testReport: TestElmInteractiveScenario(
-                scenario,
-                interactiveSessionFromAppCode,
-                asyncLogDelegate: scenarioEntry =>
-                asyncLogDelegate?.Invoke(new TestInteractiveScenariosLogEntry.ScenarioLogEntry(
+                return
+                    (scenarioContainer,
+                    testReport: TestElmInteractiveScenario(
+                        scenario,
+                        interactiveSessionFromAppCode,
+                        asyncLogDelegate: scenarioEntry =>
+                        asyncLogDelegate?.Invoke(new TestInteractiveScenariosLogEntry.ScenarioLogEntry(
                     new TestInteractiveScenariosLogEntry.ScenarioLogEntryStruct(
                         ScenarioName: scenarioName,
                         scenarioEntry)))));
-        })
+            })
         .ToImmutableDictionary(
             s => s.scenarioContainer,
             elementSelector: s => s.testReport);
@@ -241,121 +250,127 @@ public class TestElmInteractive
 
         var stepsReports =
             parsedScenario.Steps
-            .Select(sessionStep =>
-            {
-                Result<InteractiveScenarioTestStepFailure, InteractiveScenarioTestStepSuccess> ContinueWithErrorMessage(
-                    string errorMessage)
+            .Select(
+                sessionStep =>
                 {
-                    if (sessionStep.step.ExpectedErrorContains is { } expectedErrorContains)
+                    Result<InteractiveScenarioTestStepFailure, InteractiveScenarioTestStepSuccess> ContinueWithErrorMessage(
+                        string errorMessage)
                     {
-                        if (!errorMessage.Contains(expectedErrorContains, StringComparison.InvariantCultureIgnoreCase))
+                        if (sessionStep.step.ExpectedErrorContains is { } expectedErrorContains)
                         {
-                            var errorText =
-                            "Error from interactive does not contain expected value. Expected:\n" +
-                            expectedErrorContains +
-                            "\nBut got this error:\n" +
-                            errorMessage;
+                            if (!errorMessage.Contains(expectedErrorContains, StringComparison.InvariantCultureIgnoreCase))
+                            {
+                                var errorText =
+                                    "Error from interactive does not contain expected value. Expected:\n" +
+                                    expectedErrorContains +
+                                    "\nBut got this error:\n" +
+                                    errorMessage;
+
+                                return
+                                    (Result<InteractiveScenarioTestStepFailure, InteractiveScenarioTestStepSuccess>)
+                                    new InteractiveScenarioTestStepFailure(
+                                        submission: sessionStep.step.Submission,
+                                        errorAsText: errorText);
+                            }
 
                             return
-                            (Result<InteractiveScenarioTestStepFailure, InteractiveScenarioTestStepSuccess>)
-                            new InteractiveScenarioTestStepFailure(
-                                submission: sessionStep.step.Submission,
-                                errorAsText: errorText);
+                                (Result<InteractiveScenarioTestStepFailure, InteractiveScenarioTestStepSuccess>)
+                                new InteractiveScenarioTestStepSuccess.ErrorAsExpected(errorMessage);
                         }
 
                         return
-                        (Result<InteractiveScenarioTestStepFailure, InteractiveScenarioTestStepSuccess>)
-                        new InteractiveScenarioTestStepSuccess.ErrorAsExpected(errorMessage);
+                            new InteractiveScenarioTestStepFailure(
+                                submission: sessionStep.step.Submission,
+                                errorAsText: errorMessage);
                     }
 
-                    return
-                    new InteractiveScenarioTestStepFailure(
-                        submission: sessionStep.step.Submission,
-                        errorAsText: errorMessage);
-                }
-
-                Result<InteractiveScenarioTestStepFailure, InteractiveScenarioTestStepSuccess> GetResult()
-                {
-                    try
+                    Result<InteractiveScenarioTestStepFailure, InteractiveScenarioTestStepSuccess> GetResult()
                     {
-                        asyncLogDelegate?.Invoke(
+                        try
+                        {
+                            asyncLogDelegate?.Invoke(
                             new TestInteractiveScenarioLogEntry.SubmissionStart(
                                 new TestInteractiveScenarioLogEntry.SubmissionStartStruct(
                                     StepName: sessionStep.stepName,
                                     Submission: sessionStep.step.Submission)));
 
-                        var submissionResult = interactiveSession.Submit(sessionStep.step.Submission);
+                            var submissionResult = interactiveSession.Submit(sessionStep.step.Submission);
 
-                        asyncLogDelegate?.Invoke(
+                            asyncLogDelegate?.Invoke(
                             new TestInteractiveScenarioLogEntry.SubmissionResponse(
                                 new TestInteractiveScenarioLogEntry.SubmissionResponseStruct(
                                     Result: submissionResult)));
 
-                        return
-                        submissionResult
-                        .Unpack(
-                            fromErr: err => ContinueWithErrorMessage("Submission result has error: " + err),
-                            fromOk: submissionResultOk =>
-                            {
-                                if (sessionStep.step.ExpectedResponse is { } expectedResponse)
-                                {
-                                    if (submissionResultOk.InteractiveResponse?.DisplayText is not { } responseDisplayText)
+                            return
+                                submissionResult
+                                .Unpack(
+                                    fromErr: err => ContinueWithErrorMessage("Submission result has error: " + err),
+                                    fromOk: submissionResultOk =>
                                     {
-                                        return ContinueWithErrorMessage(
-                                            "Expected response but got null as display text");
-                                    }
+                                        if (sessionStep.step.ExpectedResponse is { } expectedResponse)
+                                        {
+                                            if (submissionResultOk.InteractiveResponse?.DisplayText is not { } responseDisplayText)
+                                            {
+                                                return
+                                                    ContinueWithErrorMessage(
+                                                        "Expected response but got null as display text");
+                                            }
 
-                                    if (Testing.CompareStringsChunkwiseAndReportFirstDifference(
+                                            if (Testing.CompareStringsChunkwiseAndReportFirstDifference(
                                         [expectedResponse], responseDisplayText) is { } firstDifference)
-                                    {
-                                        var errorText =
-                                        string.Join(
-                                            "\n",
-                                            [
-                                                "Response from interactive does not match expected value:",
-                                                firstDifference,
-                                                "The complete response is " +
-                                                CommandLineInterface.FormatIntegerForDisplay(responseDisplayText.Length) +
-                                                " characters in length as follows:",
-                                                responseDisplayText
-                                            ]);
+                                            {
+                                                var errorText =
+                                                    string.Join(
+                                                        "\n",
+                                                        [
+                                                            "Response from interactive does not match expected value:",
+                                                            firstDifference,
+                                                            "The complete response is " +
+                                                            CommandLineInterface.FormatIntegerForDisplay(
+                                                                responseDisplayText.Length) +
+                                                            " characters in length as follows:",
+                                                            responseDisplayText
+                                                        ]);
+
+                                                return
+                                                    new InteractiveScenarioTestStepFailure(
+                                                        submission: sessionStep.step.Submission,
+                                                        errorAsText: errorText);
+                                            }
+                                        }
+
+                                        if (sessionStep.step.ExpectedErrorContains is { } expectedErrorContains)
+                                        {
+                                            var errorText =
+                                                "Assertion failed: Expected error containing '" + expectedErrorContains +
+                                                "', but submission succeeded";
+
+                                            return
+                                                new InteractiveScenarioTestStepFailure(
+                                                    submission: sessionStep.step.Submission,
+                                                    errorAsText: errorText);
+                                        }
 
                                         return
-                                        new InteractiveScenarioTestStepFailure(
-                                            submission: sessionStep.step.Submission,
-                                            errorAsText: errorText);
-                                    }
-                                }
-
-                                if (sessionStep.step.ExpectedErrorContains is { } expectedErrorContains)
-                                {
-                                    var errorText =
-                                    "Assertion failed: Expected error containing '" + expectedErrorContains +
-                                    "', but submission succeeded";
-
-                                    return
-                                    new InteractiveScenarioTestStepFailure(
-                                        submission: sessionStep.step.Submission,
-                                        errorAsText: errorText);
-                                }
-
-                                return new InteractiveScenarioTestStepSuccess.SubmissionResponseOk(submissionResultOk);
-                            });
+                                            new InteractiveScenarioTestStepSuccess.SubmissionResponseOk(
+                                                submissionResultOk);
+                                    });
+                        }
+                        catch (Exception e)
+                        {
+                            return ContinueWithErrorMessage("Runtime exception:\n" + e);
+                        }
                     }
-                    catch (Exception e)
-                    {
-                        return ContinueWithErrorMessage("Runtime exception:\n" + e);
-                    }
-                }
 
-                return (sessionStep.stepName, GetResult());
-            })
+                    return (sessionStep.stepName, GetResult());
+                })
             .ToImmutableList();
 
-        return new InteractiveScenarioTestReport(
-            Scenario: parsedScenario,
-            StepsReports: stepsReports,
-            ElapsedTime: totalStopwatch.Elapsed);
+        return
+            new InteractiveScenarioTestReport(
+                Scenario: parsedScenario,
+                StepsReports: stepsReports,
+                ElapsedTime: totalStopwatch.Elapsed);
     }
 
     public static Result<string, Scenario> ParseScenario(FileTree scenarioTree)
@@ -369,8 +384,11 @@ public class TestElmInteractive
         var testScenarioSteps =
             stepsDirectory switch
             {
-                null => throw new Exception(nameof(stepsDirectory) + " is null"),
-                not null => stepsDirectory.Map(
+                null =>
+                throw new Exception(nameof(stepsDirectory) + " is null"),
+
+                not null =>
+                stepsDirectory.Map(
                     fromFile: _ => throw new Exception(nameof(stepsDirectory) + " is blob"),
                     fromDirectory: tree =>
                     0 < tree.Count
@@ -384,21 +402,24 @@ public class TestElmInteractive
 
         if (!stepsNames.Order().SequenceEqual(stepsNames.OrderByNatural()))
         {
-            return Result<string, Scenario>.err(
-                "Ambiguous sort order of steps (" + string.Join(", ", stepsNames) + "). Rename these steps to make the ordering obvious");
+            return
+                Result<string, Scenario>.err(
+                    "Ambiguous sort order of steps (" + string.Join(", ", stepsNames) +
+                    "). Rename these steps to make the ordering obvious");
         }
 
         return
             testScenarioSteps
-            .Select(sessionStep =>
-            {
-                var stepName = sessionStep.itemName;
+            .Select(
+                sessionStep =>
+                {
+                    var stepName = sessionStep.itemName;
 
-                return
-                ParseScenarioStep(sessionStep.itemValue)
-                .MapError(err => "Failed to parse step " + stepName + ": " + err)
-                .Map(parsedStep => (stepName, parsedStep));
-            })
+                    return
+                        ParseScenarioStep(sessionStep.itemValue)
+                        .MapError(err => "Failed to parse step " + stepName + ": " + err)
+                        .Map(parsedStep => (stepName, parsedStep));
+                })
             .ListCombine()
             .Map(steps => new Scenario(AppCodeTree: appCodeTree, Steps: steps));
     }
@@ -428,9 +449,10 @@ public class TestElmInteractive
                 _ =>
                 Result<string, string>.err("Missing submission"),
             })
-            .Map(submission => new ScenarioStep(
-                submission,
-                ExpectedResponse: expectedResponse,
-                ExpectedErrorContains: expectedErrorContains));
+            .Map(
+                submission => new ScenarioStep(
+                    submission,
+                    ExpectedResponse: expectedResponse,
+                    ExpectedErrorContains: expectedErrorContains));
     }
 }

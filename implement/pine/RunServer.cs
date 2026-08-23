@@ -271,7 +271,11 @@ public class RunServer
                     var response = sourceHttpClient.GetAsync(httpRequestPath).Result;
 
                     if (!response.IsSuccessStatusCode)
-                        throw new Exception("Unexpected response status code: " + (int)response.StatusCode + " (" + response.StatusCode + ").");
+                    {
+                        throw new Exception(
+                            "Unexpected response status code: " + (int)response.StatusCode + " (" + response.StatusCode +
+                            ").");
+                    }
 
                     return
                         response.Content.ReadAsStringAsync().Result.Split('\n', StringSplitOptions.RemoveEmptyEntries)
@@ -289,7 +293,11 @@ public class RunServer
                         return null;
 
                     if (!response.IsSuccessStatusCode)
-                        throw new Exception("Unexpected response status code: " + (int)response.StatusCode + " (" + response.StatusCode + ").");
+                    {
+                        throw new Exception(
+                            "Unexpected response status code: " + (int)response.StatusCode + " (" + response.StatusCode +
+                            ").");
+                    }
 
                     return response.Content.ReadAsByteArrayAsync().Result;
                 });

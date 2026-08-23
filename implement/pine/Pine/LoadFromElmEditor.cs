@@ -41,33 +41,35 @@ namespace Pine
                 IReadOnlyList<BlobChangeSequenceElement> changes,
                 ReadOnlyMemory<byte>? blobBefore)
             {
-                static (ReadOnlyMemory<byte> originalBlobRemainingBytes, ReadOnlyMemory<byte> changedBlobBytes) applyChange(
+                static (ReadOnlyMemory<byte> originalBlobRemainingBytes, ReadOnlyMemory<byte> changedBlobBytes) ApplyChange(
                     BlobChangeSequenceElement change, ReadOnlyMemory<byte> originalBlobRemainingBytes, ReadOnlyMemory<byte> changedBlobBytes)
                 {
                     var reuseBytes = change.ReuseBytes?[0];
                     var removeBytes = change.RemoveBytes?[0];
                     var addBytes = change.AddBytes?[0];
 
-                    if (reuseBytes != null)
+                    if (reuseBytes is not null)
                     {
-                        return (
-                            originalBlobRemainingBytes[reuseBytes.Value..],
-                            BytesConversions.Concat(changedBlobBytes.Span, originalBlobRemainingBytes[..reuseBytes.Value].Span));
+                        return
+                            (originalBlobRemainingBytes[reuseBytes.Value..],
+                            BytesConversions.Concat(
+                                changedBlobBytes.Span,
+                                originalBlobRemainingBytes[..reuseBytes.Value].Span));
                     }
 
-                    if (removeBytes != null)
+                    if (removeBytes is not null)
                     {
-                        return (
-                            originalBlobRemainingBytes[removeBytes.Value..],
+                        return
+                            (originalBlobRemainingBytes[removeBytes.Value..],
                             changedBlobBytes);
                     }
 
-                    if (addBytes != null)
+                    if (addBytes is not null)
                     {
                         var bytes = Convert.FromBase64String(addBytes.AsBase64);
 
-                        return (
-                            originalBlobRemainingBytes,
+                        return
+                            (originalBlobRemainingBytes,
                             BytesConversions.Concat(changedBlobBytes.Span, [.. bytes]));
                     }
 
@@ -79,7 +81,10 @@ namespace Pine
                         seed:
                         (originalBlobRemainingBytes: blobBefore ?? ReadOnlyMemory<byte>.Empty,
                         changedBlobBytes: ReadOnlyMemory<byte>.Empty),
-                        (prev, change) => applyChange(change, originalBlobRemainingBytes: prev.originalBlobRemainingBytes, changedBlobBytes: prev.changedBlobBytes))
+                        (prev, change) => ApplyChange(
+                            change,
+                            originalBlobRemainingBytes: prev.originalBlobRemainingBytes,
+                            changedBlobBytes: prev.changedBlobBytes))
                     .changedBlobBytes;
             }
         }
@@ -134,19 +139,24 @@ namespace Pine
                 try
                 {
                     projectStateString ??=
-                        projectStateDeflateBase64String == null ? null :
-                        Encoding.UTF8.GetString(BytesConversions.Inflate(Convert.FromBase64String(projectStateDeflateBase64String)).Span);
+                        projectStateDeflateBase64String is null
+                        ?
+                        null
+                        :
+                        Encoding.UTF8.GetString(
+                            BytesConversions.Inflate(Convert.FromBase64String(projectStateDeflateBase64String)).Span);
                 }
                 catch { }
 
-                if (projectStateString == null)
+                if (projectStateString is null)
                     return null;
 
-                return new ParseUrlResult(
-                    projectStateString: projectStateString,
-                    projectStateDeflateBase64String: projectStateDeflateBase64String,
-                    projectStateHashString: projectStateHashString,
-                    filePathToOpenString: filePathToOpenString);
+                return
+                    new ParseUrlResult(
+                        projectStateString: projectStateString,
+                        projectStateDeflateBase64String: projectStateDeflateBase64String,
+                        projectStateHashString: projectStateHashString,
+                        filePathToOpenString: filePathToOpenString);
             }
             catch
             {
@@ -164,7 +174,7 @@ namespace Pine
             LoadFromUrlSuccess returnValueFromTree(FileTree tree) =>
                 new(parsedUrl: parsedUrl, tree: tree);
 
-            if (LoadFromGitHubOrGitLab.ParseUrl(parsedUrl.projectStateString) != null)
+            if (LoadFromGitHubOrGitLab.ParseUrl(parsedUrl.projectStateString) is not null)
             {
                 return
                     LoadFromGitHubOrGitLab.LoadFromUrl(parsedUrl.projectStateString)
@@ -174,15 +184,17 @@ namespace Pine
 
             // Support parsing tuples: https://github.com/arogozine/TupleAsJsonArray/tree/e59f8c4edee070b096220b6cab77eba997b19d3a
 
-            var jsonSerializerOptions = new System.Text.Json.JsonSerializerOptions
-            {
-                Converters =
+            var jsonSerializerOptions =
+                new System.Text.Json.JsonSerializerOptions
                 {
-                    new TupleAsJsonArray.TupleConverterFactory(),
-                }
-            };
+                    Converters =
+                    {
+                        new TupleAsJsonArray.TupleConverterFactory(),
+                    }
+                };
 
-            var projectState = System.Text.Json.JsonSerializer.Deserialize<ProjectState>(
+            var projectState =
+                System.Text.Json.JsonSerializer.Deserialize<ProjectState>(
                 parsedUrl.projectStateString,
                 options: jsonSerializerOptions)!;
 
@@ -209,7 +221,8 @@ namespace Pine
                     return "Failed to load from Git host: " + loadFromGitHostError;
                 }
 
-                baseComposition = loadFromGitHost.Map(loaded => loaded.tree).Extract(error => throw new Exception(error));
+                baseComposition =
+                    loadFromGitHost.Map(loaded => loaded.tree).Extract(error => throw new Exception(error));
             }
 
             return
@@ -238,14 +251,18 @@ namespace Pine
                     (previousComposition, blobChange) =>
                     {
                         var blobValueBefore =
-                        compositionAfterRemovals.GetNodeAtPath(blobChange.Item1) switch
-                        {
-                            FileTree.FileNode blob => blob.Bytes,
-                            _ => null
-                        };
+                            compositionAfterRemovals.GetNodeAtPath(blobChange.Item1) switch
+                            {
+                                FileTree.FileNode blob => blob.Bytes,
 
-                        var changedBlobValue = ProjectState_2021_01.ProjectStateDifference.ApplyBlobChanges(
-                            blobChange.Item2, blobValueBefore);
+                                _ =>
+                                null
+                            };
+
+                        var changedBlobValue =
+                            ProjectState_2021_01.ProjectStateDifference.ApplyBlobChanges(
+                                blobChange.Item2,
+                                blobValueBefore);
 
                         return previousComposition.SetNodeAtPathSorted(blobChange.Item1, FileTree.File(changedBlobValue));
                     });

@@ -35,7 +35,10 @@ public class InteractiveSessionPine : IInteractiveSession
         new LockingPineVM(
             new PineVMWithPersistentCache(
                 new FileStoreFromSystemIOFile(
-                    System.IO.Path.Combine(Filesystem.CacheDirectory, "elm-compiler-vm", Pine.CLI.PineCliCommand.AppVersionId))));
+                    System.IO.Path.Combine(
+                        Filesystem.CacheDirectory,
+                        "elm-compiler-vm",
+                        Pine.CLI.PineCliCommand.AppVersionId))));
 
     /*
      * TODO: Move these caches to a dedicated scope to enable for better control over reuse/disposal.
@@ -43,7 +46,8 @@ public class InteractiveSessionPine : IInteractiveSession
 
     static readonly ElmCompilerCache elmCompilerCache = new();
 
-    static readonly ConcurrentDictionary<string, Result<string, KeyValuePair<IReadOnlyList<string>, PineValue>>> TryParseModuleTextCache = new();
+    static readonly ConcurrentDictionary<string, Result<string, KeyValuePair<IReadOnlyList<string>, PineValue>>> TryParseModuleTextCache =
+        new();
 
     public InteractiveSessionPine(
         FileTree compilerSourceFiles,
@@ -132,12 +136,13 @@ public class InteractiveSessionPine : IInteractiveSession
             ElmCompilerInElm.GetElmCompilerAsync(compilerSourceFiles).Result;
 
         _buildPineEvalContextTask =
-            System.Threading.Tasks.Task.Run(() =>
-            CompileInteractiveEnvironment(
-                appCodeTree: appCodeTree,
-                overrideSkipLowering: overrideSkipLowering,
-                entryPointsFilePaths: entryPointsFilePaths,
-                skipFilteringForSourceDirs: false));
+            System.Threading.Tasks.Task.Run(
+                () =>
+                CompileInteractiveEnvironment(
+                    appCodeTree: appCodeTree,
+                    overrideSkipLowering: overrideSkipLowering,
+                    entryPointsFilePaths: entryPointsFilePaths,
+                    skipFilteringForSourceDirs: false));
     }
 
     public static (IPineVM, InvocationCache?) BuildPineVM(
@@ -189,16 +194,17 @@ public class InteractiveSessionPine : IInteractiveSession
             appSourceFiles.AppFiles
             .EnumerateFilesTransitive()
             .Where(blob => blob.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
-            .Select(blob =>
-            {
-                var moduleText = System.Text.Encoding.UTF8.GetString(blob.fileContent.Span);
+            .Select(
+                blob =>
+                {
+                    var moduleText = System.Text.Encoding.UTF8.GetString(blob.fileContent.Span);
 
-                var moduleName =
-                ElmModule.ParseModuleName(moduleText)
-                .Extract(err => throw new Exception("Failed parsing module name: " + err));
+                    var moduleName =
+                        ElmModule.ParseModuleName(moduleText)
+                        .Extract(err => throw new Exception("Failed parsing module name: " + err));
 
-                return new KeyValuePair<IReadOnlyList<string>, ReadOnlyMemory<byte>>(moduleName, blob.fileContent);
-            })
+                    return new KeyValuePair<IReadOnlyList<string>, ReadOnlyMemory<byte>>(moduleName, blob.fileContent);
+                })
             .ToImmutableDictionary(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         ReadOnlyMemory<byte>? replaceKernelModule(
@@ -226,13 +232,14 @@ public class InteractiveSessionPine : IInteractiveSession
         var mergedKernelModulesTree =
             FileTree.FromSetOfFilesWithStringPath(
                 defaultKernelModulesTree.EnumerateFilesTransitive()
-                .Select(blob =>
-                (blob.path,
-                replaceKernelModule(blob.path, blob.fileContent) is { } overrideContent
-                ?
-                overrideContent
-                :
-                blob.fileContent)));
+                .Select(
+                    blob =>
+                    (blob.path,
+                    replaceKernelModule(blob.path, blob.fileContent) is { } overrideContent
+                    ?
+                    overrideContent
+                    :
+                    blob.fileContent)));
 
         var mergedKernelModulesTreeBlobs =
             mergedKernelModulesTree
@@ -242,8 +249,9 @@ public class InteractiveSessionPine : IInteractiveSession
         var appFilesAfterKernelModules =
             FileTree.FromSetOfFilesWithStringPath(
                 appSourceFiles.AppFiles.EnumerateFilesTransitive()
-                .Where(blob =>
-                !mergedKernelModulesTreeBlobs.Any(
+                .Where(
+                    blob =>
+                    !mergedKernelModulesTreeBlobs.Any(
                     kernelBlob =>
                     kernelBlob.fileContent.Span.SequenceEqual(blob.fileContent.Span))));
 
@@ -304,20 +312,21 @@ public class InteractiveSessionPine : IInteractiveSession
     {
         var appCodeTreeModuleNames =
             appCodeTree.EnumerateFilesTransitive()
-            .SelectMany((blob) =>
-            {
-                var fileName = blob.path.Last();
-
-                if (!fileName.EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
-                    return (IEnumerable<IReadOnlyList<string>>)[];
-
-                if (ModuleNameFromFileContent(blob.fileContent.Span) is not { } moduleName)
+            .SelectMany(
+                (blob) =>
                 {
-                    return [];
-                }
+                    var fileName = blob.path.Last();
 
-                return [moduleName];
-            })
+                    if (!fileName.EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
+                        return (IEnumerable<IReadOnlyList<string>>)[];
+
+                    if (ModuleNameFromFileContent(blob.fileContent.Span) is not { } moduleName)
+                    {
+                        return [];
+                    }
+
+                    return [moduleName];
+                })
             .ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         return
@@ -340,9 +349,9 @@ public class InteractiveSessionPine : IInteractiveSession
                     }
 
                     return
-                    aggregate.SetNodeAtPathSorted(
-                        nextBlob.path,
-                        FileTree.File(nextBlob.fileContent));
+                        aggregate.SetNodeAtPathSorted(
+                            nextBlob.path,
+                            FileTree.File(nextBlob.fileContent));
                 });
     }
 
@@ -386,7 +395,8 @@ public class InteractiveSessionPine : IInteractiveSession
             compileableSourceModules
             .Aggregate(
                 seed: appSourceFiles,
-                func: (tree, compileableModule) => tree.RemoveNodeAtPath(compileableModule.filePath) ?? throw new Exception());
+                func:
+                (tree, compileableModule) => tree.RemoveNodeAtPath(compileableModule.filePath) ?? throw new Exception());
 
         var compileableSourceModulesTexts =
             compileableSourceModules
@@ -585,7 +595,8 @@ public class InteractiveSessionPine : IInteractiveSession
                 new Lazy<ElmValue>(
                     () =>
                     elmCompilerCache.PineValueDecodedAsElmValue(parsedSubmissionOk)
-                    .Extract(decodeErr => throw new Exception("Failed decoding submission as Elm value: " + decodeErr)));
+                    .Extract(
+                        decodeErr => throw new Exception("Failed decoding submission as Elm value: " + decodeErr)));
 
             LogDuration("parse");
 
@@ -640,7 +651,8 @@ public class InteractiveSessionPine : IInteractiveSession
             if (compileParsedOkAsElmValueResult.IsOkOrNull() is not { } compileParsedOkAsElmValue)
             {
                 throw new NotImplementedException(
-                    "Unexpected compile parsed ok as Elm value result type: " + compileParsedOkAsElmValueResult.GetType());
+                    "Unexpected compile parsed ok as Elm value result type: " +
+                    compileParsedOkAsElmValueResult.GetType());
             }
 
             LogDuration("compile - decode result");
@@ -703,8 +715,9 @@ public class InteractiveSessionPine : IInteractiveSession
                     " instead of 2";
             }
 
-            _buildPineEvalContextTask = System.Threading.Tasks.Task.FromResult(
-                Result<string, PineValue>.ok(evalResultListComponent.Items.Span[0]));
+            _buildPineEvalContextTask =
+                System.Threading.Tasks.Task.FromResult(
+                    Result<string, PineValue>.ok(evalResultListComponent.Items.Span[0]));
 
             clock.Restart();
 
@@ -750,11 +763,12 @@ public class InteractiveSessionPine : IInteractiveSession
     {
         var expressionsProfiles =
             scenarios
-            .Select(scenario =>
-            CollectExpressionsToOptimizeFromScenario(
-                compileElmProgramCodeFiles: compileElmProgramCodeFiles,
-                scenario: scenario,
-                enableEvalExprCache: enableEvalExprCache))
+            .Select(
+                scenario =>
+                CollectExpressionsToOptimizeFromScenario(
+                    compileElmProgramCodeFiles: compileElmProgramCodeFiles,
+                    scenario: scenario,
+                    enableEvalExprCache: enableEvalExprCache))
             .ToImmutableArray();
 
         var aggregateExpressionsProfiles =
@@ -784,12 +798,13 @@ public class InteractiveSessionPine : IInteractiveSession
             new ProfilingPineVM(
                 evalCache: cache);
 
-        var profilingSession = new InteractiveSessionPine(
-            compilerSourceFiles: compileElmProgramCodeFiles,
-            appCodeTree: (AppCompilationUnits?)null,
-            overrideSkipLowering: false,
-            entryPointsFilePaths: null,
-            profilingVM.PineVM);
+        var profilingSession =
+            new InteractiveSessionPine(
+                compilerSourceFiles: compileElmProgramCodeFiles,
+                appCodeTree: (AppCompilationUnits?)null,
+                overrideSkipLowering: false,
+                entryPointsFilePaths: null,
+                profilingVM.PineVM);
 
         foreach (var step in scenario.Steps)
             profilingSession.Submit(step.step.Submission);
@@ -860,25 +875,26 @@ public class InteractiveSessionPine : IInteractiveSession
             {
                 _evalCache[(expression, environment)] = evalOk;
 
-                System.Threading.Tasks.Task.Run(() =>
-                {
-                    try
+                System.Threading.Tasks.Task.Run(
+                    () =>
                     {
-                        using var stream = new System.IO.MemoryStream();
+                        try
+                        {
+                            using var stream = new System.IO.MemoryStream();
 
-                        ValueBinaryEncodingClassic.Encode(stream, evalOk);
+                            ValueBinaryEncodingClassic.Encode(stream, evalOk);
 
-                        stream.Seek(0, System.IO.SeekOrigin.Begin);
+                            stream.Seek(0, System.IO.SeekOrigin.Begin);
 
-                        var fileContent = stream.ToArray();
+                            var fileContent = stream.ToArray();
 
-                        _fileStore.SetFileContent([fileName], fileContent);
-                    }
-                    catch (Exception e)
-                    {
-                        Console.WriteLine("Failed to write cache file: " + e);
-                    }
-                });
+                            _fileStore.SetFileContent([fileName], fileContent);
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("Failed to write cache file: " + e);
+                        }
+                    });
             }
 
             return evalResult;

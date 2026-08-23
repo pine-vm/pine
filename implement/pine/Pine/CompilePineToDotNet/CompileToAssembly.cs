@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Reflection;
+
 using static Pine.CompilePineToDotNet.CompileToCSharp;
 
 namespace Pine.CompilePineToDotNet;
@@ -54,12 +55,14 @@ public class CompileToAssembly
 
         var syntaxTree = CSharpSyntaxTree.ParseText(syntaxText);
 
-        var compilation = CSharpCompilation.Create("assembly-name")
-            .WithOptions(new CSharpCompilationOptions(
-                OutputKind.DynamicallyLinkedLibrary,
-                optimizationLevel: optimizationLevel)
-            .WithAssemblyIdentityComparer(DesktopAssemblyIdentityComparer.Default))
-            .WithReferences(MetadataReferences.Value)
+        var compilation =
+            CSharpCompilation.Create("assembly-name")
+            .WithOptions(
+                new CSharpCompilationOptions(
+                    OutputKind.DynamicallyLinkedLibrary,
+                    optimizationLevel: optimizationLevel)
+                .WithAssemblyIdentityComparer(DesktopAssemblyIdentityComparer.Default))
+            .WithReferences(s_metadataReferences.Value)
             .AddSyntaxTrees(syntaxTree);
 
         using var codeStream = new MemoryStream();
@@ -73,14 +76,14 @@ public class CompileToAssembly
 
         if (!compilationResult.Success && 0 < compilationErrors.Count)
         {
-            return Result<string, CompileToAssemblyResult>.err(
+            return
                 "Compilation failed with " + compilationErrors.Count + " errors:\n" +
-                string.Join("\n", compilationErrors.Select(d => d.ToString())));
+                string.Join("\n", compilationErrors.Select(d => d.ToString()));
         }
 
         var assembly = codeStream.ToArray();
 
-        Result<string, CompileDictionaryResult> buildDictionary()
+        Result<string, CompileDictionaryResult> BuildDictionary()
         {
             var loadedAssembly = Assembly.Load(assembly);
 
@@ -88,9 +91,11 @@ public class CompileToAssembly
                 loadedAssembly.GetType(csharpFile.SyntaxContainerConfig.ContainerTypeName);
 
             if (compiledType is null)
+            {
                 return
                     "Did not find type " + csharpFile.SyntaxContainerConfig.ContainerTypeName +
                     " in assembly " + loadedAssembly.FullName;
+            }
 
             var dictionaryMember =
                 compiledType.GetMethod(
@@ -98,9 +103,11 @@ public class CompileToAssembly
                     BindingFlags.Public | BindingFlags.Static);
 
             if (dictionaryMember is null)
+            {
                 return
                     "Did not find method " + csharpFile.SyntaxContainerConfig.DictionaryMemberName +
                     " in type " + compiledType.FullName;
+            }
 
             var originalDictionary =
                 (IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, PineValue>>)
@@ -116,27 +123,28 @@ public class CompileToAssembly
             return dictionaryWithEvalReturnTypeResult;
         }
 
-        return Result<string, CompileToAssemblyResult>.ok(
+        return
             new CompileToAssemblyResult(
                 csharpFile,
                 Assembly: assembly,
-                BuildCompiledExpressionsDictionary: buildDictionary));
+                BuildCompiledExpressionsDictionary: BuildDictionary);
     }
 
 
-    private static readonly Lazy<IImmutableList<MetadataReference>> MetadataReferences =
+    private static readonly Lazy<IImmutableList<MetadataReference>> s_metadataReferences =
         new(() => ListMetadataReferences().ToImmutableList());
 
     private static IEnumerable<MetadataReference> ListMetadataReferences()
     {
-        var types = new[]
-        {
-            typeof(object),
-            typeof(Func<>),
-            typeof(BigInteger),
-            typeof(IImmutableList<>),
-            typeof(Core.Interpreter.IntermediateVM.PineVM)
-        };
+        var types =
+            new[]
+            {
+                typeof(object),
+                typeof(Func<>),
+                typeof(BigInteger),
+                typeof(IImmutableList<>),
+                typeof(Core.Interpreter.IntermediateVM.PineVM)
+            };
 
         var typesAssembliesLocations =
             types

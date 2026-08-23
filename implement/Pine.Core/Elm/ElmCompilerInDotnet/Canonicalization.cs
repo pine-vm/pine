@@ -2229,7 +2229,11 @@ public class Canonicalization
         var allShadowings =
             CanonicalizationResult<object>.MergeShadowings(letShadowings, canonicalizedLetBlock.Shadowings);
 
-        return new CanonicalizationResult<SyntaxTypes.Expression.LetBlock>(canonicalizedLetBlock.Value, allErrors, allShadowings);
+        return
+            new CanonicalizationResult<SyntaxTypes.Expression.LetBlock>(
+                canonicalizedLetBlock.Value,
+                allErrors,
+                allShadowings);
     }
 
     private static CanonicalizationResult<Node<SyntaxTypes.Expression.LetDeclaration>> CanonicalizeLetDeclarationNode(

@@ -131,7 +131,10 @@ public class ProcessStoreReaderInFileStore(IFileStore fileStore)
                 JsonSerializer.Deserialize<ReductionRecordInFile>(fileContent.Value[payloadStartIndex..].Span)!;
 
             if (reducedCompositionHashBase16 != reductionRecordFromFile.ReducedCompositionHashBase16)
-                throw new Exception("Unexpected content in file " + string.Join("/", filePath) + ", composition hash does not match.");
+            {
+                throw new Exception(
+                    "Unexpected content in file " + string.Join("/", filePath) + ", composition hash does not match.");
+            }
 
             return
                 new ReductionRecord(

@@ -57,7 +57,8 @@ public class ExecutableFile
             KeyValuePair<IReadOnlyList<string>, ReadOnlyMemory<byte>> environmentFile,
             bool executable)
         {
-            var environmentFilePath = Path.Combine(containerDirectory, Filesystem.MakePlatformSpecificPath(environmentFile.Key));
+            var environmentFilePath =
+                Path.Combine(containerDirectory, Filesystem.MakePlatformSpecificPath(environmentFile.Key));
 
             CreateAndWriteFileToPath(environmentFilePath, environmentFile.Value, executable);
         }
@@ -75,8 +76,13 @@ public class ExecutableFile
             .ToImmutableDictionary()
             .SetItems(
                 (environmentPathExecutableFiles ?? ImmutableDictionary<string, ReadOnlyMemory<byte>>.Empty)
-                .Select(execFile => new KeyValuePair<IReadOnlyList<string>, ReadOnlyMemory<byte>>(
-                    [environmentPathContainerDirectoryName, execFile.Key + executableFileNameAppendix], execFile.Value)))
+                .Select(
+                    execFile => new KeyValuePair<IReadOnlyList<string>, ReadOnlyMemory<byte>>(
+                        [
+                        environmentPathContainerDirectoryName,
+                        execFile.Key + executableFileNameAppendix
+                        ],
+                        execFile.Value)))
             .SetItem(mainExecutableFilePathRelative, executableFile);
 
         foreach (var environmentFile in allExecutableFiles)
@@ -93,12 +99,14 @@ public class ExecutableFile
 
         var mainExecutableFilePathAbsolute = Path.Combine(containerDirectory, mainExecutableFileName);
 
-        var environmentPathExecutableFilesPathAbsolute = Path.Combine(containerDirectory, environmentPathContainerDirectoryName);
+        var environmentPathExecutableFilesPathAbsolute =
+            Path.Combine(containerDirectory, environmentPathContainerDirectoryName);
 
         var pathEnvironmentVarSeparator = PathEnvironmentVarSeparator.ToString();
 
         var environmentPathEntryBefore =
-            environmentStringsDict.FirstOrDefault(c => c.Key.Equals("PATH", StringComparison.InvariantCultureIgnoreCase));
+            environmentStringsDict.FirstOrDefault(
+                c => c.Key.Equals("PATH", StringComparison.InvariantCultureIgnoreCase));
 
         var environmentVarsForNewPath =
             /*
@@ -134,19 +142,21 @@ public class ExecutableFile
             environmentStringsDict
             .SetItems(environmentVarsForNewPath);
 
-        var process = new Process
-        {
-            StartInfo = new ProcessStartInfo
+        var process =
+            new Process
             {
-                WorkingDirectory = workingDirectoryAbsolute,
-                FileName = mainExecutableFilePathAbsolute,
-                Arguments = arguments,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            },
-        };
+                StartInfo =
+                new ProcessStartInfo
+                {
+                    WorkingDirectory = workingDirectoryAbsolute,
+                    FileName = mainExecutableFilePathAbsolute,
+                    Arguments = arguments,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                },
+            };
 
         foreach (var envString in environmentStringsWithExecutableFiles.EmptyIfNull())
             process.StartInfo.Environment[envString.Key] = envString.Value;
@@ -159,32 +169,34 @@ public class ExecutableFile
         var stderrTcs = new TaskCompletionSource<bool>();
 
         // Event handler for standard output
-        process.OutputDataReceived += (sender, e) =>
-        {
-            if (e.Data is null)
+        process.OutputDataReceived +=
+            (sender, e) =>
             {
-                // No more output
-                stdoutTcs.TrySetResult(true);
-            }
-            else
-            {
-                standardOutputBuilder.AppendLine(e.Data);
-            }
-        };
+                if (e.Data is null)
+                {
+                    // No more output
+                    stdoutTcs.TrySetResult(true);
+                }
+                else
+                {
+                    standardOutputBuilder.AppendLine(e.Data);
+                }
+            };
 
         // Event handler for standard error
-        process.ErrorDataReceived += (sender, e) =>
-        {
-            if (e.Data is null)
+        process.ErrorDataReceived +=
+            (sender, e) =>
             {
-                // No more error output
-                stderrTcs.TrySetResult(true);
-            }
-            else
-            {
-                standardErrorBuilder.AppendLine(e.Data);
-            }
-        };
+                if (e.Data is null)
+                {
+                    // No more error output
+                    stderrTcs.TrySetResult(true);
+                }
+                else
+                {
+                    standardErrorBuilder.AppendLine(e.Data);
+                }
+            };
 
         // Start the process and begin asynchronous reads
         if (!process.Start())
@@ -220,12 +232,12 @@ public class ExecutableFile
         {
         }
 
-        return (new ProcessOutput
-        (
-            ExitCode: exitCode,
-            StandardError: standardErrorBuilder.ToString(),
-            StandardOutput: standardOutputBuilder.ToString()
-        ), createdFiles);
+        return
+            (new ProcessOutput(
+                ExitCode: exitCode,
+                StandardError: standardErrorBuilder.ToString(),
+                StandardOutput: standardOutputBuilder.ToString()),
+            createdFiles);
     }
 
     public static void CreateAndWriteFileToPath(
@@ -245,11 +257,12 @@ public class ExecutableFile
             :
             null;
 
-        var fileStreamOptions = new FileStreamOptions
-        {
-            Mode = FileMode.Create,
-            Access = FileAccess.Write
-        };
+        var fileStreamOptions =
+            new FileStreamOptions
+            {
+                Mode = FileMode.Create,
+                Access = FileAccess.Write
+            };
 
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             fileStreamOptions.UnixCreateMode = unixCreateMode;

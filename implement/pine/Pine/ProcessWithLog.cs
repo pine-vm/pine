@@ -21,7 +21,9 @@ public abstract record ProcessWithLog<LogEntryT, ResultT>
         this switch
         {
             LogEntry logEntry =>
-            new ProcessWithLog<LogEntryT, NewResultT>.LogEntry(logEntry.logEntry, () => logEntry.nextStep().Continue(continuation)),
+            new ProcessWithLog<LogEntryT, NewResultT>.LogEntry(
+                logEntry.logEntry,
+                () => logEntry.nextStep().Continue(continuation)),
 
             Result result => continuation(result.Value),
 

@@ -381,7 +381,8 @@ public class ElmTimeJsonAdapter
 
                 exposedFunctionsDeclDictValue =
                     interpreter.EvaluateExpression(exposedFunctionsDeclDictValueExpr, PineValue.EmptyList)
-                    .Extract(err => throw new System.Exception("Failed to evaluate exposed functions declaration: " + err));
+                    .Extract(
+                        err => throw new System.Exception("Failed to evaluate exposed functions declaration: " + err));
             }
 
             var exposedFunctionsList =

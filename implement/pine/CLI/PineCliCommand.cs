@@ -31,10 +31,12 @@ public class PineCliCommand
     {
         LoadFromGitHubOrGitLab.RepositoryFilesPartialForCommitCacheDefault =
             new CacheByFileName(
-                new FileStoreFromSystemIOFile(Path.Combine(Filesystem.CacheDirectory, "git", "partial-for-commit", "zip")));
+                new FileStoreFromSystemIOFile(
+                    Path.Combine(Filesystem.CacheDirectory, "git", "partial-for-commit", "zip")));
 
         var rootCommand =
-            new RootCommand("Pine: Elm DevTools and runtime\nTo get help or report an issue, see https://github.com/pine-vm/pine/discussions");
+            new RootCommand(
+                "Pine: Elm DevTools and runtime\nTo get help or report an issue, see https://github.com/pine-vm/pine/discussions");
 
         // Custom version option that shows "pine X.X.X" format
         var versionOption =

@@ -968,10 +968,9 @@ public class ReducePineExpression
                     var items = taggedValue.Items.Span;
 
                     return
-                        (
-                            items[0],
-                            items[1],
-                            Expression.LitralInst(items[2]));
+                        (items[0],
+                        items[1],
+                        Expression.LitralInst(items[2]));
                 }
 
             case Expression.Litral

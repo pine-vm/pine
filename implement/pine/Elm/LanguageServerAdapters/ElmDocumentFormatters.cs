@@ -20,9 +20,9 @@ public sealed class InProcessElmDocumentFormatter(
     Func<string, Result<ElmSyntaxParseError, string>> format) : IDocumentFormatter
 {
     private readonly Func<string, Result<ElmSyntaxParseError, string>> _format =
-            format
-            ??
-            throw new ArgumentNullException(nameof(format));
+        format
+        ??
+        throw new ArgumentNullException(nameof(format));
 
     public InProcessElmDocumentFormatter()
         : this(ElmFormat.FormatModuleText)
@@ -78,9 +78,9 @@ public sealed class InProcessElmDocumentFormatter(
 public sealed class Avh4ElmDocumentFormatter(ElmFormatInvoker format) : IDocumentFormatter
 {
     private readonly ElmFormatInvoker _format =
-            format
-            ??
-            throw new ArgumentNullException(nameof(format));
+        format
+        ??
+        throw new ArgumentNullException(nameof(format));
 
     public Avh4ElmDocumentFormatter()
         : this(InvokeElmFormat)

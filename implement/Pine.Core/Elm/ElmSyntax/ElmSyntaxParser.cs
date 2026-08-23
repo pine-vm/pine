@@ -1784,7 +1784,9 @@ public class ElmSyntaxParser
                         ModuleData: moduleData);
 
                 var moduleNode =
-                    new Node<SyntaxTypes.Module>(MakeRange(effectKeyword.Start, exposingNode.Range.End), moduleNodeValue);
+                    new Node<SyntaxTypes.Module>(
+                        MakeRange(effectKeyword.Start, exposingNode.Range.End),
+                        moduleNodeValue);
 
                 return moduleNode;
             }

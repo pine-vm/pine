@@ -170,18 +170,22 @@ public class ElmInteractive
                 if (0 < listComponent.Items.Length)
                 {
                     if (StringEncoding.StringFromValue(pineValue) is Result<string, string>.Ok asString)
-                        return new PineValueMappedForTransport(
-                            ListAsString: asString.Value,
-                            BlobAsInt: null,
-                            List: null,
-                            Origin: pineValue);
+                    {
+                        return
+                            new PineValueMappedForTransport(
+                                ListAsString: asString.Value,
+                                BlobAsInt: null,
+                                List: null,
+                                Origin: pineValue);
+                    }
                 }
 
-                return new PineValueMappedForTransport(
-                    ListAsString: null,
-                    BlobAsInt: null,
-                    List: [.. listComponent.Items.ToArray().Select(item => FromPineValue(item, cache))],
-                    Origin: pineValue);
+                return
+                    new PineValueMappedForTransport(
+                        ListAsString: null,
+                        BlobAsInt: null,
+                        List: [.. listComponent.Items.ToArray().Select(item => FromPineValue(item, cache))],
+                        Origin: pineValue);
             }
 
             if (pineValue is PineValue.BlobValue blobValue)
@@ -190,20 +194,22 @@ public class ElmInteractive
                 {
                     if (IntegerEncoding.ParseSignedIntegerStrict(blobValue.Bytes.Span) is Result<string, System.Numerics.BigInteger>.Ok asInt)
                     {
-                        return new PineValueMappedForTransport(
-                            ListAsString: null,
-                            BlobAsInt: (int)asInt.Value,
-                            List: null,
-                            Origin: pineValue);
+                        return
+                            new PineValueMappedForTransport(
+                                ListAsString: null,
+                                BlobAsInt: (int)asInt.Value,
+                                List: null,
+                                Origin: pineValue);
                     }
                 }
             }
 
-            return new PineValueMappedForTransport(
-                ListAsString: null,
-                BlobAsInt: null,
-                List: null,
-                Origin: pineValue);
+            return
+                new PineValueMappedForTransport(
+                    ListAsString: null,
+                    BlobAsInt: null,
+                    List: null,
+                    Origin: pineValue);
         }
     }
 
@@ -223,10 +229,11 @@ public class ElmInteractive
 
         if (pineValue.List is { } asList)
         {
-            return new PineValueJson
-            {
-                List = [.. asList.Select(e => FromPineValueWithoutBuildingDictionary(e, dictionary))]
-            };
+            return
+                new PineValueJson
+                {
+                    List = [.. asList.Select(e => FromPineValueWithoutBuildingDictionary(e, dictionary))]
+                };
         }
 
         if (pineValue.Origin is PineValue.BlobValue blobComponent)
@@ -243,8 +250,9 @@ public class ElmInteractive
         if (compilationCache.ValueJsonCache.TryGetValue(pineValue, out var cached))
             return (cached, System.Threading.Tasks.Task.FromResult(compilationCache));
 
-        var valueMappedForTransportCache = new Dictionary<PineValue, PineValueMappedForTransport>(
-            compilationCache.ValueMappedForTransportCache);
+        var valueMappedForTransportCache =
+            new Dictionary<PineValue, PineValueMappedForTransport>(
+                compilationCache.ValueMappedForTransportCache);
 
         var intermediate = PineValueMappedForTransport.FromPineValue(pineValue, cache: valueMappedForTransportCache);
 
@@ -254,12 +262,16 @@ public class ElmInteractive
         {
             {
                 if (mappedForTransport.Origin is PineValue.BlobValue blob)
+                {
                     if (blob.Bytes.Length < 3)
                         return;
+                }
 
                 if (mappedForTransport.Origin is PineValue.ListValue list)
+                {
                     if (list.Items.Length < 1)
                         return;
+                }
             }
 
             if (!usageCountLowerBoundDictionary.TryGetValue(mappedForTransport, out var usageCountLowerBound))
@@ -320,16 +332,19 @@ public class ElmInteractive
              * Order the dictionary entries so that earlier entries do not reference later ones.
              * */
             .OrderBy(entry => EstimatePineValueMemoryUsage(entry.Key.Origin))
-            .Select(entry => new PineValueJson.DictionaryEntry(
-                key: entry.Value,
-                value: FromPineValueWithoutBuildingDictionary(entry.Key, dictionary, doNotDictionaryOnFirstLevel: true)))
+            .Select(
+                entry => new PineValueJson.DictionaryEntry(
+                    key: entry.Value,
+                    value:
+                    FromPineValueWithoutBuildingDictionary(entry.Key, dictionary, doNotDictionaryOnFirstLevel: true)))
             .ToImmutableArray();
 
-        var pineValueJson = FromPineValueWithoutBuildingDictionary(
-            intermediate,
-            dictionary: dictionary)
+        var pineValueJson =
+            FromPineValueWithoutBuildingDictionary(
+                intermediate,
+                dictionary: dictionary)
             with
-        { Dictionary = dictionaryForSerial };
+            { Dictionary = dictionaryForSerial };
 
         var decodeResponseDictionary =
             dictionary
@@ -339,22 +354,25 @@ public class ElmInteractive
 
         var cacheEntry = (json: pineValueJson, dictionary: decodeResponseDictionary);
 
-        var compilationCacheTask = System.Threading.Tasks.Task.Run(() =>
-        {
-            var valueJsonCache = new Dictionary<PineValue, (PineValueJson, IReadOnlyDictionary<string, PineValue>)>(
-                compilationCache.ValueJsonCache)
-            {
-                [pineValue] = cacheEntry
-            };
-
-            return
-                compilationCache
-                with
+        var compilationCacheTask =
+            System.Threading.Tasks.Task.Run(
+                () =>
                 {
-                    ValueMappedForTransportCache = valueMappedForTransportCache.ToImmutableDictionary(),
-                    ValueJsonCache = valueJsonCache.ToImmutableDictionary()
-                };
-        });
+                    var valueJsonCache =
+                        new Dictionary<PineValue, (PineValueJson, IReadOnlyDictionary<string, PineValue>)>(
+                            compilationCache.ValueJsonCache)
+                        {
+                            [pineValue] = cacheEntry
+                        };
+
+                    return
+                        compilationCache
+                        with
+                        {
+                            ValueMappedForTransportCache = valueMappedForTransportCache.ToImmutableDictionary(),
+                            ValueJsonCache = valueJsonCache.ToImmutableDictionary()
+                        };
+                });
 
         return (cacheEntry, compilationCacheTask);
     }
@@ -463,9 +481,11 @@ public class ElmInteractive
             treeFiltered;
 
         return
-            [.. FileTreeExtensions.ToFlatDictionaryWithPathComparer(treeWithKernelModules)
+            [
+            .. FileTreeExtensions.ToFlatDictionaryWithPathComparer(treeWithKernelModules)
             .Where(sourceFile => sourceFile.Key.Last().EndsWith(".elm"))
-            .Select(appCodeFile => (appCodeFile.Key, appCodeFile.Value, Encoding.UTF8.GetString(appCodeFile.Value.Span)))
+            .Select(
+                appCodeFile => (appCodeFile.Key, appCodeFile.Value, Encoding.UTF8.GetString(appCodeFile.Value.Span)))
             ];
     }
 
@@ -478,7 +498,8 @@ public class ElmInteractive
             System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile.Bytes.Span);
 
         IReadOnlyList<IReadOnlyList<string>> elmJsonSourceDirectories =
-            [..elmJsonFileParsed?.SourceDirectories
+            [
+            ..elmJsonFileParsed?.SourceDirectories
             .Select(flat => flat.Split('/', '\\'))
             ];
 
@@ -505,17 +526,19 @@ public class ElmInteractive
         if (compilationRootFilePath.Count is 0)
             return sourceTree;
 
-        var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
-            sourceFiles: FileTreeExtensions.ToFlatDictionaryWithPathComparer(sourceTree),
-            workingDirectoryRelative: [],
-            ElmAppInterfaceConfig.Default with { CompilationRootFilePath = compilationRootFilePath });
+        var compilationResult =
+            ElmAppCompilation.AsCompletelyLoweredElmApp(
+                sourceFiles: FileTreeExtensions.ToFlatDictionaryWithPathComparer(sourceTree),
+                workingDirectoryRelative: [],
+                ElmAppInterfaceConfig.Default with { CompilationRootFilePath = compilationRootFilePath });
 
         return
             compilationResult
             .Unpack(
                 fromErr: compilationError =>
                 {
-                    var errorMessage = "\n" + ElmAppCompilation.CompileCompilationErrorsDisplayText(compilationError) + "\n";
+                    var errorMessage =
+                        "\n" + ElmAppCompilation.CompileCompilationErrorsDisplayText(compilationError) + "\n";
 
                     Console.WriteLine(errorMessage);
 

@@ -32,14 +32,14 @@ public sealed class ElmMakeDiagnosticsProvider(
     ElmMakeInvoker invokeElmMake) : IDiagnosticsProvider
 {
     private readonly Func<string, string?> _findElmJsonFile =
-            findElmJsonFile
-            ??
-            throw new ArgumentNullException(nameof(findElmJsonFile));
+        findElmJsonFile
+        ??
+        throw new ArgumentNullException(nameof(findElmJsonFile));
 
     private readonly ElmMakeInvoker _invokeElmMake =
-            invokeElmMake
-            ??
-            throw new ArgumentNullException(nameof(invokeElmMake));
+        invokeElmMake
+        ??
+        throw new ArgumentNullException(nameof(invokeElmMake));
 
     public ElmMakeDiagnosticsProvider()
         : this(FindElmJsonFile, InvokeElmMake)

@@ -1,3 +1,6 @@
+using Pine.Core;
+using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.PineVM;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -5,9 +8,6 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Pine.Core;
-using Pine.Core.Interpreter.IntermediateVM;
-using Pine.Core.PineVM;
 
 namespace Pine.PineVM;
 
@@ -61,28 +61,31 @@ public class DynamicPGOShare : IDisposable
         CompiledExpressionsCountLimit = compiledExpressionsCountLimit;
         LimitSampleCountPerSubmissionDefault = limitSampleCountPerSubmissionDefault;
 
-        dynamicCompilationTask = Task.Run(() =>
-        {
-            while (!disposedCancellationTokenSource.IsCancellationRequested)
-            {
-                Task.Delay(TimeSpan.FromSeconds(1)).Wait();
+        dynamicCompilationTask =
+            Task.Run(
+                () =>
+                {
+                    while (!disposedCancellationTokenSource.IsCancellationRequested)
+                    {
+                        Task.Delay(TimeSpan.FromSeconds(1)).Wait();
 
-                CompileIfNewProfiles();
-            }
-        });
+                        CompileIfNewProfiles();
+                    }
+                });
     }
 
     public IPineVM GetVMAutoUpdating(
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null)
     {
-        return new RedirectingVM(
-            (expression, environment) =>
-            EvaluateExpressionRestartingAfterCompilation(
-                expression,
-                environment,
-                initialProfileAggregationDelay: TimeSpan.FromSeconds(8),
-                overrideLimitSampleCountPerSubmission: null,
-                evalCache: evalCache));
+        return
+            new RedirectingVM(
+                (expression, environment) =>
+                EvaluateExpressionRestartingAfterCompilation(
+                    expression,
+                    environment,
+                    initialProfileAggregationDelay: TimeSpan.FromSeconds(8),
+                    overrideLimitSampleCountPerSubmission: null,
+                    evalCache: evalCache));
     }
 
     public record EvaluateExpressionProfilingTask(
@@ -118,26 +121,27 @@ public class DynamicPGOShare : IDisposable
 
             profilingEvalTask.EvalTask.Wait(profileAggregationDelay, disposedCancellationTokenSource.Token);
 
-            Task.Run(() =>
-            {
-                var exprUsageSamples = profilingEvalTask.ProfilingPineVM.ExprEnvUsagesFlat;
+            Task.Run(
+                () =>
+                {
+                    var exprUsageSamples = profilingEvalTask.ProfilingPineVM.ExprEnvUsagesFlat;
 
-                var exprUsageSamplesIncluded =
-                SubsequenceWithEvenDistribution(
-                    [.. exprUsageSamples],
-                    limitSampleCount);
+                    var exprUsageSamplesIncluded =
+                        SubsequenceWithEvenDistribution(
+                            [.. exprUsageSamples],
+                            limitSampleCount);
 
-                var expressionUsages =
-                exprUsageSamplesIncluded
-                .Select(sample => sample.Value.Analysis.Value.ToMaybe())
-                .WhereNotNothing()
-                .SelectMany(usage => usage)
-                .ToImmutableList();
+                    var expressionUsages =
+                        exprUsageSamplesIncluded
+                        .Select(sample => sample.Value.Analysis.Value.ToMaybe())
+                        .WhereNotNothing()
+                        .SelectMany(usage => usage)
+                        .ToImmutableList();
 
-                var usageProfiles = ProfilingPineVM.UsageProfileDictionaryFromListOfUsages(expressionUsages);
+                    var usageProfiles = ProfilingPineVM.UsageProfileDictionaryFromListOfUsages(expressionUsages);
 
-                profileContainer.Iterations.Enqueue(usageProfiles);
-            });
+                    profileContainer.Iterations.Enqueue(usageProfiles);
+                });
 
             if (profilingEvalTask.EvalTask.IsCompleted)
             {
@@ -171,33 +175,37 @@ public class DynamicPGOShare : IDisposable
         ?
         [.. source]
         :
-        [..source
+        [
+        ..source
         .Chunk(source.Count / limitSampleCount)
         .Select(chunk => chunk.First())
-        .Take(limitSampleCount)];
+        .Take(limitSampleCount)
+        ];
 
     private Task WaitForNextCompletedCompilation(CancellationToken cancellationToken) =>
-        Task.Run(() =>
-        {
-            var lastCompletedCompilation = completedCompilations.LastOrDefault();
-
-            while (completedCompilations.LastOrDefault() == lastCompletedCompilation)
+        Task.Run(
+            () =>
             {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    return;
-                }
+                var lastCompletedCompilation = completedCompilations.LastOrDefault();
 
-                try
+                while (completedCompilations.LastOrDefault() == lastCompletedCompilation)
                 {
-                    Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).Wait();
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    try
+                    {
+                        Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).Wait();
+                    }
+                    catch (AggregateException ex) when (ex.Flatten().InnerExceptions.OfType<TaskCanceledException>().Any())
+                    {
+                        return;
+                    }
                 }
-                catch (AggregateException ex) when (ex.Flatten().InnerExceptions.OfType<TaskCanceledException>().Any())
-                {
-                    return;
-                }
-            }
-        }, cancellationToken);
+            },
+            cancellationToken);
 
     private EvaluateExpressionProfilingTask StartEvaluateExpressionTaskBasedOnLastCompilation(
         Expression expression,
@@ -252,10 +260,11 @@ public class DynamicPGOShare : IDisposable
         var evalTask =
             Task.Run(() => profilingVM.PineVM.EvaluateExpression(expression, environment));
 
-        return new EvaluateExpressionProfilingTask(
-            profilingVM,
-            newCancellationTokenSource,
-            evalTask);
+        return
+            new EvaluateExpressionProfilingTask(
+                profilingVM,
+                newCancellationTokenSource,
+                evalTask);
     }
 
     private void CompileIfNewProfiles()
@@ -307,8 +316,10 @@ public class DynamicPGOShare : IDisposable
             CompilePineToDotNet.CompileToCSharp.CompileExpressionsToCSharpClass(
                 expressionsToCompile,
                 syntaxContainerConfig)
-            .AndThen(compiledToCSharp => CompilePineToDotNet.CompileToAssembly.Compile(
-                compiledToCSharp, Microsoft.CodeAnalysis.OptimizationLevel.Release));
+            .AndThen(
+                compiledToCSharp => CompilePineToDotNet.CompileToAssembly.Compile(
+                    compiledToCSharp,
+                    Microsoft.CodeAnalysis.OptimizationLevel.Release));
 
         var dictionary =
             compileToAssemblyResult
@@ -333,8 +344,10 @@ public class DynamicPGOShare : IDisposable
     public static IEnumerable<KeyValuePair<ExpressionUsageAnalysis, ExpressionUsageProfile>> FilterAndRankExpressionProfilesForCompilation(
         IReadOnlyDictionary<ExpressionUsageAnalysis, ExpressionUsageProfile> aggregateExpressionsProfiles) =>
         aggregateExpressionsProfiles
-        .Where(expressionProfile =>
-        4 < expressionProfile.Value.UsageCount && ShouldIncludeExpressionInCompilation(expressionProfile.Key.Expression))
+        .Where(
+            expressionProfile =>
+            4 < expressionProfile.Value.UsageCount &&
+            ShouldIncludeExpressionInCompilation(expressionProfile.Key.Expression))
         .OrderByDescending(expressionAndProfile => expressionAndProfile.Value.UsageCount)
         .ThenBy(expressionAndProfile => expressionAndProfile.Key.CompiledExpressionId.ExpressionHashBase16);
 
