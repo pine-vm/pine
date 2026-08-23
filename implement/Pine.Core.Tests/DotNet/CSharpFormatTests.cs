@@ -2779,7 +2779,7 @@ public class CSharpFormatTests
     }
 
     [Fact]
-    public void Propagates_line_breaks_up_in_return_method_chain()
+    public void Preserves_argument_line_break_in_return_method_chain()
     {
         var inputSyntaxText =
             """"
@@ -2790,8 +2790,8 @@ public class CSharpFormatTests
         var expectedSyntaxText =
             """"
             return
-                node.WithEqualsToken(node.EqualsToken.WithTrailingTrivia(s_space))
-                .WithValue(fmtValue.WithLeadingTrivia());
+                node.WithEqualsToken(node.EqualsToken.WithTrailingTrivia(s_space)).WithValue(
+                    fmtValue.WithLeadingTrivia());
             """";
 
         AssertFormattedSyntax(inputSyntaxText, expectedSyntaxText, scriptMode: true);
@@ -6637,5 +6637,250 @@ public class CSharpFormatTests
             """";
 
         AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_comments_in_argument_list_between_parameter_name_and_argument_expression()
+    {
+        var input =
+            """"
+            var compilerResponseValue =
+                ElmInteractiveEnvironment.ApplyFunction(
+                    declExpandInteractiveEnv,
+                    arguments:
+                    /*
+                     * A comment
+                     * */
+                    // [pineValueEmptyListInCompiler, PineValue.List(compilerModulesParsedAsPineValues)]
+                    [pineValueEmptyListInCompiler, PineValue.EmptyList]
+                    )
+
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_SingleLineRawStringLiteral_on_new_line_in_assert_equal()
+    {
+        var input =
+            """"
+            public class TestClass
+            {
+                void TestMethod()
+                {
+                    HoverAtLine(state, lineNumber: 4).Should().Be(
+                        """ProvideHoverResponse [ "    init : Int" ]""");
+                }
+            }
+
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: false);
+    }
+
+    [Fact]
+    public void Format_object_creation_argument_list_too_long_for_single_line_to_multiline()
+    {
+        var input =
+            """"
+            class TestClass
+            {
+                public TypeAliasA ExprEnvUsagesFlat =>
+                    expressionUsages
+                    .SelectMany(
+                        exprUsageRecord =>
+                        exprUsageRecord.Value
+                        .Select(
+                            envUsageRecord =>
+                            new KeyValuePair<string, ExpressionEnvUsageRecord>
+                            ("a string literal 1234567890 abcd", envUsageRecord.Value)))
+                    .ToImmutableDictionary();
+            }
+
+            """";
+
+        var expected =
+            """"
+            class TestClass
+            {
+                public TypeAliasA ExprEnvUsagesFlat =>
+                    expressionUsages
+                    .SelectMany(
+                        exprUsageRecord =>
+                        exprUsageRecord.Value
+                        .Select(
+                            envUsageRecord =>
+                            new KeyValuePair<string, ExpressionEnvUsageRecord>(
+                                "a string literal 1234567890 abcd",
+                                envUsageRecord.Value)))
+                    .ToImmutableDictionary();
+            }
+            
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: false);
+    }
+
+    [Fact]
+    public void Preserve_pragma_warning_separated_line()
+    {
+        var input =
+            """"
+            using System;
+
+            namespace Pine.Core.Internal;
+
+            using static Core.KernelFunction;
+
+            #pragma warning disable IDE1006
+
+            /// <summary>
+            /// </summary>
+            public static class Classname
+            {
+            }
+
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: false);
+    }
+
+    [Fact]
+    public void Preserve_comments_in_conditional_expression()
+    {
+        var input =
+            """"
+            var genericReprInterface =
+                availableSpecialized.Count is 0
+                ?
+                /*
+                 * Since
+                 * */
+                // BuildFunctionSpecializedCompilationInterface(functionInterfaceBase, expr, envConstraint: null)
+                functionInterfaceBase
+                :
+                /*
+                 * If
+                 * */
+                functionInterfaceBase;
+
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Format_implicit_object_creation_argument_list_multiline()
+    {
+        var input =
+            """"
+            public static ElmAppInterfaceConfig Default => new
+            (
+                CompilationRootFilePath: ["src", "Backend", "Main.elm"]
+            );
+
+            """";
+
+        var expected =
+            """"
+            public static ElmAppInterfaceConfig Default =>
+                new(
+                    CompilationRootFilePath: ["src", "Backend", "Main.elm"]);
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Format_argument_list_collection_multiline()
+    {
+        var input =
+            """"
+            var combinedEnvironment =
+            PineValue.List([PineValue.List(functionValueAndRecord.functionRecord.EnvFunctions),
+                PineValue.List(combinedArguments)]);
+
+            """";
+
+        var expected =
+            """"
+            var combinedEnvironment =
+                PineValue.List(
+                    [
+                    PineValue.List(functionValueAndRecord.functionRecord.EnvFunctions),
+                    PineValue.List(combinedArguments)
+                    ]);
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Format_with_expression_with_argument_list_on_new_line()
+    {
+        var input =
+            """"
+            var pineValueJson = FromPineValueWithoutBuildingDictionary(
+                intermediate,
+                dictionary: dictionary)
+                with
+            { Dictionary = dictionaryForSerial };
+
+            """";
+
+        var expected =
+            """"
+            var pineValueJson =
+                FromPineValueWithoutBuildingDictionary(
+                    intermediate,
+                    dictionary: dictionary)
+                with
+                { Dictionary = dictionaryForSerial };
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Format_normalizing_indent_including_comments_in_initializer_expression()
+    {
+        var input =
+            """"
+            var commandResults = ExecutableFile.ExecuteFileWithArguments(
+                environmentFilesNotExecutable: elmCodeFiles,
+                GetElmExecutableFile,
+                command,
+                new Dictionary<string, string>
+                {
+                    //  Avoid
+                    /* Also,
+                    -- HTTP
+                    */
+                    {"ELM_HOME", GetElmHomeDirectory()},
+                },
+                workingDirectoryRelative: workingDirectoryRelative);
+
+            """";
+
+        var expected =
+            """"
+            var commandResults =
+                ExecutableFile.ExecuteFileWithArguments(
+                    environmentFilesNotExecutable: elmCodeFiles,
+                    GetElmExecutableFile,
+                    command,
+                    new Dictionary<string, string>
+                    {
+                        //  Avoid
+                        /* Also,
+                        -- HTTP
+                        */
+                        {"ELM_HOME", GetElmHomeDirectory()},
+                    },
+                    workingDirectoryRelative: workingDirectoryRelative);
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
     }
 }

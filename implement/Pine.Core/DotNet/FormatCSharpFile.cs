@@ -428,13 +428,30 @@ public static class FormatCSharpFile
     /// </summary>
     private static SyntaxTriviaList EnsureLeadingBreaks(SyntaxTriviaList orig, int minBreaks, int indent)
     {
-        // Collect all non-whitespace trivia (comments, preprocessor, etc.)
-        var preserved = new List<SyntaxTrivia>();
+        // Collect all non-whitespace trivia (comments, preprocessor, etc.) together
+        // with their original indentation so multiline comments can move as a unit.
+        var preserved = new List<(SyntaxTrivia Trivia, int OriginalIndent)>();
+        var atLineStart = true;
+        var originalIndent = 0;
 
         foreach (var t in orig)
         {
-            if (!IsLineBreak(t) && !IsWhitespace(t))
-                preserved.Add(t);
+            if (IsLineBreak(t))
+            {
+                atLineStart = true;
+                originalIndent = 0;
+            }
+            else if (IsWhitespace(t))
+            {
+                if (atLineStart)
+                    originalIndent += t.ToFullString().Length;
+            }
+            else
+            {
+                preserved.Add((t, originalIndent));
+                atLineStart = t.HasStructure;
+                originalIndent = 0;
+            }
         }
 
         var r = new List<SyntaxTrivia>();
@@ -442,20 +459,24 @@ public static class FormatCSharpFile
         for (var i = 0; i < minBreaks; i++)
             r.Add(s_lineFeed);
 
-        foreach (var t in preserved)
+        foreach (var (t, originalTriviaIndent) in preserved)
         {
             // Preprocessor directives stay at column 0, except region directives
             // which are indented to match their scope.
             if (!IsDirectiveTrivia(t) || IsRegionDirective(t))
                 r.Add(Indent(indent));
 
-            r.Add(ReindentMultiLineComment(t, indent));
+            r.Add(
+                ShiftMultiLineCommentPreservingRelativeIndent(
+                    t,
+                    originalTriviaIndent,
+                    indent * IndentSize));
             // Doc comments include their own trailing newline; others need one
             if (!t.HasStructure)
                 r.Add(s_lineFeed);
         }
 
-        if (preserved.Count > 0 && IsDirectiveTrivia(preserved[^1]))
+        if (preserved.Count > 0 && IsDirectiveTrivia(preserved[^1].Trivia))
         {
             r.Add(s_lineFeed);
         }
@@ -485,23 +506,32 @@ public static class FormatCSharpFile
     {
         var gaps = new List<int>();
         var preserved = new List<SyntaxTrivia>();
+        var preservedIndents = new List<int>();
         var currentBreaks = 0;
+        var atLineStart = true;
+        var originalIndent = 0;
 
         foreach (var t in orig)
         {
             if (IsLineBreak(t))
             {
                 currentBreaks++;
+                atLineStart = true;
+                originalIndent = 0;
             }
             else if (IsWhitespace(t))
             {
-                // ignore — whitespace within trivia is not significant here
+                if (atLineStart)
+                    originalIndent += t.ToFullString().Length;
             }
             else
             {
                 gaps.Add(currentBreaks);
                 preserved.Add(t);
+                preservedIndents.Add(originalIndent);
                 currentBreaks = 0;
+                atLineStart = t.HasStructure;
+                originalIndent = 0;
             }
         }
 
@@ -539,7 +569,11 @@ public static class FormatCSharpFile
             if (!IsDirectiveTrivia(t) || IsRegionDirective(t))
                 r.Add(Indent(indent));
 
-            r.Add(ReindentMultiLineComment(t, indent));
+            r.Add(
+                ShiftMultiLineCommentPreservingRelativeIndent(
+                    t,
+                    preservedIndents[k],
+                    indent * IndentSize));
 
             // Doc comments include their own trailing newline; others need one
             if (!t.HasStructure)
@@ -561,51 +595,6 @@ public static class FormatCSharpFile
 
         r.Add(Indent(indent));
         return [.. r];
-    }
-
-    /// <summary>
-    /// Re-indents a multi-line block comment so that internal lines match the given indent level.
-    /// Single-line comments and non-comment trivia are returned unchanged.
-    /// </summary>
-    private static SyntaxTrivia ReindentMultiLineComment(SyntaxTrivia trivia, int indent)
-    {
-        if (!trivia.IsKind(SyntaxKind.MultiLineCommentTrivia))
-            return trivia;
-
-        var text = trivia.ToFullString();
-
-        if (!text.Contains('\n'))
-            return trivia;
-
-        var lines = text.Split('\n');
-
-        if (lines.Length <= 1)
-            return trivia;
-
-        // Determine the new indentation for continuation lines inside the comment.
-        // Use indent * IndentSize + 1 to align the * with the * in /*
-        var newIndentStr = new string(' ', indent * IndentSize + 1);
-
-        var sb = new System.Text.StringBuilder();
-        sb.Append(lines[0]);
-
-        for (var i = 1; i < lines.Length; i++)
-        {
-            sb.Append('\n');
-
-            var trimmed = lines[i].TrimStart();
-
-            if (trimmed.StartsWith("*/", StringComparison.Ordinal))
-                sb.Append(new string(' ', indent * IndentSize)).Append(trimmed);
-
-            else if (trimmed.Length > 0 && trimmed[0] is '*')
-                sb.Append(newIndentStr).Append(trimmed);
-
-            else
-                sb.Append(lines[i]); // preserve non-* lines and empty lines as-is
-        }
-
-        return SyntaxFactory.Comment(sb.ToString());
     }
 
     /// <summary>
@@ -897,11 +886,17 @@ public static class FormatCSharpFile
             var first = members[0];
             var leading = first.GetLeadingTrivia();
 
+            var extraLeadingBreaks =
+                Math.Max(0, 2 - CountLeadingBreaksBeforeFirstContent(leading));
+
             members =
                 members.Replace(
                     first,
                     first.WithLeadingTrivia(
-                        EnsureLeadingBreaks(leading, 2, indent)));
+                        RebuildLeadingTriviaPreservingBlanks(
+                            leading,
+                            extraLeadingBreaks,
+                            indent)));
         }
 
         // Ensure file ends with exactly one newline
@@ -1169,11 +1164,17 @@ public static class FormatCSharpFile
             var first = members[0];
             var leading = first.GetLeadingTrivia();
 
+            var extraLeadingBreaks =
+                Math.Max(0, 2 - CountLeadingBreaksBeforeFirstContent(leading));
+
             members =
                 members.Replace(
                     first,
                     first.WithLeadingTrivia(
-                        EnsureLeadingBreaks(leading, 2, ctx.IndentLevel)));
+                        RebuildLeadingTriviaPreservingBlanks(
+                            leading,
+                            extraLeadingBreaks,
+                            ctx.IndentLevel)));
         }
         else if (members.Count > 0)
         {
@@ -2473,7 +2474,14 @@ public static class FormatCSharpFile
                 {
                     // Break after the colon when the first line exceeds max length.
                     var nc = nameColon.WithTrailingTrivia();
-                    var expr = argSyntax.Expression.WithLeadingTrivia(s_lineFeed, Indent(argIndent));
+
+                    var expr =
+                        argSyntax.Expression.WithLeadingTrivia(
+                            EnsureLeadingBreaks(
+                                node.Arguments[i].Expression.GetLeadingTrivia(),
+                                1,
+                                argIndent));
+
                     a = argSyntax.WithNameColon(nc).WithExpression(expr);
                     a = a.WithLeadingTrivia(s_lineFeed, Indent(argIndent));
                 }
@@ -2487,7 +2495,14 @@ public static class FormatCSharpFile
                     if (origExprLine > origColonLine)
                     {
                         var nc = nameColon.WithTrailingTrivia();
-                        var expr = argSyntax.Expression.WithLeadingTrivia(s_lineFeed, Indent(argIndent));
+
+                        var expr =
+                            argSyntax.Expression.WithLeadingTrivia(
+                                EnsureLeadingBreaks(
+                                    node.Arguments[i].Expression.GetLeadingTrivia(),
+                                    1,
+                                    argIndent));
+
                         a = argSyntax.WithNameColon(nc).WithExpression(expr);
                     }
                 }
@@ -2829,6 +2844,12 @@ public static class FormatCSharpFile
         var sourceMultiLine =
             LineOf(node.OpenBracketToken) != LineOf(node.CloseBracketToken);
 
+        var firstElementSharesOpenLine =
+            LineOf(node.Elements[0].GetFirstToken()) == LineOf(node.OpenBracketToken);
+
+        var isNamedArgument =
+            node.Parent is ArgumentSyntax { NameColon: not null };
+
         for (var i = 0; i < node.Elements.Count; i++)
         {
             var e = node.Elements[i];
@@ -2848,6 +2869,10 @@ public static class FormatCSharpFile
                 node.Elements[i].GetFirstToken().GetLocation().GetLineSpan().StartLinePosition.Character / IndentSize;
 
             var elemIndent =
+                firstElementSharesOpenLine
+                ?
+                ctx.IndentLevel + (isNamedArgument ? 1 : 0)
+                :
                 sourceMultiLine
                 ?
                 ctx.IndentLevel + Math.Max(0, elemLevel - openBracketLevel)
@@ -2959,11 +2984,18 @@ public static class FormatCSharpFile
 
         var fmtInit = FormatInitializerExpression(node.Initializer, ctx);
 
-        // Add trailing space after 'with' only when the initializer stays on the same line.
-        // Use the string overload because the node overload would check the original tree
-        // position, which may not reflect the formatted layout.
-        var initIsMultiLine = SpansMultipleLines(fmtInit.ToFullString());
-        var withTrailing = initIsMultiLine ? [] : new SyntaxTriviaList(s_space);
+        var initializerStartsOnNewLine =
+            LineOf(node.Initializer.OpenBraceToken) > LineOf(node.WithKeyword) ||
+            SpansMultipleLines(fmtInit.ToFullString());
+
+        if (initializerStartsOnNewLine)
+        {
+            fmtInit =
+                fmtInit.WithOpenBraceToken(
+                    fmtInit.OpenBraceToken.WithLeadingTrivia(s_lineFeed, Indent(ctx.IndentLevel)));
+        }
+
+        var withTrailing = initializerStartsOnNewLine ? [] : new SyntaxTriviaList(s_space);
 
         var withLeading =
             EndLineOf(node.Expression) < LineOf(node.WithKeyword)
@@ -3275,7 +3307,8 @@ public static class FormatCSharpFile
                 node.QuestionToken.WithLeadingTrivia(s_lineFeed, ci)
                 .WithTrailingTrivia())
             .WithWhenTrue(
-                fmtTrue.WithLeadingTrivia(new SyntaxTriviaList(s_lineFeed, ci))
+                fmtTrue.WithLeadingTrivia(
+                    EnsureLeadingBreaks(node.WhenTrue.GetLeadingTrivia(), 1, ctx.IndentLevel))
                 .WithTrailingTrivia(
                     EnsureSpaceBeforeComments(StripWhitespace(node.WhenTrue.GetTrailingTrivia()))))
             .WithColonToken(
@@ -3894,66 +3927,6 @@ public static class FormatCSharpFile
         var fmtExpr = (ExpressionSyntax)FormatNode(node.Expression, ctx);
         var fmtArgs = FormatArgumentList(node.ArgumentList, ctx);
 
-        // Propagate line breaks up in method chains: if the argument list spans
-        // multiple lines but the args themselves would fit on one line, and the
-        // expression is a member access on an invocation (method chain like a.B().C()),
-        // collapse the arg list to single-line and break at the dot instead.
-        // Only propagate when the collapsed total width (expression + single-line args)
-        // is large enough that a dot break produces a better layout; when the total
-        // fits comfortably, preserve the existing multiline arg layout.
-        if (fmtExpr is MemberAccessExpressionSyntax memberAccess &&
-            memberAccess.Expression is InvocationExpressionSyntax &&
-            SpansMultipleLines(fmtArgs))
-        {
-            // Estimate single-line arg width
-            var singleLineArgWidth = 2; // parens
-
-            var allArgsSingleLine = true;
-
-            for (var i = 0; i < node.ArgumentList.Arguments.Count; i++)
-            {
-                var argText = node.ArgumentList.Arguments[i].ToString().Trim();
-
-                if (SpansMultipleLines(argText))
-                {
-                    allArgsSingleLine = false;
-                    break;
-                }
-
-                if (i > 0)
-                    singleLineArgWidth += 2; // ", "
-
-                singleLineArgWidth += argText.Length;
-            }
-
-            var collapsedTotalWidth =
-                ctx.IndentLevel * IndentSize + fmtExpr.ToString().TrimEnd().Length + singleLineArgWidth;
-
-            // Only propagate when the resulting dot-broken line (dot + method
-            // name + collapsed args) is short enough to justify the trade-off.
-            var dotLineWidth =
-                ctx.IndentLevel * IndentSize + 1 + memberAccess.Name.ToString().Length + singleLineArgWidth;
-
-            if (allArgsSingleLine && dotLineWidth <= MaximumLineLength / 2 &&
-                collapsedTotalWidth > MaximumLineLength * 5 / 6)
-            {
-                // Collapse arg list to single line
-                fmtArgs = FormatArgListSingleLine(node.ArgumentList);
-                // Break at the dot
-                var dotIndent = ctx.IndentLevel;
-
-                fmtExpr =
-                    memberAccess
-                    .WithExpression(
-                        memberAccess.Expression.WithTrailingTrivia(
-                            EnsureSpaceBeforeComments(StripWhitespace(memberAccess.Expression.GetTrailingTrivia()))))
-                    .WithOperatorToken(
-                        memberAccess.OperatorToken
-                        .WithLeadingTrivia(EnsureLeadingBreaks(memberAccess.OperatorToken.LeadingTrivia, 1, dotIndent))
-                        .WithTrailingTrivia());
-            }
-        }
-
         // Preserve line break before argument list's open paren when it was on a
         // separate line from the expression (e.g., invocation of expression result:
         // expr\n    ([args])).
@@ -4021,6 +3994,18 @@ public static class FormatCSharpFile
         {
             var fmtArgs = FormatArgumentList(r.ArgumentList, ctx);
 
+            if (r.ArgumentList.Arguments.Count > 0 && !SpansMultipleLines(fmtArgs))
+            {
+                var totalWidth =
+                    ctx.EffectiveColumn +
+                    "new ".Length +
+                    r.Type.ToString().Trim().Length +
+                    fmtArgs.ToString().TrimEnd().Length;
+
+                if (totalWidth > MaximumLineLength)
+                    fmtArgs = FormatArgListMultiLine(r.ArgumentList, ctx);
+            }
+
             // Collapse newline before open paren — the paren should stay on the
             // same line as the type name in object creation expressions.
             // The newline may live in the type's trailing trivia rather than the
@@ -4069,7 +4054,19 @@ public static class FormatCSharpFile
         ImplicitObjectCreationExpressionSyntax node,
         FormatContext ctx)
     {
-        var r = node.WithArgumentList(FormatArgumentList(node.ArgumentList, ctx));
+        var fmtArgs = FormatArgumentList(node.ArgumentList, ctx);
+
+        fmtArgs =
+            fmtArgs.WithOpenParenToken(
+                fmtArgs.OpenParenToken.WithLeadingTrivia(
+                    StripWhitespace(fmtArgs.OpenParenToken.LeadingTrivia)));
+
+        var r =
+            node
+            .WithNewKeyword(
+                node.NewKeyword.WithTrailingTrivia(
+                    StripWhitespace(node.NewKeyword.TrailingTrivia)))
+            .WithArgumentList(fmtArgs);
 
         if (r.Initializer is not null)
         {
