@@ -52,7 +52,7 @@ public class LoopIterationCountLimitTests
         var error =
             evaluationResult
             .Unpack(
-                fromErr: err => err.Message,
+                fromErr: err => EvaluationError.RenderDisplayString(err),
                 fromOk: _ => null);
 
         error.Should().NotBeNull(
@@ -97,7 +97,7 @@ public class LoopIterationCountLimitTests
         var error =
             evaluationResult
             .Unpack(
-                fromErr: err => err.Message,
+                fromErr: err => EvaluationError.RenderDisplayString(err),
                 fromOk: _ => null);
 
         error.Should().NotBeNull();
