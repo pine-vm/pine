@@ -12,3 +12,17 @@ public interface IPineVM
         Expression expression,
         PineValue environment);
 }
+
+/// <summary>
+/// Optional Pine VM capability for interrupting an evaluation cooperatively.
+/// </summary>
+public interface ICancellablePineVM : IPineVM
+{
+    /// <summary>
+    /// Evaluates an expression and stops when <paramref name="cancellationToken"/> is canceled.
+    /// </summary>
+    Result<string, PineValue> EvaluateExpression(
+        Expression expression,
+        PineValue environment,
+        System.Threading.CancellationToken cancellationToken);
+}

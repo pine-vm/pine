@@ -2,6 +2,8 @@ using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.PineVM;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Threading;
@@ -44,6 +46,23 @@ public class EvaluationCancellationTests
                 BuildListCount: 0,
                 LoopIterationCount: 0,
                 InstructionCount: 0));
+    }
+
+    [Fact]
+    public void Cancellable_VM_interface_reports_cancellation_to_host()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Action evaluate =
+            () =>
+            ((ICancellablePineVM)CreateVm())
+            .EvaluateExpression(
+                Expression.EnvironmentInstance,
+                PineValue.EmptyList,
+                cancellation.Token);
+
+        evaluate.Should().Throw<OperationCanceledException>();
     }
 
     [Fact]

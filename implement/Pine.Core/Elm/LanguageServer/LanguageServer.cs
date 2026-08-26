@@ -57,6 +57,61 @@ public class LanguageServer(
 
     private readonly Lock _documentStateLock = new();
 
+    private readonly Dictionary<string, DocumentUpdateWork> _pendingDocumentUpdates =
+        new(System.StringComparer.Ordinal);
+
+    private readonly Dictionary<string, int> _languageServiceDocumentVersions =
+        new(System.StringComparer.Ordinal);
+
+    private long _nextDocumentUpdateSequence;
+
+    private sealed class DocumentUpdateWork(
+        string documentUri,
+        int version,
+        string content,
+        long sequence) : System.IDisposable
+    {
+        private readonly Lock _cancellationLock = new();
+
+        private CancellationTokenSource? _cancellation = new();
+
+        public string DocumentUri { get; } = documentUri;
+
+        public int Version { get; } = version;
+
+        public string Content { get; } = content;
+
+        public long Sequence { get; } = sequence;
+
+        public CancellationToken CancellationToken
+        {
+            get
+            {
+                lock (_cancellationLock)
+                {
+                    return _cancellation?.Token ?? new CancellationToken(canceled: true);
+                }
+            }
+        }
+
+        public void Cancel()
+        {
+            lock (_cancellationLock)
+            {
+                _cancellation?.Cancel();
+            }
+        }
+
+        public void Dispose()
+        {
+            lock (_cancellationLock)
+            {
+                _cancellation?.Dispose();
+                _cancellation = null;
+            }
+        }
+    }
+
     private IReadOnlyList<WorkspaceFolder> _workspaceFolders = [];
 
     private InitializeParams? _initializeParams;
@@ -148,6 +203,10 @@ public class LanguageServer(
         InitializeParams initializeParams)
     {
         Log("Initialize: " + System.Text.Json.JsonSerializer.Serialize(initializeParams));
+
+        Log(
+            "LSP request cancellation is enabled through $/cancelRequest; " +
+            "the base protocol defines no server capability flag for it");
 
         this._initializeParams = initializeParams;
 
@@ -504,25 +563,28 @@ public class LanguageServer(
     /// <summary>
     /// Applies a text document open notification.
     /// </summary>
-    public void TextDocument_didOpen(TextDocumentItem textDocument)
-    {
-        lock (_documentStateLock)
-        {
-            TextDocument_didOpenSynchronized(textDocument);
-        }
-    }
+    public void TextDocument_didOpen(TextDocumentItem textDocument) =>
+        TextDocument_didOpenAsync(textDocument).GetAwaiter().GetResult();
 
-    private void TextDocument_didOpenSynchronized(TextDocumentItem textDocument)
+    /// <summary>
+    /// Applies a text document open notification without blocking later notifications while the
+    /// language service processes its content.
+    /// </summary>
+    public async Task TextDocument_didOpenAsync(TextDocumentItem textDocument)
     {
         var decodedUri = DocumentUriCleaned(textDocument.Uri);
 
         Log("TextDocument_didOpen: " + decodedUri);
 
         _allSeenDocumentUris[decodedUri] = decodedUri;
-        _closedTextDocuments.TryRemove(decodedUri, out var _);
+
+        DocumentUpdateWork update;
+        DocumentUpdateWork? supersededUpdate;
 
         lock (_documentStateLock)
         {
+            _closedTextDocuments.TryRemove(decodedUri, out var _);
+
             if (_clientTextDocumentVersions.TryGetValue(decodedUri, out var currentVersion) &&
                 currentVersion > textDocument.Version)
             {
@@ -535,25 +597,19 @@ public class LanguageServer(
 
             _clientTextDocumentContents[decodedUri] = textDocument.Text;
             _clientTextDocumentVersions[decodedUri] = textDocument.Version;
+
+            (update, supersededUpdate) =
+                RegisterDocumentUpdateLocked(
+                    decodedUri,
+                    textDocument.Version,
+                    textDocument.Text);
         }
 
         BumpSourceRevision();
 
-        if (GetLanguageServiceState("opening document") is not { } languageServiceState)
-        {
-            return;
-        }
+        CancelSupersededDocumentUpdate(supersededUpdate, update);
 
-        lock (_documentStateLock)
-        {
-            if (_clientTextDocumentVersions.TryGetValue(decodedUri, out var currentVersion) &&
-                currentVersion == textDocument.Version &&
-                _clientTextDocumentContents.TryGetValue(decodedUri, out var currentContent) &&
-                currentContent == textDocument.Text)
-            {
-                languageServiceState.AddFile(decodedUri, textDocument.Text);
-            }
-        }
+        await ProcessDocumentUpdateAsync(update, "opening document");
     }
 
     /// <summary>
@@ -561,15 +617,13 @@ public class LanguageServer(
     /// </summary>
     public void TextDocument_didChange(
         VersionedTextDocumentIdentifier textDocument,
-        IReadOnlyList<TextDocumentContentChangeEvent> contentChanges)
-    {
-        lock (_documentStateLock)
-        {
-            TextDocument_didChangeSynchronized(textDocument, contentChanges);
-        }
-    }
+        IReadOnlyList<TextDocumentContentChangeEvent> contentChanges) =>
+        TextDocument_didChangeAsync(textDocument, contentChanges).GetAwaiter().GetResult();
 
-    private void TextDocument_didChangeSynchronized(
+    /// <summary>
+    /// Records a text document change immediately and cancels processing of an older version.
+    /// </summary>
+    public async Task TextDocument_didChangeAsync(
         VersionedTextDocumentIdentifier textDocument,
         IReadOnlyList<TextDocumentContentChangeEvent> contentChanges)
     {
@@ -586,12 +640,6 @@ public class LanguageServer(
             return;
         }
 
-        if (_closedTextDocuments.ContainsKey(textDocumentUri))
-        {
-            Log("Ignoring change for closed document " + textDocumentUri);
-            return;
-        }
-
         for (var i = 0; i < contentChanges.Count; ++i)
         {
             Log("Content change " + i + ".range: " + contentChanges[i].Range?.ToString() ?? "null");
@@ -605,8 +653,17 @@ public class LanguageServer(
 
         var newContent = contentChanges[^1].Text;
 
+        DocumentUpdateWork update;
+        DocumentUpdateWork? supersededUpdate;
+
         lock (_documentStateLock)
         {
+            if (_closedTextDocuments.ContainsKey(textDocumentUri))
+            {
+                Log("Ignoring change for closed document " + textDocumentUri);
+                return;
+            }
+
             if (_clientTextDocumentVersions.TryGetValue(textDocumentUri, out var currentVersion) &&
                 textDocument.Version <= currentVersion)
             {
@@ -619,6 +676,12 @@ public class LanguageServer(
 
             _clientTextDocumentContents[textDocumentUri] = newContent;
             _clientTextDocumentVersions[textDocumentUri] = textDocument.Version;
+
+            (update, supersededUpdate) =
+                RegisterDocumentUpdateLocked(
+                    textDocumentUri,
+                    textDocument.Version,
+                    newContent);
         }
 
         BumpSourceRevision();
@@ -631,27 +694,136 @@ public class LanguageServer(
             " chars distributed over " +
             CommandLineInterface.FormatIntegerForDisplay(linesCount) + " lines");
 
-        if (GetLanguageServiceState("changing document") is not { } languageServiceState)
+        CancelSupersededDocumentUpdate(supersededUpdate, update);
+
+        await ProcessDocumentUpdateAsync(update, "changing document");
+    }
+
+    private (DocumentUpdateWork Update, DocumentUpdateWork? SupersededUpdate)
+        RegisterDocumentUpdateLocked(
+        string documentUri,
+        int version,
+        string content)
+    {
+        _pendingDocumentUpdates.TryGetValue(documentUri, out var supersededUpdate);
+
+        var update =
+            new DocumentUpdateWork(
+                documentUri,
+                version,
+                content,
+                Interlocked.Increment(ref _nextDocumentUpdateSequence));
+
+        _pendingDocumentUpdates[documentUri] = update;
+        _languageServiceDocumentVersions.TryGetValue(documentUri, out var acceptedVersion);
+
+        Log(
+            "Queued document update " + update.Sequence + " for " + documentUri +
+            " version " + version + "; " + _pendingDocumentUpdates.Count +
+            " documents have pending updates; latest accepted version is " +
+            acceptedVersion);
+
+        return (update, supersededUpdate);
+    }
+
+    private void CancelSupersededDocumentUpdate(
+        DocumentUpdateWork? supersededUpdate,
+        DocumentUpdateWork replacement)
+    {
+        if (supersededUpdate is null)
         {
             return;
         }
 
-        lock (_documentStateLock)
+        Log(
+            "Superseding document update " + supersededUpdate.Sequence + " for " +
+            supersededUpdate.DocumentUri + " version " + supersededUpdate.Version +
+            " with update " + replacement.Sequence + " version " + replacement.Version +
+            "; requesting cancellation");
+
+        supersededUpdate.Cancel();
+    }
+
+    private async Task ProcessDocumentUpdateAsync(
+        DocumentUpdateWork update,
+        string operation)
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var cancellationToken = update.CancellationToken;
+
+        try
         {
-            if (_clientTextDocumentVersions.TryGetValue(textDocumentUri, out var currentVersion) &&
-                currentVersion == textDocument.Version)
+            var languageServiceState =
+                await GetLanguageServiceStateAsync(operation, cancellationToken);
+
+            if (languageServiceState is null)
             {
-                var clock = System.Diagnostics.Stopwatch.StartNew();
-
-                languageServiceState.AddFile(textDocumentUri, newContent);
-
-                Log(
-                    "Processed file " + textDocumentUri + " with " +
-                    CommandLineInterface.FormatIntegerForDisplay(newContent.Length) +
-                    " chars in language service in " +
-                    CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) +
-                    " ms");
+                return;
             }
+
+            var result =
+                await languageServiceState.AddFileAsync(
+                    update.DocumentUri,
+                    update.Content,
+                    cancellationToken);
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (result.IsErrOrNull() is { } error)
+            {
+                Log(
+                    "Document update " + update.Sequence + " for " + update.DocumentUri +
+                    " version " + update.Version + " failed: " + error);
+
+                return;
+            }
+
+            lock (_documentStateLock)
+            {
+                if (!_pendingDocumentUpdates.TryGetValue(update.DocumentUri, out var currentUpdate) ||
+                    !ReferenceEquals(currentUpdate, update) ||
+                    !_clientTextDocumentVersions.TryGetValue(update.DocumentUri, out var currentVersion) ||
+                    currentVersion != update.Version)
+                {
+                    Log(
+                        "Discarding completion of superseded document update " + update.Sequence +
+                        " for " + update.DocumentUri + " version " + update.Version);
+
+                    return;
+                }
+
+                _languageServiceDocumentVersions[update.DocumentUri] = update.Version;
+                _pendingDocumentUpdates.Remove(update.DocumentUri);
+            }
+
+            Log(
+                "Accepted document update " + update.Sequence + " for " + update.DocumentUri +
+                " version " + update.Version + " with " +
+                CommandLineInterface.FormatIntegerForDisplay(update.Content.Length) +
+                " chars in language service in " +
+                CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) +
+                " ms");
+        }
+        catch (System.OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            Log(
+                "Canceled superseded document update " + update.Sequence + " for " +
+                update.DocumentUri + " version " + update.Version + " after " +
+                CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) +
+                " ms");
+        }
+        finally
+        {
+            lock (_documentStateLock)
+            {
+                if (_pendingDocumentUpdates.TryGetValue(update.DocumentUri, out var currentUpdate) &&
+                    ReferenceEquals(currentUpdate, update))
+                {
+                    _pendingDocumentUpdates.Remove(update.DocumentUri);
+                }
+            }
+
+            update.Dispose();
         }
     }
 
@@ -660,21 +832,26 @@ public class LanguageServer(
     /// </summary>
     public void TextDocument_didClose(TextDocumentIdentifier textDocument)
     {
-        lock (_documentStateLock)
-        {
-            TextDocument_didCloseSynchronized(textDocument);
-        }
-    }
-
-    private void TextDocument_didCloseSynchronized(TextDocumentIdentifier textDocument)
-    {
         var decodedUri = DocumentUriCleaned(textDocument.Uri);
 
+        DocumentUpdateWork? pendingUpdate;
+
         lock (_documentStateLock)
         {
+            _pendingDocumentUpdates.Remove(decodedUri, out pendingUpdate);
+            _languageServiceDocumentVersions.Remove(decodedUri);
             _clientTextDocumentContents.TryRemove(decodedUri, out var _);
             _clientTextDocumentVersions.TryRemove(decodedUri, out var _);
             _closedTextDocuments[decodedUri] = 0;
+        }
+
+        if (pendingUpdate is not null)
+        {
+            Log(
+                "Closing " + decodedUri + " cancels pending document update " +
+                pendingUpdate.Sequence + " for version " + pendingUpdate.Version);
+
+            pendingUpdate.Cancel();
         }
 
         BumpSourceRevision();
@@ -1023,8 +1200,8 @@ public class LanguageServer(
         }
         catch (System.OperationCanceledException)
         {
-            Log("Formatting " + textDocumentUri + " was canceled");
-            return [];
+            Log("Client cancellation observed while formatting " + textDocumentUri);
+            throw;
         }
         catch (System.Exception e)
         {
@@ -1106,7 +1283,8 @@ public class LanguageServer(
     /// Provides hover information for a text document position.
     /// </summary>
     public Hover? TextDocument_hover(
-        TextDocumentPositionParams positionParams)
+        TextDocumentPositionParams positionParams,
+        CancellationToken cancellationToken = default)
     {
         var textDocumentUri = DocumentUriCleaned(positionParams.TextDocument.Uri);
 
@@ -1123,7 +1301,8 @@ public class LanguageServer(
                      * inherited from the Monaco editor API.
                      * */
                     (int)positionParams.Position.Line + 1,
-                    (int)positionParams.Position.Character + 1));
+                    (int)positionParams.Position.Character + 1),
+                cancellationToken);
 
         {
             if (hoverStrings.IsErrOrNull() is { } err)
@@ -1154,7 +1333,8 @@ public class LanguageServer(
     /// Provides completion items for a text document position.
     /// </summary>
     public CompletionItem[] TextDocument_completion(
-        TextDocumentPositionParams positionParams)
+        TextDocumentPositionParams positionParams,
+        CancellationToken cancellationToken = default)
     {
         var textDocumentUri = DocumentUriCleaned(positionParams.TextDocument.Uri);
 
@@ -1173,7 +1353,8 @@ public class LanguageServer(
                     CursorLineNumber:
                     (int)positionParams.Position.Line + 1,
                     CursorColumn:
-                    (int)positionParams.Position.Character + 1));
+                    (int)positionParams.Position.Character + 1),
+                cancellationToken);
 
         {
             if (completionItems.IsErrOrNull() is { } err)
@@ -1217,7 +1398,8 @@ public class LanguageServer(
     /// Provides definition locations for a text document position.
     /// </summary>
     public IReadOnlyList<Location> TextDocument_definition(
-        TextDocumentPositionParams positionParams)
+        TextDocumentPositionParams positionParams,
+        CancellationToken cancellationToken = default)
     {
         var textDocumentUri = DocumentUriCleaned(positionParams.TextDocument.Uri);
 
@@ -1230,7 +1412,8 @@ public class LanguageServer(
                 new ProvideHoverRequestStruct(
                     InterfaceFileLocationFromUri(textDocumentUri),
                     PositionLineNumber: (int)positionParams.Position.Line + 1,
-                    PositionColumn: (int)positionParams.Position.Character + 1));
+                    PositionColumn: (int)positionParams.Position.Character + 1),
+                cancellationToken);
 
         {
             if (provideDefinitionResult.IsErrOrNull() is { } err)
@@ -1277,7 +1460,8 @@ public class LanguageServer(
     /// Provides symbols for a text document.
     /// </summary>
     public IReadOnlyList<Protocol.DocumentSymbol> TextDocument_documentSymbol(
-        TextDocumentIdentifier textDocument)
+        TextDocumentIdentifier textDocument,
+        CancellationToken cancellationToken = default)
     {
         var textDocumentUri = DocumentUriCleaned(textDocument.Uri);
 
@@ -1286,7 +1470,7 @@ public class LanguageServer(
         Log("textDocument/documentSymbol: " + textDocumentUri);
 
         var documentSymbols =
-            TextDocumentSymbolRequest(textDocumentUri);
+            TextDocumentSymbolRequest(textDocumentUri, cancellationToken);
 
         {
             if (documentSymbols.IsErrOrNull() is { } err)
@@ -1371,7 +1555,8 @@ public class LanguageServer(
     /// Provides reference locations for a text document position.
     /// </summary>
     public IReadOnlyList<Location> TextDocument_references(
-        TextDocumentPositionParams positionParams)
+        TextDocumentPositionParams positionParams,
+        CancellationToken cancellationToken = default)
     {
         var textDocumentUri = DocumentUriCleaned(positionParams.TextDocument.Uri);
 
@@ -1384,7 +1569,8 @@ public class LanguageServer(
                 new ProvideHoverRequestStruct(
                     InterfaceFileLocationFromUri(textDocumentUri),
                     PositionLineNumber: (int)positionParams.Position.Line + 1,
-                    PositionColumn: (int)positionParams.Position.Character + 1));
+                    PositionColumn: (int)positionParams.Position.Character + 1),
+                cancellationToken);
 
         {
             if (provideReferenceResult.IsErrOrNull() is { } err)
@@ -1430,7 +1616,8 @@ public class LanguageServer(
     /// Provides edits to rename a symbol.
     /// </summary>
     public Result<string, Protocol.WorkspaceEdit?> TextDocument_rename(
-        Protocol.RenameParams renameParams)
+        Protocol.RenameParams renameParams,
+        CancellationToken cancellationToken = default)
     {
         var textDocumentUri = DocumentUriCleaned(renameParams.TextDocument.Uri);
 
@@ -1448,7 +1635,8 @@ public class LanguageServer(
                      * */
                     PositionLineNumber: (int)renameParams.Position.Line + 1,
                     PositionColumn: (int)renameParams.Position.Character + 1,
-                    NewName: renameParams.NewName));
+                    NewName: renameParams.NewName),
+                cancellationToken);
 
         {
             if (provideRenameResult.IsErrOrNull() is { } err)
@@ -1516,6 +1704,8 @@ public class LanguageServer(
         if (didSaveParams.Text is { } text)
         {
             var appliedToOpenDocument = false;
+            DocumentUpdateWork? update = null;
+            DocumentUpdateWork? supersededUpdate = null;
 
             lock (_documentStateLock)
             {
@@ -1528,24 +1718,21 @@ public class LanguageServer(
                 {
                     _clientTextDocumentContents[textDocumentUri] = text;
                     appliedToOpenDocument = true;
+
+                    _clientTextDocumentVersions.TryGetValue(textDocumentUri, out var version);
+
+                    (update, supersededUpdate) =
+                        RegisterDocumentUpdateLocked(textDocumentUri, version, text);
                 }
             }
 
             if (appliedToOpenDocument)
             {
-                if (GetLanguageServiceState("saving document") is { } languageServiceState)
-                {
-                    lock (_documentStateLock)
-                    {
-                        if (_clientTextDocumentContents.TryGetValue(textDocumentUri, out var currentContent) &&
-                            currentContent == text)
-                        {
-                            languageServiceState.AddFile(textDocumentUri, text);
-                        }
-                    }
-                }
-
                 BumpSourceRevision();
+
+                CancelSupersededDocumentUpdate(supersededUpdate, update!);
+
+                await ProcessDocumentUpdateAsync(update!, "saving document");
             }
             else
             {
@@ -1982,11 +2169,13 @@ public class LanguageServer(
     /// Requests hover information from the language service.
     /// </summary>
     public Result<string, IReadOnlyList<string>> ProvideHover(
-        ProvideHoverRequestStruct provideHoverRequest)
+        ProvideHoverRequestStruct provideHoverRequest,
+        CancellationToken cancellationToken = default)
     {
         var genericRequestResult =
             HandleRequest(
-                new Request.ProvideHoverRequest(provideHoverRequest));
+                new Request.ProvideHoverRequest(provideHoverRequest),
+                cancellationToken);
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -2013,11 +2202,13 @@ public class LanguageServer(
     /// </summary>
     public Result<string, IReadOnlyList<MonacoCompletionItem>>
         ProvideCompletionItems(
-        ProvideCompletionItemsRequestStruct provideCompletionItemsRequest)
+        ProvideCompletionItemsRequestStruct provideCompletionItemsRequest,
+        CancellationToken cancellationToken = default)
     {
         var genericRequestResult =
             HandleRequest(
-                new Request.ProvideCompletionItemsRequest(provideCompletionItemsRequest));
+                new Request.ProvideCompletionItemsRequest(provideCompletionItemsRequest),
+                cancellationToken);
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -2046,11 +2237,13 @@ public class LanguageServer(
     /// </summary>
     public Result<string, IReadOnlyList<LocationInFile>>
         ProvideDefinition(
-        ProvideHoverRequestStruct provideDefinitionRequest)
+        ProvideHoverRequestStruct provideDefinitionRequest,
+        CancellationToken cancellationToken = default)
     {
         var genericRequestResult =
             HandleRequest(
-                new Request.ProvideDefinitionRequest(provideDefinitionRequest));
+                new Request.ProvideDefinitionRequest(provideDefinitionRequest),
+                cancellationToken);
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -2078,11 +2271,13 @@ public class LanguageServer(
     /// Requests document symbols from the language service.
     /// </summary>
     public Result<string, IReadOnlyList<Interface.DocumentSymbol>> TextDocumentSymbolRequest(
-        string fileUri)
+        string fileUri,
+        CancellationToken cancellationToken = default)
     {
         var genericRequestResult =
             HandleRequest(
-                new Request.TextDocumentSymbolRequest(fileUri));
+                new Request.TextDocumentSymbolRequest(fileUri),
+                cancellationToken);
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -2110,11 +2305,13 @@ public class LanguageServer(
     /// Requests reference locations from the language service.
     /// </summary>
     public Result<string, IReadOnlyList<LocationInFile>> TextDocumentReferencesRequest(
-        ProvideHoverRequestStruct referenceRequest)
+        ProvideHoverRequestStruct referenceRequest,
+        CancellationToken cancellationToken = default)
     {
         var genericRequestResult =
             HandleRequest(
-                new Request.TextDocumentReferencesRequest(referenceRequest));
+                new Request.TextDocumentReferencesRequest(referenceRequest),
+                cancellationToken);
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -2142,11 +2339,13 @@ public class LanguageServer(
     /// Requests symbol rename edits from the language service.
     /// </summary>
     public Result<string, Interface.WorkspaceEdit> TextDocumentRenameRequest(
-        Interface.RenameParams renameParams)
+        Interface.RenameParams renameParams,
+        CancellationToken cancellationToken = default)
     {
         var genericRequestResult =
             HandleRequest(
-                new Request.TextDocumentRenameRequest(renameParams));
+                new Request.TextDocumentRenameRequest(renameParams),
+                cancellationToken);
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -2174,26 +2373,54 @@ public class LanguageServer(
     /// Handles a request in the current language service workspace.
     /// </summary>
     public Result<string, Response> HandleRequest(
-        Request request)
+        Request request,
+        CancellationToken cancellationToken = default)
     {
         if (_languageServiceStateTask is not { } languageServiceStateTask)
         {
             return "Language service state not initialized";
         }
 
-        if (languageServiceStateTask.Result.IsErrOrNull() is { } err)
+        Result<string, ILanguageServiceSession> taskResult;
+
+        try
+        {
+            taskResult =
+                languageServiceStateTask
+                .WaitAsync(cancellationToken)
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (System.OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            Log("Client cancellation observed while waiting to handle " + request.GetType().Name);
+            throw;
+        }
+
+        if (taskResult.IsErrOrNull() is { } err)
         {
             return err;
         }
 
-        if (languageServiceStateTask.Result.IsOkOrNull() is not { } languageServiceState)
+        if (taskResult.IsOkOrNull() is not { } languageServiceState)
         {
             throw new System.NotImplementedException(
-                "Unexpected language service state result type: " + languageServiceStateTask.Result.GetType());
+                "Unexpected language service state result type: " + taskResult.GetType());
         }
 
-        return
-            languageServiceState.HandleRequest(request);
+        try
+        {
+            return
+                languageServiceState
+                .HandleRequestAsync(request, cancellationToken)
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (System.OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            Log("Client cancellation observed while handling " + request.GetType().Name);
+            throw;
+        }
     }
 
     private ILanguageServiceSession? GetLanguageServiceState(string operation)
@@ -2205,6 +2432,34 @@ public class LanguageServer(
         }
 
         var taskResult = languageServiceStateTask.Result;
+
+        if (taskResult.IsErrOrNull() is { } err)
+        {
+            Log("Cannot update language service while " + operation + ": " + err);
+            return null;
+        }
+
+        if (taskResult.IsOkOrNull() is not { } languageServiceState)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected language service state result type: " + taskResult.GetType());
+        }
+
+        return languageServiceState;
+    }
+
+    private async Task<ILanguageServiceSession?> GetLanguageServiceStateAsync(
+        string operation,
+        CancellationToken cancellationToken)
+    {
+        if (_languageServiceStateTask is not { } languageServiceStateTask)
+        {
+            Log("Cannot update language service while " + operation + ": state not initialized");
+            return null;
+        }
+
+        var taskResult =
+            await languageServiceStateTask.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         if (taskResult.IsErrOrNull() is { } err)
         {

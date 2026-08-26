@@ -371,7 +371,8 @@ public class LanguageServiceState(
         LanguageServiceProgram program,
         IPineVM pineVM,
         PineValue state,
-        Request request)
+        Request request,
+        System.Threading.CancellationToken cancellationToken = default)
     {
         var requestEncoded =
             RequestEncoding.Encode(request);
@@ -383,7 +384,8 @@ public class LanguageServiceState(
                 [
                 requestEncoded,
                 state,
-                ]);
+                ],
+                cancellationToken);
 
         {
             if (handleRequestResult.IsErrOrNull() is { } requestError)

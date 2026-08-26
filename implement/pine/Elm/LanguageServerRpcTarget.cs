@@ -3,6 +3,7 @@ using Pine.Core.LanguageServerProtocol;
 using StreamJsonRpc;
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Pine.Elm;
@@ -107,20 +108,20 @@ public record LanguageServerRpcTarget(
     /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_didOpen
     /// </summary>
     [JsonRpcMethod("textDocument/didOpen")]
-    public void TextDocument_didOpen(TextDocumentItem textDocument)
+    public Task TextDocument_didOpen(TextDocumentItem textDocument)
     {
-        Server.TextDocument_didOpen(textDocument);
+        return Server.TextDocument_didOpenAsync(textDocument);
     }
 
     /// <summary>
     /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_didChange
     /// </summary>
     [JsonRpcMethod("textDocument/didChange")]
-    public void TextDocument_didChange(
+    public Task TextDocument_didChange(
         VersionedTextDocumentIdentifier textDocument,
         IReadOnlyList<TextDocumentContentChangeEvent> contentChanges)
     {
-        Server.TextDocument_didChange(textDocument, contentChanges);
+        return Server.TextDocument_didChangeAsync(textDocument, contentChanges);
     }
 
     /// <summary>
@@ -147,12 +148,14 @@ public record LanguageServerRpcTarget(
     [JsonRpcMethod("textDocument/formatting")]
     public Task<IReadOnlyList<TextEdit>> TextDocument_formatting(
         TextDocumentIdentifier textDocument,
-        FormattingOptions options)
+        FormattingOptions options,
+        CancellationToken cancellationToken)
     {
         return
             Server.TextDocument_formattingAsync(
                 textDocument,
-                options);
+                options,
+                cancellationToken);
     }
 
     /// <summary>
@@ -160,9 +163,10 @@ public record LanguageServerRpcTarget(
     /// </summary>
     [JsonRpcMethod("textDocument/hover", UseSingleObjectParameterDeserialization = true)]
     public Hover? TextDocument_hover(
-        TextDocumentPositionParams positionParams)
+        TextDocumentPositionParams positionParams,
+        CancellationToken cancellationToken)
     {
-        return Server.TextDocument_hover(positionParams);
+        return Server.TextDocument_hover(positionParams, cancellationToken);
     }
 
     /// <summary>
@@ -170,9 +174,10 @@ public record LanguageServerRpcTarget(
     /// </summary>
     [JsonRpcMethod("textDocument/completion", UseSingleObjectParameterDeserialization = true)]
     public CompletionItem[] TextDocument_completion(
-        TextDocumentPositionParams positionParams)
+        TextDocumentPositionParams positionParams,
+        CancellationToken cancellationToken)
     {
-        return Server.TextDocument_completion(positionParams);
+        return Server.TextDocument_completion(positionParams, cancellationToken);
     }
 
     /// <summary>
@@ -180,18 +185,22 @@ public record LanguageServerRpcTarget(
     /// </summary>
     [JsonRpcMethod("textDocument/definition", UseSingleObjectParameterDeserialization = true)]
     public IReadOnlyList<Location> TextDocument_definition(
-        TextDocumentPositionParams positionParams)
+        TextDocumentPositionParams positionParams,
+        CancellationToken cancellationToken)
     {
-        return Server.TextDocument_definition(positionParams);
+        return Server.TextDocument_definition(positionParams, cancellationToken);
     }
 
     /// <summary>
     /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_documentSymbol
     /// </summary>
     [JsonRpcMethod("textDocument/documentSymbol")]
-    public IReadOnlyList<DocumentSymbol> TextDocument_documentSymbol(TextDocumentIdentifier textDocument)
+    public IReadOnlyList<DocumentSymbol> TextDocument_documentSymbol(
+        TextDocumentIdentifier textDocument,
+        CancellationToken cancellationToken)
     {
-        var documentSymbols = Server.TextDocument_documentSymbol(textDocument);
+        var documentSymbols =
+            Server.TextDocument_documentSymbol(textDocument, cancellationToken);
 
         return documentSymbols;
     }
@@ -201,15 +210,18 @@ public record LanguageServerRpcTarget(
     /// </summary>
     [JsonRpcMethod("textDocument/references", UseSingleObjectParameterDeserialization = true)]
     public IReadOnlyList<Location> TextDocument_references(
-        TextDocumentPositionParams referenceParams)
+        TextDocumentPositionParams referenceParams,
+        CancellationToken cancellationToken)
     {
-        return Server.TextDocument_references(referenceParams);
+        return Server.TextDocument_references(referenceParams, cancellationToken);
     }
 
     [JsonRpcMethod("textDocument/rename", UseSingleObjectParameterDeserialization = true)]
-    public WorkspaceEdit? TextDocument_rename(RenameParams renameParams)
+    public WorkspaceEdit? TextDocument_rename(
+        RenameParams renameParams,
+        CancellationToken cancellationToken)
     {
-        var renameResult = Server.TextDocument_rename(renameParams);
+        var renameResult = Server.TextDocument_rename(renameParams, cancellationToken);
 
         if (renameResult.IsErrOrNull() is { } err)
         {

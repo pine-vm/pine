@@ -176,8 +176,7 @@ public sealed class RevisionedOperationScheduler<TState, TOperation, TResult, TW
                         previousOperation,
                         orderedCompletion,
                         resultCompletion,
-                        cancellationToken),
-                    cancellationToken);
+                        cancellationToken));
 
             return resultCompletion.Task;
         }
@@ -250,6 +249,8 @@ public sealed class RevisionedOperationScheduler<TState, TOperation, TResult, TW
                     replayState,
                     isReplay: true,
                     operationCancellation.Token);
+
+            operationCancellation.Token.ThrowIfCancellationRequested();
 
             lock (_stateLock)
             {

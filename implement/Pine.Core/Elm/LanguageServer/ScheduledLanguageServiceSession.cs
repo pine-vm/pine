@@ -13,7 +13,8 @@ internal sealed class ScheduledLanguageServiceSession(
     LanguageServiceState.LanguageServiceProgram program,
     int maxConcurrencyCount,
     ScheduledLanguageServiceSession.Worker firstWorker,
-    Func<ScheduledLanguageServiceSession.Worker> createWorker) : ILanguageServiceSession
+    Func<ScheduledLanguageServiceSession.Worker> createWorker,
+    Action<string>? logDelegate) : ILanguageServiceSession
 {
     internal sealed record Worker(
         IPineVM PineVM,
@@ -36,14 +37,15 @@ internal sealed class ScheduledLanguageServiceSession(
             :
             createWorker(),
             execute:
-            (worker, request, state, _) =>
+            (worker, request, state, cancellationToken) =>
             {
                 var transition =
                     LanguageServiceState.ApplyRequest(
                         program,
                         worker.PineVM,
                         state,
-                        request);
+                        request,
+                        cancellationToken);
 
                 return
                     ValueTask.FromResult(
@@ -60,7 +62,14 @@ internal sealed class ScheduledLanguageServiceSession(
             {
                 worker.InvocationCache.MergeIntoShared();
                 return ValueTask.CompletedTask;
-            });
+            },
+            reportEvent:
+            schedulerEvent =>
+            logDelegate?.Invoke(
+                "Language-service scheduler operation " + schedulerEvent.Sequence +
+                ": " + schedulerEvent.Kind +
+                " (source revision " + schedulerEvent.SourceRevision +
+                ", current revision " + schedulerEvent.CurrentRevision + ")"));
 
     /// <inheritdoc/>
     public Result<string, Response.WorkspaceSummaryResponse> DeleteFile(

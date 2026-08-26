@@ -61,6 +61,29 @@ There are multiple ways to implement the merging of cache entries:
 
 In any case, this approach means that some work, such as building a new dictionary in the overall app state, is done multiple times, causing overhead in CPU cycles.
 
+#### Superseding Obsolete Document Updates
+
+[`textDocument/didChange`](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_didChange) is an LSP notification, not a request. A [notification message](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#notificationMessage) has no request ID, so the client cannot target a document update with [`$/cancelRequest`](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#cancelRequest).
+
+The server therefore performs version-based supersession itself:
+
++ It records the newest content and version before starting expensive language-service work.
++ A newer version cancels pending or in-flight processing of the older version.
++ Pine VM evaluation observes that cancellation cooperatively.
++ Only the update that still matches the newest client version is accepted.
+
+This keeps intermediate versions produced during rapid typing from accumulating in the scheduler while preserving the LSP ordering requirement for document synchronization notifications.
+
+> Note: This approach to internal cancellation might become obsolete with the introduction of lenient evaluation, in which the expensive parts are not evaluated immediately, and their thunks can be discarded before evaluation.
+
+#### Request Cancellation
+
+For LSP requests such as hover, completion, definition, references, rename, document symbols, and formatting, the RPC boundary accepts a cancellation token. StreamJsonRpc connects that token to the base protocol's [`$/cancelRequest`](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#cancelRequest) notification, and cancellation flows through the language-service scheduler into Pine VM evaluation.
+
+The LSP base protocol defines no general server capability flag for request cancellation. It is therefore not added to `ServerCapabilities`; the server continues to announce each implemented request provider and its [`TextDocumentSyncOptions`](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocumentSyncOptions) during initialization. The similarly named `serverCancelSupport` field is specific to [semantic tokens](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_semanticTokens) and does not apply to document synchronization or general requests.
+
+The server logs document URI, version, internal update sequence, pending count, supersession, scheduler cancellation, accepted or discarded completion, elapsed time, and observed client request cancellation. These events distinguish client-issued `$/cancelRequest` from the server's own cancellation of obsolete document versions.
+
 ### Lenient Evaluation
 
 The tool of lenient evaluation can help improve both response times and efficiency.

@@ -252,6 +252,40 @@ public class RevisionedOperationSchedulerTests
         (await third).Result.Should().Be(4);
     }
 
+    [Fact]
+    public async Task Already_canceled_submission_does_not_break_ordering_chain()
+    {
+        await using var scheduler =
+            new RevisionedOperationScheduler<int, int, int, object>(
+                initialState: 0,
+                maxConcurrencyCount: 1,
+                createWorker: _ => new object(),
+                execute:
+                (_, operation, state, cancellationToken) =>
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    return
+                        ValueTask.FromResult(
+                            new RevisionedOperationAttempt<int, int>(
+                                state + operation,
+                                state + operation,
+                                CanCompleteSpeculatively: false));
+                },
+                statesEqual: (left, right) => left == right);
+
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        var canceled = scheduler.SubmitAsync(1, cancellation.Token);
+        var next = scheduler.SubmitAsync(2);
+
+        Func<Task> awaitCanceled = async () => await canceled;
+
+        await awaitCanceled.Should().ThrowAsync<OperationCanceledException>();
+        (await next.WaitAsync(TimeSpan.FromSeconds(5))).Result.Should().Be(2);
+    }
+
     private static void UpdateMaximum(ref int maximum, int candidate)
     {
         var current = Volatile.Read(ref maximum);

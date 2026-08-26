@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.Elm.LanguageServer;
 using Pine.Core.Elm.LanguageServer.LanguageServiceInterface;
 using Pine.Core.LanguageServerProtocol;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -143,7 +144,8 @@ public class LanguageServerDocumentSyncTests
         logs.Should().ContainSingle(
             log =>
             log.StartsWith(
-                "Processed file " + documentUri + " with " +
+                "Accepted document update 2 for " + documentUri +
+                " version 2 with " +
                 CommandLineInterface.FormatIntegerForDisplay(changedContent.Length) +
                 " chars in language service in ",
                 System.StringComparison.Ordinal) &&
@@ -174,6 +176,154 @@ public class LanguageServerDocumentSyncTests
         server.TextDocument_didClose(new TextDocumentIdentifier(documentUri));
 
         session.TryGetFile(documentUri).Should().Be(OriginalContent);
+    }
+
+    [Fact]
+    public async Task Rapid_document_updates_cancel_superseded_processing_and_accept_latest_version()
+    {
+        var (workspace, _) = VirtualWorkspace.Create();
+        var session = new SupersedingDocumentUpdateSession("version 3");
+        var logs = new List<string>();
+        var server = CreateServer(workspace, session, logDelegate: logs.Add);
+
+        await InitializeAsync(server);
+
+        var documentUri = VirtualWorkspace.DocumentUri("Main.elm");
+
+        var opened =
+            server.TextDocument_didOpenAsync(
+                new TextDocumentItem(documentUri, "elm", Version: 1, Text: "version 1"));
+
+        var second =
+            server.TextDocument_didChangeAsync(
+                new VersionedTextDocumentIdentifier(documentUri, Version: 2),
+                [new TextDocumentContentChangeEvent(null, null, "version 2")]);
+
+        var third =
+            server.TextDocument_didChangeAsync(
+                new VersionedTextDocumentIdentifier(documentUri, Version: 3),
+                [new TextDocumentContentChangeEvent(null, null, "version 3")]);
+
+        await Task.WhenAll(opened, second, third).WaitAsync(System.TimeSpan.FromSeconds(5));
+
+        session.AcceptedContent.Should().Be("version 3");
+        session.CanceledCount.Should().Be(2);
+        server.TryGetDocumentText(documentUri).Should().Be("version 3");
+        logs.Should().Contain(log => log.Contains("Superseding document update"));
+        logs.Should().Contain(log => log.Contains("Accepted document update") && log.Contains("version 3"));
+    }
+
+    [Fact]
+    public async Task Client_request_cancellation_reaches_language_service_and_is_logged()
+    {
+        var (workspace, _) = VirtualWorkspace.Create();
+        var session = new CancelableRequestSession();
+        var logs = new List<string>();
+        var server = CreateServer(workspace, session, logDelegate: logs.Add);
+
+        await InitializeAsync(server);
+
+        using var cancellation = new CancellationTokenSource();
+
+        var hover =
+            Task.Run(
+                () =>
+                server.TextDocument_hover(
+                    new TextDocumentPositionParams(
+                        new TextDocumentIdentifier(VirtualWorkspace.DocumentUri("Main.elm")),
+                        new Position(0, 0)),
+                    cancellation.Token));
+
+        await session.Started.WaitAsync(System.TimeSpan.FromSeconds(5));
+        cancellation.Cancel();
+
+        Func<Task> awaitHover = async () => await hover;
+
+        await awaitHover.Should().ThrowAsync<System.OperationCanceledException>();
+        logs.Should().Contain(
+            log => log.Contains("Client cancellation observed while handling ProvideHoverRequest"));
+    }
+
+    private sealed class CancelableRequestSession : ILanguageServiceSession
+    {
+        private readonly TaskCompletionSource _started =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task Started => _started.Task;
+
+        public Result<string, Response.WorkspaceSummaryResponse> AddFile(
+            string fileUri,
+            string fileContentAsText) =>
+            new Response.WorkspaceSummaryResponse();
+
+        public Result<string, Response.WorkspaceSummaryResponse> DeleteFile(string fileUri) =>
+            new Response.WorkspaceSummaryResponse();
+
+        public Result<string, Response.WorkspaceSummaryResponse> AddElmPackage(
+            ElmPackageVersion019Identifer packageVersionId,
+            IReadOnlyList<KeyValuePair<IReadOnlyList<string>, string>> filesContentsAsText) =>
+            new Response.WorkspaceSummaryResponse();
+
+        public Result<string, Response> HandleRequest(Request request) =>
+            "The async API is required";
+
+        public async Task<Result<string, Response>> HandleRequestAsync(
+            Request request,
+            CancellationToken cancellationToken = default)
+        {
+            _started.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return "Unexpected completion";
+        }
+    }
+
+    private sealed class SupersedingDocumentUpdateSession(string contentToAccept)
+        : ILanguageServiceSession
+    {
+        private int _canceledCount;
+
+        public int CanceledCount => Volatile.Read(ref _canceledCount);
+
+        public string? AcceptedContent { get; private set; }
+
+        public Result<string, Response.WorkspaceSummaryResponse> AddFile(
+            string fileUri,
+            string fileContentAsText) =>
+            AddFileAsync(fileUri, fileContentAsText).GetAwaiter().GetResult();
+
+        public async Task<Result<string, Response.WorkspaceSummaryResponse>> AddFileAsync(
+            string fileUri,
+            string fileContentAsText,
+            CancellationToken cancellationToken = default)
+        {
+            if (fileContentAsText != contentToAccept)
+            {
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                }
+                catch (System.OperationCanceledException)
+                {
+                    Interlocked.Increment(ref _canceledCount);
+                    throw;
+                }
+            }
+
+            AcceptedContent = fileContentAsText;
+
+            return new Response.WorkspaceSummaryResponse();
+        }
+
+        public Result<string, Response.WorkspaceSummaryResponse> DeleteFile(string fileUri) =>
+            new Response.WorkspaceSummaryResponse();
+
+        public Result<string, Response.WorkspaceSummaryResponse> AddElmPackage(
+            ElmPackageVersion019Identifer packageVersionId,
+            IReadOnlyList<KeyValuePair<IReadOnlyList<string>, string>> filesContentsAsText) =>
+            new Response.WorkspaceSummaryResponse();
+
+        public Result<string, Response> HandleRequest(Request request) =>
+            "Not implemented in this test double";
     }
 
     private sealed class ConcurrentInitializationSession : ILanguageServiceSession

@@ -12,7 +12,7 @@ using BuiltinFunctionSpecialized = Pine.Core.Internal.BuiltinFunctionSpecialized
 
 namespace Pine.Core.Interpreter.IntermediateVM;
 
-public class PineVM : IPineVM
+public class PineVM : ICancellablePineVM
 {
     private readonly IInvocationCacheAccess? _invocationCache;
 
@@ -223,7 +223,14 @@ public class PineVM : IPineVM
     /// <inheritdoc/>
     public Result<string, PineValue> EvaluateExpression(
         Expression expression,
-        PineValue environment)
+        PineValue environment) =>
+        EvaluateExpression(expression, environment, cancellationToken: default);
+
+    /// <inheritdoc/>
+    public Result<string, PineValue> EvaluateExpression(
+        Expression expression,
+        PineValue environment,
+        System.Threading.CancellationToken cancellationToken)
     {
         var evalReportResult =
             EvaluateExpressionOnCustomStack(
@@ -231,10 +238,16 @@ public class PineVM : IPineVM
                 environment,
                 config:
                 _evaluationConfigDefault ??
-                EvaluationConfig.Default);
+                EvaluationConfig.Default,
+                cancellationToken);
 
         if (evalReportResult.IsErrOrNull() is { } err)
         {
+            if (err.Reason is EvaluationErrorReason.CancellationRequested)
+            {
+                throw new System.OperationCanceledException(cancellationToken);
+            }
+
             return EvaluationError.RenderDisplayString(err);
         }
 

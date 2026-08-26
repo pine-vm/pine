@@ -94,7 +94,8 @@ public class LanguageServiceSessionFactory : ILanguageServiceSessionFactory
                 program,
                 options.MaxConcurrencyCount,
                 firstWorker,
-                CreateWorker);
+                CreateWorker,
+                _logDelegate);
 
         return
             ValueTask.FromResult(

@@ -93,15 +93,40 @@ public static class ElmInteractiveEnvironment
     public static Result<string, PineValue> ApplyFunction(
         PineVM.IPineVM pineVM,
         FunctionRecord functionRecord,
-        IReadOnlyList<PineValue> arguments)
+        IReadOnlyList<PineValue> arguments,
+        System.Threading.CancellationToken cancellationToken = default)
     {
         return
             ApplyFunctionArgumentsForEvalExpr(functionRecord, arguments)
             .AndThen(
                 composedArgs =>
-                pineVM.EvaluateExpression(
+                pineVM is PineVM.ICancellablePineVM cancellablePineVM
+                ?
+                cancellablePineVM.EvaluateExpression(
                     composedArgs.expression,
-                    composedArgs.environment));
+                    composedArgs.environment,
+                    cancellationToken)
+                :
+                EvaluateWithoutCancellation(
+                    pineVM,
+                    composedArgs.expression,
+                    composedArgs.environment,
+                    cancellationToken));
+    }
+
+    private static Result<string, PineValue> EvaluateWithoutCancellation(
+        PineVM.IPineVM pineVM,
+        Expression expression,
+        PineValue environment,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var result = pineVM.EvaluateExpression(expression, environment);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return result;
     }
 
     /// <summary>

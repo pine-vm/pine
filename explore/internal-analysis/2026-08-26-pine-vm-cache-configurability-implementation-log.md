@@ -238,6 +238,24 @@ Validation:
   Therefore only one scheduler operation existed at a time and no speculative
   work could overlap. The fix adds an asynchronous submission path rather than
   changing worker ownership or cache merging.
+- `textDocument/didChange` is an LSP notification without a request ID, so
+  `$/cancelRequest` cannot target it. Document updates now use an internal
+  per-URI sequence, version, and cancellation source: receipt updates the client
+  overlay immediately, newer versions cancel older language-service work, and
+  only the newest completion is accepted.
+- The previous document-change path held `_documentStateLock` while parsing in
+  the language service. This both blocked receipt of newer versions and made
+  cancellation impossible. Parsing now runs outside the document-state lock.
+- StreamJsonRpc request handlers now expose cancellation tokens for formatting,
+  hover, completion, definition, document symbols, references, and rename.
+  Tokens flow through the revisioned scheduler and the intermediate Pine VM.
+  The LSP base protocol defines no general cancellation capability to announce;
+  the semantic-token `serverCancelSupport` capability is not applicable.
+- A pre-canceled scheduler submission previously passed its token to
+  `Task.Run`. The delegate could therefore never run, leaving both the result
+  and FIFO ordering task incomplete. Scheduler startup no longer uses the
+  operation token; the processing routine observes cancellation and always
+  advances the ordering chain.
 
 ## Validation History
 
@@ -277,3 +295,14 @@ Validation:
   imports from unrelated files and made the project uncompilable. Reverted all
   formatter-only test changes, retained only the targeted test file, restored
   its imports, and reran the focused test successfully.
+- `RevisionedOperationSchedulerTests` after cancellation-chain repair — 7
+  passed.
+- `EvaluationCancellationTests` after exposing the cancellable VM capability —
+  4 passed.
+- `LanguageServerDocumentSyncTests` after update supersession and request
+  cancellation integration — 11 passed.
+- `dotnet build implement/Pine.Core.Tests/Pine.Core.Tests.csproj --no-restore`
+  after the cancellation changes — passed with no warnings or errors.
+- `dotnet build implement/pine/pine.csproj --no-restore` after adding
+  StreamJsonRpc cancellation-token binding — passed with pre-existing warnings
+  and no errors.
