@@ -3191,7 +3191,7 @@ parseCaseBlock indentMin caseToken tokens =
                         firstBranchToken :: _ ->
                             case
                                 parseCaseBranches
-                                    (min firstBranchToken.start.column (indentMin + 1))
+                                    (min firstBranchToken.start.column (caseToken.start.column + 1))
                                     firstBranchToken.start.column
                                     afterOf
                                     []

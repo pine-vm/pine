@@ -124,6 +124,24 @@ public class ElmParserFileTests
         beta = "hello"
         """;
 
+    private const string ParenthesizedIfWithCaseThenBranchModuleText =
+        """
+        module Reproduction exposing (reproduce)
+
+        reproduce condition value fallback =
+            (if condition then
+                case value of
+                    Just found ->
+                        found
+
+                    Nothing ->
+                        fallback
+
+             else
+                fallback
+            )
+        """;
+
     private static readonly Lazy<ElmInteractiveEnvironment.ParsedInteractiveEnvironment> s_env =
         new(
             () =>
@@ -281,5 +299,17 @@ public class ElmParserFileTests
         result.valueAsExpression.expressionString
             .Should().Be(
             """Ok { comments = [], declarations = [ Node { end = { column = 10, row = 3 }, start = { column = 1, row = 3 } } (FunctionDeclaration { declaration = Node { end = { column = 10, row = 3 }, start = { column = 1, row = 3 } } { arguments = [], equalsTokenLocation = { column = 6, row = 3 }, expression = Node { end = { column = 10, row = 3 }, start = { column = 8, row = 3 } } (IntegerLiteral "79"), name = Node { end = { column = 5, row = 3 }, start = { column = 1, row = 3 } } "alfa" }, documentation = Nothing, signature = Nothing }), Node { end = { column = 15, row = 5 }, start = { column = 1, row = 5 } } (FunctionDeclaration { declaration = Node { end = { column = 15, row = 5 }, start = { column = 1, row = 5 } } { arguments = [], equalsTokenLocation = { column = 6, row = 5 }, expression = Node { end = { column = 15, row = 5 }, start = { column = 8, row = 5 } } (StringLiteral "hello" (Just "hello")), name = Node { end = { column = 5, row = 5 }, start = { column = 1, row = 5 } } "beta" }, documentation = Nothing, signature = Nothing }) ], imports = [], incompleteDeclarations = [], moduleDefinition = Node { end = { column = 38, row = 1 }, start = { column = 1, row = 1 } } (NormalModule { exposingList = Node { end = { column = 38, row = 1 }, start = { column = 17, row = 1 } } (Explicit { column = 26, row = 1 } (NonEmpty (Node { end = { column = 31, row = 1 }, start = { column = 27, row = 1 } } (FunctionExpose "alfa")) [ ({ column = 31, row = 1 }, Node { end = { column = 37, row = 1 }, start = { column = 33, row = 1 } } (FunctionExpose "beta")) ]) { column = 37, row = 1 }), moduleName = Node { end = { column = 16, row = 1 }, start = { column = 8, row = 1 } } [ "Explicit" ] }) }""");
+    }
+
+    [Fact]
+    public void Parenthesized_if_with_case_then_branch()
+    {
+        var result =
+            ParseFileAndRender(ParenthesizedIfWithCaseThenBranchModuleText);
+
+        result.valueAsExpression.expressionString.Should().Be(
+            """"
+            Ok { comments = [], declarations = [ Node { end = { column = 6, row = 14 }, start = { column = 1, row = 3 } } (FunctionDeclaration { declaration = Node { end = { column = 6, row = 14 }, start = { column = 1, row = 3 } } { arguments = [ Node { end = { column = 20, row = 3 }, start = { column = 11, row = 3 } } (VarPattern "condition"), Node { end = { column = 26, row = 3 }, start = { column = 21, row = 3 } } (VarPattern "value"), Node { end = { column = 35, row = 3 }, start = { column = 27, row = 3 } } (VarPattern "fallback") ], equalsTokenLocation = { column = 36, row = 3 }, expression = Node { end = { column = 6, row = 14 }, start = { column = 5, row = 4 } } (Parenthesized (Node { end = { column = 17, row = 13 }, start = { column = 6, row = 4 } } (IfBlock { column = 6, row = 4 } (Node { end = { column = 18, row = 4 }, start = { column = 9, row = 4 } } (Identifier [] "condition")) { column = 19, row = 4 } (Node { end = { column = 25, row = 10 }, start = { column = 9, row = 5 } } (CaseExpression { caseTokenLocation = { column = 9, row = 5 }, cases = [ { arrowLocation = { column = 24, row = 6 }, expression = Node { end = { column = 22, row = 7 }, start = { column = 17, row = 7 } } (Identifier [] "found"), pattern = Node { end = { column = 23, row = 6 }, start = { column = 13, row = 6 } } (NamedPattern { moduleName = [], name = "Just" } [ Node { end = { column = 23, row = 6 }, start = { column = 18, row = 6 } } (VarPattern "found") ]) }, { arrowLocation = { column = 21, row = 9 }, expression = Node { end = { column = 25, row = 10 }, start = { column = 17, row = 10 } } (Identifier [] "fallback"), pattern = Node { end = { column = 20, row = 9 }, start = { column = 13, row = 9 } } (NamedPattern { moduleName = [], name = "Nothing" } []) } ], expression = Node { end = { column = 19, row = 5 }, start = { column = 14, row = 5 } } (Identifier [] "value"), ofTokenLocation = { column = 20, row = 5 } })) { column = 6, row = 12 } (Node { end = { column = 17, row = 13 }, start = { column = 9, row = 13 } } (Identifier [] "fallback"))))), name = Node { end = { column = 10, row = 3 }, start = { column = 1, row = 3 } } "reproduce" }, documentation = Nothing, signature = Nothing }) ], imports = [], incompleteDeclarations = [], moduleDefinition = Node { end = { column = 41, row = 1 }, start = { column = 1, row = 1 } } (NormalModule { exposingList = Node { end = { column = 41, row = 1 }, start = { column = 21, row = 1 } } (Explicit { column = 30, row = 1 } (NonEmpty (Node { end = { column = 40, row = 1 }, start = { column = 31, row = 1 } } (FunctionExpose "reproduce")) []) { column = 40, row = 1 }), moduleName = Node { end = { column = 20, row = 1 }, start = { column = 8, row = 1 } } [ "Reproduction" ] }) }
+            """".Trim());
     }
 }
