@@ -69,11 +69,30 @@ public class PineCliOptionsTests
     [InlineData("elm-format")]
     public void Elm_format_commands_are_available(params string[] command)
     {
-        var result = RunPine([.. command, "--help"]);
+        var sourcePath =
+            Path.Combine(
+                Path.GetTempPath(),
+                "pine-cli-options-tests-" + Guid.NewGuid().ToString("N") + ".elm");
 
-        result.ExitCode.Should().Be(0);
-        result.StandardOutput.Should().Contain("--verify-no-changes");
-        result.StandardError.Should().BeEmpty();
+        try
+        {
+            File.WriteAllText(
+                sourcePath,
+                """
+                module Main exposing (main)
+
+                main=0
+                """);
+
+            var result = RunPine([.. command, sourcePath, "--yes", "--color", "never"]);
+
+            result.ExitCode.Should().Be(0);
+            result.StandardError.Should().BeEmpty();
+        }
+        finally
+        {
+            File.Delete(sourcePath);
+        }
     }
 
 
