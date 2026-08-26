@@ -55,6 +55,12 @@
 				"editor.wordBasedSuggestions": "off"
 			}
 		},
+		"commands": [
+			{
+				"command": "pine.showLanguageServerClientLog",
+				"title": "Pine: Show Language Server Client Log"
+			}
+		],
 		"configuration": {
 			"type": "object",
 			"title": "Pine",

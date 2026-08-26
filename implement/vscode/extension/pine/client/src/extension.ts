@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { workspace, ExtensionContext, window, OutputChannel } from 'vscode';
+import { commands, workspace, ExtensionContext, window, OutputChannel } from 'vscode';
 
 import {
     CloseAction,
@@ -141,6 +141,11 @@ export function activate(context: ExtensionContext) {
         serverOptions,
         clientOptions
     );
+
+    context.subscriptions.push(
+        commands.registerCommand(
+            'pine.showLanguageServerClientLog',
+            () => client.outputChannel.show()));
 
     console.log("client start...");
 
