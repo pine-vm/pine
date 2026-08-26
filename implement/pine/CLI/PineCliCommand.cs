@@ -1,6 +1,5 @@
 using Pine.Core;
 using Pine.Core.IO;
-using Pine.Elm.CLI;
 using Pine.PineVM;
 using System;
 using System.Collections.Immutable;
@@ -79,7 +78,7 @@ public class PineCliCommand
 
         rootCommand.Add(MakeCommand.Create());
         rootCommand.Add(ScreenshotCommand.Create());
-        rootCommand.Add(ElmFormatCommand.CreateElmFormatCommand());
+        rootCommand.Add(Elm.FormatCommand.CreateBackwardCompatible());
         rootCommand.Add(CSharp.CLI.CSharpFormatCommand.CreateCSharpFormatCommand());
         rootCommand.Add(DescribeCommand.Create());
         rootCommand.Add(RunCacheServerCommand.Create());

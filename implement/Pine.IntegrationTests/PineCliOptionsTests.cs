@@ -36,17 +36,43 @@ public class PineCliOptionsTests
 
         result.ExitCode.Should().Be(0);
         result.StandardOutput.Should().Contain("elm                            Elm development tools.");
+        result.StandardOutput.Should().NotContain("elm-format");
         result.StandardError.Should().BeEmpty();
     }
 
 
     [Fact]
-    public void Elm_command_exposes_test_subcommand()
+    public void Elm_command_exposes_format_and_test_subcommands()
     {
         var result = RunPine("elm", "--help");
 
         result.ExitCode.Should().Be(0);
+        result.StandardOutput.Should().Contain("format");
         result.StandardOutput.Should().Contain("test");
+        result.StandardError.Should().BeEmpty();
+    }
+
+
+    [Fact]
+    public void Root_help_hides_backward_compatible_elm_format_command()
+    {
+        var result = RunPine("--help");
+
+        result.ExitCode.Should().Be(0);
+        result.StandardOutput.Should().NotContain("elm-format");
+        result.StandardError.Should().BeEmpty();
+    }
+
+
+    [Theory]
+    [InlineData("elm", "format")]
+    [InlineData("elm-format")]
+    public void Elm_format_commands_are_available(params string[] command)
+    {
+        var result = RunPine([.. command, "--help"]);
+
+        result.ExitCode.Should().Be(0);
+        result.StandardOutput.Should().Contain("--verify-no-changes");
         result.StandardError.Should().BeEmpty();
     }
 

@@ -57,7 +57,6 @@ public static class HelpCommand
                 ["elm-test-rs"] = "Compile and run tests.",
                 ["make"] = "Compile Elm code.",
                 ["screenshot"] = "Render an HTML, SVG, or Elm entry point to an image.",
-                ["elm-format"] = "Format Elm module files.",
                 ["dotnet"] = ".NET and C# development tools.",
                 ["describe"] = "Describe a composition.",
                 ["run"] = null,
@@ -103,7 +102,6 @@ public static class HelpCommand
                 "elm-test-rs",
                 "make",
                 "screenshot",
-                "elm-format",
                 "dotnet",
                 "describe",
             };
