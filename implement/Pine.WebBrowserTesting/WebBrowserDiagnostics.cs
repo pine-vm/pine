@@ -119,15 +119,11 @@ public sealed record WebBrowserFailureArtifacts(
 /// <summary>
 /// Adds browser and document state to a failed browser operation.
 /// </summary>
-public sealed class WebBrowserOperationException : Exception
-{
-    public WebBrowserOperationException(
-        string operation,
-        WebBrowserDiagnostics diagnostics,
-        Exception innerException)
-        :
-        base(
-            operation +
+public sealed class WebBrowserOperationException(
+    string operation,
+    WebBrowserDiagnostics diagnostics,
+    Exception innerException) : Exception(
+        operation +
             " failed." +
             Environment.NewLine +
             innerException.Message +
@@ -135,27 +131,17 @@ public sealed class WebBrowserOperationException : Exception
             "Browser diagnostics:" +
             Environment.NewLine +
             diagnostics,
-            innerException)
-    {
-        Operation = operation;
-        Diagnostics = diagnostics;
-    }
+        innerException)
+{
+    public string Operation { get; } = operation;
 
-    public string Operation { get; }
-
-    public WebBrowserDiagnostics Diagnostics { get; }
+    public WebBrowserDiagnostics Diagnostics { get; } = diagnostics;
 }
 
 /// <summary>
 /// Thrown when a browser container cannot be started or reached.
 /// </summary>
-public sealed class WebBrowserStartupException : Exception
+public sealed class WebBrowserStartupException(string message, string containerLogs, Exception innerException) : Exception(message, innerException)
 {
-    public WebBrowserStartupException(string message, string containerLogs, Exception innerException)
-        : base(message, innerException)
-    {
-        ContainerLogs = containerLogs;
-    }
-
-    public string ContainerLogs { get; }
+    public string ContainerLogs { get; } = containerLogs;
 }
