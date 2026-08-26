@@ -87,6 +87,7 @@ public class StubLanguageServiceSessionFactory(
     public int CreateSessionCount { get; private set; }
 
     public ValueTask<Result<string, ILanguageServiceSession>> CreateSessionAsync(
+        LanguageServerOptions options,
         CancellationToken cancellationToken)
     {
         ++CreateSessionCount;

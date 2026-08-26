@@ -73,6 +73,18 @@ public record StackFrameInput
     }
 
     /// <summary>
+    /// Eagerly evaluates the arguments and computes the hash code so this input can be
+    /// published to another thread without exposing lazy mutable state.
+    /// </summary>
+    public StackFrameInput Materialize()
+    {
+        GetEvaluatedArguments();
+        GetHashCode();
+
+        return this;
+    }
+
+    /// <summary>
     /// Creates a <see cref="StackFrameInput"/> by extracting argument values from the given environment value
     /// according to the paths defined in the parameter layout.
     /// </summary>

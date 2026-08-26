@@ -213,5 +213,22 @@ public sealed class MutableDocumentTextSource : IDocumentTextSource
 /// <param name="ServerVersion">
 /// Version reported to the client in the <c>initialize</c> response.
 /// </param>
-public sealed record LanguageServerOptions(
-    string ServerVersion);
+/// <param name="MaxConcurrencyCount">
+/// Maximum number of exclusively leased language-service workers.
+/// </param>
+public sealed record LanguageServerOptions
+{
+    public LanguageServerOptions(
+        string ServerVersion,
+        int MaxConcurrencyCount = 4)
+    {
+        System.ArgumentOutOfRangeException.ThrowIfLessThan(MaxConcurrencyCount, 1);
+
+        this.ServerVersion = ServerVersion;
+        this.MaxConcurrencyCount = MaxConcurrencyCount;
+    }
+
+    public string ServerVersion { get; }
+
+    public int MaxConcurrencyCount { get; }
+}

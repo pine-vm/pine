@@ -6,7 +6,6 @@ using Pine.Core.IO;
 using Pine.Core.PineVM;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 
 using BuiltinFunctionSpecialized = Pine.Core.Internal.BuiltinFunctionSpecialized;
@@ -15,11 +14,9 @@ namespace Pine.Core.Interpreter.IntermediateVM;
 
 public class PineVM : IPineVM
 {
-    private IDictionary<EvalCacheEntryKey, PineValue>? EvalCache { init; get; }
+    private readonly IInvocationCacheAccess? _invocationCache;
 
-    private readonly HashSet<PineValue> _expressionsWithEvalCacheEntries;
-
-    private int _indexedEvalCacheEntryCount;
+    private readonly InvocationCacheConfiguration _invocationCacheConfiguration;
 
     private readonly EvaluationConfig? _evaluationConfigDefault;
 
@@ -60,10 +57,6 @@ public class PineVM : IPineVM
 
     private readonly OptimizationParametersSerial? _optimizationParametersSerial = null;
 
-    private readonly StackFrameInputHash _stackFrameInputHash = new();
-
-    private readonly IFileStore? _cacheFileStore;
-
     private readonly IReadOnlyDictionary<Expression, ExpressionCompilation>? _expressionCompilationOverrides;
 
     private readonly bool _disableDirectContinueForSimpleEval;
@@ -93,7 +86,9 @@ public class PineVM : IPineVM
         bool disableDirectContinueForSimpleEval = false,
         bool disableDirectEvalForSimpleTemplate = false,
         ReportTailLoopIteration? reportTailLoopIteration = null,
-        ReportExpressionCompiled? reportExpressionCompiled = null)
+        ReportExpressionCompiled? reportExpressionCompiled = null,
+        IInvocationCacheAccess? invocationCache = null,
+        InvocationCacheConfiguration? invocationCacheConfiguration = null)
     {
         return
             new PineVM(
@@ -119,7 +114,9 @@ public class PineVM : IPineVM
                 disableDirectContinueForSimpleEval: disableDirectContinueForSimpleEval,
                 disableDirectEvalForSimpleTemplate: disableDirectEvalForSimpleTemplate,
                 reportTailLoopIteration: reportTailLoopIteration,
-                reportExpressionCompiled: reportExpressionCompiled);
+                reportExpressionCompiled: reportExpressionCompiled,
+                invocationCache: invocationCache,
+                invocationCacheConfiguration: invocationCacheConfiguration);
 
     }
 
@@ -146,18 +143,39 @@ public class PineVM : IPineVM
         bool disableDirectContinueForSimpleEval = false,
         bool disableDirectEvalForSimpleTemplate = false,
         ReportTailLoopIteration? reportTailLoopIteration = null,
-        ReportExpressionCompiled? reportExpressionCompiled = null)
+        ReportExpressionCompiled? reportExpressionCompiled = null,
+        IInvocationCacheAccess? invocationCache = null,
+        InvocationCacheConfiguration? invocationCacheConfiguration = null)
     {
-        EvalCache = evalCache;
+        if (evalCache is not null && invocationCache is not null)
+        {
+            throw new ArgumentException(
+                "Configure either evalCache or invocationCache, not both.");
+        }
 
-        _expressionsWithEvalCacheEntries =
-            evalCache is null
+        var memoryInvocationCache =
+            invocationCache
+            ??
+            (evalCache is null
             ?
-            []
+            null
             :
-            [.. evalCache.Keys.Select(key => key.ExprValue)];
+            new InvocationCacheAccessFromDictionary(evalCache));
 
-        _indexedEvalCacheEntryCount = evalCache?.Count ?? 0;
+        _invocationCache =
+            cacheFileStore is null || optimizationParametersSerial is null
+            ?
+            memoryInvocationCache
+            :
+            new PersistentInvocationCacheAccess(
+                memoryInvocationCache,
+                cacheFileStore,
+                optimizationParametersSerial);
+
+        _invocationCacheConfiguration =
+            invocationCacheConfiguration
+            ??
+            InvocationCacheConfiguration.Default;
 
         _evaluationConfigDefault = evaluationConfigDefault;
 
@@ -240,49 +258,11 @@ public class PineVM : IPineVM
 
     readonly static ConcurrentPineValueHashCache s_mutableCacheValueHash = new();
 
-    private bool EvalCacheMayContainExpression(
-        IDictionary<EvalCacheEntryKey, PineValue> evalCache,
-        PineValue expressionValue)
-    {
-        if (_indexedEvalCacheEntryCount != evalCache.Count)
-        {
-            _expressionsWithEvalCacheEntries.Clear();
-
-            foreach (var key in evalCache.Keys)
-            {
-                _expressionsWithEvalCacheEntries.Add(key.ExprValue);
-            }
-
-            _indexedEvalCacheEntryCount = evalCache.Count;
-        }
-
-        return
-            evalCache.Count is not 0 &&
-            _expressionsWithEvalCacheEntries.Contains(expressionValue);
-    }
-
-    private bool TryAddEvalCacheEntry(
-        IDictionary<EvalCacheEntryKey, PineValue> evalCache,
-        EvalCacheEntryKey key,
-        PineValue value)
-    {
-        if (_indexedEvalCacheEntryCount != evalCache.Count)
-            EvalCacheMayContainExpression(evalCache, key.ExprValue);
-
-        var added = evalCache.TryAdd(key, value);
-
-        _expressionsWithEvalCacheEntries.Add(key.ExprValue);
-        _indexedEvalCacheEntryCount = evalCache.Count;
-
-        return added;
-    }
-
     static StackFrame BuildStackFrame(
         PineValue? expressionValue,
         Expression expression,
         StackFrameInstructions instructions,
         StackFrameInput stackFrameInput,
-        string? cacheFileName,
         StackFrameProfilingBaseline profilingBaseline)
     {
         var localsValues =
@@ -302,8 +282,7 @@ public class PineVM : IPineVM
                 StackValues: new PineValueInProcess[instructions.MaxStackUsage],
                 LocalsValues: localsValues,
                 ProfilingBaseline: profilingBaseline,
-                Specialization: null,
-                CacheFileName: cacheFileName);
+                Specialization: null);
     }
 
     private ExpressionEntry GetExpressionEntry(
@@ -697,8 +676,7 @@ public class PineVM : IPineVM
                                             BeginEvalCount: evalCount,
                                             BeginStackFrameCount: stackFrameCount,
                                             BeginBuildListCount: buildListCount),
-                                        Specialization: specialization.Stepwise,
-                                        CacheFileName: null);
+                                        Specialization: specialization.Stepwise);
 
                                 return
                                     PushStackFrame(
@@ -810,64 +788,16 @@ public class PineVM : IPineVM
                     if (currentFrame.StackValues.Length > 0)
                     {
                         if (expressionValue is not null &&
-                            EvalCache is { } evalCache &&
-                            EvalCacheMayContainExpression(evalCache, expressionValue))
+                            _invocationCache is { } invocationCache &&
+                            invocationCache.MayContainExpression(expressionValue))
                         {
                             var cacheKey = new EvalCacheEntryKey(expressionValue, stackFrameInput);
 
-                            if (evalCache.TryGetValue(cacheKey, out var fromCache))
+                            if (invocationCache.TryGet(cacheKey, out var fromCache))
                             {
                                 currentFrame.PushInstructionResult(PineValueInProcess.Create(fromCache));
 
                                 return null;
-                            }
-                        }
-                    }
-
-                    string? cacheFileName = null;
-
-                    if (currentFrame.StackValues.Length > 0 &&
-                        exprEntry.OptimizationConfig is { } optimizationConfig &&
-                        _cacheFileStore is { } cacheFileStore)
-                    {
-                        if (optimizationConfig.PersistentCachePredicate?.SatisfiedBy(
-                            parameters: instructions.Parameters,
-                            arguments: stackFrameInput.EvaluatedArguments) ?? false)
-                        {
-                            var inputPersistentHashBytes =
-                                _stackFrameInputHash.ComposeHashBytes(stackFrameInput).HashBytes;
-
-                            var stackFrameInputPersistentHash =
-                                Convert.ToHexStringLower(inputPersistentHashBytes.Span);
-
-                            cacheFileName =
-                                exprEntry.ExpressionHashBase16[..16] + "_" +
-                                stackFrameInputPersistentHash[..16];
-
-                            if (cacheFileStore.GetFileContent([cacheFileName]) is { } cachedContent)
-                            {
-                                try
-                                {
-                                    var cachedValue =
-                                        ValueEncodingFlatDeterministic.DecodeRoot(cachedContent);
-
-                                    currentFrame.PushInstructionResult(PineValueInProcess.Create(cachedValue));
-
-                                    if (expressionValue is not null && EvalCache is { } evalCache)
-                                    {
-                                        var cacheKey = new EvalCacheEntryKey(expressionValue, stackFrameInput);
-
-                                        TryAddEvalCacheEntry(evalCache, cacheKey, cachedValue);
-                                    }
-
-                                    return null;
-                                }
-                                catch (Exception ex)
-                                {
-                                    throw new Exception(
-                                        "Failed to decode cached value for cache file '" + cacheFileName + "'.",
-                                        ex);
-                                }
                             }
                         }
                     }
@@ -879,7 +809,6 @@ public class PineVM : IPineVM
                             expression: expression,
                             instructions: instructions,
                             stackFrameInput: stackFrameInput,
-                            cacheFileName: cacheFileName,
                             replaceCurrentFrame: replaceCurrentFrame);
                 }
             }
@@ -890,7 +819,6 @@ public class PineVM : IPineVM
             Expression expression,
             StackFrameInstructions instructions,
             StackFrameInput stackFrameInput,
-            string? cacheFileName,
             bool replaceCurrentFrame)
         {
             var newFrameProfilingBaseline =
@@ -911,7 +839,6 @@ public class PineVM : IPineVM
                     expression: expression,
                     instructions: instructions,
                     stackFrameInput: stackFrameInput,
-                    cacheFileName: cacheFileName,
                     profilingBaseline: newFrameProfilingBaseline);
 
             return PushStackFrame(newFrame, replaceCurrentFrame: replaceCurrentFrame);
@@ -984,35 +911,25 @@ public class PineVM : IPineVM
                 var frameStackFrameCount = stackFrameCount - currentFrame.ProfilingBaseline.BeginStackFrameCount;
                 var frameBuildListCount = buildListCount - currentFrame.ProfilingBaseline.BeginBuildListCount;
 
-                if (currentFrame.CacheFileName is { } cacheFileName && _cacheFileStore is { } cacheFileStore)
+                var evalCountSinceLastCacheEntry =
+                    evalCount - lastCacheEntryEvalCount;
+
+                var instructionCountSinceLastCacheEntry =
+                    instructionCount - lastCacheEntryInstructionCount;
+
+                if (_invocationCache is { } invocationCache &&
+                    _invocationCacheConfiguration.ShouldOfferEntry(
+                        frameInstructionCount: frameTotalInstructionCount,
+                        frameStackFrameCount: frameStackFrameCount,
+                        instructionCountSinceLastEntry: instructionCountSinceLastCacheEntry,
+                        evalCountSinceLastEntry: evalCountSinceLastCacheEntry))
                 {
-                    using var stream = new MemoryStream();
-
-                    ValueEncodingFlatDeterministic.Encode(stream, frameReturnValue.Evaluate());
-
-                    cacheFileStore.SetFileContent(
-                        path: [cacheFileName],
-                        fileContent: stream.ToArray());
-                }
-
-                if (frameTotalInstructionCount + frameStackFrameCount * 100 > 700 && EvalCache is { } evalCache)
-                {
-                    var evalCountSinceLastCacheEntry =
-                        evalCount - lastCacheEntryEvalCount;
-
-                    var instructionCountSinceLastCacheEntry =
-                        instructionCount - lastCacheEntryInstructionCount;
-
-                    if (instructionCountSinceLastCacheEntry + evalCountSinceLastCacheEntry * 100 > 700)
+                    if (invocationCache.TryAdd(
+                        new EvalCacheEntryKey(currentFrameExprValue, currentFrame.InputValues),
+                        frameReturnValue.Evaluate()))
                     {
-                        if (TryAddEvalCacheEntry(
-                            evalCache,
-                            new EvalCacheEntryKey(currentFrameExprValue, currentFrame.InputValues),
-                            frameReturnValue.Evaluate()))
-                        {
-                            lastCacheEntryInstructionCount = instructionCount;
-                            lastCacheEntryEvalCount = evalCount;
-                        }
+                        lastCacheEntryInstructionCount = instructionCount;
+                        lastCacheEntryEvalCount = evalCount;
                     }
                 }
 
@@ -1096,7 +1013,6 @@ public class PineVM : IPineVM
             rootExpression,
             rootInstructions,
             rootStackFrameInput,
-            cacheFileName: null,
             replaceCurrentFrame: false) is { } rootStackDepthError)
         {
             return rootStackDepthError;
@@ -2153,7 +2069,6 @@ public class PineVM : IPineVM
                                 expression: invocationExpression,
                                 instructions: targetInstructions,
                                 stackFrameInput: directInput,
-                                cacheFileName: null,
                                 replaceCurrentFrame: replaceCurrentFrame) is { } stackDepthError)
                             {
                                 return stackDepthError;

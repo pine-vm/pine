@@ -18,6 +18,15 @@ public interface ILanguageServiceSession
         string fileContentAsText);
 
     /// <summary>
+    /// Adds or replaces a workspace file without blocking the submitting thread.
+    /// </summary>
+    Task<Result<string, Response.WorkspaceSummaryResponse>> AddFileAsync(
+        string fileUri,
+        string fileContentAsText,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(AddFile(fileUri, fileContentAsText));
+
+    /// <summary>
     /// Removes a workspace file.
     /// </summary>
     Result<string, Response.WorkspaceSummaryResponse> DeleteFile(
@@ -35,6 +44,14 @@ public interface ILanguageServiceSession
     /// </summary>
     Result<string, Response> HandleRequest(
         Request request);
+
+    /// <summary>
+    /// Answers a language-service request without blocking the submitting thread.
+    /// </summary>
+    Task<Result<string, Response>> HandleRequestAsync(
+        Request request,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(HandleRequest(request));
 }
 
 /// <summary>
@@ -46,6 +63,7 @@ public interface ILanguageServiceSessionFactory
     /// Creates a new session. Implementations may need substantial time on the first call.
     /// </summary>
     ValueTask<Result<string, ILanguageServiceSession>> CreateSessionAsync(
+        LanguageServerOptions options,
         CancellationToken cancellationToken);
 }
 

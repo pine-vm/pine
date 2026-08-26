@@ -310,7 +310,7 @@ public class LanguageServer(
         InitializeParams initializeParams)
     {
         var initResult =
-            await sessionFactory.CreateSessionAsync(CancellationToken.None);
+            await sessionFactory.CreateSessionAsync(options, CancellationToken.None);
 
         if (initResult.IsErrOrNull() is { } err)
         {
@@ -335,6 +335,24 @@ public class LanguageServer(
 
         var aggregateElmModuleFiles = new HashSet<string>(System.StringComparer.Ordinal);
         var aggregateElmJsonFiles = new HashSet<string>(System.StringComparer.Ordinal);
+
+        var pendingFiles =
+            new List<(
+                WorkspaceFile File,
+                Task<int> ElapsedMilliseconds)>();
+
+        async Task<int> AddFileAndMeasure(WorkspaceFile file)
+        {
+            var fileClock = System.Diagnostics.Stopwatch.StartNew();
+
+            _ =
+                await languageServiceState.AddFileAsync(
+                    file.DocumentUri,
+                    file.Text,
+                    CancellationToken.None);
+
+            return (int)fileClock.Elapsed.TotalMilliseconds;
+        }
 
         foreach (var rootUri in rootUris)
         {
@@ -372,16 +390,9 @@ public class LanguageServer(
 
             foreach (var file in elmJsonFiles.Concat(elmModuleFiles))
             {
-                var fileClock = System.Diagnostics.Stopwatch.StartNew();
-
-                languageServiceState.AddFile(file.DocumentUri, file.Text);
-
-                Log(
-                    "Processed file " + file.DocumentUri + " with " +
-                    CommandLineInterface.FormatIntegerForDisplay(file.Text.Length) +
-                    " chars in language service in " +
-                    CommandLineInterface.FormatIntegerForDisplay((int)fileClock.Elapsed.TotalMilliseconds) +
-                    " ms");
+                pendingFiles.Add(
+                    (file,
+                    AddFileAndMeasure(file)));
 
                 if (IsElmModuleDocumentUri(file.DocumentUri))
                 {
@@ -395,6 +406,18 @@ public class LanguageServer(
                     CollectDirectDependenciesFromElmJsonFile(file.Text);
                 }
             }
+        }
+
+        await Task.WhenAll(pendingFiles.Select(pending => pending.ElapsedMilliseconds));
+
+        foreach (var pending in pendingFiles)
+        {
+            Log(
+                "Processed file " + pending.File.DocumentUri + " with " +
+                CommandLineInterface.FormatIntegerForDisplay(pending.File.Text.Length) +
+                " chars in language service in " +
+                CommandLineInterface.FormatIntegerForDisplay(pending.ElapsedMilliseconds.Result) +
+                " ms");
         }
 
         Log(

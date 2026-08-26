@@ -89,7 +89,9 @@ public static class SetupVM
         Action<PineValue, PineValue>? reportEnterPrecompiledLeaf = null,
         Action<PineValue, PineValue, PineValue?>? reportExitPrecompiledLeaf = null,
         OptimizationParametersSerial? optimizationParametersSerial = null,
-        IFileStore? cacheFileStore = null)
+        IFileStore? cacheFileStore = null,
+        IInvocationCacheAccess? invocationCache = null,
+        InvocationCacheConfiguration? invocationCacheConfiguration = null)
     {
         precompiledLeaves ??= DefaultPrecompiledLeaves;
 
@@ -110,6 +112,8 @@ public static class SetupVM
                 reportEnterPrecompiledLeaf: reportEnterPrecompiledLeaf,
                 reportExitPrecompiledLeaf: reportExitPrecompiledLeaf,
                 optimizationParametersSerial: optimizationParametersSerial,
-                cacheFileStore: cacheFileStore);
+                cacheFileStore: cacheFileStore,
+                invocationCache: invocationCache,
+                invocationCacheConfiguration: invocationCacheConfiguration);
     }
 }

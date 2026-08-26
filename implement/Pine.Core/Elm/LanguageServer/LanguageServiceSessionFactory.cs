@@ -1,3 +1,4 @@
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.IO;
 using Pine.Core.PineVM;
 using System;
@@ -7,46 +8,93 @@ using System.Threading.Tasks;
 namespace Pine.Core.Elm.LanguageServer;
 
 /// <summary>
-/// Creates language-service sessions backed by the Elm language service program compiled for the
-/// Pine VM.
+/// Creates language-service sessions backed by a bounded pool of Pine VM workers.
 /// </summary>
-/// <param name="pineVMFactory">
-/// Creates the virtual machine running the language service program.
-/// </param>
-/// <param name="compilationCache">
-/// Optional store caching the compiled environment between sessions and processes.
-/// </param>
-/// <param name="logDelegate">Optional delegate receiving progress reports from compilation.</param>
-public class LanguageServiceSessionFactory(
-    Func<IPineVM> pineVMFactory,
-    IFileStore? compilationCache = null,
-    Action<string>? logDelegate = null)
-    : ILanguageServiceSessionFactory
+public class LanguageServiceSessionFactory : ILanguageServiceSessionFactory
 {
+    private readonly Func<IInvocationCacheAccess, IPineVM> _pineVMFactory;
+
+    private readonly IFileStore? _compilationCache;
+
+    private readonly Action<string>? _logDelegate;
+
+    /// <summary>
+    /// Creates a factory using VMs that do not consume the supplied shared-cache access.
+    /// </summary>
+    public LanguageServiceSessionFactory(
+        Func<IPineVM> pineVMFactory,
+        IFileStore? compilationCache = null,
+        Action<string>? logDelegate = null)
+        : this(
+            _ => pineVMFactory(),
+            compilationCache,
+            logDelegate)
+    {
+        ArgumentNullException.ThrowIfNull(pineVMFactory);
+    }
+
+    /// <summary>
+    /// Creates a factory whose VM instances use worker-local cache access.
+    /// </summary>
+    public LanguageServiceSessionFactory(
+        Func<IInvocationCacheAccess, IPineVM> pineVMFactory,
+        IFileStore? compilationCache = null,
+        Action<string>? logDelegate = null)
+    {
+        ArgumentNullException.ThrowIfNull(pineVMFactory);
+
+        _pineVMFactory = pineVMFactory;
+        _compilationCache = compilationCache;
+        _logDelegate = logDelegate;
+    }
+
     /// <inheritdoc/>
     public ValueTask<Result<string, ILanguageServiceSession>> CreateSessionAsync(
+        LanguageServerOptions options,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(options);
         cancellationToken.ThrowIfCancellationRequested();
 
-        var initResult =
-            LanguageServiceState.InitLanguageServiceState(
-                pineVMFactory(),
-                compilationCache,
-                logDelegate);
+        var sharedCache = new ConcurrentInvocationCache();
 
-        if (initResult.IsErrOrNull() is { } err)
+        ScheduledLanguageServiceSession.Worker CreateWorker()
+        {
+            var workerCache = new BufferedInvocationCacheAccess(sharedCache);
+            var pineVM = _pineVMFactory(workerCache);
+
+            return new ScheduledLanguageServiceSession.Worker(pineVM, workerCache);
+        }
+
+        var firstWorker = CreateWorker();
+
+        var programResult =
+            LanguageServiceState.CompileLanguageServiceProgram(
+                firstWorker.PineVM,
+                _compilationCache,
+                _logDelegate);
+
+        firstWorker.InvocationCache.MergeIntoShared();
+
+        if (programResult.IsErrOrNull() is { } err)
         {
             return
                 ValueTask.FromResult(
                     Result<string, ILanguageServiceSession>.err(err));
         }
 
-        if (initResult.IsOkOrNull() is not { } session)
+        if (programResult.IsOkOrNull() is not { } program)
         {
             throw new InvalidOperationException(
-                "Unexpected language service state result type: " + initResult.GetType());
+                "Unexpected language service program result type: " + programResult.GetType());
         }
+
+        var session =
+            new ScheduledLanguageServiceSession(
+                program,
+                options.MaxConcurrencyCount,
+                firstWorker,
+                CreateWorker);
 
         return
             ValueTask.FromResult(

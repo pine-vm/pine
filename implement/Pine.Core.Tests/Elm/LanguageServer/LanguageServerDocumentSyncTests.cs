@@ -4,6 +4,7 @@ using Pine.Core.Elm.LanguageServer.LanguageServiceInterface;
 using Pine.Core.LanguageServerProtocol;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -69,6 +70,38 @@ public class LanguageServerDocumentSyncTests
                 ClientInfo: null));
 
         await server.WorkspaceInitializationTask!;
+    }
+
+    [Fact]
+    public async Task Initialization_submits_workspace_files_concurrently()
+    {
+        var (workspace, _) =
+            VirtualWorkspace.Create(
+                [
+                (["First.elm"], OriginalContent),
+                (["Second.elm"], OriginalContent)
+                ]);
+
+        var session = new ConcurrentInitializationSession();
+        var server = CreateServer(workspace, session);
+        var initialization = InitializeAsync(server);
+
+        try
+        {
+            var completed =
+                await Task.WhenAny(
+                    session.TwoFilesStarted,
+                    Task.Delay(System.TimeSpan.FromSeconds(5)));
+
+            completed.Should().Be(session.TwoFilesStarted);
+            session.MaximumActiveRequests.Should().BeGreaterThan(1);
+        }
+        finally
+        {
+            session.Release();
+        }
+
+        await initialization;
     }
 
     [Fact]
@@ -141,6 +174,86 @@ public class LanguageServerDocumentSyncTests
         server.TextDocument_didClose(new TextDocumentIdentifier(documentUri));
 
         session.TryGetFile(documentUri).Should().Be(OriginalContent);
+    }
+
+    private sealed class ConcurrentInitializationSession : ILanguageServiceSession
+    {
+        private readonly TaskCompletionSource _twoFilesStarted =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private readonly TaskCompletionSource _release =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private int _startedRequests;
+
+        private int _activeRequests;
+
+        private int _maximumActiveRequests;
+
+        public Task TwoFilesStarted => _twoFilesStarted.Task;
+
+        public int MaximumActiveRequests => Volatile.Read(ref _maximumActiveRequests);
+
+        public void Release() => _release.TrySetResult();
+
+        public Result<string, Response.WorkspaceSummaryResponse> AddFile(
+            string fileUri,
+            string fileContentAsText) =>
+            new Response.WorkspaceSummaryResponse();
+
+        public async Task<Result<string, Response.WorkspaceSummaryResponse>> AddFileAsync(
+            string fileUri,
+            string fileContentAsText,
+            CancellationToken cancellationToken = default)
+        {
+            var activeRequests = Interlocked.Increment(ref _activeRequests);
+
+            UpdateMaximum(ref _maximumActiveRequests, activeRequests);
+
+            if (Interlocked.Increment(ref _startedRequests) >= 2)
+            {
+                _twoFilesStarted.TrySetResult();
+            }
+
+            try
+            {
+                await _release.Task.WaitAsync(cancellationToken);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _activeRequests);
+            }
+
+            return new Response.WorkspaceSummaryResponse();
+        }
+
+        public Result<string, Response.WorkspaceSummaryResponse> DeleteFile(string fileUri) =>
+            new Response.WorkspaceSummaryResponse();
+
+        public Result<string, Response.WorkspaceSummaryResponse> AddElmPackage(
+            ElmPackageVersion019Identifer packageVersionId,
+            IReadOnlyList<KeyValuePair<IReadOnlyList<string>, string>> filesContentsAsText) =>
+            new Response.WorkspaceSummaryResponse();
+
+        public Result<string, Response> HandleRequest(Request request) =>
+            "Not implemented in this test double";
+
+        private static void UpdateMaximum(ref int maximum, int candidate)
+        {
+            var current = Volatile.Read(ref maximum);
+
+            while (candidate > current)
+            {
+                var observed = Interlocked.CompareExchange(ref maximum, candidate, current);
+
+                if (observed == current)
+                {
+                    return;
+                }
+
+                current = observed;
+            }
+        }
     }
 
     [Fact]

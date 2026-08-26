@@ -22,6 +22,14 @@ public class LanguageServiceState(
 
     private PineValue _state = initState;
 
+    internal sealed record LanguageServiceProgram(
+        LanguageServiceInterfaceStruct Interface,
+        PineValue InitialState);
+
+    internal sealed record LanguageServiceTransition(
+        Result<string, Response> Response,
+        PineValue State);
+
     /// <summary>
     /// Compiles the language service program and initializes a new session on the given VM.
     /// </summary>
@@ -30,7 +38,7 @@ public class LanguageServiceState(
     /// Optional store to cache the compiled environment between sessions and processes.
     /// </param>
     /// <param name="logDelegate">Optional delegate receiving progress reports from compilation.</param>
-    public static Result<string, LanguageServiceState> InitLanguageServiceState(
+    internal static Result<string, LanguageServiceProgram> CompileLanguageServiceProgram(
         IPineVM pineVM,
         IFileStore? compilationCache,
         System.Action<string>? logDelegate = null)
@@ -129,9 +137,40 @@ public class LanguageServiceState(
         }
 
         return
-            new LanguageServiceState(
+            new LanguageServiceProgram(
                 languageServiceInterface,
-                initOk,
+                initOk);
+    }
+
+    /// <summary>
+    /// Compiles the language service program and initializes a new session on the given VM.
+    /// </summary>
+    public static Result<string, LanguageServiceState> InitLanguageServiceState(
+        IPineVM pineVM,
+        IFileStore? compilationCache,
+        System.Action<string>? logDelegate = null)
+    {
+        var programResult =
+            CompileLanguageServiceProgram(
+                pineVM,
+                compilationCache,
+                logDelegate);
+
+        if (programResult.IsErrOrNull() is { } err)
+        {
+            return err;
+        }
+
+        if (programResult.IsOkOrNull() is not { } program)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected language service program result type: " + programResult.GetType());
+        }
+
+        return
+            new LanguageServiceState(
+                program.Interface,
+                program.InitialState,
                 pineVM);
     }
 
@@ -313,95 +352,117 @@ public class LanguageServiceState(
     public Result<string, Response> HandleRequest(
         Request request)
     {
+        lock (pineVM)
+        {
+            var transition =
+                ApplyRequest(
+                    new LanguageServiceProgram(languageServiceInterface, _state),
+                    pineVM,
+                    _state,
+                    request);
+
+            _state = transition.State;
+
+            return transition.Response;
+        }
+    }
+
+    internal static LanguageServiceTransition ApplyRequest(
+        LanguageServiceProgram program,
+        IPineVM pineVM,
+        PineValue state,
+        Request request)
+    {
         var requestEncoded =
             RequestEncoding.Encode(request);
 
-        lock (pineVM)
+        var handleRequestResult =
+            ElmInteractiveEnvironment.ApplyFunction(
+                pineVM,
+                program.Interface.HandleRequestInCurrentWorkspace,
+                [
+                requestEncoded,
+                state,
+                ]);
+
         {
-            var handleRequestResult =
-                ElmInteractiveEnvironment.ApplyFunction(
-                    pineVM,
-                    languageServiceInterface.HandleRequestInCurrentWorkspace,
-                    [
-                    requestEncoded,
-                    _state,
-                    ]);
-
+            if (handleRequestResult.IsErrOrNull() is { } requestError)
             {
-                if (handleRequestResult.IsErrOrNull() is { } err)
+                throw new System.Exception("Failed to handle request: " + requestError);
+            }
+        }
+
+        if (handleRequestResult.IsOkOrNull() is not { } handleRequestOk)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected handle request result type: " + handleRequestResult.GetType());
+        }
+
+        if (handleRequestOk is not PineValue.ListValue handleRequestOkList)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected handle request result type: " + handleRequestOk.GetType());
+        }
+
+        if (handleRequestOkList.Items.Length is not 2)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected handle request result length: " + handleRequestOkList.Items.Length);
+        }
+
+        var requestResponseResultValue =
+            handleRequestOkList.Items.Span[0];
+
+        var langServiceStateValue =
+            handleRequestOkList.Items.Span[1];
+
+        var langServiceResponseOk =
+            ElmValueInterop.ParseElmResultValue(
+                requestResponseResultValue,
+                err: err =>
                 {
-                    throw new System.Exception("Failed to handle request: " + err);
-                }
-            }
-
-            if (handleRequestResult.IsOkOrNull() is not { } handleRequestOk)
-            {
-                throw new System.NotImplementedException(
-                    "Unexpected handle request result type: " + handleRequestResult.GetType());
-            }
-
-            if (handleRequestOk is not PineValue.ListValue handleRequestOkList)
-            {
-                throw new System.NotImplementedException(
-                    "Unexpected handle request result type: " + handleRequestOk.GetType());
-            }
-
-            if (handleRequestOkList.Items.Length is not 2)
-            {
-                throw new System.NotImplementedException(
-                    "Unexpected handle request result length: " + handleRequestOkList.Items.Length);
-            }
-
-            var requestResponseResultValue =
-                handleRequestOkList.Items.Span[0];
-
-            var langServiceStateValue =
-                handleRequestOkList.Items.Span[1];
-
-            _state = langServiceStateValue;
-
-            var langServiceResponseOk =
-                ElmValueInterop.ParseElmResultValue(
-                    requestResponseResultValue,
-                    err: err =>
-                    {
-                        throw new System.Exception("Failed to parse request response result: " + err);
-                    },
-                    ok:
-                    ok => ok,
-                    invalid:
-                    err => throw new System.Exception("Invalid form: " + err));
+                    throw new System.Exception("Failed to parse request response result: " + err);
+                },
+                ok:
+                ok => ok,
+                invalid:
+                err => throw new System.Exception("Invalid form: " + err));
 
 
-            var langServiceResponseOkElmValue =
-                ElmValueEncoding.PineValueAsElmValue(langServiceResponseOk, null, null)
-                .Extract(err => throw new System.Exception("Failed to parse request response result: " + err));
+        var langServiceResponseOkElmValue =
+            ElmValueEncoding.PineValueAsElmValue(langServiceResponseOk, null, null)
+            .Extract(err => throw new System.Exception("Failed to parse request response result: " + err));
 
-            if (langServiceResponseOkElmValue is not ElmValue.ElmTag responseTag)
-            {
-                throw new System.NotImplementedException(
-                    "Unexpected response type: " + langServiceResponseOkElmValue.GetType());
-            }
+        if (langServiceResponseOkElmValue is not ElmValue.ElmTag responseTag)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected response type: " + langServiceResponseOkElmValue.GetType());
+        }
 
-            var decodeResponseResult =
-                ResponseEncoding.Decode(langServiceResponseOk);
+        var decodeResponseResult =
+            ResponseEncoding.Decode(langServiceResponseOk);
 
-            {
-                if (decodeResponseResult.IsErrOrNull() is { } err)
-                {
-                    return
-                        "Failed to decode response: " + err;
-                }
-            }
+        Result<string, Response> response;
 
+        if (decodeResponseResult.IsErrOrNull() is { } err)
+        {
+            response = "Failed to decode response: " + err;
+        }
+        else
+        {
             if (decodeResponseResult.IsOkOrNull() is not { } decodedResponse)
             {
                 throw new System.NotImplementedException(
                     "Unexpected response type: " + decodeResponseResult.GetType());
             }
 
-            return decodedResponse;
+            response = decodedResponse;
         }
+
+        return
+            new LanguageServiceTransition(
+                response,
+                langServiceStateValue);
     }
 
     /// <summary>

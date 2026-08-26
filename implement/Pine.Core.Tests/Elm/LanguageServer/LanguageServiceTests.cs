@@ -76,4 +76,19 @@ public class LanguageServiceTests
             .Should().BeOfType<Result<string, PineValue>.Err>()
             .Which.Value.Should().Contain("LanguageService.elm");
     }
+
+    [Fact]
+    public void Language_server_options_default_to_four_workers_and_require_positive_concurrency()
+    {
+        new LanguageServerOptions(ServerVersion: "test")
+            .MaxConcurrencyCount.Should().Be(4);
+
+        var constructWithInvalidConcurrency =
+            () =>
+            new LanguageServerOptions(
+                ServerVersion: "test",
+                MaxConcurrencyCount: 0);
+
+        constructWithInvalidConcurrency.Should().Throw<ArgumentOutOfRangeException>();
+    }
 }

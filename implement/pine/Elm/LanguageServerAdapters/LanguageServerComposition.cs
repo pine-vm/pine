@@ -1,6 +1,7 @@
 using ElmTime.Elm019;
 using Pine.Core;
 using Pine.Core.Elm.LanguageServer;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.IO;
 using Pine.Core.PineVM;
 using Pine.PineVM;
@@ -31,6 +32,12 @@ public static class LanguageServerComposition
         PineVMResettingCache.Create(resetCacheEntriesThresholdDefault: 10_000);
 
     /// <summary>
+    /// Creates an exclusively owned language-service VM using the supplied worker cache.
+    /// </summary>
+    public static IPineVM CreatePineVM(IInvocationCacheAccess invocationCache) =>
+        IntermediateVM.SetupVM.Create(invocationCache: invocationCache);
+
+    /// <summary>
     /// Store caching the compiled language service program between processes.
     /// </summary>
     public static IFileStore CreateDefaultCompilationCache(string pineAppVersionId) =>
@@ -58,7 +65,7 @@ public static class LanguageServerComposition
         string pineAppVersionId,
         Action<string>? logDelegate = null) =>
         new LanguageServiceSessionFactory(
-            CreatePineVM,
+            invocationCache => CreatePineVM(invocationCache),
             CreateDefaultCompilationCache(pineAppVersionId),
             logDelegate);
 

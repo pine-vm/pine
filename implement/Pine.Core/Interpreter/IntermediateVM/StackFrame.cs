@@ -17,8 +17,7 @@ public record StackFrame(
     Memory<PineValueInProcess?> StackValues,
     Memory<PineValueInProcess> LocalsValues,
     StackFrameProfilingBaseline ProfilingBaseline,
-    ApplyStepwise? Specialization,
-    string? CacheFileName)
+    ApplyStepwise? Specialization)
 {
     /// <summary>
     /// The index of the next instruction to execute within <see cref="StackFrameInstructions.Instructions"/>.
