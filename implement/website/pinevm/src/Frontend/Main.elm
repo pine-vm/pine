@@ -180,7 +180,7 @@ view state =
     let
         title =
             if state.selectedPage == HomePage then
-                "Pine — Run Elm Everywhere"
+                "Pine — Grow What’s Next"
 
             else
                 String.join " — " [ titleFromPage state.selectedPage, "Pine" ]
