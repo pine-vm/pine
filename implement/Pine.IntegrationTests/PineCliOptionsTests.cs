@@ -36,18 +36,63 @@ public class PineCliOptionsTests
 
         result.ExitCode.Should().Be(0);
         result.StandardOutput.Should().Contain("elm                            Elm development tools.");
+        result.StandardOutput.Should().NotContain("elm-format");
         result.StandardError.Should().BeEmpty();
     }
 
 
     [Fact]
-    public void Elm_command_exposes_test_subcommand()
+    public void Elm_command_exposes_format_and_test_subcommands()
     {
         var result = RunPine("elm", "--help");
 
         result.ExitCode.Should().Be(0);
+        result.StandardOutput.Should().Contain("format");
         result.StandardOutput.Should().Contain("test");
         result.StandardError.Should().BeEmpty();
+    }
+
+
+    [Fact]
+    public void Root_help_hides_backward_compatible_elm_format_command()
+    {
+        var result = RunPine("--help");
+
+        result.ExitCode.Should().Be(0);
+        result.StandardOutput.Should().NotContain("elm-format");
+        result.StandardError.Should().BeEmpty();
+    }
+
+
+    [Theory]
+    [InlineData("elm", "format")]
+    [InlineData("elm-format")]
+    public void Elm_format_commands_are_available(params string[] command)
+    {
+        var sourcePath =
+            Path.Combine(
+                Path.GetTempPath(),
+                "pine-cli-options-tests-" + Guid.NewGuid().ToString("N") + ".elm");
+
+        try
+        {
+            File.WriteAllText(
+                sourcePath,
+                """
+                module Main exposing (main)
+
+                main=0
+                """);
+
+            var result = RunPine([.. command, sourcePath, "--yes", "--color", "never"]);
+
+            result.ExitCode.Should().Be(0);
+            result.StandardError.Should().BeEmpty();
+        }
+        finally
+        {
+            File.Delete(sourcePath);
+        }
     }
 
 

@@ -8,6 +8,7 @@ public static class ElmCommand
     {
         var command = new Command("elm", "Elm development tools.");
 
+        command.Add(Elm.FormatCommand.Create());
         command.Add(Elm.TestCommand.Create());
 
         return command;

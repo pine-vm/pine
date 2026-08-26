@@ -1,17 +1,35 @@
-using Pine.CLI;
 using Pine.Core;
 using Pine.Core.Elm.ElmSyntax;
 using System;
 using System.CommandLine;
 using System.Linq;
 
-namespace Pine.Elm.CLI;
+namespace Pine.CLI.Elm;
 
-public class ElmFormatCommand
+public static class FormatCommand
 {
-    public static Command CreateElmFormatCommand()
+    public static Command Create()
     {
-        var command = new Command("elm-format", "Format Elm module files.");
+        return Create("format", hidden: false, commandLabel: "elm format");
+    }
+
+
+    public static Command CreateBackwardCompatible()
+    {
+        return Create("elm-format", hidden: true, commandLabel: "elm-format");
+    }
+
+
+    private static Command Create(
+        string name,
+        bool hidden,
+        string commandLabel)
+    {
+        var command =
+            new Command(name, "Format Elm module files.")
+            {
+                Hidden = hidden
+            };
 
         var pathsArgument =
             new Argument<string[]>("paths")
@@ -54,7 +72,7 @@ public class ElmFormatCommand
                         formatFile: FormatElmFile,
                         skipPrompt: yes,
                         verifyNoChanges: verifyNoChanges,
-                        commandLabel: "elm-format",
+                        commandLabel: commandLabel,
                         colorMode: colorMode);
             });
 
