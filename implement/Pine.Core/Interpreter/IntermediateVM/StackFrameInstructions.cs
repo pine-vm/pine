@@ -67,6 +67,7 @@ public record StackFrameInstructions(
                     break;
 
                 case StackInstructionKind.Switch_Jump_If_Equal_Const:
+                case StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const:
 
                     yield return instructionIndex + 1;
 

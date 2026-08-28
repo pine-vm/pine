@@ -450,6 +450,13 @@ public enum StackInstructionKind
     /// Depends on the property <see cref="StackInstruction.SwitchJumpTable"/>.
     /// </summary>
     Switch_Jump_If_Equal_Const,
+
+    /// <summary>
+    /// Pops the skip count (top) and source value (second) from the stack and jumps by the
+    /// offset for the case whose literal equals the source slice beginning at the skip count.
+    /// Depends on the property <see cref="StackInstruction.SwitchJumpTable"/>.
+    /// </summary>
+    Switch_Jump_If_Slice_Skip_Var_Equal_Const,
 }
 
 /// <summary>
@@ -1048,6 +1055,16 @@ public record StackInstruction(
     /// </summary>
     public static StackInstruction Slice_Skip_Var_Equal_Const(PineValue literal) =>
         new(StackInstructionKind.Slice_Skip_Var_Equal_Const, Literal: literal);
+
+    /// <summary>
+    /// Creates a <see cref="StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const"/>
+    /// instruction using the given cases and relative jump offsets.
+    /// </summary>
+    public static StackInstruction Switch_Jump_If_Slice_Skip_Var_Equal_Const(
+        ImmutableDictionary<PineValue, int> jumpTable) =>
+        new(
+            StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const,
+            SwitchJumpTable: jumpTable);
 
 
     /// <inheritdoc/>
@@ -1836,6 +1853,13 @@ public record StackInstruction(
             StackInstructionKind.Switch_Jump_If_Equal_Const =>
             new InstructionDetails(
                 PopCount: 1,
+                PushCount: 0,
+                Display:
+                () => Render_Switch_Jump_If_Equal_Const_Details(instruction, literalDisplayString)),
+
+            StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const =>
+            new InstructionDetails(
+                PopCount: 2,
                 PushCount: 0,
                 Display:
                 () => Render_Switch_Jump_If_Equal_Const_Details(instruction, literalDisplayString)),

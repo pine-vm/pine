@@ -685,12 +685,55 @@ public class PineIRCompiler
             return null;
         }
 
-        var afterCondition =
-            CompileExpressionTransitive(
-                comparedExpression,
-                context with { IsTailPosition = false },
-                prior,
-                parseCache);
+        (Expression sourceExpr, Expression skipCountExpr)? sliceSkipVar = null;
+
+        if (TryParse_Builtin_Take_Const(comparedExpression, parseCache) is { } parsedTake &&
+            parsedTake.takeCount > 0 &&
+            TryParse_Builtin_Skip(parsedTake.sourceExpr) is { } parsedSkip &&
+            cases.All(
+                switchCase =>
+                switchCase.Literal switch
+                {
+                    PineValue.BlobValue blobValue =>
+                    blobValue.Bytes.Length == parsedTake.takeCount,
+
+                    PineValue.ListValue listValue =>
+                    listValue.Items.Length == parsedTake.takeCount,
+
+                    _ =>
+                    false
+                }))
+        {
+            sliceSkipVar = (parsedSkip.sourceExpr, parsedSkip.skipCountExpr);
+        }
+
+        NodeCompilationResult afterCondition;
+
+        if (sliceSkipVar is { } parsedSliceSkipVar)
+        {
+            var afterSource =
+                CompileExpressionTransitive(
+                    parsedSliceSkipVar.sourceExpr,
+                    context with { IsTailPosition = false },
+                    prior,
+                    parseCache);
+
+            afterCondition =
+                CompileExpressionTransitive(
+                    parsedSliceSkipVar.skipCountExpr,
+                    context with { IsTailPosition = false },
+                    afterSource,
+                    parseCache);
+        }
+        else
+        {
+            afterCondition =
+                CompileExpressionTransitive(
+                    comparedExpression,
+                    context with { IsTailPosition = false },
+                    prior,
+                    parseCache);
+        }
 
         var defaultBranchInstructions =
             CompileExpressionTransitive(
@@ -765,9 +808,14 @@ public class PineIRCompiler
         }
 
         var switchInstruction =
+            sliceSkipVar is null
+            ?
             new StackInstruction(
                 StackInstructionKind.Switch_Jump_If_Equal_Const,
-                SwitchJumpTable: jumpTableBuilder.ToImmutable());
+                SwitchJumpTable: jumpTableBuilder.ToImmutable())
+            :
+            StackInstruction.Switch_Jump_If_Slice_Skip_Var_Equal_Const(
+                jumpTableBuilder.ToImmutable());
 
         var branchInstructions =
             new List<StackInstruction>

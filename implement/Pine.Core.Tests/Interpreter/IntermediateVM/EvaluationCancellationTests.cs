@@ -133,6 +133,14 @@ public class EvaluationCancellationTests
                 StackInstruction.Push_Literal(PineValue.EmptyList),
                 StackInstruction.Return,
             ],
+            [
+                StackInstruction.Push_Literal(PineValue.EmptyList),
+                StackInstruction.Push_Literal(IntegerEncoding.EncodeSignedInteger(0)),
+                StackInstruction.Switch_Jump_If_Slice_Skip_Var_Equal_Const(
+                    ImmutableDictionary<PineValue, int>.Empty),
+                StackInstruction.Push_Literal(PineValue.EmptyList),
+                StackInstruction.Return,
+            ],
             ];
 
         foreach (var instructions in instructionVariants)

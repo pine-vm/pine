@@ -140,6 +140,7 @@ public sealed record PineControlFlowGraph(
                     break;
 
                 case StackInstructionKind.Switch_Jump_If_Equal_Const:
+                case StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const:
                     var switchJumpTable =
                         instruction.SwitchJumpTable
                         ??
@@ -460,7 +461,8 @@ public sealed record PineControlFlowGraph(
                     BranchArguments: [],
                     Instruction: last),
 
-                StackInstructionKind.Switch_Jump_If_Equal_Const =>
+                StackInstructionKind.Switch_Jump_If_Equal_Const or
+                StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const =>
                 new PineControlFlowTerminator.Switch(
                     FallThrough: ResolveBlock(
                         endInstructionIndexExclusive,

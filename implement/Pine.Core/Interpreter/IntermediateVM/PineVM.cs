@@ -2163,6 +2163,63 @@ public class PineVM : ICancellablePineVM
                             continue;
                         }
 
+                    case StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const:
+                        {
+                            if (CheckCancellation() is { } cancellationError)
+                            {
+                                return cancellationError;
+                            }
+
+                            var skipCountValue = currentFrame.PopTopmostFromStack();
+                            var slicedValue = currentFrame.PopTopmostFromStack();
+
+                            var jumpTable =
+                                currentInstruction.SwitchJumpTable
+                                ??
+                                throw new Exception("Invalid operation form: Missing switch jump table");
+
+                            int? jumpOffset = null;
+
+                            var skipCount = skipCountValue.AsInteger();
+
+                            foreach (var switchCase in jumpTable)
+                            {
+                                var matches =
+                                    skipCount is { } skipCountInteger
+                                    ?
+                                    slicedValue.SliceSkipVarEqualConst(
+                                        skipCount: skipCountInteger < 0 ? 0 : (int)skipCountInteger,
+                                        literal: switchCase.Key)
+                                    :
+                                    switchCase.Key == PineValue.EmptyList;
+
+                                if (matches)
+                                {
+                                    jumpOffset = switchCase.Value;
+                                    break;
+                                }
+                            }
+
+                            if (jumpOffset is { } matchedJumpOffset)
+                            {
+                                currentFrame.InstructionPointer += matchedJumpOffset;
+
+                                if (matchedJumpOffset < 0)
+                                {
+                                    if (IncrementLoopIterationCountAndEnforceLimits(currentFrame) is { } loopLimitError)
+                                    {
+                                        return loopLimitError;
+                                    }
+                                }
+
+                                continue;
+                            }
+
+                            currentFrame.InstructionPointer++;
+
+                            continue;
+                        }
+
                     case StackInstructionKind.Bit_And_Binary:
                         {
                             var right = currentFrame.PopTopmostFromStack().Evaluate();
