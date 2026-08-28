@@ -32,7 +32,7 @@ public class DefaultPrecompiledLeavesContentTests
             IntermediateVM.SetupVM.DefaultPrecompiledLeaves;
 
         aggregate.Count.Should().Be(
-            39,
+            40,
             because:
             "the Pine.Core aggregate contributes the Basics.compare, Basics.eq, Basics.idiv " +
             "and Basics.gcd leaves, six Dict kernel leaves, the Json.Decode.parseValue leaf, " +
@@ -40,7 +40,7 @@ public class DefaultPrecompiledLeavesContentTests
             "two Bytes kernel leaves, the two record runtime leaves " +
             "(record access and record update), " +
             "the two Base64 conversion leaves (Base64.Encode.toBytes and " +
-            "Base64.Decode.fromBytes), ten ElmSyntax.Concrete.Parser leaves, plus the " +
+            "Base64.Decode.fromBytes), eleven ElmSyntax.Concrete.Parser leaves, plus the " +
             "ElmSyntax.Abstract.ConvertFromConcrete record-setter merge leaf");
 
         aggregate.Keys.Should().Contain(
@@ -195,7 +195,7 @@ public class DefaultPrecompiledLeavesContentTests
 
         IntermediateVM.SetupVM.ConcreteParserPrecompiledLeaves.Count
             .Should().Be(
-            10,
+            11,
             because: "the concrete-parser area exposes all requested recursive helpers");
 
         IntermediateVM.SetupVM.ConvertFromConcretePrecompiledLeaves.Count

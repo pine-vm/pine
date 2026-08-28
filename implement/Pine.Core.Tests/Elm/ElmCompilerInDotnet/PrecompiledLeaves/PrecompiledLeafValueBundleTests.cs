@@ -26,8 +26,8 @@ public class PrecompiledLeafValueBundleTests
             .OfType<PineValue.ListValue>()
             .Should()
             .OnlyContain(
-                value =>
-                reusedListValues.ContainsKey(
-                    new PineValue.ListValue.ListValueStruct(value)));
+            value =>
+            reusedListValues.ContainsKey(
+                new PineValue.ListValue.ListValueStruct(value)));
     }
 }

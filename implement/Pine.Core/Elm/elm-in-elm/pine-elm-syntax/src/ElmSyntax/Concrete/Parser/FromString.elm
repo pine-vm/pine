@@ -8,291 +8,1754 @@ import ElmSyntax.Concrete.File as File
 import ElmSyntax.Concrete.Import as Import
 import ElmSyntax.Concrete.Infix as Infix
 import ElmSyntax.Concrete.Module as Module
-import ElmSyntax.Concrete.Node as Node exposing (Node(..))
+import ElmSyntax.Concrete.Node exposing (Node(..))
 import ElmSyntax.Concrete.Parser.DeclarationOrExpression as DeclarationOrExpression exposing (DeclarationOrExpression)
-import ElmSyntax.Concrete.Parser.Token as Token
-import ElmSyntax.Concrete.Parser.TokensFromString as TokensFromString
+import ElmSyntax.Concrete.Parser.StringParsing as StringParsing
+    exposing
+        ( LiteralRunBoundary(..)
+        , LiteralTermination(..)
+        , MultilineCommentRunEnd(..)
+        , concatenateChunksRev
+        , findLiteralRunEnd
+        , hexStringToInt
+        , isDigit
+        , isFloatLiteral
+        , isIdentifierChar
+        , isIdentifierStart
+        , isOperatorChar
+        , isUpperCharacter
+        , isWhitespace
+        , lineCommentEnd
+        , literalTerminationLength
+        , locationString
+        , multilineCommentRunEnd
+        , numberEnd
+        , prependNonEmptyChunk
+        , scanUnicodeEscapeDigits
+        , skipOperatorChars
+        , skipToIdentifierEnd
+        , startsWithUpper
+        )
 import ElmSyntax.Concrete.Pattern as Pattern
 import ElmSyntax.Concrete.Range exposing (Location, Range)
 import ElmSyntax.Concrete.SeparatedSyntaxList as SeparatedSyntaxList
 import ElmSyntax.Concrete.TypeAnnotation as TypeAnnotation
 
 
+{-| The complete state threaded through every recursive parsing function: the original source
+string, the current offset into that string, the row and column matching that offset, and the
+comments collected so far.
+
+Row and column are stored directly instead of in a nested location record, so advancing the
+state neither reads through nor rebuilds an inner record.
+
+`commentsRev` collects every line and block comment in the order they are consumed, most recent
+first. `skipTrivia` is the only place that recognizes a comment, therefore the state returned by
+a successful parse already carries every comment of the parsed source and no separate scan over
+the source is needed.
+
+Parsing functions never skip trivia (whitespace and comments) before returning: the state a
+function returns points at the exact end of the syntax it consumed. Callers that accept trivia
+apply `skipTrivia` themselves, which keeps the adjacency checks (for example for record access)
+exact. Because a caller that rejects what follows the trivia continues from the state before the
+trivia, the comments of a rejected branch are dropped together with that state and collected
+again by whichever `skipTrivia` result the parser keeps.
+
+-}
+type alias ParserState =
+    { source : String
+    , offset : Int
+    , row : Int
+    , column : Int
+    , commentsRev : List (Node String)
+    }
+
+
 parseExpression : String -> Result String Expression.Expression
 parseExpression input =
-    case TokensFromString.parseExpression input of
-        Ok tokens ->
-            parseExpressionTokens tokens
+    finishParseExpression
+        (parseExpressionNodeAt
+            0
+            0
+            { source = input
+            , offset = 0
+            , row = 1
+            , column = 1
+            , commentsRev = []
+            }
+        )
 
+
+finishParseExpression :
+    Result String ( Node Expression.Expression, ParserState )
+    -> Result String Expression.Expression
+finishParseExpression expressionResult =
+    case expressionResult of
         Err error ->
             Err error
+
+        Ok ( expressionNode, stateAfterExpression ) ->
+            finishParseExpressionAtEnd expressionNode (skipTrivia stateAfterExpression)
+
+
+finishParseExpressionAtEnd :
+    Node Expression.Expression
+    -> ParserState
+    -> Result String Expression.Expression
+finishParseExpressionAtEnd expressionNode stateAfterTrivia =
+    case String.slice stateAfterTrivia.offset (stateAfterTrivia.offset + 1) stateAfterTrivia.source of
+        "" ->
+            case expressionNode of
+                Node _ expression ->
+                    Ok expression
+
+        _ ->
+            Err
+                ("Unexpected token '"
+                    ++ snippetAt stateAfterTrivia
+                    ++ "' after parsing expression."
+                )
 
 
 parseFile : String -> Result String File.File
 parseFile input =
-    case TokensFromString.parseFile input of
-        Ok tokens ->
-            parseFileTokens tokens
-
-        Err error ->
-            Err error
-
-
-parseFileTokens : List Token.Token -> Result String File.File
-parseFileTokens tokens =
-    case parseModuleTokens tokens of
+    case
+        parseModuleDefinition
+            { source = input
+            , offset = 0
+            , row = 1
+            , column = 1
+            , commentsRev = []
+            }
+    of
         Err error ->
             Err error
 
         Ok ( moduleDefinition, afterModule ) ->
-            case parseImports [] afterModule of
+            parseFileImports moduleDefinition afterModule
+
+
+{-| Each stage of the file grammar hands its result to the next stage as arguments instead of
+binding it in an enclosing `case` branch that later stages read from again.
+
+A value destructured from a `case` is recomputed for every place the branch mentions it, so
+holding on to an earlier stage's result while parsing the following stages would re-run the
+earlier parse once per mention. Passing the result on as an argument evaluates each stage once.
+
+-}
+parseFileImports : Node Module.Module -> ParserState -> Result String File.File
+parseFileImports moduleDefinition state =
+    case parseImports [] state of
+        Err error ->
+            Err error
+
+        Ok ( imports, afterImports ) ->
+            parseFileBody moduleDefinition imports afterImports
+
+
+parseFileBody :
+    Node Module.Module
+    -> List (Node Import.Import)
+    -> ParserState
+    -> Result String File.File
+parseFileBody moduleDefinition imports state =
+    case parseFileDeclarations [] [] (lastImportEndRow imports Nothing) state of
+        Err error ->
+            Err error
+
+        Ok ( declarations, documentationComments, finalState ) ->
+            finishFile moduleDefinition imports declarations documentationComments finalState
+
+
+finishFile :
+    Node Module.Module
+    -> List (Node Import.Import)
+    -> List (Node Declaration.Declaration)
+    -> List (Node String)
+    -> ParserState
+    -> Result String File.File
+finishFile moduleDefinition imports declarations documentationComments finalState =
+    Ok
+        { moduleDefinition = moduleDefinition
+        , imports = imports
+        , declarations = declarations
+        , comments =
+            commentsExcludingDocumentation
+                documentationComments
+                (List.reverse finalState.commentsRev)
+        , incompleteDeclarations = []
+        }
+
+
+lastImportEndRow : List (Node Import.Import) -> Maybe Int -> Maybe Int
+lastImportEndRow imports latest =
+    case imports of
+        [] ->
+            latest
+
+        (Node importRange _) :: rest ->
+            lastImportEndRow rest (Just importRange.end.row)
+
+
+parseDeclarationOrExpression : String -> Result String DeclarationOrExpression
+parseDeclarationOrExpression input =
+    let
+        initialState =
+            { source = input, offset = 0, row = 1, column = 1, commentsRev = [] }
+
+        stateAtFirst =
+            skipTrivia initialState
+    in
+    case String.slice stateAtFirst.offset (stateAtFirst.offset + 1) input of
+        first ->
+            if isIdentifierStart first && startsWithDeclarationKeyword input stateAtFirst.offset then
+                case parseDeclaration stateAtFirst of
+                    Err error ->
+                        Err ("Failed to parse declaration or expression: " ++ error)
+
+                    Ok ( declaration, afterDeclaration ) ->
+                        let
+                            stateAfterTrivia =
+                                skipTrivia afterDeclaration
+                        in
+                        case String.slice stateAfterTrivia.offset (stateAfterTrivia.offset + 1) input of
+                            "" ->
+                                Ok (DeclarationOrExpression.Declaration declaration)
+
+                            _ ->
+                                Err
+                                    ("Unexpected token '"
+                                        ++ snippetAt stateAfterTrivia
+                                        ++ "' after parsing declaration."
+                                    )
+
+            else if startsFunctionDeclaration input stateAtFirst.offset then
+                case parseDeclaration stateAtFirst of
+                    Err _ ->
+                        parseAsExpressionFallback stateAtFirst
+
+                    Ok ( declaration, afterDeclaration ) ->
+                        let
+                            stateAfterTrivia =
+                                skipTrivia afterDeclaration
+                        in
+                        case String.slice stateAfterTrivia.offset (stateAfterTrivia.offset + 1) input of
+                            "" ->
+                                Ok (DeclarationOrExpression.Declaration declaration)
+
+                            _ ->
+                                parseAsExpressionFallback stateAtFirst
+
+            else
+                parseAsExpressionFallback stateAtFirst
+
+
+parseAsExpressionFallback : ParserState -> Result String DeclarationOrExpression
+parseAsExpressionFallback state =
+    case parseExpressionNodeAt 0 0 state of
+        Err error ->
+            Err ("Failed to parse declaration or expression: " ++ error)
+
+        Ok ( Node _ expression, stateAfterExpression ) ->
+            let
+                stateAfterTrivia =
+                    skipTrivia stateAfterExpression
+            in
+            case String.slice stateAfterTrivia.offset (stateAfterTrivia.offset + 1) stateAfterTrivia.source of
+                "" ->
+                    Ok (DeclarationOrExpression.Expression expression)
+
+                _ ->
+                    Err
+                        ("Unexpected token '"
+                            ++ snippetAt stateAfterTrivia
+                            ++ "' after parsing expression."
+                        )
+
+
+{-| True when the identifier starting at `offset` is one of the keywords that can only start a
+declaration, never an expression.
+-}
+startsWithDeclarationKeyword : String -> Int -> Bool
+startsWithDeclarationKeyword source offset =
+    case String.slice offset (skipToIdentifierEnd source (offset + 1)) source of
+        "type" ->
+            True
+
+        "port" ->
+            True
+
+        "infix" ->
+            True
+
+        _ ->
+            False
+
+
+{-| Mirrors the lookahead that decides whether the input starts a function declaration rather
+than an expression: an identifier that is not a block keyword, followed either by a type
+annotation colon or by an equals sign outside of any bracket.
+-}
+startsFunctionDeclaration : String -> Int -> Bool
+startsFunctionDeclaration source offset =
+    case String.slice offset (offset + 1) source of
+        first ->
+            if not (isIdentifierStart first) then
+                False
+
+            else
+                let
+                    nameEnd =
+                        skipToIdentifierEnd source (offset + 1)
+                in
+                case String.slice offset nameEnd source of
+                    "let" ->
+                        False
+
+                    "case" ->
+                        False
+
+                    "if" ->
+                        False
+
+                    _ ->
+                        let
+                            afterName =
+                                skipTriviaOffset source nameEnd
+                        in
+                        case String.slice afterName (afterName + 1) source of
+                            ":" ->
+                                if isOperatorChar (String.slice (afterName + 1) (afterName + 2) source) then
+                                    containsTopLevelEqual source nameEnd 0
+
+                                else
+                                    True
+
+                            _ ->
+                                containsTopLevelEqual source nameEnd 0
+
+
+{-| Scans forward looking for an equals sign that is not nested in parentheses, braces or
+brackets, skipping over comments, literals and multi-character operators (so `==` and `/=` never
+count as an equals sign).
+-}
+containsTopLevelEqual : String -> Int -> Int -> Bool
+containsTopLevelEqual source offset delimiterDepth =
+    if offset >= 0 then
+        let
+            nextThreeChars =
+                String.slice offset (offset + 3) source
+        in
+        case nextThreeChars of
+            "\"\"\"" ->
+                containsTopLevelEqual source (literalEndOffset TripleQuoteTermination source (offset + 3)) delimiterDepth
+
+            _ ->
+                case String.slice 0 2 nextThreeChars of
+                    "{-" ->
+                        containsTopLevelEqual source (blockCommentEndOffset source (offset + 2) 1) delimiterDepth
+
+                    "--" ->
+                        containsTopLevelEqual source (lineCommentEnd source (offset + 2)) delimiterDepth
+
+                    nextTwoChars ->
+                        case String.slice 0 1 nextTwoChars of
+                            "" ->
+                                False
+
+                            "(" ->
+                                containsTopLevelEqual source (offset + 1) (delimiterDepth + 1)
+
+                            "[" ->
+                                containsTopLevelEqual source (offset + 1) (delimiterDepth + 1)
+
+                            ")" ->
+                                containsTopLevelEqual source (offset + 1) (max 0 (delimiterDepth - 1))
+
+                            "]" ->
+                                containsTopLevelEqual source (offset + 1) (max 0 (delimiterDepth - 1))
+
+                            "}" ->
+                                containsTopLevelEqual source (offset + 1) (max 0 (delimiterDepth - 1))
+
+                            "{" ->
+                                containsTopLevelEqual source (offset + 1) (delimiterDepth + 1)
+
+                            "-" ->
+                                containsTopLevelEqual source (offset + 1) delimiterDepth
+
+                            "=" ->
+                                if isOperatorChar (String.slice 1 2 nextTwoChars) then
+                                    containsTopLevelEqual source (offset + 2) delimiterDepth
+
+                                else
+                                    delimiterDepth == 0
+
+                            "\"" ->
+                                containsTopLevelEqual source (literalEndOffset DoubleQuoteTermination source (offset + 1)) delimiterDepth
+
+                            "'" ->
+                                containsTopLevelEqual source (literalEndOffset SingleQuoteTermination source (offset + 1)) delimiterDepth
+
+                            first ->
+                                if isIdentifierStart first then
+                                    containsTopLevelEqual source (skipToIdentifierEnd source (offset + 1)) delimiterDepth
+
+                                else if isDigit first then
+                                    containsTopLevelEqual source (numberEnd source first offset) delimiterDepth
+
+                                else
+                                    containsTopLevelEqual source (offset + 1) delimiterDepth
+
+    else
+        False
+
+
+
+-- MODULE DEFINITION
+
+
+parseModuleDefinition : ParserState -> Result String ( Node Module.Module, ParserState )
+parseModuleDefinition state =
+    parseModuleDefinitionAt (skipTrivia state)
+
+
+parseModuleDefinitionAt : ParserState -> Result String ( Node Module.Module, ParserState )
+parseModuleDefinitionAt stateAtFirst =
+    case String.slice stateAtFirst.offset (stateAtFirst.offset + 1) stateAtFirst.source of
+        first ->
+            if isIdentifierStart first then
+                case String.slice stateAtFirst.offset (skipToIdentifierEnd stateAtFirst.source (stateAtFirst.offset + 1)) stateAtFirst.source of
+                    "effect" ->
+                        parseEffectModule stateAtFirst
+
+                    "port" ->
+                        parsePortModule stateAtFirst
+
+                    _ ->
+                        parseNormalModule stateAtFirst
+
+            else
+                parseNormalModule stateAtFirst
+
+
+parseNormalModule : ParserState -> Result String ( Node Module.Module, ParserState )
+parseNormalModule state =
+    finishDefaultModuleOnKeyword NormalDefaultModule (consumeKeyword "module" 6 state)
+
+
+parsePortModule : ParserState -> Result String ( Node Module.Module, ParserState )
+parsePortModule state =
+    parsePortModuleOnKeyword (consumeKeyword "port" 4 state)
+
+
+parsePortModuleOnKeyword :
+    Result String ( Location, ParserState )
+    -> Result String ( Node Module.Module, ParserState )
+parsePortModuleOnKeyword portKeywordResult =
+    case portKeywordResult of
+        Err error ->
+            Err error
+
+        Ok ( portTokenLocation, afterPortKeyword ) ->
+            parsePortModuleOnModuleKeyword
+                portTokenLocation
+                (consumeKeyword "module" 6 afterPortKeyword)
+
+
+parsePortModuleOnModuleKeyword :
+    Location
+    -> Result String ( Location, ParserState )
+    -> Result String ( Node Module.Module, ParserState )
+parsePortModuleOnModuleKeyword portTokenLocation moduleKeywordResult =
+    case moduleKeywordResult of
+        Err error ->
+            Err error
+
+        Ok ( _, afterModuleKeyword ) ->
+            finishDefaultModule PortDefaultModule portTokenLocation afterModuleKeyword
+
+
+type DefaultModuleKind
+    = NormalDefaultModule
+    | PortDefaultModule
+
+
+finishDefaultModuleOnKeyword :
+    DefaultModuleKind
+    -> Result String ( Location, ParserState )
+    -> Result String ( Node Module.Module, ParserState )
+finishDefaultModuleOnKeyword moduleKind keywordResult =
+    case keywordResult of
+        Err error ->
+            Err error
+
+        Ok ( moduleTokenLocation, afterModuleKeyword ) ->
+            finishDefaultModule moduleKind moduleTokenLocation afterModuleKeyword
+
+
+finishDefaultModule :
+    DefaultModuleKind
+    -> Location
+    -> ParserState
+    -> Result String ( Node Module.Module, ParserState )
+finishDefaultModule moduleKind startLocation state =
+    finishDefaultModuleExposing moduleKind startLocation (parseModuleName state)
+
+
+finishDefaultModuleExposing :
+    DefaultModuleKind
+    -> Location
+    -> Result String ( Node Module.ModuleName, ParserState )
+    -> Result String ( Node Module.Module, ParserState )
+finishDefaultModuleExposing moduleKind startLocation moduleNameResult =
+    case moduleNameResult of
+        Err error ->
+            Err error
+
+        Ok ( moduleName, afterModuleName ) ->
+            finishDefaultModuleOnExposing
+                moduleKind
+                startLocation
+                moduleName
+                (parseExposing afterModuleName)
+
+
+finishDefaultModuleOnExposing :
+    DefaultModuleKind
+    -> Location
+    -> Node Module.ModuleName
+    -> Result String ( Node Exposing.Exposing, ParserState )
+    -> Result String ( Node Module.Module, ParserState )
+finishDefaultModuleOnExposing moduleKind startLocation moduleName exposingResult =
+    case exposingResult of
+        Err error ->
+            Err error
+
+        Ok ( exposingList, remaining ) ->
+            finishDefaultModuleNode moduleKind startLocation moduleName exposingList remaining
+
+
+finishDefaultModuleNode :
+    DefaultModuleKind
+    -> Location
+    -> Node Module.ModuleName
+    -> Node Exposing.Exposing
+    -> ParserState
+    -> Result String ( Node Module.Module, ParserState )
+finishDefaultModuleNode moduleKind startLocation moduleName exposingList remaining =
+    let
+        (Node exposingRange _) =
+            exposingList
+
+        moduleData =
+            { moduleName = moduleName
+            , exposingList = exposingList
+            }
+
+        parsedModule =
+            case moduleKind of
+                NormalDefaultModule ->
+                    Module.NormalModule moduleData
+
+                PortDefaultModule ->
+                    Module.PortModule moduleData
+    in
+    Ok
+        ( Node
+            { start = startLocation
+            , end = exposingRange.end
+            }
+            parsedModule
+        , remaining
+        )
+
+
+parseEffectModule : ParserState -> Result String ( Node Module.Module, ParserState )
+parseEffectModule state =
+    case consumeKeyword "effect" 6 state of
+        Err error ->
+            Err error
+
+        Ok ( effectTokenLocation, afterEffect ) ->
+            case consumeKeyword "module" 6 afterEffect of
                 Err error ->
                     Err error
 
-                Ok ( imports, afterImports ) ->
-                    let
-                        previousRangeEndRow =
-                            case List.reverse imports of
-                                importNode :: _ ->
-                                    let
-                                        (Node importRange _) =
-                                            importNode
-                                    in
-                                    Just importRange.end.row
-
-                                [] ->
-                                    Nothing
-                    in
-                    case parseFileDeclarations [] [] previousRangeEndRow afterImports of
+                Ok ( _, afterModule ) ->
+                    case parseModuleName afterModule of
                         Err error ->
                             Err error
 
-                        Ok ( declarations, documentationComments ) ->
-                            let
-                                comments =
-                                    commentsExcludingDocumentation documentationComments tokens
-                            in
-                            Ok
-                                { moduleDefinition = moduleDefinition
-                                , imports = imports
-                                , declarations = declarations
-                                , comments = comments
-                                , incompleteDeclarations = []
-                                }
+                        Ok ( moduleName, afterModuleName ) ->
+                            case parseEffectWhere afterModuleName of
+                                Err error ->
+                                    Err error
+
+                                Ok ( command, subscription, afterWhere ) ->
+                                    case parseExposing afterWhere of
+                                        Err error ->
+                                            Err error
+
+                                        Ok ( exposingList, remaining ) ->
+                                            let
+                                                (Node exposingRange _) =
+                                                    exposingList
+                                            in
+                                            Ok
+                                                ( Node
+                                                    { start = effectTokenLocation
+                                                    , end = exposingRange.end
+                                                    }
+                                                    (Module.EffectModule
+                                                        { moduleName = moduleName
+                                                        , exposingList = exposingList
+                                                        , command = command
+                                                        , subscription = subscription
+                                                        }
+                                                    )
+                                                , remaining
+                                                )
 
 
-commentsExcludingDocumentation : List (Node String) -> List Token.Token -> List (Node String)
-commentsExcludingDocumentation documentationComments tokens =
-    case tokens of
-        token :: rest ->
-            if token.tokenType == Token.Comment then
-                commentsExcludingDocumentationAtComment documentationComments token rest
-
-            else
-                commentsExcludingDocumentation documentationComments rest
-
-        [] ->
-            []
+parseEffectWhere :
+    ParserState
+    -> Result String ( Maybe (Node String), Maybe (Node String), ParserState )
+parseEffectWhere state =
+    parseEffectWhereAt state (skipTrivia state)
 
 
-commentsExcludingDocumentationAtComment :
-    List (Node String)
-    -> Token.Token
-    -> List Token.Token
-    -> List (Node String)
-commentsExcludingDocumentationAtComment documentationComments token remainingTokens =
-    case documentationComments of
-        (Node documentationRange _) :: remainingDocumentationComments ->
+parseEffectWhereAt :
+    ParserState
+    -> ParserState
+    -> Result String ( Maybe (Node String), Maybe (Node String), ParserState )
+parseEffectWhereAt state stateAtWhere =
+    case String.slice stateAtWhere.offset (stateAtWhere.offset + 1) stateAtWhere.source of
+        first ->
             if
-                token.start == documentationRange.start
-                    && token.end == documentationRange.end
+                isIdentifierStart first
+                    && (String.slice stateAtWhere.offset (skipToIdentifierEnd stateAtWhere.source (stateAtWhere.offset + 1)) stateAtWhere.source
+                            == "where"
+                       )
             then
-                commentsExcludingDocumentation remainingDocumentationComments remainingTokens
+                case consumeKeyword "where" 5 stateAtWhere of
+                    Err error ->
+                        Err error
 
-            else if locationBefore documentationRange.start token.start then
-                commentsExcludingDocumentationAtComment remainingDocumentationComments token remainingTokens
+                    Ok ( _, afterWhere ) ->
+                        let
+                            stateAtOpenBrace =
+                                skipTrivia afterWhere
+                        in
+                        case String.slice stateAtOpenBrace.offset (stateAtOpenBrace.offset + 1) stateAtOpenBrace.source of
+                            "{" ->
+                                parseEffectWhereFields
+                                    Nothing
+                                    Nothing
+                                    { source = stateAtOpenBrace.source
+                                    , offset = stateAtOpenBrace.offset + 1
+                                    , row = stateAtOpenBrace.row
+                                    , column = stateAtOpenBrace.column + 1
+                                    , commentsRev = stateAtOpenBrace.commentsRev
+                                    }
+
+                            _ ->
+                                Err ("Expected '{', but found '" ++ snippetAt stateAtOpenBrace ++ "'.")
 
             else
-                Node (tokenRange token) token.lexeme
-                    :: commentsExcludingDocumentation documentationComments remainingTokens
-
-        [] ->
-            Node (tokenRange token) token.lexeme
-                :: commentsExcludingDocumentation [] remainingTokens
+                Ok ( Nothing, Nothing, state )
 
 
-locationBefore : Location -> Location -> Bool
-locationBefore left right =
-    left.row < right.row
-        || (left.row == right.row && left.column < right.column)
+parseEffectWhereFields :
+    Maybe (Node String)
+    -> Maybe (Node String)
+    -> ParserState
+    -> Result String ( Maybe (Node String), Maybe (Node String), ParserState )
+parseEffectWhereFields command subscription state =
+    parseEffectWhereFieldsAt command subscription (skipTrivia state)
+
+
+parseEffectWhereFieldsAt :
+    Maybe (Node String)
+    -> Maybe (Node String)
+    -> ParserState
+    -> Result String ( Maybe (Node String), Maybe (Node String), ParserState )
+parseEffectWhereFieldsAt command subscription stateAtField =
+    case String.slice stateAtField.offset (stateAtField.offset + 1) stateAtField.source of
+        "}" ->
+            Ok
+                ( command
+                , subscription
+                , { source = stateAtField.source
+                  , offset = stateAtField.offset + 1
+                  , row = stateAtField.row
+                  , column = stateAtField.column + 1
+                  , commentsRev = stateAtField.commentsRev
+                  }
+                )
+
+        first ->
+            if isIdentifierStart first then
+                let
+                    fieldNameEnd =
+                        skipToIdentifierEnd stateAtField.source (stateAtField.offset + 1)
+
+                    fieldName =
+                        String.slice stateAtField.offset fieldNameEnd stateAtField.source
+
+                    stateAtEquals =
+                        skipTrivia
+                            { source = stateAtField.source
+                            , offset = fieldNameEnd
+                            , row = stateAtField.row
+                            , column = stateAtField.column + (fieldNameEnd - stateAtField.offset)
+                            , commentsRev = stateAtField.commentsRev
+                            }
+                in
+                case String.slice stateAtEquals.offset (stateAtEquals.offset + 1) stateAtEquals.source of
+                    "=" ->
+                        case
+                            parseModuleName
+                                { source = stateAtEquals.source
+                                , offset = stateAtEquals.offset + 1
+                                , row = stateAtEquals.row
+                                , column = stateAtEquals.column + 1
+                                , commentsRev = stateAtEquals.commentsRev
+                                }
+                        of
+                            Err error ->
+                                Err error
+
+                            Ok ( Node valueRange valueNames, afterValue ) ->
+                                let
+                                    valueName =
+                                        case List.reverse valueNames of
+                                            name :: _ ->
+                                                name
+
+                                            [] ->
+                                                ""
+
+                                    value =
+                                        Node valueRange valueName
+
+                                    nextCommand =
+                                        if fieldName == "command" then
+                                            Just value
+
+                                        else
+                                            command
+
+                                    nextSubscription =
+                                        if fieldName == "subscription" then
+                                            Just value
+
+                                        else
+                                            subscription
+
+                                    stateAtSeparator =
+                                        skipTrivia afterValue
+                                in
+                                case String.slice stateAtSeparator.offset (stateAtSeparator.offset + 1) stateAtSeparator.source of
+                                    "," ->
+                                        parseEffectWhereFields
+                                            nextCommand
+                                            nextSubscription
+                                            { source = stateAtSeparator.source
+                                            , offset = stateAtSeparator.offset + 1
+                                            , row = stateAtSeparator.row
+                                            , column = stateAtSeparator.column + 1
+                                            , commentsRev = stateAtSeparator.commentsRev
+                                            }
+
+                                    _ ->
+                                        parseEffectWhereFields nextCommand nextSubscription afterValue
+
+                    _ ->
+                        Err ("Expected '=', but found '" ++ snippetAt stateAtEquals ++ "'.")
+
+            else
+                Err
+                    ("Expected an effect module field or '}', but found '"
+                        ++ snippetAt stateAtField
+                        ++ "'."
+                    )
+
+
+
+-- IMPORTS
 
 
 parseImports :
     List (Node Import.Import)
-    -> List Token.Token
-    -> Result String ( List (Node Import.Import), List Token.Token )
-parseImports importsRev tokens =
-    case dropTrivia tokens of
-        next :: _ ->
-            if next.tokenType == Token.Identifier && next.lexeme == "import" then
-                case parseImportTokens tokens of
-                    Ok ( importNode, remaining ) ->
-                        parseImports (importNode :: importsRev) remaining
+    -> ParserState
+    -> Result String ( List (Node Import.Import), ParserState )
+parseImports importsRev state =
+    parseImportsAt importsRev state (skipTrivia state)
 
+
+parseImportsAt :
+    List (Node Import.Import)
+    -> ParserState
+    -> ParserState
+    -> Result String ( List (Node Import.Import), ParserState )
+parseImportsAt importsRev state stateAtImport =
+    case String.slice stateAtImport.offset (stateAtImport.offset + 1) stateAtImport.source of
+        first ->
+            if
+                isIdentifierStart first
+                    && (String.slice stateAtImport.offset (skipToIdentifierEnd stateAtImport.source (stateAtImport.offset + 1)) stateAtImport.source
+                            == "import"
+                       )
+            then
+                parseImportsOnImport importsRev (parseImport stateAtImport)
+
+            else
+                Ok ( List.reverse importsRev, state )
+
+
+parseImportsOnImport :
+    List (Node Import.Import)
+    -> Result String ( Node Import.Import, ParserState )
+    -> Result String ( List (Node Import.Import), ParserState )
+parseImportsOnImport importsRev importResult =
+    case importResult of
+        Err error ->
+            Err error
+
+        Ok ( importNode, remaining ) ->
+            parseImports (importNode :: importsRev) remaining
+
+
+parseImport : ParserState -> Result String ( Node Import.Import, ParserState )
+parseImport state =
+    parseImportOnKeyword (consumeKeyword "import" 6 state)
+
+
+parseImportOnKeyword :
+    Result String ( Location, ParserState )
+    -> Result String ( Node Import.Import, ParserState )
+parseImportOnKeyword keywordResult =
+    case keywordResult of
+        Err error ->
+            Err error
+
+        Ok ( importTokenLocation, afterImport ) ->
+            parseImportOnModuleName importTokenLocation (parseModuleName afterImport)
+
+
+parseImportOnModuleName :
+    Location
+    -> Result String ( Node Module.ModuleName, ParserState )
+    -> Result String ( Node Import.Import, ParserState )
+parseImportOnModuleName importTokenLocation moduleNameResult =
+    case moduleNameResult of
+        Err error ->
+            Err error
+
+        Ok ( moduleName, afterModuleName ) ->
+            parseImportOnAlias importTokenLocation moduleName (parseImportAlias afterModuleName)
+
+
+parseImportOnAlias :
+    Location
+    -> Node Module.ModuleName
+    -> Result String ( Maybe ( Location, Node Module.ModuleName ), ParserState )
+    -> Result String ( Node Import.Import, ParserState )
+parseImportOnAlias importTokenLocation moduleName aliasResult =
+    case aliasResult of
+        Err error ->
+            Err error
+
+        Ok ( moduleAlias, afterAlias ) ->
+            parseImportOnExposing
+                importTokenLocation
+                moduleName
+                moduleAlias
+                (parseOptionalExposing afterAlias)
+
+
+parseImportOnExposing :
+    Location
+    -> Node Module.ModuleName
+    -> Maybe ( Location, Node Module.ModuleName )
+    -> Result String ( Maybe ( Location, Node Exposing.Exposing ), ParserState )
+    -> Result String ( Node Import.Import, ParserState )
+parseImportOnExposing importTokenLocation moduleName moduleAlias exposingResult =
+    case exposingResult of
+        Err error ->
+            Err error
+
+        Ok ( exposingList, remaining ) ->
+            Ok
+                ( Node
+                    { start = importTokenLocation
+                    , end = importEndLocation moduleName moduleAlias exposingList
+                    }
+                    { importTokenLocation = importTokenLocation
+                    , moduleName = moduleName
+                    , moduleAlias = moduleAlias
+                    , exposingList = exposingList
+                    }
+                , remaining
+                )
+
+
+importEndLocation :
+    Node Module.ModuleName
+    -> Maybe ( Location, Node Module.ModuleName )
+    -> Maybe ( Location, Node Exposing.Exposing )
+    -> Location
+importEndLocation moduleName moduleAlias exposingList =
+    case exposingList of
+        Just ( _, Node exposingRange _ ) ->
+            exposingRange.end
+
+        Nothing ->
+            case moduleAlias of
+                Just ( _, Node aliasRange _ ) ->
+                    aliasRange.end
+
+                Nothing ->
+                    let
+                        (Node moduleNameRange _) =
+                            moduleName
+                    in
+                    moduleNameRange.end
+
+
+parseImportAlias :
+    ParserState
+    -> Result String ( Maybe ( Location, Node Module.ModuleName ), ParserState )
+parseImportAlias state =
+    parseImportAliasAt state (skipTrivia state)
+
+
+parseImportAliasAt :
+    ParserState
+    -> ParserState
+    -> Result String ( Maybe ( Location, Node Module.ModuleName ), ParserState )
+parseImportAliasAt state stateAtAs =
+    case String.slice stateAtAs.offset (stateAtAs.offset + 1) stateAtAs.source of
+        first ->
+            if
+                isIdentifierStart first
+                    && (String.slice stateAtAs.offset (skipToIdentifierEnd stateAtAs.source (stateAtAs.offset + 1)) stateAtAs.source
+                            == "as"
+                       )
+            then
+                let
+                    asTokenLocation =
+                        { row = stateAtAs.row, column = stateAtAs.column }
+
+                    afterAs =
+                        { source = stateAtAs.source
+                        , offset = stateAtAs.offset + 2
+                        , row = stateAtAs.row
+                        , column = stateAtAs.column + 2
+                        , commentsRev = stateAtAs.commentsRev
+                        }
+
+                    stateAtAlias =
+                        skipTrivia afterAs
+                in
+                case String.slice stateAtAlias.offset (stateAtAlias.offset + 1) stateAtAlias.source of
+                    aliasFirst ->
+                        if isIdentifierStart aliasFirst then
+                            let
+                                aliasEnd =
+                                    skipToIdentifierEnd stateAtAlias.source (stateAtAlias.offset + 1)
+
+                                aliasLength =
+                                    aliasEnd - stateAtAlias.offset
+                            in
+                            Ok
+                                ( Just
+                                    ( asTokenLocation
+                                    , Node
+                                        { start = { row = stateAtAlias.row, column = stateAtAlias.column }
+                                        , end = { row = stateAtAlias.row, column = stateAtAlias.column + aliasLength }
+                                        }
+                                        [ String.slice stateAtAlias.offset aliasEnd stateAtAlias.source ]
+                                    )
+                                , { source = stateAtAlias.source
+                                  , offset = aliasEnd
+                                  , row = stateAtAlias.row
+                                  , column = stateAtAlias.column + aliasLength
+                                  , commentsRev = stateAtAlias.commentsRev
+                                  }
+                                )
+
+                        else
+                            Err
+                                ("Expected module alias, but found '"
+                                    ++ snippetAt stateAtAlias
+                                    ++ "'."
+                                )
+
+            else
+                Ok ( Nothing, state )
+
+
+parseOptionalExposing :
+    ParserState
+    -> Result String ( Maybe ( Location, Node Exposing.Exposing ), ParserState )
+parseOptionalExposing state =
+    parseOptionalExposingAt state (skipTrivia state)
+
+
+parseOptionalExposingAt :
+    ParserState
+    -> ParserState
+    -> Result String ( Maybe ( Location, Node Exposing.Exposing ), ParserState )
+parseOptionalExposingAt state stateAtExposing =
+    case String.slice stateAtExposing.offset (stateAtExposing.offset + 1) stateAtExposing.source of
+        first ->
+            if
+                isIdentifierStart first
+                    && (String.slice stateAtExposing.offset (skipToIdentifierEnd stateAtExposing.source (stateAtExposing.offset + 1)) stateAtExposing.source
+                            == "exposing"
+                       )
+            then
+                case parseExposing stateAtExposing of
                     Err error ->
                         Err error
 
-            else
-                Ok ( List.reverse importsRev, tokens )
+                    Ok ( exposingNode, remaining ) ->
+                        Ok
+                            ( Just
+                                ( { row = stateAtExposing.row, column = stateAtExposing.column }
+                                , exposingNode
+                                )
+                            , remaining
+                            )
 
-        [] ->
-            Ok ( List.reverse importsRev, [] )
+            else
+                Ok ( Nothing, state )
+
+
+parseModuleName : ParserState -> Result String ( Node Module.ModuleName, ParserState )
+parseModuleName state =
+    parseModuleNameAt (skipTrivia state)
+
+
+parseModuleNameAt : ParserState -> Result String ( Node Module.ModuleName, ParserState )
+parseModuleNameAt stateAtName =
+    case String.slice stateAtName.offset (stateAtName.offset + 1) stateAtName.source of
+        first ->
+            if isIdentifierStart first then
+                parseModuleNameFromEnd
+                    stateAtName
+                    (skipToIdentifierEnd stateAtName.source (stateAtName.offset + 1))
+
+            else
+                Err ("Expected module name, but found '" ++ snippetAt stateAtName ++ "'.")
+
+
+parseModuleNameFromEnd :
+    ParserState
+    -> Int
+    -> Result String ( Node Module.ModuleName, ParserState )
+parseModuleNameFromEnd stateAtName nameEnd =
+    parseModuleNameRest
+        { row = stateAtName.row, column = stateAtName.column }
+        stateAtName.row
+        (stateAtName.column + (nameEnd - stateAtName.offset))
+        [ String.slice stateAtName.offset nameEnd stateAtName.source ]
+        { source = stateAtName.source
+        , offset = nameEnd
+        , row = stateAtName.row
+        , column = stateAtName.column + (nameEnd - stateAtName.offset)
+        , commentsRev = stateAtName.commentsRev
+        }
+
+
+parseModuleNameRest :
+    Location
+    -> Int
+    -> Int
+    -> List String
+    -> ParserState
+    -> Result String ( Node Module.ModuleName, ParserState )
+parseModuleNameRest start endRow endColumn partsRev state =
+    parseModuleNameRestAt start endRow endColumn partsRev state (skipTrivia state)
+
+
+parseModuleNameRestAt :
+    Location
+    -> Int
+    -> Int
+    -> List String
+    -> ParserState
+    -> ParserState
+    -> Result String ( Node Module.ModuleName, ParserState )
+parseModuleNameRestAt start endRow endColumn partsRev state stateAtDot =
+    if isDotToken stateAtDot.source stateAtDot.offset then
+        parseModuleNamePartAt
+            start
+            partsRev
+            (skipTrivia
+                { source = stateAtDot.source
+                , offset = stateAtDot.offset + 1
+                , row = stateAtDot.row
+                , column = stateAtDot.column + 1
+                , commentsRev = stateAtDot.commentsRev
+                }
+            )
+
+    else
+        Ok
+            ( Node
+                { start = start, end = { row = endRow, column = endColumn } }
+                (List.reverse partsRev)
+            , state
+            )
+
+
+parseModuleNamePartAt :
+    Location
+    -> List String
+    -> ParserState
+    -> Result String ( Node Module.ModuleName, ParserState )
+parseModuleNamePartAt start partsRev stateAtPart =
+    case String.slice stateAtPart.offset (stateAtPart.offset + 1) stateAtPart.source of
+        first ->
+            if isIdentifierStart first then
+                parseModuleNamePartFromEnd
+                    start
+                    partsRev
+                    stateAtPart
+                    (skipToIdentifierEnd stateAtPart.source (stateAtPart.offset + 1))
+
+            else
+                Err ("Expected module name part, but found '" ++ snippetAt stateAtPart ++ "'.")
+
+
+parseModuleNamePartFromEnd :
+    Location
+    -> List String
+    -> ParserState
+    -> Int
+    -> Result String ( Node Module.ModuleName, ParserState )
+parseModuleNamePartFromEnd start partsRev stateAtPart partEnd =
+    parseModuleNameRest
+        start
+        stateAtPart.row
+        (stateAtPart.column + (partEnd - stateAtPart.offset))
+        (String.slice stateAtPart.offset partEnd stateAtPart.source :: partsRev)
+        { source = stateAtPart.source
+        , offset = partEnd
+        , row = stateAtPart.row
+        , column = stateAtPart.column + (partEnd - stateAtPart.offset)
+        , commentsRev = stateAtPart.commentsRev
+        }
+
+
+parseExposing : ParserState -> Result String ( Node Exposing.Exposing, ParserState )
+parseExposing state =
+    parseExposingOnKeyword (consumeKeyword "exposing" 8 state)
+
+
+parseExposingOnKeyword :
+    Result String ( Location, ParserState )
+    -> Result String ( Node Exposing.Exposing, ParserState )
+parseExposingOnKeyword keywordResult =
+    case keywordResult of
+        Err error ->
+            Err error
+
+        Ok ( exposingTokenLocation, afterExposing ) ->
+            let
+                stateAtOpenParen =
+                    skipTrivia afterExposing
+            in
+            case String.slice stateAtOpenParen.offset (stateAtOpenParen.offset + 1) stateAtOpenParen.source of
+                "(" ->
+                    let
+                        afterOpenParen =
+                            { source = stateAtOpenParen.source
+                            , offset = stateAtOpenParen.offset + 1
+                            , row = stateAtOpenParen.row
+                            , column = stateAtOpenParen.column + 1
+                            , commentsRev = stateAtOpenParen.commentsRev
+                            }
+                    in
+                    parseExposingListAt
+                        exposingTokenLocation
+                        { row = stateAtOpenParen.row, column = stateAtOpenParen.column }
+                        afterOpenParen
+                        (skipTrivia afterOpenParen)
+
+                _ ->
+                    Err ("Expected '(', but found '" ++ snippetAt stateAtOpenParen ++ "'.")
+
+
+parseExposingListAt :
+    Location
+    -> Location
+    -> ParserState
+    -> ParserState
+    -> Result String ( Node Exposing.Exposing, ParserState )
+parseExposingListAt exposingTokenLocation openParenLocation afterOpenParen stateAtFirst =
+    case String.slice stateAtFirst.offset (stateAtFirst.offset + 2) stateAtFirst.source of
+        ".." ->
+            let
+                stateAtCloseParen =
+                    skipTrivia
+                        { source = stateAtFirst.source
+                        , offset = stateAtFirst.offset + 2
+                        , row = stateAtFirst.row
+                        , column = stateAtFirst.column + 2
+                        , commentsRev = stateAtFirst.commentsRev
+                        }
+            in
+            case String.slice stateAtCloseParen.offset (stateAtCloseParen.offset + 1) stateAtCloseParen.source of
+                ")" ->
+                    let
+                        remaining =
+                            { source = stateAtCloseParen.source
+                            , offset = stateAtCloseParen.offset + 1
+                            , row = stateAtCloseParen.row
+                            , column = stateAtCloseParen.column + 1
+                            , commentsRev = stateAtCloseParen.commentsRev
+                            }
+                    in
+                    Ok
+                        ( Node
+                            { start = exposingTokenLocation
+                            , end = { row = remaining.row, column = remaining.column }
+                            }
+                            (Exposing.All
+                                { start = { row = stateAtFirst.row, column = stateAtFirst.column }
+                                , end = { row = stateAtFirst.row, column = stateAtFirst.column + 2 }
+                                }
+                            )
+                        , remaining
+                        )
+
+                _ ->
+                    Err ("Expected ')', but found '" ++ snippetAt stateAtCloseParen ++ "'.")
+
+        _ ->
+            parseExplicitExposing
+                exposingTokenLocation
+                openParenLocation
+                Nothing
+                []
+                afterOpenParen
+
+
+parseExplicitExposing :
+    Location
+    -> Location
+    -> Maybe (Node Exposing.TopLevelExpose)
+    -> List ( Location, Node Exposing.TopLevelExpose )
+    -> ParserState
+    -> Result String ( Node Exposing.Exposing, ParserState )
+parseExplicitExposing exposingTokenLocation openParenLocation first restRev state =
+    parseExplicitExposingAt exposingTokenLocation openParenLocation first restRev (skipTrivia state)
+
+
+parseExplicitExposingAt :
+    Location
+    -> Location
+    -> Maybe (Node Exposing.TopLevelExpose)
+    -> List ( Location, Node Exposing.TopLevelExpose )
+    -> ParserState
+    -> Result String ( Node Exposing.Exposing, ParserState )
+parseExplicitExposingAt exposingTokenLocation openParenLocation first restRev stateAtToken =
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        ")" ->
+            let
+                nodes =
+                    case first of
+                        Nothing ->
+                            SeparatedSyntaxList.Empty
+
+                        Just firstNode ->
+                            SeparatedSyntaxList.NonEmpty firstNode (List.reverse restRev)
+            in
+            Ok
+                ( Node
+                    { start = exposingTokenLocation
+                    , end = { row = stateAtToken.row, column = stateAtToken.column + 1 }
+                    }
+                    (Exposing.Explicit
+                        openParenLocation
+                        nodes
+                        { row = stateAtToken.row, column = stateAtToken.column }
+                    )
+                , { source = stateAtToken.source
+                  , offset = stateAtToken.offset + 1
+                  , row = stateAtToken.row
+                  , column = stateAtToken.column + 1
+                  , commentsRev = stateAtToken.commentsRev
+                  }
+                )
+
+        separator ->
+            case first of
+                Nothing ->
+                    parseExplicitExposingOnFirst
+                        exposingTokenLocation
+                        openParenLocation
+                        restRev
+                        (parseTopLevelExpose stateAtToken)
+
+                Just _ ->
+                    if separator == "," then
+                        parseExplicitExposingOnFurther
+                            exposingTokenLocation
+                            openParenLocation
+                            first
+                            restRev
+                            { row = stateAtToken.row, column = stateAtToken.column }
+                            (parseTopLevelExpose
+                                { source = stateAtToken.source
+                                , offset = stateAtToken.offset + 1
+                                , row = stateAtToken.row
+                                , column = stateAtToken.column + 1
+                                , commentsRev = stateAtToken.commentsRev
+                                }
+                            )
+
+                    else
+                        Err "Expected ',' before exposing list item."
+
+
+parseExplicitExposingOnFirst :
+    Location
+    -> Location
+    -> List ( Location, Node Exposing.TopLevelExpose )
+    -> Result String ( Node Exposing.TopLevelExpose, ParserState )
+    -> Result String ( Node Exposing.Exposing, ParserState )
+parseExplicitExposingOnFirst exposingTokenLocation openParenLocation restRev exposeResult =
+    case exposeResult of
+        Err error ->
+            Err error
+
+        Ok ( exposeNode, afterExpose ) ->
+            parseExplicitExposing
+                exposingTokenLocation
+                openParenLocation
+                (Just exposeNode)
+                restRev
+                afterExpose
+
+
+parseExplicitExposingOnFurther :
+    Location
+    -> Location
+    -> Maybe (Node Exposing.TopLevelExpose)
+    -> List ( Location, Node Exposing.TopLevelExpose )
+    -> Location
+    -> Result String ( Node Exposing.TopLevelExpose, ParserState )
+    -> Result String ( Node Exposing.Exposing, ParserState )
+parseExplicitExposingOnFurther exposingTokenLocation openParenLocation first restRev separatorLocation exposeResult =
+    case exposeResult of
+        Err error ->
+            Err error
+
+        Ok ( exposeNode, afterExpose ) ->
+            parseExplicitExposing
+                exposingTokenLocation
+                openParenLocation
+                first
+                (( separatorLocation, exposeNode ) :: restRev)
+                afterExpose
+
+
+parseTopLevelExpose : ParserState -> Result String ( Node Exposing.TopLevelExpose, ParserState )
+parseTopLevelExpose state =
+    parseTopLevelExposeAt (skipTrivia state)
+
+
+parseTopLevelExposeAt : ParserState -> Result String ( Node Exposing.TopLevelExpose, ParserState )
+parseTopLevelExposeAt stateAtToken =
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        "(" ->
+            let
+                stateAtOperator =
+                    skipTrivia
+                        { source = stateAtToken.source
+                        , offset = stateAtToken.offset + 1
+                        , row = stateAtToken.row
+                        , column = stateAtToken.column + 1
+                        , commentsRev = stateAtToken.commentsRev
+                        }
+
+                operatorLength =
+                    operatorTokenLength stateAtOperator.source stateAtOperator.offset
+            in
+            if operatorLength == 0 then
+                Err "Expected an operator followed by ')' in exposing list."
+
+            else
+                let
+                    stateAtClose =
+                        skipTrivia
+                            { source = stateAtOperator.source
+                            , offset = stateAtOperator.offset + operatorLength
+                            , row = stateAtOperator.row
+                            , column = stateAtOperator.column + operatorLength
+                            , commentsRev = stateAtOperator.commentsRev
+                            }
+                in
+                if String.slice stateAtClose.offset (stateAtClose.offset + 1) stateAtClose.source == ")" then
+                    Ok
+                        ( Node
+                            { start = { row = stateAtToken.row, column = stateAtToken.column }
+                            , end = { row = stateAtClose.row, column = stateAtClose.column + 1 }
+                            }
+                            (Exposing.InfixExpose
+                                (String.slice stateAtOperator.offset (stateAtOperator.offset + operatorLength) stateAtOperator.source)
+                            )
+                        , { source = stateAtClose.source
+                          , offset = stateAtClose.offset + 1
+                          , row = stateAtClose.row
+                          , column = stateAtClose.column + 1
+                          , commentsRev = stateAtClose.commentsRev
+                          }
+                        )
+
+                else
+                    Err "Expected an operator followed by ')' in exposing list."
+
+        first ->
+            if isIdentifierStart first then
+                let
+                    nameEnd =
+                        skipToIdentifierEnd stateAtToken.source (stateAtToken.offset + 1)
+
+                    nameLength =
+                        nameEnd - stateAtToken.offset
+
+                    name =
+                        String.slice stateAtToken.offset nameEnd stateAtToken.source
+
+                    afterName =
+                        { source = stateAtToken.source
+                        , offset = nameEnd
+                        , row = stateAtToken.row
+                        , column = stateAtToken.column + nameLength
+                        , commentsRev = stateAtToken.commentsRev
+                        }
+                in
+                if startsWithUpper name then
+                    parseUpperExpose
+                        { row = stateAtToken.row, column = stateAtToken.column }
+                        stateAtToken.row
+                        (stateAtToken.column + nameLength)
+                        name
+                        afterName
+
+                else
+                    Ok
+                        ( Node
+                            { start = { row = stateAtToken.row, column = stateAtToken.column }
+                            , end = { row = stateAtToken.row, column = stateAtToken.column + nameLength }
+                            }
+                            (Exposing.FunctionExpose name)
+                        , afterName
+                        )
+
+            else
+                Err ("Unexpected token '" ++ snippetAt stateAtToken ++ "' in exposing list.")
+
+
+parseUpperExpose :
+    Location
+    -> Int
+    -> Int
+    -> String
+    -> ParserState
+    -> Result String ( Node Exposing.TopLevelExpose, ParserState )
+parseUpperExpose nameStart nameEndRow nameEndColumn name state =
+    parseUpperExposeAt nameStart nameEndRow nameEndColumn name state (skipTrivia state)
+
+
+parseUpperExposeAt :
+    Location
+    -> Int
+    -> Int
+    -> String
+    -> ParserState
+    -> ParserState
+    -> Result String ( Node Exposing.TopLevelExpose, ParserState )
+parseUpperExposeAt nameStart nameEndRow nameEndColumn name state stateAtOpen =
+    if String.slice stateAtOpen.offset (stateAtOpen.offset + 1) stateAtOpen.source == "(" then
+        let
+            stateAtInner =
+                skipTrivia
+                    { source = stateAtOpen.source
+                    , offset = stateAtOpen.offset + 1
+                    , row = stateAtOpen.row
+                    , column = stateAtOpen.column + 1
+                    , commentsRev = stateAtOpen.commentsRev
+                    }
+        in
+        case String.slice stateAtInner.offset (stateAtInner.offset + 1) stateAtInner.source of
+            ")" ->
+                Ok
+                    ( Node
+                        { start = nameStart
+                        , end = { row = stateAtInner.row, column = stateAtInner.column + 1 }
+                        }
+                        (Exposing.TypeExpose { name = name, open = Nothing })
+                    , { source = stateAtInner.source
+                      , offset = stateAtInner.offset + 1
+                      , row = stateAtInner.row
+                      , column = stateAtInner.column + 1
+                      , commentsRev = stateAtInner.commentsRev
+                      }
+                    )
+
+            _ ->
+                if String.slice stateAtInner.offset (stateAtInner.offset + 2) stateAtInner.source == ".." then
+                    let
+                        stateAtCloseParen =
+                            skipTrivia
+                                { source = stateAtInner.source
+                                , offset = stateAtInner.offset + 2
+                                , row = stateAtInner.row
+                                , column = stateAtInner.column + 2
+                                , commentsRev = stateAtInner.commentsRev
+                                }
+                    in
+                    case String.slice stateAtCloseParen.offset (stateAtCloseParen.offset + 1) stateAtCloseParen.source of
+                        ")" ->
+                            let
+                                remaining =
+                                    { source = stateAtCloseParen.source
+                                    , offset = stateAtCloseParen.offset + 1
+                                    , row = stateAtCloseParen.row
+                                    , column = stateAtCloseParen.column + 1
+                                    , commentsRev = stateAtCloseParen.commentsRev
+                                    }
+                            in
+                            Ok
+                                ( Node
+                                    { start = nameStart
+                                    , end = { row = remaining.row, column = remaining.column }
+                                    }
+                                    (Exposing.TypeExpose
+                                        { name = name
+                                        , open =
+                                            Just
+                                                { start = { row = stateAtOpen.row, column = stateAtOpen.column }
+                                                , end = { row = remaining.row, column = remaining.column }
+                                                }
+                                        }
+                                    )
+                                , remaining
+                                )
+
+                        _ ->
+                            Err ("Expected ')', but found '" ++ snippetAt stateAtCloseParen ++ "'.")
+
+                else
+                    Err "Expected '..' or ')' after exposed type name."
+
+    else
+        Ok
+            ( Node
+                { start = nameStart, end = { row = nameEndRow, column = nameEndColumn } }
+                (Exposing.TypeOrAliasExpose name)
+            , state
+            )
+
+
+
+-- FILE DECLARATIONS
 
 
 parseFileDeclarations :
     List (Node Declaration.Declaration)
     -> List (Node String)
     -> Maybe Int
-    -> List Token.Token
-    -> Result String ( List (Node Declaration.Declaration), List (Node String) )
-parseFileDeclarations declarationsRev documentationCommentsRev previousRangeEndRow tokens =
-    case dropTrivia tokens of
-        [] ->
-            Ok ( List.reverse declarationsRev, List.reverse documentationCommentsRev )
+    -> ParserState
+    -> Result String ( List (Node Declaration.Declaration), List (Node String), ParserState )
+parseFileDeclarations declarationsRev documentationCommentsRev previousRangeEndRow state =
+    parseFileDeclarationsAt declarationsRev documentationCommentsRev previousRangeEndRow state (skipTrivia state)
 
-        firstToken :: _ ->
-            if firstToken.start.column /= 1 then
+
+parseFileDeclarationsAt :
+    List (Node Declaration.Declaration)
+    -> List (Node String)
+    -> Maybe Int
+    -> ParserState
+    -> ParserState
+    -> Result String ( List (Node Declaration.Declaration), List (Node String), ParserState )
+parseFileDeclarationsAt declarationsRev documentationCommentsRev previousRangeEndRow state stateAtDeclaration =
+    case String.slice stateAtDeclaration.offset (stateAtDeclaration.offset + 1) stateAtDeclaration.source of
+        "" ->
+            Ok
+                ( List.reverse declarationsRev
+                , List.reverse documentationCommentsRev
+                , stateAtDeclaration
+                )
+
+        _ ->
+            if stateAtDeclaration.column /= 1 then
                 Err
                     ("Unexpected token '"
-                        ++ firstToken.lexeme
+                        ++ snippetAt stateAtDeclaration
                         ++ "' after parsing "
                         ++ String.fromInt (List.length declarationsRev)
                         ++ " declarations."
                     )
 
             else
-                case parseDeclarationTokens tokens of
-                    Err error ->
-                        Err error
-
-                    Ok ( declaration, remaining ) ->
-                        let
-                            documentation =
-                                documentationCommentBefore
-                                    previousRangeEndRow
-                                    firstToken.start.row
-                                    tokens
-
-                            declarationWithDocumentation =
-                                case documentation of
-                                    Nothing ->
-                                        declaration
-
-                                    Just documentationNode ->
-                                        setDeclarationDocumentation documentationNode declaration
-
-                            nextDocumentationCommentsRev =
-                                case documentation of
-                                    Nothing ->
-                                        documentationCommentsRev
-
-                                    Just documentationNode ->
-                                        documentationNode :: documentationCommentsRev
-
-                            declarationRange =
-                                rangeOfDeclaration declarationWithDocumentation
-
-                            declarationNode =
-                                Node declarationRange declarationWithDocumentation
-                        in
-                        parseFileDeclarations
-                            (declarationNode :: declarationsRev)
-                            nextDocumentationCommentsRev
-                            (Just declarationRange.end.row)
-                            remaining
+                parseFileDeclarationsOnDeclaration
+                    declarationsRev
+                    documentationCommentsRev
+                    (attachableDocumentationComment
+                        previousRangeEndRow
+                        stateAtDeclaration.row
+                        state.row
+                        state.column
+                        0
+                        stateAtDeclaration.commentsRev
+                    )
+                    (parseDeclaration stateAtDeclaration)
 
 
-documentationCommentBefore : Maybe Int -> Int -> List Token.Token -> Maybe (Node String)
-documentationCommentBefore previousRangeEndRow declarationRow tokens =
-    case findAttachableDocumentationCommentToken previousRangeEndRow declarationRow tokens Nothing of
-        Just comment ->
-            Just (Node (tokenRange comment) comment.lexeme)
+parseFileDeclarationsOnDeclaration :
+    List (Node Declaration.Declaration)
+    -> List (Node String)
+    -> Maybe (Node String)
+    -> Result String ( Declaration.Declaration, ParserState )
+    -> Result String ( List (Node Declaration.Declaration), List (Node String), ParserState )
+parseFileDeclarationsOnDeclaration declarationsRev documentationCommentsRev documentation declarationResult =
+    case declarationResult of
+        Err error ->
+            Err error
 
-        Nothing ->
-            Nothing
+        Ok ( declaration, remaining ) ->
+            case documentation of
+                Nothing ->
+                    parseFileDeclarationsWithRange
+                        declarationsRev
+                        documentationCommentsRev
+                        declaration
+                        (rangeOfDeclaration declaration)
+                        remaining
+
+                Just documentationNode ->
+                    parseFileDeclarationsWithDocumentation
+                        declarationsRev
+                        (documentationNode :: documentationCommentsRev)
+                        (setDeclarationDocumentation documentationNode declaration)
+                        remaining
 
 
-findAttachableDocumentationCommentToken :
+parseFileDeclarationsWithDocumentation :
+    List (Node Declaration.Declaration)
+    -> List (Node String)
+    -> Declaration.Declaration
+    -> ParserState
+    -> Result String ( List (Node Declaration.Declaration), List (Node String), ParserState )
+parseFileDeclarationsWithDocumentation declarationsRev documentationCommentsRev declaration remaining =
+    parseFileDeclarationsWithRange
+        declarationsRev
+        documentationCommentsRev
+        declaration
+        (rangeOfDeclaration declaration)
+        remaining
+
+
+parseFileDeclarationsWithRange :
+    List (Node Declaration.Declaration)
+    -> List (Node String)
+    -> Declaration.Declaration
+    -> Range
+    -> ParserState
+    -> Result String ( List (Node Declaration.Declaration), List (Node String), ParserState )
+parseFileDeclarationsWithRange declarationsRev documentationCommentsRev declaration declarationRange remaining =
+    parseFileDeclarations
+        (Node declarationRange declaration :: declarationsRev)
+        documentationCommentsRev
+        (Just declarationRange.end.row)
+        remaining
+
+
+{-| Returns the documentation comment attaching to a declaration, taken from the comments that
+`skipTrivia` already collected in the trivia directly in front of that declaration.
+
+`commentsRev` is the parser state's comment list, most recent first. The walk ends at the first
+comment starting before `fromRow`/`fromColumn`, the position where that trivia begins, which is
+the end of the syntax preceding the declaration.
+
+`plainCommentRow` is the start row of the plain (non-documentation) comment following the
+candidate under consideration, or `0` while no plain comment was passed: a plain comment on a row
+after the candidate's last row cancels the attachment. Because the walk runs from the declaration
+backwards, the first plain comment it passes is the last one in the source and therefore the one
+with the highest start row.
+
+-}
+attachableDocumentationComment :
     Maybe Int
     -> Int
-    -> List Token.Token
-    -> Maybe Token.Token
-    -> Maybe Token.Token
-findAttachableDocumentationCommentToken previousRangeEndRow declarationRow tokens latestMatch =
-    case tokens of
-        comment :: rest ->
-            if comment.tokenType /= Token.Comment then
-                latestMatch
+    -> Int
+    -> Int
+    -> Int
+    -> List (Node String)
+    -> Maybe (Node String)
+attachableDocumentationComment previousRangeEndRow declarationRow fromRow fromColumn plainCommentRow commentsRev =
+    case commentsRev of
+        [] ->
+            Nothing
 
-            else if String.startsWith "{-|" comment.lexeme then
+        (Node commentRange commentText) :: remainingCommentsRev ->
+            if
+                (commentRange.start.row < fromRow)
+                    || (commentRange.start.row == fromRow && commentRange.start.column < fromColumn)
+            then
+                Nothing
+
+            else if String.startsWith "{-|" commentText then
                 let
                     isAfterPreviousRange =
                         case previousRangeEndRow of
                             Nothing ->
-                                comment.end.row + 1 == declarationRow
+                                commentRange.end.row + 1 == declarationRow
 
                             Just previousEndRow ->
-                                previousEndRow < comment.end.row
-
-                    nextLatestMatch =
-                        if comment.end.row < declarationRow && isAfterPreviousRange then
-                            Just comment
-
-                        else
-                            latestMatch
+                                previousEndRow < commentRange.end.row
                 in
-                findAttachableDocumentationCommentToken
+                if commentRange.end.row < declarationRow && isAfterPreviousRange then
+                    if plainCommentRow > commentRange.end.row then
+                        Nothing
+
+                    else
+                        Just (Node commentRange commentText)
+
+                else
+                    attachableDocumentationComment
+                        previousRangeEndRow
+                        declarationRow
+                        fromRow
+                        fromColumn
+                        plainCommentRow
+                        remainingCommentsRev
+
+            else if plainCommentRow == 0 then
+                attachableDocumentationComment
                     previousRangeEndRow
                     declarationRow
-                    rest
-                    nextLatestMatch
+                    fromRow
+                    fromColumn
+                    commentRange.start.row
+                    remainingCommentsRev
 
             else
-                let
-                    nextLatestMatch =
-                        case latestMatch of
-                            Just documentationComment ->
-                                if comment.start.row > documentationComment.end.row then
-                                    Nothing
-
-                                else
-                                    latestMatch
-
-                            Nothing ->
-                                Nothing
-                in
-                findAttachableDocumentationCommentToken
+                attachableDocumentationComment
                     previousRangeEndRow
                     declarationRow
-                    rest
-                    nextLatestMatch
-
-        [] ->
-            latestMatch
-
-
-takeLeadingTrivia : List Token.Token -> List Token.Token
-takeLeadingTrivia tokens =
-    case tokens of
-        token :: rest ->
-            if isTrivia token then
-                token :: takeLeadingTrivia rest
-
-            else
-                []
-
-        [] ->
-            []
+                    fromRow
+                    fromColumn
+                    plainCommentRow
+                    remainingCommentsRev
 
 
 setDeclarationDocumentation : Node String -> Declaration.Declaration -> Declaration.Declaration
@@ -300,15 +1763,31 @@ setDeclarationDocumentation documentation declaration =
     case declaration of
         Declaration.FunctionDeclaration function ->
             Declaration.FunctionDeclaration
-                { function | documentation = Just documentation }
+                { documentation = Just documentation
+                , signature = function.signature
+                , declaration = function.declaration
+                }
 
         Declaration.ChoiceTypeDeclaration choiceType ->
             Declaration.ChoiceTypeDeclaration
-                { choiceType | documentation = Just documentation }
+                { documentation = Just documentation
+                , typeTokenLocation = choiceType.typeTokenLocation
+                , name = choiceType.name
+                , generics = choiceType.generics
+                , equalsTokenLocation = choiceType.equalsTokenLocation
+                , constructors = choiceType.constructors
+                }
 
         Declaration.AliasDeclaration typeAlias ->
             Declaration.AliasDeclaration
-                { typeAlias | documentation = Just documentation }
+                { documentation = Just documentation
+                , typeTokenLocation = typeAlias.typeTokenLocation
+                , aliasTokenLocation = typeAlias.aliasTokenLocation
+                , name = typeAlias.name
+                , generics = typeAlias.generics
+                , equalsTokenLocation = typeAlias.equalsTokenLocation
+                , typeAnnotation = typeAlias.typeAnnotation
+                }
 
         Declaration.PortDeclaration _ _ ->
             declaration
@@ -341,11 +1820,7 @@ rangeOfDeclaration declaration =
                 case choiceType.constructors of
                     SeparatedSyntaxList.NonEmpty first rest ->
                         case List.reverse rest of
-                            ( _, last ) :: _ ->
-                                let
-                                    (Node lastRange _) =
-                                        last
-                                in
+                            ( _, Node lastRange _ ) :: _ ->
                                 lastRange.end
 
                             [] ->
@@ -391,897 +1866,310 @@ rangeOfDeclaration declaration =
             }
 
 
-parseModuleTokens : List Token.Token -> Result String ( Node Module.Module, List Token.Token )
-parseModuleTokens tokens =
-    case dropTrivia tokens of
-        firstToken :: _ ->
-            if firstToken.tokenType == Token.Identifier && firstToken.lexeme == "effect" then
-                parseEffectModule tokens
-
-            else if firstToken.tokenType == Token.Identifier && firstToken.lexeme == "port" then
-                parseDefaultModule PortDefaultModule "port" tokens
-
-            else
-                parseDefaultModule NormalDefaultModule "module" tokens
+commentsExcludingDocumentation : List (Node String) -> List (Node String) -> List (Node String)
+commentsExcludingDocumentation documentationComments comments =
+    case comments of
+        comment :: rest ->
+            commentsExcludingDocumentationAtComment documentationComments comment rest
 
         [] ->
-            Err "Expected a module declaration."
+            []
 
 
-type DefaultModuleKind
-    = NormalDefaultModule
-    | PortDefaultModule
+commentsExcludingDocumentationAtComment :
+    List (Node String)
+    -> Node String
+    -> List (Node String)
+    -> List (Node String)
+commentsExcludingDocumentationAtComment documentationComments comment remainingComments =
+    let
+        (Node commentRange _) =
+            comment
+    in
+    case documentationComments of
+        (Node documentationRange _) :: remainingDocumentationComments ->
+            if
+                commentRange.start == documentationRange.start
+                    && commentRange.end == documentationRange.end
+            then
+                commentsExcludingDocumentation remainingDocumentationComments remainingComments
 
-
-parseDefaultModule :
-    DefaultModuleKind
-    -> String
-    -> List Token.Token
-    -> Result String ( Node Module.Module, List Token.Token )
-parseDefaultModule moduleKind firstKeyword tokens =
-    case consumeKeyword firstKeyword tokens of
-        Err error ->
-            Err error
-
-        Ok ( firstToken, afterFirstKeyword ) ->
-            let
-                consumeModuleKeyword =
-                    if firstKeyword == "module" then
-                        Ok afterFirstKeyword
-
-                    else
-                        case consumeKeyword "module" afterFirstKeyword of
-                            Ok ( _, afterModuleKeyword ) ->
-                                Ok afterModuleKeyword
-
-                            Err error ->
-                                Err error
-            in
-            case consumeModuleKeyword of
-                Err error ->
-                    Err error
-
-                Ok afterModuleKeyword ->
-                    case parseModuleName afterModuleKeyword of
-                        Err error ->
-                            Err error
-
-                        Ok ( moduleName, afterModuleName ) ->
-                            case parseExposingTokens afterModuleName of
-                                Err error ->
-                                    Err error
-
-                                Ok ( exposingList, remaining ) ->
-                                    let
-                                        (Node exposingRange _) =
-                                            exposingList
-
-                                        moduleData =
-                                            { moduleName = moduleName
-                                            , exposingList = exposingList
-                                            }
-
-                                        parsedModule =
-                                            case moduleKind of
-                                                NormalDefaultModule ->
-                                                    Module.NormalModule moduleData
-
-                                                PortDefaultModule ->
-                                                    Module.PortModule moduleData
-                                    in
-                                    Ok
-                                        ( Node
-                                            { start = firstToken.start
-                                            , end = exposingRange.end
-                                            }
-                                            parsedModule
-                                        , remaining
-                                        )
-
-
-parseEffectModule : List Token.Token -> Result String ( Node Module.Module, List Token.Token )
-parseEffectModule tokens =
-    case consumeKeyword "effect" tokens of
-        Err error ->
-            Err error
-
-        Ok ( effectToken, afterEffect ) ->
-            case consumeKeyword "module" afterEffect of
-                Err error ->
-                    Err error
-
-                Ok ( _, afterModule ) ->
-                    case parseModuleName afterModule of
-                        Err error ->
-                            Err error
-
-                        Ok ( moduleName, afterModuleName ) ->
-                            case parseEffectWhere afterModuleName of
-                                Err error ->
-                                    Err error
-
-                                Ok ( command, subscription, afterWhere ) ->
-                                    case parseExposingTokens afterWhere of
-                                        Err error ->
-                                            Err error
-
-                                        Ok ( exposingList, remaining ) ->
-                                            let
-                                                (Node exposingRange _) =
-                                                    exposingList
-                                            in
-                                            Ok
-                                                ( Node
-                                                    { start = effectToken.start
-                                                    , end = exposingRange.end
-                                                    }
-                                                    (Module.EffectModule
-                                                        { moduleName = moduleName
-                                                        , exposingList = exposingList
-                                                        , command = command
-                                                        , subscription = subscription
-                                                        }
-                                                    )
-                                                , remaining
-                                                )
-
-
-parseEffectWhere :
-    List Token.Token
-    -> Result String ( Maybe (Node String), Maybe (Node String), List Token.Token )
-parseEffectWhere tokens =
-    case dropTrivia tokens of
-        whereToken :: _ ->
-            if whereToken.tokenType == Token.Identifier && whereToken.lexeme == "where" then
-                case consumeKeyword "where" tokens of
-                    Err error ->
-                        Err error
-
-                    Ok ( _, afterWhere ) ->
-                        case consumeToken Token.OpenBrace "'{'" (dropTrivia afterWhere) of
-                            Err error ->
-                                Err error
-
-                            Ok ( _, afterOpenBrace ) ->
-                                parseEffectWhereFields Nothing Nothing afterOpenBrace
+            else if locationBefore documentationRange.start commentRange.start then
+                commentsExcludingDocumentationAtComment remainingDocumentationComments comment remainingComments
 
             else
-                Ok ( Nothing, Nothing, tokens )
+                comment :: commentsExcludingDocumentation documentationComments remainingComments
 
         [] ->
-            Ok ( Nothing, Nothing, [] )
+            comment :: commentsExcludingDocumentation [] remainingComments
 
 
-parseEffectWhereFields :
-    Maybe (Node String)
-    -> Maybe (Node String)
-    -> List Token.Token
-    -> Result String ( Maybe (Node String), Maybe (Node String), List Token.Token )
-parseEffectWhereFields command subscription tokens =
-    case dropTrivia tokens of
-        closeBrace :: rest ->
-            if closeBrace.tokenType == Token.CloseBrace then
-                Ok ( command, subscription, rest )
+locationBefore : Location -> Location -> Bool
+locationBefore left right =
+    left.row
+        < right.row
+        || (left.row == right.row && left.column < right.column)
 
-            else if closeBrace.tokenType == Token.Identifier then
-                case consumeToken Token.Equal "'='" (dropTrivia rest) of
-                    Err error ->
-                        Err error
 
-                    Ok ( _, afterEqual ) ->
-                        case parseModuleName afterEqual of
-                            Err error ->
-                                Err error
 
-                            Ok ( valueNode, afterValue ) ->
-                                let
-                                    (Node valueRange valueNames) =
-                                        valueNode
+-- DECLARATIONS
 
-                                    valueName =
-                                        case List.reverse valueNames of
-                                            name :: _ ->
-                                                name
 
-                                            [] ->
-                                                ""
+parseDeclaration : ParserState -> Result String ( Declaration.Declaration, ParserState )
+parseDeclaration state =
+    parseDeclarationAt (skipTrivia state)
 
-                                    value =
-                                        Node valueRange valueName
 
-                                    nextCommand =
-                                        if closeBrace.lexeme == "command" then
-                                            Just value
+parseDeclarationAt : ParserState -> Result String ( Declaration.Declaration, ParserState )
+parseDeclarationAt stateAtDeclaration =
+    case String.slice stateAtDeclaration.offset (stateAtDeclaration.offset + 1) stateAtDeclaration.source of
+        first ->
+            if isIdentifierStart first then
+                case String.slice stateAtDeclaration.offset (skipToIdentifierEnd stateAtDeclaration.source (stateAtDeclaration.offset + 1)) stateAtDeclaration.source of
+                    "infix" ->
+                        parseInfixDeclaration stateAtDeclaration
 
-                                        else
-                                            command
+                    "type" ->
+                        parseTypeDeclaration stateAtDeclaration
 
-                                    nextSubscription =
-                                        if closeBrace.lexeme == "subscription" then
-                                            Just value
-
-                                        else
-                                            subscription
-                                in
-                                case dropTrivia afterValue of
-                                    comma :: afterComma ->
-                                        if comma.tokenType == Token.Comma then
-                                            parseEffectWhereFields nextCommand nextSubscription afterComma
-
-                                        else
-                                            parseEffectWhereFields nextCommand nextSubscription afterValue
-
-                                    [] ->
-                                        Err "Expected '}' after effect module fields."
-
-            else
-                Err ("Expected an effect module field or '}', but found '" ++ closeBrace.lexeme ++ "'.")
-
-        [] ->
-            Err "Expected '}' after effect module fields."
-
-
-parseImportTokens : List Token.Token -> Result String ( Node Import.Import, List Token.Token )
-parseImportTokens tokens =
-    case consumeKeyword "import" tokens of
-        Err error ->
-            Err error
-
-        Ok ( importToken, afterImport ) ->
-            case parseModuleName afterImport of
-                Err error ->
-                    Err error
-
-                Ok ( moduleName, afterModuleName ) ->
-                    case parseImportAlias afterModuleName of
-                        Err error ->
-                            Err error
-
-                        Ok ( moduleAlias, afterAlias ) ->
-                            case parseOptionalExposing afterAlias of
-                                Err error ->
-                                    Err error
-
-                                Ok ( exposingList, remaining ) ->
-                                    let
-                                        importEnd =
-                                            case exposingList of
-                                                Just ( _, exposingNode ) ->
-                                                    let
-                                                        (Node exposingRange _) =
-                                                            exposingNode
-                                                    in
-                                                    exposingRange.end
-
-                                                Nothing ->
-                                                    case moduleAlias of
-                                                        Just ( _, aliasNode ) ->
-                                                            let
-                                                                (Node aliasRange _) =
-                                                                    aliasNode
-                                                            in
-                                                            aliasRange.end
-
-                                                        Nothing ->
-                                                            let
-                                                                (Node moduleNameRange _) =
-                                                                    moduleName
-                                                            in
-                                                            moduleNameRange.end
-                                    in
-                                    Ok
-                                        ( Node
-                                            { start = importToken.start, end = importEnd }
-                                            { importTokenLocation = importToken.start
-                                            , moduleName = moduleName
-                                            , moduleAlias = moduleAlias
-                                            , exposingList = exposingList
-                                            }
-                                        , remaining
-                                        )
-
-
-parseImportAlias :
-    List Token.Token
-    -> Result String ( Maybe ( Location, Node Module.ModuleName ), List Token.Token )
-parseImportAlias tokens =
-    case dropTrivia tokens of
-        asToken :: _ ->
-            if asToken.tokenType == Token.Identifier && asToken.lexeme == "as" then
-                case consumeKeyword "as" tokens of
-                    Err error ->
-                        Err error
-
-                    Ok ( consumedAs, afterAs ) ->
-                        case dropTrivia afterAs of
-                            aliasToken :: rest ->
-                                if aliasToken.tokenType == Token.Identifier then
-                                    Ok
-                                        ( Just
-                                            ( consumedAs.start
-                                            , Node (tokenRange aliasToken) [ aliasToken.lexeme ]
-                                            )
-                                        , rest
-                                        )
-
-                                else
-                                    Err ("Expected module alias, but found '" ++ aliasToken.lexeme ++ "'.")
-
-                            [] ->
-                                Err "Expected module alias."
-
-            else
-                Ok ( Nothing, tokens )
-
-        [] ->
-            Ok ( Nothing, [] )
-
-
-parseOptionalExposing :
-    List Token.Token
-    -> Result String ( Maybe ( Location, Node Exposing.Exposing ), List Token.Token )
-parseOptionalExposing tokens =
-    case dropTrivia tokens of
-        exposingToken :: _ ->
-            if exposingToken.tokenType == Token.Identifier && exposingToken.lexeme == "exposing" then
-                case parseExposingTokens tokens of
-                    Ok ( exposingNode, remaining ) ->
-                        Ok ( Just ( exposingToken.start, exposingNode ), remaining )
-
-                    Err error ->
-                        Err error
-
-            else
-                Ok ( Nothing, tokens )
-
-        [] ->
-            Ok ( Nothing, [] )
-
-
-parseModuleName :
-    List Token.Token
-    -> Result String ( Node Module.ModuleName, List Token.Token )
-parseModuleName tokens =
-    case dropTrivia tokens of
-        firstToken :: rest ->
-            if firstToken.tokenType == Token.Identifier then
-                parseModuleNameRest
-                    firstToken.start
-                    firstToken.end
-                    [ firstToken.lexeme ]
-                    rest
-
-            else
-                Err ("Expected module name, but found '" ++ firstToken.lexeme ++ "'.")
-
-        [] ->
-            Err "Expected module name."
-
-
-parseModuleNameRest :
-    Location
-    -> Location
-    -> List String
-    -> List Token.Token
-    -> Result String ( Node Module.ModuleName, List Token.Token )
-parseModuleNameRest start end partsRev tokens =
-    case tokens of
-        dotToken :: nameToken :: rest ->
-            if dotToken.tokenType == Token.Dot && nameToken.tokenType == Token.Identifier then
-                parseModuleNameRest start nameToken.end (nameToken.lexeme :: partsRev) rest
-
-            else if dotToken.tokenType == Token.Dot then
-                Err ("Expected module name part, but found '" ++ nameToken.lexeme ++ "'.")
-
-            else
-                Ok ( Node { start = start, end = end } (List.reverse partsRev), tokens )
-
-        dotToken :: [] ->
-            if dotToken.tokenType == Token.Dot then
-                Err "Expected module name part."
-
-            else
-                Ok ( Node { start = start, end = end } (List.reverse partsRev), tokens )
-
-        [] ->
-            Ok ( Node { start = start, end = end } (List.reverse partsRev), [] )
-
-
-parseExposingTokens :
-    List Token.Token
-    -> Result String ( Node Exposing.Exposing, List Token.Token )
-parseExposingTokens tokens =
-    case consumeKeyword "exposing" tokens of
-        Err error ->
-            Err error
-
-        Ok ( exposingToken, afterExposing ) ->
-            case consumeToken Token.OpenParen "'('" (dropTrivia afterExposing) of
-                Err error ->
-                    Err error
-
-                Ok ( openParen, afterOpenParen ) ->
-                    case dropTrivia afterOpenParen of
-                        dotDotToken :: afterDotDot ->
-                            if dotDotToken.tokenType == Token.DotDot then
-                                case consumeToken Token.CloseParen "')'" (dropTrivia afterDotDot) of
-                                    Err error ->
-                                        Err error
-
-                                    Ok ( closeParen, remaining ) ->
-                                        Ok
-                                            ( Node
-                                                { start = exposingToken.start, end = closeParen.end }
-                                                (Exposing.All (tokenRange dotDotToken))
-                                            , remaining
-                                            )
-
-                            else
-                                parseExplicitExposing
-                                    exposingToken
-                                    openParen
-                                    Nothing
-                                    []
-                                    afterOpenParen
-
-                        [] ->
-                            Err "Expected ')' to close exposing list."
-
-
-parseExplicitExposing :
-    Token.Token
-    -> Token.Token
-    -> Maybe (Node Exposing.TopLevelExpose)
-    -> List ( Location, Node Exposing.TopLevelExpose )
-    -> List Token.Token
-    -> Result String ( Node Exposing.Exposing, List Token.Token )
-parseExplicitExposing exposingToken openParen first restRev tokens =
-    case dropTrivia tokens of
-        token :: remaining ->
-            if token.tokenType == Token.CloseParen then
-                let
-                    nodes =
-                        case first of
-                            Nothing ->
-                                SeparatedSyntaxList.Empty
-
-                            Just firstNode ->
-                                SeparatedSyntaxList.NonEmpty firstNode (List.reverse restRev)
-                in
-                Ok
-                    ( Node
-                        { start = exposingToken.start, end = token.end }
-                        (Exposing.Explicit openParen.start nodes token.start)
-                    , remaining
-                    )
-
-            else
-                case first of
-                    Nothing ->
-                        case parseTopLevelExpose tokens of
-                            Err error ->
-                                Err error
-
-                            Ok ( exposeNode, afterExpose ) ->
-                                parseExplicitExposing
-                                    exposingToken
-                                    openParen
-                                    (Just exposeNode)
-                                    restRev
-                                    afterExpose
-
-                    Just _ ->
-                        if token.tokenType == Token.Comma then
-                            case parseTopLevelExpose remaining of
-                                Err error ->
-                                    Err error
-
-                                Ok ( exposeNode, afterExpose ) ->
-                                    parseExplicitExposing
-                                        exposingToken
-                                        openParen
-                                        first
-                                        (( token.start, exposeNode ) :: restRev)
-                                        afterExpose
-
-                        else
-                            Err "Expected ',' before exposing list item."
-
-        [] ->
-            Err "Expected ')' to close exposing list."
-
-
-parseTopLevelExpose :
-    List Token.Token
-    -> Result String ( Node Exposing.TopLevelExpose, List Token.Token )
-parseTopLevelExpose tokens =
-    case dropTrivia tokens of
-        token :: rest ->
-            if token.tokenType == Token.OpenParen then
-                case rest of
-                    operatorToken :: closeParen :: remaining ->
-                        if
-                            operatorToken.tokenType
-                                == Token.Operator
-                                && closeParen.tokenType
-                                == Token.CloseParen
-                        then
-                            Ok
-                                ( Node
-                                    { start = token.start, end = closeParen.end }
-                                    (Exposing.InfixExpose operatorToken.lexeme)
-                                , remaining
-                                )
-
-                        else
-                            Err "Expected an operator followed by ')' in exposing list."
+                    "port" ->
+                        parsePortDeclaration stateAtDeclaration
 
                     _ ->
-                        Err "Expected an operator followed by ')' in exposing list."
-
-            else if token.tokenType == Token.Identifier then
-                if startsWithUpper token.lexeme then
-                    parseUpperExpose token rest
-
-                else
-                    Ok
-                        ( Node (tokenRange token) (Exposing.FunctionExpose token.lexeme)
-                        , rest
-                        )
+                        parseFunctionDeclaration stateAtDeclaration
 
             else
-                Err ("Unexpected token '" ++ token.lexeme ++ "' in exposing list.")
-
-        [] ->
-            Err "Expected exposing list item."
+                parseFunctionDeclaration stateAtDeclaration
 
 
-parseUpperExpose :
-    Token.Token
-    -> List Token.Token
-    -> Result String ( Node Exposing.TopLevelExpose, List Token.Token )
-parseUpperExpose nameToken tokens =
-    case dropTrivia tokens of
-        openParen :: afterOpenParen ->
-            if openParen.tokenType == Token.OpenParen then
-                case dropTrivia afterOpenParen of
-                    dotDot :: afterDotDot ->
-                        if dotDot.tokenType == Token.DotDot then
-                            case consumeToken Token.CloseParen "')'" (dropTrivia afterDotDot) of
-                                Err error ->
-                                    Err error
-
-                                Ok ( closeParen, remaining ) ->
-                                    Ok
-                                        ( Node
-                                            { start = nameToken.start, end = closeParen.end }
-                                            (Exposing.TypeExpose
-                                                { name = nameToken.lexeme
-                                                , open =
-                                                    Just
-                                                        { start = openParen.start
-                                                        , end = closeParen.end
-                                                        }
-                                                }
-                                            )
-                                        , remaining
-                                        )
-
-                        else if dotDot.tokenType == Token.CloseParen then
-                            Ok
-                                ( Node
-                                    { start = nameToken.start, end = dotDot.end }
-                                    (Exposing.TypeExpose
-                                        { name = nameToken.lexeme, open = Nothing }
-                                    )
-                                , afterDotDot
-                                )
-
-                        else
-                            Err "Expected '..' or ')' after exposed type name."
-
-                    [] ->
-                        Err "Expected ')' after exposed type name."
-
-            else
-                Ok
-                    ( Node
-                        (tokenRange nameToken)
-                        (Exposing.TypeOrAliasExpose nameToken.lexeme)
-                    , tokens
-                    )
-
-        [] ->
-            Ok
-                ( Node
-                    (tokenRange nameToken)
-                    (Exposing.TypeOrAliasExpose nameToken.lexeme)
-                , []
-                )
-
-
-parseDeclarationOrExpression : String -> Result String DeclarationOrExpression
-parseDeclarationOrExpression input =
-    case TokensFromString.parseExpressionOrDeclaration input of
-        Ok tokens ->
-            parseDeclarationOrExpressionTokens tokens
-
+parseInfixDeclaration : ParserState -> Result String ( Declaration.Declaration, ParserState )
+parseInfixDeclaration state =
+    case consumeKeyword "infix" 5 state of
         Err error ->
             Err error
 
-
-parseDeclarationOrExpressionTokens : List Token.Token -> Result String DeclarationOrExpression
-parseDeclarationOrExpressionTokens tokens =
-    case dropTrivia tokens of
-        [] ->
-            Err "No tokens to parse as a declaration or expression."
-
-        firstToken :: _ ->
+        Ok ( infixTokenLocation, afterInfix ) ->
             let
-                startsWithDeclarationKeyword =
-                    firstToken.tokenType
-                        == Token.Identifier
-                        && (firstToken.lexeme
-                                == "type"
-                                || firstToken.lexeme
-                                == "port"
-                                || firstToken.lexeme
-                                == "infix"
-                           )
+                stateAtDirection =
+                    skipTrivia afterInfix
             in
-            if startsWithDeclarationKeyword then
-                case parseDeclarationTokens tokens of
-                    Ok ( declaration, remaining ) ->
-                        case dropTrivia remaining of
-                            [] ->
-                                Ok (DeclarationOrExpression.Declaration declaration)
-
-                            nextToken :: _ ->
-                                Err
-                                    ("Unexpected token '"
-                                        ++ nextToken.lexeme
-                                        ++ "' after parsing declaration."
-                                    )
-
-                    Err error ->
-                        Err ("Failed to parse declaration or expression: " ++ error)
-
-            else if tokensStartFunctionDeclaration tokens then
-                case parseDeclarationTokens tokens of
-                    Ok ( declaration, remaining ) ->
-                        case dropTrivia remaining of
-                            [] ->
-                                Ok (DeclarationOrExpression.Declaration declaration)
-
-                            _ ->
-                                parseAsExpressionFallback tokens
-
-                    Err _ ->
-                        parseAsExpressionFallback tokens
-
-            else
-                parseAsExpressionFallback tokens
-
-
-tokensStartFunctionDeclaration : List Token.Token -> Bool
-tokensStartFunctionDeclaration tokens =
-    case dropTrivia tokens of
-        firstToken :: rest ->
-            if
-                firstToken.tokenType
-                    /= Token.Identifier
-                    || firstToken.lexeme
-                    == "let"
-                    || firstToken.lexeme
-                    == "case"
-                    || firstToken.lexeme
-                    == "if"
-            then
-                False
-
-            else
-                case dropTrivia rest of
-                    secondToken :: _ ->
-                        secondToken.tokenType == Token.Colon
-                            || containsTopLevelEqual 0 rest
-
-                    [] ->
-                        False
-
-        [] ->
-            False
-
-
-containsTopLevelEqual : Int -> List Token.Token -> Bool
-containsTopLevelEqual delimiterDepth tokens =
-    case tokens of
-        token :: rest ->
-            case token.tokenType of
-                Token.OpenParen ->
-                    containsTopLevelEqual (delimiterDepth + 1) rest
-
-                Token.OpenBrace ->
-                    containsTopLevelEqual (delimiterDepth + 1) rest
-
-                Token.OpenBracket ->
-                    containsTopLevelEqual (delimiterDepth + 1) rest
-
-                Token.CloseParen ->
-                    containsTopLevelEqual (max 0 (delimiterDepth - 1)) rest
-
-                Token.CloseBrace ->
-                    containsTopLevelEqual (max 0 (delimiterDepth - 1)) rest
-
-                Token.CloseBracket ->
-                    containsTopLevelEqual (max 0 (delimiterDepth - 1)) rest
-
-                Token.Equal ->
-                    delimiterDepth == 0
-
-                _ ->
-                    containsTopLevelEqual delimiterDepth rest
-
-        [] ->
-            False
-
-
-parseAsExpressionFallback : List Token.Token -> Result String DeclarationOrExpression
-parseAsExpressionFallback tokens =
-    case parseExpressionNode tokens of
-        Ok ( Node _ expression, remaining ) ->
-            case dropTrivia remaining of
-                [] ->
-                    Ok (DeclarationOrExpression.Expression expression)
-
-                nextToken :: _ ->
-                    Err
-                        ("Unexpected token '"
-                            ++ nextToken.lexeme
-                            ++ "' after parsing expression."
-                        )
-
-        Err error ->
-            Err ("Failed to parse declaration or expression: " ++ error)
-
-
-parseDeclarationTokens : List Token.Token -> Result String ( Declaration.Declaration, List Token.Token )
-parseDeclarationTokens tokens =
-    case dropTrivia tokens of
-        firstToken :: _ ->
-            if firstToken.tokenType == Token.Identifier && firstToken.lexeme == "infix" then
-                parseInfixDeclaration tokens
-
-            else if firstToken.tokenType == Token.Identifier && firstToken.lexeme == "type" then
-                parseTypeDeclarationTokens tokens
-
-            else if firstToken.tokenType == Token.Identifier && firstToken.lexeme == "port" then
-                parsePortDeclarationTokens tokens
-
-            else
-                parseFunctionDeclarationTokens tokens
-
-        [] ->
-            Err "Expected a declaration."
-
-
-parseInfixDeclaration : List Token.Token -> Result String ( Declaration.Declaration, List Token.Token )
-parseInfixDeclaration tokens =
-    case consumeKeyword "infix" tokens of
-        Err e ->
-            Err e
-
-        Ok ( infixToken, afterInfix ) ->
-            case dropTrivia afterInfix of
-                directionToken :: afterDirection ->
-                    if directionToken.tokenType /= Token.Identifier then
+            case String.slice stateAtDirection.offset (stateAtDirection.offset + 1) stateAtDirection.source of
+                directionFirst ->
+                    if not (isIdentifierStart directionFirst) then
                         Err
                             ("Expected infix direction, but found '"
-                                ++ directionToken.lexeme
+                                ++ snippetAt stateAtDirection
                                 ++ "'."
                             )
 
                     else
-                        case parseInfixDirection directionToken.lexeme of
+                        let
+                            directionEnd =
+                                skipToIdentifierEnd stateAtDirection.source (stateAtDirection.offset + 1)
+
+                            directionLexeme =
+                                String.slice stateAtDirection.offset directionEnd stateAtDirection.source
+
+                            directionRange =
+                                { start = { row = stateAtDirection.row, column = stateAtDirection.column }
+                                , end = { row = stateAtDirection.row, column = stateAtDirection.column + (directionEnd - stateAtDirection.offset) }
+                                }
+
+                            afterDirection =
+                                { source = stateAtDirection.source
+                                , offset = directionEnd
+                                , row = stateAtDirection.row
+                                , column = stateAtDirection.column + (directionEnd - stateAtDirection.offset)
+                                , commentsRev = stateAtDirection.commentsRev
+                                }
+                        in
+                        case parseInfixDirection directionLexeme of
                             Nothing ->
-                                Err
-                                    ("Infix direction is not a valid value: "
-                                        ++ directionToken.lexeme
-                                    )
+                                Err ("Infix direction is not a valid value: " ++ directionLexeme)
 
                             Just direction ->
-                                case dropTrivia afterDirection of
-                                    precedenceToken :: afterPrecedence ->
-                                        if precedenceToken.tokenType /= Token.NumberLiteral then
-                                            Err
-                                                ("Expected infix precedence, but found '"
-                                                    ++ precedenceToken.lexeme
-                                                    ++ "'."
-                                                )
+                                parseInfixDeclarationFromDirection
+                                    infixTokenLocation
+                                    (Node directionRange direction)
+                                    afterDirection
 
-                                        else
-                                            case String.toInt precedenceToken.lexeme of
-                                                Nothing ->
-                                                    Err
-                                                        ("Infix precedence is not a number: "
-                                                            ++ precedenceToken.lexeme
-                                                        )
 
-                                                Just precedence ->
-                                                    case consumeToken Token.OpenParen "'('" (dropTrivia afterPrecedence) of
-                                                        Err e ->
-                                                            Err e
+parseInfixDeclarationFromDirection :
+    Location
+    -> Node Infix.InfixDirection
+    -> ParserState
+    -> Result String ( Declaration.Declaration, ParserState )
+parseInfixDeclarationFromDirection infixTokenLocation direction state =
+    parseInfixDeclarationFromDirectionAt infixTokenLocation direction (skipTrivia state)
 
-                                                        Ok ( openParen, afterOpen ) ->
-                                                            case dropTrivia afterOpen of
-                                                                operatorToken :: afterOperator ->
-                                                                    if operatorToken.tokenType /= Token.Operator then
-                                                                        Err
-                                                                            ("Expected operator symbol, but found '"
-                                                                                ++ operatorToken.lexeme
-                                                                                ++ "'."
-                                                                            )
 
-                                                                    else
-                                                                        case consumeToken Token.CloseParen "')'" (dropTrivia afterOperator) of
-                                                                            Err e ->
-                                                                                Err e
+parseInfixDeclarationFromDirectionAt :
+    Location
+    -> Node Infix.InfixDirection
+    -> ParserState
+    -> Result String ( Declaration.Declaration, ParserState )
+parseInfixDeclarationFromDirectionAt infixTokenLocation direction stateAtPrecedence =
+    case String.slice stateAtPrecedence.offset (stateAtPrecedence.offset + 1) stateAtPrecedence.source of
+        precedenceFirst ->
+            if not (isDigit precedenceFirst) then
+                Err
+                    ("Expected infix precedence, but found '"
+                        ++ snippetAt stateAtPrecedence
+                        ++ "'."
+                    )
 
-                                                                            Ok ( closeParen, afterClose ) ->
-                                                                                case consumeToken Token.Equal "'='" (dropTrivia afterClose) of
-                                                                                    Err e ->
-                                                                                        Err e
+            else
+                let
+                    precedenceEnd =
+                        numberEnd stateAtPrecedence.source precedenceFirst stateAtPrecedence.offset
 
-                                                                                    Ok ( equalToken, afterEqual ) ->
-                                                                                        case dropTrivia afterEqual of
-                                                                                            funcNameToken :: afterFuncName ->
-                                                                                                if funcNameToken.tokenType /= Token.Identifier then
-                                                                                                    Err
-                                                                                                        ("Expected function name, but found '"
-                                                                                                            ++ funcNameToken.lexeme
-                                                                                                            ++ "'."
-                                                                                                        )
+                    precedenceLexeme =
+                        String.slice stateAtPrecedence.offset precedenceEnd stateAtPrecedence.source
 
-                                                                                                else
-                                                                                                    let
-                                                                                                        infixValue =
-                                                                                                            { infixTokenLocation = infixToken.start
-                                                                                                            , direction =
-                                                                                                                Node
-                                                                                                                    (tokenRange directionToken)
-                                                                                                                    direction
-                                                                                                            , precedence =
-                                                                                                                Node
-                                                                                                                    (tokenRange precedenceToken)
-                                                                                                                    precedence
-                                                                                                            , operator =
-                                                                                                                Node
-                                                                                                                    { start = openParen.start
-                                                                                                                    , end = closeParen.end
-                                                                                                                    }
-                                                                                                                    operatorToken.lexeme
-                                                                                                            , equalsTokenLocation = equalToken.start
-                                                                                                            , function =
-                                                                                                                Node
-                                                                                                                    (tokenRange funcNameToken)
-                                                                                                                    funcNameToken.lexeme
-                                                                                                            }
-                                                                                                    in
-                                                                                                    Ok
-                                                                                                        ( Declaration.InfixDeclaration infixValue
-                                                                                                        , afterFuncName
-                                                                                                        )
+                    precedenceRange =
+                        { start = { row = stateAtPrecedence.row, column = stateAtPrecedence.column }
+                        , end = { row = stateAtPrecedence.row, column = stateAtPrecedence.column + (precedenceEnd - stateAtPrecedence.offset) }
+                        }
 
-                                                                                            [] ->
-                                                                                                Err "Expected function name after '='."
+                    afterPrecedence =
+                        { source = stateAtPrecedence.source
+                        , offset = precedenceEnd
+                        , row = stateAtPrecedence.row
+                        , column = stateAtPrecedence.column + (precedenceEnd - stateAtPrecedence.offset)
+                        , commentsRev = stateAtPrecedence.commentsRev
+                        }
+                in
+                case String.toInt precedenceLexeme of
+                    Nothing ->
+                        Err ("Infix precedence is not a number: " ++ precedenceLexeme)
 
-                                                                _ ->
-                                                                    Err "Expected operator symbol after '('."
+                    Just precedence ->
+                        let
+                            stateAtOpenParen =
+                                skipTrivia afterPrecedence
+                        in
+                        case String.slice stateAtOpenParen.offset (stateAtOpenParen.offset + 1) stateAtOpenParen.source of
+                            "(" ->
+                                let
+                                    openParenLocation =
+                                        { row = stateAtOpenParen.row, column = stateAtOpenParen.column }
 
-                                    [] ->
-                                        Err "Expected infix precedence."
+                                    stateAtOperator =
+                                        skipTrivia
+                                            { source = stateAtOpenParen.source
+                                            , offset = stateAtOpenParen.offset + 1
+                                            , row = stateAtOpenParen.row
+                                            , column = stateAtOpenParen.column + 1
+                                            , commentsRev = stateAtOpenParen.commentsRev
+                                            }
 
-                [] ->
-                    Err "Expected infix direction."
+                                    operatorLength =
+                                        operatorTokenLength stateAtOperator.source stateAtOperator.offset
+                                in
+                                if operatorLength == 0 then
+                                    Err
+                                        ("Expected operator symbol, but found '"
+                                            ++ snippetAt stateAtOperator
+                                            ++ "'."
+                                        )
+
+                                else
+                                    let
+                                        operatorLexeme =
+                                            String.slice stateAtOperator.offset (stateAtOperator.offset + operatorLength) stateAtOperator.source
+
+                                        afterOperator =
+                                            { source = stateAtOperator.source
+                                            , offset = stateAtOperator.offset + operatorLength
+                                            , row = stateAtOperator.row
+                                            , column = stateAtOperator.column + operatorLength
+                                            , commentsRev = stateAtOperator.commentsRev
+                                            }
+
+                                        stateAtCloseParen =
+                                            skipTrivia afterOperator
+                                    in
+                                    case String.slice stateAtCloseParen.offset (stateAtCloseParen.offset + 1) stateAtCloseParen.source of
+                                        ")" ->
+                                            let
+                                                afterClose =
+                                                    { source = stateAtCloseParen.source
+                                                    , offset = stateAtCloseParen.offset + 1
+                                                    , row = stateAtCloseParen.row
+                                                    , column = stateAtCloseParen.column + 1
+                                                    , commentsRev = stateAtCloseParen.commentsRev
+                                                    }
+
+                                                stateAtEquals =
+                                                    skipTrivia afterClose
+                                            in
+                                            case String.slice stateAtEquals.offset (stateAtEquals.offset + 1) stateAtEquals.source of
+                                                "=" ->
+                                                    let
+                                                        equalsLocation =
+                                                            { row = stateAtEquals.row, column = stateAtEquals.column }
+
+                                                        stateAtFunction =
+                                                            skipTrivia
+                                                                { source = stateAtEquals.source
+                                                                , offset = stateAtEquals.offset + 1
+                                                                , row = stateAtEquals.row
+                                                                , column = stateAtEquals.column + 1
+                                                                , commentsRev = stateAtEquals.commentsRev
+                                                                }
+                                                    in
+                                                    case String.slice stateAtFunction.offset (stateAtFunction.offset + 1) stateAtFunction.source of
+                                                        functionFirst ->
+                                                            if not (isIdentifierStart functionFirst) then
+                                                                Err
+                                                                    ("Expected function name, but found '"
+                                                                        ++ snippetAt stateAtFunction
+                                                                        ++ "'."
+                                                                    )
+
+                                                            else
+                                                                let
+                                                                    functionNameEnd =
+                                                                        skipToIdentifierEnd stateAtFunction.source (stateAtFunction.offset + 1)
+
+                                                                    functionNameLength =
+                                                                        functionNameEnd - stateAtFunction.offset
+                                                                in
+                                                                Ok
+                                                                    ( Declaration.InfixDeclaration
+                                                                        { infixTokenLocation = infixTokenLocation
+                                                                        , direction = direction
+                                                                        , precedence = Node precedenceRange precedence
+                                                                        , operator =
+                                                                            Node
+                                                                                { start = openParenLocation
+                                                                                , end = { row = afterClose.row, column = afterClose.column }
+                                                                                }
+                                                                                operatorLexeme
+                                                                        , equalsTokenLocation = equalsLocation
+                                                                        , function =
+                                                                            Node
+                                                                                { start = { row = stateAtFunction.row, column = stateAtFunction.column }
+                                                                                , end = { row = stateAtFunction.row, column = stateAtFunction.column + functionNameLength }
+                                                                                }
+                                                                                (String.slice stateAtFunction.offset functionNameEnd stateAtFunction.source)
+                                                                        }
+                                                                    , { source = stateAtFunction.source
+                                                                      , offset = functionNameEnd
+                                                                      , row = stateAtFunction.row
+                                                                      , column = stateAtFunction.column + functionNameLength
+                                                                      , commentsRev = stateAtFunction.commentsRev
+                                                                      }
+                                                                    )
+
+                                                _ ->
+                                                    Err ("Expected '=', but found '" ++ snippetAt stateAtEquals ++ "'.")
+
+                                        _ ->
+                                            Err ("Expected ')', but found '" ++ snippetAt stateAtCloseParen ++ "'.")
+
+                            _ ->
+                                Err ("Expected '(', but found '" ++ snippetAt stateAtOpenParen ++ "'.")
 
 
 parseInfixDirection : String -> Maybe Infix.InfixDirection
@@ -1300,582 +2188,876 @@ parseInfixDirection s =
             Nothing
 
 
-parseTypeDeclarationTokens : List Token.Token -> Result String ( Declaration.Declaration, List Token.Token )
-parseTypeDeclarationTokens tokens =
-    case consumeKeyword "type" tokens of
-        Err e ->
-            Err e
+parseTypeDeclaration : ParserState -> Result String ( Declaration.Declaration, ParserState )
+parseTypeDeclaration state =
+    case consumeKeyword "type" 4 state of
+        Err error ->
+            Err error
 
-        Ok ( typeToken, afterType ) ->
+        Ok ( typeTokenLocation, afterType ) ->
             let
-                remaining =
-                    dropTrivia afterType
+                stateAtNext =
+                    skipTrivia afterType
             in
-            case remaining of
-                firstToken :: _ ->
-                    if firstToken.tokenType == Token.Identifier && firstToken.lexeme == "alias" then
-                        parseAliasDeclaration typeToken remaining
+            case String.slice stateAtNext.offset (stateAtNext.offset + 1) stateAtNext.source of
+                first ->
+                    if
+                        isIdentifierStart first
+                            && (String.slice stateAtNext.offset (skipToIdentifierEnd stateAtNext.source (stateAtNext.offset + 1)) stateAtNext.source
+                                    == "alias"
+                               )
+                    then
+                        parseAliasDeclaration typeTokenLocation stateAtNext
 
                     else
-                        parseChoiceTypeDeclaration typeToken remaining
-
-                [] ->
-                    Err "Expected type name or 'alias' keyword."
+                        parseChoiceTypeDeclaration typeTokenLocation stateAtNext
 
 
 parseAliasDeclaration :
-    Token.Token
-    -> List Token.Token
-    -> Result String ( Declaration.Declaration, List Token.Token )
-parseAliasDeclaration typeToken tokens =
-    case consumeKeyword "alias" tokens of
-        Err e ->
-            Err e
+    Location
+    -> ParserState
+    -> Result String ( Declaration.Declaration, ParserState )
+parseAliasDeclaration typeTokenLocation state =
+    case consumeKeyword "alias" 5 state of
+        Err error ->
+            Err error
 
-        Ok ( aliasToken, afterAlias ) ->
-            case dropTrivia afterAlias of
-                nameToken :: afterName ->
-                    if nameToken.tokenType /= Token.Identifier then
+        Ok ( aliasTokenLocation, afterAlias ) ->
+            let
+                stateAtName =
+                    skipTrivia afterAlias
+            in
+            case String.slice stateAtName.offset (stateAtName.offset + 1) stateAtName.source of
+                first ->
+                    if not (isIdentifierStart first) then
                         Err "Expected type alias name."
 
                     else
                         let
+                            nameEnd =
+                                skipToIdentifierEnd stateAtName.source (stateAtName.offset + 1)
+
+                            nameLength =
+                                nameEnd - stateAtName.offset
+
+                            nameNode =
+                                Node
+                                    { start = { row = stateAtName.row, column = stateAtName.column }
+                                    , end = { row = stateAtName.row, column = stateAtName.column + nameLength }
+                                    }
+                                    (String.slice stateAtName.offset nameEnd stateAtName.source)
+
+                            afterName =
+                                { source = stateAtName.source
+                                , offset = nameEnd
+                                , row = stateAtName.row
+                                , column = stateAtName.column + nameLength
+                                , commentsRev = stateAtName.commentsRev
+                                }
+
                             ( generics, afterGenerics ) =
                                 collectTypeGenerics afterName []
-                        in
-                        case consumeToken Token.Equal "'='" afterGenerics of
-                            Err e ->
-                                Err e
 
-                            Ok ( equalToken, afterEqual ) ->
-                                case parseTypeAnnotation 0 (dropTrivia afterEqual) of
-                                    Err e ->
-                                        Err e
+                            stateAtEquals =
+                                skipTrivia afterGenerics
+                        in
+                        case String.slice stateAtEquals.offset (stateAtEquals.offset + 1) stateAtEquals.source of
+                            "=" ->
+                                case
+                                    parseTypeAnnotation
+                                        0
+                                        { source = stateAtEquals.source
+                                        , offset = stateAtEquals.offset + 1
+                                        , row = stateAtEquals.row
+                                        , column = stateAtEquals.column + 1
+                                        , commentsRev = stateAtEquals.commentsRev
+                                        }
+                                of
+                                    Err error ->
+                                        Err error
 
                                     Ok ( typeAnnotationNode, remaining ) ->
-                                        let
-                                            typeAlias =
+                                        Ok
+                                            ( Declaration.AliasDeclaration
                                                 { documentation = Nothing
-                                                , typeTokenLocation = typeToken.start
-                                                , aliasTokenLocation = aliasToken.start
-                                                , name =
-                                                    Node (tokenRange nameToken) nameToken.lexeme
+                                                , typeTokenLocation = typeTokenLocation
+                                                , aliasTokenLocation = aliasTokenLocation
+                                                , name = nameNode
                                                 , generics = generics
-                                                , equalsTokenLocation = equalToken.start
+                                                , equalsTokenLocation = { row = stateAtEquals.row, column = stateAtEquals.column }
                                                 , typeAnnotation = typeAnnotationNode
                                                 }
-                                        in
-                                        Ok
-                                            ( Declaration.AliasDeclaration typeAlias
                                             , remaining
                                             )
 
-                [] ->
-                    Err "Expected type alias name."
+                            _ ->
+                                Err ("Expected '=', but found '" ++ snippetAt stateAtEquals ++ "'.")
 
 
 parseChoiceTypeDeclaration :
-    Token.Token
-    -> List Token.Token
-    -> Result String ( Declaration.Declaration, List Token.Token )
-parseChoiceTypeDeclaration typeToken tokens =
-    case dropTrivia tokens of
-        nameToken :: afterName ->
-            if nameToken.tokenType /= Token.Identifier then
+    Location
+    -> ParserState
+    -> Result String ( Declaration.Declaration, ParserState )
+parseChoiceTypeDeclaration typeTokenLocation state =
+    parseChoiceTypeDeclarationAt typeTokenLocation (skipTrivia state)
+
+
+parseChoiceTypeDeclarationAt :
+    Location
+    -> ParserState
+    -> Result String ( Declaration.Declaration, ParserState )
+parseChoiceTypeDeclarationAt typeTokenLocation stateAtName =
+    case String.slice stateAtName.offset (stateAtName.offset + 1) stateAtName.source of
+        first ->
+            if not (isIdentifierStart first) then
                 Err "Expected type name."
 
             else
                 let
+                    nameEnd =
+                        skipToIdentifierEnd stateAtName.source (stateAtName.offset + 1)
+
+                    nameLength =
+                        nameEnd - stateAtName.offset
+
+                    nameNode =
+                        Node
+                            { start = { row = stateAtName.row, column = stateAtName.column }
+                            , end = { row = stateAtName.row, column = stateAtName.column + nameLength }
+                            }
+                            (String.slice stateAtName.offset nameEnd stateAtName.source)
+
+                    afterName =
+                        { source = stateAtName.source
+                        , offset = nameEnd
+                        , row = stateAtName.row
+                        , column = stateAtName.column + nameLength
+                        , commentsRev = stateAtName.commentsRev
+                        }
+
                     ( generics, afterGenerics ) =
                         collectTypeGenerics afterName []
+
+                    stateAtEquals =
+                        skipTrivia afterGenerics
                 in
-                case consumeToken Token.Equal "'='" afterGenerics of
-                    Err e ->
-                        Err e
+                case String.slice stateAtEquals.offset (stateAtEquals.offset + 1) stateAtEquals.source of
+                    "=" ->
+                        case
+                            parseChoiceTypeConstructor
+                                { source = stateAtEquals.source
+                                , offset = stateAtEquals.offset + 1
+                                , row = stateAtEquals.row
+                                , column = stateAtEquals.column + 1
+                                , commentsRev = stateAtEquals.commentsRev
+                                }
+                        of
+                            Err error ->
+                                Err error
 
-                    Ok ( equalToken, afterEqual ) ->
-                        case dropTrivia afterEqual of
-                            firstConstructorNameToken :: afterFirstConstructorName ->
-                                if firstConstructorNameToken.tokenType /= Token.Identifier then
-                                    Err
-                                        ("Expected constructor name, but found '"
-                                            ++ firstConstructorNameToken.lexeme
-                                            ++ "'."
-                                        )
+                            Ok ( firstConstructor, afterFirstConstructor ) ->
+                                case parseMoreChoiceConstructors firstConstructor [] afterFirstConstructor of
+                                    Err error ->
+                                        Err error
 
-                                else
-                                    case
-                                        parseChoiceTypeConstructorArgs
-                                            firstConstructorNameToken.start.column
-                                            []
-                                            afterFirstConstructorName
-                                    of
-                                        Err e ->
-                                            Err e
+                                    Ok ( constructors, remaining ) ->
+                                        Ok
+                                            ( Declaration.ChoiceTypeDeclaration
+                                                { documentation = Nothing
+                                                , typeTokenLocation = typeTokenLocation
+                                                , name = nameNode
+                                                , generics = generics
+                                                , equalsTokenLocation = { row = stateAtEquals.row, column = stateAtEquals.column }
+                                                , constructors = constructors
+                                                }
+                                            , remaining
+                                            )
 
-                                        Ok ( firstArgs, afterFirstArgs ) ->
-                                            let
-                                                firstConstructorEnd =
-                                                    case List.reverse firstArgs of
-                                                        Node lastArgRange _ :: _ ->
-                                                            lastArgRange.end
+                    _ ->
+                        Err ("Expected '=', but found '" ++ snippetAt stateAtEquals ++ "'.")
 
-                                                        [] ->
-                                                            firstConstructorNameToken.end
 
-                                                firstConstructor =
-                                                    Node
-                                                        { start = firstConstructorNameToken.start
-                                                        , end = firstConstructorEnd
-                                                        }
-                                                        { name =
-                                                            Node
-                                                                (tokenRange firstConstructorNameToken)
-                                                                firstConstructorNameToken.lexeme
-                                                        , arguments = firstArgs
-                                                        }
-                                            in
-                                            case parseMoreChoiceConstructors firstConstructor [] afterFirstArgs of
-                                                Err e ->
-                                                    Err e
+parseChoiceTypeConstructor :
+    ParserState
+    -> Result String ( Node Declaration.ValueConstructor, ParserState )
+parseChoiceTypeConstructor state =
+    parseChoiceTypeConstructorAt (skipTrivia state)
 
-                                                Ok ( constructors, remaining ) ->
-                                                    let
-                                                        lastConstructorEnd =
-                                                            case constructors of
-                                                                SeparatedSyntaxList.NonEmpty (Node firstRange _) rest ->
-                                                                    case List.reverse rest of
-                                                                        ( _, Node lastRange _ ) :: _ ->
-                                                                            lastRange.end
 
-                                                                        [] ->
-                                                                            firstRange.end
+parseChoiceTypeConstructorAt :
+    ParserState
+    -> Result String ( Node Declaration.ValueConstructor, ParserState )
+parseChoiceTypeConstructorAt stateAtName =
+    case String.slice stateAtName.offset (stateAtName.offset + 1) stateAtName.source of
+        first ->
+            if not (isIdentifierStart first) then
+                Err
+                    ("Expected constructor name, but found '"
+                        ++ snippetAt stateAtName
+                        ++ "'."
+                    )
 
-                                                                SeparatedSyntaxList.Empty ->
-                                                                    firstConstructorEnd
+            else
+                let
+                    nameEnd =
+                        skipToIdentifierEnd stateAtName.source (stateAtName.offset + 1)
 
-                                                        choiceStruct =
-                                                            { documentation = Nothing
-                                                            , typeTokenLocation = typeToken.start
-                                                            , name =
-                                                                Node (tokenRange nameToken) nameToken.lexeme
-                                                            , generics = generics
-                                                            , equalsTokenLocation = equalToken.start
-                                                            , constructors = constructors
-                                                            }
-                                                    in
-                                                    Ok
-                                                        ( Declaration.ChoiceTypeDeclaration choiceStruct
-                                                        , remaining
-                                                        )
+                    nameLength =
+                        nameEnd - stateAtName.offset
 
-                            [] ->
-                                Err "Expected constructor name."
+                    nameRange =
+                        { start = { row = stateAtName.row, column = stateAtName.column }
+                        , end = { row = stateAtName.row, column = stateAtName.column + nameLength }
+                        }
 
-        [] ->
-            Err "Expected type name."
+                    afterName =
+                        { source = stateAtName.source
+                        , offset = nameEnd
+                        , row = stateAtName.row
+                        , column = stateAtName.column + nameLength
+                        , commentsRev = stateAtName.commentsRev
+                        }
+                in
+                case parseChoiceTypeConstructorArgs stateAtName.column [] afterName of
+                    Err error ->
+                        Err error
+
+                    Ok ( arguments, afterArguments ) ->
+                        let
+                            constructorEnd =
+                                case List.reverse arguments of
+                                    (Node lastArgumentRange _) :: _ ->
+                                        lastArgumentRange.end
+
+                                    [] ->
+                                        nameRange.end
+                        in
+                        Ok
+                            ( Node
+                                { start = nameRange.start, end = constructorEnd }
+                                { name =
+                                    Node nameRange (String.slice stateAtName.offset nameEnd stateAtName.source)
+                                , arguments = arguments
+                                }
+                            , afterArguments
+                            )
 
 
 parseMoreChoiceConstructors :
     Node Declaration.ValueConstructor
     -> List ( Location, Node Declaration.ValueConstructor )
-    -> List Token.Token
-    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList (Node Declaration.ValueConstructor), List Token.Token )
-parseMoreChoiceConstructors firstConstructor restRev tokens =
-    case dropTrivia tokens of
-        pipeToken :: afterPipe ->
-            if pipeToken.tokenType == Token.Pipe then
-                case dropTrivia afterPipe of
-                    nameToken :: afterName ->
-                        if nameToken.tokenType /= Token.Identifier then
-                            Err
-                                ("Expected constructor name after '|', but found '"
-                                    ++ nameToken.lexeme
-                                    ++ "'."
-                                )
+    -> ParserState
+    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList (Node Declaration.ValueConstructor), ParserState )
+parseMoreChoiceConstructors firstConstructor restRev state =
+    parseMoreChoiceConstructorsAt firstConstructor restRev state (skipTrivia state)
 
-                        else
-                            case parseChoiceTypeConstructorArgs nameToken.start.column [] afterName of
-                                Err e ->
-                                    Err e
 
-                                Ok ( args, remaining ) ->
-                                    let
-                                        constructorEnd =
-                                            case List.reverse args of
-                                                Node lastArgRange _ :: _ ->
-                                                    lastArgRange.end
+parseMoreChoiceConstructorsAt :
+    Node Declaration.ValueConstructor
+    -> List ( Location, Node Declaration.ValueConstructor )
+    -> ParserState
+    -> ParserState
+    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList (Node Declaration.ValueConstructor), ParserState )
+parseMoreChoiceConstructorsAt firstConstructor restRev state stateAtPipe =
+    if isPipeToken stateAtPipe.source stateAtPipe.offset then
+        let
+            pipeLocation =
+                { row = stateAtPipe.row, column = stateAtPipe.column }
 
-                                                [] ->
-                                                    nameToken.end
+            afterPipe =
+                { source = stateAtPipe.source
+                , offset = stateAtPipe.offset + 1
+                , row = stateAtPipe.row
+                , column = stateAtPipe.column + 1
+                , commentsRev = stateAtPipe.commentsRev
+                }
+        in
+        case parseChoiceTypeConstructor afterPipe of
+            Err error ->
+                Err error
 
-                                        constructorNode =
-                                            Node
-                                                { start = nameToken.start, end = constructorEnd }
-                                                { name =
-                                                    Node (tokenRange nameToken) nameToken.lexeme
-                                                , arguments = args
-                                                }
-                                    in
-                                    parseMoreChoiceConstructors
-                                        firstConstructor
-                                        (( pipeToken.start, constructorNode ) :: restRev)
-                                        remaining
+            Ok ( constructorNode, remaining ) ->
+                parseMoreChoiceConstructors
+                    firstConstructor
+                    (( pipeLocation, constructorNode ) :: restRev)
+                    remaining
 
-                    [] ->
-                        Err "Expected constructor name after '|'."
-
-            else
-                Ok
-                    ( SeparatedSyntaxList.NonEmpty firstConstructor (List.reverse restRev)
-                    , tokens
-                    )
-
-        [] ->
-            Ok ( SeparatedSyntaxList.NonEmpty firstConstructor (List.reverse restRev), [] )
+    else
+        Ok
+            ( SeparatedSyntaxList.NonEmpty firstConstructor (List.reverse restRev)
+            , state
+            )
 
 
 parseChoiceTypeConstructorArgs :
     Int
     -> List (Node TypeAnnotation.TypeAnnotation)
-    -> List Token.Token
-    -> Result String ( List (Node TypeAnnotation.TypeAnnotation), List Token.Token )
-parseChoiceTypeConstructorArgs constructorCol argsRev tokens =
-    case dropTrivia tokens of
-        nextToken :: _ ->
-            if nextToken.start.column >= constructorCol && canStartTypeAnnotation nextToken then
-                case parseTypeAnnotationTypedArg constructorCol tokens of
-                    Err e ->
-                        Err e
+    -> ParserState
+    -> Result String ( List (Node TypeAnnotation.TypeAnnotation), ParserState )
+parseChoiceTypeConstructorArgs constructorColumn argumentsRev state =
+    parseChoiceTypeConstructorArgsAt constructorColumn argumentsRev state (skipTrivia state)
 
-                    Ok ( arg, remaining ) ->
-                        parseChoiceTypeConstructorArgs
-                            constructorCol
-                            (arg :: argsRev)
-                            remaining
 
-            else
-                Ok ( List.reverse argsRev, tokens )
+parseChoiceTypeConstructorArgsAt :
+    Int
+    -> List (Node TypeAnnotation.TypeAnnotation)
+    -> ParserState
+    -> ParserState
+    -> Result String ( List (Node TypeAnnotation.TypeAnnotation), ParserState )
+parseChoiceTypeConstructorArgsAt constructorColumn argumentsRev state stateAtArgument =
+    if
+        stateAtArgument.column
+            >= constructorColumn
+            && canStartTypeAnnotationAt stateAtArgument.source stateAtArgument.offset
+    then
+        case parseTypeAnnotationTypedArg constructorColumn stateAtArgument of
+            Err error ->
+                Err error
 
-        [] ->
-            Ok ( List.reverse argsRev, [] )
+            Ok ( argument, remaining ) ->
+                parseChoiceTypeConstructorArgs constructorColumn (argument :: argumentsRev) remaining
+
+    else
+        Ok ( List.reverse argumentsRev, state )
 
 
 collectTypeGenerics :
-    List Token.Token
+    ParserState
     -> List (Node String)
-    -> ( List (Node String), List Token.Token )
-collectTypeGenerics tokens genericsRev =
-    case dropTrivia tokens of
-        token :: rest ->
-            if token.tokenType == Token.Identifier then
-                collectTypeGenerics rest (Node (tokenRange token) token.lexeme :: genericsRev)
+    -> ( List (Node String), ParserState )
+collectTypeGenerics state genericsRev =
+    collectTypeGenericsAt state genericsRev (skipTrivia state)
+
+
+collectTypeGenericsAt :
+    ParserState
+    -> List (Node String)
+    -> ParserState
+    -> ( List (Node String), ParserState )
+collectTypeGenericsAt state genericsRev stateAtGeneric =
+    case String.slice stateAtGeneric.offset (stateAtGeneric.offset + 1) stateAtGeneric.source of
+        first ->
+            if isIdentifierStart first then
+                let
+                    genericEnd =
+                        skipToIdentifierEnd stateAtGeneric.source (stateAtGeneric.offset + 1)
+
+                    genericLength =
+                        genericEnd - stateAtGeneric.offset
+                in
+                collectTypeGenerics
+                    { source = stateAtGeneric.source
+                    , offset = genericEnd
+                    , row = stateAtGeneric.row
+                    , column = stateAtGeneric.column + genericLength
+                    , commentsRev = stateAtGeneric.commentsRev
+                    }
+                    (Node
+                        { start = { row = stateAtGeneric.row, column = stateAtGeneric.column }
+                        , end = { row = stateAtGeneric.row, column = stateAtGeneric.column + genericLength }
+                        }
+                        (String.slice stateAtGeneric.offset genericEnd stateAtGeneric.source)
+                        :: genericsRev
+                    )
 
             else
-                ( List.reverse genericsRev, tokens )
-
-        [] ->
-            ( List.reverse genericsRev, [] )
+                ( List.reverse genericsRev, state )
 
 
-parsePortDeclarationTokens : List Token.Token -> Result String ( Declaration.Declaration, List Token.Token )
-parsePortDeclarationTokens tokens =
-    case consumeKeyword "port" tokens of
-        Err e ->
-            Err e
+parsePortDeclaration : ParserState -> Result String ( Declaration.Declaration, ParserState )
+parsePortDeclaration state =
+    case consumeKeyword "port" 4 state of
+        Err error ->
+            Err error
 
-        Ok ( portToken, afterPort ) ->
-            case dropTrivia afterPort of
-                portNameToken :: afterPortName ->
-                    if portNameToken.tokenType /= Token.Identifier then
+        Ok ( portTokenLocation, afterPort ) ->
+            let
+                stateAtName =
+                    skipTrivia afterPort
+            in
+            case String.slice stateAtName.offset (stateAtName.offset + 1) stateAtName.source of
+                first ->
+                    if not (isIdentifierStart first) then
                         Err "Expected port name."
 
                     else
-                        case consumeToken Token.Colon "':'" (dropTrivia afterPortName) of
-                            Err e ->
-                                Err e
+                        let
+                            nameEnd =
+                                skipToIdentifierEnd stateAtName.source (stateAtName.offset + 1)
 
-                            Ok ( colonToken, afterColon ) ->
-                                case parseTypeAnnotation 0 (dropTrivia afterColon) of
-                                    Err e ->
-                                        Err e
+                            nameLength =
+                                nameEnd - stateAtName.offset
+
+                            nameNode =
+                                Node
+                                    { start = { row = stateAtName.row, column = stateAtName.column }
+                                    , end = { row = stateAtName.row, column = stateAtName.column + nameLength }
+                                    }
+                                    (String.slice stateAtName.offset nameEnd stateAtName.source)
+
+                            stateAtColon =
+                                skipTrivia
+                                    { source = stateAtName.source
+                                    , offset = nameEnd
+                                    , row = stateAtName.row
+                                    , column = stateAtName.column + nameLength
+                                    , commentsRev = stateAtName.commentsRev
+                                    }
+                        in
+                        case String.slice stateAtColon.offset (stateAtColon.offset + 1) stateAtColon.source of
+                            ":" ->
+                                case
+                                    parseTypeAnnotation
+                                        0
+                                        { source = stateAtColon.source
+                                        , offset = stateAtColon.offset + 1
+                                        , row = stateAtColon.row
+                                        , column = stateAtColon.column + 1
+                                        , commentsRev = stateAtColon.commentsRev
+                                        }
+                                of
+                                    Err error ->
+                                        Err error
 
                                     Ok ( typeAnnotationNode, remaining ) ->
-                                        let
-                                            signature =
-                                                { name =
-                                                    Node (tokenRange portNameToken) portNameToken.lexeme
-                                                , colonLocation = colonToken.start
+                                        Ok
+                                            ( Declaration.PortDeclaration
+                                                portTokenLocation
+                                                { name = nameNode
+                                                , colonLocation = { row = stateAtColon.row, column = stateAtColon.column }
                                                 , typeAnnotation = typeAnnotationNode
                                                 }
-                                        in
-                                        Ok
-                                            ( Declaration.PortDeclaration portToken.start signature
                                             , remaining
                                             )
 
-                [] ->
-                    Err "Expected port name."
+                            _ ->
+                                Err ("Expected ':', but found '" ++ snippetAt stateAtColon ++ "'.")
 
 
-parseFunctionDeclarationTokens : List Token.Token -> Result String ( Declaration.Declaration, List Token.Token )
-parseFunctionDeclarationTokens tokens =
-    case dropTrivia tokens of
-        firstNameToken :: afterFirstName ->
-            if firstNameToken.tokenType /= Token.Identifier then
+parseFunctionDeclaration : ParserState -> Result String ( Declaration.Declaration, ParserState )
+parseFunctionDeclaration state =
+    parseFunctionDeclarationAt (skipTrivia state)
+
+
+parseFunctionDeclarationAt : ParserState -> Result String ( Declaration.Declaration, ParserState )
+parseFunctionDeclarationAt stateAtName =
+    case String.slice stateAtName.offset (stateAtName.offset + 1) stateAtName.source of
+        first ->
+            if not (isIdentifierStart first) then
+                Err ("Expected function name, but found '" ++ snippetAt stateAtName ++ "'.")
+
+            else
+                parseFunctionDeclarationWithName
+                    stateAtName
+                    (skipToIdentifierEnd stateAtName.source (stateAtName.offset + 1))
+
+
+parseFunctionDeclarationWithName :
+    ParserState
+    -> Int
+    -> Result String ( Declaration.Declaration, ParserState )
+parseFunctionDeclarationWithName stateAtName nameEnd =
+    parseFunctionDeclarationAfterName
+        { start = { row = stateAtName.row, column = stateAtName.column }
+        , end = { row = stateAtName.row, column = stateAtName.column + (nameEnd - stateAtName.offset) }
+        }
+        (String.slice stateAtName.offset nameEnd stateAtName.source)
+        { source = stateAtName.source
+        , offset = nameEnd
+        , row = stateAtName.row
+        , column = stateAtName.column + (nameEnd - stateAtName.offset)
+        , commentsRev = stateAtName.commentsRev
+        }
+
+
+parseFunctionDeclarationAfterName :
+    Range
+    -> String
+    -> ParserState
+    -> Result String ( Declaration.Declaration, ParserState )
+parseFunctionDeclarationAfterName nameRange name afterName =
+    parseFunctionDeclarationAtColon nameRange name afterName (skipTrivia afterName)
+
+
+parseFunctionDeclarationAtColon :
+    Range
+    -> String
+    -> ParserState
+    -> ParserState
+    -> Result String ( Declaration.Declaration, ParserState )
+parseFunctionDeclarationAtColon nameRange name afterName stateAtColon =
+    if isColonToken stateAtColon.source stateAtColon.offset then
+        parseFunctionDeclarationOnSignature
+            nameRange
+            name
+            { row = stateAtColon.row, column = stateAtColon.column }
+            (parseTypeAnnotation
+                nameRange.start.column
+                { source = stateAtColon.source
+                , offset = stateAtColon.offset + 1
+                , row = stateAtColon.row
+                , column = stateAtColon.column + 1
+                , commentsRev = stateAtColon.commentsRev
+                }
+            )
+
+    else
+        finishFunctionDeclaration nameRange.start nameRange name Nothing afterName
+
+
+parseFunctionDeclarationOnSignature :
+    Range
+    -> String
+    -> Location
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result String ( Declaration.Declaration, ParserState )
+parseFunctionDeclarationOnSignature nameRange name colonLocation signatureResult =
+    case signatureResult of
+        Err error ->
+            Err error
+
+        Ok ( signatureTypeNode, afterSignatureType ) ->
+            parseFunctionDeclarationAtSecondName
+                nameRange
+                name
+                colonLocation
+                signatureTypeNode
+                (skipTrivia afterSignatureType)
+
+
+parseFunctionDeclarationAtSecondName :
+    Range
+    -> String
+    -> Location
+    -> Node TypeAnnotation.TypeAnnotation
+    -> ParserState
+    -> Result String ( Declaration.Declaration, ParserState )
+parseFunctionDeclarationAtSecondName nameRange name colonLocation signatureTypeNode stateAtSecondName =
+    case String.slice stateAtSecondName.offset (stateAtSecondName.offset + 1) stateAtSecondName.source of
+        secondFirst ->
+            if not (isIdentifierStart secondFirst) then
                 Err
-                    ("Expected function name, but found '"
-                        ++ firstNameToken.lexeme
+                    ("Expected function name after signature, but found '"
+                        ++ snippetAt stateAtSecondName
                         ++ "'."
                     )
 
             else
-                case dropTrivia afterFirstName of
-                    colonToken :: afterColon ->
-                        if colonToken.tokenType == Token.Colon then
-                            case
-                                parseTypeAnnotation
-                                    firstNameToken.start.column
-                                    (dropTrivia afterColon)
-                            of
-                                Err e ->
-                                    Err e
+                parseFunctionDeclarationWithSecondName
+                    nameRange
+                    name
+                    colonLocation
+                    signatureTypeNode
+                    stateAtSecondName
+                    (skipToIdentifierEnd stateAtSecondName.source (stateAtSecondName.offset + 1))
 
-                                Ok ( ((Node sigTypeAnnotationRange _) as sigTypeAnnotation), afterSigAnnotation ) ->
-                                    case dropTrivia afterSigAnnotation of
-                                        secondNameToken :: afterSecondName ->
-                                            if secondNameToken.tokenType /= Token.Identifier then
-                                                Err
-                                                    ("Expected function name after signature, but found '"
-                                                        ++ secondNameToken.lexeme
-                                                        ++ "'."
-                                                    )
 
-                                            else if secondNameToken.lexeme /= firstNameToken.lexeme then
-                                                Err
-                                                    ("Function name does not match signature: "
-                                                        ++ secondNameToken.lexeme
-                                                        ++ " != "
-                                                        ++ firstNameToken.lexeme
-                                                    )
+parseFunctionDeclarationWithSecondName :
+    Range
+    -> String
+    -> Location
+    -> Node TypeAnnotation.TypeAnnotation
+    -> ParserState
+    -> Int
+    -> Result String ( Declaration.Declaration, ParserState )
+parseFunctionDeclarationWithSecondName nameRange name colonLocation signatureTypeNode stateAtSecondName secondNameEnd =
+    let
+        secondName =
+            String.slice stateAtSecondName.offset secondNameEnd stateAtSecondName.source
 
-                                            else
-                                                let
-                                                    signatureNode =
-                                                        Node
-                                                            { start = firstNameToken.start
-                                                            , end = sigTypeAnnotationRange.end
-                                                            }
-                                                            { name =
-                                                                Node
-                                                                    (tokenRange firstNameToken)
-                                                                    firstNameToken.lexeme
-                                                            , colonLocation = colonToken.start
-                                                            , typeAnnotation = sigTypeAnnotation
-                                                            }
-                                                in
-                                                finishFunctionDeclaration
-                                                    firstNameToken
-                                                    secondNameToken
-                                                    (Just signatureNode)
-                                                    afterSecondName
+        (Node signatureTypeRange _) =
+            signatureTypeNode
+    in
+    if secondName /= name then
+        Err
+            ("Function name does not match signature: "
+                ++ secondName
+                ++ " != "
+                ++ name
+            )
 
-                                        [] ->
-                                            Err "Expected function name after signature."
-
-                        else
-                            finishFunctionDeclaration
-                                firstNameToken
-                                firstNameToken
-                                Nothing
-                                afterFirstName
-
-                    [] ->
-                        finishFunctionDeclaration firstNameToken firstNameToken Nothing []
-
-        [] ->
-            Err "Expected function name."
+    else
+        finishFunctionDeclaration
+            nameRange.start
+            { start = { row = stateAtSecondName.row, column = stateAtSecondName.column }
+            , end = { row = stateAtSecondName.row, column = stateAtSecondName.column + (secondNameEnd - stateAtSecondName.offset) }
+            }
+            secondName
+            (Just
+                (Node
+                    { start = nameRange.start
+                    , end = signatureTypeRange.end
+                    }
+                    { name = Node nameRange name
+                    , colonLocation = colonLocation
+                    , typeAnnotation = signatureTypeNode
+                    }
+                )
+            )
+            { source = stateAtSecondName.source
+            , offset = secondNameEnd
+            , row = stateAtSecondName.row
+            , column = stateAtSecondName.column + (secondNameEnd - stateAtSecondName.offset)
+            , commentsRev = stateAtSecondName.commentsRev
+            }
 
 
 finishFunctionDeclaration :
-    Token.Token
-    -> Token.Token
+    Location
+    -> Range
+    -> String
     -> Maybe (Node Expression.Signature)
-    -> List Token.Token
-    -> Result String ( Declaration.Declaration, List Token.Token )
-finishFunctionDeclaration firstNameToken implNameToken maybeSignature tokens =
-    case collectFunctionArguments firstNameToken.start.column [] tokens of
-        Err e ->
-            Err e
+    -> ParserState
+    -> Result String ( Declaration.Declaration, ParserState )
+finishFunctionDeclaration declarationStart implementationNameRange implementationName maybeSignature state =
+    finishFunctionDeclarationOnArguments
+        declarationStart
+        implementationNameRange
+        implementationName
+        maybeSignature
+        (collectFunctionArguments declarationStart.column [] state)
+
+
+finishFunctionDeclarationOnArguments :
+    Location
+    -> Range
+    -> String
+    -> Maybe (Node Expression.Signature)
+    -> Result String ( List (Node Pattern.Pattern), ParserState )
+    -> Result String ( Declaration.Declaration, ParserState )
+finishFunctionDeclarationOnArguments declarationStart implementationNameRange implementationName maybeSignature argumentsResult =
+    case argumentsResult of
+        Err error ->
+            Err error
 
         Ok ( arguments, afterArguments ) ->
-            case consumeToken Token.Equal "'='" afterArguments of
-                Err e ->
-                    Err e
-
-                Ok ( equalToken, afterEqual ) ->
-                    case
-                        parseExpressionNodeAt
-                            (firstNameToken.start.column + 1)
+            let
+                stateAtEquals =
+                    skipTrivia afterArguments
+            in
+            case String.slice stateAtEquals.offset (stateAtEquals.offset + 1) stateAtEquals.source of
+                "=" ->
+                    finishFunctionDeclarationOnBody
+                        implementationNameRange
+                        implementationName
+                        maybeSignature
+                        arguments
+                        { row = stateAtEquals.row, column = stateAtEquals.column }
+                        (parseExpressionNodeAt
+                            (declarationStart.column + 1)
                             0
-                            (dropTrivia afterEqual)
-                    of
-                        Err e ->
-                            Err e
+                            { source = stateAtEquals.source
+                            , offset = stateAtEquals.offset + 1
+                            , row = stateAtEquals.row
+                            , column = stateAtEquals.column + 1
+                            , commentsRev = stateAtEquals.commentsRev
+                            }
+                        )
 
-                        Ok ( ((Node bodyRange _) as bodyExpr), remaining ) ->
-                            let
-                                implRange =
-                                    { start = implNameToken.start
-                                    , end = bodyRange.end
-                                    }
+                _ ->
+                    Err ("Expected '=', but found '" ++ snippetAt stateAtEquals ++ "'.")
 
-                                functionImpl =
-                                    { name =
-                                        Node (tokenRange implNameToken) implNameToken.lexeme
-                                    , arguments = arguments
-                                    , equalsTokenLocation = equalToken.start
-                                    , expression = bodyExpr
-                                    }
 
-                                functionStruct =
-                                    { documentation = Nothing
-                                    , signature = maybeSignature
-                                    , declaration = Node implRange functionImpl
-                                    }
-                            in
-                            Ok
-                                ( Declaration.FunctionDeclaration functionStruct
-                                , remaining
-                                )
+finishFunctionDeclarationOnBody :
+    Range
+    -> String
+    -> Maybe (Node Expression.Signature)
+    -> List (Node Pattern.Pattern)
+    -> Location
+    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result String ( Declaration.Declaration, ParserState )
+finishFunctionDeclarationOnBody implementationNameRange implementationName maybeSignature arguments equalsTokenLocation bodyResult =
+    case bodyResult of
+        Err error ->
+            Err error
+
+        Ok ( Node bodyRange body, remaining ) ->
+            Ok
+                ( Declaration.FunctionDeclaration
+                    { documentation = Nothing
+                    , signature = maybeSignature
+                    , declaration =
+                        Node
+                            { start = implementationNameRange.start
+                            , end = bodyRange.end
+                            }
+                            { name = Node implementationNameRange implementationName
+                            , arguments = arguments
+                            , equalsTokenLocation = equalsTokenLocation
+                            , expression = Node bodyRange body
+                            }
+                    }
+                , remaining
+                )
 
 
 collectFunctionArguments :
     Int
     -> List (Node Pattern.Pattern)
-    -> List Token.Token
-    -> Result String ( List (Node Pattern.Pattern), List Token.Token )
-collectFunctionArguments indentMin argsRev tokens =
-    case dropTrivia tokens of
-        nextToken :: _ ->
-            if canStartArgumentPattern nextToken then
-                case parsePatternAtomic indentMin tokens of
-                    Err e ->
-                        Err e
-
-                    Ok ( arg, remaining ) ->
-                        collectFunctionArguments indentMin (arg :: argsRev) remaining
-
-            else
-                Ok ( List.reverse argsRev, tokens )
-
-        [] ->
-            Ok ( List.reverse argsRev, [] )
+    -> ParserState
+    -> Result String ( List (Node Pattern.Pattern), ParserState )
+collectFunctionArguments indentMin argumentsRev state =
+    collectFunctionArgumentsAt indentMin argumentsRev state (skipTrivia state)
 
 
-canStartArgumentPattern : Token.Token -> Bool
-canStartArgumentPattern token =
-    case token.tokenType of
-        Token.Identifier ->
-            True
+collectFunctionArgumentsAt :
+    Int
+    -> List (Node Pattern.Pattern)
+    -> ParserState
+    -> ParserState
+    -> Result String ( List (Node Pattern.Pattern), ParserState )
+collectFunctionArgumentsAt indentMin argumentsRev state stateAtArgument =
+    if canStartArgumentPatternAt stateAtArgument.source stateAtArgument.offset then
+        collectFunctionArgumentsOnArgument
+            indentMin
+            argumentsRev
+            (parsePatternAtomic indentMin stateAtArgument)
 
-        Token.OpenParen ->
-            True
-
-        Token.OpenBrace ->
-            True
-
-        Token.OpenBracket ->
-            True
-
-        _ ->
-            False
+    else
+        Ok ( List.reverse argumentsRev, state )
 
 
-canStartTypeAnnotation : Token.Token -> Bool
-canStartTypeAnnotation token =
-    case token.tokenType of
-        Token.Identifier ->
-            True
+collectFunctionArgumentsOnArgument :
+    Int
+    -> List (Node Pattern.Pattern)
+    -> Result String ( Node Pattern.Pattern, ParserState )
+    -> Result String ( List (Node Pattern.Pattern), ParserState )
+collectFunctionArgumentsOnArgument indentMin argumentsRev argumentResult =
+    case argumentResult of
+        Err error ->
+            Err error
 
-        Token.OpenParen ->
-            True
+        Ok ( argument, remaining ) ->
+            collectFunctionArguments indentMin (argument :: argumentsRev) remaining
 
-        Token.OpenBrace ->
-            True
 
-        _ ->
-            False
+
+-- TYPE ANNOTATIONS
 
 
 parseTypeAnnotation :
     Int
-    -> List Token.Token
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
-parseTypeAnnotation indentMin tokens =
-    case parseTypeAnnotationFunctionParam indentMin tokens of
-        Err e ->
-            Err e
+    -> ParserState
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+parseTypeAnnotation indentMin state =
+    parseTypeAnnotationOnParam (parseTypeAnnotationFunctionParam indentMin state)
 
-        Ok ( paramType, remaining ) ->
-            case dropTrivia remaining of
-                arrowToken :: afterArrow ->
-                    if arrowToken.tokenType == Token.Arrow then
-                        let
-                            (Node paramTypeRange _) =
-                                paramType
-                        in
-                        case parseTypeAnnotation paramTypeRange.start.column (dropTrivia afterArrow) of
-                            Err e ->
-                                Err e
 
-                            Ok ( returnType, afterReturn ) ->
-                                let
-                                    (Node returnTypeRange _) =
-                                        returnType
-                                in
-                                Ok
-                                    ( Node
-                                        { start = paramTypeRange.start
-                                        , end = returnTypeRange.end
-                                        }
-                                        (TypeAnnotation.FunctionTypeAnnotation
-                                            paramType
-                                            arrowToken.start
-                                            returnType
-                                        )
-                                    , afterReturn
-                                    )
+parseTypeAnnotationOnParam :
+    Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+parseTypeAnnotationOnParam paramResult =
+    case paramResult of
+        Err error ->
+            Err error
 
-                    else
-                        Ok ( paramType, remaining )
+        Ok ( paramTypeNode, afterParamType ) ->
+            parseTypeAnnotationAtArrow paramTypeNode afterParamType (skipTrivia afterParamType)
 
-                [] ->
-                    Ok ( paramType, [] )
+
+parseTypeAnnotationAtArrow :
+    Node TypeAnnotation.TypeAnnotation
+    -> ParserState
+    -> ParserState
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+parseTypeAnnotationAtArrow paramTypeNode afterParamType stateAtArrow =
+    if String.slice stateAtArrow.offset (stateAtArrow.offset + 2) stateAtArrow.source == "->" then
+        parseTypeAnnotationOnReturn
+            paramTypeNode
+            { row = stateAtArrow.row, column = stateAtArrow.column }
+            (parseTypeAnnotation
+                (typeAnnotationStartColumn paramTypeNode)
+                { source = stateAtArrow.source
+                , offset = stateAtArrow.offset + 2
+                , row = stateAtArrow.row
+                , column = stateAtArrow.column + 2
+                , commentsRev = stateAtArrow.commentsRev
+                }
+            )
+
+    else
+        Ok ( paramTypeNode, afterParamType )
+
+
+typeAnnotationStartColumn : Node TypeAnnotation.TypeAnnotation -> Int
+typeAnnotationStartColumn typeAnnotationNode =
+    case typeAnnotationNode of
+        Node typeAnnotationRange _ ->
+            typeAnnotationRange.start.column
+
+
+parseTypeAnnotationOnReturn :
+    Node TypeAnnotation.TypeAnnotation
+    -> Location
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+parseTypeAnnotationOnReturn paramTypeNode arrowLocation returnResult =
+    case returnResult of
+        Err error ->
+            Err error
+
+        Ok ( returnTypeNode, afterReturn ) ->
+            finishFunctionTypeAnnotation paramTypeNode arrowLocation returnTypeNode afterReturn
+
+
+finishFunctionTypeAnnotation :
+    Node TypeAnnotation.TypeAnnotation
+    -> Location
+    -> Node TypeAnnotation.TypeAnnotation
+    -> ParserState
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+finishFunctionTypeAnnotation paramTypeNode arrowLocation returnTypeNode afterReturn =
+    let
+        (Node paramTypeRange _) =
+            paramTypeNode
+
+        (Node returnTypeRange _) =
+            returnTypeNode
+    in
+    Ok
+        ( Node
+            { start = paramTypeRange.start
+            , end = returnTypeRange.end
+            }
+            (TypeAnnotation.FunctionTypeAnnotation
+                paramTypeNode
+                arrowLocation
+                returnTypeNode
+            )
+        , afterReturn
+        )
 
 
 parseTypeAnnotationFunctionParam :
     Int
-    -> List Token.Token
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
-parseTypeAnnotationFunctionParam indentMin tokens =
-    case parseTypeAnnotationTypedArg indentMin tokens of
-        Err e ->
-            Err e
+    -> ParserState
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+parseTypeAnnotationFunctionParam indentMin state =
+    parseTypeAnnotationOnTypedArg indentMin (parseTypeAnnotationTypedArg indentMin state)
 
-        Ok ( ((Node lessAppRange lessAppValue) as lessApp), remaining ) ->
+
+parseTypeAnnotationOnTypedArg :
+    Int
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+parseTypeAnnotationOnTypedArg indentMin typedArgResult =
+    case typedArgResult of
+        Err error ->
+            Err error
+
+        Ok ( Node lessAppRange lessAppValue, remaining ) ->
             case lessAppValue of
                 TypeAnnotation.Typed typedName [] ->
                     collectTypeApplicationArgs
                         indentMin
                         lessAppRange.start.column
                         typedName
-                        lessApp
+                        (Node lessAppRange lessAppValue)
                         []
-                        (dropTrivia remaining)
+                        remaining
 
                 _ ->
-                    Ok ( lessApp, remaining )
+                    Ok ( Node lessAppRange lessAppValue, remaining )
 
 
 collectTypeApplicationArgs :
@@ -1884,882 +3066,1655 @@ collectTypeApplicationArgs :
     -> Node ( List String, String )
     -> Node TypeAnnotation.TypeAnnotation
     -> List (Node TypeAnnotation.TypeAnnotation)
-    -> List Token.Token
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
-collectTypeApplicationArgs indentMin lessAppStartCol typedName lessApp argsRev tokens =
-    case tokens of
-        nextToken :: _ ->
-            if
-                nextToken.start.column
-                    > lessAppStartCol
-                    && nextToken.start.column
-                    > indentMin
-                    && canStartTypeAnnotation nextToken
-            then
-                case parseTypeAnnotationTypedArg indentMin tokens of
-                    Err e ->
-                        Err e
-
-                    Ok ( arg, remaining ) ->
-                        collectTypeApplicationArgs
-                            indentMin
-                            lessAppStartCol
-                            typedName
-                            lessApp
-                            (arg :: argsRev)
-                            (dropTrivia remaining)
-
-            else
-                buildTypedResult lessApp typedName argsRev tokens
-
-        [] ->
-            buildTypedResult lessApp typedName argsRev []
+    -> ParserState
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+collectTypeApplicationArgs indentMin lessAppStartColumn typedName lessApp argumentsRev state =
+    collectTypeApplicationArgsAt indentMin lessAppStartColumn typedName lessApp argumentsRev state (skipTrivia state)
 
 
-buildTypedResult :
-    Node TypeAnnotation.TypeAnnotation
+collectTypeApplicationArgsAt :
+    Int
+    -> Int
     -> Node ( List String, String )
+    -> Node TypeAnnotation.TypeAnnotation
     -> List (Node TypeAnnotation.TypeAnnotation)
-    -> List Token.Token
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
-buildTypedResult ((Node lessAppRange _) as lessApp) typedName argsRev remaining =
-    let
-        args =
-            List.reverse argsRev
+    -> ParserState
+    -> ParserState
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+collectTypeApplicationArgsAt indentMin lessAppStartColumn typedName lessApp argumentsRev state stateAtArgument =
+    if
+        stateAtArgument.column
+            > lessAppStartColumn
+            && stateAtArgument.column
+            > indentMin
+            && canStartTypeAnnotationAt stateAtArgument.source stateAtArgument.offset
+    then
+        case parseTypeAnnotationTypedArg indentMin stateAtArgument of
+            Err error ->
+                Err error
 
-        range =
-            case argsRev of
-                Node lastArgRange _ :: _ ->
-                    { start = lessAppRange.start
-                    , end = lastArgRange.end
-                    }
+            Ok ( argument, remaining ) ->
+                collectTypeApplicationArgs
+                    indentMin
+                    lessAppStartColumn
+                    typedName
+                    lessApp
+                    (argument :: argumentsRev)
+                    remaining
 
-                [] ->
-                    lessAppRange
-    in
-    Ok ( Node range (TypeAnnotation.Typed typedName args), remaining )
+    else
+        let
+            (Node lessAppRange _) =
+                lessApp
+
+            range =
+                case argumentsRev of
+                    (Node lastArgumentRange _) :: _ ->
+                        { start = lessAppRange.start
+                        , end = lastArgumentRange.end
+                        }
+
+                    [] ->
+                        lessAppRange
+        in
+        Ok
+            ( Node range (TypeAnnotation.Typed typedName (List.reverse argumentsRev))
+            , state
+            )
 
 
 parseTypeAnnotationTypedArg :
     Int
-    -> List Token.Token
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
-parseTypeAnnotationTypedArg indentMin tokens =
-    case dropTrivia tokens of
-        [] ->
-            Err "Expected a type annotation."
+    -> ParserState
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+parseTypeAnnotationTypedArg indentMin state =
+    parseTypeAnnotationTypedArgAt indentMin (skipTrivia state)
 
-        firstToken :: rest ->
-            case firstToken.tokenType of
-                Token.OpenParen ->
-                    parseParenthesizedTypeAnnotation indentMin firstToken rest
 
-                Token.OpenBrace ->
-                    parseRecordTypeAnnotation firstToken rest
+parseTypeAnnotationTypedArgAt :
+    Int
+    -> ParserState
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+parseTypeAnnotationTypedArgAt indentMin stateAtToken =
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        "(" ->
+            parseParenthesizedTypeAnnotation
+                indentMin
+                { row = stateAtToken.row, column = stateAtToken.column }
+                { source = stateAtToken.source
+                , offset = stateAtToken.offset + 1
+                , row = stateAtToken.row
+                , column = stateAtToken.column + 1
+                , commentsRev = stateAtToken.commentsRev
+                }
 
-                Token.Identifier ->
-                    if startsWithUpper firstToken.lexeme then
-                        let
-                            ( typeNameToken, moduleNamesRev, remaining ) =
-                                parseQualifiedName [] firstToken rest
+        "{" ->
+            parseRecordTypeAnnotation
+                { row = stateAtToken.row, column = stateAtToken.column }
+                { source = stateAtToken.source
+                , offset = stateAtToken.offset + 1
+                , row = stateAtToken.row
+                , column = stateAtToken.column + 1
+                , commentsRev = stateAtToken.commentsRev
+                }
 
-                            moduleNames =
-                                List.reverse moduleNamesRev
+        first ->
+            if isIdentifierStart first then
+                let
+                    nameEnd =
+                        skipToIdentifierEnd stateAtToken.source (stateAtToken.offset + 1)
 
-                            typeRange =
-                                { start = firstToken.start
-                                , end = typeNameToken.end
-                                }
-                        in
-                        Ok
-                            ( Node typeRange
-                                (TypeAnnotation.Typed
-                                    (Node typeRange ( moduleNames, typeNameToken.lexeme ))
-                                    []
-                                )
-                            , remaining
-                            )
+                    nameLength =
+                        nameEnd - stateAtToken.offset
 
-                    else
-                        Ok
-                            ( Node (tokenRange firstToken) (TypeAnnotation.GenericType firstToken.lexeme)
-                            , rest
-                            )
-
-                _ ->
-                    Err
-                        ("Unsupported type annotation start: '"
-                            ++ firstToken.lexeme
-                            ++ "'."
+                    name =
+                        String.slice stateAtToken.offset nameEnd stateAtToken.source
+                in
+                if isUpperCharacter first then
+                    let
+                        ( Node qualifiedRange qualifiedName, remaining ) =
+                            parseQualifiedNameNode name nameEnd stateAtToken
+                    in
+                    Ok
+                        ( Node qualifiedRange
+                            (TypeAnnotation.Typed (Node qualifiedRange qualifiedName) [])
+                        , remaining
                         )
+
+                else
+                    Ok
+                        ( Node
+                            { start = { row = stateAtToken.row, column = stateAtToken.column }
+                            , end = { row = stateAtToken.row, column = stateAtToken.column + nameLength }
+                            }
+                            (TypeAnnotation.GenericType name)
+                        , { source = stateAtToken.source
+                          , offset = nameEnd
+                          , row = stateAtToken.row
+                          , column = stateAtToken.column + nameLength
+                          , commentsRev = stateAtToken.commentsRev
+                          }
+                        )
+
+            else
+                Err
+                    ("Unsupported type annotation start: '"
+                        ++ snippetAt stateAtToken
+                        ++ "'."
+                    )
 
 
 parseParenthesizedTypeAnnotation :
     Int
-    -> Token.Token
-    -> List Token.Token
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
-parseParenthesizedTypeAnnotation indentMin openParen tokens =
-    case dropTrivia tokens of
-        closeToken :: rest ->
-            if closeToken.tokenType == Token.CloseParen then
-                Ok
-                    ( Node { start = openParen.start, end = closeToken.end } TypeAnnotation.Unit
-                    , rest
-                    )
+    -> Location
+    -> ParserState
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+parseParenthesizedTypeAnnotation indentMin openParenLocation state =
+    parseParenthesizedTypeAnnotationAt indentMin openParenLocation (skipTrivia state)
 
-            else
-                case parseTypeAnnotation indentMin tokens of
-                    Err e ->
-                        Err e
 
-                    Ok ( firstAnnotation, afterFirst ) ->
-                        parseFurtherTypeAnnotations indentMin openParen firstAnnotation [] afterFirst
+parseParenthesizedTypeAnnotationAt :
+    Int
+    -> Location
+    -> ParserState
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+parseParenthesizedTypeAnnotationAt indentMin openParenLocation stateAtToken =
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        ")" ->
+            Ok
+                ( Node
+                    { start = openParenLocation
+                    , end = { row = stateAtToken.row, column = stateAtToken.column + 1 }
+                    }
+                    TypeAnnotation.Unit
+                , { source = stateAtToken.source
+                  , offset = stateAtToken.offset + 1
+                  , row = stateAtToken.row
+                  , column = stateAtToken.column + 1
+                  , commentsRev = stateAtToken.commentsRev
+                  }
+                )
 
-        [] ->
-            Err "Expected ')' or a type annotation after '('."
+        _ ->
+            case parseTypeAnnotation indentMin stateAtToken of
+                Err error ->
+                    Err error
+
+                Ok ( firstAnnotation, afterFirst ) ->
+                    parseFurtherTypeAnnotations indentMin openParenLocation firstAnnotation [] afterFirst
 
 
 parseFurtherTypeAnnotations :
     Int
-    -> Token.Token
+    -> Location
     -> Node TypeAnnotation.TypeAnnotation
     -> List ( Location, Node TypeAnnotation.TypeAnnotation )
-    -> List Token.Token
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
-parseFurtherTypeAnnotations indentMin openParen first restRev tokens =
-    case dropTrivia tokens of
-        token :: rest ->
-            if token.tokenType == Token.CloseParen then
-                let
-                    range =
-                        { start = openParen.start, end = token.end }
+    -> ParserState
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+parseFurtherTypeAnnotations indentMin openParenLocation first restRev state =
+    parseFurtherTypeAnnotationsAt indentMin openParenLocation first restRev (skipTrivia state)
 
-                    annotation =
-                        TypeAnnotation.Tupled
-                            (SeparatedSyntaxList.NonEmpty first (List.reverse restRev))
-                in
-                Ok ( Node range annotation, rest )
 
-            else if token.tokenType == Token.Comma then
-                case parseTypeAnnotation indentMin (dropTrivia rest) of
-                    Err e ->
-                        Err e
-
-                    Ok ( nextAnnotation, remaining ) ->
-                        parseFurtherTypeAnnotations
-                            indentMin
-                            openParen
-                            first
-                            (( token.start, nextAnnotation ) :: restRev)
-                            remaining
-
-            else
-                Err
-                    ("Expected ',' or ')' in type annotation, but found '"
-                        ++ token.lexeme
-                        ++ "'."
+parseFurtherTypeAnnotationsAt :
+    Int
+    -> Location
+    -> Node TypeAnnotation.TypeAnnotation
+    -> List ( Location, Node TypeAnnotation.TypeAnnotation )
+    -> ParserState
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+parseFurtherTypeAnnotationsAt indentMin openParenLocation first restRev stateAtToken =
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        ")" ->
+            Ok
+                ( Node
+                    { start = openParenLocation
+                    , end = { row = stateAtToken.row, column = stateAtToken.column + 1 }
+                    }
+                    (TypeAnnotation.Tupled
+                        (SeparatedSyntaxList.NonEmpty first (List.reverse restRev))
                     )
+                , { source = stateAtToken.source
+                  , offset = stateAtToken.offset + 1
+                  , row = stateAtToken.row
+                  , column = stateAtToken.column + 1
+                  , commentsRev = stateAtToken.commentsRev
+                  }
+                )
 
-        [] ->
-            Err "Expected ')' in type annotation."
+        "," ->
+            case
+                parseTypeAnnotation
+                    indentMin
+                    { source = stateAtToken.source
+                    , offset = stateAtToken.offset + 1
+                    , row = stateAtToken.row
+                    , column = stateAtToken.column + 1
+                    , commentsRev = stateAtToken.commentsRev
+                    }
+            of
+                Err error ->
+                    Err error
+
+                Ok ( nextAnnotation, remaining ) ->
+                    parseFurtherTypeAnnotations
+                        indentMin
+                        openParenLocation
+                        first
+                        (( { row = stateAtToken.row, column = stateAtToken.column }, nextAnnotation ) :: restRev)
+                        remaining
+
+        _ ->
+            Err
+                ("Expected ',' or ')' in type annotation, but found '"
+                    ++ snippetAt stateAtToken
+                    ++ "'."
+                )
 
 
 parseRecordTypeAnnotation :
-    Token.Token
-    -> List Token.Token
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
-parseRecordTypeAnnotation openBrace tokens =
-    case dropTrivia tokens of
-        closeToken :: rest ->
-            if closeToken.tokenType == Token.CloseBrace then
-                Ok
-                    ( Node { start = openBrace.start, end = closeToken.end }
-                        (TypeAnnotation.Record SeparatedSyntaxList.Empty)
-                    , rest
+    Location
+    -> ParserState
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+parseRecordTypeAnnotation openBraceLocation state =
+    parseRecordTypeAnnotationAt openBraceLocation (skipTrivia state)
+
+
+parseRecordTypeAnnotationAt :
+    Location
+    -> ParserState
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+parseRecordTypeAnnotationAt openBraceLocation stateAtToken =
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        "}" ->
+            Ok
+                ( Node
+                    { start = openBraceLocation
+                    , end = { row = stateAtToken.row, column = stateAtToken.column + 1 }
+                    }
+                    (TypeAnnotation.Record SeparatedSyntaxList.Empty)
+                , { source = stateAtToken.source
+                  , offset = stateAtToken.offset + 1
+                  , row = stateAtToken.row
+                  , column = stateAtToken.column + 1
+                  , commentsRev = stateAtToken.commentsRev
+                  }
+                )
+
+        first ->
+            if not (isIdentifierStart first) then
+                Err
+                    ("Expected record field name, but found '"
+                        ++ snippetAt stateAtToken
+                        ++ "'."
                     )
 
             else
-                case dropTrivia tokens of
-                    firstIdToken :: afterFirstId ->
-                        if firstIdToken.tokenType /= Token.Identifier then
-                            Err
-                                ("Expected record field name, but found '"
-                                    ++ firstIdToken.lexeme
-                                    ++ "'."
-                                )
+                let
+                    nameEnd =
+                        skipToIdentifierEnd stateAtToken.source (stateAtToken.offset + 1)
 
-                        else
-                            case dropTrivia afterFirstId of
-                                pipeToken :: afterPipe ->
-                                    if pipeToken.tokenType == Token.Pipe then
-                                        parseGenericRecordBody
-                                            openBrace
-                                            firstIdToken
-                                            pipeToken
-                                            (dropTrivia afterPipe)
+                    nameLength =
+                        nameEnd - stateAtToken.offset
 
-                                    else
-                                        parseRecordTypeFields
-                                            openBrace
-                                            firstIdToken
-                                            (dropTrivia afterFirstId)
+                    afterName =
+                        { source = stateAtToken.source
+                        , offset = nameEnd
+                        , row = stateAtToken.row
+                        , column = stateAtToken.column + nameLength
+                        , commentsRev = stateAtToken.commentsRev
+                        }
 
-                                [] ->
-                                    Err "Expected '|' or ':' in record type annotation."
+                    stateAtPipe =
+                        skipTrivia afterName
+                in
+                if isPipeToken stateAtPipe.source stateAtPipe.offset then
+                    parseGenericRecordBody
+                        openBraceLocation
+                        (Node
+                            { start = { row = stateAtToken.row, column = stateAtToken.column }
+                            , end = { row = stateAtToken.row, column = stateAtToken.column + nameLength }
+                            }
+                            (String.slice stateAtToken.offset nameEnd stateAtToken.source)
+                        )
+                        { row = stateAtPipe.row, column = stateAtPipe.column }
+                        { source = stateAtPipe.source
+                        , offset = stateAtPipe.offset + 1
+                        , row = stateAtPipe.row
+                        , column = stateAtPipe.column + 1
+                        , commentsRev = stateAtPipe.commentsRev
+                        }
 
-                    [] ->
-                        Err "Expected record field name."
+                else
+                    case parseTypeRecordFieldFromName stateAtToken of
+                        Err error ->
+                            Err error
 
-        [] ->
-            Err "Expected '}' in record type annotation."
+                        Ok ( firstField, _, afterFirst ) ->
+                            finishOrContinueRecord openBraceLocation firstField [] afterFirst
 
 
 parseGenericRecordBody :
-    Token.Token
-    -> Token.Token
-    -> Token.Token
-    -> List Token.Token
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
-parseGenericRecordBody openBrace genericName pipeToken tokens =
-    case tokens of
-        closeToken :: rest ->
-            if closeToken.tokenType == Token.CloseBrace then
-                let
-                    nodeRecordDefRange =
-                        { start = pipeToken.end, end = pipeToken.end }
-
-                    range =
-                        { start = openBrace.start, end = closeToken.end }
-                in
-                Ok
-                    ( Node range
-                        (TypeAnnotation.GenericRecord
-                            (Node (tokenRange genericName) genericName.lexeme)
-                            pipeToken.start
-                            (Node nodeRecordDefRange SeparatedSyntaxList.Empty)
-                        )
-                    , rest
-                    )
-
-            else
-                parseGenericRecordFields openBrace genericName pipeToken pipeToken.end Nothing [] tokens
-
-        [] ->
-            Err "Expected '}' in generic record type annotation."
-
-
-parseGenericRecordFields :
-    Token.Token
-    -> Token.Token
-    -> Token.Token
+    Location
+    -> Node String
     -> Location
-    -> Maybe (Node TypeAnnotation.RecordField)
-    -> List ( Location, Node TypeAnnotation.RecordField )
-    -> List Token.Token
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
-parseGenericRecordFields openBrace genericName pipeToken nodeRecordDefStart maybeFirst restRev tokens =
-    case parseTypeRecordFieldFromName tokens of
-        Err e ->
-            Err e
+    -> ParserState
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+parseGenericRecordBody openBraceLocation genericName pipeLocation state =
+    let
+        nodeRecordDefStart =
+            { row = pipeLocation.row, column = pipeLocation.column + 1 }
 
-        Ok ( fieldNode, fieldEnd, afterField ) ->
-            case maybeFirst of
-                Nothing ->
-                    finishOrContinueGenericRecord
-                        openBrace
+        stateAtToken =
+            skipTrivia state
+    in
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        "}" ->
+            Ok
+                ( Node
+                    { start = openBraceLocation
+                    , end = { row = stateAtToken.row, column = stateAtToken.column + 1 }
+                    }
+                    (TypeAnnotation.GenericRecord
                         genericName
-                        pipeToken
+                        pipeLocation
+                        (Node
+                            { start = nodeRecordDefStart, end = nodeRecordDefStart }
+                            SeparatedSyntaxList.Empty
+                        )
+                    )
+                , { source = stateAtToken.source
+                  , offset = stateAtToken.offset + 1
+                  , row = stateAtToken.row
+                  , column = stateAtToken.column + 1
+                  , commentsRev = stateAtToken.commentsRev
+                  }
+                )
+
+        _ ->
+            case parseTypeRecordFieldFromName stateAtToken of
+                Err error ->
+                    Err error
+
+                Ok ( firstField, fieldEnd, afterField ) ->
+                    finishOrContinueGenericRecord
+                        openBraceLocation
+                        genericName
+                        pipeLocation
                         nodeRecordDefStart
-                        fieldNode
+                        firstField
                         fieldEnd
                         []
-                        (dropTrivia afterField)
-
-                Just firstField ->
-                    Err "Internal error: expected to parse first field in generic record."
+                        afterField
 
 
 finishOrContinueGenericRecord :
-    Token.Token
-    -> Token.Token
-    -> Token.Token
+    Location
+    -> Node String
+    -> Location
     -> Location
     -> Node TypeAnnotation.RecordField
     -> Location
     -> List ( Location, Node TypeAnnotation.RecordField )
-    -> List Token.Token
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
-finishOrContinueGenericRecord openBrace genericName pipeToken nodeRecordDefStart firstField lastEnd restRev tokens =
-    case tokens of
-        token :: rest ->
-            if token.tokenType == Token.CloseBrace then
-                let
-                    fieldsList =
-                        SeparatedSyntaxList.NonEmpty firstField (List.reverse restRev)
+    -> ParserState
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+finishOrContinueGenericRecord openBraceLocation genericName pipeLocation nodeRecordDefStart firstField lastEnd restRev state =
+    finishOrContinueGenericRecordAt openBraceLocation genericName pipeLocation nodeRecordDefStart firstField lastEnd restRev (skipTrivia state)
 
-                    nodeRecordDefRange =
-                        { start = nodeRecordDefStart, end = lastEnd }
 
-                    range =
-                        { start = openBrace.start, end = token.end }
-                in
-                Ok
-                    ( Node range
-                        (TypeAnnotation.GenericRecord
-                            (Node (tokenRange genericName) genericName.lexeme)
-                            pipeToken.start
-                            (Node nodeRecordDefRange fieldsList)
+finishOrContinueGenericRecordAt :
+    Location
+    -> Node String
+    -> Location
+    -> Location
+    -> Node TypeAnnotation.RecordField
+    -> Location
+    -> List ( Location, Node TypeAnnotation.RecordField )
+    -> ParserState
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+finishOrContinueGenericRecordAt openBraceLocation genericName pipeLocation nodeRecordDefStart firstField lastEnd restRev stateAtToken =
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        "}" ->
+            Ok
+                ( Node
+                    { start = openBraceLocation
+                    , end = { row = stateAtToken.row, column = stateAtToken.column + 1 }
+                    }
+                    (TypeAnnotation.GenericRecord
+                        genericName
+                        pipeLocation
+                        (Node
+                            { start = nodeRecordDefStart, end = lastEnd }
+                            (SeparatedSyntaxList.NonEmpty firstField (List.reverse restRev))
                         )
-                    , rest
                     )
+                , { source = stateAtToken.source
+                  , offset = stateAtToken.offset + 1
+                  , row = stateAtToken.row
+                  , column = stateAtToken.column + 1
+                  , commentsRev = stateAtToken.commentsRev
+                  }
+                )
 
-            else if token.tokenType == Token.Comma then
-                case parseTypeRecordFieldFromName (dropTrivia rest) of
-                    Err e ->
-                        Err e
+        "," ->
+            case
+                parseTypeRecordFieldFromName
+                    { source = stateAtToken.source
+                    , offset = stateAtToken.offset + 1
+                    , row = stateAtToken.row
+                    , column = stateAtToken.column + 1
+                    , commentsRev = stateAtToken.commentsRev
+                    }
+            of
+                Err error ->
+                    Err error
 
-                    Ok ( nextField, nextEnd, afterNext ) ->
-                        finishOrContinueGenericRecord
-                            openBrace
-                            genericName
-                            pipeToken
-                            nodeRecordDefStart
-                            firstField
-                            nextEnd
-                            (( token.start, nextField ) :: restRev)
-                            (dropTrivia afterNext)
+                Ok ( nextField, nextEnd, afterNext ) ->
+                    finishOrContinueGenericRecord
+                        openBraceLocation
+                        genericName
+                        pipeLocation
+                        nodeRecordDefStart
+                        firstField
+                        nextEnd
+                        (( { row = stateAtToken.row, column = stateAtToken.column }, nextField ) :: restRev)
+                        afterNext
 
-            else
-                Err
-                    ("Expected ',' or '}' in generic record type annotation, but found '"
-                        ++ token.lexeme
-                        ++ "'."
-                    )
-
-        [] ->
-            Err "Expected '}' in generic record type annotation."
-
-
-parseRecordTypeFields :
-    Token.Token
-    -> Token.Token
-    -> List Token.Token
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
-parseRecordTypeFields openBrace firstFieldName tokens =
-    case parseTypeRecordFieldFromName (firstFieldName :: tokens) of
-        Err e ->
-            Err e
-
-        Ok ( firstField, _, afterFirst ) ->
-            finishOrContinueRecord openBrace firstField [] (dropTrivia afterFirst)
+        _ ->
+            Err
+                ("Expected ',' or '}' in generic record type annotation, but found '"
+                    ++ snippetAt stateAtToken
+                    ++ "'."
+                )
 
 
 finishOrContinueRecord :
-    Token.Token
+    Location
     -> Node TypeAnnotation.RecordField
     -> List ( Location, Node TypeAnnotation.RecordField )
-    -> List Token.Token
-    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
-finishOrContinueRecord openBrace firstField restRev tokens =
-    case tokens of
-        token :: rest ->
-            if token.tokenType == Token.CloseBrace then
-                let
-                    fieldsList =
-                        SeparatedSyntaxList.NonEmpty firstField (List.reverse restRev)
+    -> ParserState
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+finishOrContinueRecord openBraceLocation firstField restRev state =
+    finishOrContinueRecordAt openBraceLocation firstField restRev (skipTrivia state)
 
-                    range =
-                        { start = openBrace.start, end = token.end }
-                in
-                Ok
-                    ( Node range (TypeAnnotation.Record fieldsList)
-                    , rest
+
+finishOrContinueRecordAt :
+    Location
+    -> Node TypeAnnotation.RecordField
+    -> List ( Location, Node TypeAnnotation.RecordField )
+    -> ParserState
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
+finishOrContinueRecordAt openBraceLocation firstField restRev stateAtToken =
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        "}" ->
+            Ok
+                ( Node
+                    { start = openBraceLocation
+                    , end = { row = stateAtToken.row, column = stateAtToken.column + 1 }
+                    }
+                    (TypeAnnotation.Record
+                        (SeparatedSyntaxList.NonEmpty firstField (List.reverse restRev))
                     )
+                , { source = stateAtToken.source
+                  , offset = stateAtToken.offset + 1
+                  , row = stateAtToken.row
+                  , column = stateAtToken.column + 1
+                  , commentsRev = stateAtToken.commentsRev
+                  }
+                )
 
-            else if token.tokenType == Token.Comma then
-                case parseTypeRecordFieldFromName (dropTrivia rest) of
-                    Err e ->
-                        Err e
+        "," ->
+            case
+                parseTypeRecordFieldFromName
+                    { source = stateAtToken.source
+                    , offset = stateAtToken.offset + 1
+                    , row = stateAtToken.row
+                    , column = stateAtToken.column + 1
+                    , commentsRev = stateAtToken.commentsRev
+                    }
+            of
+                Err error ->
+                    Err error
 
-                    Ok ( nextField, _, afterNext ) ->
-                        finishOrContinueRecord
-                            openBrace
-                            firstField
-                            (( token.start, nextField ) :: restRev)
-                            (dropTrivia afterNext)
+                Ok ( nextField, _, afterNext ) ->
+                    finishOrContinueRecord
+                        openBraceLocation
+                        firstField
+                        (( { row = stateAtToken.row, column = stateAtToken.column }, nextField ) :: restRev)
+                        afterNext
 
-            else
-                Err
-                    ("Expected ',' or '}' in record type annotation, but found '"
-                        ++ token.lexeme
-                        ++ "'."
-                    )
-
-        [] ->
-            Err "Expected '}' in record type annotation."
+        _ ->
+            Err
+                ("Expected ',' or '}' in record type annotation, but found '"
+                    ++ snippetAt stateAtToken
+                    ++ "'."
+                )
 
 
 parseTypeRecordFieldFromName :
-    List Token.Token
-    -> Result String ( Node TypeAnnotation.RecordField, Location, List Token.Token )
-parseTypeRecordFieldFromName tokens =
-    case dropTrivia tokens of
-        fieldNameToken :: afterFieldName ->
-            if fieldNameToken.tokenType /= Token.Identifier then
+    ParserState
+    -> Result String ( Node TypeAnnotation.RecordField, Location, ParserState )
+parseTypeRecordFieldFromName state =
+    parseTypeRecordFieldFromNameAt (skipTrivia state)
+
+
+parseTypeRecordFieldFromNameAt :
+    ParserState
+    -> Result String ( Node TypeAnnotation.RecordField, Location, ParserState )
+parseTypeRecordFieldFromNameAt stateAtName =
+    case String.slice stateAtName.offset (stateAtName.offset + 1) stateAtName.source of
+        first ->
+            if not (isIdentifierStart first) then
                 Err
                     ("Expected record field name, but found '"
-                        ++ fieldNameToken.lexeme
+                        ++ snippetAt stateAtName
                         ++ "'."
                     )
 
             else
-                case consumeToken Token.Colon "':'" (dropTrivia afterFieldName) of
-                    Err e ->
-                        Err e
+                let
+                    nameEnd =
+                        skipToIdentifierEnd stateAtName.source (stateAtName.offset + 1)
 
-                    Ok ( colonToken, afterColon ) ->
-                        case parseTypeAnnotation fieldNameToken.start.column (dropTrivia afterColon) of
-                            Err e ->
-                                Err e
+                    nameLength =
+                        nameEnd - stateAtName.offset
 
-                            Ok ( ((Node fieldTypeRange _) as fieldTypeNode), remaining ) ->
-                                let
-                                    fieldEnd =
-                                        fieldTypeRange.end
+                    nameRange =
+                        { start = { row = stateAtName.row, column = stateAtName.column }
+                        , end = { row = stateAtName.row, column = stateAtName.column + nameLength }
+                        }
 
-                                    fieldRecord =
+                    stateAtColon =
+                        skipTrivia
+                            { source = stateAtName.source
+                            , offset = nameEnd
+                            , row = stateAtName.row
+                            , column = stateAtName.column + nameLength
+                            , commentsRev = stateAtName.commentsRev
+                            }
+                in
+                case String.slice stateAtColon.offset (stateAtColon.offset + 1) stateAtColon.source of
+                    ":" ->
+                        case
+                            parseTypeAnnotation
+                                stateAtName.column
+                                { source = stateAtColon.source
+                                , offset = stateAtColon.offset + 1
+                                , row = stateAtColon.row
+                                , column = stateAtColon.column + 1
+                                , commentsRev = stateAtColon.commentsRev
+                                }
+                        of
+                            Err error ->
+                                Err error
+
+                            Ok ( Node fieldTypeRange fieldType, remaining ) ->
+                                Ok
+                                    ( Node
+                                        { start = nameRange.start, end = fieldTypeRange.end }
                                         { fieldName =
-                                            Node (tokenRange fieldNameToken) fieldNameToken.lexeme
-                                        , colonLocation = colonToken.start
-                                        , fieldType = fieldTypeNode
+                                            Node nameRange (String.slice stateAtName.offset nameEnd stateAtName.source)
+                                        , colonLocation = { row = stateAtColon.row, column = stateAtColon.column }
+                                        , fieldType = Node fieldTypeRange fieldType
                                         }
+                                    , fieldTypeRange.end
+                                    , remaining
+                                    )
 
-                                    fieldNode =
-                                        Node
-                                            { start = fieldNameToken.start, end = fieldEnd }
-                                            fieldRecord
-                                in
-                                Ok ( fieldNode, fieldEnd, remaining )
-
-        [] ->
-            Err "Expected record field name."
+                    _ ->
+                        Err ("Expected ':', but found '" ++ snippetAt stateAtColon ++ "'.")
 
 
-parseExpressionTokens : List Token.Token -> Result String Expression.Expression
-parseExpressionTokens tokens =
-    case parseExpressionNode tokens of
-        Ok ( Node _ expression, remaining ) ->
-            case dropTrivia remaining of
-                [] ->
-                    Ok expression
 
-                nextToken :: _ ->
-                    Err ("Unexpected token '" ++ nextToken.lexeme ++ "' after parsing expression.")
-
-        Err error ->
-            Err error
-
-
-parseExpressionNode : List Token.Token -> Result String ( Node Expression.Expression, List Token.Token )
-parseExpressionNode tokens =
-    parseExpressionNodeAt 0 0 tokens
+-- EXPRESSIONS
 
 
 parseExpressionNodeAt :
     Int
     -> Int
-    -> List Token.Token
-    -> Result String ( Node Expression.Expression, List Token.Token )
-parseExpressionNodeAt indentMin minPrecedence tokens =
-    case parseApplication indentMin tokens of
-        Ok parsedApplication ->
-            parseOperators indentMin minPrecedence parsedApplication
+    -> ParserState
+    -> Result String ( Node Expression.Expression, ParserState )
+parseExpressionNodeAt indentMin minPrecedence state =
+    parseOperatorsOnApplication indentMin minPrecedence (parseApplication indentMin state)
 
+
+{-| Continues with the operator parser on an already parsed application.
+
+The application result arrives as an argument instead of being matched directly on the call
+that produced it: a `case` on a call evaluates that call once for the branch test and once more
+for the branch that reads the matched value, which would double the cost of every nesting level
+of the grammar. Matching on a parameter costs two environment lookups instead.
+
+-}
+parseOperatorsOnApplication :
+    Int
+    -> Int
+    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result String ( Node Expression.Expression, ParserState )
+parseOperatorsOnApplication indentMin minPrecedence applicationResult =
+    case applicationResult of
         Err error ->
             Err error
+
+        Ok ( application, afterApplication ) ->
+            parseOperators indentMin minPrecedence application afterApplication
 
 
 parseOperators :
     Int
     -> Int
-    -> ( Node Expression.Expression, List Token.Token )
-    -> Result String ( Node Expression.Expression, List Token.Token )
-parseOperators indentMin minPrecedence ( left, tokens ) =
-    case dropTrivia tokens of
-        operatorToken :: afterOperator ->
-            case operatorInfo operatorToken of
-                Just ( precedence, direction ) ->
-                    if precedence < minPrecedence then
-                        Ok ( left, tokens )
+    -> Node Expression.Expression
+    -> ParserState
+    -> Result String ( Node Expression.Expression, ParserState )
+parseOperators indentMin minPrecedence left state =
+    parseOperatorsAt indentMin minPrecedence left state (skipTrivia state)
 
-                    else
-                        let
-                            nextMinPrecedence =
-                                if direction == Infix.Left || direction == Infix.Non then
-                                    precedence + 1
 
-                                else
-                                    precedence
-                        in
-                        case parseExpressionNodeAt indentMin nextMinPrecedence afterOperator of
-                            Ok ( right, remaining ) ->
-                                let
-                                    (Node leftRange _) =
-                                        left
+parseOperatorsAt :
+    Int
+    -> Int
+    -> Node Expression.Expression
+    -> ParserState
+    -> ParserState
+    -> Result String ( Node Expression.Expression, ParserState )
+parseOperatorsAt indentMin minPrecedence left state stateAtOperator =
+    parseOperatorsWithLength
+        indentMin
+        minPrecedence
+        left
+        state
+        stateAtOperator
+        (operatorTokenLength stateAtOperator.source stateAtOperator.offset)
 
-                                    (Node rightRange _) =
-                                        right
-                                in
-                                parseOperators indentMin
-                                    minPrecedence
-                                    ( Node
-                                        { start = leftRange.start
-                                        , end = rightRange.end
-                                        }
-                                        (Expression.OperatorApplication
-                                            (Node (tokenRange operatorToken) operatorToken.lexeme)
-                                            direction
-                                            left
-                                            right
-                                        )
-                                    , remaining
-                                    )
 
-                            Err error ->
-                                Err error
+parseOperatorsWithLength :
+    Int
+    -> Int
+    -> Node Expression.Expression
+    -> ParserState
+    -> ParserState
+    -> Int
+    -> Result String ( Node Expression.Expression, ParserState )
+parseOperatorsWithLength indentMin minPrecedence left state stateAtOperator operatorLength =
+    if operatorLength == 0 then
+        Ok ( left, state )
 
-                Nothing ->
-                    Ok ( left, tokens )
+    else
+        parseOperatorsWithLexeme
+            indentMin
+            minPrecedence
+            left
+            state
+            stateAtOperator
+            operatorLength
+            (String.slice stateAtOperator.offset (stateAtOperator.offset + operatorLength) stateAtOperator.source)
 
-        [] ->
-            Ok ( left, [] )
+
+parseOperatorsWithLexeme :
+    Int
+    -> Int
+    -> Node Expression.Expression
+    -> ParserState
+    -> ParserState
+    -> Int
+    -> String
+    -> Result String ( Node Expression.Expression, ParserState )
+parseOperatorsWithLexeme indentMin minPrecedence left state stateAtOperator operatorLength operatorLexeme =
+    parseOperatorsWithPrecedence
+        indentMin
+        minPrecedence
+        left
+        state
+        stateAtOperator
+        operatorLength
+        operatorLexeme
+        (operatorPrecedence operatorLexeme)
+
+
+parseOperatorsWithPrecedence :
+    Int
+    -> Int
+    -> Node Expression.Expression
+    -> ParserState
+    -> ParserState
+    -> Int
+    -> String
+    -> Int
+    -> Result String ( Node Expression.Expression, ParserState )
+parseOperatorsWithPrecedence indentMin minPrecedence left state stateAtOperator operatorLength operatorLexeme precedence =
+    if precedence < 0 || precedence < minPrecedence then
+        Ok ( left, state )
+
+    else
+        parseOperatorsWithDirection
+            indentMin
+            minPrecedence
+            left
+            stateAtOperator
+            operatorLength
+            operatorLexeme
+            precedence
+            (operatorDirection operatorLexeme)
+
+
+parseOperatorsWithDirection :
+    Int
+    -> Int
+    -> Node Expression.Expression
+    -> ParserState
+    -> Int
+    -> String
+    -> Int
+    -> Infix.InfixDirection
+    -> Result String ( Node Expression.Expression, ParserState )
+parseOperatorsWithDirection indentMin minPrecedence left stateAtOperator operatorLength operatorLexeme precedence direction =
+    parseOperatorsOnRight
+        indentMin
+        minPrecedence
+        left
+        (Node
+            { start = { row = stateAtOperator.row, column = stateAtOperator.column }
+            , end = { row = stateAtOperator.row, column = stateAtOperator.column + operatorLength }
+            }
+            operatorLexeme
+        )
+        direction
+        (parseExpressionNodeAt
+            indentMin
+            (case direction of
+                Infix.Left ->
+                    precedence + 1
+
+                Infix.Non ->
+                    precedence + 1
+
+                Infix.Right ->
+                    precedence
+            )
+            { source = stateAtOperator.source
+            , offset = stateAtOperator.offset + operatorLength
+            , row = stateAtOperator.row
+            , column = stateAtOperator.column + operatorLength
+            , commentsRev = stateAtOperator.commentsRev
+            }
+        )
+
+
+parseOperatorsOnRight :
+    Int
+    -> Int
+    -> Node Expression.Expression
+    -> Node String
+    -> Infix.InfixDirection
+    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result String ( Node Expression.Expression, ParserState )
+parseOperatorsOnRight indentMin minPrecedence left operatorNode direction rightResult =
+    case rightResult of
+        Err error ->
+            Err error
+
+        Ok ( rightNode, remaining ) ->
+            parseOperators
+                indentMin
+                minPrecedence
+                (operatorApplicationNode left operatorNode direction rightNode)
+                remaining
+
+
+operatorApplicationNode :
+    Node Expression.Expression
+    -> Node String
+    -> Infix.InfixDirection
+    -> Node Expression.Expression
+    -> Node Expression.Expression
+operatorApplicationNode left operatorNode direction rightNode =
+    let
+        (Node leftRange _) =
+            left
+
+        (Node rightRange _) =
+            rightNode
+    in
+    Node
+        { start = leftRange.start
+        , end = rightRange.end
+        }
+        (Expression.OperatorApplication
+            operatorNode
+            direction
+            left
+            rightNode
+        )
 
 
 parseApplication :
     Int
-    -> List Token.Token
-    -> Result String ( Node Expression.Expression, List Token.Token )
-parseApplication indentMin tokens =
-    case parseBasicExpression indentMin tokens of
-        Ok ( function, remaining ) ->
-            parseApplicationArguments indentMin function [] remaining
+    -> ParserState
+    -> Result String ( Node Expression.Expression, ParserState )
+parseApplication indentMin state =
+    parseApplicationArgumentsOnFunction indentMin (parseBasicExpression indentMin state)
 
+
+parseApplicationArgumentsOnFunction :
+    Int
+    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result String ( Node Expression.Expression, ParserState )
+parseApplicationArgumentsOnFunction indentMin functionResult =
+    case functionResult of
         Err error ->
             Err error
+
+        Ok ( function, afterFunction ) ->
+            parseApplicationArguments indentMin function [] afterFunction
 
 
 parseApplicationArguments :
     Int
     -> Node Expression.Expression
     -> List (Node Expression.Expression)
-    -> List Token.Token
-    -> Result String ( Node Expression.Expression, List Token.Token )
-parseApplicationArguments indentMin function argumentsRev tokens =
-    case dropTrivia tokens of
-        next :: _ ->
-            if next.start.column > indentMin && canStartArgumentExpression next then
-                case parseBasicExpression indentMin tokens of
-                    Ok ( argument, remaining ) ->
-                        parseApplicationArguments indentMin function (argument :: argumentsRev) remaining
-
-                    Err error ->
-                        Err error
-
-            else
-                finishApplication function argumentsRev tokens
-
-        [] ->
-            finishApplication function argumentsRev []
+    -> ParserState
+    -> Result String ( Node Expression.Expression, ParserState )
+parseApplicationArguments indentMin function argumentsRev state =
+    parseApplicationArgumentsAt indentMin function argumentsRev state (skipTrivia state)
 
 
-finishApplication :
-    Node Expression.Expression
+parseApplicationArgumentsAt :
+    Int
+    -> Node Expression.Expression
     -> List (Node Expression.Expression)
-    -> List Token.Token
-    -> Result String ( Node Expression.Expression, List Token.Token )
-finishApplication function argumentsRev remaining =
-    case argumentsRev of
-        [] ->
-            Ok ( function, remaining )
+    -> ParserState
+    -> ParserState
+    -> Result String ( Node Expression.Expression, ParserState )
+parseApplicationArgumentsAt indentMin function argumentsRev state stateAtArgument =
+    if
+        stateAtArgument.column
+            > indentMin
+            && canStartArgumentExpressionAt stateAtArgument.source stateAtArgument.offset
+    then
+        parseApplicationArgumentsOnArgument
+            indentMin
+            function
+            argumentsRev
+            (parseBasicExpression indentMin stateAtArgument)
 
-        Node lastArgumentRange _ :: _ ->
-            let
-                (Node functionRange _) =
-                    function
-            in
-            Ok
-                ( Node
-                    { start = functionRange.start
-                    , end = lastArgumentRange.end
-                    }
-                    (Expression.Application function (List.reverse argumentsRev))
-                , remaining
-                )
+    else
+        case argumentsRev of
+            [] ->
+                Ok ( function, state )
+
+            (Node lastArgumentRange _) :: _ ->
+                let
+                    (Node functionRange _) =
+                        function
+                in
+                Ok
+                    ( Node
+                        { start = functionRange.start
+                        , end = lastArgumentRange.end
+                        }
+                        (Expression.Application function (List.reverse argumentsRev))
+                    , state
+                    )
+
+
+parseApplicationArgumentsOnArgument :
+    Int
+    -> Node Expression.Expression
+    -> List (Node Expression.Expression)
+    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result String ( Node Expression.Expression, ParserState )
+parseApplicationArgumentsOnArgument indentMin function argumentsRev argumentResult =
+    case argumentResult of
+        Err error ->
+            Err error
+
+        Ok ( argument, remaining ) ->
+            parseApplicationArguments indentMin function (argument :: argumentsRev) remaining
 
 
 parseBasicExpression :
     Int
-    -> List Token.Token
-    -> Result String ( Node Expression.Expression, List Token.Token )
-parseBasicExpression indentMin tokens =
-    case parseAtomicExpression indentMin tokens of
-        Ok parsedAtomicExpression ->
-            parseRecordAccesses indentMin parsedAtomicExpression
+    -> ParserState
+    -> Result String ( Node Expression.Expression, ParserState )
+parseBasicExpression indentMin state =
+    parseRecordAccessesOnAtomic indentMin (parseAtomicExpression indentMin state)
 
+
+parseRecordAccessesOnAtomic :
+    Int
+    -> Result String ( Node Expression.Expression, ParserState )
+    -> Result String ( Node Expression.Expression, ParserState )
+parseRecordAccessesOnAtomic indentMin atomicResult =
+    case atomicResult of
         Err error ->
             Err error
 
+        Ok ( atomic, afterAtomic ) ->
+            parseRecordAccesses indentMin atomic afterAtomic
 
+
+{-| Consumes any number of `.field` suffixes directly attached to the expression parsed so far.
+The dot has to follow the expression without any separating trivia, therefore this inspects the
+source at the exact end of that expression instead of skipping trivia first.
+-}
 parseRecordAccesses :
     Int
-    -> ( Node Expression.Expression, List Token.Token )
-    -> Result String ( Node Expression.Expression, List Token.Token )
-parseRecordAccesses indentMin ( record, tokens ) =
-    case dropTrivia tokens of
-        dotToken :: fieldToken :: rest ->
-            let
-                (Node recordRange _) =
-                    record
-            in
-            if
-                dotToken.tokenType
-                    == Token.Dot
-                    && fieldToken.tokenType
-                    == Token.Identifier
-                    && recordRange.end
-                    == dotToken.start
-                    && dotToken.end
-                    == fieldToken.start
-            then
-                let
-                    access =
-                        Node
-                            { start = recordRange.start, end = fieldToken.end }
+    -> Node Expression.Expression
+    -> ParserState
+    -> Result String ( Node Expression.Expression, ParserState )
+parseRecordAccesses indentMin record state =
+    if String.slice state.offset (state.offset + 1) state.source == "." then
+        case String.slice (state.offset + 1) (state.offset + 2) state.source of
+            fieldFirst ->
+                if isIdentifierStart fieldFirst then
+                    let
+                        fieldEnd =
+                            skipToIdentifierEnd state.source (state.offset + 2)
+
+                        fieldLength =
+                            fieldEnd - (state.offset + 1)
+
+                        (Node recordRange _) =
+                            record
+
+                        fieldEndColumn =
+                            state.column + 1 + fieldLength
+                    in
+                    parseRecordAccesses
+                        indentMin
+                        (Node
+                            { start = recordRange.start
+                            , end = { row = state.row, column = fieldEndColumn }
+                            }
                             (Expression.RecordAccess
                                 record
-                                (Node (tokenRange fieldToken) fieldToken.lexeme)
+                                (Node
+                                    { start = { row = state.row, column = state.column + 1 }
+                                    , end = { row = state.row, column = fieldEndColumn }
+                                    }
+                                    (String.slice (state.offset + 1) fieldEnd state.source)
+                                )
                             )
-                in
-                parseRecordAccesses indentMin ( access, rest )
+                        )
+                        { source = state.source
+                        , offset = fieldEnd
+                        , row = state.row
+                        , column = fieldEndColumn
+                        , commentsRev = state.commentsRev
+                        }
 
-            else
-                Ok ( record, tokens )
+                else
+                    Ok ( record, state )
 
-        _ ->
-            Ok ( record, tokens )
+    else
+        Ok ( record, state )
 
 
 parseAtomicExpression :
     Int
-    -> List Token.Token
-    -> Result String ( Node Expression.Expression, List Token.Token )
-parseAtomicExpression indentMin tokens =
-    case dropTrivia tokens of
-        [] ->
-            Err "No tokens to parse as an expression."
+    -> ParserState
+    -> Result String ( Node Expression.Expression, ParserState )
+parseAtomicExpression indentMin state =
+    parseAtomicExpressionAt indentMin (skipTrivia state)
 
-        token :: rest ->
-            case token.tokenType of
-                Token.StringLiteral ->
-                    Ok
-                        ( Node (tokenRange token)
-                            (Expression.StringLiteral token.lexeme token.rawText)
-                        , rest
-                        )
 
-                Token.TripleQuotedStringLiteral ->
-                    case token.rawText of
-                        Just rawText ->
-                            Ok
-                                ( Node (tokenRange token)
-                                    (Expression.MultilineStringLiteral token.lexeme
-                                        (Just (String.split "\n" rawText))
-                                    )
-                                , rest
-                                )
+parseAtomicExpressionAt :
+    Int
+    -> ParserState
+    -> Result String ( Node Expression.Expression, ParserState )
+parseAtomicExpressionAt indentMin stateAtToken =
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        "\"" ->
+            if String.slice stateAtToken.offset (stateAtToken.offset + 3) stateAtToken.source == "\"\"\"" then
+                parseTripleQuotedStringExpression stateAtToken
 
-                        Nothing ->
-                            Ok
-                                ( Node (tokenRange token)
-                                    (Expression.MultilineStringLiteral token.lexeme Nothing)
-                                , rest
-                                )
+            else
+                parseStringExpression stateAtToken
 
-                Token.CharLiteral ->
-                    case String.toList token.lexeme of
-                        [ char ] ->
-                            Ok ( Node (tokenRange token) (Expression.CharLiteral (Char.toCode char)), rest )
+        "'" ->
+            parseCharExpression stateAtToken
 
-                        _ ->
-                            Err ("Invalid character literal '" ++ token.lexeme ++ "'.")
+        "[" ->
+            parseList indentMin stateAtToken
 
-                Token.NumberLiteral ->
-                    Ok ( Node (tokenRange token) (parseNumber token.lexeme), rest )
+        "(" ->
+            parseParenthesizedOrTuple indentMin stateAtToken
 
-                Token.Identifier ->
-                    if token.lexeme == "let" then
-                        parseLetBlock indentMin token rest
+        "{" ->
+            parseRecord indentMin stateAtToken
 
-                    else if token.lexeme == "if" then
-                        parseIfBlock indentMin token rest
+        "\\" ->
+            parseLambda indentMin stateAtToken
 
-                    else if token.lexeme == "case" then
-                        parseCaseBlock indentMin token rest
-
-                    else
-                        parseIdentifier token rest
-
-                Token.OpenBracket ->
-                    parseList indentMin token rest
-
-                Token.OpenParen ->
-                    parseParenthesizedOrTuple indentMin token rest
-
-                Token.OpenBrace ->
-                    parseRecord indentMin token rest
-
-                Token.Negation ->
-                    case parseBasicExpression indentMin rest of
-                        Ok ( ((Node negatedRange _) as negated), remaining ) ->
-                            Ok
-                                ( Node
-                                    { start = token.start, end = negatedRange.end }
-                                    (Expression.Negation negated)
-                                , remaining
-                                )
-
-                        Err error ->
-                            Err error
-
-                Token.Lambda ->
-                    parseLambda indentMin token rest
-
-                Token.Dot ->
-                    case dropTrivia rest of
-                        fieldToken :: remaining ->
-                            if fieldToken.tokenType == Token.Identifier then
-                                Ok
-                                    ( Node
-                                        { start = token.start, end = fieldToken.end }
-                                        (Expression.RecordAccessFunction ("." ++ fieldToken.lexeme))
-                                    , remaining
-                                    )
-
-                            else
-                                Err ("Expected a record field name after '.', but found '" ++ fieldToken.lexeme ++ "'.")
-
-                        [] ->
-                            Err "Expected a record field name after '.'."
+        "-" ->
+            case String.slice (stateAtToken.offset + 1) (stateAtToken.offset + 2) stateAtToken.source of
+                ">" ->
+                    Err "Failed to parse expression: Unexpected token '->'."
 
                 _ ->
-                    Err ("Failed to parse expression: Unexpected token '" ++ token.lexeme ++ "'.")
+                    if minusIsOperatorAt stateAtToken.source stateAtToken.offset then
+                        Err "Failed to parse expression: Unexpected token '-'."
+
+                    else
+                        parseNegation indentMin stateAtToken
+
+        "." ->
+            case String.slice (stateAtToken.offset + 1) (stateAtToken.offset + 2) stateAtToken.source of
+                "." ->
+                    Err "Failed to parse expression: Unexpected token '..'."
+
+                next ->
+                    if isOperatorChar next then
+                        Err ("Failed to parse expression: Unexpected token '" ++ snippetAt stateAtToken ++ "'.")
+
+                    else
+                        parseRecordAccessFunction stateAtToken
+
+        first ->
+            if isDigit first then
+                parseNumberExpressionAt
+                    stateAtToken
+                    (numberEnd stateAtToken.source first stateAtToken.offset)
+
+            else if isIdentifierStart first then
+                parseNameExpressionAt
+                    indentMin
+                    stateAtToken
+                    first
+                    (skipToIdentifierEnd stateAtToken.source (stateAtToken.offset + 1))
+
+            else
+                Err ("Failed to parse expression: Unexpected token '" ++ snippetAt stateAtToken ++ "'.")
 
 
-parseIdentifier :
-    Token.Token
-    -> List Token.Token
-    -> Result String ( Node Expression.Expression, List Token.Token )
-parseIdentifier firstToken tokens =
-    let
-        ( nameToken, moduleNamesRev, remaining ) =
-            parseQualifiedName [] firstToken tokens
-    in
+parseNumberExpressionAt :
+    ParserState
+    -> Int
+    -> Result String ( Node Expression.Expression, ParserState )
+parseNumberExpressionAt stateAtToken literalEnd =
     Ok
         ( Node
-            { start = firstToken.start, end = nameToken.end }
-            (Expression.Identifier
-                (List.reverse moduleNamesRev)
-                nameToken.lexeme
-            )
-        , remaining
+            { start = { row = stateAtToken.row, column = stateAtToken.column }
+            , end = { row = stateAtToken.row, column = stateAtToken.column + (literalEnd - stateAtToken.offset) }
+            }
+            (parseNumber (String.slice stateAtToken.offset literalEnd stateAtToken.source))
+        , { source = stateAtToken.source
+          , offset = literalEnd
+          , row = stateAtToken.row
+          , column = stateAtToken.column + (literalEnd - stateAtToken.offset)
+          , commentsRev = stateAtToken.commentsRev
+          }
         )
 
 
-parseQualifiedName :
-    List String
-    -> Token.Token
-    -> List Token.Token
-    -> ( Token.Token, List String, List Token.Token )
-parseQualifiedName moduleNamesRev currentName tokens =
-    case dropTrivia tokens of
-        dotToken :: nextName :: rest ->
-            if startsWithUpper currentName.lexeme && dotToken.tokenType == Token.Dot && nextName.tokenType == Token.Identifier then
-                parseQualifiedName (currentName.lexeme :: moduleNamesRev) nextName rest
+parseNameExpressionAt :
+    Int
+    -> ParserState
+    -> String
+    -> Int
+    -> Result String ( Node Expression.Expression, ParserState )
+parseNameExpressionAt indentMin stateAtToken first nameEnd =
+    case String.slice stateAtToken.offset nameEnd stateAtToken.source of
+        "let" ->
+            parseLetBlock indentMin stateAtToken
+
+        "if" ->
+            parseIfBlock indentMin stateAtToken
+
+        "case" ->
+            parseCaseBlock indentMin stateAtToken
+
+        name ->
+            if isUpperCharacter first then
+                finishQualifiedNameExpression (parseQualifiedNameNode name nameEnd stateAtToken)
 
             else
-                ( currentName, moduleNamesRev, tokens )
+                Ok
+                    ( Node
+                        { start = { row = stateAtToken.row, column = stateAtToken.column }
+                        , end = { row = stateAtToken.row, column = stateAtToken.column + (nameEnd - stateAtToken.offset) }
+                        }
+                        (Expression.Identifier [] name)
+                    , { source = stateAtToken.source
+                      , offset = nameEnd
+                      , row = stateAtToken.row
+                      , column = stateAtToken.column + (nameEnd - stateAtToken.offset)
+                      , commentsRev = stateAtToken.commentsRev
+                      }
+                    )
 
-        _ ->
-            ( currentName, moduleNamesRev, tokens )
 
-
-parseList :
-    Int
-    -> Token.Token
-    -> List Token.Token
-    -> Result String ( Node Expression.Expression, List Token.Token )
-parseList indentMin openToken tokens =
-    case parseSeparatedExpressions indentMin Token.CloseBracket tokens of
-        Ok ( elements, closeToken, remaining ) ->
+finishQualifiedNameExpression :
+    ( Node ( List String, String ), ParserState )
+    -> Result String ( Node Expression.Expression, ParserState )
+finishQualifiedNameExpression qualifiedNameResult =
+    case qualifiedNameResult of
+        ( Node qualifiedRange ( moduleNames, qualifiedName ), remaining ) ->
             Ok
-                ( Node
-                    { start = openToken.start, end = closeToken.end }
-                    (Expression.ListExpr elements)
+                ( Node qualifiedRange (Expression.Identifier moduleNames qualifiedName)
                 , remaining
                 )
 
+
+parseNegation :
+    Int
+    -> ParserState
+    -> Result String ( Node Expression.Expression, ParserState )
+parseNegation indentMin state =
+    case
+        parseBasicExpression
+            indentMin
+            { source = state.source
+            , offset = state.offset + 1
+            , row = state.row
+            , column = state.column + 1
+            , commentsRev = state.commentsRev
+            }
+    of
         Err error ->
             Err error
+
+        Ok ( Node negatedRange negated, remaining ) ->
+            Ok
+                ( Node
+                    { start = { row = state.row, column = state.column }
+                    , end = negatedRange.end
+                    }
+                    (Expression.Negation (Node negatedRange negated))
+                , remaining
+                )
+
+
+parseRecordAccessFunction : ParserState -> Result String ( Node Expression.Expression, ParserState )
+parseRecordAccessFunction state =
+    let
+        stateAtField =
+            skipTrivia
+                { source = state.source
+                , offset = state.offset + 1
+                , row = state.row
+                , column = state.column + 1
+                , commentsRev = state.commentsRev
+                }
+    in
+    case String.slice stateAtField.offset (stateAtField.offset + 1) stateAtField.source of
+        first ->
+            if isIdentifierStart first then
+                let
+                    fieldEnd =
+                        skipToIdentifierEnd stateAtField.source (stateAtField.offset + 1)
+
+                    fieldLength =
+                        fieldEnd - stateAtField.offset
+                in
+                Ok
+                    ( Node
+                        { start = { row = state.row, column = state.column }
+                        , end = { row = stateAtField.row, column = stateAtField.column + fieldLength }
+                        }
+                        (Expression.RecordAccessFunction
+                            ("." ++ String.slice stateAtField.offset fieldEnd stateAtField.source)
+                        )
+                    , { source = stateAtField.source
+                      , offset = fieldEnd
+                      , row = stateAtField.row
+                      , column = stateAtField.column + fieldLength
+                      , commentsRev = stateAtField.commentsRev
+                      }
+                    )
+
+            else
+                Err
+                    ("Expected a record field name after '.', but found '"
+                        ++ snippetAt stateAtField
+                        ++ "'."
+                    )
+
+
+parseStringExpression : ParserState -> Result String ( Node Expression.Expression, ParserState )
+parseStringExpression state =
+    parseStringExpressionOnLiteral
+        state
+        (consumeLiteral
+            DoubleQuoteTermination
+            state.source
+            state.row
+            state.column
+            (state.offset + 1)
+            state.row
+            (state.column + 1)
+            []
+            []
+        )
+
+
+parseStringExpressionOnLiteral :
+    ParserState
+    -> Result String ConsumedLiteral
+    -> Result String ( Node Expression.Expression, ParserState )
+parseStringExpressionOnLiteral state literalResult =
+    case literalResult of
+        Err error ->
+            Err error
+
+        Ok consumed ->
+            finishStringExpression state consumed
+
+
+finishStringExpression :
+    ParserState
+    -> ConsumedLiteral
+    -> Result String ( Node Expression.Expression, ParserState )
+finishStringExpression state consumed =
+    Ok
+        ( Node
+            { start = { row = state.row, column = state.column }
+            , end = { row = consumed.endRow, column = consumed.endColumn }
+            }
+            (Expression.StringLiteral consumed.decoded (Just consumed.raw))
+        , { source = state.source
+          , offset = consumed.endOffset
+          , row = consumed.endRow
+          , column = consumed.endColumn
+          , commentsRev = state.commentsRev
+          }
+        )
+
+
+parseTripleQuotedStringExpression : ParserState -> Result String ( Node Expression.Expression, ParserState )
+parseTripleQuotedStringExpression state =
+    parseTripleQuotedStringExpressionOnLiteral
+        state
+        (consumeLiteral
+            TripleQuoteTermination
+            state.source
+            state.row
+            state.column
+            (state.offset + 3)
+            state.row
+            (state.column + 3)
+            []
+            []
+        )
+
+
+parseTripleQuotedStringExpressionOnLiteral :
+    ParserState
+    -> Result String ConsumedLiteral
+    -> Result String ( Node Expression.Expression, ParserState )
+parseTripleQuotedStringExpressionOnLiteral state literalResult =
+    case literalResult of
+        Err error ->
+            Err error
+
+        Ok consumed ->
+            finishTripleQuotedStringExpression state consumed
+
+
+finishTripleQuotedStringExpression :
+    ParserState
+    -> ConsumedLiteral
+    -> Result String ( Node Expression.Expression, ParserState )
+finishTripleQuotedStringExpression state consumed =
+    Ok
+        ( Node
+            { start = { row = state.row, column = state.column }
+            , end = { row = consumed.endRow, column = consumed.endColumn }
+            }
+            (Expression.MultilineStringLiteral
+                consumed.decoded
+                (Just (String.split "\n" consumed.raw))
+            )
+        , { source = state.source
+          , offset = consumed.endOffset
+          , row = consumed.endRow
+          , column = consumed.endColumn
+          , commentsRev = state.commentsRev
+          }
+        )
+
+
+parseCharExpression : ParserState -> Result String ( Node Expression.Expression, ParserState )
+parseCharExpression state =
+    parseCharExpressionOnLiteral
+        state
+        (consumeLiteral
+            SingleQuoteTermination
+            state.source
+            state.row
+            state.column
+            (state.offset + 1)
+            state.row
+            (state.column + 1)
+            []
+            []
+        )
+
+
+parseCharExpressionOnLiteral :
+    ParserState
+    -> Result String ConsumedLiteral
+    -> Result String ( Node Expression.Expression, ParserState )
+parseCharExpressionOnLiteral state literalResult =
+    case literalResult of
+        Err error ->
+            Err error
+
+        Ok consumed ->
+            finishCharExpression state consumed
+
+
+finishCharExpression :
+    ParserState
+    -> ConsumedLiteral
+    -> Result String ( Node Expression.Expression, ParserState )
+finishCharExpression state consumed =
+    case String.toList consumed.decoded of
+        [ char ] ->
+            Ok
+                ( Node
+                    { start = { row = state.row, column = state.column }
+                    , end = { row = consumed.endRow, column = consumed.endColumn }
+                    }
+                    (Expression.CharLiteral (Char.toCode char))
+                , { source = state.source
+                  , offset = consumed.endOffset
+                  , row = consumed.endRow
+                  , column = consumed.endColumn
+                  , commentsRev = state.commentsRev
+                  }
+                )
+
+        _ ->
+            Err ("Invalid character literal '" ++ consumed.decoded ++ "'.")
+
+
+parseQualifiedNameNode : String -> Int -> ParserState -> ( Node ( List String, String ), ParserState )
+parseQualifiedNameNode name nameEnd state =
+    let
+        nameLength =
+            nameEnd - state.offset
+    in
+    parseQualifiedNameRest
+        { row = state.row, column = state.column }
+        []
+        name
+        state.row
+        (state.column + nameLength)
+        { source = state.source
+        , offset = nameEnd
+        , row = state.row
+        , column = state.column + nameLength
+        , commentsRev = state.commentsRev
+        }
+
+
+parseQualifiedNameRest :
+    Location
+    -> List String
+    -> String
+    -> Int
+    -> Int
+    -> ParserState
+    -> ( Node ( List String, String ), ParserState )
+parseQualifiedNameRest start moduleNamesRev currentName endRow endColumn state =
+    if startsWithUpper currentName then
+        let
+            stateAtDot =
+                skipTrivia state
+        in
+        if isDotToken stateAtDot.source stateAtDot.offset then
+            let
+                stateAtName =
+                    skipTrivia
+                        { source = stateAtDot.source
+                        , offset = stateAtDot.offset + 1
+                        , row = stateAtDot.row
+                        , column = stateAtDot.column + 1
+                        , commentsRev = stateAtDot.commentsRev
+                        }
+            in
+            case String.slice stateAtName.offset (stateAtName.offset + 1) stateAtName.source of
+                first ->
+                    if isIdentifierStart first then
+                        let
+                            nextNameEnd =
+                                skipToIdentifierEnd stateAtName.source (stateAtName.offset + 1)
+
+                            nextNameLength =
+                                nextNameEnd - stateAtName.offset
+                        in
+                        parseQualifiedNameRest
+                            start
+                            (currentName :: moduleNamesRev)
+                            (String.slice stateAtName.offset nextNameEnd stateAtName.source)
+                            stateAtName.row
+                            (stateAtName.column + nextNameLength)
+                            { source = stateAtName.source
+                            , offset = nextNameEnd
+                            , row = stateAtName.row
+                            , column = stateAtName.column + nextNameLength
+                            , commentsRev = stateAtName.commentsRev
+                            }
+
+                    else
+                        finishQualifiedName start moduleNamesRev currentName endRow endColumn state
+
+        else
+            finishQualifiedName start moduleNamesRev currentName endRow endColumn state
+
+    else
+        finishQualifiedName start moduleNamesRev currentName endRow endColumn state
+
+
+finishQualifiedName :
+    Location
+    -> List String
+    -> String
+    -> Int
+    -> Int
+    -> ParserState
+    -> ( Node ( List String, String ), ParserState )
+finishQualifiedName start moduleNamesRev currentName endRow endColumn state =
+    ( Node
+        { start = start, end = { row = endRow, column = endColumn } }
+        ( List.reverse moduleNamesRev, currentName )
+    , state
+    )
+
+
+parseList : Int -> ParserState -> Result String ( Node Expression.Expression, ParserState )
+parseList indentMin state =
+    let
+        stateAtToken =
+            skipTrivia
+                { source = state.source
+                , offset = state.offset + 1
+                , row = state.row
+                , column = state.column + 1
+                , commentsRev = state.commentsRev
+                }
+    in
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        "]" ->
+            Ok
+                ( Node
+                    { start = { row = state.row, column = state.column }
+                    , end = { row = stateAtToken.row, column = stateAtToken.column + 1 }
+                    }
+                    (Expression.ListExpr SeparatedSyntaxList.Empty)
+                , { source = stateAtToken.source
+                  , offset = stateAtToken.offset + 1
+                  , row = stateAtToken.row
+                  , column = stateAtToken.column + 1
+                  , commentsRev = stateAtToken.commentsRev
+                  }
+                )
+
+        _ ->
+            case parseExpressionNodeAt indentMin 0 stateAtToken of
+                Err error ->
+                    Err error
+
+                Ok ( first, afterFirst ) ->
+                    case parseFurtherListElements indentMin afterFirst [] of
+                        Err error ->
+                            Err error
+
+                        Ok ( further, afterClose ) ->
+                            Ok
+                                ( Node
+                                    { start = { row = state.row, column = state.column }
+                                    , end = { row = afterClose.row, column = afterClose.column }
+                                    }
+                                    (Expression.ListExpr (SeparatedSyntaxList.NonEmpty first further))
+                                , afterClose
+                                )
+
+
+parseFurtherListElements :
+    Int
+    -> ParserState
+    -> List ( Location, Node Expression.Expression )
+    -> Result String ( List ( Location, Node Expression.Expression ), ParserState )
+parseFurtherListElements indentMin state furtherRev =
+    parseFurtherListElementsAt indentMin state furtherRev (skipTrivia state)
+
+
+parseFurtherListElementsAt :
+    Int
+    -> ParserState
+    -> List ( Location, Node Expression.Expression )
+    -> ParserState
+    -> Result String ( List ( Location, Node Expression.Expression ), ParserState )
+parseFurtherListElementsAt indentMin state furtherRev stateAtToken =
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        "]" ->
+            Ok
+                ( List.reverse furtherRev
+                , { source = stateAtToken.source
+                  , offset = stateAtToken.offset + 1
+                  , row = stateAtToken.row
+                  , column = stateAtToken.column + 1
+                  , commentsRev = stateAtToken.commentsRev
+                  }
+                )
+
+        "," ->
+            case
+                parseExpressionNodeAt
+                    indentMin
+                    0
+                    { source = stateAtToken.source
+                    , offset = stateAtToken.offset + 1
+                    , row = stateAtToken.row
+                    , column = stateAtToken.column + 1
+                    , commentsRev = stateAtToken.commentsRev
+                    }
+            of
+                Err error ->
+                    Err error
+
+                Ok ( expression, remaining ) ->
+                    parseFurtherListElements
+                        indentMin
+                        remaining
+                        (( { row = stateAtToken.row, column = stateAtToken.column }, expression ) :: furtherRev)
+
+        _ ->
+            Err
+                ("Expected ',' or a closing delimiter, but found '"
+                    ++ snippetAt stateAtToken
+                    ++ "'."
+                )
 
 
 parseParenthesizedOrTuple :
     Int
-    -> Token.Token
-    -> List Token.Token
-    -> Result String ( Node Expression.Expression, List Token.Token )
-parseParenthesizedOrTuple indentMin openToken tokens =
-    case dropTrivia tokens of
-        firstToken :: rest ->
-            if firstToken.tokenType == Token.CloseParen then
-                Ok
-                    ( Node
-                        { start = openToken.start, end = firstToken.end }
-                        Expression.UnitExpr
-                    , rest
-                    )
+    -> ParserState
+    -> Result String ( Node Expression.Expression, ParserState )
+parseParenthesizedOrTuple indentMin state =
+    let
+        stateAtToken =
+            skipTrivia
+                { source = state.source
+                , offset = state.offset + 1
+                , row = state.row
+                , column = state.column + 1
+                , commentsRev = state.commentsRev
+                }
+    in
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        ")" ->
+            Ok
+                ( Node
+                    { start = { row = state.row, column = state.column }
+                    , end = { row = stateAtToken.row, column = stateAtToken.column + 1 }
+                    }
+                    Expression.UnitExpr
+                , { source = stateAtToken.source
+                  , offset = stateAtToken.offset + 1
+                  , row = stateAtToken.row
+                  , column = stateAtToken.column + 1
+                  , commentsRev = stateAtToken.commentsRev
+                  }
+                )
+
+        _ ->
+            let
+                operatorLength =
+                    operatorTokenLength stateAtToken.source stateAtToken.offset
+            in
+            if operatorLength > 0 then
+                let
+                    stateAtClose =
+                        skipTrivia
+                            { source = stateAtToken.source
+                            , offset = stateAtToken.offset + operatorLength
+                            , row = stateAtToken.row
+                            , column = stateAtToken.column + operatorLength
+                            , commentsRev = stateAtToken.commentsRev
+                            }
+                in
+                if String.slice stateAtClose.offset (stateAtClose.offset + 1) stateAtClose.source == ")" then
+                    Ok
+                        ( Node
+                            { start = { row = state.row, column = state.column }
+                            , end = { row = stateAtClose.row, column = stateAtClose.column + 1 }
+                            }
+                            (Expression.PrefixOperator
+                                (String.slice stateAtToken.offset (stateAtToken.offset + operatorLength) stateAtToken.source)
+                            )
+                        , { source = stateAtClose.source
+                          , offset = stateAtClose.offset + 1
+                          , row = stateAtClose.row
+                          , column = stateAtClose.column + 1
+                          , commentsRev = stateAtClose.commentsRev
+                          }
+                        )
+
+                else
+                    parseNonEmptyParenthesized indentMin state stateAtToken
 
             else
-                case dropTrivia rest of
-                    closeToken :: afterClose ->
-                        if firstToken.tokenType == Token.Operator && closeToken.tokenType == Token.CloseParen then
-                            Ok
-                                ( Node
-                                    { start = openToken.start, end = closeToken.end }
-                                    (Expression.PrefixOperator firstToken.lexeme)
-                                , afterClose
-                                )
-
-                        else
-                            parseNonEmptyParenthesized indentMin openToken tokens
-
-                    [] ->
-                        parseNonEmptyParenthesized indentMin openToken tokens
-
-        [] ->
-            Err "Expected an expression or ')' after '('."
+                parseNonEmptyParenthesized indentMin state stateAtToken
 
 
 parseNonEmptyParenthesized :
     Int
-    -> Token.Token
-    -> List Token.Token
-    -> Result String ( Node Expression.Expression, List Token.Token )
-parseNonEmptyParenthesized indentMin openToken tokens =
-    case parseExpressionNodeAt indentMin 0 tokens of
+    -> ParserState
+    -> ParserState
+    -> Result String ( Node Expression.Expression, ParserState )
+parseNonEmptyParenthesized indentMin openState state =
+    case parseExpressionNodeAt indentMin 0 state of
+        Err error ->
+            Err error
+
         Ok ( first, afterFirst ) ->
-            case parseFurtherSeparatedExpressions indentMin Token.CloseParen afterFirst [] of
-                Ok ( further, closeToken, remaining ) ->
+            case parseFurtherTupleElements indentMin afterFirst [] of
+                Err error ->
+                    Err error
+
+                Ok ( further, afterClose ) ->
                     let
                         expression =
                             case further of
@@ -2772,732 +4727,1025 @@ parseNonEmptyParenthesized indentMin openToken tokens =
                     in
                     Ok
                         ( Node
-                            { start = openToken.start, end = closeToken.end }
+                            { start = { row = openState.row, column = openState.column }
+                            , end = { row = afterClose.row, column = afterClose.column }
+                            }
                             expression
-                        , remaining
+                        , afterClose
                         )
 
-                Err error ->
-                    Err error
 
-        Err error ->
-            Err error
-
-
-parseSeparatedExpressions :
+parseFurtherTupleElements :
     Int
-    -> Token.TokenType
-    -> List Token.Token
-    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList (Node Expression.Expression), Token.Token, List Token.Token )
-parseSeparatedExpressions indentMin closingType tokens =
-    case dropTrivia tokens of
-        closeToken :: rest ->
-            if closeToken.tokenType == closingType then
-                Ok ( SeparatedSyntaxList.Empty, closeToken, rest )
-
-            else
-                parseNonEmptySeparatedExpressions indentMin closingType tokens
-
-        [] ->
-            Err "Expected a closing delimiter."
-
-
-parseNonEmptySeparatedExpressions :
-    Int
-    -> Token.TokenType
-    -> List Token.Token
-    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList (Node Expression.Expression), Token.Token, List Token.Token )
-parseNonEmptySeparatedExpressions indentMin closingType tokens =
-    case parseExpressionNodeAt indentMin 0 tokens of
-        Ok ( first, afterFirst ) ->
-            case parseFurtherSeparatedExpressions indentMin closingType afterFirst [] of
-                Ok ( further, closeToken, remaining ) ->
-                    Ok ( SeparatedSyntaxList.NonEmpty first further, closeToken, remaining )
-
-                Err error ->
-                    Err error
-
-        Err error ->
-            Err error
-
-
-parseFurtherSeparatedExpressions :
-    Int
-    -> Token.TokenType
-    -> List Token.Token
+    -> ParserState
     -> List ( Location, Node Expression.Expression )
-    -> Result String ( List ( Location, Node Expression.Expression ), Token.Token, List Token.Token )
-parseFurtherSeparatedExpressions indentMin closingType tokens furtherRev =
-    case dropTrivia tokens of
-        token :: rest ->
-            if token.tokenType == closingType then
-                Ok ( List.reverse furtherRev, token, rest )
-
-            else if token.tokenType == Token.Comma then
-                case parseExpressionNodeAt indentMin 0 rest of
-                    Ok ( expression, remaining ) ->
-                        parseFurtherSeparatedExpressions indentMin
-                            closingType
-                            remaining
-                            (( token.start, expression ) :: furtherRev)
-
-                    Err error ->
-                        Err error
-
-            else
-                Err ("Expected ',' or a closing delimiter, but found '" ++ token.lexeme ++ "'.")
-
-        [] ->
-            Err "Expected a closing delimiter."
+    -> Result String ( List ( Location, Node Expression.Expression ), ParserState )
+parseFurtherTupleElements indentMin state furtherRev =
+    parseFurtherTupleElementsAt indentMin state furtherRev (skipTrivia state)
 
 
-parseIfBlock :
+parseFurtherTupleElementsAt :
     Int
-    -> Token.Token
-    -> List Token.Token
-    -> Result String ( Node Expression.Expression, List Token.Token )
-parseIfBlock indentMin ifToken tokens =
+    -> ParserState
+    -> List ( Location, Node Expression.Expression )
+    -> ParserState
+    -> Result String ( List ( Location, Node Expression.Expression ), ParserState )
+parseFurtherTupleElementsAt indentMin state furtherRev stateAtToken =
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        ")" ->
+            Ok
+                ( List.reverse furtherRev
+                , { source = stateAtToken.source
+                  , offset = stateAtToken.offset + 1
+                  , row = stateAtToken.row
+                  , column = stateAtToken.column + 1
+                  , commentsRev = stateAtToken.commentsRev
+                  }
+                )
+
+        "," ->
+            case
+                parseExpressionNodeAt
+                    indentMin
+                    0
+                    { source = stateAtToken.source
+                    , offset = stateAtToken.offset + 1
+                    , row = stateAtToken.row
+                    , column = stateAtToken.column + 1
+                    , commentsRev = stateAtToken.commentsRev
+                    }
+            of
+                Err error ->
+                    Err error
+
+                Ok ( expression, remaining ) ->
+                    parseFurtherTupleElements
+                        indentMin
+                        remaining
+                        (( { row = stateAtToken.row, column = stateAtToken.column }, expression ) :: furtherRev)
+
+        _ ->
+            Err
+                ("Expected ',' or a closing delimiter, but found '"
+                    ++ snippetAt stateAtToken
+                    ++ "'."
+                )
+
+
+parseIfBlock : Int -> ParserState -> Result String ( Node Expression.Expression, ParserState )
+parseIfBlock indentMin state =
     let
+        ifTokenLocation =
+            { row = state.row, column = state.column }
+
         branchIndentMin =
-            min indentMin ifToken.start.column
+            min indentMin state.column
+
+        afterIf =
+            { source = state.source
+            , offset = state.offset + 2
+            , row = state.row
+            , column = state.column + 2
+            , commentsRev = state.commentsRev
+            }
     in
-    case parseExpressionNodeAt branchIndentMin 0 tokens of
+    case parseExpressionNodeAt branchIndentMin 0 afterIf of
+        Err error ->
+            Err error
+
         Ok ( condition, afterCondition ) ->
-            case consumeKeyword "then" afterCondition of
-                Ok ( thenToken, afterThen ) ->
+            case consumeKeyword "then" 4 afterCondition of
+                Err error ->
+                    Err error
+
+                Ok ( thenTokenLocation, afterThen ) ->
                     case parseExpressionNodeAt branchIndentMin 0 afterThen of
+                        Err error ->
+                            Err error
+
                         Ok ( thenBranch, afterThenBranch ) ->
-                            case consumeKeyword "else" afterThenBranch of
-                                Ok ( elseToken, afterElse ) ->
+                            case consumeKeyword "else" 4 afterThenBranch of
+                                Err error ->
+                                    Err error
+
+                                Ok ( elseTokenLocation, afterElse ) ->
                                     case parseExpressionNodeAt branchIndentMin 0 afterElse of
-                                        Ok ( ((Node elseBranchRange _) as elseBranch), remaining ) ->
+                                        Err error ->
+                                            Err error
+
+                                        Ok ( Node elseBranchRange elseBranch, remaining ) ->
                                             Ok
                                                 ( Node
-                                                    { start = ifToken.start
+                                                    { start = ifTokenLocation
                                                     , end = elseBranchRange.end
                                                     }
                                                     (Expression.IfBlock
-                                                        ifToken.start
+                                                        ifTokenLocation
                                                         condition
-                                                        thenToken.start
+                                                        thenTokenLocation
                                                         thenBranch
-                                                        elseToken.start
-                                                        elseBranch
+                                                        elseTokenLocation
+                                                        (Node elseBranchRange elseBranch)
                                                     )
                                                 , remaining
                                                 )
 
-                                        Err error ->
-                                            Err error
 
-                                Err error ->
-                                    Err error
+parseLambda : Int -> ParserState -> Result String ( Node Expression.Expression, ParserState )
+parseLambda indentMin state =
+    case
+        parseLambdaArguments
+            indentMin
+            { source = state.source
+            , offset = state.offset + 1
+            , row = state.row
+            , column = state.column + 1
+            , commentsRev = state.commentsRev
+            }
+            []
+    of
+        Err error ->
+            Err error
 
+        Ok ( arguments, arrowLocation, afterArrow ) ->
+            case arguments of
+                [] ->
+                    Err "Expected at least one argument in lambda expression."
+
+                _ ->
+                    case parseExpressionNodeAt indentMin 0 afterArrow of
                         Err error ->
                             Err error
 
-                Err error ->
-                    Err error
-
-        Err error ->
-            Err error
-
-
-parseLambda :
-    Int
-    -> Token.Token
-    -> List Token.Token
-    -> Result String ( Node Expression.Expression, List Token.Token )
-parseLambda indentMin lambdaToken tokens =
-    case parseLambdaArguments indentMin tokens [] of
-        Ok ( arguments, arrowToken, afterArrow ) ->
-            if List.isEmpty arguments then
-                Err "Expected at least one argument in lambda expression."
-
-            else
-                case parseExpressionNodeAt indentMin 0 afterArrow of
-                    Ok ( ((Node bodyRange _) as body), remaining ) ->
-                        Ok
-                            ( Node
-                                { start = lambdaToken.start, end = bodyRange.end }
-                                (Expression.LambdaExpression
-                                    { backslashLocation = lambdaToken.start
-                                    , arguments = arguments
-                                    , arrowLocation = arrowToken.start
-                                    , expression = body
+                        Ok ( Node bodyRange body, remaining ) ->
+                            Ok
+                                ( Node
+                                    { start = { row = state.row, column = state.column }
+                                    , end = bodyRange.end
                                     }
+                                    (Expression.LambdaExpression
+                                        { backslashLocation = { row = state.row, column = state.column }
+                                        , arguments = arguments
+                                        , arrowLocation = arrowLocation
+                                        , expression = Node bodyRange body
+                                        }
+                                    )
+                                , remaining
                                 )
-                            , remaining
-                            )
-
-                    Err error ->
-                        Err error
-
-        Err error ->
-            Err error
 
 
 parseLambdaArguments :
     Int
-    -> List Token.Token
+    -> ParserState
     -> List (Node Pattern.Pattern)
-    -> Result String ( List (Node Pattern.Pattern), Token.Token, List Token.Token )
-parseLambdaArguments indentMin tokens argumentsRev =
-    case dropTrivia tokens of
-        [] ->
-            Err "Expected '->' in lambda expression."
-
-        token :: rest ->
-            if token.tokenType == Token.Arrow then
-                Ok ( List.reverse argumentsRev, token, rest )
-
-            else
-                case parsePatternNodeAt indentMin (token :: rest) of
-                    Ok ( argument, remaining ) ->
-                        parseLambdaArguments indentMin remaining (argument :: argumentsRev)
-
-                    Err error ->
-                        Err error
+    -> Result String ( List (Node Pattern.Pattern), Location, ParserState )
+parseLambdaArguments indentMin state argumentsRev =
+    parseLambdaArgumentsAt indentMin state argumentsRev (skipTrivia state)
 
 
-parseLetBlock :
+parseLambdaArgumentsAt :
     Int
-    -> Token.Token
-    -> List Token.Token
-    -> Result String ( Node Expression.Expression, List Token.Token )
-parseLetBlock indentMin letToken tokens =
-    case parseLetDeclarations (min indentMin letToken.start.column) tokens [] of
-        Ok ( declarations, inToken, afterIn ) ->
-            if List.isEmpty declarations then
-                Err "Expected at least one declaration in let expression."
+    -> ParserState
+    -> List (Node Pattern.Pattern)
+    -> ParserState
+    -> Result String ( List (Node Pattern.Pattern), Location, ParserState )
+parseLambdaArgumentsAt indentMin state argumentsRev stateAtToken =
+    if String.slice stateAtToken.offset (stateAtToken.offset + 2) stateAtToken.source == "->" then
+        Ok
+            ( List.reverse argumentsRev
+            , { row = stateAtToken.row, column = stateAtToken.column }
+            , { source = stateAtToken.source
+              , offset = stateAtToken.offset + 2
+              , row = stateAtToken.row
+              , column = stateAtToken.column + 2
+              , commentsRev = stateAtToken.commentsRev
+              }
+            )
 
-            else
-                case parseExpressionNodeAt indentMin 0 afterIn of
-                    Ok ( ((Node bodyRange _) as body), remaining ) ->
-                        Ok
-                            ( Node
-                                { start = letToken.start, end = bodyRange.end }
-                                (Expression.LetExpression
-                                    { letTokenLocation = letToken.start
-                                    , declarations = declarations
-                                    , inTokenLocation = inToken.start
-                                    , expression = body
-                                    }
-                                )
-                            , remaining
-                            )
+    else
+        case parsePatternNodeAt indentMin stateAtToken of
+            Err error ->
+                Err error
 
-                    Err error ->
-                        Err error
+            Ok ( argument, remaining ) ->
+                parseLambdaArguments indentMin remaining (argument :: argumentsRev)
 
+
+parseLetBlock : Int -> ParserState -> Result String ( Node Expression.Expression, ParserState )
+parseLetBlock indentMin state =
+    case
+        parseLetDeclarations
+            (min indentMin state.column)
+            { source = state.source
+            , offset = state.offset + 3
+            , row = state.row
+            , column = state.column + 3
+            , commentsRev = state.commentsRev
+            }
+            []
+    of
         Err error ->
             Err error
+
+        Ok ( declarations, inTokenLocation, afterIn ) ->
+            case declarations of
+                [] ->
+                    Err "Expected at least one declaration in let expression."
+
+                _ ->
+                    case parseExpressionNodeAt indentMin 0 afterIn of
+                        Err error ->
+                            Err error
+
+                        Ok ( Node bodyRange body, remaining ) ->
+                            Ok
+                                ( Node
+                                    { start = { row = state.row, column = state.column }
+                                    , end = bodyRange.end
+                                    }
+                                    (Expression.LetExpression
+                                        { letTokenLocation = { row = state.row, column = state.column }
+                                        , declarations = declarations
+                                        , inTokenLocation = inTokenLocation
+                                        , expression = Node bodyRange body
+                                        }
+                                    )
+                                , remaining
+                                )
 
 
 parseLetDeclarations :
     Int
-    -> List Token.Token
+    -> ParserState
     -> List (Node Expression.LetDeclaration)
-    -> Result String ( List (Node Expression.LetDeclaration), Token.Token, List Token.Token )
-parseLetDeclarations indentMin tokens declarationsRev =
-    case dropTrivia tokens of
-        [] ->
-            Err "Expected 'in' in let expression."
+    -> Result String ( List (Node Expression.LetDeclaration), Location, ParserState )
+parseLetDeclarations indentMin state declarationsRev =
+    parseLetDeclarationsAt indentMin state declarationsRev (skipTrivia state)
 
-        token :: rest ->
-            if token.tokenType == Token.Identifier && token.lexeme == "in" then
-                Ok ( List.reverse declarationsRev, token, rest )
 
-            else if token.start.column <= indentMin then
-                Err ("Expected 'in' in let expression, but found '" ++ token.lexeme ++ "'.")
+parseLetDeclarationsAt :
+    Int
+    -> ParserState
+    -> List (Node Expression.LetDeclaration)
+    -> ParserState
+    -> Result String ( List (Node Expression.LetDeclaration), Location, ParserState )
+parseLetDeclarationsAt indentMin state declarationsRev stateAtToken =
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        first ->
+            if
+                isIdentifierStart first
+                    && (String.slice stateAtToken.offset (skipToIdentifierEnd stateAtToken.source (stateAtToken.offset + 1)) stateAtToken.source
+                            == "in"
+                       )
+            then
+                Ok
+                    ( List.reverse declarationsRev
+                    , { row = stateAtToken.row, column = stateAtToken.column }
+                    , { source = stateAtToken.source
+                      , offset = stateAtToken.offset + 2
+                      , row = stateAtToken.row
+                      , column = stateAtToken.column + 2
+                      , commentsRev = stateAtToken.commentsRev
+                      }
+                    )
+
+            else if stateAtToken.column <= indentMin then
+                Err
+                    ("Expected 'in' in let expression, but found '"
+                        ++ snippetAt stateAtToken
+                        ++ "'."
+                    )
 
             else
-                case parseLetDeclaration token.start.column (token :: rest) of
-                    Ok ( declaration, remaining ) ->
-                        parseLetDeclarations indentMin remaining (declaration :: declarationsRev)
-
+                case parseLetDeclaration stateAtToken.column stateAtToken of
                     Err error ->
                         Err error
+
+                    Ok ( declaration, remaining ) ->
+                        parseLetDeclarations indentMin remaining (declaration :: declarationsRev)
 
 
 parseLetDeclaration :
     Int
-    -> List Token.Token
-    -> Result String ( Node Expression.LetDeclaration, List Token.Token )
-parseLetDeclaration declarationIndent tokens =
-    case dropTrivia tokens of
-        nameToken :: rest ->
-            if nameToken.tokenType == Token.Identifier then
-                case dropTrivia rest of
-                    colonToken :: afterColon ->
-                        if colonToken.tokenType == Token.Colon then
-                            case parseTypeAnnotation declarationIndent (dropTrivia afterColon) of
-                                Ok ( ((Node typeAnnotationRange _) as typeAnnotation), afterTypeAnnotation ) ->
-                                    case dropTrivia afterTypeAnnotation of
-                                        implementationNameToken :: afterImplementationName ->
-                                            if implementationNameToken.tokenType /= Token.Identifier then
-                                                Err
-                                                    ("Expected function name after signature, but found '"
-                                                        ++ implementationNameToken.lexeme
-                                                        ++ "'."
+    -> ParserState
+    -> Result String ( Node Expression.LetDeclaration, ParserState )
+parseLetDeclaration declarationIndent state =
+    parseLetDeclarationAt declarationIndent (skipTrivia state)
+
+
+parseLetDeclarationAt :
+    Int
+    -> ParserState
+    -> Result String ( Node Expression.LetDeclaration, ParserState )
+parseLetDeclarationAt declarationIndent stateAtToken =
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        first ->
+            if isIdentifierStart first then
+                let
+                    nameEnd =
+                        skipToIdentifierEnd stateAtToken.source (stateAtToken.offset + 1)
+
+                    nameLength =
+                        nameEnd - stateAtToken.offset
+
+                    name =
+                        String.slice stateAtToken.offset nameEnd stateAtToken.source
+
+                    nameRange =
+                        { start = { row = stateAtToken.row, column = stateAtToken.column }
+                        , end = { row = stateAtToken.row, column = stateAtToken.column + nameLength }
+                        }
+
+                    afterName =
+                        { source = stateAtToken.source
+                        , offset = nameEnd
+                        , row = stateAtToken.row
+                        , column = stateAtToken.column + nameLength
+                        , commentsRev = stateAtToken.commentsRev
+                        }
+
+                    stateAtColon =
+                        skipTrivia afterName
+                in
+                if isColonToken stateAtColon.source stateAtColon.offset then
+                    case
+                        parseTypeAnnotation
+                            declarationIndent
+                            { source = stateAtColon.source
+                            , offset = stateAtColon.offset + 1
+                            , row = stateAtColon.row
+                            , column = stateAtColon.column + 1
+                            , commentsRev = stateAtColon.commentsRev
+                            }
+                    of
+                        Err error ->
+                            Err error
+
+                        Ok ( Node typeAnnotationRange typeAnnotation, afterTypeAnnotation ) ->
+                            let
+                                stateAtImplementationName =
+                                    skipTrivia afterTypeAnnotation
+                            in
+                            case String.slice stateAtImplementationName.offset (stateAtImplementationName.offset + 1) stateAtImplementationName.source of
+                                implementationFirst ->
+                                    if not (isIdentifierStart implementationFirst) then
+                                        Err
+                                            ("Expected function name after signature, but found '"
+                                                ++ snippetAt stateAtImplementationName
+                                                ++ "'."
+                                            )
+
+                                    else
+                                        let
+                                            implementationNameEnd =
+                                                skipToIdentifierEnd stateAtImplementationName.source (stateAtImplementationName.offset + 1)
+
+                                            implementationNameLength =
+                                                implementationNameEnd - stateAtImplementationName.offset
+
+                                            implementationName =
+                                                String.slice stateAtImplementationName.offset implementationNameEnd stateAtImplementationName.source
+                                        in
+                                        if implementationName /= name then
+                                            Err
+                                                ("Function name does not match signature: "
+                                                    ++ implementationName
+                                                    ++ " != "
+                                                    ++ name
+                                                )
+
+                                        else
+                                            finishLetFunctionDeclaration
+                                                declarationIndent
+                                                nameRange.start
+                                                { start = { row = stateAtImplementationName.row, column = stateAtImplementationName.column }
+                                                , end = { row = stateAtImplementationName.row, column = stateAtImplementationName.column + implementationNameLength }
+                                                }
+                                                implementationName
+                                                (Just
+                                                    (Node
+                                                        { start = nameRange.start
+                                                        , end = typeAnnotationRange.end
+                                                        }
+                                                        { name = Node nameRange name
+                                                        , colonLocation = { row = stateAtColon.row, column = stateAtColon.column }
+                                                        , typeAnnotation = Node typeAnnotationRange typeAnnotation
+                                                        }
                                                     )
+                                                )
+                                                { source = stateAtImplementationName.source
+                                                , offset = implementationNameEnd
+                                                , row = stateAtImplementationName.row
+                                                , column = stateAtImplementationName.column + implementationNameLength
+                                                , commentsRev = stateAtImplementationName.commentsRev
+                                                }
 
-                                            else if implementationNameToken.lexeme /= nameToken.lexeme then
-                                                Err
-                                                    ("Function name does not match signature: "
-                                                        ++ implementationNameToken.lexeme
-                                                        ++ " != "
-                                                        ++ nameToken.lexeme
-                                                    )
-
-                                            else
-                                                finishLetFunctionDeclaration declarationIndent
-                                                    nameToken
-                                                    implementationNameToken
-                                                    (Just
-                                                        (Node
-                                                            { start = nameToken.start
-                                                            , end = typeAnnotationRange.end
-                                                            }
-                                                            { name = Node (tokenRange nameToken) nameToken.lexeme
-                                                            , colonLocation = colonToken.start
-                                                            , typeAnnotation = typeAnnotation
-                                                            }
-                                                        )
-                                                    )
-                                                    afterImplementationName
-
-                                        [] ->
-                                            Err "Expected function name after signature."
-
-                                Err error ->
-                                    Err error
-
-                        else
-                            finishLetFunctionDeclaration declarationIndent nameToken nameToken Nothing rest
-
-                    [] ->
-                        finishLetFunctionDeclaration declarationIndent nameToken nameToken Nothing []
+                else
+                    finishLetFunctionDeclaration declarationIndent nameRange.start nameRange name Nothing afterName
 
             else
-                case parsePatternNodeAt declarationIndent (nameToken :: rest) of
-                    Ok ( ((Node patternRange _) as pattern), afterPattern ) ->
-                        case consumeToken Token.Equal "'='" afterPattern of
-                            Ok ( equalToken, afterEqual ) ->
-                                case parseExpressionNodeAt declarationIndent 0 afterEqual of
-                                    Ok ( ((Node bodyRange _) as body), remaining ) ->
+                case parsePatternNodeAt declarationIndent stateAtToken of
+                    Err error ->
+                        Err error
+
+                    Ok ( Node patternRange pattern, afterPattern ) ->
+                        let
+                            stateAtEquals =
+                                skipTrivia afterPattern
+                        in
+                        case String.slice stateAtEquals.offset (stateAtEquals.offset + 1) stateAtEquals.source of
+                            "=" ->
+                                case
+                                    parseExpressionNodeAt
+                                        declarationIndent
+                                        0
+                                        { source = stateAtEquals.source
+                                        , offset = stateAtEquals.offset + 1
+                                        , row = stateAtEquals.row
+                                        , column = stateAtEquals.column + 1
+                                        , commentsRev = stateAtEquals.commentsRev
+                                        }
+                                of
+                                    Err error ->
+                                        Err error
+
+                                    Ok ( Node bodyRange body, remaining ) ->
                                         Ok
                                             ( Node
                                                 { start = patternRange.start
                                                 , end = bodyRange.end
                                                 }
-                                                (Expression.LetDestructuring pattern equalToken.start body)
+                                                (Expression.LetDestructuring
+                                                    (Node patternRange pattern)
+                                                    { row = stateAtEquals.row, column = stateAtEquals.column }
+                                                    (Node bodyRange body)
+                                                )
                                             , remaining
                                             )
 
-                                    Err error ->
-                                        Err error
-
-                            Err error ->
-                                Err error
-
-                    Err error ->
-                        Err error
-
-        [] ->
-            Err "Expected a declaration in let expression."
+                            _ ->
+                                Err ("Expected '=', but found '" ++ snippetAt stateAtEquals ++ "'.")
 
 
 finishLetFunctionDeclaration :
     Int
-    -> Token.Token
-    -> Token.Token
+    -> Location
+    -> Range
+    -> String
     -> Maybe (Node Expression.Signature)
-    -> List Token.Token
-    -> Result String ( Node Expression.LetDeclaration, List Token.Token )
-finishLetFunctionDeclaration declarationIndent firstNameToken implementationNameToken maybeSignature tokens =
-    case parsePatternsUntilEqual declarationIndent tokens [] of
-        Ok ( arguments, equalToken, afterEqual ) ->
-            case parseExpressionNodeAt declarationIndent 0 afterEqual of
-                Ok ( ((Node bodyRange _) as body), remaining ) ->
-                    let
-                        implementationRange =
-                            { start = implementationNameToken.start, end = bodyRange.end }
+    -> ParserState
+    -> Result String ( Node Expression.LetDeclaration, ParserState )
+finishLetFunctionDeclaration declarationIndent declarationStart implementationNameRange implementationName maybeSignature state =
+    case parsePatternsUntilEqual declarationIndent state [] of
+        Err error ->
+            Err error
 
-                        declarationRange =
-                            { start = firstNameToken.start, end = bodyRange.end }
-                    in
+        Ok ( arguments, equalsLocation, afterEqual ) ->
+            case parseExpressionNodeAt declarationIndent 0 afterEqual of
+                Err error ->
+                    Err error
+
+                Ok ( Node bodyRange body, remaining ) ->
                     Ok
-                        ( Node declarationRange
+                        ( Node
+                            { start = declarationStart, end = bodyRange.end }
                             (Expression.LetFunction
                                 { documentation = Nothing
                                 , signature = maybeSignature
                                 , declaration =
-                                    Node implementationRange
-                                        { name =
-                                            Node
-                                                (tokenRange implementationNameToken)
-                                                implementationNameToken.lexeme
+                                    Node
+                                        { start = implementationNameRange.start, end = bodyRange.end }
+                                        { name = Node implementationNameRange implementationName
                                         , arguments = arguments
-                                        , equalsTokenLocation = equalToken.start
-                                        , expression = body
+                                        , equalsTokenLocation = equalsLocation
+                                        , expression = Node bodyRange body
                                         }
                                 }
                             )
                         , remaining
                         )
 
-                Err error ->
-                    Err error
-
-        Err error ->
-            Err error
-
 
 parsePatternsUntilEqual :
     Int
-    -> List Token.Token
+    -> ParserState
     -> List (Node Pattern.Pattern)
-    -> Result String ( List (Node Pattern.Pattern), Token.Token, List Token.Token )
-parsePatternsUntilEqual indentMin tokens patternsRev =
-    case dropTrivia tokens of
-        [] ->
-            Err "Expected '=' in let declaration."
-
-        token :: rest ->
-            if token.tokenType == Token.Equal then
-                Ok ( List.reverse patternsRev, token, rest )
-
-            else
-                case parsePatternNodeAt indentMin (token :: rest) of
-                    Ok ( pattern, remaining ) ->
-                        parsePatternsUntilEqual indentMin remaining (pattern :: patternsRev)
-
-                    Err error ->
-                        Err error
+    -> Result String ( List (Node Pattern.Pattern), Location, ParserState )
+parsePatternsUntilEqual indentMin state patternsRev =
+    parsePatternsUntilEqualAt indentMin state patternsRev (skipTrivia state)
 
 
-parseCaseBlock :
+parsePatternsUntilEqualAt :
     Int
-    -> Token.Token
-    -> List Token.Token
-    -> Result String ( Node Expression.Expression, List Token.Token )
-parseCaseBlock indentMin caseToken tokens =
-    case parseExpressionNodeAt caseToken.start.column 0 tokens of
+    -> ParserState
+    -> List (Node Pattern.Pattern)
+    -> ParserState
+    -> Result String ( List (Node Pattern.Pattern), Location, ParserState )
+parsePatternsUntilEqualAt indentMin state patternsRev stateAtToken =
+    if isEqualsToken stateAtToken.source stateAtToken.offset then
+        Ok
+            ( List.reverse patternsRev
+            , { row = stateAtToken.row, column = stateAtToken.column }
+            , { source = stateAtToken.source
+              , offset = stateAtToken.offset + 1
+              , row = stateAtToken.row
+              , column = stateAtToken.column + 1
+              , commentsRev = stateAtToken.commentsRev
+              }
+            )
+
+    else
+        case parsePatternNodeAt indentMin stateAtToken of
+            Err error ->
+                Err error
+
+            Ok ( pattern, remaining ) ->
+                parsePatternsUntilEqual indentMin remaining (pattern :: patternsRev)
+
+
+parseCaseBlock : Int -> ParserState -> Result String ( Node Expression.Expression, ParserState )
+parseCaseBlock indentMin state =
+    let
+        caseTokenLocation =
+            { row = state.row, column = state.column }
+    in
+    case
+        parseExpressionNodeAt
+            state.column
+            0
+            { source = state.source
+            , offset = state.offset + 4
+            , row = state.row
+            , column = state.column + 4
+            , commentsRev = state.commentsRev
+            }
+    of
+        Err error ->
+            Err error
+
         Ok ( subject, afterSubject ) ->
-            case consumeKeyword "of" afterSubject of
-                Ok ( ofToken, afterOf ) ->
-                    case dropTrivia afterOf of
-                        firstBranchToken :: _ ->
-                            case
-                                parseCaseBranches
-                                    (min firstBranchToken.start.column (caseToken.start.column + 1))
-                                    firstBranchToken.start.column
-                                    afterOf
-                                    []
-                            of
-                                Ok ( branchesRev, remaining ) ->
-                                    case branchesRev of
-                                        [] ->
-                                            Err "Expected at least one case branch after 'of'."
-
-                                        lastBranch :: _ ->
-                                            let
-                                                (Node lastExpressionRange _) =
-                                                    lastBranch.expression
-                                            in
-                                            Ok
-                                                ( Node
-                                                    { start = caseToken.start
-                                                    , end = lastExpressionRange.end
-                                                    }
-                                                    (Expression.CaseExpression
-                                                        { caseTokenLocation = caseToken.start
-                                                        , expression = subject
-                                                        , ofTokenLocation = ofToken.start
-                                                        , cases = List.reverse branchesRev
-                                                        }
-                                                    )
-                                                , remaining
-                                                )
-
-                                Err error ->
-                                    Err error
-
-                        [] ->
-                            Err "Expected at least one case branch after 'of'."
-
+            case consumeKeyword "of" 2 afterSubject of
                 Err error ->
                     Err error
 
-        Err error ->
-            Err error
+                Ok ( ofTokenLocation, afterOf ) ->
+                    let
+                        stateAtFirstBranch =
+                            skipTrivia afterOf
+                    in
+                    case
+                        parseCaseBranches
+                            (min stateAtFirstBranch.column (state.column + 1))
+                            stateAtFirstBranch.column
+                            afterOf
+                            []
+                    of
+                        Err error ->
+                            Err error
+
+                        Ok ( branchesRev, remaining ) ->
+                            case branchesRev of
+                                [] ->
+                                    Err "Expected at least one case branch after 'of'."
+
+                                lastBranch :: _ ->
+                                    let
+                                        (Node lastExpressionRange _) =
+                                            lastBranch.expression
+                                    in
+                                    Ok
+                                        ( Node
+                                            { start = caseTokenLocation
+                                            , end = lastExpressionRange.end
+                                            }
+                                            (Expression.CaseExpression
+                                                { caseTokenLocation = caseTokenLocation
+                                                , expression = subject
+                                                , ofTokenLocation = ofTokenLocation
+                                                , cases = List.reverse branchesRev
+                                                }
+                                            )
+                                        , remaining
+                                        )
 
 
 parseCaseBranches :
     Int
     -> Int
-    -> List Token.Token
+    -> ParserState
     -> List Expression.Case
-    -> Result String ( List Expression.Case, List Token.Token )
-parseCaseBranches lowerBound branchIndent tokens branchesRev =
-    case dropTrivia tokens of
-        [] ->
-            Ok ( branchesRev, [] )
+    -> Result String ( List Expression.Case, ParserState )
+parseCaseBranches lowerBound branchIndent state branchesRev =
+    parseCaseBranchesAt lowerBound branchIndent state branchesRev (skipTrivia state)
 
-        token :: _ ->
-            if token.start.column < lowerBound || isClosingToken token then
-                Ok ( branchesRev, tokens )
+
+parseCaseBranchesAt :
+    Int
+    -> Int
+    -> ParserState
+    -> List Expression.Case
+    -> ParserState
+    -> Result String ( List Expression.Case, ParserState )
+parseCaseBranchesAt lowerBound branchIndent state branchesRev stateAtToken =
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        "" ->
+            Ok ( branchesRev, state )
+
+        _ ->
+            if
+                stateAtToken.column
+                    < lowerBound
+                    || isClosingAt stateAtToken.source stateAtToken.offset
+            then
+                Ok ( branchesRev, state )
 
             else
-                case parseCaseBranch branchIndent tokens of
-                    Ok ( branch, remaining ) ->
-                        parseCaseBranches lowerBound branchIndent remaining (branch :: branchesRev)
-
+                case parseCaseBranch branchIndent stateAtToken of
                     Err error ->
                         Err error
 
+                    Ok ( branch, remaining ) ->
+                        parseCaseBranches lowerBound branchIndent remaining (branch :: branchesRev)
 
-parseCaseBranch :
-    Int
-    -> List Token.Token
-    -> Result String ( Expression.Case, List Token.Token )
-parseCaseBranch branchIndent tokens =
-    case parsePatternNodeAt branchIndent tokens of
+
+parseCaseBranch : Int -> ParserState -> Result String ( Expression.Case, ParserState )
+parseCaseBranch branchIndent state =
+    case parsePatternNodeAt branchIndent state of
+        Err error ->
+            Err error
+
         Ok ( pattern, afterPattern ) ->
-            case consumeToken Token.Arrow "'->'" afterPattern of
-                Ok ( arrowToken, afterArrow ) ->
-                    case parseExpressionNodeAt branchIndent 0 afterArrow of
+            let
+                stateAtArrow =
+                    skipTrivia afterPattern
+            in
+            case String.slice stateAtArrow.offset (stateAtArrow.offset + 2) stateAtArrow.source of
+                "->" ->
+                    case
+                        parseExpressionNodeAt
+                            branchIndent
+                            0
+                            { source = stateAtArrow.source
+                            , offset = stateAtArrow.offset + 2
+                            , row = stateAtArrow.row
+                            , column = stateAtArrow.column + 2
+                            , commentsRev = stateAtArrow.commentsRev
+                            }
+                    of
+                        Err error ->
+                            Err error
+
                         Ok ( body, remaining ) ->
                             Ok
                                 ( { pattern = pattern
-                                  , arrowLocation = arrowToken.start
+                                  , arrowLocation = { row = stateAtArrow.row, column = stateAtArrow.column }
                                   , expression = body
                                   }
                                 , remaining
                                 )
 
+                _ ->
+                    Err ("Expected '->', but found '" ++ snippetAt stateAtArrow ++ "'.")
+
+
+parseRecord : Int -> ParserState -> Result String ( Node Expression.Expression, ParserState )
+parseRecord indentMin state =
+    let
+        stateAtToken =
+            skipTrivia
+                { source = state.source
+                , offset = state.offset + 1
+                , row = state.row
+                , column = state.column + 1
+                , commentsRev = state.commentsRev
+                }
+    in
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        "}" ->
+            Ok
+                ( Node
+                    { start = { row = state.row, column = state.column }
+                    , end = { row = stateAtToken.row, column = stateAtToken.column + 1 }
+                    }
+                    (Expression.RecordExpr SeparatedSyntaxList.Empty)
+                , { source = stateAtToken.source
+                  , offset = stateAtToken.offset + 1
+                  , row = stateAtToken.row
+                  , column = stateAtToken.column + 1
+                  , commentsRev = stateAtToken.commentsRev
+                  }
+                )
+
+        first ->
+            if not (isIdentifierStart first) then
+                Err ("Expected a record field name, but found '" ++ snippetAt stateAtToken ++ "'.")
+
+            else
+                let
+                    nameEnd =
+                        skipToIdentifierEnd stateAtToken.source (stateAtToken.offset + 1)
+
+                    nameLength =
+                        nameEnd - stateAtToken.offset
+
+                    nameRange =
+                        { start = { row = stateAtToken.row, column = stateAtToken.column }
+                        , end = { row = stateAtToken.row, column = stateAtToken.column + nameLength }
+                        }
+
+                    name =
+                        String.slice stateAtToken.offset nameEnd stateAtToken.source
+
+                    afterName =
+                        { source = stateAtToken.source
+                        , offset = nameEnd
+                        , row = stateAtToken.row
+                        , column = stateAtToken.column + nameLength
+                        , commentsRev = stateAtToken.commentsRev
+                        }
+
+                    stateAtPipe =
+                        skipTrivia afterName
+                in
+                if isPipeToken stateAtPipe.source stateAtPipe.offset then
+                    case
+                        parseRecordUpdateFields
+                            indentMin
+                            { source = stateAtPipe.source
+                            , offset = stateAtPipe.offset + 1
+                            , row = stateAtPipe.row
+                            , column = stateAtPipe.column + 1
+                            , commentsRev = stateAtPipe.commentsRev
+                            }
+                    of
                         Err error ->
                             Err error
 
-                Err error ->
-                    Err error
+                        Ok ( fields, afterClose ) ->
+                            Ok
+                                ( Node
+                                    { start = { row = state.row, column = state.column }
+                                    , end = { row = afterClose.row, column = afterClose.column }
+                                    }
+                                    (Expression.RecordUpdateExpression
+                                        (Node nameRange name)
+                                        { row = stateAtPipe.row, column = stateAtPipe.column }
+                                        fields
+                                    )
+                                , afterClose
+                                )
 
-        Err error ->
-            Err error
+                else
+                    case parseRecordFieldsWithFirst indentMin nameRange name afterName of
+                        Err error ->
+                            Err error
+
+                        Ok ( fields, afterClose ) ->
+                            Ok
+                                ( Node
+                                    { start = { row = state.row, column = state.column }
+                                    , end = { row = afterClose.row, column = afterClose.column }
+                                    }
+                                    (Expression.RecordExpr fields)
+                                , afterClose
+                                )
 
 
-parseRecord :
+parseRecordUpdateFields :
     Int
-    -> Token.Token
-    -> List Token.Token
-    -> Result String ( Node Expression.Expression, List Token.Token )
-parseRecord indentMin openToken tokens =
-    case dropTrivia tokens of
-        closeToken :: rest ->
-            if closeToken.tokenType == Token.CloseBrace then
-                Ok
-                    ( Node
-                        { start = openToken.start, end = closeToken.end }
-                        (Expression.RecordExpr SeparatedSyntaxList.Empty)
-                    , rest
-                    )
+    -> ParserState
+    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList Expression.RecordExprField, ParserState )
+parseRecordUpdateFields indentMin state =
+    parseRecordUpdateFieldsAt indentMin (skipTrivia state)
+
+
+parseRecordUpdateFieldsAt :
+    Int
+    -> ParserState
+    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList Expression.RecordExprField, ParserState )
+parseRecordUpdateFieldsAt indentMin stateAtToken =
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        "}" ->
+            Ok
+                ( SeparatedSyntaxList.Empty
+                , { source = stateAtToken.source
+                  , offset = stateAtToken.offset + 1
+                  , row = stateAtToken.row
+                  , column = stateAtToken.column + 1
+                  , commentsRev = stateAtToken.commentsRev
+                  }
+                )
+
+        first ->
+            if not (isIdentifierStart first) then
+                Err ("Expected a record field name, but found '" ++ snippetAt stateAtToken ++ "'.")
 
             else
-                parseNonEmptyRecord indentMin openToken tokens
+                let
+                    nameEnd =
+                        skipToIdentifierEnd stateAtToken.source (stateAtToken.offset + 1)
 
-        [] ->
-            Err "Expected '}' in record expression."
-
-
-parseNonEmptyRecord :
-    Int
-    -> Token.Token
-    -> List Token.Token
-    -> Result String ( Node Expression.Expression, List Token.Token )
-parseNonEmptyRecord indentMin openToken tokens =
-    case dropTrivia tokens of
-        nameToken :: afterName ->
-            if nameToken.tokenType /= Token.Identifier then
-                Err ("Expected a record field name, but found '" ++ nameToken.lexeme ++ "'.")
-
-            else
-                case dropTrivia afterName of
-                    pipeToken :: afterPipe ->
-                        if pipeToken.tokenType == Token.Pipe then
-                            case parseRecordFields indentMin afterPipe of
-                                Ok ( fields, closeToken, remaining ) ->
-                                    Ok
-                                        ( Node
-                                            { start = openToken.start, end = closeToken.end }
-                                            (Expression.RecordUpdateExpression
-                                                (Node (tokenRange nameToken) nameToken.lexeme)
-                                                pipeToken.start
-                                                fields
-                                            )
-                                        , remaining
-                                        )
-
-                                Err error ->
-                                    Err error
-
-                        else
-                            case parseRecordFieldsWithFirst indentMin nameToken afterName of
-                                Ok ( fields, closeToken, remaining ) ->
-                                    Ok
-                                        ( Node
-                                            { start = openToken.start, end = closeToken.end }
-                                            (Expression.RecordExpr fields)
-                                        , remaining
-                                        )
-
-                                Err error ->
-                                    Err error
-
-                    [] ->
-                        Err "Expected '=' or '|' in record expression."
-
-        [] ->
-            Err "Expected a record field."
-
-
-parseRecordFields :
-    Int
-    -> List Token.Token
-    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList Expression.RecordExprField, Token.Token, List Token.Token )
-parseRecordFields indentMin tokens =
-    case dropTrivia tokens of
-        closeToken :: rest ->
-            if closeToken.tokenType == Token.CloseBrace then
-                Ok ( SeparatedSyntaxList.Empty, closeToken, rest )
-
-            else
-                parseRecordFieldsWithFirst indentMin closeToken rest
-
-        [] ->
-            Err "Expected a record field or '}'."
+                    nameLength =
+                        nameEnd - stateAtToken.offset
+                in
+                parseRecordFieldsWithFirst
+                    indentMin
+                    { start = { row = stateAtToken.row, column = stateAtToken.column }
+                    , end = { row = stateAtToken.row, column = stateAtToken.column + nameLength }
+                    }
+                    (String.slice stateAtToken.offset nameEnd stateAtToken.source)
+                    { source = stateAtToken.source
+                    , offset = nameEnd
+                    , row = stateAtToken.row
+                    , column = stateAtToken.column + nameLength
+                    , commentsRev = stateAtToken.commentsRev
+                    }
 
 
 parseRecordFieldsWithFirst :
     Int
-    -> Token.Token
-    -> List Token.Token
-    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList Expression.RecordExprField, Token.Token, List Token.Token )
-parseRecordFieldsWithFirst indentMin fieldName tokens =
-    case parseRecordField indentMin fieldName tokens of
-        Ok ( firstField, remaining ) ->
-            case parseFurtherRecordFields indentMin remaining [] of
-                Ok ( furtherFields, closeToken, afterClose ) ->
-                    Ok
-                        ( SeparatedSyntaxList.NonEmpty firstField furtherFields
-                        , closeToken
-                        , afterClose
-                        )
+    -> Range
+    -> String
+    -> ParserState
+    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList Expression.RecordExprField, ParserState )
+parseRecordFieldsWithFirst indentMin fieldNameRange fieldName state =
+    case parseRecordField indentMin fieldNameRange fieldName state of
+        Err error ->
+            Err error
 
+        Ok ( firstField, afterFirstField ) ->
+            case parseFurtherRecordFields indentMin afterFirstField [] of
                 Err error ->
                     Err error
 
-        Err error ->
-            Err error
+                Ok ( furtherFields, afterClose ) ->
+                    Ok
+                        ( SeparatedSyntaxList.NonEmpty firstField furtherFields
+                        , afterClose
+                        )
 
 
 parseRecordField :
     Int
-    -> Token.Token
-    -> List Token.Token
-    -> Result String ( Expression.RecordExprField, List Token.Token )
-parseRecordField indentMin fieldName tokens =
-    if fieldName.tokenType /= Token.Identifier then
-        Err ("Expected a record field name, but found '" ++ fieldName.lexeme ++ "'.")
+    -> Range
+    -> String
+    -> ParserState
+    -> Result String ( Expression.RecordExprField, ParserState )
+parseRecordField indentMin fieldNameRange fieldName state =
+    let
+        stateAtEquals =
+            skipTrivia state
+    in
+    case String.slice stateAtEquals.offset (stateAtEquals.offset + 1) stateAtEquals.source of
+        "=" ->
+            case
+                parseExpressionNodeAt
+                    indentMin
+                    0
+                    { source = stateAtEquals.source
+                    , offset = stateAtEquals.offset + 1
+                    , row = stateAtEquals.row
+                    , column = stateAtEquals.column + 1
+                    , commentsRev = stateAtEquals.commentsRev
+                    }
+            of
+                Err error ->
+                    Err error
 
-    else
-        case consumeToken Token.Equal "'='" tokens of
-            Ok ( equalToken, afterEqual ) ->
-                case parseExpressionNodeAt indentMin 0 afterEqual of
-                    Ok ( valueExpression, remaining ) ->
-                        Ok
-                            ( { fieldName = Node (tokenRange fieldName) fieldName.lexeme
-                              , equalsLocation = equalToken.start
-                              , valueExpr = valueExpression
-                              }
-                            , remaining
-                            )
+                Ok ( valueExpression, remaining ) ->
+                    Ok
+                        ( { fieldName = Node fieldNameRange fieldName
+                          , equalsLocation = { row = stateAtEquals.row, column = stateAtEquals.column }
+                          , valueExpr = valueExpression
+                          }
+                        , remaining
+                        )
 
-                    Err error ->
-                        Err error
-
-            Err error ->
-                Err error
+        _ ->
+            Err ("Expected '=', but found '" ++ snippetAt stateAtEquals ++ "'.")
 
 
 parseFurtherRecordFields :
     Int
-    -> List Token.Token
+    -> ParserState
     -> List ( Location, Expression.RecordExprField )
-    -> Result String ( List ( Location, Expression.RecordExprField ), Token.Token, List Token.Token )
-parseFurtherRecordFields indentMin tokens fieldsRev =
-    case dropTrivia tokens of
-        token :: rest ->
-            if token.tokenType == Token.CloseBrace then
-                Ok ( List.reverse fieldsRev, token, rest )
+    -> Result String ( List ( Location, Expression.RecordExprField ), ParserState )
+parseFurtherRecordFields indentMin state fieldsRev =
+    parseFurtherRecordFieldsAt indentMin state fieldsRev (skipTrivia state)
 
-            else if token.tokenType == Token.Comma then
-                case dropTrivia rest of
-                    fieldName :: afterName ->
-                        case parseRecordField indentMin fieldName afterName of
-                            Ok ( field, remaining ) ->
-                                parseFurtherRecordFields indentMin
-                                    remaining
-                                    (( token.start, field ) :: fieldsRev)
 
+parseFurtherRecordFieldsAt :
+    Int
+    -> ParserState
+    -> List ( Location, Expression.RecordExprField )
+    -> ParserState
+    -> Result String ( List ( Location, Expression.RecordExprField ), ParserState )
+parseFurtherRecordFieldsAt indentMin state fieldsRev stateAtToken =
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        "}" ->
+            Ok
+                ( List.reverse fieldsRev
+                , { source = stateAtToken.source
+                  , offset = stateAtToken.offset + 1
+                  , row = stateAtToken.row
+                  , column = stateAtToken.column + 1
+                  , commentsRev = stateAtToken.commentsRev
+                  }
+                )
+
+        "," ->
+            let
+                stateAtFieldName =
+                    skipTrivia
+                        { source = stateAtToken.source
+                        , offset = stateAtToken.offset + 1
+                        , row = stateAtToken.row
+                        , column = stateAtToken.column + 1
+                        , commentsRev = stateAtToken.commentsRev
+                        }
+            in
+            case String.slice stateAtFieldName.offset (stateAtFieldName.offset + 1) stateAtFieldName.source of
+                fieldFirst ->
+                    if not (isIdentifierStart fieldFirst) then
+                        Err
+                            ("Expected a record field name, but found '"
+                                ++ snippetAt stateAtFieldName
+                                ++ "'."
+                            )
+
+                    else
+                        let
+                            nameEnd =
+                                skipToIdentifierEnd stateAtFieldName.source (stateAtFieldName.offset + 1)
+
+                            nameLength =
+                                nameEnd - stateAtFieldName.offset
+                        in
+                        case
+                            parseRecordField
+                                indentMin
+                                { start = { row = stateAtFieldName.row, column = stateAtFieldName.column }
+                                , end = { row = stateAtFieldName.row, column = stateAtFieldName.column + nameLength }
+                                }
+                                (String.slice stateAtFieldName.offset nameEnd stateAtFieldName.source)
+                                { source = stateAtFieldName.source
+                                , offset = nameEnd
+                                , row = stateAtFieldName.row
+                                , column = stateAtFieldName.column + nameLength
+                                , commentsRev = stateAtFieldName.commentsRev
+                                }
+                        of
                             Err error ->
                                 Err error
 
-                    [] ->
-                        Err "Expected a record field after ','."
+                            Ok ( field, remaining ) ->
+                                parseFurtherRecordFields
+                                    indentMin
+                                    remaining
+                                    (( { row = stateAtToken.row, column = stateAtToken.column }, field ) :: fieldsRev)
 
-            else
-                Err ("Expected ',' or '}', but found '" ++ token.lexeme ++ "'.")
-
-        [] ->
-            Err "Expected '}' in record expression."
+        _ ->
+            Err ("Expected ',' or '}', but found '" ++ snippetAt stateAtToken ++ "'.")
 
 
-parsePatternNode : List Token.Token -> Result String ( Node Pattern.Pattern, List Token.Token )
-parsePatternNode tokens =
-    parsePatternNodeAt 0 tokens
+
+-- PATTERNS
 
 
 parsePatternNodeAt :
     Int
-    -> List Token.Token
-    -> Result String ( Node Pattern.Pattern, List Token.Token )
-parsePatternNodeAt indentMin tokens =
-    case parsePatternAtomic indentMin tokens of
-        Ok ( pattern, remaining ) ->
-            case parseNamedPatternArguments indentMin pattern remaining of
-                Ok parsedNamedPattern ->
-                    parsePatternSuffix indentMin parsedNamedPattern
+    -> ParserState
+    -> Result String ( Node Pattern.Pattern, ParserState )
+parsePatternNodeAt indentMin state =
+    case parsePatternAtomic indentMin state of
+        Err error ->
+            Err error
 
+        Ok ( pattern, afterAtomic ) ->
+            case parseNamedPatternArguments indentMin pattern afterAtomic of
                 Err error ->
                     Err error
 
-        Err error ->
-            Err error
+                Ok ( namedPattern, afterArguments ) ->
+                    parsePatternSuffix indentMin namedPattern afterArguments
 
 
 parseNamedPatternArguments :
     Int
     -> Node Pattern.Pattern
-    -> List Token.Token
-    -> Result String ( Node Pattern.Pattern, List Token.Token )
-parseNamedPatternArguments indentMin ((Node _ patternValue) as pattern) tokens =
+    -> ParserState
+    -> Result String ( Node Pattern.Pattern, ParserState )
+parseNamedPatternArguments indentMin pattern state =
+    let
+        (Node _ patternValue) =
+            pattern
+    in
     case patternValue of
         Pattern.NamedPattern name [] ->
-            parsePatternArguments indentMin name pattern [] tokens
+            parsePatternArguments indentMin name pattern [] state
 
         _ ->
-            Ok ( pattern, tokens )
+            Ok ( pattern, state )
 
 
 parsePatternArguments :
@@ -3505,813 +5753,1854 @@ parsePatternArguments :
     -> Pattern.QualifiedNameRef
     -> Node Pattern.Pattern
     -> List (Node Pattern.Pattern)
-    -> List Token.Token
-    -> Result String ( Node Pattern.Pattern, List Token.Token )
-parsePatternArguments indentMin name original argumentsRev tokens =
-    case dropTrivia tokens of
-        next :: _ ->
-            if next.start.column >= indentMin && canStartNamedPatternArgument next then
-                case parsePatternAtomic indentMin tokens of
-                    Ok ( argument, remaining ) ->
-                        parsePatternArguments indentMin name original (argument :: argumentsRev) remaining
-
-                    Err error ->
-                        Err error
-
-            else
-                finishNamedPattern name original argumentsRev tokens
-
-        [] ->
-            finishNamedPattern name original argumentsRev []
+    -> ParserState
+    -> Result String ( Node Pattern.Pattern, ParserState )
+parsePatternArguments indentMin name original argumentsRev state =
+    parsePatternArgumentsAt indentMin name original argumentsRev state (skipTrivia state)
 
 
-finishNamedPattern :
-    Pattern.QualifiedNameRef
+parsePatternArgumentsAt :
+    Int
+    -> Pattern.QualifiedNameRef
     -> Node Pattern.Pattern
     -> List (Node Pattern.Pattern)
-    -> List Token.Token
-    -> Result String ( Node Pattern.Pattern, List Token.Token )
-finishNamedPattern name original argumentsRev tokens =
-    case argumentsRev of
-        [] ->
-            Ok ( original, tokens )
+    -> ParserState
+    -> ParserState
+    -> Result String ( Node Pattern.Pattern, ParserState )
+parsePatternArgumentsAt indentMin name original argumentsRev state stateAtArgument =
+    if
+        stateAtArgument.column
+            >= indentMin
+            && canStartNamedPatternArgumentAt stateAtArgument.source stateAtArgument.offset
+    then
+        case parsePatternAtomic indentMin stateAtArgument of
+            Err error ->
+                Err error
 
-        Node lastArgumentRange _ :: _ ->
-            let
-                (Node originalRange _) =
-                    original
-            in
-            Ok
-                ( Node
-                    { start = originalRange.start
-                    , end = lastArgumentRange.end
-                    }
-                    (Pattern.NamedPattern name (List.reverse argumentsRev))
-                , tokens
-                )
+            Ok ( argument, remaining ) ->
+                parsePatternArguments indentMin name original (argument :: argumentsRev) remaining
+
+    else
+        case argumentsRev of
+            [] ->
+                Ok ( original, state )
+
+            (Node lastArgumentRange _) :: _ ->
+                let
+                    (Node originalRange _) =
+                        original
+                in
+                Ok
+                    ( Node
+                        { start = originalRange.start
+                        , end = lastArgumentRange.end
+                        }
+                        (Pattern.NamedPattern name (List.reverse argumentsRev))
+                    , state
+                    )
 
 
 parsePatternSuffix :
     Int
-    -> ( Node Pattern.Pattern, List Token.Token )
-    -> Result String ( Node Pattern.Pattern, List Token.Token )
-parsePatternSuffix indentMin ( pattern, tokens ) =
-    case dropTrivia tokens of
-        token :: rest ->
-            if token.tokenType == Token.Operator && token.lexeme == "::" then
-                case parsePatternNodeAt indentMin rest of
-                    Ok ( tailPattern, remaining ) ->
+    -> Node Pattern.Pattern
+    -> ParserState
+    -> Result String ( Node Pattern.Pattern, ParserState )
+parsePatternSuffix indentMin pattern state =
+    parsePatternSuffixAt indentMin pattern state (skipTrivia state)
+
+
+parsePatternSuffixAt :
+    Int
+    -> Node Pattern.Pattern
+    -> ParserState
+    -> ParserState
+    -> Result String ( Node Pattern.Pattern, ParserState )
+parsePatternSuffixAt indentMin pattern state stateAtToken =
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        ":" ->
+            if String.slice (stateAtToken.offset + 1) (stateAtToken.offset + 2) stateAtToken.source == ":" then
+                case
+                    parsePatternNodeAt
+                        indentMin
+                        { source = stateAtToken.source
+                        , offset = stateAtToken.offset + 2
+                        , row = stateAtToken.row
+                        , column = stateAtToken.column + 2
+                        , commentsRev = stateAtToken.commentsRev
+                        }
+                of
+                    Err error ->
+                        Err error
+
+                    Ok ( Node tailPatternRange tailPattern, remaining ) ->
                         let
                             (Node patternRange _) =
                                 pattern
-
-                            (Node tailPatternRange _) =
-                                tailPattern
                         in
                         Ok
                             ( Node
                                 { start = patternRange.start
                                 , end = tailPatternRange.end
                                 }
-                                (Pattern.UnConsPattern pattern token.start tailPattern)
+                                (Pattern.UnConsPattern
+                                    pattern
+                                    { row = stateAtToken.row, column = stateAtToken.column }
+                                    (Node tailPatternRange tailPattern)
+                                )
                             , remaining
                             )
 
-                    Err error ->
-                        Err error
+            else
+                Ok ( pattern, state )
 
-            else if token.tokenType == Token.Identifier && token.lexeme == "as" then
-                case dropTrivia rest of
-                    nameToken :: remaining ->
-                        if nameToken.tokenType == Token.Identifier then
+        first ->
+            if
+                isIdentifierStart first
+                    && (String.slice stateAtToken.offset (skipToIdentifierEnd stateAtToken.source (stateAtToken.offset + 1)) stateAtToken.source
+                            == "as"
+                       )
+            then
+                let
+                    stateAtName =
+                        skipTrivia
+                            { source = stateAtToken.source
+                            , offset = stateAtToken.offset + 2
+                            , row = stateAtToken.row
+                            , column = stateAtToken.column + 2
+                            , commentsRev = stateAtToken.commentsRev
+                            }
+                in
+                case String.slice stateAtName.offset (stateAtName.offset + 1) stateAtName.source of
+                    nameFirst ->
+                        if isIdentifierStart nameFirst then
                             let
+                                nameEnd =
+                                    skipToIdentifierEnd stateAtName.source (stateAtName.offset + 1)
+
+                                nameLength =
+                                    nameEnd - stateAtName.offset
+
                                 (Node patternRange _) =
                                     pattern
                             in
                             Ok
                                 ( Node
-                                    { start = patternRange.start, end = nameToken.end }
+                                    { start = patternRange.start
+                                    , end = { row = stateAtName.row, column = stateAtName.column + nameLength }
+                                    }
                                     (Pattern.AsPattern
                                         pattern
-                                        token.start
-                                        (Node (tokenRange nameToken) nameToken.lexeme)
+                                        { row = stateAtToken.row, column = stateAtToken.column }
+                                        (Node
+                                            { start = { row = stateAtName.row, column = stateAtName.column }
+                                            , end = { row = stateAtName.row, column = stateAtName.column + nameLength }
+                                            }
+                                            (String.slice stateAtName.offset nameEnd stateAtName.source)
+                                        )
                                     )
-                                , remaining
+                                , { source = stateAtName.source
+                                  , offset = nameEnd
+                                  , row = stateAtName.row
+                                  , column = stateAtName.column + nameLength
+                                  , commentsRev = stateAtName.commentsRev
+                                  }
                                 )
 
                         else
-                            Err ("Expected a pattern name after 'as', but found '" ++ nameToken.lexeme ++ "'.")
-
-                    [] ->
-                        Err "Expected a pattern name after 'as'."
+                            Err
+                                ("Expected a pattern name after 'as', but found '"
+                                    ++ snippetAt stateAtName
+                                    ++ "'."
+                                )
 
             else
-                Ok ( pattern, tokens )
-
-        [] ->
-            Ok ( pattern, [] )
+                Ok ( pattern, state )
 
 
 parsePatternAtomic :
     Int
-    -> List Token.Token
-    -> Result String ( Node Pattern.Pattern, List Token.Token )
-parsePatternAtomic indentMin tokens =
-    case dropTrivia tokens of
-        [] ->
-            Err "Expected a pattern."
-
-        token :: rest ->
-            case token.tokenType of
-                Token.Identifier ->
-                    if token.lexeme == "_" then
-                        Ok ( Node (tokenRange token) Pattern.AllPattern, rest )
-
-                    else if startsWithUpper token.lexeme then
-                        let
-                            ( nameToken, moduleNamesRev, remaining ) =
-                                parseQualifiedName [] token rest
-                        in
-                        Ok
-                            ( Node
-                                { start = token.start, end = nameToken.end }
-                                (Pattern.NamedPattern
-                                    { moduleName = List.reverse moduleNamesRev
-                                    , name = nameToken.lexeme
-                                    }
-                                    []
-                                )
-                            , remaining
-                            )
-
-                    else
-                        Ok ( Node (tokenRange token) (Pattern.VarPattern token.lexeme), rest )
-
-                Token.StringLiteral ->
-                    Ok ( Node (tokenRange token) (Pattern.StringPattern token.lexeme), rest )
-
-                Token.TripleQuotedStringLiteral ->
-                    Ok ( Node (tokenRange token) (Pattern.StringPattern token.lexeme), rest )
-
-                Token.CharLiteral ->
-                    case String.toList token.lexeme of
-                        [ char ] ->
-                            Ok ( Node (tokenRange token) (Pattern.CharPattern (Char.toCode char)), rest )
-
-                        _ ->
-                            Err ("Invalid character pattern '" ++ token.lexeme ++ "'.")
-
-                Token.NumberLiteral ->
-                    if String.startsWith "0x" token.lexeme then
-                        case hexStringToInt (String.dropLeft 2 token.lexeme) of
-                            Just value ->
-                                Ok ( Node (tokenRange token) (Pattern.HexPattern value), rest )
-
-                            Nothing ->
-                                Err ("Invalid hexadecimal pattern '" ++ token.lexeme ++ "'.")
-
-                    else if String.contains "." token.lexeme || String.contains "e" token.lexeme || String.contains "E" token.lexeme then
-                        case String.toFloat token.lexeme of
-                            Just value ->
-                                Ok ( Node (tokenRange token) (Pattern.FloatPattern value), rest )
-
-                            Nothing ->
-                                Err ("Invalid float pattern '" ++ token.lexeme ++ "'.")
-
-                    else
-                        case String.toInt token.lexeme of
-                            Just value ->
-                                Ok ( Node (tokenRange token) (Pattern.IntPattern value), rest )
-
-                            Nothing ->
-                                Err ("Invalid integer pattern '" ++ token.lexeme ++ "'.")
-
-                Token.OpenParen ->
-                    parseTuplePattern indentMin token rest
-
-                Token.OpenBracket ->
-                    parseListPattern indentMin token rest
-
-                Token.OpenBrace ->
-                    parseRecordPattern token rest
-
-                _ ->
-                    Err ("Expected a pattern, but found '" ++ token.lexeme ++ "'.")
+    -> ParserState
+    -> Result String ( Node Pattern.Pattern, ParserState )
+parsePatternAtomic indentMin state =
+    parsePatternAtomicAt indentMin (skipTrivia state)
 
 
-parseTuplePattern :
+parsePatternAtomicAt :
     Int
-    -> Token.Token
-    -> List Token.Token
-    -> Result String ( Node Pattern.Pattern, List Token.Token )
-parseTuplePattern indentMin openToken tokens =
-    case dropTrivia tokens of
-        closeToken :: rest ->
-            if closeToken.tokenType == Token.CloseParen then
-                Ok
-                    ( Node { start = openToken.start, end = closeToken.end } Pattern.UnitPattern
-                    , rest
-                    )
+    -> ParserState
+    -> Result String ( Node Pattern.Pattern, ParserState )
+parsePatternAtomicAt indentMin stateAtToken =
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        "\"" ->
+            if String.slice stateAtToken.offset (stateAtToken.offset + 3) stateAtToken.source == "\"\"\"" then
+                parseStringPattern TripleQuoteTermination 3 stateAtToken
 
             else
-                parseNonEmptyTuplePattern indentMin openToken tokens
+                parseStringPattern DoubleQuoteTermination 1 stateAtToken
 
-        [] ->
-            Err "Expected ')' in pattern."
+        "'" ->
+            parseCharPattern stateAtToken
 
+        "(" ->
+            parseTuplePattern indentMin stateAtToken
 
-parseNonEmptyTuplePattern :
-    Int
-    -> Token.Token
-    -> List Token.Token
-    -> Result String ( Node Pattern.Pattern, List Token.Token )
-parseNonEmptyTuplePattern indentMin openToken tokens =
-    case parsePatternNodeAt indentMin tokens of
-        Ok ( first, afterFirst ) ->
-            case parseFurtherPatterns indentMin Token.CloseParen afterFirst [] of
-                Ok ( further, closeToken, remaining ) ->
+        "[" ->
+            parseListPattern indentMin stateAtToken
+
+        "{" ->
+            parseRecordPattern stateAtToken
+
+        first ->
+            if isDigit first then
+                parseNumberPattern first stateAtToken
+
+            else if isIdentifierStart first then
+                let
+                    nameEnd =
+                        skipToIdentifierEnd stateAtToken.source (stateAtToken.offset + 1)
+
+                    nameLength =
+                        nameEnd - stateAtToken.offset
+
+                    name =
+                        String.slice stateAtToken.offset nameEnd stateAtToken.source
+                in
+                if name == "_" then
+                    Ok
+                        ( Node
+                            { start = { row = stateAtToken.row, column = stateAtToken.column }
+                            , end = { row = stateAtToken.row, column = stateAtToken.column + 1 }
+                            }
+                            Pattern.AllPattern
+                        , { source = stateAtToken.source
+                          , offset = nameEnd
+                          , row = stateAtToken.row
+                          , column = stateAtToken.column + 1
+                          , commentsRev = stateAtToken.commentsRev
+                          }
+                        )
+
+                else if isUpperCharacter first then
                     let
-                        pattern =
-                            case further of
-                                [] ->
-                                    Pattern.ParenthesizedPattern first
-
-                                _ ->
-                                    Pattern.TuplePattern (SeparatedSyntaxList.NonEmpty first further)
+                        ( Node qualifiedRange ( moduleNames, qualifiedName ), remaining ) =
+                            parseQualifiedNameNode name nameEnd stateAtToken
                     in
                     Ok
-                        ( Node { start = openToken.start, end = closeToken.end } pattern
+                        ( Node qualifiedRange
+                            (Pattern.NamedPattern
+                                { moduleName = moduleNames, name = qualifiedName }
+                                []
+                            )
                         , remaining
                         )
 
+                else
+                    Ok
+                        ( Node
+                            { start = { row = stateAtToken.row, column = stateAtToken.column }
+                            , end = { row = stateAtToken.row, column = stateAtToken.column + nameLength }
+                            }
+                            (Pattern.VarPattern name)
+                        , { source = stateAtToken.source
+                          , offset = nameEnd
+                          , row = stateAtToken.row
+                          , column = stateAtToken.column + nameLength
+                          , commentsRev = stateAtToken.commentsRev
+                          }
+                        )
+
+            else
+                Err ("Expected a pattern, but found '" ++ snippetAt stateAtToken ++ "'.")
+
+
+parseStringPattern :
+    LiteralTermination
+    -> Int
+    -> ParserState
+    -> Result String ( Node Pattern.Pattern, ParserState )
+parseStringPattern termination openingLength state =
+    case
+        consumeLiteral
+            termination
+            state.source
+            state.row
+            state.column
+            (state.offset + openingLength)
+            state.row
+            (state.column + openingLength)
+            []
+            []
+    of
+        Err error ->
+            Err error
+
+        Ok consumed ->
+            Ok
+                ( Node
+                    { start = { row = state.row, column = state.column }
+                    , end = { row = consumed.endRow, column = consumed.endColumn }
+                    }
+                    (Pattern.StringPattern consumed.decoded)
+                , { source = state.source
+                  , offset = consumed.endOffset
+                  , row = consumed.endRow
+                  , column = consumed.endColumn
+                  , commentsRev = state.commentsRev
+                  }
+                )
+
+
+parseCharPattern : ParserState -> Result String ( Node Pattern.Pattern, ParserState )
+parseCharPattern state =
+    case
+        consumeLiteral
+            SingleQuoteTermination
+            state.source
+            state.row
+            state.column
+            (state.offset + 1)
+            state.row
+            (state.column + 1)
+            []
+            []
+    of
+        Err error ->
+            Err error
+
+        Ok consumed ->
+            case String.toList consumed.decoded of
+                [ char ] ->
+                    Ok
+                        ( Node
+                            { start = { row = state.row, column = state.column }
+                            , end = { row = consumed.endRow, column = consumed.endColumn }
+                            }
+                            (Pattern.CharPattern (Char.toCode char))
+                        , { source = state.source
+                          , offset = consumed.endOffset
+                          , row = consumed.endRow
+                          , column = consumed.endColumn
+                          , commentsRev = state.commentsRev
+                          }
+                        )
+
+                _ ->
+                    Err ("Invalid character pattern '" ++ consumed.decoded ++ "'.")
+
+
+parseNumberPattern : String -> ParserState -> Result String ( Node Pattern.Pattern, ParserState )
+parseNumberPattern firstCharacter state =
+    let
+        literalEnd =
+            numberEnd state.source firstCharacter state.offset
+
+        literalLength =
+            literalEnd - state.offset
+
+        literal =
+            String.slice state.offset literalEnd state.source
+
+        range =
+            { start = { row = state.row, column = state.column }
+            , end = { row = state.row, column = state.column + literalLength }
+            }
+
+        remaining =
+            { source = state.source
+            , offset = literalEnd
+            , row = state.row
+            , column = state.column + literalLength
+            , commentsRev = state.commentsRev
+            }
+    in
+    if String.startsWith "0x" literal then
+        case hexStringToInt (String.dropLeft 2 literal) of
+            Just value ->
+                Ok ( Node range (Pattern.HexPattern value), remaining )
+
+            Nothing ->
+                Err ("Invalid hexadecimal pattern '" ++ literal ++ "'.")
+
+    else if String.contains "." literal || String.contains "e" literal || String.contains "E" literal then
+        case String.toFloat literal of
+            Just value ->
+                Ok ( Node range (Pattern.FloatPattern value), remaining )
+
+            Nothing ->
+                Err ("Invalid float pattern '" ++ literal ++ "'.")
+
+    else
+        case String.toInt literal of
+            Just value ->
+                Ok ( Node range (Pattern.IntPattern value), remaining )
+
+            Nothing ->
+                Err ("Invalid integer pattern '" ++ literal ++ "'.")
+
+
+parseTuplePattern : Int -> ParserState -> Result String ( Node Pattern.Pattern, ParserState )
+parseTuplePattern indentMin state =
+    let
+        stateAtToken =
+            skipTrivia
+                { source = state.source
+                , offset = state.offset + 1
+                , row = state.row
+                , column = state.column + 1
+                , commentsRev = state.commentsRev
+                }
+    in
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        ")" ->
+            Ok
+                ( Node
+                    { start = { row = state.row, column = state.column }
+                    , end = { row = stateAtToken.row, column = stateAtToken.column + 1 }
+                    }
+                    Pattern.UnitPattern
+                , { source = stateAtToken.source
+                  , offset = stateAtToken.offset + 1
+                  , row = stateAtToken.row
+                  , column = stateAtToken.column + 1
+                  , commentsRev = stateAtToken.commentsRev
+                  }
+                )
+
+        _ ->
+            case parsePatternNodeAt indentMin stateAtToken of
                 Err error ->
                     Err error
 
-        Err error ->
-            Err error
+                Ok ( first, afterFirst ) ->
+                    case parseFurtherTuplePatterns indentMin afterFirst [] of
+                        Err error ->
+                            Err error
+
+                        Ok ( further, afterClose ) ->
+                            let
+                                pattern =
+                                    case further of
+                                        [] ->
+                                            Pattern.ParenthesizedPattern first
+
+                                        _ ->
+                                            Pattern.TuplePattern
+                                                (SeparatedSyntaxList.NonEmpty first further)
+                            in
+                            Ok
+                                ( Node
+                                    { start = { row = state.row, column = state.column }
+                                    , end = { row = afterClose.row, column = afterClose.column }
+                                    }
+                                    pattern
+                                , afterClose
+                                )
 
 
-parseListPattern :
+parseFurtherTuplePatterns :
     Int
-    -> Token.Token
-    -> List Token.Token
-    -> Result String ( Node Pattern.Pattern, List Token.Token )
-parseListPattern indentMin openToken tokens =
-    case dropTrivia tokens of
-        closeToken :: rest ->
-            if closeToken.tokenType == Token.CloseBracket then
-                Ok
-                    ( Node
-                        { start = openToken.start, end = closeToken.end }
-                        (Pattern.ListPattern SeparatedSyntaxList.Empty)
-                    , rest
-                    )
-
-            else
-                case parsePatternNodeAt indentMin tokens of
-                    Ok ( first, afterFirst ) ->
-                        case parseFurtherPatterns indentMin Token.CloseBracket afterFirst [] of
-                            Ok ( further, closing, remaining ) ->
-                                Ok
-                                    ( Node
-                                        { start = openToken.start, end = closing.end }
-                                        (Pattern.ListPattern (SeparatedSyntaxList.NonEmpty first further))
-                                    , remaining
-                                    )
-
-                            Err error ->
-                                Err error
-
-                    Err error ->
-                        Err error
-
-        [] ->
-            Err "Expected ']' in pattern."
-
-
-parseFurtherPatterns :
-    Int
-    -> Token.TokenType
-    -> List Token.Token
+    -> ParserState
     -> List ( Location, Node Pattern.Pattern )
-    -> Result String ( List ( Location, Node Pattern.Pattern ), Token.Token, List Token.Token )
-parseFurtherPatterns indentMin closingType tokens furtherRev =
-    case dropTrivia tokens of
-        token :: rest ->
-            if token.tokenType == closingType then
-                Ok ( List.reverse furtherRev, token, rest )
-
-            else if token.tokenType == Token.Comma then
-                case parsePatternNodeAt indentMin rest of
-                    Ok ( pattern, remaining ) ->
-                        parseFurtherPatterns indentMin
-                            closingType
-                            remaining
-                            (( token.start, pattern ) :: furtherRev)
-
-                    Err error ->
-                        Err error
-
-            else
-                Err ("Expected ',' or a closing delimiter in pattern, but found '" ++ token.lexeme ++ "'.")
-
-        [] ->
-            Err "Expected a closing delimiter in pattern."
+    -> Result String ( List ( Location, Node Pattern.Pattern ), ParserState )
+parseFurtherTuplePatterns indentMin state furtherRev =
+    parseFurtherTuplePatternsAt indentMin state furtherRev (skipTrivia state)
 
 
-parseRecordPattern :
-    Token.Token
-    -> List Token.Token
-    -> Result String ( Node Pattern.Pattern, List Token.Token )
-parseRecordPattern openToken tokens =
-    case parseRecordPatternFields tokens Nothing [] of
-        Ok ( fields, closeToken, remaining ) ->
+parseFurtherTuplePatternsAt :
+    Int
+    -> ParserState
+    -> List ( Location, Node Pattern.Pattern )
+    -> ParserState
+    -> Result String ( List ( Location, Node Pattern.Pattern ), ParserState )
+parseFurtherTuplePatternsAt indentMin state furtherRev stateAtToken =
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        ")" ->
             Ok
-                ( Node
-                    { start = openToken.start, end = closeToken.end }
-                    (Pattern.RecordPattern fields)
-                , remaining
+                ( List.reverse furtherRev
+                , { source = stateAtToken.source
+                  , offset = stateAtToken.offset + 1
+                  , row = stateAtToken.row
+                  , column = stateAtToken.column + 1
+                  , commentsRev = stateAtToken.commentsRev
+                  }
                 )
 
+        "," ->
+            case
+                parsePatternNodeAt
+                    indentMin
+                    { source = stateAtToken.source
+                    , offset = stateAtToken.offset + 1
+                    , row = stateAtToken.row
+                    , column = stateAtToken.column + 1
+                    , commentsRev = stateAtToken.commentsRev
+                    }
+            of
+                Err error ->
+                    Err error
+
+                Ok ( pattern, remaining ) ->
+                    parseFurtherTuplePatterns
+                        indentMin
+                        remaining
+                        (( { row = stateAtToken.row, column = stateAtToken.column }, pattern ) :: furtherRev)
+
+        _ ->
+            Err
+                ("Expected ',' or a closing delimiter in pattern, but found '"
+                    ++ snippetAt stateAtToken
+                    ++ "'."
+                )
+
+
+parseListPattern : Int -> ParserState -> Result String ( Node Pattern.Pattern, ParserState )
+parseListPattern indentMin state =
+    let
+        stateAtToken =
+            skipTrivia
+                { source = state.source
+                , offset = state.offset + 1
+                , row = state.row
+                , column = state.column + 1
+                , commentsRev = state.commentsRev
+                }
+    in
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        "]" ->
+            Ok
+                ( Node
+                    { start = { row = state.row, column = state.column }
+                    , end = { row = stateAtToken.row, column = stateAtToken.column + 1 }
+                    }
+                    (Pattern.ListPattern SeparatedSyntaxList.Empty)
+                , { source = stateAtToken.source
+                  , offset = stateAtToken.offset + 1
+                  , row = stateAtToken.row
+                  , column = stateAtToken.column + 1
+                  , commentsRev = stateAtToken.commentsRev
+                  }
+                )
+
+        _ ->
+            case parsePatternNodeAt indentMin stateAtToken of
+                Err error ->
+                    Err error
+
+                Ok ( first, afterFirst ) ->
+                    case parseFurtherListPatterns indentMin afterFirst [] of
+                        Err error ->
+                            Err error
+
+                        Ok ( further, afterClose ) ->
+                            Ok
+                                ( Node
+                                    { start = { row = state.row, column = state.column }
+                                    , end = { row = afterClose.row, column = afterClose.column }
+                                    }
+                                    (Pattern.ListPattern
+                                        (SeparatedSyntaxList.NonEmpty first further)
+                                    )
+                                , afterClose
+                                )
+
+
+parseFurtherListPatterns :
+    Int
+    -> ParserState
+    -> List ( Location, Node Pattern.Pattern )
+    -> Result String ( List ( Location, Node Pattern.Pattern ), ParserState )
+parseFurtherListPatterns indentMin state furtherRev =
+    parseFurtherListPatternsAt indentMin state furtherRev (skipTrivia state)
+
+
+parseFurtherListPatternsAt :
+    Int
+    -> ParserState
+    -> List ( Location, Node Pattern.Pattern )
+    -> ParserState
+    -> Result String ( List ( Location, Node Pattern.Pattern ), ParserState )
+parseFurtherListPatternsAt indentMin state furtherRev stateAtToken =
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        "]" ->
+            Ok
+                ( List.reverse furtherRev
+                , { source = stateAtToken.source
+                  , offset = stateAtToken.offset + 1
+                  , row = stateAtToken.row
+                  , column = stateAtToken.column + 1
+                  , commentsRev = stateAtToken.commentsRev
+                  }
+                )
+
+        "," ->
+            case
+                parsePatternNodeAt
+                    indentMin
+                    { source = stateAtToken.source
+                    , offset = stateAtToken.offset + 1
+                    , row = stateAtToken.row
+                    , column = stateAtToken.column + 1
+                    , commentsRev = stateAtToken.commentsRev
+                    }
+            of
+                Err error ->
+                    Err error
+
+                Ok ( pattern, remaining ) ->
+                    parseFurtherListPatterns
+                        indentMin
+                        remaining
+                        (( { row = stateAtToken.row, column = stateAtToken.column }, pattern ) :: furtherRev)
+
+        _ ->
+            Err
+                ("Expected ',' or a closing delimiter in pattern, but found '"
+                    ++ snippetAt stateAtToken
+                    ++ "'."
+                )
+
+
+parseRecordPattern : ParserState -> Result String ( Node Pattern.Pattern, ParserState )
+parseRecordPattern state =
+    case
+        parseRecordPatternFields
+            { source = state.source
+            , offset = state.offset + 1
+            , row = state.row
+            , column = state.column + 1
+            , commentsRev = state.commentsRev
+            }
+            Nothing
+            []
+    of
         Err error ->
             Err error
+
+        Ok ( fields, afterClose ) ->
+            Ok
+                ( Node
+                    { start = { row = state.row, column = state.column }
+                    , end = { row = afterClose.row, column = afterClose.column }
+                    }
+                    (Pattern.RecordPattern fields)
+                , afterClose
+                )
 
 
 parseRecordPatternFields :
-    List Token.Token
+    ParserState
     -> Maybe (Node String)
     -> List ( Location, Node String )
-    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList (Node String), Token.Token, List Token.Token )
-parseRecordPatternFields tokens firstField furtherRev =
-    case dropTrivia tokens of
-        token :: rest ->
-            if token.tokenType == Token.CloseBrace then
+    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList (Node String), ParserState )
+parseRecordPatternFields state firstField furtherRev =
+    parseRecordPatternFieldsAt state firstField furtherRev (skipTrivia state)
+
+
+parseRecordPatternFieldsAt :
+    ParserState
+    -> Maybe (Node String)
+    -> List ( Location, Node String )
+    -> ParserState
+    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList (Node String), ParserState )
+parseRecordPatternFieldsAt state firstField furtherRev stateAtToken =
+    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+        "}" ->
+            let
+                afterClose =
+                    { source = stateAtToken.source
+                    , offset = stateAtToken.offset + 1
+                    , row = stateAtToken.row
+                    , column = stateAtToken.column + 1
+                    , commentsRev = stateAtToken.commentsRev
+                    }
+            in
+            case firstField of
+                Nothing ->
+                    Ok ( SeparatedSyntaxList.Empty, afterClose )
+
+                Just first ->
+                    Ok
+                        ( SeparatedSyntaxList.NonEmpty first (List.reverse furtherRev)
+                        , afterClose
+                        )
+
+        first ->
+            if isIdentifierStart first then
                 case firstField of
                     Nothing ->
-                        Ok ( SeparatedSyntaxList.Empty, token, rest )
+                        let
+                            nameEnd =
+                                skipToIdentifierEnd stateAtToken.source (stateAtToken.offset + 1)
 
-                    Just first ->
-                        Ok ( SeparatedSyntaxList.NonEmpty first (List.reverse furtherRev), token, rest )
-
-            else if token.tokenType == Token.Identifier then
-                let
-                    field =
-                        Node (tokenRange token) token.lexeme
-                in
-                case firstField of
-                    Nothing ->
-                        parseRecordPatternFieldsAfterField rest (Just field) furtherRev
+                            nameLength =
+                                nameEnd - stateAtToken.offset
+                        in
+                        parseRecordPatternFieldsAfterField
+                            { source = stateAtToken.source
+                            , offset = nameEnd
+                            , row = stateAtToken.row
+                            , column = stateAtToken.column + nameLength
+                            , commentsRev = stateAtToken.commentsRev
+                            }
+                            (Just
+                                (Node
+                                    { start = { row = stateAtToken.row, column = stateAtToken.column }
+                                    , end = { row = stateAtToken.row, column = stateAtToken.column + nameLength }
+                                    }
+                                    (String.slice stateAtToken.offset nameEnd stateAtToken.source)
+                                )
+                            )
+                            furtherRev
 
                     Just _ ->
                         Err "Expected ',' before record pattern field."
 
             else
-                Err ("Expected a record pattern field or '}', but found '" ++ token.lexeme ++ "'.")
-
-        [] ->
-            Err "Expected '}' in record pattern."
+                Err
+                    ("Expected a record pattern field or '}', but found '"
+                        ++ snippetAt stateAtToken
+                        ++ "'."
+                    )
 
 
 parseRecordPatternFieldsAfterField :
-    List Token.Token
+    ParserState
     -> Maybe (Node String)
     -> List ( Location, Node String )
-    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList (Node String), Token.Token, List Token.Token )
-parseRecordPatternFieldsAfterField tokens firstField furtherRev =
-    case dropTrivia tokens of
-        commaToken :: rest ->
-            if commaToken.tokenType == Token.Comma then
-                case dropTrivia rest of
-                    fieldToken :: afterField ->
-                        if fieldToken.tokenType == Token.Identifier then
-                            parseRecordPatternFieldsAfterField afterField
-                                firstField
-                                (( commaToken.start, Node (tokenRange fieldToken) fieldToken.lexeme ) :: furtherRev)
-
-                        else
-                            Err ("Expected a record pattern field after ',', but found '" ++ fieldToken.lexeme ++ "'.")
-
-                    [] ->
-                        Err "Expected a record pattern field after ','."
-
-            else
-                parseRecordPatternFields tokens firstField furtherRev
-
-        _ ->
-            parseRecordPatternFields tokens firstField furtherRev
+    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList (Node String), ParserState )
+parseRecordPatternFieldsAfterField state firstField furtherRev =
+    parseRecordPatternFieldsAfterFieldAt state firstField furtherRev (skipTrivia state)
 
 
-consumeKeyword : String -> List Token.Token -> Result String ( Token.Token, List Token.Token )
-consumeKeyword keyword tokens =
-    case dropTrivia tokens of
-        token :: rest ->
-            if token.tokenType == Token.Identifier && token.lexeme == keyword then
-                Ok ( token, rest )
+parseRecordPatternFieldsAfterFieldAt :
+    ParserState
+    -> Maybe (Node String)
+    -> List ( Location, Node String )
+    -> ParserState
+    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList (Node String), ParserState )
+parseRecordPatternFieldsAfterFieldAt state firstField furtherRev stateAtToken =
+    if String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source == "," then
+        let
+            stateAtField =
+                skipTrivia
+                    { source = stateAtToken.source
+                    , offset = stateAtToken.offset + 1
+                    , row = stateAtToken.row
+                    , column = stateAtToken.column + 1
+                    , commentsRev = stateAtToken.commentsRev
+                    }
+        in
+        case String.slice stateAtField.offset (stateAtField.offset + 1) stateAtField.source of
+            fieldFirst ->
+                if isIdentifierStart fieldFirst then
+                    let
+                        nameEnd =
+                            skipToIdentifierEnd stateAtField.source (stateAtField.offset + 1)
 
-            else
-                Err ("Expected '" ++ keyword ++ "', but found '" ++ token.lexeme ++ "'.")
+                        nameLength =
+                            nameEnd - stateAtField.offset
+                    in
+                    parseRecordPatternFieldsAfterField
+                        { source = stateAtField.source
+                        , offset = nameEnd
+                        , row = stateAtField.row
+                        , column = stateAtField.column + nameLength
+                        , commentsRev = stateAtField.commentsRev
+                        }
+                        firstField
+                        (( { row = stateAtToken.row, column = stateAtToken.column }
+                         , Node
+                            { start = { row = stateAtField.row, column = stateAtField.column }
+                            , end = { row = stateAtField.row, column = stateAtField.column + nameLength }
+                            }
+                            (String.slice stateAtField.offset nameEnd stateAtField.source)
+                         )
+                            :: furtherRev
+                        )
 
-        [] ->
-            Err ("Expected '" ++ keyword ++ "'.")
-
-
-consumeToken :
-    Token.TokenType
-    -> String
-    -> List Token.Token
-    -> Result String ( Token.Token, List Token.Token )
-consumeToken tokenType description tokens =
-    case dropTrivia tokens of
-        token :: rest ->
-            if token.tokenType == tokenType then
-                Ok ( token, rest )
-
-            else
-                Err ("Expected " ++ description ++ ", but found '" ++ token.lexeme ++ "'.")
-
-        [] ->
-            Err ("Expected " ++ description ++ ".")
-
-
-operatorInfo : Token.Token -> Maybe ( Int, Infix.InfixDirection )
-operatorInfo token =
-    if token.tokenType /= Token.Operator then
-        Nothing
+                else
+                    Err
+                        ("Expected a record pattern field after ',', but found '"
+                            ++ snippetAt stateAtField
+                            ++ "'."
+                        )
 
     else
-        case token.lexeme of
-            "<|" ->
-                Just ( 0, Infix.Right )
+        parseRecordPatternFields state firstField furtherRev
 
-            "|>" ->
-                Just ( 0, Infix.Left )
 
-            "||" ->
-                Just ( 2, Infix.Right )
 
-            "&&" ->
-                Just ( 3, Infix.Right )
+-- TRIVIA
 
-            "==" ->
-                Just ( 4, Infix.Non )
 
-            "/=" ->
-                Just ( 4, Infix.Non )
+{-| Advances the state over whitespace, line comments and nested block comments, collecting every
+comment it consumes with its exact range and lexeme.
 
-            "<" ->
-                Just ( 4, Infix.Non )
+This is the only place in the parser that recognizes a comment, so the state reaching the end of a
+source carries every comment of that source and no additional scan over the source is needed.
 
-            ">" ->
-                Just ( 4, Infix.Non )
+-}
+skipTrivia : ParserState -> ParserState
+skipTrivia state =
+    skipTriviaAt state.source state.offset state.row state.column state.commentsRev
 
-            "<=" ->
-                Just ( 4, Infix.Non )
 
-            ">=" ->
-                Just ( 4, Infix.Non )
+skipWhitespaceAt : String -> Int -> Int -> Int -> List (Node String) -> ParserState
+skipWhitespaceAt source offset row column commentsRev =
+    let
+        nextTwoChars =
+            String.slice offset (offset + 2) source
+    in
+    if nextTwoChars == "\u{000D}\n" then
+        skipWhitespaceAt source (offset + 2) (row + 1) 1 commentsRev
 
-            "++" ->
-                Just ( 5, Infix.Right )
+    else
+        case String.slice 0 1 nextTwoChars of
+            " " ->
+                skipWhitespaceAt source (offset + 1) row (column + 1) commentsRev
 
-            "::" ->
-                Just ( 5, Infix.Right )
+            "\n" ->
+                skipWhitespaceAt source (offset + 1) (row + 1) 1 commentsRev
 
-            "+" ->
-                Just ( 6, Infix.Left )
+            "\t" ->
+                skipWhitespaceAt source (offset + 1) row (column + 1) commentsRev
 
-            "-" ->
-                Just ( 6, Infix.Left )
-
-            "*" ->
-                Just ( 7, Infix.Left )
-
-            "//" ->
-                Just ( 7, Infix.Left )
-
-            "/" ->
-                Just ( 7, Infix.Left )
-
-            "^" ->
-                Just ( 8, Infix.Right )
-
-            "<<" ->
-                Just ( 9, Infix.Left )
-
-            ">>" ->
-                Just ( 9, Infix.Right )
-
-            "|=" ->
-                Just ( 5, Infix.Left )
-
-            "|." ->
-                Just ( 6, Infix.Left )
-
-            "</>" ->
-                Just ( 7, Infix.Right )
-
-            "<?>" ->
-                Just ( 8, Infix.Left )
+            "\u{000D}" ->
+                skipWhitespaceAt source (offset + 1) (row + 1) 1 commentsRev
 
             _ ->
-                Nothing
+                { source = source
+                , offset = offset
+                , row = row
+                , column = column
+                , commentsRev = commentsRev
+                }
 
 
-canStartArgumentExpression : Token.Token -> Bool
-canStartArgumentExpression token =
-    not (isKeyword token)
-        && (case token.tokenType of
-                Token.StringLiteral ->
+{-| The trivia scan after at least one character of trivia was consumed: unlike `skipTrivia` it
+always builds the resulting state, because the position it starts at already differs from the one
+its caller started at.
+-}
+skipTriviaAt : String -> Int -> Int -> Int -> List (Node String) -> ParserState
+skipTriviaAt source offset row column commentsRev =
+    skipTriviaAfterWhitespace (skipWhitespaceAt source offset row column commentsRev)
+
+
+skipTriviaAfterWhitespace : ParserState -> ParserState
+skipTriviaAfterWhitespace state =
+    case String.slice state.offset (state.offset + 2) state.source of
+        "--" ->
+            skipTriviaLineComment state.source state.offset state.row state.column state.commentsRev
+
+        "{-" ->
+            skipTriviaBlockComment
+                state.source
+                (state.offset + 2)
+                state.row
+                (state.column + 2)
+                state.row
+                state.column
+                1
+                [ "{-" ]
+                state.commentsRev
+
+        _ ->
+            state
+
+
+{-| Collects the line comment starting at `offset` and continues the trivia scan after it. The
+line break terminating the comment is not part of the comment's lexeme or range.
+-}
+skipTriviaLineComment : String -> Int -> Int -> Int -> List (Node String) -> ParserState
+skipTriviaLineComment source offset row column commentsRev =
+    let
+        contentEnd =
+            lineCommentEnd source (offset + 2)
+
+        endColumn =
+            column + (contentEnd - offset)
+    in
+    skipTriviaAt
+        source
+        contentEnd
+        row
+        endColumn
+        (Node
+            { start = { row = row, column = column }
+            , end = { row = row, column = endColumn }
+            }
+            (String.slice offset contentEnd source)
+            :: commentsRev
+        )
+
+
+{-| Collects a (possibly nested, possibly multi-line) block comment with all line breaks
+normalized to a single LF, and continues the trivia scan after it.
+
+The comment's chunks are accumulated in `chunksRev` while scanning, so the lexeme is built from
+one run per line and nesting delimiter instead of one slice per character.
+
+-}
+skipTriviaBlockComment :
+    String
+    -> Int
+    -> Int
+    -> Int
+    -> Int
+    -> Int
+    -> Int
+    -> List String
+    -> List (Node String)
+    -> ParserState
+skipTriviaBlockComment source offset row column startRow startColumn depth chunksRev commentsRev =
+    let
+        ( runEndOffset, runEndType ) =
+            multilineCommentRunEnd source offset
+
+        run =
+            String.slice offset runEndOffset source
+
+        columnAfterRun =
+            column + (runEndOffset - offset)
+
+        chunksAfterRun =
+            prependNonEmptyChunk run chunksRev
+    in
+    case runEndType of
+        MultilineCommentRunEnd_EndOfInput ->
+            { source = source
+            , offset = runEndOffset
+            , row = row
+            , column = columnAfterRun
+            , commentsRev =
+                Node
+                    { start = { row = startRow, column = startColumn }
+                    , end = { row = row, column = columnAfterRun }
+                    }
+                    (concatenateChunksRev chunksAfterRun)
+                    :: commentsRev
+            }
+
+        MultilineCommentRunEnd_NewlineLF ->
+            skipTriviaBlockComment source (runEndOffset + 1) (row + 1) 1 startRow startColumn depth ("\n" :: chunksAfterRun) commentsRev
+
+        MultilineCommentRunEnd_NewlineCRLF ->
+            skipTriviaBlockComment source (runEndOffset + 2) (row + 1) 1 startRow startColumn depth ("\n" :: chunksAfterRun) commentsRev
+
+        MultilineCommentRunEnd_NewlineCR ->
+            skipTriviaBlockComment source (runEndOffset + 1) (row + 1) 1 startRow startColumn depth ("\n" :: chunksAfterRun) commentsRev
+
+        MultilineCommentRunEnd_StartComment ->
+            skipTriviaBlockComment source (runEndOffset + 2) row (columnAfterRun + 2) startRow startColumn (depth + 1) ("{-" :: chunksAfterRun) commentsRev
+
+        MultilineCommentRunEnd_EndComment ->
+            let
+                finalChunksRev =
+                    "-}" :: chunksAfterRun
+
+                endColumn =
+                    columnAfterRun + 2
+            in
+            if depth == 1 then
+                skipTriviaAt
+                    source
+                    (runEndOffset + 2)
+                    row
+                    endColumn
+                    (Node
+                        { start = { row = startRow, column = startColumn }
+                        , end = { row = row, column = endColumn }
+                        }
+                        (concatenateChunksRev finalChunksRev)
+                        :: commentsRev
+                    )
+
+            else
+                skipTriviaBlockComment source (runEndOffset + 2) row endColumn startRow startColumn (depth - 1) finalChunksRev commentsRev
+
+
+{-| Position-only variant of `skipTrivia` for lookahead that never needs row or column.
+
+Lookahead never advances the state that a parse result is built from, therefore this variant does
+not collect comments: the trivia it passes over is scanned again by the `skipTrivia` call whose
+result the parser keeps.
+
+-}
+skipTriviaOffset : String -> Int -> Int
+skipTriviaOffset source offset =
+    if offset >= 0 then
+        let
+            offsetAfterWhitespace =
+                skipWhitespaceOffset source offset
+        in
+        case String.slice offsetAfterWhitespace (offsetAfterWhitespace + 2) source of
+            "--" ->
+                skipTriviaOffset source (lineCommentEnd source (offsetAfterWhitespace + 2))
+
+            "{-" ->
+                skipTriviaOffset source (blockCommentEndOffset source (offsetAfterWhitespace + 2) 1)
+
+            _ ->
+                offsetAfterWhitespace
+
+    else
+        offset
+
+
+skipWhitespaceOffset : String -> Int -> Int
+skipWhitespaceOffset source offset =
+    case String.slice offset (offset + 1) source of
+        " " ->
+            skipWhitespaceOffset source (offset + 1)
+
+        "\n" ->
+            skipWhitespaceOffset source (offset + 1)
+
+        "\u{000D}" ->
+            skipWhitespaceOffset source (offset + 1)
+
+        "\t" ->
+            skipWhitespaceOffset source (offset + 1)
+
+        _ ->
+            offset
+
+
+blockCommentEndOffset : String -> Int -> Int -> Int
+blockCommentEndOffset source offset depth =
+    if offset >= 0 then
+        let
+            nextTwoChars =
+                String.slice offset (offset + 2) source
+        in
+        case nextTwoChars of
+            "{-" ->
+                blockCommentEndOffset source (offset + 2) (depth + 1)
+
+            "-}" ->
+                if depth == 1 then
+                    offset + 2
+
+                else
+                    blockCommentEndOffset source (offset + 2) (depth - 1)
+
+            _ ->
+                if nextTwoChars == "" then
+                    offset
+
+                else
+                    blockCommentEndOffset source (offset + 1) depth
+
+    else
+        offset
+
+
+
+-- CONSUMING FIXED SYNTAX
+
+
+consumeKeyword : String -> Int -> ParserState -> Result String ( Location, ParserState )
+consumeKeyword keyword keywordLength state =
+    consumeKeywordAt keyword keywordLength (skipTrivia state)
+
+
+consumeKeywordAt : String -> Int -> ParserState -> Result String ( Location, ParserState )
+consumeKeywordAt keyword keywordLength stateAtKeyword =
+    let
+        endOffset =
+            stateAtKeyword.offset + keywordLength
+    in
+    if
+        String.slice stateAtKeyword.offset endOffset stateAtKeyword.source
+            == keyword
+            && not (isIdentifierChar (String.slice endOffset (endOffset + 1) stateAtKeyword.source))
+    then
+        Ok
+            ( { row = stateAtKeyword.row, column = stateAtKeyword.column }
+            , { source = stateAtKeyword.source
+              , offset = endOffset
+              , row = stateAtKeyword.row
+              , column = stateAtKeyword.column + keywordLength
+              , commentsRev = stateAtKeyword.commentsRev
+              }
+            )
+
+    else
+        Err ("Expected '" ++ keyword ++ "', but found '" ++ snippetAt stateAtKeyword ++ "'.")
+
+
+{-| True when a `.` at the given offset forms a lone dot rather than `..` or a longer operator.
+-}
+isDotToken : String -> Int -> Bool
+isDotToken source offset =
+    if String.slice offset (offset + 1) source == "." then
+        not (isOperatorChar (String.slice (offset + 1) (offset + 2) source))
+
+    else
+        False
+
+
+isPipeToken : String -> Int -> Bool
+isPipeToken source offset =
+    if String.slice offset (offset + 1) source == "|" then
+        not (isOperatorChar (String.slice (offset + 1) (offset + 2) source))
+
+    else
+        False
+
+
+isColonToken : String -> Int -> Bool
+isColonToken source offset =
+    if String.slice offset (offset + 1) source == ":" then
+        not (isOperatorChar (String.slice (offset + 1) (offset + 2) source))
+
+    else
+        False
+
+
+isEqualsToken : String -> Int -> Bool
+isEqualsToken source offset =
+    if String.slice offset (offset + 1) source == "=" then
+        not (isOperatorChar (String.slice (offset + 1) (offset + 2) source))
+
+    else
+        False
+
+
+
+-- OPERATORS
+
+
+{-| Length of the operator symbol at the given offset, or `0` when there is no operator there.
+A `-` only counts as an operator when it is not a negation sign, matching the surrounding rules
+of the language: a `-` directly attached to a preceding expression, or followed by whitespace or
+a closing delimiter, is binary; otherwise it negates the expression that follows.
+-}
+operatorTokenLength : String -> Int -> Int
+operatorTokenLength source offset =
+    let
+        nextTwoChars =
+            String.slice offset (offset + 2) source
+
+        second =
+            String.slice 1 2 nextTwoChars
+    in
+    case nextTwoChars of
+        "--" ->
+            0
+
+        "->" ->
+            0
+
+        ".." ->
+            0
+
+        _ ->
+            case String.slice 0 1 nextTwoChars of
+                "-" ->
+                    if minusIsOperatorAt source offset then
+                        1
+
+                    else
+                        0
+
+                "=" ->
+                    if isOperatorChar second then
+                        2
+
+                    else
+                        0
+
+                "|" ->
+                    if isOperatorChar second then
+                        2
+
+                    else
+                        0
+
+                ":" ->
+                    if isOperatorChar second then
+                        2
+
+                    else
+                        0
+
+                "." ->
+                    if isOperatorChar second then
+                        2
+
+                    else
+                        0
+
+                first ->
+                    if isOperatorChar first then
+                        skipOperatorChars source (offset + 1) (offset + 3) - offset
+
+                    else
+                        0
+
+
+minusIsOperatorAt : String -> Int -> Bool
+minusIsOperatorAt source offset =
+    case String.slice (offset + 1) (offset + 2) source of
+        "" ->
+            True
+
+        ")" ->
+            True
+
+        "]" ->
+            True
+
+        "}" ->
+            True
+
+        next ->
+            if isWhitespace next then
+                True
+
+            else
+                previousCharacterEndsExpression source offset
+
+
+{-| True when the character right before the offset is the last character of something that can
+end an expression, which makes a directly attached `-` a binary operator.
+-}
+previousCharacterEndsExpression : String -> Int -> Bool
+previousCharacterEndsExpression source offset =
+    if offset <= 0 then
+        False
+
+    else
+        case String.slice (offset - 1) offset source of
+            ")" ->
+                True
+
+            "]" ->
+                True
+
+            "}" ->
+                True
+
+            "\"" ->
+                True
+
+            "'" ->
+                True
+
+            previous ->
+                isIdentifierChar previous
+
+
+{-| Precedence of a known infix operator, or `-1` when the symbol is not a known infix operator.
+-}
+operatorPrecedence : String -> Int
+operatorPrecedence lexeme =
+    case lexeme of
+        "<|" ->
+            0
+
+        "|>" ->
+            0
+
+        "||" ->
+            2
+
+        "&&" ->
+            3
+
+        "==" ->
+            4
+
+        "/=" ->
+            4
+
+        "<" ->
+            4
+
+        ">" ->
+            4
+
+        "<=" ->
+            4
+
+        ">=" ->
+            4
+
+        "++" ->
+            5
+
+        "::" ->
+            5
+
+        "+" ->
+            6
+
+        "-" ->
+            6
+
+        "*" ->
+            7
+
+        "//" ->
+            7
+
+        "/" ->
+            7
+
+        "^" ->
+            8
+
+        "<<" ->
+            9
+
+        ">>" ->
+            9
+
+        "|=" ->
+            5
+
+        "|." ->
+            6
+
+        "</>" ->
+            7
+
+        "<?>" ->
+            8
+
+        _ ->
+            -1
+
+
+operatorDirection : String -> Infix.InfixDirection
+operatorDirection lexeme =
+    case lexeme of
+        "<|" ->
+            Infix.Right
+
+        "|>" ->
+            Infix.Left
+
+        "||" ->
+            Infix.Right
+
+        "&&" ->
+            Infix.Right
+
+        "==" ->
+            Infix.Non
+
+        "/=" ->
+            Infix.Non
+
+        "<" ->
+            Infix.Non
+
+        ">" ->
+            Infix.Non
+
+        "<=" ->
+            Infix.Non
+
+        ">=" ->
+            Infix.Non
+
+        "++" ->
+            Infix.Right
+
+        "::" ->
+            Infix.Right
+
+        "+" ->
+            Infix.Left
+
+        "-" ->
+            Infix.Left
+
+        "*" ->
+            Infix.Left
+
+        "//" ->
+            Infix.Left
+
+        "/" ->
+            Infix.Left
+
+        "^" ->
+            Infix.Right
+
+        "<<" ->
+            Infix.Left
+
+        ">>" ->
+            Infix.Right
+
+        "|=" ->
+            Infix.Left
+
+        "|." ->
+            Infix.Left
+
+        "</>" ->
+            Infix.Right
+
+        _ ->
+            Infix.Left
+
+
+
+-- START-OF-SYNTAX PREDICATES
+
+
+canStartArgumentExpressionAt : String -> Int -> Bool
+canStartArgumentExpressionAt source offset =
+    let
+        nextTwoChars =
+            String.slice offset (offset + 2) source
+    in
+    case nextTwoChars of
+        ".." ->
+            False
+
+        "->" ->
+            False
+
+        _ ->
+            case String.slice 0 1 nextTwoChars of
+                "\"" ->
                     True
 
-                Token.TripleQuotedStringLiteral ->
+                "'" ->
                     True
 
-                Token.CharLiteral ->
+                "(" ->
                     True
 
-                Token.NumberLiteral ->
+                "{" ->
                     True
 
-                Token.Identifier ->
+                "[" ->
                     True
 
-                Token.OpenParen ->
-                    True
+                "." ->
+                    not (isOperatorChar (String.slice 1 2 nextTwoChars))
 
-                Token.OpenBrace ->
-                    True
+                "-" ->
+                    not (minusIsOperatorAt source offset)
 
-                Token.OpenBracket ->
-                    True
+                first ->
+                    if isDigit first then
+                        True
 
-                Token.Negation ->
-                    True
+                    else if isIdentifierStart first then
+                        not (isKeywordAt source offset)
 
-                Token.Dot ->
-                    True
+                    else
+                        False
+
+
+{-| True when an identifier keyword that cannot start an argument begins at the offset. Longer
+keywords are checked first so each branch reads a whole candidate at once.
+-}
+isKeywordAt : String -> Int -> Bool
+isKeywordAt source offset =
+    case String.slice offset (offset + 4) source of
+        "case" ->
+            not (isIdentifierChar (String.slice (offset + 4) (offset + 5) source))
+
+        "then" ->
+            not (isIdentifierChar (String.slice (offset + 4) (offset + 5) source))
+
+        "else" ->
+            not (isIdentifierChar (String.slice (offset + 4) (offset + 5) source))
+
+        _ ->
+            case String.slice offset (offset + 3) source of
+                "let" ->
+                    not (isIdentifierChar (String.slice (offset + 3) (offset + 4) source))
 
                 _ ->
-                    False
-           )
-
-
-canStartNamedPatternArgument : Token.Token -> Bool
-canStartNamedPatternArgument token =
-    canStartPattern token
-        && not
-            (token.tokenType
-                == Token.Identifier
-                && (case token.lexeme of
-                        "as" ->
-                            True
-
-                        "of" ->
-                            True
-
-                        "then" ->
-                            True
-
-                        "else" ->
-                            True
+                    case String.slice offset (offset + 2) source of
+                        "if" ->
+                            not (isIdentifierChar (String.slice (offset + 2) (offset + 3) source))
 
                         "in" ->
-                            True
+                            not (isIdentifierChar (String.slice (offset + 2) (offset + 3) source))
 
-                        "let" ->
-                            True
+                        "of" ->
+                            not (isIdentifierChar (String.slice (offset + 2) (offset + 3) source))
 
                         _ ->
                             False
-                   )
-            )
 
 
-canStartPattern : Token.Token -> Bool
-canStartPattern token =
-    case token.tokenType of
-        Token.StringLiteral ->
-            True
+{-| True when the identifier at the offset is one of the keywords that terminate a run of
+arguments of a named pattern.
+-}
+isPatternBoundaryKeywordAt : String -> Int -> Bool
+isPatternBoundaryKeywordAt source offset =
+    case String.slice offset (offset + 4) source of
+        "then" ->
+            not (isIdentifierChar (String.slice (offset + 4) (offset + 5) source))
 
-        Token.TripleQuotedStringLiteral ->
-            True
-
-        Token.CharLiteral ->
-            True
-
-        Token.NumberLiteral ->
-            True
-
-        Token.Identifier ->
-            True
-
-        Token.OpenParen ->
-            True
-
-        Token.OpenBrace ->
-            True
-
-        Token.OpenBracket ->
-            True
+        "else" ->
+            not (isIdentifierChar (String.slice (offset + 4) (offset + 5) source))
 
         _ ->
-            False
-
-
-isKeyword : Token.Token -> Bool
-isKeyword token =
-    token.tokenType
-        == Token.Identifier
-        && (case token.lexeme of
-                "if" ->
-                    True
-
-                "then" ->
-                    True
-
-                "else" ->
-                    True
-
+            case String.slice offset (offset + 3) source of
                 "let" ->
-                    True
-
-                "in" ->
-                    True
-
-                "case" ->
-                    True
-
-                "of" ->
-                    True
+                    not (isIdentifierChar (String.slice (offset + 3) (offset + 4) source))
 
                 _ ->
-                    False
-           )
+                    case String.slice offset (offset + 2) source of
+                        "as" ->
+                            not (isIdentifierChar (String.slice (offset + 2) (offset + 3) source))
+
+                        "of" ->
+                            not (isIdentifierChar (String.slice (offset + 2) (offset + 3) source))
+
+                        "in" ->
+                            not (isIdentifierChar (String.slice (offset + 2) (offset + 3) source))
+
+                        _ ->
+                            False
 
 
-isClosingToken : Token.Token -> Bool
-isClosingToken token =
-    case token.tokenType of
-        Token.Comma ->
+canStartNamedPatternArgumentAt : String -> Int -> Bool
+canStartNamedPatternArgumentAt source offset =
+    case String.slice offset (offset + 1) source of
+        "\"" ->
             True
 
-        Token.CloseParen ->
+        "'" ->
             True
 
-        Token.CloseBracket ->
+        "(" ->
             True
 
-        Token.CloseBrace ->
+        "{" ->
             True
 
-        _ ->
-            False
-
-
-isTrivia : Token.Token -> Bool
-isTrivia token =
-    case token.tokenType of
-        Token.Comment ->
+        "[" ->
             True
 
-        _ ->
-            False
+        first ->
+            if isDigit first then
+                True
 
-
-dropTrivia : List Token.Token -> List Token.Token
-dropTrivia tokens =
-    case tokens of
-        token :: rest ->
-            if isTrivia token then
-                dropTrivia rest
+            else if isIdentifierStart first then
+                not (isPatternBoundaryKeywordAt source offset)
 
             else
-                tokens
-
-        [] ->
-            []
+                False
 
 
-tokenLexemes : List Token.Token -> List String
-tokenLexemes tokens =
-    case tokens of
-        token :: rest ->
-            token.lexeme :: tokenLexemes rest
-
-        [] ->
-            []
-
-
-tokenRange : Token.Token -> Range
-tokenRange token =
-    { start = token.start, end = token.end }
-
-
-startsWithUpper : String -> Bool
-startsWithUpper name =
-    case String.slice 0 1 name of
-        "A" ->
+canStartArgumentPatternAt : String -> Int -> Bool
+canStartArgumentPatternAt source offset =
+    case String.slice offset (offset + 1) source of
+        "(" ->
             True
 
-        "B" ->
+        "{" ->
             True
 
-        "C" ->
+        "[" ->
             True
 
-        "D" ->
+        first ->
+            isIdentifierStart first
+
+
+canStartTypeAnnotationAt : String -> Int -> Bool
+canStartTypeAnnotationAt source offset =
+    case String.slice offset (offset + 1) source of
+        "(" ->
             True
 
-        "E" ->
+        "{" ->
             True
 
-        "F" ->
+        first ->
+            isIdentifierStart first
+
+
+isClosingAt : String -> Int -> Bool
+isClosingAt source offset =
+    case String.slice offset (offset + 1) source of
+        "," ->
             True
 
-        "G" ->
+        ")" ->
             True
 
-        "H" ->
+        "]" ->
             True
 
-        "I" ->
-            True
-
-        "J" ->
-            True
-
-        "K" ->
-            True
-
-        "L" ->
-            True
-
-        "M" ->
-            True
-
-        "N" ->
-            True
-
-        "O" ->
-            True
-
-        "P" ->
-            True
-
-        "Q" ->
-            True
-
-        "R" ->
-            True
-
-        "S" ->
-            True
-
-        "T" ->
-            True
-
-        "U" ->
-            True
-
-        "V" ->
-            True
-
-        "W" ->
-            True
-
-        "X" ->
-            True
-
-        "Y" ->
-            True
-
-        "Z" ->
+        "}" ->
             True
 
         _ ->
             False
+
+
+
+-- LITERALS
+
+
+type alias ConsumedLiteral =
+    { decoded : String
+    , raw : String
+    , endOffset : Int
+    , endRow : Int
+    , endColumn : Int
+    }
+
+
+consumeLiteral :
+    LiteralTermination
+    -> String
+    -> Int
+    -> Int
+    -> Int
+    -> Int
+    -> Int
+    -> List String
+    -> List String
+    -> Result String ConsumedLiteral
+consumeLiteral termination source startRow startColumn offset row column decodedChunksRev rawChunksRev =
+    let
+        ( runEndOffset, boundary ) =
+            findLiteralRunEnd termination source offset
+
+        run =
+            String.slice offset runEndOffset source
+
+        columnAfterRun =
+            column + (runEndOffset - offset)
+
+        decodedChunksAfterRun =
+            prependNonEmptyChunk run decodedChunksRev
+
+        rawChunksAfterRun =
+            prependNonEmptyChunk run rawChunksRev
+    in
+    case boundary of
+        LiteralRunTermination ->
+            let
+                terminationLength =
+                    literalTerminationLength termination
+            in
+            Ok
+                { decoded = concatenateChunksRev decodedChunksAfterRun
+                , raw = concatenateChunksRev rawChunksAfterRun
+                , endOffset = runEndOffset + terminationLength
+                , endRow = row
+                , endColumn = columnAfterRun + terminationLength
+                }
+
+        LiteralRunUnterminated ->
+            Err ("Unterminated literal at " ++ locationString { row = startRow, column = startColumn } ++ ".")
+
+        LiteralRunNewlineLF ->
+            consumeLiteral termination
+                source
+                startRow
+                startColumn
+                (runEndOffset + 1)
+                (row + 1)
+                1
+                ("\n" :: decodedChunksAfterRun)
+                ("\n" :: rawChunksAfterRun)
+
+        LiteralRunNewlineCRLF ->
+            consumeLiteral termination
+                source
+                startRow
+                startColumn
+                (runEndOffset + 2)
+                (row + 1)
+                1
+                ("\n" :: decodedChunksAfterRun)
+                ("\n" :: rawChunksAfterRun)
+
+        LiteralRunNewlineCR ->
+            consumeLiteral termination
+                source
+                startRow
+                startColumn
+                (runEndOffset + 1)
+                (row + 1)
+                1
+                ("\n" :: decodedChunksAfterRun)
+                ("\n" :: rawChunksAfterRun)
+
+        LiteralRunBackslash ->
+            case String.slice (runEndOffset + 1) (runEndOffset + 2) source of
+                "u" ->
+                    consumeUnicodeEscape
+                        termination
+                        source
+                        startRow
+                        startColumn
+                        runEndOffset
+                        row
+                        columnAfterRun
+                        decodedChunksAfterRun
+                        rawChunksAfterRun
+
+                "" ->
+                    Err ("Unterminated literal at " ++ locationString { row = startRow, column = startColumn } ++ ".")
+
+                escaped ->
+                    let
+                        decodedCharacter =
+                            case escaped of
+                                "n" ->
+                                    "\n"
+
+                                "r" ->
+                                    "\u{000D}"
+
+                                "t" ->
+                                    "\t"
+
+                                _ ->
+                                    escaped
+                    in
+                    consumeLiteral termination
+                        source
+                        startRow
+                        startColumn
+                        (runEndOffset + 2)
+                        row
+                        (columnAfterRun + 2)
+                        (decodedCharacter :: decodedChunksAfterRun)
+                        (("\\" ++ escaped) :: rawChunksAfterRun)
+
+
+{-| Handles a `\u...` escape beginning at `escapeOffset` (the backslash). Only the `\u{XXXX}`
+form is a valid unicode escape; any other character (or no `{`) following `\u` falls back to
+treating it the same way an unrecognized single-character escape like `\z` would be treated
+elsewhere, i.e. decoding to a literal `u`.
+-}
+consumeUnicodeEscape :
+    LiteralTermination
+    -> String
+    -> Int
+    -> Int
+    -> Int
+    -> Int
+    -> Int
+    -> List String
+    -> List String
+    -> Result String ConsumedLiteral
+consumeUnicodeEscape termination source startRow startColumn escapeOffset escapeRow escapeColumn decodedChunksRev rawChunksRev =
+    let
+        afterPrefixOffset =
+            escapeOffset + 2
+    in
+    if String.slice afterPrefixOffset (afterPrefixOffset + 1) source == "{" then
+        case scanUnicodeEscapeDigits source (afterPrefixOffset + 1) of
+            Just ( digitsEndOffset, codePoint ) ->
+                if
+                    String.slice digitsEndOffset (digitsEndOffset + 1) source
+                        == "}"
+                        && codePoint
+                        <= 0x0010FFFF
+                        && not (codePoint >= 0xD800 && codePoint <= 0xDFFF)
+                then
+                    consumeLiteral termination
+                        source
+                        startRow
+                        startColumn
+                        (digitsEndOffset + 1)
+                        escapeRow
+                        (escapeColumn + ((digitsEndOffset + 1) - escapeOffset))
+                        (String.fromChar (Char.fromCode codePoint) :: decodedChunksRev)
+                        (String.slice escapeOffset (digitsEndOffset + 1) source :: rawChunksRev)
+
+                else
+                    Err ("Invalid unicode escape at " ++ locationString { row = escapeRow, column = escapeColumn } ++ ".")
+
+            Nothing ->
+                Err ("Invalid unicode escape at " ++ locationString { row = escapeRow, column = escapeColumn } ++ ".")
+
+    else
+        consumeLiteral termination
+            source
+            startRow
+            startColumn
+            afterPrefixOffset
+            escapeRow
+            (escapeColumn + 2)
+            ("u" :: decodedChunksRev)
+            ("\\u" :: rawChunksRev)
+
+
+{-| Offset right after the closing delimiter of a literal whose opening delimiter has already
+been consumed. Used by lookahead that only needs to move past a literal.
+-}
+literalEndOffset : LiteralTermination -> String -> Int -> Int
+literalEndOffset termination source offset =
+    let
+        ( runEndOffset, boundary ) =
+            findLiteralRunEnd termination source offset
+    in
+    case boundary of
+        LiteralRunTermination ->
+            runEndOffset + literalTerminationLength termination
+
+        LiteralRunUnterminated ->
+            runEndOffset
+
+        LiteralRunBackslash ->
+            literalEndOffset termination source (runEndOffset + 2)
+
+        LiteralRunNewlineLF ->
+            literalEndOffset termination source (runEndOffset + 1)
+
+        LiteralRunNewlineCRLF ->
+            literalEndOffset termination source (runEndOffset + 2)
+
+        LiteralRunNewlineCR ->
+            literalEndOffset termination source (runEndOffset + 1)
+
+
+
+-- SOURCE SCANNING
+
+
+{-| Short description of the syntax at the given position, for error messages.
+-}
+snippetAt : ParserState -> String
+snippetAt state =
+    case String.slice state.offset (state.offset + 1) state.source of
+        "" ->
+            "<end of input>"
+
+        first ->
+            if isIdentifierStart first then
+                String.slice state.offset (skipToIdentifierEnd state.source (state.offset + 1)) state.source
+
+            else if isDigit first then
+                String.slice state.offset (numberEnd state.source first state.offset) state.source
+
+            else
+                first
+
+
+
+-- LITERAL VALUES
 
 
 parseNumber : String -> Expression.Expression
 parseNumber literal =
-    if String.startsWith "0x" literal then
+    if String.slice 0 2 literal == "0x" then
         Expression.IntegerLiteral literal
 
-    else if String.contains "." literal || String.contains "e" literal || String.contains "E" literal then
+    else if isFloatLiteral literal then
         Expression.FloatLiteral literal
 
     else
         Expression.IntegerLiteral literal
-
-
-{-| Delegates to `TokensFromString.hexStringToInt`, which parses a string of ASCII hex digits
-using specialized first-order recursion. Sharing this implementation keeps hexadecimal
-integer/pattern literals here and `\u{...}` escapes in the tokenizer consistent.
--}
-hexStringToInt : String -> Maybe Int
-hexStringToInt string =
-    TokensFromString.hexStringToInt string
-
-
-locationString : Location -> String
-locationString location =
-    String.fromInt location.row ++ ":" ++ String.fromInt location.column

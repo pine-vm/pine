@@ -1872,15 +1872,14 @@ public class OptimizationOpportunityFinderTests
             opportunities
             .GroupBy(
                 opportunity =>
-                (
-                    Module:
+                (Module:
                     opportunity.ContainingDecl.Namespaces.Take(3)
-                    .SequenceEqual(["ElmSyntax", "Concrete", "Parser"])
-                    ?
-                    "ElmSyntax.Concrete.Parser"
-                    :
-                    opportunity.ContainingDecl.Namespaces[0],
-                    opportunity.Category))
+                .SequenceEqual(["ElmSyntax", "Concrete", "Parser"])
+                ?
+                "ElmSyntax.Concrete.Parser"
+                :
+                opportunity.ContainingDecl.Namespaces[0],
+                opportunity.Category))
             .OrderBy(group => group.Key.Module, System.StringComparer.Ordinal)
             .ThenBy(group => group.Key.Category)
             .Select(
@@ -1891,7 +1890,7 @@ public class OptimizationOpportunityFinderTests
 
         renderedCounts.Should().Be(
             """
-            ElmSyntax.Concrete.Parser: RootLevelChoiceTagWrapper: 69
+            ElmSyntax.Concrete.Parser: RootLevelChoiceTagWrapper: 166
             LanguageService: BasicsCompare: 3
             LanguageService: RootLevelChoiceTagWrapper: 32
             LanguageServiceAnalysis: RootLevelChoiceTagWrapper: 7

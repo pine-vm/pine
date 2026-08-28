@@ -53,7 +53,146 @@ suite =
             documentationCommentSuite
         , Test.describe "parseFile abstract model"
             abstractFileSuite
+        , Test.describe "direct source parsing"
+            directSourceParsingSuite
         ]
+
+
+{-| Covers behavior that is specific to parsing directly from the source string: trivia
+(comments and line breaks) appearing between arbitrary syntax elements, literal decoding
+including raw text, and the adjacency rules that distinguish record access from other uses
+of a dot.
+-}
+directSourceParsingSuite : List Test
+directSourceParsingSuite =
+    List.append
+        (List.map
+            (\testCase ->
+                Test.test testCase.title <|
+                    \_ ->
+                        case ElmSyntax.Concrete.Parser.FromString.parseExpression testCase.input of
+                            Ok actual ->
+                                Expect.equal testCase.expected actual
+
+                            Err err ->
+                                Expect.fail ("Expected Ok, but got Err: " ++ err)
+            )
+            directSourceParsingExpressionCases
+        )
+        [ Test.test "carriage returns between declarations do not shift ranges" <|
+            \_ ->
+                case
+                    ElmSyntax.Concrete.Parser.FromString.parseFile
+                        "module Main exposing (..)\u{000D}\n\u{000D}\nvalue = 1"
+                of
+                    Ok file ->
+                        Expect.equal
+                            [ range 3 1 3 10 ]
+                            (nodeRanges file.declarations)
+
+                    Err err ->
+                        Expect.fail ("Expected Ok, but got Err: " ++ err)
+        , Test.test "comments inside a declaration body are collected" <|
+            \_ ->
+                case
+                    ElmSyntax.Concrete.Parser.FromString.parseFile
+                        "module Main exposing (..)\n\nvalue =\n    -- inner\n    1"
+                of
+                    Ok file ->
+                        Expect.equal
+                            ( [ Node (range 4 5 4 13) "-- inner" ]
+                            , [ range 3 1 5 6 ]
+                            )
+                            ( file.comments, nodeRanges file.declarations )
+
+                    Err err ->
+                        Expect.fail ("Expected Ok, but got Err: " ++ err)
+        , Test.test "comment inside a string literal is not a comment" <|
+            \_ ->
+                case
+                    ElmSyntax.Concrete.Parser.FromString.parseFile
+                        "module Main exposing (..)\n\nvalue = \"-- not a comment\"\n"
+                of
+                    Ok file ->
+                        Expect.equal [] file.comments
+
+                    Err err ->
+                        Expect.fail ("Expected Ok, but got Err: " ++ err)
+        ]
+
+
+directSourceParsingExpressionCases :
+    List { title : String, input : String, expected : Expression.Expression }
+directSourceParsingExpressionCases =
+    [ { title = "block comment between function and argument"
+      , input = "alfa {- c -} beta"
+      , expected =
+            Expression.Application
+                (Node (range 1 1 1 5) (Expression.Identifier [] "alfa"))
+                [ Node (range 1 14 1 18) (Expression.Identifier [] "beta") ]
+      }
+    , { title = "nested block comment between function and argument"
+      , input = "alfa {- outer {- inner -} -} beta"
+      , expected =
+            Expression.Application
+                (Node (range 1 1 1 5) (Expression.Identifier [] "alfa"))
+                [ Node (range 1 30 1 34) (Expression.Identifier [] "beta") ]
+      }
+    , { title = "line comment between list elements"
+      , input = "[ 1\n-- note\n, 2 ]"
+      , expected =
+            Expression.ListExpr
+                (SeparatedSyntaxList.NonEmpty
+                    (Node (range 1 3 1 4) (Expression.IntegerLiteral "1"))
+                    [ ( location 3 1
+                      , Node (range 3 3 3 4) (Expression.IntegerLiteral "2")
+                      )
+                    ]
+                )
+      }
+    , { title = "string literal decodes escapes and retains raw text"
+      , input = "\"a\\nb\""
+      , expected =
+            Expression.StringLiteral "a\nb" (Just "a\\nb")
+      }
+    , { title = "triple-quoted string literal spanning two lines"
+      , input = "\"\"\"first\nsecond\"\"\""
+      , expected =
+            Expression.MultilineStringLiteral "first\nsecond"
+                (Just [ "first", "second" ])
+      }
+    , { title = "character literal with a unicode escape"
+      , input = "'\\u{1F600}'"
+      , expected =
+            Expression.CharLiteral 0x0001F600
+      }
+    , { title = "record access directly after a parenthesized expression"
+      , input = "(alfa).field"
+      , expected =
+            Expression.RecordAccess
+                (Node (range 1 1 1 7)
+                    (Expression.Parenthesized
+                        (Node (range 1 2 1 6) (Expression.Identifier [] "alfa"))
+                    )
+                )
+                (Node (range 1 8 1 13) "field")
+      }
+    , { title = "comment between qualified name parts"
+      , input = "Alfa{- c -}.beta"
+      , expected =
+            Expression.Identifier [ "Alfa" ] "beta"
+      }
+    ]
+
+
+nodeRanges : List (Node a) -> List { start : { row : Int, column : Int }, end : { row : Int, column : Int } }
+nodeRanges nodes =
+    case nodes of
+        (Node nodeRange _) :: rest ->
+            nodeRange :: nodeRanges rest
+
+        [] ->
+            []
 
 
 documentationCommentSuite : List Test

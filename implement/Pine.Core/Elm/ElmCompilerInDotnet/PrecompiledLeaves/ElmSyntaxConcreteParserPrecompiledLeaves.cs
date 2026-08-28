@@ -12,69 +12,91 @@ using System.Numerics;
 namespace Pine.Core.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
 
 /// <summary>
-/// Precompiled leaves for recursive helpers in <c>ElmSyntax.Concrete.Parser</c> modules.
+/// Precompiled leaves for the recursive string scanners in
+/// <c>ElmSyntax.Concrete.Parser.StringParsing</c>, the module shared by the direct-source parser
+/// (<c>ElmSyntax.Concrete.Parser.FromString</c>) and the tokenizer
+/// (<c>ElmSyntax.Concrete.Parser.TokensFromString</c>). Because both parsers call the same
+/// declarations, a single set of leaves accelerates both.
+/// <para>
+/// The location-aware whitespace scanner is the one exception: it tracks the parser state of
+/// <c>ElmSyntax.Concrete.Parser.FromString</c> (including the comments collected so far) and
+/// therefore lives in that module. It is still generic over all trivia rather than tied to any
+/// subset of the grammar.
+/// </para>
 /// </summary>
 public static class ElmSyntaxConcreteParserPrecompiledLeaves
 {
+    private const string StringParsingModuleName = "ElmSyntax.Concrete.Parser.StringParsing";
+
     private const string FromStringModuleName = "ElmSyntax.Concrete.Parser.FromString";
 
-    private const string TokensFromStringModuleName = "ElmSyntax.Concrete.Parser.TokensFromString";
-
-    private static readonly string[] s_tokensFromStringFunctionNames =
+    private static readonly string[] s_stringParsingFunctionNames =
         [
             "skipInlineWhitespace",
             "skipToIdentifierEnd",
             "skipToAsciiDecimalDigitEnd",
             "skipToAsciiHexDigitEnd",
+            "numberEndDecimal",
+            "isFloatLiteralAt",
             "scanUnicodeEscapeDigits",
+            "convert0OrMoreHexadecimalValue",
             "findLiteralRunEnd",
             "skipOperatorChars",
         ];
 
     private static readonly string[] s_fromStringFunctionNames =
         [
-            "dropTrivia",
-            "tokenLexemes",
-            "hexStringToInt",
+            "skipWhitespaceAt",
         ];
 
     /// <summary>Gets the leaf key for skipping inline whitespace.</summary>
-    public static PineValue SkipInlineWhitespaceLeafKey => LeafKey(TokensFromStringModuleName, "skipInlineWhitespace");
+    public static PineValue SkipInlineWhitespaceLeafKey => LeafKey(StringParsingModuleName, "skipInlineWhitespace");
+
+    /// <summary>Gets the leaf key for skipping whitespace with location tracking.</summary>
+    public static PineValue SkipWhitespaceAtLeafKey => LeafKey(FromStringModuleName, "skipWhitespaceAt");
 
     /// <summary>Gets the leaf key for scanning to an identifier's end.</summary>
-    public static PineValue SkipToIdentifierEndLeafKey => LeafKey(TokensFromStringModuleName, "skipToIdentifierEnd");
+    public static PineValue SkipToIdentifierEndLeafKey => LeafKey(StringParsingModuleName, "skipToIdentifierEnd");
 
     /// <summary>Gets the leaf key for scanning to an ASCII decimal number's end.</summary>
     public static PineValue SkipToAsciiDecimalDigitEndLeafKey =>
-        LeafKey(TokensFromStringModuleName, "skipToAsciiDecimalDigitEnd");
+        LeafKey(StringParsingModuleName, "skipToAsciiDecimalDigitEnd");
 
     /// <summary>Gets the leaf key for scanning to an ASCII hexadecimal number's end.</summary>
     public static PineValue SkipToAsciiHexDigitEndLeafKey =>
-        LeafKey(TokensFromStringModuleName, "skipToAsciiHexDigitEnd");
+        LeafKey(StringParsingModuleName, "skipToAsciiHexDigitEnd");
+
+    /// <summary>Gets the leaf key for scanning the decimal portion of an Elm number.</summary>
+    public static PineValue NumberEndDecimalLeafKey =>
+        LeafKey(StringParsingModuleName, "numberEndDecimal");
+
+    /// <summary>Gets the leaf key for testing whether a numeric literal is a float.</summary>
+    public static PineValue IsFloatLiteralAtLeafKey =>
+        LeafKey(StringParsingModuleName, "isFloatLiteralAt");
+
+    /// <summary>Gets the leaf key for accumulating hexadecimal digits.</summary>
+    public static PineValue Convert0OrMoreHexadecimalValueLeafKey =>
+        LeafKey(StringParsingModuleName, "convert0OrMoreHexadecimalValue");
 
     /// <summary>Gets the leaf key for scanning Unicode escape digits.</summary>
     public static PineValue ScanUnicodeEscapeDigitsLeafKey =>
-        LeafKey(TokensFromStringModuleName, "scanUnicodeEscapeDigits");
+        LeafKey(StringParsingModuleName, "scanUnicodeEscapeDigits");
 
     /// <summary>Gets the leaf key for finding a literal run's end.</summary>
-    public static PineValue FindLiteralRunEndLeafKey => LeafKey(TokensFromStringModuleName, "findLiteralRunEnd");
+    public static PineValue FindLiteralRunEndLeafKey => LeafKey(StringParsingModuleName, "findLiteralRunEnd");
 
     /// <summary>Gets the leaf key for skipping operator characters.</summary>
-    public static PineValue SkipOperatorCharsLeafKey => LeafKey(TokensFromStringModuleName, "skipOperatorChars");
-
-    /// <summary>Gets the leaf key for dropping trivia.</summary>
-    public static PineValue DropTriviaLeafKey => LeafKey(FromStringModuleName, "dropTrivia");
-
-    /// <summary>Gets the leaf key for extracting token lexemes.</summary>
-    public static PineValue TokenLexemesLeafKey => LeafKey(FromStringModuleName, "tokenLexemes");
-
-    /// <summary>Gets the leaf key for parsing a hexadecimal string.</summary>
-    public static PineValue HexStringToIntLeafKey => LeafKey(FromStringModuleName, "hexStringToInt");
+    public static PineValue SkipOperatorCharsLeafKey => LeafKey(StringParsingModuleName, "skipOperatorChars");
 
     private static readonly Lazy<IReadOnlyDictionary<(string moduleName, string functionName), LeafInfo>> s_leafInfos =
         new(BuildLeafInfos);
 
     private sealed record LeafInfo(PineValue LeafKey, PineValue EnvFunctionsValue);
+
+    private readonly record struct TriviaScan(
+        BigInteger Offset,
+        BigInteger Row,
+        BigInteger Column);
 
     private static IReadOnlyDictionary<(string moduleName, string functionName), LeafInfo> BuildLeafInfos()
     {
@@ -94,7 +116,7 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
             mergedTree.EnumerateFilesTransitive()
             .Where(
                 file =>
-                file.path[^1].Equals("TokensFromString.elm", StringComparison.OrdinalIgnoreCase) ||
+                file.path[^1].Equals("StringParsing.elm", StringComparison.OrdinalIgnoreCase) ||
                 file.path[^1].Equals("FromString.elm", StringComparison.OrdinalIgnoreCase))
             .Select(file => (IReadOnlyList<string>)file.path)
             .ToList();
@@ -115,7 +137,7 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
         var parseCache = new PineVMParseCache();
         var infos = new Dictionary<(string moduleName, string functionName), LeafInfo>();
 
-        AddModuleFunctions(TokensFromStringModuleName, s_tokensFromStringFunctionNames);
+        AddModuleFunctions(StringParsingModuleName, s_stringParsingFunctionNames);
         AddModuleFunctions(FromStringModuleName, s_fromStringFunctionNames);
 
         return infos;
@@ -150,6 +172,31 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     public static PineValue? SkipInlineWhitespaceLeafDelegate(PineValue environment) =>
         ScanStringOffset(environment, "skipInlineWhitespace", codePoint => codePoint is ' ' or '\t');
 
+    /// <summary>
+    /// Advances the parser state over whitespace while keeping the source location.
+    /// </summary>
+    public static PineValue? SkipWhitespaceAtLeafDelegate(PineValue environment)
+    {
+        if (!EnvironmentMatches(environment, FromStringModuleName, "skipWhitespaceAt") ||
+            !TryGetStringBytes(environment.ValueFromPathOrEmptyList([1]), out var source) ||
+            !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([2]), out var offset) ||
+            !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([3]), out var row) ||
+            !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([4]), out var column))
+        {
+            return null;
+        }
+
+        var scanned = ScanWhitespace(source, offset, row, column);
+
+        return
+            ParserStateValue(
+                environment.ValueFromPathOrEmptyList([1]),
+                scanned.Offset,
+                scanned.Row,
+                scanned.Column,
+                environment.ValueFromPathOrEmptyList([5]));
+    }
+
     /// <summary>Scans from the current offset to an identifier's end.</summary>
     public static PineValue? SkipToIdentifierEndLeafDelegate(PineValue environment) =>
         ScanStringOffset(
@@ -172,10 +219,122 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     public static PineValue? SkipToAsciiHexDigitEndLeafDelegate(PineValue environment) =>
         ScanStringOffset(environment, "skipToAsciiHexDigitEnd", IsAsciiHexDigit);
 
+    /// <summary>Scans a decimal number's fractional and exponent suffixes in one operation.</summary>
+    public static PineValue? NumberEndDecimalLeafDelegate(PineValue environment)
+    {
+        if (!EnvironmentMatches(environment, StringParsingModuleName, "numberEndDecimal") ||
+            !TryGetStringBytes(environment.ValueFromPathOrEmptyList([1]), out var source) ||
+            !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([2]), out var offset))
+        {
+            return null;
+        }
+
+        var sourceCodePointCount = source.Length / 4;
+
+        while (offset < sourceCodePointCount &&
+            ReadStringCodePoint(source, (int)offset) is >= '0' and <= '9')
+        {
+            offset++;
+        }
+
+        if (offset + 1 < sourceCodePointCount &&
+            ReadStringCodePoint(source, (int)offset) is '.' &&
+            ReadStringCodePoint(source, (int)(offset + 1)) is >= '0' and <= '9')
+        {
+            offset += 2;
+
+            while (offset < sourceCodePointCount &&
+                ReadStringCodePoint(source, (int)offset) is >= '0' and <= '9')
+            {
+                offset++;
+            }
+        }
+
+        if (offset < sourceCodePointCount &&
+            ReadStringCodePoint(source, (int)offset) is 'e' or 'E')
+        {
+            offset++;
+
+            if (offset < sourceCodePointCount &&
+                ReadStringCodePoint(source, (int)offset) is '+' or '-')
+            {
+                offset++;
+            }
+
+            while (offset < sourceCodePointCount &&
+                ReadStringCodePoint(source, (int)offset) is >= '0' and <= '9')
+            {
+                offset++;
+            }
+        }
+
+        return IntegerValue(offset);
+    }
+
+    /// <summary>Tests a numeric literal for a decimal or exponent marker without allocating slices.</summary>
+    public static PineValue? IsFloatLiteralAtLeafDelegate(PineValue environment)
+    {
+        if (!EnvironmentMatches(environment, StringParsingModuleName, "isFloatLiteralAt") ||
+            !TryGetStringBytes(environment.ValueFromPathOrEmptyList([1]), out var source) ||
+            !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([2]), out var offset))
+        {
+            return null;
+        }
+
+        var sourceCodePointCount = source.Length / 4;
+
+        while (offset < sourceCodePointCount)
+        {
+            switch (ReadStringCodePoint(source, (int)offset))
+            {
+                case '.':
+                case 'e':
+                case 'E':
+                    return s_true;
+
+                default:
+                    offset++;
+                    break;
+            }
+        }
+
+        return s_false;
+    }
+
+    /// <summary>Accumulates hexadecimal digits without creating a slice for every digit.</summary>
+    public static PineValue? Convert0OrMoreHexadecimalValueLeafDelegate(PineValue environment)
+    {
+        if (!EnvironmentMatches(
+                environment,
+                StringParsingModuleName,
+                "convert0OrMoreHexadecimalValue") ||
+            !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([1]), out var value) ||
+            !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([2]), out var offset) ||
+            !TryGetStringBytes(environment.ValueFromPathOrEmptyList([3]), out var source))
+        {
+            return null;
+        }
+
+        var sourceCodePointCount = source.Length / 4;
+
+        while (offset < sourceCodePointCount)
+        {
+            if (!TryHexDigitValue(ReadStringCodePoint(source, (int)offset), out var digit))
+            {
+                return s_nothing;
+            }
+
+            value = value * 16 + digit;
+            offset++;
+        }
+
+        return Just(IntegerValue(value));
+    }
+
     /// <summary>Skips operator characters from the current string offset.</summary>
     public static PineValue? SkipOperatorCharsLeafDelegate(PineValue environment)
     {
-        if (!EnvironmentMatches(environment, TokensFromStringModuleName, "skipOperatorChars") ||
+        if (!EnvironmentMatches(environment, StringParsingModuleName, "skipOperatorChars") ||
             !TryGetStringBytes(environment.ValueFromPathOrEmptyList([1]), out var source) ||
             !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([2]), out var offset) ||
             !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([3]), out var offsetMax))
@@ -198,7 +357,7 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     /// <summary>Scans and decodes Unicode escape digits.</summary>
     public static PineValue? ScanUnicodeEscapeDigitsLeafDelegate(PineValue environment)
     {
-        if (!EnvironmentMatches(environment, TokensFromStringModuleName, "scanUnicodeEscapeDigits") ||
+        if (!EnvironmentMatches(environment, StringParsingModuleName, "scanUnicodeEscapeDigits") ||
             !TryGetStringBytes(environment.ValueFromPathOrEmptyList([1]), out var source) ||
             !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([2]), out var offset))
         {
@@ -229,7 +388,7 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     /// <summary>Finds the boundary ending a literal run.</summary>
     public static PineValue? FindLiteralRunEndLeafDelegate(PineValue environment)
     {
-        if (!EnvironmentMatches(environment, TokensFromStringModuleName, "findLiteralRunEnd") ||
+        if (!EnvironmentMatches(environment, StringParsingModuleName, "findLiteralRunEnd") ||
             !TryParseLiteralTermination(
                 environment.ValueFromPathOrEmptyList([1]),
                 out var termination) ||
@@ -286,104 +445,12 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
         return LiteralRunResult(offset, "LiteralRunUnterminated");
     }
 
-    /// <summary>Drops leading trivia tokens.</summary>
-    public static PineValue? DropTriviaLeafDelegate(PineValue environment)
-    {
-        if (!EnvironmentMatches(environment, FromStringModuleName, "dropTrivia") ||
-            environment.ValueFromPathOrEmptyList([1]) is not PineValue.ListValue tokens)
-        {
-            return null;
-        }
-
-        var firstNonTrivia = 0;
-
-        while (firstNonTrivia < tokens.Items.Length)
-        {
-            if (!TryGetRecordField(tokens.Items.Span[firstNonTrivia], s_tokenTypeFieldName, out var tokenType))
-            {
-                return null;
-            }
-
-            if (tokenType != s_commentTokenType)
-            {
-                break;
-            }
-
-            firstNonTrivia++;
-        }
-
-        if (firstNonTrivia is 0)
-        {
-            return tokens;
-        }
-
-        return PineValue.List(tokens.Items[firstNonTrivia..]);
-    }
-
-    /// <summary>Extracts lexemes from tokens.</summary>
-    public static PineValue? TokenLexemesLeafDelegate(PineValue environment)
-    {
-        if (!EnvironmentMatches(environment, FromStringModuleName, "tokenLexemes") ||
-            environment.ValueFromPathOrEmptyList([1]) is not PineValue.ListValue tokens)
-        {
-            return null;
-        }
-
-        var lexemes = new PineValue[tokens.Items.Length];
-
-        for (var index = 0; index < tokens.Items.Length; ++index)
-        {
-            if (!TryGetRecordField(tokens.Items.Span[index], s_lexemeFieldName, out lexemes[index]))
-            {
-                return null;
-            }
-        }
-
-        return PineValue.List(lexemes);
-    }
-
-    /// <summary>Parses a hexadecimal string as an integer.</summary>
-    public static PineValue? HexStringToIntLeafDelegate(PineValue environment)
-    {
-        if (!EnvironmentMatches(environment, FromStringModuleName, "hexStringToInt") ||
-            !TryGetStringBytes(environment.ValueFromPathOrEmptyList([1]), out var digits))
-        {
-            return null;
-        }
-
-        var digitCount = digits.Length / 4;
-
-        if (digitCount is 0)
-        {
-            return s_nothing;
-        }
-
-        if (ReadStringCodePoint(digits, 0) is '0')
-        {
-            return Just(IntegerValue(0));
-        }
-
-        BigInteger value = 0;
-
-        for (var index = 0; index < digitCount; ++index)
-        {
-            if (!TryHexDigitValue(ReadStringCodePoint(digits, index), out var digit))
-            {
-                return s_nothing;
-            }
-
-            value = value * 16 + digit;
-        }
-
-        return Just(IntegerValue(value));
-    }
-
     private static PineValue? ScanStringOffset(
         PineValue environment,
         string functionName,
         Func<uint, bool> continuePredicate)
     {
-        if (!EnvironmentMatches(environment, TokensFromStringModuleName, functionName) ||
+        if (!EnvironmentMatches(environment, StringParsingModuleName, functionName) ||
             !TryGetStringBytes(environment.ValueFromPathOrEmptyList([1]), out var source) ||
             !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([2]), out var offset))
         {
@@ -399,6 +466,95 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
         }
 
         return IntegerValue(offset);
+    }
+
+    private static TriviaScan ScanWhitespace(
+        ReadOnlyMemory<byte> source,
+        BigInteger offset,
+        BigInteger row,
+        BigInteger column)
+    {
+        var sourceCodePointCount = source.Length / 4;
+
+        while (offset < sourceCodePointCount)
+        {
+            var index = (int)offset;
+
+            switch (ReadStringCodePoint(source, index))
+            {
+                case ' ':
+                case '\t':
+                    offset++;
+                    column++;
+                    continue;
+
+                case '\n':
+                    offset++;
+                    row++;
+                    column = 1;
+                    continue;
+
+                case '\r':
+                    offset +=
+                        index + 1 < sourceCodePointCount &&
+                        ReadStringCodePoint(source, index + 1) is '\n'
+                        ?
+                        2
+                        :
+                        1;
+
+                    row++;
+                    column = 1;
+                    continue;
+
+                default:
+                    return new(offset, row, column);
+            }
+        }
+
+        return new(offset, row, column);
+    }
+
+    private static bool TryGetLocation(
+        PineValue value,
+        out BigInteger row,
+        out BigInteger column)
+    {
+        if (!TryGetRecordField(value, s_rowFieldName, out var rowValue) ||
+            !TryGetRecordField(value, s_columnFieldName, out var columnValue) ||
+            !TryParseNonnegativeInteger(rowValue, out row) ||
+            !TryParseNonnegativeInteger(columnValue, out column))
+        {
+            row = 0;
+            column = 0;
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryGetRecordField(
+        PineValue record,
+        PineValue fieldName,
+        out PineValue value)
+    {
+        if (record is PineValue.ListValue recordList &&
+            recordList.Items.Length % 2 is 1 &&
+            recordList.Items.Length >= 3 &&
+            recordList.Items.Span[0] == ElmValue.ElmRecordTypeTagNameAsValue)
+        {
+            for (var index = 1; index + 1 < recordList.Items.Length; index += 2)
+            {
+                if (recordList.Items.Span[index] == fieldName)
+                {
+                    value = recordList.Items.Span[index + 1];
+                    return true;
+                }
+            }
+        }
+
+        value = PineValue.EmptyList;
+        return false;
     }
 
     private static bool TryGetStringBytes(PineValue value, out ReadOnlyMemory<byte> bytes)
@@ -466,27 +622,6 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
         TripleQuote,
     }
 
-    private static bool TryGetRecordField(PineValue record, PineValue fieldName, out PineValue value)
-    {
-        if (record is PineValue.ListValue recordList &&
-            recordList.Items.Length % 2 is 1 &&
-            recordList.Items.Length >= 3 &&
-            recordList.Items.Span[0] == ElmValue.ElmRecordTypeTagNameAsValue)
-        {
-            for (var index = 1; index + 1 < recordList.Items.Length; index += 2)
-            {
-                if (recordList.Items.Span[index] == fieldName)
-                {
-                    value = recordList.Items.Span[index + 1];
-                    return true;
-                }
-            }
-        }
-
-        value = PineValue.EmptyList;
-        return false;
-    }
-
     private static bool IsAsciiHexDigit(uint codePoint) =>
         codePoint is >= '0' and <= '9' or >= 'a' and <= 'f' or >= 'A' and <= 'F';
 
@@ -520,14 +655,35 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     private static PineValue LiteralRunResult(BigInteger offset, string boundaryTag) =>
         PineValue.List([IntegerValue(offset), Tag(boundaryTag)]);
 
+    private static PineValue ParserStateValue(
+        PineValue sourceValue,
+        BigInteger offset,
+        BigInteger row,
+        BigInteger column,
+        PineValue commentsRevValue) =>
+        PineValue.List(
+            [
+            ElmValue.ElmRecordTypeTagNameAsValue,
+            s_columnFieldName,
+            IntegerValue(column),
+            s_commentsRevFieldName,
+            commentsRevValue,
+            s_offsetFieldName,
+            IntegerValue(offset),
+            s_rowFieldName,
+            IntegerValue(row),
+            s_sourceFieldName,
+            sourceValue,
+            ]);
+
     private static PineValue IntegerValue(BigInteger value) =>
         ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(value));
 
-    private static PineValue Just(PineValue value) =>
-        ElmValueEncoding.TagAsPineValue("Just", [value]);
-
     private static PineValue Tag(string name) =>
         ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance(name, []));
+
+    private static PineValue Just(PineValue value) =>
+        ElmValueEncoding.TagAsPineValue("Just", [value]);
 
     private static PineValue LeafKey(string moduleName, string functionName) =>
         s_leafInfos.Value[(moduleName, functionName)].LeafKey;
@@ -536,19 +692,27 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
         environment.ValueFromPathOrEmptyList([0]) ==
         s_leafInfos.Value[(moduleName, functionName)].EnvFunctionsValue;
 
+    private static readonly PineValue s_false = Tag("False");
+
     private static readonly PineValue s_nothing = Tag("Nothing");
 
+    private static readonly PineValue s_columnFieldName = StringEncoding.ValueFromString("column");
+
+    private static readonly PineValue s_commentsRevFieldName = StringEncoding.ValueFromString("commentsRev");
+
+    private static readonly PineValue s_offsetFieldName = StringEncoding.ValueFromString("offset");
+
+    private static readonly PineValue s_rowFieldName = StringEncoding.ValueFromString("row");
+
+    private static readonly PineValue s_sourceFieldName = StringEncoding.ValueFromString("source");
+
     private static readonly PineValue s_singleQuoteTermination = Tag("SingleQuoteTermination");
+
+    private static readonly PineValue s_true = Tag("True");
 
     private static readonly PineValue s_doubleQuoteTermination = Tag("DoubleQuoteTermination");
 
     private static readonly PineValue s_tripleQuoteTermination = Tag("TripleQuoteTermination");
-
-    private static readonly PineValue s_commentTokenType = Tag("Comment");
-
-    private static readonly PineValue s_tokenTypeFieldName = StringEncoding.ValueFromString("tokenType");
-
-    private static readonly PineValue s_lexemeFieldName = StringEncoding.ValueFromString("lexeme");
 
     /// <summary>Gets the default precompiled parser leaves by leaf key.</summary>
     public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> DefaultLeaves =>
@@ -559,13 +723,14 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
             () =>
             ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty
             .Add(SkipInlineWhitespaceLeafKey, SkipInlineWhitespaceLeafDelegate)
+            .Add(SkipWhitespaceAtLeafKey, SkipWhitespaceAtLeafDelegate)
             .Add(SkipToIdentifierEndLeafKey, SkipToIdentifierEndLeafDelegate)
             .Add(SkipToAsciiDecimalDigitEndLeafKey, SkipToAsciiDecimalDigitEndLeafDelegate)
             .Add(SkipToAsciiHexDigitEndLeafKey, SkipToAsciiHexDigitEndLeafDelegate)
+            .Add(NumberEndDecimalLeafKey, NumberEndDecimalLeafDelegate)
+            .Add(IsFloatLiteralAtLeafKey, IsFloatLiteralAtLeafDelegate)
             .Add(ScanUnicodeEscapeDigitsLeafKey, ScanUnicodeEscapeDigitsLeafDelegate)
+            .Add(Convert0OrMoreHexadecimalValueLeafKey, Convert0OrMoreHexadecimalValueLeafDelegate)
             .Add(FindLiteralRunEndLeafKey, FindLiteralRunEndLeafDelegate)
-            .Add(SkipOperatorCharsLeafKey, SkipOperatorCharsLeafDelegate)
-            .Add(DropTriviaLeafKey, DropTriviaLeafDelegate)
-            .Add(TokenLexemesLeafKey, TokenLexemesLeafDelegate)
-            .Add(HexStringToIntLeafKey, HexStringToIntLeafDelegate));
+            .Add(SkipOperatorCharsLeafKey, SkipOperatorCharsLeafDelegate));
 }
