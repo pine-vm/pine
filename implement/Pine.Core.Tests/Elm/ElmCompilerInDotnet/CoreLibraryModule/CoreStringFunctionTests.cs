@@ -191,6 +191,17 @@ public class CoreStringFunctionTests
     // concat ["never","the","less"] == "nevertheless"
 
     [Fact]
+    public void Concat_empty_list()
+    {
+        var result =
+            ApplyUnary(
+                GetStringFunction("concat"),
+                ElmList());
+
+        result.Should().Be(String(""));
+    }
+
+    [Fact]
     public void Concat_nevertheless()
     {
         var result =

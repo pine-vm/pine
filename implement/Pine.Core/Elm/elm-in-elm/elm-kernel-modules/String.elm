@@ -244,13 +244,27 @@ append (String a) (String b) =
 
 concat : List String -> String
 concat strings =
-    let
-        charsBlobs =
-            List.map
-                (\(String chars) -> chars)
-                strings
-    in
-    String (Pine_builtin.concat charsBlobs)
+    case strings of
+        [] ->
+            String (Pine_builtin.take [ 0, 0 ])
+
+        _ ->
+            String (Pine_builtin.concat (mapStringsToBlobs strings))
+
+
+mapStringsToBlobs : List String -> List Int
+mapStringsToBlobs strings =
+    mapStringsToBlobsHelp strings []
+
+
+mapStringsToBlobsHelp : List String -> List Int -> List Int
+mapStringsToBlobsHelp remainingStrings acc =
+    case remainingStrings of
+        [] ->
+            Pine_builtin.reverse acc
+
+        (String chars) :: followingStrings ->
+            mapStringsToBlobsHelp followingStrings (Pine_builtin.concat [ [ chars ], acc ])
 
 
 split : String -> String -> List String
