@@ -11,6 +11,9 @@ namespace Pine.Core.IntermediateVM;
 /// </summary>
 public static class SetupVM
 {
+    /// <summary>
+    /// Prefix used for bundled declaration names that represent precompiled leaf values.
+    /// </summary>
     public const string PrecompiledLeafValueNamePrefix = "precompiled-leaf/";
 
     private const string BasicsCompareName = PrecompiledLeafValueNamePrefix + "Basics/compare";
@@ -308,36 +311,69 @@ public static class SetupVM
         return leaves;
     }
 
+    /// <summary>
+    /// Gets the native implementations for the precompiled leaf keys from the Basics module.
+    /// </summary>
     public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> BasicsPrecompiledLeaves =>
         s_basicsPrecompiledLeaves.Value;
 
+    /// <summary>
+    /// Gets the native implementations for the precompiled leaf keys from the Dict module.
+    /// </summary>
     public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> DictPrecompiledLeaves =>
         s_dictPrecompiledLeaves.Value;
 
+    /// <summary>
+    /// Gets the native implementations for the precompiled leaf keys from Json.Decode.
+    /// </summary>
     public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> JsonDecodePrecompiledLeaves =>
         s_jsonDecodePrecompiledLeaves.Value;
 
+    /// <summary>
+    /// Gets the native implementations for the precompiled leaf keys from the String module.
+    /// </summary>
     public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> StringPrecompiledLeaves =>
         s_stringPrecompiledLeaves.Value;
 
+    /// <summary>
+    /// Gets the native implementations for the precompiled leaf keys used by the Elm language service helpers.
+    /// </summary>
     public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> LanguageServicePrecompiledLeaves =>
         s_languageServicePrecompiledLeaves.Value;
 
+    /// <summary>
+    /// Gets the native implementations for the precompiled leaf keys from the Bytes helpers.
+    /// </summary>
     public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> BytesPrecompiledLeaves =>
         s_bytesPrecompiledLeaves.Value;
 
+    /// <summary>
+    /// Gets the native implementations for the precompiled leaf keys that implement record access and update.
+    /// </summary>
     public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> RecordAccessAndUpdatePrecompiledLeaves =>
         s_recordPrecompiledLeaves.Value;
 
+    /// <summary>
+    /// Gets the native implementations for the precompiled leaf keys used for Base64 conversion.
+    /// </summary>
     public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> Base64ConversionPrecompiledLeaves =>
         s_base64PrecompiledLeaves.Value;
 
+    /// <summary>
+    /// Gets the native implementations for the precompiled leaf keys from the concrete Elm parser.
+    /// </summary>
     public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> ConcreteParserPrecompiledLeaves =>
         s_concreteParserPrecompiledLeaves.Value;
 
+    /// <summary>
+    /// Gets the native implementations for the precompiled leaf keys that convert concrete Elm syntax into abstract form.
+    /// </summary>
     public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> ConvertFromConcretePrecompiledLeaves =>
         s_convertFromConcretePrecompiledLeaves.Value;
 
+    /// <summary>
+    /// Gets the combined map of all default precompiled leaf keys to their native implementations.
+    /// </summary>
     public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> DefaultPrecompiledLeaves =>
         s_defaultPrecompiledLeaves.Value;
 

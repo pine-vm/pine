@@ -7,13 +7,22 @@ using System.Linq;
 
 namespace Pine.Core.DotNet;
 
+/// <summary>
+/// Builds Roslyn type and name syntax for CLR types while minimizing unnecessary qualification.
+/// </summary>
 public static class CompileTypeSyntax
 {
+    /// <summary>
+    /// Builds type syntax for a CLR type using the supplied using directives to shorten qualified names.
+    /// </summary>
     public static TypeSyntax TypeSyntaxFromType(
         Type type,
         IReadOnlyCollection<UsingDirectiveSyntax> usings) =>
         TypeSyntaxFromType(type, new DeclarationSyntaxContext(usings));
 
+    /// <summary>
+    /// Builds type syntax for a CLR type while respecting aliases and the current declaration namespace.
+    /// </summary>
     public static TypeSyntax TypeSyntaxFromType(
         Type type,
         DeclarationSyntaxContext context)
@@ -108,6 +117,9 @@ public static class CompileTypeSyntax
         return null;
     }
 
+    /// <summary>
+    /// Removes a leading global alias from a name syntax tree while preserving the remaining qualification.
+    /// </summary>
     public static NameSyntax NameSyntaxLessGlobalAlias(NameSyntax nameSyntax)
     {
         // Normalize Roslyn's fully-qualified alias targets (e.g., "global::System.Text.StringBuilder")
@@ -131,6 +143,9 @@ public static class CompileTypeSyntax
         return nameSyntax;
     }
 
+    /// <summary>
+    /// Returns declaring type names that must appear between a namespace and a nested type name.
+    /// </summary>
     public static IEnumerable<string> NamespaceSegmentsResultingFromDeclaringTypes(Type type) =>
         type.DeclaringType switch
         {
@@ -142,11 +157,17 @@ public static class CompileTypeSyntax
             .Append(declaringType.Name)
         };
 
+    /// <summary>
+    /// Computes the shortest namespace path that remains unambiguous under the supplied using directives.
+    /// </summary>
     public static IReadOnlyList<string> ShortestRelativeNamespace(
         string fullNamespace,
         IReadOnlyCollection<UsingDirectiveSyntax> usings) =>
         ShortestRelativeNamespace(fullNamespace, new DeclarationSyntaxContext(usings));
 
+    /// <summary>
+    /// Computes the shortest namespace path relative to the active using directives and current namespace.
+    /// </summary>
     public static IReadOnlyList<string> ShortestRelativeNamespace(
         string fullNamespace,
         DeclarationSyntaxContext context)
@@ -188,6 +209,9 @@ public static class CompileTypeSyntax
         return namespaceSegments;
     }
 
+    /// <summary>
+    /// Combines namespace segments and a terminal type name into a qualified Roslyn name syntax node.
+    /// </summary>
     public static NameSyntax NameSyntaxFromQualifiedName(
         IReadOnlyList<string> namespaceSegments,
         SimpleNameSyntax nameInNamespace) =>

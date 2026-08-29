@@ -3,8 +3,14 @@ using System.Collections.Generic;
 
 namespace Pine.Core.Internal;
 
+/// <summary>
+/// Provides fused builtin-function helpers that collapse common pairs of Pine operations into single host calls.
+/// </summary>
 public class BuiltinFunctionFused
 {
+    /// <summary>
+    /// Appends an item to the end of a list prefix. If the prefix is not a list, this helper preserves the original value.
+    /// </summary>
     public static PineValue ListAppendItem(
         PineValue prefix,
         PineValue itemToAppend)
@@ -23,6 +29,9 @@ public class BuiltinFunctionFused
         return PineValue.List(newItems);
     }
 
+    /// <summary>
+    /// Prepends an item to the front of a list suffix. If the suffix is not a list, this helper starts a new single-item list.
+    /// </summary>
     public static PineValue ListPrependItem(
         PineValue itemToPrepend,
         PineValue suffix)
@@ -41,6 +50,9 @@ public class BuiltinFunctionFused
         return PineValue.List(newItems);
     }
 
+    /// <summary>
+    /// Prepends a byte to a blob suffix while reusing compact blob encodings for short results. If the suffix is not a blob, this helper returns a single-byte blob.
+    /// </summary>
     public static PineValue BlobPrependByte(
         byte byteToPrepend,
         PineValue suffix)
@@ -91,6 +103,9 @@ public class BuiltinFunctionFused
         return PineValue.Blob(newBytes);
     }
 
+    /// <summary>
+    /// Builds Pine's canonical signed-integer encoding from an unsigned magnitude and an explicit sign. Leading zero bytes are trimmed to match the normalization performed by int_add.
+    /// </summary>
     public static PineValue CanonicalIntegerFromUnsigned(
         bool signIsPositive,
         PineValue unsignedValue)
@@ -205,6 +220,9 @@ public class BuiltinFunctionFused
         return PineValue.Blob(newBytes);
     }
 
+    /// <summary>
+    /// Parses the skip count from a Pine value and then returns up to takeCount items or bytes from the remaining suffix.
+    /// </summary>
     public static PineValue SkipAndTake(
         int takeCount,
         PineValue skipCountValue,
@@ -218,6 +236,9 @@ public class BuiltinFunctionFused
         return SkipAndTake(takeCount, (int)skipCount, argument);
     }
 
+    /// <summary>
+    /// Parses both slice counts from Pine values and returns the corresponding slice of a list or blob.
+    /// </summary>
     public static PineValue SkipAndTake(
         PineValue takeCountValue,
         PineValue skipCountValue,
@@ -236,6 +257,9 @@ public class BuiltinFunctionFused
         return SkipAndTake((int)takeCount, (int)skipCount, argument);
     }
 
+    /// <summary>
+    /// Returns the slice that remains after skipping skipCount items or bytes and taking up to takeCount from a list or blob.
+    /// </summary>
     public static PineValue SkipAndTake(
         int takeCount,
         int skipCount,
@@ -300,6 +324,9 @@ public class BuiltinFunctionFused
             "Unexpected argument type: " + argument.GetType());
     }
 
+    /// <summary>
+    /// Returns the first item or byte after skipping skipCount elements from a list or blob. Bytes are wrapped as single-byte blobs.
+    /// </summary>
     public static PineValue SkipAndHead(
         int skipCount,
         PineValue argument)
@@ -327,6 +354,9 @@ public class BuiltinFunctionFused
             "Unexpected argument type: " + argument.GetType());
     }
 
+    /// <summary>
+    /// Parses the counts in skip-then-take order from Pine values and returns the corresponding slice of a list or blob.
+    /// </summary>
     public static PineValue TakeAndSkip(
         PineValue skipCountValue,
         PineValue takeCountValue,
@@ -345,6 +375,9 @@ public class BuiltinFunctionFused
         return TakeAndSkip((int)skipCount, (int)takeCount, argument);
     }
 
+    /// <summary>
+    /// Returns the slice selected by skipping skipCount items or bytes and then taking up to takeCount from a list or blob.
+    /// </summary>
     public static PineValue TakeAndSkip(
         int skipCount,
         int takeCount,
@@ -411,6 +444,9 @@ public class BuiltinFunctionFused
             "Unexpected argument type: " + argument.GetType());
     }
 
+    /// <summary>
+    /// Keeps only the last takeCount items or bytes of a list or blob.
+    /// </summary>
     public static PineValue TakeLast(
         int takeCount,
         PineValue value)
@@ -454,6 +490,9 @@ public class BuiltinFunctionFused
             "Unexpected value type: " + value.GetType().FullName);
     }
 
+    /// <summary>
+    /// Drops the last skipCount items or bytes of a list or blob.
+    /// </summary>
     public static PineValue SkipLast(
         int skipCount,
         PineValue value)

@@ -1505,6 +1505,9 @@ public class CoreBasics
                 leadingArgExpressions: [f, g]);
     }
 
+    /// <summary>
+    /// Returns the native function value for Elm's right-composition operator, applying the second function to the first function's result.
+    /// </summary>
     public static PineValue ComposeR_FunctionValue()
     {
         return BinaryFunctionValue(Generic_ComposeR);
@@ -1553,6 +1556,9 @@ public class CoreBasics
                 leadingArgExpressions: [g, f]);
     }
 
+    /// <summary>
+    /// Returns the native function value for Elm's left-composition operator, composing a left function around a right function.
+    /// </summary>
     public static PineValue ComposeL_FunctionValue()
     {
         return BinaryFunctionValue(Generic_ComposeL);

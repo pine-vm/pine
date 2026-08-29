@@ -609,6 +609,9 @@ public class ElmCompiler
         .Add(DeclQualifiedName.Create(["Json", "Decode"], "decodeValue"))
         .Add(DeclQualifiedName.Create(["Json", "Decode"], "decodeString"));
 
+    /// <summary>
+    /// Compiles the selected Elm source files into an interactive environment and returns both the encoded environment and the lowering stages used to produce it.
+    /// </summary>
     public static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults<DefaultLoweredResults> pipelineStageResults)> CompileInteractiveEnvironment(
         FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,

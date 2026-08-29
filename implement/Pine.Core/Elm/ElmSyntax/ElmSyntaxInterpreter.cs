@@ -3886,6 +3886,9 @@ public partial class ElmSyntaxInterpreter
         Application application) =>
         PineBuiltinResolver(application, s_pineBuiltinModuleNamesDefault);
 
+    /// <summary>
+    /// Builds an application resolver that dispatches by qualified function name and lets each registered delegate decline handling by returning null.
+    /// </summary>
     public static System.Func<Application, ApplicationResolution?> ApplicationResolver(
         IReadOnlyDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>> functionResolvers)
     {

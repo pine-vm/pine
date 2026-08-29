@@ -107,6 +107,9 @@ public static class KernelBytesPrecompiledLeaves
         }
     }
 
+    /// <summary>
+    /// Executes the precompiled Bytes.Encode.encodeCharsAsBlobHelp leaf by UTF-8 encoding the remaining Elm string characters into the accumulated blob.
+    /// </summary>
     public static PineValue? EncodeCharsAsBlobHelpLeafDelegate(PineValue environment)
     {
         if (!EnvironmentMatches(environment, "encodeCharsAsBlobHelp"))
@@ -189,6 +192,9 @@ public static class KernelBytesPrecompiledLeaves
         return PineValue.Blob(output.ToArray());
     }
 
+    /// <summary>
+    /// Executes the precompiled Bytes.Decode.decodeBlobAsCharsRec leaf by decoding UTF-8 bytes from the given offset and appending them to the existing character accumulator.
+    /// </summary>
     public static PineValue? DecodeBlobAsCharsRecLeafDelegate(PineValue environment)
     {
         if (!EnvironmentMatches(environment, "decodeBlobAsCharsRec") ||

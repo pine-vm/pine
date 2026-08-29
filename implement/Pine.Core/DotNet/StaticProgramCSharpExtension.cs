@@ -9,8 +9,14 @@ using System.Text;
 
 namespace Pine.Core.DotNet;
 
+/// <summary>
+/// Renders a static-program C# model into formatted compilation units and source files.
+/// </summary>
 public static class StaticProgramCSharpExtension
 {
+    /// <summary>
+    /// Materializes the generated classes of a static program as UTF-8 encoded C# source files keyed by path segments.
+    /// </summary>
     public static IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> BuildCSharpProjectFiles(
         this StaticProgramCSharp staticProgram,
         IReadOnlyList<string> namespacePrefix)
@@ -59,6 +65,9 @@ public static class StaticProgramCSharpExtension
                 EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
     }
 
+    /// <summary>
+    /// Wraps a generated class in the appropriate namespace and using directives, then formats the compilation unit.
+    /// </summary>
     public static CompilationUnitSyntax BuildCompilationUnitSyntax(
         ClassDeclarationSyntax classDeclaration,
         DeclarationSyntaxContext declarationSyntaxContext,

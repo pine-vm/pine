@@ -10,9 +10,15 @@ namespace Pine.Core.CommonEncodings;
 /// </summary>
 public static class ExpressionEncoding
 {
+    /// <summary>
+    /// Encodes an expression using the standard Pine representation without an external encoding cache.
+    /// </summary>
     public static PineValue.ListValue EncodeExpressionAsValue(Expression expression) =>
         EncodeExpressionAsValue(expression, cache: null);
 
+    /// <summary>
+    /// Encodes an expression using the standard representation and reuses the supplied cache when one is available.
+    /// </summary>
     public static PineValue.ListValue EncodeExpressionAsValue(
         Expression expression,
         PineExpressionEncodingCache? cache) =>
@@ -27,6 +33,9 @@ public static class ExpressionEncoding
         ConcurrentDictionary<Expression, PineValue.ListValue> store) =>
         ExpressionEncoding2026.EncodeExpressionAsValueViaPostOrder(rootExpression, store);
 
+    /// <summary>
+    /// Encodes one expression node while delegating encoding of direct subexpressions to the supplied callback.
+    /// </summary>
     public static PineValue.ListValue EncodeExpressionAsValueWithoutTopLevelCacheLookup(
         Expression expression,
         Func<Expression, PineValue.ListValue> encodeSubexpression) =>
@@ -34,6 +43,9 @@ public static class ExpressionEncoding
             expression,
             encodeSubexpression);
 
+    /// <summary>
+    /// Parses an encoded expression by trying the compact 2026 format first and falling back to the legacy 2024 format.
+    /// </summary>
     public static Result<string, Expression> ParseExpressionFromValue(PineValue value)
     {
         var parsed2026 =
@@ -67,6 +79,9 @@ public static class ExpressionEncoding
         return parsed2024Struct;
     }
 
+    /// <summary>
+    /// Parses an encoded expression with a caller-supplied subvalue parser for the 2026 format, then falls back to the legacy 2024 format.
+    /// </summary>
     public static Result<string, Expression> ParseExpressionFromValue(
         PineValue value,
         Func<PineValue, Result<string, Expression>> generalParser)

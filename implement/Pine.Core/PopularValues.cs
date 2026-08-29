@@ -6,8 +6,15 @@ using System.Runtime.CompilerServices;
 
 namespace Pine.Core;
 
+/// <summary>
+/// Caches frequently reused strings and Elm values so common runtime data can share interned instances.
+/// </summary>
 public static class PopularValues
 {
+    /// <summary>
+    /// Returns an interned reference for strings that are already interned or belong to the known popular-string set.
+    /// Strings outside that set are returned unchanged to avoid interning arbitrary data.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static string InternIfKnown(string s)
     {
@@ -17,6 +24,9 @@ public static class PopularValues
         return PopularStrings.Contains(s) ? string.Intern(s) : s;
     }
 
+    /// <summary>
+    /// Contains the high-frequency strings that Pine aggressively interns and reuses across runtime data structures.
+    /// </summary>
     public static readonly FrozenSet<string> PopularStrings =
         PopularStringsSource
         .Concat(SingleCharStrings)
@@ -733,6 +743,9 @@ public static class PopularValues
         "osPlatform",
         ];
 
+    /// <summary>
+    /// Enumerates common Elm value shapes and tag instances that seed the runtime's reused-value caches.
+    /// </summary>
     public static IEnumerable<ElmValue> PopularElmValuesSource()
     {
         static IReadOnlyList<ElmValue> ListOfCharsFromString(string s) =>

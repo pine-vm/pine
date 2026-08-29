@@ -9,8 +9,14 @@ using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 // Aliases to avoid ambiguity with System.Range
 using Range = SyntaxModel.Range;
 
+/// <summary>
+/// Encodes Elm syntax nodes into ElmValue records and tags shaped like the stil4m/elm-syntax version 7 data model.
+/// </summary>
 public class EncodeAsElmValue
 {
+    /// <summary>
+    /// Encodes a parsed Elm file into an ElmValue containing its comments, declarations, imports, and module definition.
+    /// </summary>
     public static ElmValue EncodeFile(File file)
     {
         return

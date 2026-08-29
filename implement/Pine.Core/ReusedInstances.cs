@@ -16,37 +16,76 @@ namespace Pine.Core;
 public record ReusedInstances(
     System.Func<IEnumerable<Expression>> LoadExpressionRootsSource)
 {
+    /// <summary>
+    /// Provides the process-wide cache of reused Pine, Elm, and expression instances loaded during startup.
+    /// </summary>
     public static readonly ReusedInstances Instance =
         new(LoadExpressionRootsSource: ExpressionsSource);
 
+    /// <summary>
+    /// Gets the embedded declarations bundle used to initialize the reuse caches when it is available.
+    /// </summary>
     public BundledDeclarations? BundledDeclarations { private set; get; }
 
+    /// <summary>
+    /// Gets reused Pine list instances keyed by their structural list representation.
+    /// </summary>
     public FrozenDictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue>? ListValues { private set; get; }
 
+    /// <summary>
+    /// Gets reused single-item list instances keyed by their sole element value.
+    /// </summary>
     public FrozenDictionary<PineValue, PineValue.ListValue>? SingletonListValues { private set; get; }
 
+    /// <summary>
+    /// Gets the reused expression instances rebuilt to share reused literals and subexpressions.
+    /// </summary>
     public FrozenSet<Expression>? Expressions { private set; get; }
 
+    /// <summary>
+    /// Gets reused literal-expression instances keyed by the Pine value they embed.
+    /// </summary>
     public FrozenDictionary<PineValue, Expression.Litral>? LiteralExpressions { private set; get; }
 
     internal FrozenDictionary<Expression.List.ListStruct, Expression.List>? ListExpressions { private set; get; }
 
     internal FrozenDictionary<Expression.Conditional.ConditionalStruct, Expression.Conditional>? ConditionalExpressions { private set; get; }
 
+    /// <summary>
+    /// Gets cached encodings from reused expressions to their Pine list representation.
+    /// </summary>
     public FrozenDictionary<Expression, PineValue.ListValue>? ExpressionEncodings { private set; get; }
 
+    /// <summary>
+    /// Gets cached decodings from Pine list-encoded expressions back to reused expression instances.
+    /// </summary>
     public FrozenDictionary<PineValue.ListValue, Expression>? ExpressionDecodings { private set; get; }
 
+    /// <summary>
+    /// Gets the reused Elm values covered by the compiler-oriented cache.
+    /// </summary>
     public FrozenSet<ElmValue>? ElmValues { private set; get; }
 
+    /// <summary>
+    /// Gets mappings from reused Elm values back to the Pine values the Elm compiler convention would decode from them.
+    /// </summary>
     public FrozenDictionary<ElmValue, PineValue>? ElmValueDecodedAsInElmCompiler { private set; get; }
 
+    /// <summary>
+    /// Gets mappings from reused Pine values to the Elm values produced by the Elm compiler's encoding convention.
+    /// </summary>
     public FrozenDictionary<PineValue, ElmValue>? ElmValueEncodedAsInElmCompiler { private set; get; }
 
     internal FrozenDictionary<ElmValue.ElmTag.ElmTagStruct, ElmValue.ElmTag>? ElmTagValues { private set; get; }
 
+    /// <summary>
+    /// Gets cached decodings from standard Pine-encoded Elm values back to reused Elm value instances.
+    /// </summary>
     public FrozenDictionary<PineValue, ElmValue>? ElmValueDecoding { private set; get; }
 
+    /// <summary>
+    /// Gets cached encodings from reused Elm values into the standard Pine representation.
+    /// </summary>
     public FrozenDictionary<ElmValue, PineValue>? ElmValueEncoding { private set; get; }
 
 
@@ -55,6 +94,9 @@ public record ReusedInstances(
         Instance.BuildFromEmbedded();
     }
 
+    /// <summary>
+    /// Enumerates the popular expression roots that seed the reused-expression cache.
+    /// </summary>
     public static IEnumerable<Expression> ExpressionsSource()
     {
         foreach (var namedExpression in PopularExpression.BuildPopularExpressionDictionary())
@@ -66,6 +108,9 @@ public record ReusedInstances(
 
     const string expectedInCompilerKey = "expected-in-compiler-container";
 
+    /// <summary>
+    /// Builds the named Pine values that are persisted in the embedded reused-values bundle.
+    /// </summary>
     public static IReadOnlyDictionary<string, PineValue> PrebuildListEntries(
         PineListValueReusedInstances source)
     {
@@ -109,6 +154,9 @@ public record ReusedInstances(
         return mutatedDict;
     }
 
+    /// <summary>
+    /// Loads prebuilt reused Pine values from the embedded bundle when available, or rebuilds them from expression roots and default leaf values.
+    /// </summary>
     public static PineListValueReusedInstances LoadPrecompiledFromEmbeddedOrDefault(
         System.Func<IEnumerable<Expression>> loadExpressionRootsSource,
         BundledDeclarations? bundledDeclarations) =>
@@ -183,11 +231,56 @@ public record ReusedInstances(
                 PineValueLists: valueListsDict);
     }
 
-    public record PineListValueReusedInstances(
-        IReadOnlySet<PineValue.ListValue> ValuesExpectedInCompilerLists,
-        IReadOnlySet<PineValue.BlobValue> ValuesExpectedInCompilerBlobs,
-        IReadOnlyDictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue> PineValueLists);
+    /// <summary>
+    /// Groups the list and blob values that should be reused across compiler-related Pine value graphs.
+    /// </summary>
+    public record PineListValueReusedInstances
+    {
+        /// <summary>
+        /// Gets the reused list values that commonly appear in compiler-produced Pine structures.
+        /// </summary>
+        public IReadOnlySet<PineValue.ListValue> ValuesExpectedInCompilerLists { get; init; }
 
+        /// <summary>
+        /// Gets the reused blob values that commonly appear in compiler-produced Pine structures.
+        /// </summary>
+        public IReadOnlySet<PineValue.BlobValue> ValuesExpectedInCompilerBlobs { get; init; }
+
+        /// <summary>
+        /// Gets the structurally keyed table of reusable Pine list instances.
+        /// </summary>
+        public IReadOnlyDictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue> PineValueLists { get; init; }
+
+        /// <summary>
+        /// Constructs a grouping of reusable list and blob values from their reused sets and the structurally keyed list table.
+        /// </summary>
+        public PineListValueReusedInstances(
+            IReadOnlySet<PineValue.ListValue> ValuesExpectedInCompilerLists,
+            IReadOnlySet<PineValue.BlobValue> ValuesExpectedInCompilerBlobs,
+            IReadOnlyDictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue> PineValueLists)
+        {
+            this.ValuesExpectedInCompilerLists = ValuesExpectedInCompilerLists;
+            this.ValuesExpectedInCompilerBlobs = ValuesExpectedInCompilerBlobs;
+            this.PineValueLists = PineValueLists;
+        }
+
+        /// <summary>
+        /// Deconstructs this grouping into its reused list and blob sets and the structurally keyed list table.
+        /// </summary>
+        public void Deconstruct(
+            out IReadOnlySet<PineValue.ListValue> ValuesExpectedInCompilerLists,
+            out IReadOnlySet<PineValue.BlobValue> ValuesExpectedInCompilerBlobs,
+            out IReadOnlyDictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue> PineValueLists)
+        {
+            ValuesExpectedInCompilerLists = this.ValuesExpectedInCompilerLists;
+            ValuesExpectedInCompilerBlobs = this.ValuesExpectedInCompilerBlobs;
+            PineValueLists = this.PineValueLists;
+        }
+    }
+
+    /// <summary>
+    /// Builds compiler-oriented sets of reusable Pine list and blob values from expressions and additional Pine roots.
+    /// </summary>
     public static PineListValueReusedInstances BuildPineListValueReusedInstances(
         IEnumerable<Expression> expressionRootsSource,
         IEnumerable<PineValue> additionalRoots)
@@ -648,6 +741,9 @@ public record ReusedInstances(
                 kvp => (IReadOnlyList<ElmValue>)[.. kvp.Value]);
     }
 
+    /// <summary>
+    /// Merges bundled reusable list instances with the string-derived list values that can be reconstructed locally.
+    /// </summary>
     public static FrozenDictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue>
         BuildListValuesFromBundledListValues(
         IReadOnlyDictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue> bundledPineValueLists)

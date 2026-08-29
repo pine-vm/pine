@@ -9,8 +9,14 @@ using System.Linq;
 
 namespace Pine.Core.DotNet;
 
+/// <summary>
+/// Emits optimized C# syntax for Pine kernel-function applications, including specialization matching and fusion rewrites.
+/// </summary>
 public class CompileKernelFunctionApplication
 {
+    /// <summary>
+    /// Tries specialized kernel-function signatures against the supplied arguments and yields each invocation that can be rendered, including commutative permutations.
+    /// </summary>
     public static IEnumerable<CompiledCSharpExpression> EnumerateMatchingSpecializedInterface(
         IReadOnlyList<PineKernelFunctions.KernelFunctionSpecializedInfo> specializedInterfaces,
         IReadOnlyList<StaticExpression<DeclQualifiedName>> argumentsList,
@@ -102,6 +108,9 @@ public class CompileKernelFunctionApplication
             };
     }
 
+    /// <summary>
+    /// Recognizes kernel-application patterns with dedicated fused helpers and yields optimized compiled expressions for each match.
+    /// </summary>
     public static IEnumerable<CompiledCSharpExpression> TryCompileKernelFusion(
         StaticExpression<DeclQualifiedName>.KernelApplication kernelApp,
         ExpressionEmitEnv emitEnv)
@@ -628,6 +637,9 @@ public class CompileKernelFunctionApplication
         }
     }
 
+    /// <summary>
+    /// Builds syntax that calls the fused helper for attaching a sign to an unsigned integer encoding and canonicalizing the result.
+    /// </summary>
     public static ExpressionSyntax CanonicalIntegerFromUnsignedSyntax(
         bool signIsPositive,
         ExpressionSyntax unsignedValueSyntax,

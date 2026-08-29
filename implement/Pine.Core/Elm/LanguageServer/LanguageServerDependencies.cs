@@ -218,6 +218,9 @@ public sealed class MutableDocumentTextSource : IDocumentTextSource
 /// </param>
 public sealed record LanguageServerOptions
 {
+    /// <summary>
+    /// Initializes language server options and enforces that at least one worker can be leased concurrently.
+    /// </summary>
     public LanguageServerOptions(
         string ServerVersion,
         int MaxConcurrencyCount = 4)
@@ -228,7 +231,13 @@ public sealed record LanguageServerOptions
         this.MaxConcurrencyCount = MaxConcurrencyCount;
     }
 
+    /// <summary>
+    /// Gets the version string reported to clients during language server initialization.
+    /// </summary>
     public string ServerVersion { get; }
 
+    /// <summary>
+    /// Gets the maximum number of language-service workers that may be leased at the same time.
+    /// </summary>
     public int MaxConcurrencyCount { get; }
 }

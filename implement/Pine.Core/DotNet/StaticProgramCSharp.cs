@@ -12,6 +12,9 @@ using System.Linq;
 
 namespace Pine.Core.DotNet;
 
+/// <summary>
+/// Represents the generated C# program model, including module classes, reused-value declarations, anonymous functions, and the dispatcher.
+/// </summary>
 public record StaticProgramCSharp(
     IReadOnlyDictionary<DeclQualifiedName, StaticProgramCSharpClass> ModulesClasses,
     ClassDeclarationSyntax CommonValueClass,
@@ -23,6 +26,9 @@ public record StaticProgramCSharp(
 
     private const string GlobalAnonFunctionsClassName = "Global_Anonymous";
 
+    /// <summary>
+    /// Creates the default syntax context with global alias usings for Pine runtime and helper types used by generated code.
+    /// </summary>
     public static DeclarationSyntaxContext DeclarationSyntaxContextDefault()
     {
         UsingDirectiveSyntax UsingAliasForType(Type type, string alias)
@@ -77,11 +83,17 @@ public record StaticProgramCSharp(
                 CurrentNamespace: null);
     }
 
+    /// <summary>
+    /// Compiles a static Pine program into the generated C# program model using the default declaration syntax context.
+    /// </summary>
     public static StaticProgramCSharp FromStaticProgram(
         StaticProgram<DeclQualifiedName> staticProgram,
         IReadOnlyDictionary<DeclQualifiedName, StaticProgramFunctionMetadata> functionMetadata) =>
         FromStaticProgram(staticProgram, functionMetadata, DeclarationSyntaxContextDefault());
 
+    /// <summary>
+    /// Compiles a static Pine program into C# classes and dispatcher declarations using the supplied syntax context.
+    /// </summary>
     public static StaticProgramCSharp FromStaticProgram(
         StaticProgram<DeclQualifiedName> staticProgram,
         IReadOnlyDictionary<DeclQualifiedName, StaticProgramFunctionMetadata> functionMetadata,
@@ -234,6 +246,9 @@ public record StaticProgramCSharp(
                 DeclarationSyntaxContext: declarationSyntaxContext);
     }
 
+    /// <summary>
+    /// Builds the class that stores reusable blob and list literal declarations and returns the names assigned to them.
+    /// </summary>
     public static (ClassDeclarationSyntax classDeclaration, IReadOnlyDictionary<PineValue, DeclQualifiedName> availableDecls)
         StaticValueClassDeclaration(
         IReadOnlySet<PineValue.BlobValue> blobValues,
@@ -325,6 +340,9 @@ public record StaticProgramCSharp(
         return (classDeclaration, availableDecls);
     }
 
+    /// <summary>
+    /// Returns true for kernel booleans and empty values that already have canonical runtime declarations.
+    /// </summary>
     public static bool ExcludeValueFromDeclarationsEmittedForReuse(PineValue v)
     {
         if (v == PineKernelValues.TrueValue || v == PineKernelValues.FalseValue)
@@ -336,6 +354,9 @@ public record StaticProgramCSharp(
         return false;
     }
 
+    /// <summary>
+    /// Builds the dispatcher class that maps encoded original expressions to compiled entry points with constraint checks.
+    /// </summary>
     public static ClassDeclarationSyntax DispatcherClassDeclaration(
         IReadOnlyDictionary<DeclQualifiedName, (Expression origExpr, StaticFunctionInterface interf, PineValueClass constraint)> namedFunctions,
         DeclarationSyntaxContext declarationSyntaxContext,
@@ -634,6 +655,9 @@ public record StaticProgramCSharp(
         return classDeclaration;
     }
 
+    /// <summary>
+    /// Generates a stable C# field name for a Pine literal value based on its structure or content.
+    /// </summary>
     public static string NameValueDeclaration(
         PineValue value,
         ConcurrentPineValueHashCache valueHashCache)
@@ -726,6 +750,9 @@ public record StaticProgramCSharp(
             $"Naming not implemented for value type {value.GetType()}");
     }
 
+    /// <summary>
+    /// Collects literal and expression values that should be emitted once and reused across the generated program.
+    /// </summary>
     public static IEnumerable<PineValue> CollectValuesToReuse(
         StaticProgram<DeclQualifiedName> staticProgram,
         IReadOnlyDictionary<DeclQualifiedName, StaticProgramFunctionMetadata> functionMetadata)
@@ -742,6 +769,9 @@ public record StaticProgramCSharp(
         }
     }
 
+    /// <summary>
+    /// Enumerates the literal values embedded in a value-class constraint so they can be reused in generated declarations.
+    /// </summary>
     public static IEnumerable<PineValue> CollectValuesRootsFromValueClass(
         PineValueClass pvc)
     {
@@ -751,6 +781,9 @@ public record StaticProgramCSharp(
         }
     }
 
+    /// <summary>
+    /// Enumerates all literal Pine values appearing anywhere inside a static expression tree.
+    /// </summary>
     public static IEnumerable<PineValue> CollectLiteralsValues<FuncId>(
         StaticExpression<FuncId> expression)
     {
@@ -761,6 +794,9 @@ public record StaticProgramCSharp(
         }
     }
 
+    /// <summary>
+    /// Maps supported characters to descriptive identifier fragments used when naming generated declarations.
+    /// </summary>
     public static string? NameCharInDeclaration(char c)
     {
         if (c is '\'')

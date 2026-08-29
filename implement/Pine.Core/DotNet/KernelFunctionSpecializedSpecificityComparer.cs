@@ -5,9 +5,15 @@ using static Pine.Core.DotNet.PineKernelFunctions;
 
 namespace Pine.Core.DotNet;
 
+/// <summary>
+/// Orders specialized kernel-function variants from most specific to least specific and compares them by signature.
+/// </summary>
 public class KernelFunctionSpecializedSpecificityComparer :
     IComparer<KernelFunctionSpecializedInfo>, IEqualityComparer<KernelFunctionSpecializedInfo>
 {
+    /// <summary>
+    /// Reusable comparer instance for ranking specialized kernel-function implementations.
+    /// </summary>
     public static readonly KernelFunctionSpecializedSpecificityComparer Instance = new();
 
     private static int SpecificityRank(KernelFunctionParameterType t) =>
@@ -46,6 +52,9 @@ public class KernelFunctionSpecializedSpecificityComparer :
             0
         };
 
+    /// <summary>
+    /// Compares two specializations by parameter specificity, arity, and return type so more constrained matches sort first.
+    /// </summary>
     public int Compare(KernelFunctionSpecializedInfo? x, KernelFunctionSpecializedInfo? y)
     {
         if (ReferenceEquals(x, y))
@@ -117,6 +126,9 @@ public class KernelFunctionSpecializedSpecificityComparer :
         return 0;
     }
 
+    /// <summary>
+    /// Returns whether two specializations expose the same parameter-type sequence and specialized return type.
+    /// </summary>
     public bool Equals(KernelFunctionSpecializedInfo? x, KernelFunctionSpecializedInfo? y)
     {
         if (ReferenceEquals(x, y))
@@ -140,6 +152,9 @@ public class KernelFunctionSpecializedSpecificityComparer :
         return true;
     }
 
+    /// <summary>
+    /// Computes a hash code from the specialization signature so it stays consistent with equality.
+    /// </summary>
     public int GetHashCode(KernelFunctionSpecializedInfo obj)
     {
         unchecked

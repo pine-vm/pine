@@ -234,6 +234,9 @@ public static class StringEncoding
         return StringParseResult.Ok(asString);
     }
 
+    /// <summary>
+    /// Decodes the legacy list-based string representation where each item stores one Unicode scalar value.
+    /// </summary>
     public static Result<string, string> StringFromListValue(PineValue.ListValue list)
     {
         if (list.Items.Length is 0)

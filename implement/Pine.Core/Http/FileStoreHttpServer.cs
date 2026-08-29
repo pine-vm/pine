@@ -388,6 +388,9 @@ public class FileStoreHttpServerMiddleware(RequestDelegate next, IFileStore file
 
     private readonly FileStoreHttpServer _server = new(fileStore);
 
+    /// <summary>
+    /// Lets the file-store server handle matching requests and forwards unmatched requests to the next middleware.
+    /// </summary>
     public async Task InvokeAsync(HttpContext context)
     {
         var handled = await _server.TryHandleRequestAsync(context);

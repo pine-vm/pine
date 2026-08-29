@@ -29,10 +29,16 @@ public static class StaticExpressionDisplay
         string FunctionName,
         StaticFunctionInterface FunctionInterface);
 
+    /// <summary>
+    /// Describes how to render a function application when the caller can derive the displayed argument expressions from the application node.
+    /// </summary>
     public record FunctionApplicationRenderingNew<IdentifierT>(
        string FunctionName,
        Func<StaticExpression<IdentifierT>, IReadOnlyList<StaticExpression<IdentifierT>>> FunctionInterface);
 
+    /// <summary>
+    /// Builds a renderer that reconstructs function arguments by following the parameter paths declared in a static function interface.
+    /// </summary>
     public static Func<StaticExpression<IdentifierT>, IReadOnlyList<StaticExpression<IdentifierT>>> BuildRenderer<IdentifierT>(
         StaticFunctionInterface functionInterface)
     {

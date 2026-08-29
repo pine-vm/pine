@@ -13,16 +13,56 @@ namespace Pine.Core.DotNet;
 using CompiledDictionary =
     IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>;
 
-public record CompileToAssemblyResult(
-    byte[] Assembly,
-    Func<CompiledDictionary> BuildCompiledExpressionsDictionary);
+/// <summary>
+/// Bundles emitted assembly bytes together with a factory for the compiled expression dispatch dictionary they expose.
+/// </summary>
+public record CompileToAssemblyResult
+{
+    /// <summary>
+    /// Assembly bytes emitted for the generated program.
+    /// </summary>
+    public byte[] Assembly { get; init; }
+
+    /// <summary>
+    /// Factory that loads the emitted assembly and returns its compiled expression dispatch dictionary.
+    /// </summary>
+    public Func<CompiledDictionary> BuildCompiledExpressionsDictionary { get; init; }
+
+    /// <summary>
+    /// Constructs a result pairing the emitted assembly bytes with the factory for its compiled expression dictionary.
+    /// </summary>
+    public CompileToAssemblyResult(
+        byte[] Assembly,
+        Func<CompiledDictionary> BuildCompiledExpressionsDictionary)
+    {
+        this.Assembly = Assembly;
+        this.BuildCompiledExpressionsDictionary = BuildCompiledExpressionsDictionary;
+    }
+
+    /// <summary>
+    /// Deconstructs this result into the emitted assembly bytes and the compiled expression dictionary factory.
+    /// </summary>
+    public void Deconstruct(
+        out byte[] Assembly,
+        out Func<CompiledDictionary> BuildCompiledExpressionsDictionary)
+    {
+        Assembly = this.Assembly;
+        BuildCompiledExpressionsDictionary = this.BuildCompiledExpressionsDictionary;
+    }
+}
 
 
+/// <summary>
+/// Compiles generated C# source files into an in-memory .NET assembly and locates the generated dispatcher dictionary.
+/// </summary>
 public class CompileToAssembly
 {
     private static readonly CSharpParseOptions s_parseOptions =
         new(languageVersion: LanguageVersion.CSharp13);
 
+    /// <summary>
+    /// Renders a static Pine program to C# source files and compiles the result into an assembly.
+    /// </summary>
     public static Result<string, CompileToAssemblyResult> Compile(
         StaticProgramCSharp staticProgram,
         IReadOnlyList<string> namespacePrefix,
@@ -34,6 +74,9 @@ public class CompileToAssembly
         return Compile(csharpFiles, optimizationLevel);
     }
 
+    /// <summary>
+    /// Parses generated C# files, emits a library assembly, and resolves the public builder for compiled expressions.
+    /// </summary>
     public static Result<string, CompileToAssemblyResult> Compile(
         IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> csharpFiles,
         OptimizationLevel optimizationLevel)
@@ -99,6 +142,9 @@ public class CompileToAssembly
                 BuildCompiledExpressionsDictionary: buildDictionary);
     }
 
+    /// <summary>
+    /// Loads compiled assembly bytes and finds the single public static method that builds the dispatch dictionary.
+    /// </summary>
     public static Result<string, Func<CompiledDictionary>> SearchDictionaryBuilderInAssembly(
         byte[] assemblyBytes)
     {

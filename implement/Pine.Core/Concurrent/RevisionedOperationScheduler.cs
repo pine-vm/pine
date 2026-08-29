@@ -35,14 +35,41 @@ public readonly record struct RevisionedOperationSchedulerEvent(
 /// </summary>
 public enum RevisionedOperationSchedulerEventKind
 {
+    /// <summary>
+    /// A speculative execution attempt began on a worker.
+    /// </summary>
     SpeculationStarted,
+    /// <summary>
+    /// A speculative execution attempt produced a result.
+    /// </summary>
     SpeculationCompleted,
+    /// <summary>
+    /// The speculative result was accepted without replay because the canonical revision still matched.
+    /// </summary>
     SpeculationAccepted,
+    /// <summary>
+    /// A replay execution began against the current canonical state.
+    /// </summary>
     ReplayStarted,
+    /// <summary>
+    /// A replay execution finished against the current canonical state.
+    /// </summary>
     ReplayCompleted,
+    /// <summary>
+    /// A replay attempt updated the canonical state and advanced the revision.
+    /// </summary>
     StateCommitted,
+    /// <summary>
+    /// The worker finalize hook completed and the attempt was ready to release its worker.
+    /// </summary>
     AttemptFinalized,
+    /// <summary>
+    /// Processing for the scheduled operation ended because its cancellation token was triggered.
+    /// </summary>
     Canceled,
+    /// <summary>
+    /// Processing for the scheduled operation ended with a non-cancellation exception.
+    /// </summary>
     Faulted,
 }
 

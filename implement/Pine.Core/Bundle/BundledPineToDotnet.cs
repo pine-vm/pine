@@ -20,6 +20,9 @@ using FileTree =
 public record BundledPineToDotnet(
     Func<CompiledDictionary> BuildDictionary)
 {
+    /// <summary>
+    /// Starts loading the bundled precompiled Pine-to-.NET dictionary from the executing assembly.
+    /// </summary>
     static public readonly System.Threading.Tasks.Task<BundledPineToDotnet> LoadBundledTask =
         System.Threading.Tasks.Task.Run(() => LoadFromEmbedded(Assembly.GetExecutingAssembly()));
 
@@ -28,6 +31,9 @@ public record BundledPineToDotnet(
     /// </summary>
     public const string ResourceFilePath = "prebuilt-artifact/pine-default-leaves.dll";
 
+    /// <summary>
+    /// Namespace prefix assigned to the generated C# sources for bundled Pine programs.
+    /// </summary>
     public const string CompiledNamespacePrefix = "PrecompiledPineToDotNet";
 
     /// <summary>
@@ -47,6 +53,9 @@ public record BundledPineToDotnet(
                 return null;
             });
 
+    /// <summary>
+    /// Loads the bundled Pine-to-.NET assembly from an embedded resource and turns it into a dictionary builder.
+    /// </summary>
     public static Result<string, BundledPineToDotnet> LoadEmbedded(
         Assembly assembly,
         string embeddedResourceFilePath = ResourceFilePath)
@@ -77,6 +86,9 @@ public record BundledPineToDotnet(
         return LoadFromAssembly(asMemory);
     }
 
+    /// <summary>
+    /// Locates the bundled dictionary builder inside raw assembly bytes and wraps it as a bundled artifact.
+    /// </summary>
     public static Result<string, BundledPineToDotnet> LoadFromAssembly(
         byte[] assemblyBytes)
     {
@@ -100,6 +112,9 @@ public record BundledPineToDotnet(
         return new BundledPineToDotnet(buildDictionary);
     }
 
+    /// <summary>
+    /// Parses an interactive Elm environment into a static program, compiles it to a bundled assembly, and writes the output files.
+    /// </summary>
     public static void BuildAndWriteBundleFile(
         ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnvironment,
         string destinationDirectory,
@@ -236,6 +251,9 @@ public record BundledPineToDotnet(
         }
     }
 
+    /// <summary>
+    /// Loads a packaged set of generated C# files, compiles them into a bundle assembly, and writes the assembly resource file.
+    /// </summary>
     public static ReadOnlyMemory<byte> LoadCSharpFilesFromFileAndBuildBundleFileAssembly(
         string csharpFilesDirectory,
         string destinationDirectory,
@@ -278,6 +296,9 @@ public record BundledPineToDotnet(
         }
     }
 
+    /// <summary>
+    /// Compiles the supplied generated C# file tree to a .NET assembly, writes it to the bundle location, and returns the assembly bytes.
+    /// </summary>
     public static ReadOnlyMemory<byte> BuildAndWriteBundleFileAssembly(
         FileTree csharpFiles,
         string destinationDirectory,
@@ -295,6 +316,9 @@ public record BundledPineToDotnet(
         return assemblyBytes;
     }
 
+    /// <summary>
+    /// Builds the generated C# project file tree for a static Pine program using the standard compiled namespace prefix.
+    /// </summary>
     public static FileTree BuildBundleCSharpFiles(
         StaticProgram<DeclQualifiedName> staticProgram,
         IReadOnlyDictionary<DeclQualifiedName, StaticProgramFunctionMetadata> functionMetadata)
@@ -309,6 +333,9 @@ public record BundledPineToDotnet(
         return csharpFiles;
     }
 
+    /// <summary>
+    /// Compiles generated bundle C# files and returns the resulting assembly bytes.
+    /// </summary>
     public static ReadOnlyMemory<byte> BuildBundleFileAssemblyFromCSharpFiles(
         FileTree csharpFiles)
     {

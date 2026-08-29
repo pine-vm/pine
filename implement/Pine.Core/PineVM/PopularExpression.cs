@@ -10,11 +10,17 @@ using System.Text.Json;
 
 namespace Pine.PineVM;
 
+/// <summary>
+/// Loads curated embedded expressions and values that are reused as popular instances.
+/// </summary>
 public class PopularExpression
 {
     static readonly JsonSerializerOptions jsonSerializerOptions =
         EncodePineExpressionAsJson.BuildJsonSerializerOptions();
 
+    /// <summary>
+    /// Builds a name-to-expression dictionary from embedded JSON expression files, reusing canonical expression instances.
+    /// </summary>
     public static IImmutableDictionary<string, Expression> BuildPopularExpressionDictionary()
     {
         var exprFiles =
@@ -48,6 +54,9 @@ public class PopularExpression
                 seed: ImmutableDictionary<string, Expression>.Empty);
     }
 
+    /// <summary>
+    /// Builds a name-to-value dictionary from embedded JSON Pine value files.
+    /// </summary>
     public static IImmutableDictionary<string, PineValue> BuildPopularValueDictionary()
     {
         var exprFiles =
@@ -78,11 +87,17 @@ public class PopularExpression
                 seed: ImmutableDictionary<string, PineValue>.Empty);
     }
 
+    /// <summary>
+    /// Loads the embedded files that define the popular expression set.
+    /// </summary>
     public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadPopularExpressionFiles() =>
         DotNetAssembly.LoadDirectoryFilesFromManifestEmbeddedFileProviderAsDictionary(
             directoryPath: ["PineVM", "PopularExpression"],
             assembly: typeof(PopularExpression).Assembly);
 
+    /// <summary>
+    /// Loads the embedded files that define the popular Pine value set.
+    /// </summary>
     public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadPopularValueFiles() =>
         DotNetAssembly.LoadDirectoryFilesFromManifestEmbeddedFileProviderAsDictionary(
             directoryPath: ["PineVM", "PopularValue"],

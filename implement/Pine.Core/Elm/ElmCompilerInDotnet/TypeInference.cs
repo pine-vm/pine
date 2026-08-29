@@ -1397,6 +1397,9 @@ public static class TypeInference
         return GetFunctionParameterTypes(declaration.Function);
     }
 
+    /// <summary>
+    /// Builds an inferred function type from a function's explicit signature when the annotated parameter and return types can be recovered.
+    /// </summary>
     public static InferredType? BuildFunctionTypeFromSignatureOrNull(
         SyntaxTypes.FunctionStruct function)
     {

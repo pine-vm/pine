@@ -12,9 +12,15 @@ namespace Pine.Core.DotNet;
 
 using LocalDeclarations = ImmutableDictionary<StaticExpression<DeclQualifiedName>, (string identifier, LocalType ltype)>;
 
+/// <summary>
+/// Represents one generated static C# class for a compiled Pine module or anonymous-function container.
+/// </summary>
 public record StaticProgramCSharpClass(
     ClassDeclarationSyntax ClassDeclarationSyntax)
 {
+    /// <summary>
+    /// Builds a generated class declaration by compiling the supplied Pine function declarations into static methods.
+    /// </summary>
     public static StaticProgramCSharpClass FromDeclarations(
         DeclQualifiedName className,
         IReadOnlyDictionary<string, (StaticFunctionInterface interf, StaticExpression<DeclQualifiedName> body)> declarations,
@@ -49,11 +55,17 @@ public record StaticProgramCSharpClass(
         return new StaticProgramCSharpClass(classSyntax);
     }
 
+    /// <summary>
+    /// Renders this generated class as a standalone C# source file string.
+    /// </summary>
     public string RenderToString()
     {
         return RenderToString(ClassDeclarationSyntax);
     }
 
+    /// <summary>
+    /// Renders a class declaration as normalized C# source using the default syntax context.
+    /// </summary>
     public static string RenderToString(
         ClassDeclarationSyntax classDeclarationSyntax)
     {
@@ -66,6 +78,9 @@ public record StaticProgramCSharpClass(
         return syntaxTree.ToString();
     }
 
+    /// <summary>
+    /// Compiles a single static Pine function into a public static C# method declaration.
+    /// </summary>
     public static MethodDeclarationSyntax RenderFunctionToMethod(
         DeclQualifiedName selfFunctionName,
         StaticFunctionInterface functionInterface,
@@ -128,6 +143,9 @@ public record StaticProgramCSharpClass(
             .WithBody(blockSyntax);
     }
 
+    /// <summary>
+    /// Compiles a static Pine function body into statement syntax, using tail-recursion loops and builder optimizations when possible.
+    /// </summary>
     public static StatementSyntax CompileToCSharpFunction(
         StaticExpression<DeclQualifiedName> functionBody,
         DeclQualifiedName selfFunctionName,
@@ -1071,10 +1089,16 @@ public record StaticProgramCSharpClass(
         return false;
     }
 
+    /// <summary>
+    /// Carries emitted statement syntax together with the local names declared while producing it.
+    /// </summary>
     public readonly record struct CompiledStatement(
         StatementSyntax Statement,
         ImmutableHashSet<string> DeclaredLocals);
 
+    /// <summary>
+    /// Compiles an expression into executable statement syntax and introduces reusable locals for common subexpressions.
+    /// </summary>
     public static CompiledStatement CompileToCSharpStatement(
         StaticExpression<DeclQualifiedName> expression,
         ExpressionEmitEnv emitEnv,
@@ -1314,6 +1338,9 @@ public record StaticProgramCSharpClass(
         return [statement];
     }
 
+    /// <summary>
+    /// Compiles an expression and returns the first available C# representation for it.
+    /// </summary>
     public static CompiledCSharpExpression CompileToCSharpExpression(
         StaticExpression<DeclQualifiedName> expression,
         ExpressionEmitEnv emitEnv)
@@ -1325,6 +1352,9 @@ public record StaticProgramCSharpClass(
             .FirstOrDefault()!;
     }
 
+    /// <summary>
+    /// Enumerates all C# representations the backend can emit for an expression, including specialized boolean, integer, and generic forms.
+    /// </summary>
     public static IEnumerable<CompiledCSharpExpression> EnumerateExpressions(
         StaticExpression<DeclQualifiedName> expression,
         ExpressionEmitEnv emitEnv)
@@ -1611,6 +1641,9 @@ public record StaticProgramCSharpClass(
     }
 
 
+    /// <summary>
+    /// Enumerates literal-specific C# representations, preferring booleans, integers, and shared declarations before falling back to generic encoding.
+    /// </summary>
     public static IEnumerable<CompiledCSharpExpression> EnumerateExpressionsForLiteral(
         StaticExpression<DeclQualifiedName>.Literal literal,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
@@ -1666,6 +1699,9 @@ public record StaticProgramCSharpClass(
     }
 
 
+    /// <summary>
+    /// Enumerates conditional expressions while preserving specialized boolean or integer result types when both branches match.
+    /// </summary>
     public static IEnumerable<CompiledCSharpExpression> EnumerateExpressionsForConditional(
         StaticExpression<DeclQualifiedName>.Conditional conditional,
         ExpressionEmitEnv emitEnv)
@@ -1766,6 +1802,9 @@ public record StaticProgramCSharpClass(
         yield return CompiledCSharpExpression.Generic(genericCSharpExpr);
     }
 
+    /// <summary>
+    /// Compiles an expression for use as a C# condition and flattens nested false-branch conditionals into a logical-and chain.
+    /// </summary>
     public static ExpressionSyntax BuildConditionExpression(
         StaticExpression<DeclQualifiedName> condition,
         ExpressionEmitEnv emitEnv)
@@ -1802,6 +1841,9 @@ public record StaticProgramCSharpClass(
                 emitEnv);
     }
 
+    /// <summary>
+    /// Combines compiled condition expressions into a short-circuiting logical-and chain, applying negation where requested.
+    /// </summary>
     public static ExpressionSyntax EmitAndConditionsChain(
         IReadOnlyList<(StaticExpression<DeclQualifiedName> expr, bool negated)> conditions,
         ExpressionEmitEnv emitEnv)
@@ -1846,6 +1888,9 @@ public record StaticProgramCSharpClass(
                     right: CompiledCSharpExpression.EnsureIsParenthesizedForComposition(right)));
     }
 
+    /// <summary>
+    /// Recognizes nested conditionals that encode conjunction and returns their component condition expressions.
+    /// </summary>
     public static IReadOnlyList<StaticExpression<DeclQualifiedName>> ParseAsAndChain(
         StaticExpression<DeclQualifiedName> expression)
     {
@@ -1863,6 +1908,9 @@ public record StaticProgramCSharpClass(
         return [expression];
     }
 
+    /// <summary>
+    /// Enumerates C# representations for a kernel-function application, including operator rewrites, fused helpers, and specialized overloads.
+    /// </summary>
     public static IEnumerable<CompiledCSharpExpression> EnumerateExpressionsForKernelApp(
         StaticExpression<DeclQualifiedName>.KernelApplication kernelApp,
         ExpressionEmitEnv emitEnv)
@@ -2117,6 +2165,9 @@ public record StaticProgramCSharpClass(
         }
     }
 
+    /// <summary>
+    /// Compiles the expression supplied for one function parameter path, drilling into subpaths when the argument packs a larger structure.
+    /// </summary>
     public static IEnumerable<CompiledCSharpExpression> ExpressionsForFunctionArgument(
         IReadOnlyList<int> paramPath,
         StaticExpression<DeclQualifiedName> argumentExpr,
@@ -2150,6 +2201,9 @@ public record StaticProgramCSharpClass(
 
 
 
+    /// <summary>
+    /// Builds the C# parameter list for a generated function from its environment-path interface.
+    /// </summary>
     public static IReadOnlyList<ParameterSyntax> ComposeParameterList(
         StaticFunctionInterface functionInterface,
         DeclarationSyntaxContext declarationSyntaxContext)

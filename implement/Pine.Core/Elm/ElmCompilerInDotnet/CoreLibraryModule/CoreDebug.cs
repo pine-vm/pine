@@ -8,9 +8,15 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 /// </summary>
 public static class CoreDebug
 {
+    /// <summary>
+    /// Builds an expression that renders an Elm value with the native Debug.toString implementation.
+    /// </summary>
     public static Expression ToString(Expression value) =>
         ApplyUnary(ToString_FunctionValue(), value);
 
+    /// <summary>
+    /// Returns the encoded Pine function value for the native Debug.toString implementation.
+    /// </summary>
     public static PineValue ToString_FunctionValue() =>
         ExpressionEncoding.EncodeExpressionAsValue(
             Internal_ToString(Expression.EnvironmentInstance));

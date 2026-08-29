@@ -12,6 +12,9 @@ using BuiltinFunctionSpecialized = Pine.Core.Internal.BuiltinFunctionSpecialized
 
 namespace Pine.Core.Interpreter.IntermediateVM;
 
+/// <summary>
+/// Evaluates Pine expressions by compiling them to intermediate instructions and executing them with optional specialization, caching, and precompiled leaves.
+/// </summary>
 public class PineVM : ICancellablePineVM
 {
     private readonly IInvocationCacheAccess? _invocationCache;
@@ -45,6 +48,9 @@ public class PineVM : ICancellablePineVM
 
     private readonly bool _disableGenericApplicationChainConsolidation;
 
+    /// <summary>
+    /// Caches parsed expressions so repeated decode-and-evaluate steps can reuse expression objects.
+    /// </summary>
     public readonly PineVMParseCache ParseCache;
 
     private readonly Dictionary<Expression, PineValue> _encodeExpressionCache = [];
@@ -63,6 +69,9 @@ public class PineVM : ICancellablePineVM
 
     private readonly bool _disableDirectEvalForSimpleTemplate;
 
+    /// <summary>
+    /// Creates a PineVM with caller-supplied caches, precompiled leaves, optimization settings, and diagnostic callbacks.
+    /// </summary>
     public static PineVM CreateCustom(
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache,
         EvaluationConfig? evaluationConfigDefault,
@@ -2580,6 +2589,9 @@ public class PineVM : ICancellablePineVM
         return fromCache;
     }
 
+    /// <summary>
+    /// Formats a Pine value for error messages by showing its string contents when the value decodes as text.
+    /// </summary>
     public static string DescribeValueForErrorMessage(PineValue pineValue) =>
         StringEncoding.StringFromValue(pineValue)
         .Unpack(fromErr: _ => "not a string", fromOk: asString => "string \'" + asString + "\'");

@@ -18,6 +18,9 @@ public class CodeAnalysis
 {
 
 
+    /// <summary>
+    /// Parses the selected declarations from a parsed interactive environment into a monomorphic static program and reports a top-level parsing error when the analysis cannot start.
+    /// </summary>
     public static Result<string, (StaticProgram<DeclQualifiedName> staticProgram, IReadOnlyDictionary<DeclQualifiedName, StaticProgramFunctionMetadata> functionMetadata, IReadOnlyDictionary<DeclQualifiedName, string> declsFailed)>
         ParseAsStaticMonomorphicProgram(
         ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnvironment,
@@ -83,6 +86,9 @@ public class CodeAnalysis
                 parseCache);
     }
 
+    /// <summary>
+    /// Parses multiple root declarations into one static program, while collecting per-declaration failure messages for roots that cannot be analyzed monomorphically.
+    /// </summary>
     public static (StaticProgram<DeclQualifiedName> staticProgram, IReadOnlyDictionary<DeclQualifiedName, StaticProgramFunctionMetadata> functionMetadata, IReadOnlyDictionary<DeclQualifiedName, string> declsFailed)
         ParseAsStaticMonomorphicProgram(
         IReadOnlyDictionary<DeclQualifiedName, FunctionRecord> rootDecls,
@@ -321,6 +327,9 @@ public class CodeAnalysis
     }
 
 
+    /// <summary>
+    /// Builds the zero-argument application for a function record and parses everything reachable from that root into static form.
+    /// </summary>
     public static Result<string, ParsedFromSingleRoot>
         ParseAsStaticMonomorphicProgram(
         FunctionRecord functionRecord,
@@ -338,10 +347,16 @@ public class CodeAnalysis
                 namesForDecl: namesForDecl);
     }
 
+    /// <summary>
+    /// Holds the static parse result produced from a single root expression, including the root identifier and every referenced function body.
+    /// </summary>
     public record ParsedFromSingleRoot(
         StaticFunctionIdentifier RootId,
         IReadOnlyDictionary<StaticFunctionIdentifier, (Expression origExpr, StaticExpressionGen body)> AllReferenced);
 
+    /// <summary>
+    /// Parses one root expression into a static monomorphic program fragment on a larger stack so deeply nested trees can be analyzed safely.
+    /// </summary>
     public static Result<string, ParsedFromSingleRoot>
         ParseAsStaticMonomorphicProgram(
         Expression rootExpression,
@@ -1253,6 +1268,9 @@ public class CodeAnalysis
         return $"zzz_anon_{exprHashBase16[..8]}_{pineValueClass.HashBase16[..8]}";
     }
 
+    /// <summary>
+    /// Simplifies a static function set by inlining non-recursive forwarding applications and trimming each function to the environment paths it actually uses.
+    /// </summary>
     public static IReadOnlyDictionary<FunctionIdentifier, StaticExpression<FunctionIdentifier>>
         SimplifyFunctions<FunctionIdentifier>(
         IReadOnlyDictionary<FunctionIdentifier, StaticExpression<FunctionIdentifier>> namedFunctionsBeforeInline)

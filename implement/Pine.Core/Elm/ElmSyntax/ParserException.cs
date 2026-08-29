@@ -8,6 +8,9 @@ namespace Pine.Core.Elm.ElmSyntax;
 /// </summary>
 public class ParserException : Exception
 {
+    /// <summary>
+    /// Gets the original parser error text without any appended line or column suffix.
+    /// </summary>
     public string ErrorMessage { get; }
 
     /// <summary>

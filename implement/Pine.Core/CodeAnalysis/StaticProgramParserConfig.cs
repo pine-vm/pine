@@ -46,11 +46,17 @@ public record StaticProgramParserConfig<IdentifierT>(
     Func<IEnumerable<IdentifierT>, PineValue, StaticProgramParser.IdentifyResponse<IdentifierT>?>? IdentifyEncodedBodyOptional = null,
     IReadOnlyList<StaticProgramParser.ConsolidatedFormTemplateEntry<IdentifierT>>? ConsolidatedFormTemplates = null)
 {
+    /// <summary>
+    /// Builds a parser configuration that accepts missing optional identifiers but throws whenever parsing needs a required identifier or crash identifier.
+    /// </summary>
     public static StaticProgramParserConfig<IdentifierT> OptionalNullRequiredThrow()
         =>
         OptionalNullRequiredThrow(
             context => $"[{string.Join(" -> ", context)}]");
 
+    /// <summary>
+    /// Builds the throwing fallback parser configuration and uses the supplied formatter in exception messages that describe the current parse context.
+    /// </summary>
     public static StaticProgramParserConfig<IdentifierT> OptionalNullRequiredThrow(
         Func<IEnumerable<IdentifierT>, string> describeContext)
         =>

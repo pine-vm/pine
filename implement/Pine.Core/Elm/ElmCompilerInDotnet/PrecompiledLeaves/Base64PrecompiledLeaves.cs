@@ -28,9 +28,15 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
 /// </summary>
 public static class Base64PrecompiledLeaves
 {
+    /// <summary>
+    /// Gets the Pine leaf key for the precompiled inner function used by Base64.Encode.toBytes.
+    /// </summary>
     public static PineValue EncodeToBytesLeafKey =>
         s_leafInfos.Value["encode"].leafKey;
 
+    /// <summary>
+    /// Gets the Pine leaf key for the precompiled inner function used by Base64.Decode.fromBytes.
+    /// </summary>
     public static PineValue DecodeFromBytesLeafKey =>
         s_leafInfos.Value["decode"].leafKey;
 

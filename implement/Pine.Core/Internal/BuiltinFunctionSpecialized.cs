@@ -9,8 +9,14 @@ using static Core.BuiltinFunction;
 
 #pragma warning disable IDE1006
 
+/// <summary>
+/// Provides specialized builtin-function implementations for partially decoded Pine values and hot argument shapes.
+/// </summary>
 public static class BuiltinFunctionSpecialized
 {
+    /// <summary>
+    /// Returns Pine's canonical boolean value for structural equality between two Pine values.
+    /// </summary>
     public static PineValue equal(
         PineValue left,
         PineValue right)
@@ -18,6 +24,9 @@ public static class BuiltinFunctionSpecialized
         return ValueFromBool(left == right);
     }
 
+    /// <summary>
+    /// Returns the host boolean result of structural equality between two Pine values.
+    /// </summary>
     public static bool equal_as_boolean(
         PineValue left,
         PineValue right)
@@ -25,6 +34,9 @@ public static class BuiltinFunctionSpecialized
         return left == right;
     }
 
+    /// <summary>
+    /// Returns the number of items in a list or the number of bytes in a blob as a CLR integer.
+    /// </summary>
     public static int length_as_int(PineValue value)
     {
         if (value is PineValue.ListValue listValue)
@@ -41,6 +53,9 @@ public static class BuiltinFunctionSpecialized
             "Unexpected value type: " + value.GetType().FullName);
     }
 
+    /// <summary>
+    /// Decodes the skip count from a Pine integer and removes that many leading items or bytes from the value.
+    /// </summary>
     public static PineValue skip(PineValue countValue, PineValue value)
     {
         if (SignedIntegerFromValueRelaxed(countValue) is not { } count)
@@ -49,6 +64,9 @@ public static class BuiltinFunctionSpecialized
         return skip(count, value);
     }
 
+    /// <summary>
+    /// Removes skipCount leading items or bytes from a list or blob. Short blob results reuse compact blob constructors when possible.
+    /// </summary>
     public static PineValue skip(BigInteger skipCount, PineValue value)
     {
         if (skipCount <= 0)
@@ -125,6 +143,9 @@ public static class BuiltinFunctionSpecialized
             "Unexpected value type: " + value.GetType().FullName);
     }
 
+    /// <summary>
+    /// Decodes the take count from a Pine integer and keeps that many leading items or bytes from the value.
+    /// </summary>
     public static PineValue take(PineValue countValue, PineValue value)
     {
         if (SignedIntegerFromValueRelaxed(countValue) is not { } count)
@@ -133,6 +154,9 @@ public static class BuiltinFunctionSpecialized
         return take(count, value);
     }
 
+    /// <summary>
+    /// Keeps the first count items or bytes from a list or blob.
+    /// </summary>
     public static PineValue take(BigInteger count, PineValue value)
     {
         if (value is PineValue.ListValue listValue)
@@ -174,6 +198,9 @@ public static class BuiltinFunctionSpecialized
             "Unexpected value type: " + value.GetType().FullName);
     }
 
+    /// <summary>
+    /// Concatenates a span of same-kind lists or blobs, skipping leading empty lists and preserving a single remaining value as-is.
+    /// </summary>
     public static PineValue concat(ReadOnlySpan<PineValue> listBeforeSkipEmpty)
     {
         // Skip over any empty lists at the start.
@@ -272,6 +299,9 @@ public static class BuiltinFunctionSpecialized
             "Unexpected value type: " + head.GetType().FullName);
     }
 
+    /// <summary>
+    /// Concatenates two lists or two blobs with fast paths for empty operands and one-byte blobs.
+    /// </summary>
     public static PineValue concat(PineValue valueA, PineValue valueB)
     {
         if (valueA is PineValue.ListValue listA)
@@ -338,6 +368,9 @@ public static class BuiltinFunctionSpecialized
             "Unexpected value type: " + valueA.GetType().FullName);
     }
 
+    /// <summary>
+    /// Decodes two Pine integers and returns their sum in canonical Pine integer encoding.
+    /// </summary>
     public static PineValue int_add(PineValue summandA, PineValue summandB)
     {
         if (SignedIntegerFromValueRelaxed(summandA) is not { } intA)
@@ -349,6 +382,9 @@ public static class BuiltinFunctionSpecialized
         return int_add(intA, intB);
     }
 
+    /// <summary>
+    /// Adds a known host integer to a Pine-encoded integer and returns the canonical Pine result.
+    /// </summary>
     public static PineValue int_add(BigInteger summandA, PineValue summandBValue)
     {
         if (SignedIntegerFromValueRelaxed(summandBValue) is not { } intValue)
@@ -357,9 +393,15 @@ public static class BuiltinFunctionSpecialized
         return int_add(summandA, intValue);
     }
 
+    /// <summary>
+    /// Encodes the sum of two host integers as a Pine integer.
+    /// </summary>
     public static PineValue int_add(BigInteger summandA, BigInteger summandB) =>
         IntegerEncoding.EncodeSignedInteger(summandA + summandB);
 
+    /// <summary>
+    /// Decodes two Pine integers and returns their product in canonical Pine integer encoding.
+    /// </summary>
     public static PineValue int_mul(PineValue factorA, PineValue factorB)
     {
         if (SignedIntegerFromValueRelaxed(factorA) is not { } intA)
@@ -371,6 +413,9 @@ public static class BuiltinFunctionSpecialized
         return int_mul(intA, intB);
     }
 
+    /// <summary>
+    /// Multiplies a known host integer with a Pine-encoded integer and returns the canonical Pine result.
+    /// </summary>
     public static PineValue int_mul(BigInteger factorA, PineValue factorBValue)
     {
         if (SignedIntegerFromValueRelaxed(factorBValue) is not { } intValue)
@@ -379,12 +424,21 @@ public static class BuiltinFunctionSpecialized
         return int_mul(factorA, intValue);
     }
 
+    /// <summary>
+    /// Encodes the product of two host integers as a Pine integer.
+    /// </summary>
     public static PineValue int_mul(BigInteger factorA, BigInteger factorB) =>
         IntegerEncoding.EncodeSignedInteger(factorA * factorB);
 
+    /// <summary>
+    /// Encodes the product of three host integers as a Pine integer.
+    /// </summary>
     public static PineValue int_mul(BigInteger factorA, BigInteger factorB, BigInteger factorC) =>
         IntegerEncoding.EncodeSignedInteger(factorA * factorB * factorC);
 
+    /// <summary>
+    /// Decodes two Pine integers, multiplies them with a known third factor, and returns the canonical Pine result.
+    /// </summary>
     public static PineValue int_mul(PineValue factorA, PineValue factorB, BigInteger factorC)
     {
         if (SignedIntegerFromValueRelaxed(factorA) is not { } intA)
@@ -396,6 +450,9 @@ public static class BuiltinFunctionSpecialized
         return int_mul(intA, intB, factorC);
     }
 
+    /// <summary>
+    /// Returns Pine's canonical boolean value for whether two decoded integers are in ascending order.
+    /// </summary>
     public static PineValue int_is_sorted_asc(
         PineValue left,
         PineValue right)
@@ -414,6 +471,9 @@ public static class BuiltinFunctionSpecialized
             ValueFromBool(leftInt <= rightInt);
     }
 
+    /// <summary>
+    /// Returns Pine's canonical boolean value for whether a decoded middle integer lies between the given bounds.
+    /// </summary>
     public static PineValue int_is_sorted_asc(
         BigInteger left,
         PineValue middle,
@@ -427,6 +487,9 @@ public static class BuiltinFunctionSpecialized
         return ValueFromBool(left <= middleInt && middleInt <= right);
     }
 
+    /// <summary>
+    /// Returns Pine's canonical boolean value for whether three host integers are already in ascending order.
+    /// </summary>
     public static PineValue int_is_sorted_asc(
         BigInteger left,
         BigInteger middle,
@@ -435,6 +498,9 @@ public static class BuiltinFunctionSpecialized
         return ValueFromBool(left <= middle && middle <= right);
     }
 
+    /// <summary>
+    /// Returns the host boolean outcome of the ascending-order check for two Pine-encoded integers. Invalid integer encodings produce false.
+    /// </summary>
     public static bool int_is_sorted_asc_as_boolean(
         PineValue left,
         PineValue right)
@@ -454,6 +520,9 @@ public static class BuiltinFunctionSpecialized
         return leftInt <= rightInt;
     }
 
+    /// <summary>
+    /// Returns whether a decoded Pine integer is greater than or equal to the given lower bound. Invalid integer encodings produce false.
+    /// </summary>
     public static bool int_is_sorted_asc_as_boolean(
         BigInteger left,
         PineValue right)
@@ -468,6 +537,9 @@ public static class BuiltinFunctionSpecialized
         return left <= rightInt;
     }
 
+    /// <summary>
+    /// Returns whether a decoded Pine integer is less than or equal to the given upper bound. Invalid integer encodings produce false.
+    /// </summary>
     public static bool int_is_sorted_asc_as_boolean(
         PineValue left,
         BigInteger right)
@@ -482,6 +554,9 @@ public static class BuiltinFunctionSpecialized
         return leftInt <= right;
     }
 
+    /// <summary>
+    /// Returns the host boolean outcome of the ascending-order check for three host integers.
+    /// </summary>
     public static bool int_is_sorted_asc_as_boolean(
         BigInteger left,
         BigInteger middle,
@@ -491,6 +566,9 @@ public static class BuiltinFunctionSpecialized
         return left <= middle && middle <= right;
     }
 
+    /// <summary>
+    /// Computes the bitwise AND of two blobs after aligning them at their least-significant bytes.
+    /// </summary>
     public static PineValue bit_and(
         PineValue left,
         PineValue right)
@@ -530,6 +608,9 @@ public static class BuiltinFunctionSpecialized
         return PineValue.Blob(resultArray);
     }
 
+    /// <summary>
+    /// Computes the bitwise OR of two blobs after right-aligning them and zero-extending the shorter input.
+    /// </summary>
     public static PineValue bit_or(
         PineValue left,
         PineValue right)
@@ -582,6 +663,9 @@ public static class BuiltinFunctionSpecialized
         return PineValue.Blob(resultArray);
     }
 
+    /// <summary>
+    /// Computes the bitwise XOR of two blobs after right-aligning them and zero-extending the shorter input.
+    /// </summary>
     public static PineValue bit_xor(
         PineValue left,
         PineValue right)
@@ -634,6 +718,9 @@ public static class BuiltinFunctionSpecialized
         return PineValue.Blob(resultArray);
     }
 
+    /// <summary>
+    /// Shifts a blob left by the given bit count within its existing width, discarding overflow bits.
+    /// </summary>
     public static PineValue bit_shift_left(
         BigInteger shiftCount,
         PineValue value)
@@ -666,6 +753,9 @@ public static class BuiltinFunctionSpecialized
         return PineValue.Blob(resultArray);
     }
 
+    /// <summary>
+    /// Shifts a blob right by the given bit count within its existing width, discarding overflow bits.
+    /// </summary>
     public static PineValue bit_shift_right(
         BigInteger shiftCount,
         PineValue value)

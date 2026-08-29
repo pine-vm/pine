@@ -11,8 +11,14 @@ using System.Reflection;
 
 namespace Pine.Core.DotNet;
 
+/// <summary>
+/// Describes the Pine kernel functions that can be emitted directly as C# calls, including specialized overloads discovered via reflection.
+/// </summary>
 public class PineKernelFunctions
 {
+    /// <summary>
+    /// Looks up the specialized overload signatures available for a kernel function name.
+    /// </summary>
     public static IReadOnlyList<KernelFunctionSpecializedInfo>? SpecializedInterfacesFromKernelFunctionName(
         string kernelFunctionName)
     {
@@ -22,6 +28,9 @@ public class PineKernelFunctions
         return null;
     }
 
+    /// <summary>
+    /// Builds a direct invocation of the generic C# implementation for a kernel function when one is known.
+    /// </summary>
     public static ExpressionSyntax? CompileKernelFunctionGenericInvocation(
         string kernelFunctionName,
         ExpressionSyntax argumentExpression,
@@ -34,34 +43,67 @@ public class PineKernelFunctions
     }
 
 
+    /// <summary>
+    /// Holds the generic invocation builder and ranked specialized overloads for one kernel function name.
+    /// </summary>
     public record KernelFunctionInfo(
         Func<ExpressionSyntax, DeclarationSyntaxContext, InvocationExpressionSyntax> CompileGenericInvocation,
         IReadOnlyList<KernelFunctionSpecializedInfo> SpecializedImplementations);
 
+    /// <summary>
+    /// Describes one specialized kernel-function overload, including parameter kinds, result kind, and invocation emitter.
+    /// </summary>
     public record KernelFunctionSpecializedInfo(
         IReadOnlyList<KernelFunctionParameterType> ParameterTypes,
         KernelFunctionSpecializedReturnType ReturnType,
         Func<IReadOnlyList<ExpressionSyntax>, DeclarationSyntaxContext, InvocationExpressionSyntax> CompileInvocation);
 
+    /// <summary>
+    /// Classifies the concrete result type a specialized kernel-function implementation produces.
+    /// </summary>
     public enum KernelFunctionSpecializedReturnType
     {
+        /// <summary>
+        /// Indicates that the specialized implementation returns a PineValue.
+        /// </summary>
         Generic = 10,
 
+        /// <summary>
+        /// Indicates that the specialized implementation returns a boolean result.
+        /// </summary>
         Boolean = 30,
 
+        /// <summary>
+        /// Indicates that the specialized implementation returns an integer result that the backend treats as BigInteger-compatible.
+        /// </summary>
         Integer = 40,
     }
 
+    /// <summary>
+    /// Classifies the argument shapes the code generator can match against specialized kernel-function overloads.
+    /// </summary>
     public enum KernelFunctionParameterType
     {
+        /// <summary>
+        /// Indicates a regular PineValue argument.
+        /// </summary>
         Generic = 10,
 
+        /// <summary>
+        /// Indicates a signed integer argument rendered directly as a numeric C# expression.
+        /// </summary>
         Integer = 40,
 
         // ReadOnlySpan<PineValue>
+        /// <summary>
+        /// Indicates a generic-value span argument built from a collection expression.
+        /// </summary>
         SpanGeneric = 100,
     }
 
+    /// <summary>
+    /// Caches the reflection-derived mapping from kernel function names to their generic and specialized C# emitters.
+    /// </summary>
     public static readonly Lazy<IReadOnlyDictionary<string, KernelFunctionInfo>> KernelFunctionsInfo =
         new(ReadKernelFunctionsInfoViaReflection);
 

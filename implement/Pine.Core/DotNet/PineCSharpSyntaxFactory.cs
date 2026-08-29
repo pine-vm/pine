@@ -12,17 +12,29 @@ using System.Numerics;
 
 namespace Pine.Core.DotNet;
 
+/// <summary>
+/// Builds Roslyn C# syntax nodes used by the Pine .NET backend to encode Pine values, helper calls, and generated expressions.
+/// </summary>
 public static class PineCSharpSyntaxFactory
 {
+    /// <summary>
+    /// Creates a C# true or false literal expression for the supplied boolean.
+    /// </summary>
     public static LiteralExpressionSyntax ExpressionSyntaxForBooleanLiteral(bool value) =>
         SyntaxFactory.LiteralExpression(
             value ? SyntaxKind.TrueLiteralExpression : SyntaxKind.FalseLiteralExpression);
 
+    /// <summary>
+    /// Creates a numeric literal expression for the supplied 64-bit integer using the backend's literal-token rules.
+    /// </summary>
     public static LiteralExpressionSyntax ExpressionSyntaxForIntegerLiteral(long integer) =>
         SyntaxFactory.LiteralExpression(
             SyntaxKind.NumericLiteralExpression,
             SyntaxTokenForIntegerLiteral(integer));
 
+    /// <summary>
+    /// Builds a numeric literal token that stays int-typed when possible and becomes an explicit long literal for larger values.
+    /// </summary>
     public static SyntaxToken SyntaxTokenForIntegerLiteral(long integer)
     {
         var text = CommandLineInterface.FormatIntegerForDisplay(integer);
@@ -45,6 +57,9 @@ public static class PineCSharpSyntaxFactory
         };
 
 
+    /// <summary>
+    /// Compiles a Pine value into a Roslyn expression, reusing overrides and choosing compact encodings for booleans, signed integers, strings, blobs, and lists.
+    /// </summary>
     public static (ExpressionSyntax exprSyntax, ValueSyntaxKind syntaxKind) CompileToCSharpLiteralExpression(
         PineValue pineValue,
         Func<PineValue, ExpressionSyntax?> overrideDefaultExpression,
@@ -238,6 +253,9 @@ public static class PineCSharpSyntaxFactory
             "Literal type not implemented: " + pineValue.GetType().FullName);
     }
 
+    /// <summary>
+    /// Wraps a boolean C# expression in a call that converts it to the canonical Pine boolean value.
+    /// </summary>
     public static ExpressionSyntax PineValueFromBoolExpression(
         ExpressionSyntax expressionSyntax,
         DeclarationSyntaxContext declarationSyntaxContext) =>
@@ -249,6 +267,9 @@ public static class PineCSharpSyntaxFactory
                 SyntaxFactory.SingletonSeparatedList(
                     SyntaxFactory.Argument(expressionSyntax))));
 
+    /// <summary>
+    /// Starts an invocation of a static BuiltinFunction member so callers can attach arguments afterward.
+    /// </summary>
     public static InvocationExpressionSyntax InvocationExpressionOnPineVMKernelFunctionClass(
         string memberIdentifierName,
         DeclarationSyntaxContext declarationSyntaxContext) =>
@@ -486,6 +507,9 @@ public static class PineCSharpSyntaxFactory
                 SyntaxFactory.IdentifierName(nameof(Builtins.ImmutableSliceBuilder.GetHead))))
         .WithArgumentList(SyntaxFactory.ArgumentList());
 
+    /// <summary>
+    /// Builds the member access that refers to PineValue.EmptyList in generated code.
+    /// </summary>
     public static ExpressionSyntax PineValueEmptyListSyntax(
         DeclarationSyntaxContext declarationSyntaxContext) =>
         SyntaxFactory.MemberAccessExpression(
@@ -493,6 +517,9 @@ public static class PineCSharpSyntaxFactory
             CompileTypeSyntax.TypeSyntaxFromType(typeof(PineValue), declarationSyntaxContext),
             SyntaxFactory.IdentifierName(nameof(PineValue.EmptyList)));
 
+    /// <summary>
+    /// Builds the member access that refers to PineValue.EmptyBlob in generated code.
+    /// </summary>
     public static ExpressionSyntax PineValueEmptyBlobSyntax(
         DeclarationSyntaxContext declarationSyntaxContext) =>
         SyntaxFactory.MemberAccessExpression(
@@ -500,6 +527,9 @@ public static class PineCSharpSyntaxFactory
             CompileTypeSyntax.TypeSyntaxFromType(typeof(PineValue), declarationSyntaxContext),
             SyntaxFactory.IdentifierName(nameof(PineValue.EmptyBlob)));
 
+    /// <summary>
+    /// Builds a statement that writes a fixed string literal to Console.WriteLine.
+    /// </summary>
     public static StatementSyntax ConsoleWriteLineForLiteralString(
         string logEntry,
         DeclarationSyntaxContext declarationSyntaxContext) =>
@@ -517,6 +547,9 @@ public static class PineCSharpSyntaxFactory
                                 SyntaxKind.StringLiteralExpression,
                                 SyntaxFactory.Literal(logEntry)))))));
 
+    /// <summary>
+    /// Builds a throw expression that creates a ParseExpressionException from the supplied message expression.
+    /// </summary>
     public static ExpressionSyntax ThrowParseExpressionException(
         ExpressionSyntax messageExpr,
         DeclarationSyntaxContext declarationSyntaxContext)
@@ -531,6 +564,9 @@ public static class PineCSharpSyntaxFactory
                             SyntaxFactory.Argument(messageExpr)))));
     }
 
+    /// <summary>
+    /// Builds a call to read a nested Pine value at a path, returning an empty list when the path does not exist.
+    /// </summary>
     public static ExpressionSyntax BuildCSharpExpressionToGetItemFromPathOrEmptyList(
         ExpressionSyntax compositionExpr,
         IReadOnlyList<int> path,
@@ -563,6 +599,9 @@ public static class PineCSharpSyntaxFactory
                         })));
     }
 
+    /// <summary>
+    /// Returns the canonical Pine kernel value expression for true or false.
+    /// </summary>
     public static ExpressionSyntax ExpressionForPineValueBooleanLiteral(
         bool value,
         DeclarationSyntaxContext declarationSyntaxContext) =>
@@ -578,6 +617,9 @@ public static class PineCSharpSyntaxFactory
                 :
                 nameof(PineVM.PineKernelValues.FalseValue)));
 
+    /// <summary>
+    /// Wraps an integer expression in IntegerEncoding.EncodeSignedInteger to produce a generic Pine value.
+    /// </summary>
     public static ExpressionSyntax GenericExpressionFromIntegerExpression(
         ExpressionSyntax intExpr,
         DeclarationSyntaxContext declarationSyntaxContext)
@@ -596,6 +638,9 @@ public static class PineCSharpSyntaxFactory
                         SyntaxFactory.Argument(intExpr))));
     }
 
+    /// <summary>
+    /// Appends name segments to a starting name to produce a qualified Roslyn name.
+    /// </summary>
     public static NameSyntax QualifiedNameSyntaxFromSegments(
         NameSyntax left,
         IReadOnlyList<SimpleNameSyntax> segments)
@@ -616,6 +661,9 @@ public static class PineCSharpSyntaxFactory
         return (QualifiedNameSyntax)name;
     }
 
+    /// <summary>
+    /// Splits a qualified Roslyn name into its simple-name segments in source order.
+    /// </summary>
     public static IReadOnlyList<SimpleNameSyntax> QualifiedNameSegments(NameSyntax name)
     {
         var segments = new List<SimpleNameSyntax>();

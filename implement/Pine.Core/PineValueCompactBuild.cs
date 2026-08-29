@@ -3,18 +3,92 @@ using System.Linq;
 
 namespace Pine.Core;
 
+/// <summary>
+/// Builds a compact table representation for Pine values and reconstructs values from that representation.
+/// </summary>
 public class PineValueCompactBuild
 {
 
-    public record ListEntry(
-        string Key,
-        ListEntryValue Value);
+    /// <summary>
+    /// Represents one named value entry in the compact Pine value table.
+    /// </summary>
+    public record ListEntry
+    {
+        /// <summary>
+        /// Gets the stable key used to reference this entry from other compact entries.
+        /// </summary>
+        public string Key { get; init; }
 
-    public record ListEntryValue(
-        string? BlobBytesBase64,
-        IReadOnlyList<string>? ListItemsKeys);
+        /// <summary>
+        /// Gets the compact payload used to rebuild the Pine value for this entry.
+        /// </summary>
+        public ListEntryValue Value { get; init; }
+
+        /// <summary>
+        /// Constructs a compact table entry from its stable key and its compact payload.
+        /// </summary>
+        public ListEntry(
+            string Key,
+            ListEntryValue Value)
+        {
+            this.Key = Key;
+            this.Value = Value;
+        }
+
+        /// <summary>
+        /// Deconstructs this entry into its stable key and its compact payload.
+        /// </summary>
+        public void Deconstruct(
+            out string Key,
+            out ListEntryValue Value)
+        {
+            Key = this.Key;
+            Value = this.Value;
+        }
+    }
+
+    /// <summary>
+    /// Represents either base64-encoded blob bytes or references to child entries for a list value.
+    /// </summary>
+    public record ListEntryValue
+    {
+        /// <summary>
+        /// Gets the base64-encoded bytes when this entry stores a blob value.
+        /// </summary>
+        public string? BlobBytesBase64 { get; init; }
+
+        /// <summary>
+        /// Gets the referenced entry keys when this entry stores a list value.
+        /// </summary>
+        public IReadOnlyList<string>? ListItemsKeys { get; init; }
+
+        /// <summary>
+        /// Constructs a compact payload from either blob bytes or a list of referenced entry keys.
+        /// </summary>
+        public ListEntryValue(
+            string? BlobBytesBase64,
+            IReadOnlyList<string>? ListItemsKeys)
+        {
+            this.BlobBytesBase64 = BlobBytesBase64;
+            this.ListItemsKeys = ListItemsKeys;
+        }
+
+        /// <summary>
+        /// Deconstructs this payload into its blob bytes and its list of referenced entry keys.
+        /// </summary>
+        public void Deconstruct(
+            out string? BlobBytesBase64,
+            out IReadOnlyList<string>? ListItemsKeys)
+        {
+            BlobBytesBase64 = this.BlobBytesBase64;
+            ListItemsKeys = this.ListItemsKeys;
+        }
+    }
 
 
+    /// <summary>
+    /// Reconstructs Pine values from compact entries whose referenced children appear earlier in the sequence.
+    /// </summary>
     public static IReadOnlyDictionary<string, PineValue>
         BuildDictionaryFromEntries(
         IReadOnlyList<ListEntry> entries)
@@ -56,11 +130,17 @@ public class PineValueCompactBuild
         return mutatedDict;
     }
 
+    /// <summary>
+    /// Collects every blob and list reachable from a root value and returns their compact entries.
+    /// </summary>
     public static (IReadOnlyList<ListEntry> listEntries,
         System.Func<System.ReadOnlyMemory<PineValue>, ListEntryValue> entryListFromItems)
         PrebuildListEntriesAllFromRoot(PineValue root) =>
         PrebuildListEntriesAllFromRoots(new HashSet<PineValue> { root });
 
+    /// <summary>
+    /// Collects every blob and list reachable from the supplied roots and returns their compact entries.
+    /// </summary>
     public static
         (IReadOnlyList<ListEntry> listEntries,
         System.Func<System.ReadOnlyMemory<PineValue>, ListEntryValue> entryValueFromListItems)
@@ -71,6 +151,9 @@ public class PineValueCompactBuild
         return PrebuildListEntries(allBlobs, allLists);
     }
 
+    /// <summary>
+    /// Creates compact entries for the supplied blobs and lists, ordering them so list references only point to known entry keys.
+    /// </summary>
     public static
         (IReadOnlyList<ListEntry> listEntries,
         System.Func<System.ReadOnlyMemory<PineValue>, ListEntryValue> entryValueFromListItems)

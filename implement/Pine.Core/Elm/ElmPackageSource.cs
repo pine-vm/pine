@@ -138,6 +138,9 @@ public class ElmPackageSource
         return UnpackElmPackageFilesDownloadedFromGitHub(result);
     }
 
+    /// <summary>
+    /// Removes the extra top-level repository directory that GitHub archives sometimes wrap around Elm package files.
+    /// </summary>
     public static IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> UnpackElmPackageFilesDownloadedFromGitHub(
         IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> rawDownload)
     {

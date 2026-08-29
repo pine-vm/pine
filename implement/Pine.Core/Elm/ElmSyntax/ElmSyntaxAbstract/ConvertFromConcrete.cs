@@ -210,6 +210,9 @@ public static class ConvertFromConcrete
             recordField.FieldName.Value,
             FromTypeAnnotation(recordField.FieldType.Value));
 
+    /// <summary>
+    /// Converts a parsed function struct into the abstract representation, including its optional signature and implementation body.
+    /// </summary>
     public static FunctionStruct FromFunctionStruct(SyntaxModel.FunctionStruct functionStruct) =>
         new(
             functionStruct.Signature is { } signature

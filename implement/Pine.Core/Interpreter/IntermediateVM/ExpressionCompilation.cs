@@ -326,6 +326,9 @@ public record ExpressionCompilation(
     /// </summary>
     public const int DefaultPathMaxHighInclusive = 30;
 
+    /// <summary>
+    /// Reduces an expression and recursively inlines static parse-and-eval calls until the configured depth and size limits stop further expansion.
+    /// </summary>
     public static Expression InlineStaticInvocationsAndReduceRecursive(
         Expression currentExpression,
         ImmutableStack<Expression> inlinedParents,
@@ -708,6 +711,9 @@ public record ExpressionCompilation(
         }
     }
 
+    /// <summary>
+    /// Starts environment-aware reduction and recursive inlining for a root expression, seeding the set of alternative root forms used during specialization.
+    /// </summary>
     public static Expression ReduceExpressionAndInlineRecursive(
         Expression rootExpression,
         ImmutableHashSet<Expression> rootExprAlternativeForms,
@@ -736,6 +742,9 @@ public record ExpressionCompilation(
             pathMaxHighInclusive: pathMaxHighInclusive,
             disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
 
+    /// <summary>
+    /// Continues environment-aware reduction and recursive inlining while tracking the current inline stack to avoid runaway recursion.
+    /// </summary>
     public static Expression ReduceExpressionAndInlineRecursive(
         Expression currentExpression,
         ImmutableStack<Expression> inlinedParents,
@@ -1040,6 +1049,9 @@ public record ExpressionCompilation(
         return expressionInlinedReduced;
     }
 
+    /// <summary>
+    /// Replaces subexpressions that are fixed by the given environment class with literal values before further reduction.
+    /// </summary>
     public static Expression SubstituteSubexpressionsForEnvironmentConstraint(
         Expression originalExpression,
         PineValueClass envConstraintId)
@@ -1067,6 +1079,9 @@ public record ExpressionCompilation(
                 originalExpression).expr;
     }
 
+    /// <summary>
+    /// Compiles an expression into the stack instructions that the intermediate VM executes for the supplied environment classification.
+    /// </summary>
     public static IReadOnlyList<StackInstruction> InstructionsFromExpression(
         Expression rootExpression,
         ImmutableHashSet<Expression> rootExprAlternativeForms,
@@ -1086,6 +1101,9 @@ public record ExpressionCompilation(
             .Instructions;
     }
 
+    /// <summary>
+    /// Enumerates expression components from deepest to shallowest so dependencies are compiled before the expressions that reference them.
+    /// </summary>
     public static IEnumerable<Expression> ListComponentsOrderedForCompilation(
         Expression rootExpression,
         Func<Expression, bool>? skipDescendants)

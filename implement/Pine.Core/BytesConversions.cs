@@ -80,6 +80,9 @@ public class BytesConversions
         return inflatedStream.ToArray();
     }
 
+    /// <summary>
+    /// Formats a timestamp in a filename-safe form used for generated report names.
+    /// </summary>
     public static string TimeStringViewForReport(DateTimeOffset time) =>
         time.ToString("yyyy-MM-ddTHH-mm-ss");
 

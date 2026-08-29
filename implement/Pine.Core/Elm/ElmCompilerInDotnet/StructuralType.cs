@@ -147,6 +147,9 @@ public abstract record StructuralType
     /// </summary>
     public sealed record TupleType : StructuralType
     {
+        /// <summary>
+        /// Gets the tuple element types in positional order.
+        /// </summary>
         public ImmutableList<StructuralType> ElementTypes { get; }
 
         private readonly int _hashCode;
@@ -212,6 +215,9 @@ public abstract record StructuralType
     /// </summary>
     public sealed record ClosedRecord : StructuralType
     {
+        /// <summary>
+        /// Gets the fixed field types keyed by field name for this closed record.
+        /// </summary>
         public ImmutableDictionary<string, StructuralType> Fields { get; }
 
         private readonly int _hashCode;
@@ -354,6 +360,9 @@ public abstract record StructuralType
     /// </summary>
     public sealed record ChoiceType : StructuralType
     {
+        /// <summary>
+        /// Gets the choice tags and their argument types keyed by tag name.
+        /// </summary>
         public ImmutableDictionary<string, ImmutableList<StructuralType>> Tags { get; }
 
         private readonly int _hashCode;

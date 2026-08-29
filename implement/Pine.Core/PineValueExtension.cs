@@ -94,6 +94,10 @@ public static class PineValueExtension
         return currentNode;
     }
 
+    /// <summary>
+    /// Traverses a Pine list tree along the given index path and returns null when any step cannot be followed.
+    /// Negative indices are clamped to zero, matching the other path-navigation helpers on this type.
+    /// </summary>
     public static PineValue? ValueFromPathOrNull(
         this PineValue environment,
         ReadOnlySpan<int> path)

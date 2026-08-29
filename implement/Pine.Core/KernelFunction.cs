@@ -133,6 +133,10 @@ public static class KernelFunction
             "Unexpected value type: " + value.GetType().FullName);
     }
 
+    /// <summary>
+    /// Flips the leading sign byte between the Pine encodings for positive and negative values while preserving the remaining bytes.
+    /// Non-blob or empty inputs do not represent a negatable value and therefore yield an empty list.
+    /// </summary>
     public static PineValue negate(PineValue value)
     {
         if (value is not PineValue.BlobValue blobValue)
@@ -283,6 +287,10 @@ public static class KernelFunction
             "Unexpected value type: " + value.GetType().FullName);
     }
 
+    /// <summary>
+    /// Concatenates a list of Pine sequences into one sequence of the same kind.
+    /// All non-empty items must be lists or all blobs, otherwise the function yields an empty list.
+    /// </summary>
     public static PineValue concat(PineValue value)
     {
         if (value is not PineValue.ListValue listValue)
@@ -293,6 +301,10 @@ public static class KernelFunction
         return Internal.KernelFunctionSpecialized.concat(listValue.Items.Span);
     }
 
+    /// <summary>
+    /// Returns the first element of a list or the first byte of a blob as a single-byte blob.
+    /// Empty sequences return their corresponding empty Pine value.
+    /// </summary>
     public static PineValue head(PineValue value)
     {
         if (value is PineValue.ListValue listValue)
@@ -319,18 +331,30 @@ public static class KernelFunction
             "Unexpected value type: " + value.GetType().FullName);
     }
 
+    /// <summary>
+    /// Decodes every item in the input list as a signed Pine integer and returns their sum.
+    /// Invalid input yields an empty list instead of an encoded integer.
+    /// </summary>
     public static PineValue int_add(PineValue value) =>
         KernelFunctionExpectingListOfBigIntAndProducingBigInt(
             integers =>
             integers.Aggregate(seed: BigInteger.Zero, func: (aggregate, next) => aggregate + next),
             value);
 
+    /// <summary>
+    /// Decodes every item in the input list as a signed Pine integer and returns their product.
+    /// Invalid input yields an empty list instead of an encoded integer.
+    /// </summary>
     public static PineValue int_mul(PineValue value) =>
         KernelFunctionExpectingListOfBigIntAndProducingBigInt(
             integers =>
             integers.Aggregate(seed: BigInteger.One, func: (aggregate, next) => aggregate * next),
             value);
 
+    /// <summary>
+    /// Reports whether the input list of signed Pine integers is already in nondecreasing order.
+    /// Empty lists count as sorted, while malformed integers cause the function to yield an empty list.
+    /// </summary>
     public static PineValue int_is_sorted_asc(PineValue value)
     {
         if (value is PineValue.ListValue listValue)
@@ -374,6 +398,10 @@ public static class KernelFunction
             "Unexpected value type: " + value.GetType().FullName);
     }
 
+    /// <summary>
+    /// Combines a non-empty list of blobs with pairwise bitwise AND operations.
+    /// The bytes are aligned at the end of each blob, so the result length matches the shortest input blob.
+    /// </summary>
     public static PineValue bit_and(PineValue value)
     {
         if (value is not PineValue.ListValue argumentsList)
@@ -413,6 +441,10 @@ public static class KernelFunction
         return merged;
     }
 
+    /// <summary>
+    /// Combines a non-empty list of blobs with pairwise bitwise OR operations.
+    /// The bytes are aligned at the end of each blob and shorter blobs are zero-padded on the left.
+    /// </summary>
     public static PineValue bit_or(PineValue value)
     {
         if (value is not PineValue.ListValue argumentsList)
@@ -452,6 +484,10 @@ public static class KernelFunction
         return merged;
     }
 
+    /// <summary>
+    /// Combines a non-empty list of blobs with pairwise bitwise XOR operations.
+    /// The bytes are aligned at the end of each blob and shorter blobs are zero-padded on the left.
+    /// </summary>
     public static PineValue bit_xor(PineValue value)
     {
         if (value is not PineValue.ListValue argumentsList)
@@ -491,6 +527,10 @@ public static class KernelFunction
         return merged;
     }
 
+    /// <summary>
+    /// Returns a blob whose bytes are the bitwise complement of the input blob.
+    /// Non-blob input cannot be complemented and therefore yields an empty list.
+    /// </summary>
     public static PineValue bit_not(PineValue value)
     {
         if (value is not PineValue.BlobValue blobValue)
