@@ -4,7 +4,7 @@ using Pine.Core.Json;
 using System.Text.Json;
 using Xunit;
 
-namespace Pine.Core.Tests;
+namespace Pine.Core.Tests.Json;
 
 public class JsonConverterForPineValueTests
 {

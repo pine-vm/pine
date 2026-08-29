@@ -4,7 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Xunit;
 
-namespace Pine.Core.Tests;
+namespace Pine.Core.Tests.Json;
 
 public class JsonConverterForChoiceTypeTests
 {

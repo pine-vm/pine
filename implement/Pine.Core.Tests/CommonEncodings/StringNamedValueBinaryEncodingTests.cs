@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using Xunit;
 
-namespace Pine.Core.Tests;
+namespace Pine.Core.Tests.CommonEncodings;
 
 public class StringNamedValueBinaryEncodingTests
 {
