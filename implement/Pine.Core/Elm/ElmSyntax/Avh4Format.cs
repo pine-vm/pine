@@ -470,6 +470,33 @@ public class Avh4Format
     private static bool SpansMultipleRows(Range range) =>
         range.End.Row > range.Start.Row;
 
+    private static bool HasMultilineOperatorAtPrecedence(
+        ExpressionSyntax.OperatorApplication operatorApplication,
+        int precedence)
+    {
+        if (operatorApplication.Right.Range.Start.Row > operatorApplication.Left.Range.End.Row)
+            return true;
+
+        return
+            HasMultilineOperatorAtPrecedence(operatorApplication.Left.Value, precedence) ||
+            HasMultilineOperatorAtPrecedence(operatorApplication.Right.Value, precedence);
+    }
+
+    private static bool HasMultilineOperatorAtPrecedence(
+        ExpressionSyntax expression,
+        int precedence)
+    {
+        while (expression is ExpressionSyntax.Parenthesized parenthesized)
+        {
+            expression = parenthesized.Expression.Value;
+        }
+
+        return
+            expression is ExpressionSyntax.OperatorApplication operatorApplication &&
+            ElmSyntaxParser.GetInfixOperatorPrecedence(operatorApplication.Operator.Value) == precedence &&
+            HasMultilineOperatorAtPrecedence(operatorApplication, precedence);
+    }
+
     /// <summary>
     /// Returns true for expressions whose canonical avh4 elm-format rendering
     /// always spans multiple lines, regardless of the source <see cref="Range"/>
@@ -4418,7 +4445,9 @@ public class Avh4Format
             Node<ExpressionSyntax> expr,
             FormattingContext context,
             bool forceRightPipeMultiline,
-            bool preserveApplicationParens)
+            bool preserveApplicationParens,
+            int? multilineOperatorPrecedence = null,
+            FormattingContext? multilineOperatorAlignment = null)
         {
             var startLoc = context.CurrentLocation();
 
@@ -4428,7 +4457,9 @@ public class Avh4Format
                     expr.Range,
                     context,
                     forceRightPipeMultiline,
-                    preserveApplicationParens);
+                    preserveApplicationParens,
+                    multilineOperatorPrecedence,
+                    multilineOperatorAlignment);
 
             return
                 FormattingResult<Node<ExpressionSyntax>>.Create(
@@ -4441,7 +4472,9 @@ public class Avh4Format
             Range originalRange,
             FormattingContext context,
             bool forceRightPipeMultiline,
-            bool preserveApplicationParens = false)
+            bool preserveApplicationParens = false,
+            int? multilineOperatorPrecedence = null,
+            FormattingContext? multilineOperatorAlignment = null)
         {
             switch (expr)
             {
@@ -4985,12 +5018,43 @@ public class Avh4Format
 
                 case ExpressionSyntax.OperatorApplication opApp:
                     {
+                        var precedence =
+                            ElmSyntaxParser.GetInfixOperatorPrecedence(opApp.Operator.Value);
+
+                        var inheritsMultilinePrecedenceLevel =
+                            precedence is { } inheritedPrecedence &&
+                            multilineOperatorPrecedence == inheritedPrecedence;
+
+                        var precedenceLevelIsMultiline =
+                            precedence is { } knownPrecedence &&
+                            (inheritsMultilinePrecedenceLevel ||
+                            HasMultilineOperatorAtPrecedence(opApp, knownPrecedence));
+
+                        var precedenceLevelAlignment =
+                            inheritsMultilinePrecedenceLevel
+                            ?
+                            multilineOperatorAlignment
+                            :
+                            precedenceLevelIsMultiline
+                            ?
+                            multilineOperatorAlignment ??
+                            context.AdvanceToNextIndentLevel().SetIndentToCurrentColumn()
+                            :
+                            null;
+
                         var forcePipeChainMultiline =
                             forceRightPipeMultiline ||
                             (opApp.Operator.Value is "|>" &&
                             ExpressionForcesMultilineLayout(opApp.Right.Value));
 
-                        var leftResult = FormatExpression(opApp.Left, context, forcePipeChainMultiline);
+                        var leftResult =
+                            FormatExpression(
+                                opApp.Left,
+                                context,
+                                forcePipeChainMultiline,
+                                preserveApplicationParens: false,
+                                multilineOperatorPrecedence: precedenceLevelIsMultiline ? precedence : null,
+                                multilineOperatorAlignment: precedenceLevelAlignment);
 
                         // Check if the right operand is on a new line in the original
                         var rightOnNewLine = opApp.Right.Range.Start.Row > opApp.Left.Range.End.Row;
@@ -5001,6 +5065,7 @@ public class Avh4Format
                         // For <| operator, also treat as multiline if right operand spans multiple rows
                         // (even if it starts on the same line as <|)
                         var treatAsMultiline =
+                            precedenceLevelIsMultiline ||
                             rightOnNewLine ||
                             (opApp.Operator.Value is "<|" && rightIsMultiline) ||
                             (opApp.Operator.Value is "|>" && forcePipeChainMultiline);
@@ -5038,7 +5103,14 @@ public class Avh4Format
                                     pipeRightContext = pipeRightContext.FormatAndAddCommentAndNextRowToIndent(comment);
                                 }
 
-                                var pipeRightResult = FormatExpression(opApp.Right, pipeRightContext);
+                                var pipeRightResult =
+                                    FormatExpression(
+                                        opApp.Right,
+                                        pipeRightContext,
+                                        forceRightPipeMultiline: false,
+                                        preserveApplicationParens: false,
+                                        multilineOperatorPrecedence: precedenceLevelIsMultiline ? precedence : null,
+                                        multilineOperatorAlignment: null);
 
                                 return
                                     FormattingResult<ExpressionSyntax>.Create(
@@ -5067,7 +5139,11 @@ public class Avh4Format
                             //    (meaning operators are aligned to the left of operands)
                             // 2. IndentSpaces is at a 4-space boundary (was set by parent operator)
                             // 3. The inherited column makes sense (<= current column)
-                            if (originalOpColumn < leftStartColumn &&
+                            if (precedenceLevelAlignment is not null)
+                            {
+                                targetRef = precedenceLevelAlignment;
+                            }
+                            else if (originalOpColumn < leftStartColumn &&
                                 (context.IndentSpaces % Indentation.Full) is 0 &&
                                 context.IndentSpaces >= Indentation.Full &&
                                 inheritedColumn < context.CurrentColumn)
@@ -5150,7 +5226,14 @@ public class Avh4Format
                                 rightContext = rightContext.FormatAndAddCommentAndNextRowToIndent(comment);
                             }
 
-                            var rightResult = FormatExpression(opApp.Right, rightContext);
+                            var rightResult =
+                                FormatExpression(
+                                    opApp.Right,
+                                    rightContext,
+                                    forceRightPipeMultiline: false,
+                                    preserveApplicationParens: false,
+                                    multilineOperatorPrecedence: precedenceLevelIsMultiline ? precedence : null,
+                                    multilineOperatorAlignment: precedenceLevelAlignment);
 
                             return
                                 FormattingResult<ExpressionSyntax>.Create(
@@ -5204,7 +5287,14 @@ public class Avh4Format
                                 contextBeforeRight = contextBeforeRight.Advance(1); // space after comment
                             }
 
-                            var rightResult = FormatExpression(opApp.Right, contextBeforeRight);
+                            var rightResult =
+                                FormatExpression(
+                                    opApp.Right,
+                                    contextBeforeRight,
+                                    forceRightPipeMultiline: false,
+                                    preserveApplicationParens: false,
+                                    multilineOperatorPrecedence: precedenceLevelIsMultiline ? precedence : null,
+                                    multilineOperatorAlignment: precedenceLevelAlignment);
 
                             // Check for trailing comment on the right operand
                             // Only look for comments between right operand end and the end of this expression

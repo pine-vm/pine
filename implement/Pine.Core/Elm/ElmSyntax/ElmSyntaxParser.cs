@@ -22,6 +22,9 @@ namespace Pine.Core.Elm.ElmSyntax;
 /// </summary>
 public class ElmSyntaxParser
 {
+    internal static int? GetInfixOperatorPrecedence(string symbol) =>
+        InfixOperatorInfo.GetInfo(symbol)?.Precedence;
+
     /// <summary>
     /// Parses Elm module text and encodes the resulting syntax tree as an Elm value for downstream processing.
     /// </summary>
