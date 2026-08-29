@@ -167,7 +167,7 @@ public class LambdaLiftingTests
 
 
             map__lifted__lambda1 f x acc =
-                (f x) :: acc
+                f x :: acc
             """";
 
         var result = LiftAndFormat(inputModuleText);
@@ -364,7 +364,7 @@ public class LambdaLiftingTests
                     c =
                         a + b
                 in
-                (compute__lifted__lambda1 ( a, c )) 10
+                compute__lifted__lambda1 ( a, c ) 10
 
 
             compute__lifted__lambda1 ( a, c ) x =
@@ -468,7 +468,7 @@ public class LambdaLiftingTests
                     1
 
                 else
-                    x * (computeFactorial__lifted__factorial_1 (x - 1))
+                    x * computeFactorial__lifted__factorial_1 (x - 1)
             """";
 
         var result = LiftAndFormat(inputModuleText);
@@ -708,7 +708,7 @@ public class LambdaLiftingTests
 
             applyWrapped : Wrap Int -> Wrap Int
             applyWrapped (Wrap g) =
-                Wrap ((applyWrapped__lifted__lambda1 g) 1)
+                Wrap (applyWrapped__lifted__lambda1 g 1)
 
 
             applyWrapped__lifted__lambda1 g x =

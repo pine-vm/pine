@@ -665,11 +665,11 @@ public class Avh4Format
     }
 
     /// <summary>
-    /// Determines if an expression is "simple" enough that it doesn't need parentheses.
-    /// Simple expressions include literals, names, unit, records, lists, and tuples
-    /// (which already have their own delimiters).
+    /// Determines if an expression needs no parentheses in the current context.
     /// </summary>
-    private static bool IsSimpleExpressionThatDoesNotNeedParens(ExpressionSyntax expr) =>
+    private static bool CanRemoveParentheses(
+        ExpressionSyntax expr,
+        bool preserveApplicationParens) =>
         expr is ExpressionSyntax.StringLiteral
             or ExpressionSyntax.CharLiteral
             or ExpressionSyntax.IntegerLiteral
@@ -679,7 +679,9 @@ public class Avh4Format
             or ExpressionSyntax.RecordExpr
             or ExpressionSyntax.ListExpr
             or ExpressionSyntax.TupledExpression
-            or ExpressionSyntax.RecordAccessFunction;
+            or ExpressionSyntax.RecordAccess
+            or ExpressionSyntax.RecordAccessFunction
+        || (!preserveApplicationParens && expr is ExpressionSyntax.Application);
 
     #endregion
 
@@ -4396,15 +4398,37 @@ public class Avh4Format
         private FormattingResult<Node<ExpressionSyntax>> FormatExpression(
             Node<ExpressionSyntax> expr,
             FormattingContext context) =>
-            FormatExpression(expr, context, forceRightPipeMultiline: false);
+            FormatExpression(
+                expr,
+                context,
+                forceRightPipeMultiline: false,
+                preserveApplicationParens: false);
 
         private FormattingResult<Node<ExpressionSyntax>> FormatExpression(
             Node<ExpressionSyntax> expr,
             FormattingContext context,
-            bool forceRightPipeMultiline)
+            bool forceRightPipeMultiline) =>
+            FormatExpression(
+                expr,
+                context,
+                forceRightPipeMultiline,
+                preserveApplicationParens: false);
+
+        private FormattingResult<Node<ExpressionSyntax>> FormatExpression(
+            Node<ExpressionSyntax> expr,
+            FormattingContext context,
+            bool forceRightPipeMultiline,
+            bool preserveApplicationParens)
         {
             var startLoc = context.CurrentLocation();
-            var result = FormatExpressionValue(expr.Value, expr.Range, context, forceRightPipeMultiline);
+
+            var result =
+                FormatExpressionValue(
+                    expr.Value,
+                    expr.Range,
+                    context,
+                    forceRightPipeMultiline,
+                    preserveApplicationParens);
 
             return
                 FormattingResult<Node<ExpressionSyntax>>.Create(
@@ -4416,7 +4440,8 @@ public class Avh4Format
             ExpressionSyntax expr,
             Range originalRange,
             FormattingContext context,
-            bool forceRightPipeMultiline)
+            bool forceRightPipeMultiline,
+            bool preserveApplicationParens = false)
         {
             switch (expr)
             {
@@ -4529,7 +4554,13 @@ public class Avh4Format
                         }
 
                         var afterNegSign = context.Advance(1); // "-"
-                        var negResult = FormatExpression(negation.Expression, afterNegSign);
+
+                        var negResult =
+                            FormatExpression(
+                                negation.Expression,
+                                afterNegSign,
+                                forceRightPipeMultiline: false,
+                                preserveApplicationParens: true);
 
                         return
                             FormattingResult<ExpressionSyntax>.Create(
@@ -4662,7 +4693,13 @@ public class Avh4Format
                                     appCtx = appCtx.Advance(1);
                                 }
 
-                                var argResult = FormatExpression(arg, appCtx);
+                                var argResult =
+                                    FormatExpression(
+                                        arg,
+                                        appCtx,
+                                        forceRightPipeMultiline: false,
+                                        preserveApplicationParens: true);
+
                                 formattedArgs.Add(argResult.FormattedNode);
                                 appCtx = argResult.Context.ReturnToIndent(context);
                             }
@@ -4674,7 +4711,13 @@ public class Avh4Format
                             {
                                 appCtx = appCtx.Advance(1); // space
 
-                                var argResult = FormatExpression(app.Arguments[i], appCtx);
+                                var argResult =
+                                    FormatExpression(
+                                        app.Arguments[i],
+                                        appCtx,
+                                        forceRightPipeMultiline: false,
+                                        preserveApplicationParens: true);
+
                                 formattedArgs.Add(argResult.FormattedNode);
                                 appCtx = argResult.Context;
                             }
@@ -4835,9 +4878,8 @@ public class Avh4Format
                             innerExpr = nestedParen.Expression;
                         }
 
-                        // Also remove parentheses around simple expressions that don't need them:
-                        // literals, names, unit, etc.
-                        if (IsSimpleExpressionThatDoesNotNeedParens(innerExpr.Value))
+                        if (CanRemoveParentheses(innerExpr.Value, preserveApplicationParens) &&
+                            !commentQueries.HasWithinRange(originalRange))
                         {
                             // Skip the parentheses entirely and just format the inner expression
                             return
@@ -5208,7 +5250,13 @@ public class Avh4Format
 
                 case ExpressionSyntax.RecordAccess recordAccess:
                     {
-                        var recordResult = FormatExpression(recordAccess.Record, context);
+                        var recordResult =
+                            FormatExpression(
+                                recordAccess.Record,
+                                context,
+                                forceRightPipeMultiline: false,
+                                preserveApplicationParens: true);
+
                         var afterDot = recordResult.Context.Advance(1); // "."
                         var fieldNameLoc = afterDot.CurrentLocation();
                         var afterFieldAccess = afterDot.Advance(recordAccess.FieldName.Value.Length);

@@ -228,10 +228,9 @@ public class SnapshotTestFormatTests
                     decl =
                         let
                             (ParserFast.Parser attemptFirst) =
-                                (ParserFast.keyword
+                                ParserFast.keyword
                                     "right"
                                     Elm.Parser.Declarations.Right
-                                )
                         in
                         71
 
@@ -329,16 +328,14 @@ public class SnapshotTestFormatTests
                     infixDirectionOnlyTwo_noRange =
                         let
                             (ParserFast.Parser attemptFirst) =
-                                (ParserFast.keyword
+                                ParserFast.keyword
                                     "right"
                                     Elm.Parser.Declarations.Right
-                                )
                 
                             (ParserFast.Parser attemptSecond) =
-                                (ParserFast.keyword
+                                ParserFast.keyword
                                     "left"
                                     Elm.Parser.Declarations.Left
-                                )
                         in
                         ParserFast.Parser
                             (\s ->

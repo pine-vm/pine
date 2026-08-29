@@ -3957,6 +3957,40 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Removes_redundant_parens()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                (alfa.beta)
+
+
+            decl_2 =
+                ([ 13, (17), (delta gamma) ])
+
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                alfa.beta
+
+
+            decl_2 =
+                [ 13, 17, delta gamma ]
+
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
     public void Stable_configurations_units()
     {
         /*

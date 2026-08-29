@@ -120,31 +120,31 @@ public class RenderedSyntaxRoundtripTests
     public void Generated_expression_context_compositions_are_preserved()
     {
         var childExpressions =
-            new[]
+            new (string Expression, string FunctionPositionContext)[]
             {
-                "inner argument",
-                "left + right",
-                "-number",
-                "if condition then yes else no",
-                "\\item -> item",
-                "let nested = argument in nested",
-                "case optional of\n            Just item -> item\n\n            Nothing -> fallback",
-            };
-
-        var parentContexts =
-            new[]
-            {
-                "outer ({0})",
-                "({0}) argument",
-                "[ ({0}) ]",
-                "if condition then ({0}) else fallback",
+                ("inner argument", "{0} argument"),
+                ("left + right", "({0}) argument"),
+                ("-number", "({0}) argument"),
+                ("if condition then yes else no", "({0}) argument"),
+                ("\\item -> item", "({0}) argument"),
+                ("let nested = argument in nested", "({0}) argument"),
+                ("case optional of\n            Just item -> item\n\n            Nothing -> fallback", "({0}) argument"),
             };
 
         foreach (var child in childExpressions)
         {
+            var parentContexts =
+                new[]
+                {
+                    "outer ({0})",
+                    child.FunctionPositionContext,
+                    "[ ({0}) ]",
+                    "if condition then ({0}) else fallback",
+                };
+
             foreach (var parent in parentContexts)
             {
-                var declaration = "value =\n    " + string.Format(parent, child);
+                var declaration = "value =\n    " + string.Format(parent, child.Expression);
 
                 ElmSyntaxAbstractTestHelper.AssertModulePreservedAcrossRenderedSyntax(
                     ModuleText(declaration));
