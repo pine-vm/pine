@@ -331,8 +331,8 @@ public class ElmCompilerTestHelper
         var initialContext =
             new ModuleCompilationContext(
                 allFunctions,
-                CompiledFunctionsCache: [],
-                PineKernelModuleNames: s_pineBuiltinModuleNamesDefault);
+                compiledFunctionsCache: [],
+                pineKernelModuleNames: s_pineBuiltinModuleNamesDefault);
 
         var allFunctionsAbstract =
             allFunctions

@@ -171,27 +171,27 @@ public record ModuleCompilationContext(
     /// Creates a module compilation context from concrete Elm declarations by converting them to abstract declarations first.
     /// </summary>
     public ModuleCompilationContext(
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, (string moduleName, string functionName, ConcreteSyntaxTypes.Declaration.FunctionDeclaration declaration)> AllFunctions,
-        ImmutableDictionary<SyntaxModelTypes.QualifiedNameRef, CompiledFunctionInfo> CompiledFunctionsCache,
-        FrozenSet<string> PineKernelModuleNames,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? FunctionDependencyLayouts = null,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? FunctionTypes = null,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>? ChoiceTagArgumentTypes = null,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? RecordTypeAliasConstructors = null)
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, (string moduleName, string functionName, ConcreteSyntaxTypes.Declaration.FunctionDeclaration declaration)> allFunctions,
+        ImmutableDictionary<SyntaxModelTypes.QualifiedNameRef, CompiledFunctionInfo> compiledFunctionsCache,
+        FrozenSet<string> pineKernelModuleNames,
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? functionDependencyLayouts = null,
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? functionTypes = null,
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>? choiceTagArgumentTypes = null,
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? recordTypeAliasConstructors = null)
         : this(
-            AllFunctions.ToDictionary(
+            allFunctions.ToDictionary(
                 kvp => kvp.Key,
                 kvp =>
                 (
                     kvp.Value.moduleName,
                     kvp.Value.functionName,
                     (SyntaxTypes.Declaration.FunctionDeclaration)ElmSyntaxAbstractConversion.FromDeclaration(kvp.Value.declaration))),
-            CompiledFunctionsCache,
-            PineKernelModuleNames,
-            FunctionDependencyLayouts,
-            FunctionTypes,
-            ChoiceTagArgumentTypes,
-            RecordTypeAliasConstructors)
+            compiledFunctionsCache,
+            pineKernelModuleNames,
+            functionDependencyLayouts,
+            functionTypes,
+            choiceTagArgumentTypes,
+            recordTypeAliasConstructors)
     {
     }
 

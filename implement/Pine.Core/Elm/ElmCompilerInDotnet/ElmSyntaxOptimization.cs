@@ -131,7 +131,7 @@ public partial class ElmSyntaxOptimization
                     if (!graph.ContainsKey(adjacentNode))
                         continue;
 
-                    if (!indices.ContainsKey(adjacentNode))
+                    if (!indices.TryGetValue(adjacentNode, out var value))
                     {
                         indices[adjacentNode] = index;
                         lowlink[adjacentNode] = index;
@@ -140,10 +140,9 @@ public partial class ElmSyntaxOptimization
                         onStack.Add(adjacentNode);
                         work.Push((adjacentNode, graph[adjacentNode].GetEnumerator()));
                     }
-                    else if (onStack.Contains(adjacentNode) &&
-                        indices[adjacentNode] < lowlink[node])
+                    else if (onStack.Contains(adjacentNode) && value < lowlink[node])
                     {
-                        lowlink[node] = indices[adjacentNode];
+                        lowlink[node] = value;
                     }
                 }
                 else

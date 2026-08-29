@@ -8,7 +8,7 @@ using System.Linq;
 
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Stil4mElmSyntax7 = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 using Abstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
@@ -67,7 +67,7 @@ public static class DeclarationDeduplication
     /// different (or absent) signatures still match.
     /// </remarks>
     public static string GetStructuralFingerprint(
-        SyntaxTypes.Declaration.FunctionDeclaration funcDecl,
+        Stil4mElmSyntax7.Declaration.FunctionDeclaration funcDecl,
         ModuleName currentModuleName)
     {
         var stripped = StripSignatureAndDocumentation(funcDecl);
@@ -89,7 +89,7 @@ public static class DeclarationDeduplication
         var single =
             ImmutableDictionary.CreateRange(
                 [
-                new KeyValuePair<DeclQualifiedName, SyntaxTypes.Declaration>(dummyName, qualified)
+                new KeyValuePair<DeclQualifiedName, Stil4mElmSyntax7.Declaration>(dummyName, qualified)
                 ]);
 
         return
@@ -100,7 +100,7 @@ public static class DeclarationDeduplication
 
     /// <summary>
     /// Abstract-model overload of
-    /// <see cref="GetStructuralFingerprint(SyntaxTypes.Declaration.FunctionDeclaration, ModuleName)"/>.
+    /// <see cref="GetStructuralFingerprint(Stil4mElmSyntax7.Declaration.FunctionDeclaration, ModuleName)"/>.
     /// Bridges the abstract function declaration to the concrete
     /// model expected by the fingerprint renderer. The conversion is
     /// deterministic, so fingerprints remain stable across invocations.
@@ -109,14 +109,14 @@ public static class DeclarationDeduplication
         Abstract.Declaration.FunctionDeclaration funcDecl,
         ModuleName currentModuleName) =>
         GetStructuralFingerprint(
-            (SyntaxTypes.Declaration.FunctionDeclaration)
+            (Stil4mElmSyntax7.Declaration.FunctionDeclaration)
             ElmSyntaxAbstractConversion.ToDeclaration(funcDecl),
             currentModuleName);
 
     /// <summary>
     /// Walks the declaration's body and rewrites every
-    /// <see cref="SyntaxTypes.Expression.FunctionOrValue"/> with empty
-    /// <see cref="SyntaxTypes.Expression.FunctionOrValue.ModuleName"/>
+    /// <see cref="Stil4mElmSyntax7.Expression.FunctionOrValue"/> with empty
+    /// <see cref="Stil4mElmSyntax7.Expression.FunctionOrValue.ModuleName"/>
     /// to use <paramref name="currentModuleName"/>. Local bindings
     /// (let-bound names, lambda parameters, case-pattern variables)
     /// are also empty-module FunctionOrValues at the AST level, so we
@@ -124,8 +124,8 @@ public static class DeclarationDeduplication
     /// would mis-qualify locals and the renderer's
     /// shadow-detection would reject the result.
     /// </summary>
-    private static SyntaxTypes.Declaration.FunctionDeclaration QualifyIntraModuleReferences(
-        SyntaxTypes.Declaration.FunctionDeclaration funcDecl,
+    private static Stil4mElmSyntax7.Declaration.FunctionDeclaration QualifyIntraModuleReferences(
+        Stil4mElmSyntax7.Declaration.FunctionDeclaration funcDecl,
         ModuleName currentModuleName)
     {
         var impl = funcDecl.Function.Declaration.Value;
@@ -143,18 +143,18 @@ public static class DeclarationDeduplication
             return funcDecl;
 
         return
-            new SyntaxTypes.Declaration.FunctionDeclaration(
+            new Stil4mElmSyntax7.Declaration.FunctionDeclaration(
                 funcDecl.Function with
                 {
                     Declaration =
-                    new Node<SyntaxTypes.FunctionImplementation>(
+                    new Node<Stil4mElmSyntax7.FunctionImplementation>(
                         funcDecl.Function.Declaration.Range,
                         impl with { Expression = newBody })
                 });
     }
 
-    private static Node<SyntaxTypes.Expression> QualifyExpression(
-        Node<SyntaxTypes.Expression> exprNode,
+    private static Node<Stil4mElmSyntax7.Expression> QualifyExpression(
+        Node<Stil4mElmSyntax7.Expression> exprNode,
         ModuleName currentModuleName,
         ImmutableHashSet<string> locals)
     {
@@ -162,19 +162,19 @@ public static class DeclarationDeduplication
 
         switch (expr)
         {
-            case SyntaxTypes.Expression.FunctionOrValue fov
+            case Stil4mElmSyntax7.Expression.FunctionOrValue fov
             when fov.ModuleName.Count is 0 && !locals.Contains(fov.Name):
 
                 {
                     return
-                        new Node<SyntaxTypes.Expression>(
+                        new Node<Stil4mElmSyntax7.Expression>(
                             exprNode.Range,
-                            new SyntaxTypes.Expression.FunctionOrValue(
+                            new Stil4mElmSyntax7.Expression.FunctionOrValue(
                                 currentModuleName,
                                 fov.Name));
                 }
 
-            case SyntaxTypes.Expression.LetExpression letExpr:
+            case Stil4mElmSyntax7.Expression.LetExpression letExpr:
                 {
                     // Let-bound names enter scope across all let
                     // declarations and the body — collect them first.
@@ -184,11 +184,11 @@ public static class DeclarationDeduplication
                     {
                         switch (letDecl.Value)
                         {
-                            case SyntaxTypes.Expression.LetDeclaration.LetFunction lf:
+                            case Stil4mElmSyntax7.Expression.LetDeclaration.LetFunction lf:
                                 newLocals = newLocals.Add(lf.Function.Declaration.Value.Name.Value);
                                 break;
 
-                            case SyntaxTypes.Expression.LetDeclaration.LetDestructuring ld:
+                            case Stil4mElmSyntax7.Expression.LetDeclaration.LetDestructuring ld:
                                 foreach (var n in CollectVarPatternNames(ld.Pattern))
                                     newLocals = newLocals.Add(n);
 
@@ -197,13 +197,13 @@ public static class DeclarationDeduplication
                     }
 
                     var rewrittenLetDecls =
-                        new List<Node<SyntaxTypes.Expression.LetDeclaration>>();
+                        new List<Node<Stil4mElmSyntax7.Expression.LetDeclaration>>();
 
                     foreach (var letDecl in letExpr.Value.Declarations)
                     {
                         switch (letDecl.Value)
                         {
-                            case SyntaxTypes.Expression.LetDeclaration.LetFunction lf:
+                            case Stil4mElmSyntax7.Expression.LetDeclaration.LetFunction lf:
                                 {
                                     var lfImpl = lf.Function.Declaration.Value;
 
@@ -218,30 +218,30 @@ public static class DeclarationDeduplication
                                             lfLocals);
 
                                     var newLf =
-                                        new SyntaxTypes.Expression.LetDeclaration.LetFunction(
+                                        new Stil4mElmSyntax7.Expression.LetDeclaration.LetFunction(
                                             lf.Function with
                                             {
                                                 Declaration =
-                                                new Node<SyntaxTypes.FunctionImplementation>(
+                                                new Node<Stil4mElmSyntax7.FunctionImplementation>(
                                                     lf.Function.Declaration.Range,
                                                     lfImpl with { Expression = newLfBody })
                                             });
 
                                     rewrittenLetDecls.Add(
-                                        new Node<SyntaxTypes.Expression.LetDeclaration>(letDecl.Range, newLf));
+                                        new Node<Stil4mElmSyntax7.Expression.LetDeclaration>(letDecl.Range, newLf));
 
                                     break;
                                 }
 
-                            case SyntaxTypes.Expression.LetDeclaration.LetDestructuring ld:
+                            case Stil4mElmSyntax7.Expression.LetDeclaration.LetDestructuring ld:
                                 {
                                     var newLdExpr =
                                         QualifyExpression(ld.Expression, currentModuleName, locals);
 
                                     rewrittenLetDecls.Add(
-                                        new Node<SyntaxTypes.Expression.LetDeclaration>(
+                                        new Node<Stil4mElmSyntax7.Expression.LetDeclaration>(
                                             letDecl.Range,
-                                            new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
+                                            new Stil4mElmSyntax7.Expression.LetDeclaration.LetDestructuring(
                                                 ld.Pattern,
                                                 newLdExpr)));
 
@@ -258,15 +258,15 @@ public static class DeclarationDeduplication
                         QualifyExpression(letExpr.Value.Expression, currentModuleName, newLocals);
 
                     return
-                        new Node<SyntaxTypes.Expression>(
+                        new Node<Stil4mElmSyntax7.Expression>(
                             exprNode.Range,
-                            new SyntaxTypes.Expression.LetExpression(
-                                new SyntaxTypes.Expression.LetBlock(
+                            new Stil4mElmSyntax7.Expression.LetExpression(
+                                new Stil4mElmSyntax7.Expression.LetBlock(
                                     rewrittenLetDecls,
                                     rewrittenLetBody)));
                 }
 
-            case SyntaxTypes.Expression.LambdaExpression lambda:
+            case Stil4mElmSyntax7.Expression.LambdaExpression lambda:
                 {
                     var lambdaLocals =
                         locals.Union(
@@ -276,15 +276,15 @@ public static class DeclarationDeduplication
                         QualifyExpression(lambda.Lambda.Expression, currentModuleName, lambdaLocals);
 
                     return
-                        new Node<SyntaxTypes.Expression>(
+                        new Node<Stil4mElmSyntax7.Expression>(
                             exprNode.Range,
-                            new SyntaxTypes.Expression.LambdaExpression(
-                                new SyntaxTypes.LambdaStruct(
+                            new Stil4mElmSyntax7.Expression.LambdaExpression(
+                                new Stil4mElmSyntax7.LambdaStruct(
                                     lambda.Lambda.Arguments,
                                     newLambdaBody)));
                 }
 
-            case SyntaxTypes.Expression.CaseExpression caseExpr:
+            case Stil4mElmSyntax7.Expression.CaseExpression caseExpr:
                 {
                     var newScrutinee =
                         QualifyExpression(caseExpr.CaseBlock.Expression, currentModuleName, locals);
@@ -296,23 +296,23 @@ public static class DeclarationDeduplication
                                 var branchLocals = locals.Union(CollectVarPatternNames(c.Pattern));
 
                                 return
-                                    new SyntaxTypes.Case(
+                                    new Stil4mElmSyntax7.Case(
                                         c.Pattern,
                                         QualifyExpression(c.Expression, currentModuleName, branchLocals));
                             }).ToList();
 
                     return
-                        new Node<SyntaxTypes.Expression>(
+                        new Node<Stil4mElmSyntax7.Expression>(
                             exprNode.Range,
-                            new SyntaxTypes.Expression.CaseExpression(
-                                new SyntaxTypes.CaseBlock(newScrutinee, newCases)));
+                            new Stil4mElmSyntax7.Expression.CaseExpression(
+                                new Stil4mElmSyntax7.CaseBlock(newScrutinee, newCases)));
                 }
 
             default:
                 {
                     var anyChanged = false;
 
-                    Node<SyntaxTypes.Expression> Recurse(Node<SyntaxTypes.Expression> child)
+                    Node<Stil4mElmSyntax7.Expression> Recurse(Node<Stil4mElmSyntax7.Expression> child)
                     {
                         var newChild = QualifyExpression(child, currentModuleName, locals);
 
@@ -327,7 +327,7 @@ public static class DeclarationDeduplication
                     if (!anyChanged)
                         return exprNode;
 
-                    return new Node<SyntaxTypes.Expression>(exprNode.Range, rewritten);
+                    return new Node<Stil4mElmSyntax7.Expression>(exprNode.Range, rewritten);
                 }
         }
     }
@@ -337,33 +337,33 @@ public static class DeclarationDeduplication
     /// Used by <see cref="QualifyIntraModuleReferences"/> to seed local
     /// bindings so they are not mis-qualified as top-level references.
     /// </summary>
-    private static IEnumerable<string> CollectVarPatternNames(Node<SyntaxTypes.Pattern> patternNode)
+    private static IEnumerable<string> CollectVarPatternNames(Node<Stil4mElmSyntax7.Pattern> patternNode)
     {
         return CollectVarPatternNames(patternNode.Value);
     }
 
-    private static IEnumerable<string> CollectVarPatternNames(SyntaxTypes.Pattern pattern)
+    private static IEnumerable<string> CollectVarPatternNames(Stil4mElmSyntax7.Pattern pattern)
     {
         switch (pattern)
         {
-            case SyntaxTypes.Pattern.VarPattern vp:
+            case Stil4mElmSyntax7.Pattern.VarPattern vp:
                 yield return vp.Name;
                 break;
 
-            case SyntaxTypes.Pattern.TuplePattern tp:
+            case Stil4mElmSyntax7.Pattern.TuplePattern tp:
                 foreach (var el in tp.Elements)
                     foreach (var n in CollectVarPatternNames(el))
                         yield return n;
 
                 break;
 
-            case SyntaxTypes.Pattern.RecordPattern rp:
+            case Stil4mElmSyntax7.Pattern.RecordPattern rp:
                 foreach (var f in rp.Fields)
                     yield return f.Value;
 
                 break;
 
-            case SyntaxTypes.Pattern.UnConsPattern uc:
+            case Stil4mElmSyntax7.Pattern.UnConsPattern uc:
                 foreach (var n in CollectVarPatternNames(uc.Head))
                     yield return n;
 
@@ -372,28 +372,28 @@ public static class DeclarationDeduplication
 
                 break;
 
-            case SyntaxTypes.Pattern.ListPattern lp:
+            case Stil4mElmSyntax7.Pattern.ListPattern lp:
                 foreach (var el in lp.Elements)
                     foreach (var n in CollectVarPatternNames(el))
                         yield return n;
 
                 break;
 
-            case SyntaxTypes.Pattern.NamedPattern np:
+            case Stil4mElmSyntax7.Pattern.NamedPattern np:
                 foreach (var arg in np.Arguments)
                     foreach (var n in CollectVarPatternNames(arg))
                         yield return n;
 
                 break;
 
-            case SyntaxTypes.Pattern.AsPattern ap:
+            case Stil4mElmSyntax7.Pattern.AsPattern ap:
                 foreach (var n in CollectVarPatternNames(ap.Pattern))
                     yield return n;
 
                 yield return ap.Name.Value;
                 break;
 
-            case SyntaxTypes.Pattern.ParenthesizedPattern pp:
+            case Stil4mElmSyntax7.Pattern.ParenthesizedPattern pp:
                 foreach (var n in CollectVarPatternNames(pp.Pattern))
                     yield return n;
 
@@ -401,8 +401,8 @@ public static class DeclarationDeduplication
         }
     }
 
-    private static SyntaxTypes.Declaration.FunctionDeclaration StripSignatureAndDocumentation(
-        SyntaxTypes.Declaration.FunctionDeclaration funcDecl) =>
+    private static Stil4mElmSyntax7.Declaration.FunctionDeclaration StripSignatureAndDocumentation(
+        Stil4mElmSyntax7.Declaration.FunctionDeclaration funcDecl) =>
         new(
             funcDecl.Function with
             {
@@ -411,20 +411,20 @@ public static class DeclarationDeduplication
             });
 
     /// <summary>
-    /// Bottom-up rewrite of every <see cref="SyntaxTypes.Expression.FunctionOrValue"/>
+    /// Bottom-up rewrite of every <see cref="Stil4mElmSyntax7.Expression.FunctionOrValue"/>
     /// in the tree. Returns the original node unchanged when no
     /// rename fires anywhere, so callers can short-circuit via
     /// reference equality.
     /// </summary>
-    private static Node<SyntaxTypes.Expression> RewriteReferencesInExpression(
-        Node<SyntaxTypes.Expression> exprNode,
+    private static Node<Stil4mElmSyntax7.Expression> RewriteReferencesInExpression(
+        Node<Stil4mElmSyntax7.Expression> exprNode,
         IReadOnlyDictionary<DeclQualifiedName, DeclQualifiedName> renameMap,
         ModuleName currentModuleName)
     {
         var expr = exprNode.Value;
 
         // Rewrite the FunctionOrValue leaf in place.
-        if (expr is SyntaxTypes.Expression.FunctionOrValue fov)
+        if (expr is Stil4mElmSyntax7.Expression.FunctionOrValue fov)
         {
             var rewrittenFov =
                 TryRewriteFunctionOrValue(fov, renameMap, currentModuleName);
@@ -432,7 +432,7 @@ public static class DeclarationDeduplication
             if (rewrittenFov is null)
                 return exprNode;
 
-            return new Node<SyntaxTypes.Expression>(exprNode.Range, rewrittenFov);
+            return new Node<Stil4mElmSyntax7.Expression>(exprNode.Range, rewrittenFov);
         }
 
         // For every composite expression, recurse into children. Track
@@ -440,7 +440,7 @@ public static class DeclarationDeduplication
         // when needed.
         var anyChildChanged = false;
 
-        Node<SyntaxTypes.Expression> Recurse(Node<SyntaxTypes.Expression> child)
+        Node<Stil4mElmSyntax7.Expression> Recurse(Node<Stil4mElmSyntax7.Expression> child)
         {
             var newChild = RewriteReferencesInExpression(child, renameMap, currentModuleName);
 
@@ -455,16 +455,16 @@ public static class DeclarationDeduplication
         if (!anyChildChanged)
             return exprNode;
 
-        return new Node<SyntaxTypes.Expression>(exprNode.Range, rewrittenExpr);
+        return new Node<Stil4mElmSyntax7.Expression>(exprNode.Range, rewrittenExpr);
     }
 
     /// <summary>
-    /// Attempts to rewrite a single <see cref="SyntaxTypes.Expression.FunctionOrValue"/>
+    /// Attempts to rewrite a single <see cref="Stil4mElmSyntax7.Expression.FunctionOrValue"/>
     /// using the provided rename map. Returns null when the reference
     /// does not resolve to any dedup'd declaration.
     /// </summary>
-    private static SyntaxTypes.Expression.FunctionOrValue? TryRewriteFunctionOrValue(
-        SyntaxTypes.Expression.FunctionOrValue fov,
+    private static Stil4mElmSyntax7.Expression.FunctionOrValue? TryRewriteFunctionOrValue(
+        Stil4mElmSyntax7.Expression.FunctionOrValue fov,
         IReadOnlyDictionary<DeclQualifiedName, DeclQualifiedName> renameMap,
         ModuleName currentModuleName)
     {
@@ -488,7 +488,7 @@ public static class DeclarationDeduplication
         // when the module path is explicit and there is no ambiguity
         // about the resolution.
         return
-            new SyntaxTypes.Expression.FunctionOrValue(
+            new Stil4mElmSyntax7.Expression.FunctionOrValue(
                 ModuleName: target.Namespaces,
                 Name: target.DeclName);
     }

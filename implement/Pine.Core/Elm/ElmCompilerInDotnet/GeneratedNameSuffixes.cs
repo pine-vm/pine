@@ -21,8 +21,7 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 ///     Searchability: <c>grep</c>-ing for one symbol surfaces the
 ///     full catalogue of synthetic naming conventions used across
 ///     <see cref="LambdaLifting"/>, <see cref="WrapperReturnStripping"/>,
-///     <see cref="InliningFunctionSpecialization"/>, and
-///     <see cref="DeclarationDeduplication"/>.
+///     and <see cref="DeclarationDeduplication"/>.
 ///   </item>
 /// </list>
 ///
@@ -51,15 +50,6 @@ internal static class GeneratedNameSuffixes
     /// constructor is re-applied at every fully-saturated call site).
     /// </summary>
     public const string Stripped = "__stripped";
-
-    /// <summary>
-    /// Infix used by
-    /// <see cref="InliningFunctionSpecialization.NameSpecializations"/>
-    /// when emitting per-call-site specialised siblings. The full
-    /// pattern is <c>&lt;originalDeclName&gt;__specialized__N</c> where
-    /// <c>N</c> is a 1-based counter.
-    /// </summary>
-    public const string Specialized = "__specialized__";
 
     /// <summary>
     /// Sub-suffix used by <see cref="LambdaLifting"/> following the

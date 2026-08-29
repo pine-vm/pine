@@ -20,11 +20,11 @@ public class ModuleCompilationContextTests
 
         var context =
             new ModuleCompilationContext(
-                AllFunctions:
+                allFunctions:
                 new Dictionary<QualifiedNameRef, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)>(),
-                CompiledFunctionsCache: [],
-                PineKernelModuleNames: FrozenSet.Create<string>([]),
-                FunctionTypes: new Dictionary<QualifiedNameRef, FunctionTypeInfo>
+                compiledFunctionsCache: [],
+                pineKernelModuleNames: FrozenSet.Create<string>([]),
+                functionTypes: new Dictionary<QualifiedNameRef, FunctionTypeInfo>
                 {
                     [qualifiedFunctionName] = new(returnType, parameterTypes)
                 });
@@ -48,15 +48,15 @@ public class ModuleCompilationContextTests
 
         var context =
             new ModuleCompilationContext(
-                AllFunctions:
+                allFunctions:
                 new Dictionary<QualifiedNameRef, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)>(),
-                CompiledFunctionsCache: [],
-                PineKernelModuleNames: FrozenSet.Create<string>([]),
-                ChoiceTagArgumentTypes: new Dictionary<QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>
+                compiledFunctionsCache: [],
+                pineKernelModuleNames: FrozenSet.Create<string>([]),
+                choiceTagArgumentTypes: new Dictionary<QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>
                 {
                     [constructorName] = [TypeInference.InferredType.Int(), TypeInference.InferredType.Bool()]
                 },
-                RecordTypeAliasConstructors: new Dictionary<QualifiedNameRef, IReadOnlyList<string>>
+                recordTypeAliasConstructors: new Dictionary<QualifiedNameRef, IReadOnlyList<string>>
                 {
                     [recordConstructorName] = ["fieldA", "fieldB"]
                 });
