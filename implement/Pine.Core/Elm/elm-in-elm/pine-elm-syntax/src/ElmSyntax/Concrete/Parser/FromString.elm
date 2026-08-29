@@ -103,7 +103,7 @@ finishParseExpressionAtEnd :
     -> ParserState
     -> Result String Expression.Expression
 finishParseExpressionAtEnd expressionNode stateAfterTrivia =
-    case String.slice stateAfterTrivia.offset (stateAfterTrivia.offset + 1) stateAfterTrivia.source of
+    case String.left 1 (String.dropLeft stateAfterTrivia.offset stateAfterTrivia.source) of
         "" ->
             case expressionNode of
                 Node _ expression ->
@@ -206,7 +206,7 @@ parseDeclarationOrExpression input =
         stateAtFirst =
             skipTrivia initialState
     in
-    case String.slice stateAtFirst.offset (stateAtFirst.offset + 1) input of
+    case String.left 1 (String.dropLeft stateAtFirst.offset input) of
         first ->
             if isIdentifierStart first && startsWithDeclarationKeyword input stateAtFirst.offset then
                 case parseDeclaration stateAtFirst of
@@ -218,7 +218,7 @@ parseDeclarationOrExpression input =
                             stateAfterTrivia =
                                 skipTrivia afterDeclaration
                         in
-                        case String.slice stateAfterTrivia.offset (stateAfterTrivia.offset + 1) input of
+                        case String.left 1 (String.dropLeft stateAfterTrivia.offset input) of
                             "" ->
                                 Ok (DeclarationOrExpression.Declaration declaration)
 
@@ -239,7 +239,7 @@ parseDeclarationOrExpression input =
                             stateAfterTrivia =
                                 skipTrivia afterDeclaration
                         in
-                        case String.slice stateAfterTrivia.offset (stateAfterTrivia.offset + 1) input of
+                        case String.left 1 (String.dropLeft stateAfterTrivia.offset input) of
                             "" ->
                                 Ok (DeclarationOrExpression.Declaration declaration)
 
@@ -261,7 +261,7 @@ parseAsExpressionFallback state =
                 stateAfterTrivia =
                     skipTrivia stateAfterExpression
             in
-            case String.slice stateAfterTrivia.offset (stateAfterTrivia.offset + 1) stateAfterTrivia.source of
+            case String.left 1 (String.dropLeft stateAfterTrivia.offset stateAfterTrivia.source) of
                 "" ->
                     Ok (DeclarationOrExpression.Expression expression)
 
@@ -278,7 +278,7 @@ declaration, never an expression.
 -}
 startsWithDeclarationKeyword : String -> Int -> Bool
 startsWithDeclarationKeyword source offset =
-    case String.slice offset (skipToIdentifierEnd source (offset + 1)) source of
+    case String.left (skipToIdentifierEnd source (offset + 1) - offset) (String.dropLeft offset source) of
         "type" ->
             True
 
@@ -298,7 +298,7 @@ annotation colon or by an equals sign outside of any bracket.
 -}
 startsFunctionDeclaration : String -> Int -> Bool
 startsFunctionDeclaration source offset =
-    case String.slice offset (offset + 1) source of
+    case String.left 1 (String.dropLeft offset source) of
         first ->
             if not (isIdentifierStart first) then
                 False
@@ -308,7 +308,7 @@ startsFunctionDeclaration source offset =
                     nameEnd =
                         skipToIdentifierEnd source (offset + 1)
                 in
-                case String.slice offset nameEnd source of
+                case String.left (nameEnd - offset) (String.dropLeft offset source) of
                     "let" ->
                         False
 
@@ -323,9 +323,9 @@ startsFunctionDeclaration source offset =
                             afterName =
                                 skipTriviaOffset source nameEnd
                         in
-                        case String.slice afterName (afterName + 1) source of
+                        case String.left 1 (String.dropLeft afterName source) of
                             ":" ->
-                                if isOperatorChar (String.slice (afterName + 1) (afterName + 2) source) then
+                                if isOperatorChar (String.left 1 (String.dropLeft (afterName + 1) source)) then
                                     containsTopLevelEqual source nameEnd 0
 
                                 else
@@ -341,74 +341,70 @@ count as an equals sign).
 -}
 containsTopLevelEqual : String -> Int -> Int -> Bool
 containsTopLevelEqual source offset delimiterDepth =
-    if offset >= 0 then
-        let
-            nextThreeChars =
-                String.slice offset (offset + 3) source
-        in
-        case nextThreeChars of
-            "\"\"\"" ->
-                containsTopLevelEqual source (literalEndOffset TripleQuoteTermination source (offset + 3)) delimiterDepth
+    let
+        nextThreeChars =
+            String.left 3 (String.dropLeft offset source)
+    in
+    case nextThreeChars of
+        "\"\"\"" ->
+            containsTopLevelEqual source (literalEndOffset TripleQuoteTermination source (offset + 3)) delimiterDepth
 
-            _ ->
-                case String.slice 0 2 nextThreeChars of
-                    "{-" ->
-                        containsTopLevelEqual source (blockCommentEndOffset source (offset + 2) 1) delimiterDepth
+        _ ->
+            case String.left 2 nextThreeChars of
+                "{-" ->
+                    containsTopLevelEqual source (blockCommentEndOffset source (offset + 2) 1) delimiterDepth
 
-                    "--" ->
-                        containsTopLevelEqual source (lineCommentEnd source (offset + 2)) delimiterDepth
+                "--" ->
+                    containsTopLevelEqual source (lineCommentEnd source (offset + 2)) delimiterDepth
 
-                    nextTwoChars ->
-                        case String.slice 0 1 nextTwoChars of
-                            "" ->
-                                False
+                nextTwoChars ->
+                    case String.left 1 nextTwoChars of
+                        "" ->
+                            False
 
-                            "(" ->
-                                containsTopLevelEqual source (offset + 1) (delimiterDepth + 1)
+                        "(" ->
+                            containsTopLevelEqual source (offset + 1) (delimiterDepth + 1)
 
-                            "[" ->
-                                containsTopLevelEqual source (offset + 1) (delimiterDepth + 1)
+                        "[" ->
+                            containsTopLevelEqual source (offset + 1) (delimiterDepth + 1)
 
-                            ")" ->
-                                containsTopLevelEqual source (offset + 1) (max 0 (delimiterDepth - 1))
+                        ")" ->
+                            containsTopLevelEqual source (offset + 1) (max 0 (delimiterDepth - 1))
 
-                            "]" ->
-                                containsTopLevelEqual source (offset + 1) (max 0 (delimiterDepth - 1))
+                        "]" ->
+                            containsTopLevelEqual source (offset + 1) (max 0 (delimiterDepth - 1))
 
-                            "}" ->
-                                containsTopLevelEqual source (offset + 1) (max 0 (delimiterDepth - 1))
+                        "}" ->
+                            containsTopLevelEqual source (offset + 1) (max 0 (delimiterDepth - 1))
 
-                            "{" ->
-                                containsTopLevelEqual source (offset + 1) (delimiterDepth + 1)
+                        "{" ->
+                            containsTopLevelEqual source (offset + 1) (delimiterDepth + 1)
 
-                            "-" ->
+                        "-" ->
+                            containsTopLevelEqual source (offset + 1) delimiterDepth
+
+                        "=" ->
+                            if isOperatorChar (String.left 1 (String.dropLeft 1 nextTwoChars)) then
+                                containsTopLevelEqual source (offset + 2) delimiterDepth
+
+                            else
+                                delimiterDepth == 0
+
+                        "\"" ->
+                            containsTopLevelEqual source (literalEndOffset DoubleQuoteTermination source (offset + 1)) delimiterDepth
+
+                        "'" ->
+                            containsTopLevelEqual source (literalEndOffset SingleQuoteTermination source (offset + 1)) delimiterDepth
+
+                        first ->
+                            if isIdentifierStart first then
+                                containsTopLevelEqual source (skipToIdentifierEnd source (offset + 1)) delimiterDepth
+
+                            else if isDigit first then
+                                containsTopLevelEqual source (numberEnd source first offset) delimiterDepth
+
+                            else
                                 containsTopLevelEqual source (offset + 1) delimiterDepth
-
-                            "=" ->
-                                if isOperatorChar (String.slice 1 2 nextTwoChars) then
-                                    containsTopLevelEqual source (offset + 2) delimiterDepth
-
-                                else
-                                    delimiterDepth == 0
-
-                            "\"" ->
-                                containsTopLevelEqual source (literalEndOffset DoubleQuoteTermination source (offset + 1)) delimiterDepth
-
-                            "'" ->
-                                containsTopLevelEqual source (literalEndOffset SingleQuoteTermination source (offset + 1)) delimiterDepth
-
-                            first ->
-                                if isIdentifierStart first then
-                                    containsTopLevelEqual source (skipToIdentifierEnd source (offset + 1)) delimiterDepth
-
-                                else if isDigit first then
-                                    containsTopLevelEqual source (numberEnd source first offset) delimiterDepth
-
-                                else
-                                    containsTopLevelEqual source (offset + 1) delimiterDepth
-
-    else
-        False
 
 
 
@@ -422,10 +418,10 @@ parseModuleDefinition state =
 
 parseModuleDefinitionAt : ParserState -> Result String ( Node Module.Module, ParserState )
 parseModuleDefinitionAt stateAtFirst =
-    case String.slice stateAtFirst.offset (stateAtFirst.offset + 1) stateAtFirst.source of
+    case String.left 1 (String.dropLeft stateAtFirst.offset stateAtFirst.source) of
         first ->
             if isIdentifierStart first then
-                case String.slice stateAtFirst.offset (skipToIdentifierEnd stateAtFirst.source (stateAtFirst.offset + 1)) stateAtFirst.source of
+                case String.left (skipToIdentifierEnd stateAtFirst.source (stateAtFirst.offset + 1) - stateAtFirst.offset) (String.dropLeft stateAtFirst.offset stateAtFirst.source) of
                     "effect" ->
                         parseEffectModule stateAtFirst
 
@@ -630,11 +626,11 @@ parseEffectWhereAt :
     -> ParserState
     -> Result String ( Maybe (Node String), Maybe (Node String), ParserState )
 parseEffectWhereAt state stateAtWhere =
-    case String.slice stateAtWhere.offset (stateAtWhere.offset + 1) stateAtWhere.source of
+    case String.left 1 (String.dropLeft stateAtWhere.offset stateAtWhere.source) of
         first ->
             if
                 isIdentifierStart first
-                    && (String.slice stateAtWhere.offset (skipToIdentifierEnd stateAtWhere.source (stateAtWhere.offset + 1)) stateAtWhere.source
+                    && (String.left (skipToIdentifierEnd stateAtWhere.source (stateAtWhere.offset + 1) - stateAtWhere.offset) (String.dropLeft stateAtWhere.offset stateAtWhere.source)
                             == "where"
                        )
             then
@@ -647,7 +643,7 @@ parseEffectWhereAt state stateAtWhere =
                             stateAtOpenBrace =
                                 skipTrivia afterWhere
                         in
-                        case String.slice stateAtOpenBrace.offset (stateAtOpenBrace.offset + 1) stateAtOpenBrace.source of
+                        case String.left 1 (String.dropLeft stateAtOpenBrace.offset stateAtOpenBrace.source) of
                             "{" ->
                                 parseEffectWhereFields
                                     Nothing
@@ -681,7 +677,7 @@ parseEffectWhereFieldsAt :
     -> ParserState
     -> Result String ( Maybe (Node String), Maybe (Node String), ParserState )
 parseEffectWhereFieldsAt command subscription stateAtField =
-    case String.slice stateAtField.offset (stateAtField.offset + 1) stateAtField.source of
+    case String.left 1 (String.dropLeft stateAtField.offset stateAtField.source) of
         "}" ->
             Ok
                 ( command
@@ -701,7 +697,7 @@ parseEffectWhereFieldsAt command subscription stateAtField =
                         skipToIdentifierEnd stateAtField.source (stateAtField.offset + 1)
 
                     fieldName =
-                        String.slice stateAtField.offset fieldNameEnd stateAtField.source
+                        String.left (fieldNameEnd - stateAtField.offset) (String.dropLeft stateAtField.offset stateAtField.source)
 
                     stateAtEquals =
                         skipTrivia
@@ -712,7 +708,7 @@ parseEffectWhereFieldsAt command subscription stateAtField =
                             , commentsRev = stateAtField.commentsRev
                             }
                 in
-                case String.slice stateAtEquals.offset (stateAtEquals.offset + 1) stateAtEquals.source of
+                case String.left 1 (String.dropLeft stateAtEquals.offset stateAtEquals.source) of
                     "=" ->
                         case
                             parseModuleName
@@ -756,7 +752,7 @@ parseEffectWhereFieldsAt command subscription stateAtField =
                                     stateAtSeparator =
                                         skipTrivia afterValue
                                 in
-                                case String.slice stateAtSeparator.offset (stateAtSeparator.offset + 1) stateAtSeparator.source of
+                                case String.left 1 (String.dropLeft stateAtSeparator.offset stateAtSeparator.source) of
                                     "," ->
                                         parseEffectWhereFields
                                             nextCommand
@@ -800,11 +796,11 @@ parseImportsAt :
     -> ParserState
     -> Result String ( List (Node Import.Import), ParserState )
 parseImportsAt importsRev state stateAtImport =
-    case String.slice stateAtImport.offset (stateAtImport.offset + 1) stateAtImport.source of
+    case String.left 1 (String.dropLeft stateAtImport.offset stateAtImport.source) of
         first ->
             if
                 isIdentifierStart first
-                    && (String.slice stateAtImport.offset (skipToIdentifierEnd stateAtImport.source (stateAtImport.offset + 1)) stateAtImport.source
+                    && (String.left (skipToIdentifierEnd stateAtImport.source (stateAtImport.offset + 1) - stateAtImport.offset) (String.dropLeft stateAtImport.offset stateAtImport.source)
                             == "import"
                        )
             then
@@ -936,11 +932,11 @@ parseImportAliasAt :
     -> ParserState
     -> Result String ( Maybe ( Location, Node Module.ModuleName ), ParserState )
 parseImportAliasAt state stateAtAs =
-    case String.slice stateAtAs.offset (stateAtAs.offset + 1) stateAtAs.source of
+    case String.left 1 (String.dropLeft stateAtAs.offset stateAtAs.source) of
         first ->
             if
                 isIdentifierStart first
-                    && (String.slice stateAtAs.offset (skipToIdentifierEnd stateAtAs.source (stateAtAs.offset + 1)) stateAtAs.source
+                    && (String.left (skipToIdentifierEnd stateAtAs.source (stateAtAs.offset + 1) - stateAtAs.offset) (String.dropLeft stateAtAs.offset stateAtAs.source)
                             == "as"
                        )
             then
@@ -959,7 +955,7 @@ parseImportAliasAt state stateAtAs =
                     stateAtAlias =
                         skipTrivia afterAs
                 in
-                case String.slice stateAtAlias.offset (stateAtAlias.offset + 1) stateAtAlias.source of
+                case String.left 1 (String.dropLeft stateAtAlias.offset stateAtAlias.source) of
                     aliasFirst ->
                         if isIdentifierStart aliasFirst then
                             let
@@ -976,7 +972,7 @@ parseImportAliasAt state stateAtAs =
                                         { start = { row = stateAtAlias.row, column = stateAtAlias.column }
                                         , end = { row = stateAtAlias.row, column = stateAtAlias.column + aliasLength }
                                         }
-                                        [ String.slice stateAtAlias.offset aliasEnd stateAtAlias.source ]
+                                        [ String.left (aliasEnd - stateAtAlias.offset) (String.dropLeft stateAtAlias.offset stateAtAlias.source) ]
                                     )
                                 , { source = stateAtAlias.source
                                   , offset = aliasEnd
@@ -1009,11 +1005,11 @@ parseOptionalExposingAt :
     -> ParserState
     -> Result String ( Maybe ( Location, Node Exposing.Exposing ), ParserState )
 parseOptionalExposingAt state stateAtExposing =
-    case String.slice stateAtExposing.offset (stateAtExposing.offset + 1) stateAtExposing.source of
+    case String.left 1 (String.dropLeft stateAtExposing.offset stateAtExposing.source) of
         first ->
             if
                 isIdentifierStart first
-                    && (String.slice stateAtExposing.offset (skipToIdentifierEnd stateAtExposing.source (stateAtExposing.offset + 1)) stateAtExposing.source
+                    && (String.left (skipToIdentifierEnd stateAtExposing.source (stateAtExposing.offset + 1) - stateAtExposing.offset) (String.dropLeft stateAtExposing.offset stateAtExposing.source)
                             == "exposing"
                        )
             then
@@ -1041,7 +1037,7 @@ parseModuleName state =
 
 parseModuleNameAt : ParserState -> Result String ( Node Module.ModuleName, ParserState )
 parseModuleNameAt stateAtName =
-    case String.slice stateAtName.offset (stateAtName.offset + 1) stateAtName.source of
+    case String.left 1 (String.dropLeft stateAtName.offset stateAtName.source) of
         first ->
             if isIdentifierStart first then
                 parseModuleNameFromEnd
@@ -1061,7 +1057,7 @@ parseModuleNameFromEnd stateAtName nameEnd =
         { row = stateAtName.row, column = stateAtName.column }
         stateAtName.row
         (stateAtName.column + (nameEnd - stateAtName.offset))
-        [ String.slice stateAtName.offset nameEnd stateAtName.source ]
+        [ String.left (nameEnd - stateAtName.offset) (String.dropLeft stateAtName.offset stateAtName.source) ]
         { source = stateAtName.source
         , offset = nameEnd
         , row = stateAtName.row
@@ -1118,7 +1114,7 @@ parseModuleNamePartAt :
     -> ParserState
     -> Result String ( Node Module.ModuleName, ParserState )
 parseModuleNamePartAt start partsRev stateAtPart =
-    case String.slice stateAtPart.offset (stateAtPart.offset + 1) stateAtPart.source of
+    case String.left 1 (String.dropLeft stateAtPart.offset stateAtPart.source) of
         first ->
             if isIdentifierStart first then
                 parseModuleNamePartFromEnd
@@ -1142,7 +1138,7 @@ parseModuleNamePartFromEnd start partsRev stateAtPart partEnd =
         start
         stateAtPart.row
         (stateAtPart.column + (partEnd - stateAtPart.offset))
-        (String.slice stateAtPart.offset partEnd stateAtPart.source :: partsRev)
+        (String.left (partEnd - stateAtPart.offset) (String.dropLeft stateAtPart.offset stateAtPart.source) :: partsRev)
         { source = stateAtPart.source
         , offset = partEnd
         , row = stateAtPart.row
@@ -1169,7 +1165,7 @@ parseExposingOnKeyword keywordResult =
                 stateAtOpenParen =
                     skipTrivia afterExposing
             in
-            case String.slice stateAtOpenParen.offset (stateAtOpenParen.offset + 1) stateAtOpenParen.source of
+            case String.left 1 (String.dropLeft stateAtOpenParen.offset stateAtOpenParen.source) of
                 "(" ->
                     let
                         afterOpenParen =
@@ -1197,7 +1193,7 @@ parseExposingListAt :
     -> ParserState
     -> Result String ( Node Exposing.Exposing, ParserState )
 parseExposingListAt exposingTokenLocation openParenLocation afterOpenParen stateAtFirst =
-    case String.slice stateAtFirst.offset (stateAtFirst.offset + 2) stateAtFirst.source of
+    case String.left 2 (String.dropLeft stateAtFirst.offset stateAtFirst.source) of
         ".." ->
             let
                 stateAtCloseParen =
@@ -1209,7 +1205,7 @@ parseExposingListAt exposingTokenLocation openParenLocation afterOpenParen state
                         , commentsRev = stateAtFirst.commentsRev
                         }
             in
-            case String.slice stateAtCloseParen.offset (stateAtCloseParen.offset + 1) stateAtCloseParen.source of
+            case String.left 1 (String.dropLeft stateAtCloseParen.offset stateAtCloseParen.source) of
                 ")" ->
                     let
                         remaining =
@@ -1264,7 +1260,7 @@ parseExplicitExposingAt :
     -> ParserState
     -> Result String ( Node Exposing.Exposing, ParserState )
 parseExplicitExposingAt exposingTokenLocation openParenLocation first restRev stateAtToken =
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         ")" ->
             let
                 nodes =
@@ -1372,7 +1368,7 @@ parseTopLevelExpose state =
 
 parseTopLevelExposeAt : ParserState -> Result String ( Node Exposing.TopLevelExpose, ParserState )
 parseTopLevelExposeAt stateAtToken =
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "(" ->
             let
                 stateAtOperator =
@@ -1401,14 +1397,14 @@ parseTopLevelExposeAt stateAtToken =
                             , commentsRev = stateAtOperator.commentsRev
                             }
                 in
-                if String.slice stateAtClose.offset (stateAtClose.offset + 1) stateAtClose.source == ")" then
+                if String.left 1 (String.dropLeft stateAtClose.offset stateAtClose.source) == ")" then
                     Ok
                         ( Node
                             { start = { row = stateAtToken.row, column = stateAtToken.column }
                             , end = { row = stateAtClose.row, column = stateAtClose.column + 1 }
                             }
                             (Exposing.InfixExpose
-                                (String.slice stateAtOperator.offset (stateAtOperator.offset + operatorLength) stateAtOperator.source)
+                                (String.left operatorLength (String.dropLeft stateAtOperator.offset stateAtOperator.source))
                             )
                         , { source = stateAtClose.source
                           , offset = stateAtClose.offset + 1
@@ -1431,7 +1427,7 @@ parseTopLevelExposeAt stateAtToken =
                         nameEnd - stateAtToken.offset
 
                     name =
-                        String.slice stateAtToken.offset nameEnd stateAtToken.source
+                        String.left (nameEnd - stateAtToken.offset) (String.dropLeft stateAtToken.offset stateAtToken.source)
 
                     afterName =
                         { source = stateAtToken.source
@@ -1483,7 +1479,7 @@ parseUpperExposeAt :
     -> ParserState
     -> Result String ( Node Exposing.TopLevelExpose, ParserState )
 parseUpperExposeAt nameStart nameEndRow nameEndColumn name state stateAtOpen =
-    if String.slice stateAtOpen.offset (stateAtOpen.offset + 1) stateAtOpen.source == "(" then
+    if String.left 1 (String.dropLeft stateAtOpen.offset stateAtOpen.source) == "(" then
         let
             stateAtInner =
                 skipTrivia
@@ -1494,7 +1490,7 @@ parseUpperExposeAt nameStart nameEndRow nameEndColumn name state stateAtOpen =
                     , commentsRev = stateAtOpen.commentsRev
                     }
         in
-        case String.slice stateAtInner.offset (stateAtInner.offset + 1) stateAtInner.source of
+        case String.left 1 (String.dropLeft stateAtInner.offset stateAtInner.source) of
             ")" ->
                 Ok
                     ( Node
@@ -1511,7 +1507,7 @@ parseUpperExposeAt nameStart nameEndRow nameEndColumn name state stateAtOpen =
                     )
 
             _ ->
-                if String.slice stateAtInner.offset (stateAtInner.offset + 2) stateAtInner.source == ".." then
+                if String.left 2 (String.dropLeft stateAtInner.offset stateAtInner.source) == ".." then
                     let
                         stateAtCloseParen =
                             skipTrivia
@@ -1522,7 +1518,7 @@ parseUpperExposeAt nameStart nameEndRow nameEndColumn name state stateAtOpen =
                                 , commentsRev = stateAtInner.commentsRev
                                 }
                     in
-                    case String.slice stateAtCloseParen.offset (stateAtCloseParen.offset + 1) stateAtCloseParen.source of
+                    case String.left 1 (String.dropLeft stateAtCloseParen.offset stateAtCloseParen.source) of
                         ")" ->
                             let
                                 remaining =
@@ -1587,7 +1583,7 @@ parseFileDeclarationsAt :
     -> ParserState
     -> Result String ( List (Node Declaration.Declaration), List (Node String), ParserState )
 parseFileDeclarationsAt declarationsRev documentationCommentsRev previousRangeEndRow state stateAtDeclaration =
-    case String.slice stateAtDeclaration.offset (stateAtDeclaration.offset + 1) stateAtDeclaration.source of
+    case String.left 1 (String.dropLeft stateAtDeclaration.offset stateAtDeclaration.source) of
         "" ->
             Ok
                 ( List.reverse declarationsRev
@@ -1922,10 +1918,10 @@ parseDeclaration state =
 
 parseDeclarationAt : ParserState -> Result String ( Declaration.Declaration, ParserState )
 parseDeclarationAt stateAtDeclaration =
-    case String.slice stateAtDeclaration.offset (stateAtDeclaration.offset + 1) stateAtDeclaration.source of
+    case String.left 1 (String.dropLeft stateAtDeclaration.offset stateAtDeclaration.source) of
         first ->
             if isIdentifierStart first then
-                case String.slice stateAtDeclaration.offset (skipToIdentifierEnd stateAtDeclaration.source (stateAtDeclaration.offset + 1)) stateAtDeclaration.source of
+                case String.left (skipToIdentifierEnd stateAtDeclaration.source (stateAtDeclaration.offset + 1) - stateAtDeclaration.offset) (String.dropLeft stateAtDeclaration.offset stateAtDeclaration.source) of
                     "infix" ->
                         parseInfixDeclaration stateAtDeclaration
 
@@ -1953,7 +1949,7 @@ parseInfixDeclaration state =
                 stateAtDirection =
                     skipTrivia afterInfix
             in
-            case String.slice stateAtDirection.offset (stateAtDirection.offset + 1) stateAtDirection.source of
+            case String.left 1 (String.dropLeft stateAtDirection.offset stateAtDirection.source) of
                 directionFirst ->
                     if not (isIdentifierStart directionFirst) then
                         Err
@@ -1968,7 +1964,7 @@ parseInfixDeclaration state =
                                 skipToIdentifierEnd stateAtDirection.source (stateAtDirection.offset + 1)
 
                             directionLexeme =
-                                String.slice stateAtDirection.offset directionEnd stateAtDirection.source
+                                String.left (directionEnd - stateAtDirection.offset) (String.dropLeft stateAtDirection.offset stateAtDirection.source)
 
                             directionRange =
                                 { start = { row = stateAtDirection.row, column = stateAtDirection.column }
@@ -2009,7 +2005,7 @@ parseInfixDeclarationFromDirectionAt :
     -> ParserState
     -> Result String ( Declaration.Declaration, ParserState )
 parseInfixDeclarationFromDirectionAt infixTokenLocation direction stateAtPrecedence =
-    case String.slice stateAtPrecedence.offset (stateAtPrecedence.offset + 1) stateAtPrecedence.source of
+    case String.left 1 (String.dropLeft stateAtPrecedence.offset stateAtPrecedence.source) of
         precedenceFirst ->
             if not (isDigit precedenceFirst) then
                 Err
@@ -2024,7 +2020,7 @@ parseInfixDeclarationFromDirectionAt infixTokenLocation direction stateAtPrecede
                         numberEnd stateAtPrecedence.source precedenceFirst stateAtPrecedence.offset
 
                     precedenceLexeme =
-                        String.slice stateAtPrecedence.offset precedenceEnd stateAtPrecedence.source
+                        String.left (precedenceEnd - stateAtPrecedence.offset) (String.dropLeft stateAtPrecedence.offset stateAtPrecedence.source)
 
                     precedenceRange =
                         { start = { row = stateAtPrecedence.row, column = stateAtPrecedence.column }
@@ -2048,7 +2044,7 @@ parseInfixDeclarationFromDirectionAt infixTokenLocation direction stateAtPrecede
                             stateAtOpenParen =
                                 skipTrivia afterPrecedence
                         in
-                        case String.slice stateAtOpenParen.offset (stateAtOpenParen.offset + 1) stateAtOpenParen.source of
+                        case String.left 1 (String.dropLeft stateAtOpenParen.offset stateAtOpenParen.source) of
                             "(" ->
                                 let
                                     openParenLocation =
@@ -2076,7 +2072,7 @@ parseInfixDeclarationFromDirectionAt infixTokenLocation direction stateAtPrecede
                                 else
                                     let
                                         operatorLexeme =
-                                            String.slice stateAtOperator.offset (stateAtOperator.offset + operatorLength) stateAtOperator.source
+                                            String.left operatorLength (String.dropLeft stateAtOperator.offset stateAtOperator.source)
 
                                         afterOperator =
                                             { source = stateAtOperator.source
@@ -2089,7 +2085,7 @@ parseInfixDeclarationFromDirectionAt infixTokenLocation direction stateAtPrecede
                                         stateAtCloseParen =
                                             skipTrivia afterOperator
                                     in
-                                    case String.slice stateAtCloseParen.offset (stateAtCloseParen.offset + 1) stateAtCloseParen.source of
+                                    case String.left 1 (String.dropLeft stateAtCloseParen.offset stateAtCloseParen.source) of
                                         ")" ->
                                             let
                                                 afterClose =
@@ -2103,7 +2099,7 @@ parseInfixDeclarationFromDirectionAt infixTokenLocation direction stateAtPrecede
                                                 stateAtEquals =
                                                     skipTrivia afterClose
                                             in
-                                            case String.slice stateAtEquals.offset (stateAtEquals.offset + 1) stateAtEquals.source of
+                                            case String.left 1 (String.dropLeft stateAtEquals.offset stateAtEquals.source) of
                                                 "=" ->
                                                     let
                                                         equalsLocation =
@@ -2118,7 +2114,7 @@ parseInfixDeclarationFromDirectionAt infixTokenLocation direction stateAtPrecede
                                                                 , commentsRev = stateAtEquals.commentsRev
                                                                 }
                                                     in
-                                                    case String.slice stateAtFunction.offset (stateAtFunction.offset + 1) stateAtFunction.source of
+                                                    case String.left 1 (String.dropLeft stateAtFunction.offset stateAtFunction.source) of
                                                         functionFirst ->
                                                             if not (isIdentifierStart functionFirst) then
                                                                 Err
@@ -2152,7 +2148,7 @@ parseInfixDeclarationFromDirectionAt infixTokenLocation direction stateAtPrecede
                                                                                 { start = { row = stateAtFunction.row, column = stateAtFunction.column }
                                                                                 , end = { row = stateAtFunction.row, column = stateAtFunction.column + functionNameLength }
                                                                                 }
-                                                                                (String.slice stateAtFunction.offset functionNameEnd stateAtFunction.source)
+                                                                                (String.left (functionNameEnd - stateAtFunction.offset) (String.dropLeft stateAtFunction.offset stateAtFunction.source))
                                                                         }
                                                                     , { source = stateAtFunction.source
                                                                       , offset = functionNameEnd
@@ -2199,11 +2195,11 @@ parseTypeDeclaration state =
                 stateAtNext =
                     skipTrivia afterType
             in
-            case String.slice stateAtNext.offset (stateAtNext.offset + 1) stateAtNext.source of
+            case String.left 1 (String.dropLeft stateAtNext.offset stateAtNext.source) of
                 first ->
                     if
                         isIdentifierStart first
-                            && (String.slice stateAtNext.offset (skipToIdentifierEnd stateAtNext.source (stateAtNext.offset + 1)) stateAtNext.source
+                            && (String.left (skipToIdentifierEnd stateAtNext.source (stateAtNext.offset + 1) - stateAtNext.offset) (String.dropLeft stateAtNext.offset stateAtNext.source)
                                     == "alias"
                                )
                     then
@@ -2227,7 +2223,7 @@ parseAliasDeclaration typeTokenLocation state =
                 stateAtName =
                     skipTrivia afterAlias
             in
-            case String.slice stateAtName.offset (stateAtName.offset + 1) stateAtName.source of
+            case String.left 1 (String.dropLeft stateAtName.offset stateAtName.source) of
                 first ->
                     if not (isIdentifierStart first) then
                         Err "Expected type alias name."
@@ -2245,7 +2241,7 @@ parseAliasDeclaration typeTokenLocation state =
                                     { start = { row = stateAtName.row, column = stateAtName.column }
                                     , end = { row = stateAtName.row, column = stateAtName.column + nameLength }
                                     }
-                                    (String.slice stateAtName.offset nameEnd stateAtName.source)
+                                    (String.left (nameEnd - stateAtName.offset) (String.dropLeft stateAtName.offset stateAtName.source))
 
                             afterName =
                                 { source = stateAtName.source
@@ -2261,7 +2257,7 @@ parseAliasDeclaration typeTokenLocation state =
                             stateAtEquals =
                                 skipTrivia afterGenerics
                         in
-                        case String.slice stateAtEquals.offset (stateAtEquals.offset + 1) stateAtEquals.source of
+                        case String.left 1 (String.dropLeft stateAtEquals.offset stateAtEquals.source) of
                             "=" ->
                                 case
                                     parseTypeAnnotation
@@ -2307,7 +2303,7 @@ parseChoiceTypeDeclarationAt :
     -> ParserState
     -> Result String ( Declaration.Declaration, ParserState )
 parseChoiceTypeDeclarationAt typeTokenLocation stateAtName =
-    case String.slice stateAtName.offset (stateAtName.offset + 1) stateAtName.source of
+    case String.left 1 (String.dropLeft stateAtName.offset stateAtName.source) of
         first ->
             if not (isIdentifierStart first) then
                 Err "Expected type name."
@@ -2325,7 +2321,7 @@ parseChoiceTypeDeclarationAt typeTokenLocation stateAtName =
                             { start = { row = stateAtName.row, column = stateAtName.column }
                             , end = { row = stateAtName.row, column = stateAtName.column + nameLength }
                             }
-                            (String.slice stateAtName.offset nameEnd stateAtName.source)
+                            (String.left (nameEnd - stateAtName.offset) (String.dropLeft stateAtName.offset stateAtName.source))
 
                     afterName =
                         { source = stateAtName.source
@@ -2341,7 +2337,7 @@ parseChoiceTypeDeclarationAt typeTokenLocation stateAtName =
                     stateAtEquals =
                         skipTrivia afterGenerics
                 in
-                case String.slice stateAtEquals.offset (stateAtEquals.offset + 1) stateAtEquals.source of
+                case String.left 1 (String.dropLeft stateAtEquals.offset stateAtEquals.source) of
                     "=" ->
                         case
                             parseChoiceTypeConstructor
@@ -2388,7 +2384,7 @@ parseChoiceTypeConstructorAt :
     ParserState
     -> Result String ( Node Declaration.ValueConstructor, ParserState )
 parseChoiceTypeConstructorAt stateAtName =
-    case String.slice stateAtName.offset (stateAtName.offset + 1) stateAtName.source of
+    case String.left 1 (String.dropLeft stateAtName.offset stateAtName.source) of
         first ->
             if not (isIdentifierStart first) then
                 Err
@@ -2436,7 +2432,7 @@ parseChoiceTypeConstructorAt stateAtName =
                             ( Node
                                 { start = nameRange.start, end = constructorEnd }
                                 { name =
-                                    Node nameRange (String.slice stateAtName.offset nameEnd stateAtName.source)
+                                    Node nameRange (String.left (nameEnd - stateAtName.offset) (String.dropLeft stateAtName.offset stateAtName.source))
                                 , arguments = arguments
                                 }
                             , afterArguments
@@ -2535,7 +2531,7 @@ collectTypeGenericsAt :
     -> ParserState
     -> ( List (Node String), ParserState )
 collectTypeGenericsAt state genericsRev stateAtGeneric =
-    case String.slice stateAtGeneric.offset (stateAtGeneric.offset + 1) stateAtGeneric.source of
+    case String.left 1 (String.dropLeft stateAtGeneric.offset stateAtGeneric.source) of
         first ->
             if isIdentifierStart first then
                 let
@@ -2556,7 +2552,7 @@ collectTypeGenericsAt state genericsRev stateAtGeneric =
                         { start = { row = stateAtGeneric.row, column = stateAtGeneric.column }
                         , end = { row = stateAtGeneric.row, column = stateAtGeneric.column + genericLength }
                         }
-                        (String.slice stateAtGeneric.offset genericEnd stateAtGeneric.source)
+                        (String.left (genericEnd - stateAtGeneric.offset) (String.dropLeft stateAtGeneric.offset stateAtGeneric.source))
                         :: genericsRev
                     )
 
@@ -2575,7 +2571,7 @@ parsePortDeclaration state =
                 stateAtName =
                     skipTrivia afterPort
             in
-            case String.slice stateAtName.offset (stateAtName.offset + 1) stateAtName.source of
+            case String.left 1 (String.dropLeft stateAtName.offset stateAtName.source) of
                 first ->
                     if not (isIdentifierStart first) then
                         Err "Expected port name."
@@ -2593,7 +2589,7 @@ parsePortDeclaration state =
                                     { start = { row = stateAtName.row, column = stateAtName.column }
                                     , end = { row = stateAtName.row, column = stateAtName.column + nameLength }
                                     }
-                                    (String.slice stateAtName.offset nameEnd stateAtName.source)
+                                    (String.left (nameEnd - stateAtName.offset) (String.dropLeft stateAtName.offset stateAtName.source))
 
                             stateAtColon =
                                 skipTrivia
@@ -2604,7 +2600,7 @@ parsePortDeclaration state =
                                     , commentsRev = stateAtName.commentsRev
                                     }
                         in
-                        case String.slice stateAtColon.offset (stateAtColon.offset + 1) stateAtColon.source of
+                        case String.left 1 (String.dropLeft stateAtColon.offset stateAtColon.source) of
                             ":" ->
                                 case
                                     parseTypeAnnotation
@@ -2641,7 +2637,7 @@ parseFunctionDeclaration state =
 
 parseFunctionDeclarationAt : ParserState -> Result String ( Declaration.Declaration, ParserState )
 parseFunctionDeclarationAt stateAtName =
-    case String.slice stateAtName.offset (stateAtName.offset + 1) stateAtName.source of
+    case String.left 1 (String.dropLeft stateAtName.offset stateAtName.source) of
         first ->
             if not (isIdentifierStart first) then
                 Err ("Expected function name, but found '" ++ snippetAt stateAtName ++ "'.")
@@ -2661,7 +2657,7 @@ parseFunctionDeclarationWithName stateAtName nameEnd =
         { start = { row = stateAtName.row, column = stateAtName.column }
         , end = { row = stateAtName.row, column = stateAtName.column + (nameEnd - stateAtName.offset) }
         }
-        (String.slice stateAtName.offset nameEnd stateAtName.source)
+        (String.left (nameEnd - stateAtName.offset) (String.dropLeft stateAtName.offset stateAtName.source))
         { source = stateAtName.source
         , offset = nameEnd
         , row = stateAtName.row
@@ -2733,7 +2729,7 @@ parseFunctionDeclarationAtSecondName :
     -> ParserState
     -> Result String ( Declaration.Declaration, ParserState )
 parseFunctionDeclarationAtSecondName nameRange name colonLocation signatureTypeNode stateAtSecondName =
-    case String.slice stateAtSecondName.offset (stateAtSecondName.offset + 1) stateAtSecondName.source of
+    case String.left 1 (String.dropLeft stateAtSecondName.offset stateAtSecondName.source) of
         secondFirst ->
             if not (isIdentifierStart secondFirst) then
                 Err
@@ -2763,7 +2759,7 @@ parseFunctionDeclarationWithSecondName :
 parseFunctionDeclarationWithSecondName nameRange name colonLocation signatureTypeNode stateAtSecondName secondNameEnd =
     let
         secondName =
-            String.slice stateAtSecondName.offset secondNameEnd stateAtSecondName.source
+            String.left (secondNameEnd - stateAtSecondName.offset) (String.dropLeft stateAtSecondName.offset stateAtSecondName.source)
 
         (Node signatureTypeRange _) =
             signatureTypeNode
@@ -2835,7 +2831,7 @@ finishFunctionDeclarationOnArguments declarationStart implementationNameRange im
                 stateAtEquals =
                     skipTrivia afterArguments
             in
-            case String.slice stateAtEquals.offset (stateAtEquals.offset + 1) stateAtEquals.source of
+            case String.left 1 (String.dropLeft stateAtEquals.offset stateAtEquals.source) of
                 "=" ->
                     finishFunctionDeclarationOnBody
                         implementationNameRange
@@ -2961,7 +2957,7 @@ parseTypeAnnotationAtArrow :
     -> ParserState
     -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
 parseTypeAnnotationAtArrow paramTypeNode afterParamType stateAtArrow =
-    if String.slice stateAtArrow.offset (stateAtArrow.offset + 2) stateAtArrow.source == "->" then
+    if String.left 2 (String.dropLeft stateAtArrow.offset stateAtArrow.source) == "->" then
         parseTypeAnnotationOnReturn
             paramTypeNode
             { row = stateAtArrow.row, column = stateAtArrow.column }
@@ -3136,7 +3132,7 @@ parseTypeAnnotationTypedArgAt :
     -> ParserState
     -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
 parseTypeAnnotationTypedArgAt indentMin stateAtToken =
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "(" ->
             parseParenthesizedTypeAnnotation
                 indentMin
@@ -3168,7 +3164,7 @@ parseTypeAnnotationTypedArgAt indentMin stateAtToken =
                         nameEnd - stateAtToken.offset
 
                     name =
-                        String.slice stateAtToken.offset nameEnd stateAtToken.source
+                        String.left (nameEnd - stateAtToken.offset) (String.dropLeft stateAtToken.offset stateAtToken.source)
                 in
                 if isUpperCharacter first then
                     let
@@ -3219,7 +3215,7 @@ parseParenthesizedTypeAnnotationAt :
     -> ParserState
     -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
 parseParenthesizedTypeAnnotationAt indentMin openParenLocation stateAtToken =
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         ")" ->
             Ok
                 ( Node
@@ -3263,7 +3259,7 @@ parseFurtherTypeAnnotationsAt :
     -> ParserState
     -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
 parseFurtherTypeAnnotationsAt indentMin openParenLocation first restRev stateAtToken =
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         ")" ->
             Ok
                 ( Node
@@ -3324,7 +3320,7 @@ parseRecordTypeAnnotationAt :
     -> ParserState
     -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
 parseRecordTypeAnnotationAt openBraceLocation stateAtToken =
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "}" ->
             Ok
                 ( Node
@@ -3374,7 +3370,7 @@ parseRecordTypeAnnotationAt openBraceLocation stateAtToken =
                             { start = { row = stateAtToken.row, column = stateAtToken.column }
                             , end = { row = stateAtToken.row, column = stateAtToken.column + nameLength }
                             }
-                            (String.slice stateAtToken.offset nameEnd stateAtToken.source)
+                            (String.left (nameEnd - stateAtToken.offset) (String.dropLeft stateAtToken.offset stateAtToken.source))
                         )
                         { row = stateAtPipe.row, column = stateAtPipe.column }
                         { source = stateAtPipe.source
@@ -3407,7 +3403,7 @@ parseGenericRecordBody openBraceLocation genericName pipeLocation state =
         stateAtToken =
             skipTrivia state
     in
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "}" ->
             Ok
                 ( Node
@@ -3472,7 +3468,7 @@ finishOrContinueGenericRecordAt :
     -> ParserState
     -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
 finishOrContinueGenericRecordAt openBraceLocation genericName pipeLocation nodeRecordDefStart firstField lastEnd restRev stateAtToken =
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "}" ->
             Ok
                 ( Node
@@ -3544,7 +3540,7 @@ finishOrContinueRecordAt :
     -> ParserState
     -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
 finishOrContinueRecordAt openBraceLocation firstField restRev stateAtToken =
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "}" ->
             Ok
                 ( Node
@@ -3601,7 +3597,7 @@ parseTypeRecordFieldFromNameAt :
     ParserState
     -> Result String ( Node TypeAnnotation.RecordField, Location, ParserState )
 parseTypeRecordFieldFromNameAt stateAtName =
-    case String.slice stateAtName.offset (stateAtName.offset + 1) stateAtName.source of
+    case String.left 1 (String.dropLeft stateAtName.offset stateAtName.source) of
         first ->
             if not (isIdentifierStart first) then
                 Err
@@ -3632,7 +3628,7 @@ parseTypeRecordFieldFromNameAt stateAtName =
                             , commentsRev = stateAtName.commentsRev
                             }
                 in
-                case String.slice stateAtColon.offset (stateAtColon.offset + 1) stateAtColon.source of
+                case String.left 1 (String.dropLeft stateAtColon.offset stateAtColon.source) of
                     ":" ->
                         case
                             parseTypeAnnotation
@@ -3652,7 +3648,7 @@ parseTypeRecordFieldFromNameAt stateAtName =
                                     ( Node
                                         { start = nameRange.start, end = fieldTypeRange.end }
                                         { fieldName =
-                                            Node nameRange (String.slice stateAtName.offset nameEnd stateAtName.source)
+                                            Node nameRange (String.left (nameEnd - stateAtName.offset) (String.dropLeft stateAtName.offset stateAtName.source))
                                         , colonLocation = { row = stateAtColon.row, column = stateAtColon.column }
                                         , fieldType = Node fieldTypeRange fieldType
                                         }
@@ -3746,7 +3742,7 @@ parseOperatorsWithLength indentMin minPrecedence left state stateAtOperator oper
             state
             stateAtOperator
             operatorLength
-            (String.slice stateAtOperator.offset (stateAtOperator.offset + operatorLength) stateAtOperator.source)
+            (String.left operatorLength (String.dropLeft stateAtOperator.offset stateAtOperator.source))
 
 
 parseOperatorsWithLexeme :
@@ -4002,8 +3998,8 @@ parseRecordAccesses :
     -> ParserState
     -> Result String ( Node Expression.Expression, ParserState )
 parseRecordAccesses indentMin record state =
-    if String.slice state.offset (state.offset + 1) state.source == "." then
-        case String.slice (state.offset + 1) (state.offset + 2) state.source of
+    if String.left 1 (String.dropLeft state.offset state.source) == "." then
+        case String.left 1 (String.dropLeft (state.offset + 1) state.source) of
             fieldFirst ->
                 if isIdentifierStart fieldFirst then
                     let
@@ -4031,7 +4027,7 @@ parseRecordAccesses indentMin record state =
                                     { start = { row = state.row, column = state.column + 1 }
                                     , end = { row = state.row, column = fieldEndColumn }
                                     }
-                                    (String.slice (state.offset + 1) fieldEnd state.source)
+                                    (String.left (fieldEnd - (state.offset + 1)) (String.dropLeft (state.offset + 1) state.source))
                                 )
                             )
                         )
@@ -4062,9 +4058,9 @@ parseAtomicExpressionAt :
     -> ParserState
     -> Result String ( Node Expression.Expression, ParserState )
 parseAtomicExpressionAt indentMin stateAtToken =
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "\"" ->
-            if String.slice stateAtToken.offset (stateAtToken.offset + 3) stateAtToken.source == "\"\"\"" then
+            if String.left 3 (String.dropLeft stateAtToken.offset stateAtToken.source) == "\"\"\"" then
                 parseTripleQuotedStringExpression stateAtToken
 
             else
@@ -4086,7 +4082,7 @@ parseAtomicExpressionAt indentMin stateAtToken =
             parseLambda indentMin stateAtToken
 
         "-" ->
-            case String.slice (stateAtToken.offset + 1) (stateAtToken.offset + 2) stateAtToken.source of
+            case String.left 1 (String.dropLeft (stateAtToken.offset + 1) stateAtToken.source) of
                 ">" ->
                     Err "Failed to parse expression: Unexpected token '->'."
 
@@ -4098,7 +4094,7 @@ parseAtomicExpressionAt indentMin stateAtToken =
                         parseNegation indentMin stateAtToken
 
         "." ->
-            case String.slice (stateAtToken.offset + 1) (stateAtToken.offset + 2) stateAtToken.source of
+            case String.left 1 (String.dropLeft (stateAtToken.offset + 1) stateAtToken.source) of
                 "." ->
                     Err "Failed to parse expression: Unexpected token '..'."
 
@@ -4136,7 +4132,7 @@ parseNumberExpressionAt stateAtToken literalEnd =
             { start = { row = stateAtToken.row, column = stateAtToken.column }
             , end = { row = stateAtToken.row, column = stateAtToken.column + (literalEnd - stateAtToken.offset) }
             }
-            (parseNumber (String.slice stateAtToken.offset literalEnd stateAtToken.source))
+            (parseNumber (String.left (literalEnd - stateAtToken.offset) (String.dropLeft stateAtToken.offset stateAtToken.source)))
         , { source = stateAtToken.source
           , offset = literalEnd
           , row = stateAtToken.row
@@ -4153,7 +4149,7 @@ parseNameExpressionAt :
     -> Int
     -> Result String ( Node Expression.Expression, ParserState )
 parseNameExpressionAt indentMin stateAtToken first nameEnd =
-    case String.slice stateAtToken.offset nameEnd stateAtToken.source of
+    case String.left (nameEnd - stateAtToken.offset) (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "let" ->
             parseLetBlock indentMin stateAtToken
 
@@ -4236,7 +4232,7 @@ parseRecordAccessFunction state =
                 , commentsRev = state.commentsRev
                 }
     in
-    case String.slice stateAtField.offset (stateAtField.offset + 1) stateAtField.source of
+    case String.left 1 (String.dropLeft stateAtField.offset stateAtField.source) of
         first ->
             if isIdentifierStart first then
                 let
@@ -4252,7 +4248,7 @@ parseRecordAccessFunction state =
                         , end = { row = stateAtField.row, column = stateAtField.column + fieldLength }
                         }
                         (Expression.RecordAccessFunction
-                            ("." ++ String.slice stateAtField.offset fieldEnd stateAtField.source)
+                            ("." ++ String.left (fieldEnd - stateAtField.offset) (String.dropLeft stateAtField.offset stateAtField.source))
                         )
                     , { source = stateAtField.source
                       , offset = fieldEnd
@@ -4473,7 +4469,7 @@ parseQualifiedNameRest start moduleNamesRev currentName endRow endColumn state =
                         , commentsRev = stateAtDot.commentsRev
                         }
             in
-            case String.slice stateAtName.offset (stateAtName.offset + 1) stateAtName.source of
+            case String.left 1 (String.dropLeft stateAtName.offset stateAtName.source) of
                 first ->
                     if isIdentifierStart first then
                         let
@@ -4486,7 +4482,7 @@ parseQualifiedNameRest start moduleNamesRev currentName endRow endColumn state =
                         parseQualifiedNameRest
                             start
                             (currentName :: moduleNamesRev)
-                            (String.slice stateAtName.offset nextNameEnd stateAtName.source)
+                            (String.left (nextNameEnd - stateAtName.offset) (String.dropLeft stateAtName.offset stateAtName.source))
                             stateAtName.row
                             (stateAtName.column + nextNameLength)
                             { source = stateAtName.source
@@ -4534,7 +4530,7 @@ parseList indentMin state =
                 , commentsRev = state.commentsRev
                 }
     in
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "]" ->
             Ok
                 ( Node
@@ -4587,7 +4583,7 @@ parseFurtherListElementsAt :
     -> ParserState
     -> Result String ( List ( Location, Node Expression.Expression ), ParserState )
 parseFurtherListElementsAt indentMin state furtherRev stateAtToken =
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "]" ->
             Ok
                 ( List.reverse furtherRev
@@ -4643,7 +4639,7 @@ parseParenthesizedOrTuple indentMin state =
                 , commentsRev = state.commentsRev
                 }
     in
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         ")" ->
             Ok
                 ( Node
@@ -4675,14 +4671,14 @@ parseParenthesizedOrTuple indentMin state =
                             , commentsRev = stateAtToken.commentsRev
                             }
                 in
-                if String.slice stateAtClose.offset (stateAtClose.offset + 1) stateAtClose.source == ")" then
+                if String.left 1 (String.dropLeft stateAtClose.offset stateAtClose.source) == ")" then
                     Ok
                         ( Node
                             { start = { row = state.row, column = state.column }
                             , end = { row = stateAtClose.row, column = stateAtClose.column + 1 }
                             }
                             (Expression.PrefixOperator
-                                (String.slice stateAtToken.offset (stateAtToken.offset + operatorLength) stateAtToken.source)
+                                (String.left operatorLength (String.dropLeft stateAtToken.offset stateAtToken.source))
                             )
                         , { source = stateAtClose.source
                           , offset = stateAtClose.offset + 1
@@ -4751,7 +4747,7 @@ parseFurtherTupleElementsAt :
     -> ParserState
     -> Result String ( List ( Location, Node Expression.Expression ), ParserState )
 parseFurtherTupleElementsAt indentMin state furtherRev stateAtToken =
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         ")" ->
             Ok
                 ( List.reverse furtherRev
@@ -4910,7 +4906,7 @@ parseLambdaArgumentsAt :
     -> ParserState
     -> Result String ( List (Node Pattern.Pattern), Location, ParserState )
 parseLambdaArgumentsAt indentMin state argumentsRev stateAtToken =
-    if String.slice stateAtToken.offset (stateAtToken.offset + 2) stateAtToken.source == "->" then
+    if String.left 2 (String.dropLeft stateAtToken.offset stateAtToken.source) == "->" then
         Ok
             ( List.reverse argumentsRev
             , { row = stateAtToken.row, column = stateAtToken.column }
@@ -4990,11 +4986,11 @@ parseLetDeclarationsAt :
     -> ParserState
     -> Result String ( List (Node Expression.LetDeclaration), Location, ParserState )
 parseLetDeclarationsAt indentMin state declarationsRev stateAtToken =
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         first ->
             if
                 isIdentifierStart first
-                    && (String.slice stateAtToken.offset (skipToIdentifierEnd stateAtToken.source (stateAtToken.offset + 1)) stateAtToken.source
+                    && (String.left (skipToIdentifierEnd stateAtToken.source (stateAtToken.offset + 1) - stateAtToken.offset) (String.dropLeft stateAtToken.offset stateAtToken.source)
                             == "in"
                        )
             then
@@ -5038,7 +5034,7 @@ parseLetDeclarationAt :
     -> ParserState
     -> Result String ( Node Expression.LetDeclaration, ParserState )
 parseLetDeclarationAt declarationIndent stateAtToken =
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         first ->
             if isIdentifierStart first then
                 let
@@ -5049,7 +5045,7 @@ parseLetDeclarationAt declarationIndent stateAtToken =
                         nameEnd - stateAtToken.offset
 
                     name =
-                        String.slice stateAtToken.offset nameEnd stateAtToken.source
+                        String.left (nameEnd - stateAtToken.offset) (String.dropLeft stateAtToken.offset stateAtToken.source)
 
                     nameRange =
                         { start = { row = stateAtToken.row, column = stateAtToken.column }
@@ -5086,7 +5082,7 @@ parseLetDeclarationAt declarationIndent stateAtToken =
                                 stateAtImplementationName =
                                     skipTrivia afterTypeAnnotation
                             in
-                            case String.slice stateAtImplementationName.offset (stateAtImplementationName.offset + 1) stateAtImplementationName.source of
+                            case String.left 1 (String.dropLeft stateAtImplementationName.offset stateAtImplementationName.source) of
                                 implementationFirst ->
                                     if not (isIdentifierStart implementationFirst) then
                                         Err
@@ -5104,7 +5100,7 @@ parseLetDeclarationAt declarationIndent stateAtToken =
                                                 implementationNameEnd - stateAtImplementationName.offset
 
                                             implementationName =
-                                                String.slice stateAtImplementationName.offset implementationNameEnd stateAtImplementationName.source
+                                                String.left (implementationNameEnd - stateAtImplementationName.offset) (String.dropLeft stateAtImplementationName.offset stateAtImplementationName.source)
                                         in
                                         if implementationName /= name then
                                             Err
@@ -5153,7 +5149,7 @@ parseLetDeclarationAt declarationIndent stateAtToken =
                             stateAtEquals =
                                 skipTrivia afterPattern
                         in
-                        case String.slice stateAtEquals.offset (stateAtEquals.offset + 1) stateAtEquals.source of
+                        case String.left 1 (String.dropLeft stateAtEquals.offset stateAtEquals.source) of
                             "=" ->
                                 case
                                     parseExpressionNodeAt
@@ -5347,7 +5343,7 @@ parseCaseBranchesAt :
     -> ParserState
     -> Result String ( List Expression.Case, ParserState )
 parseCaseBranchesAt lowerBound branchIndent state branchesRev stateAtToken =
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "" ->
             Ok ( branchesRev, state )
 
@@ -5379,7 +5375,7 @@ parseCaseBranch branchIndent state =
                 stateAtArrow =
                     skipTrivia afterPattern
             in
-            case String.slice stateAtArrow.offset (stateAtArrow.offset + 2) stateAtArrow.source of
+            case String.left 2 (String.dropLeft stateAtArrow.offset stateAtArrow.source) of
                 "->" ->
                     case
                         parseExpressionNodeAt
@@ -5420,7 +5416,7 @@ parseRecord indentMin state =
                 , commentsRev = state.commentsRev
                 }
     in
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "}" ->
             Ok
                 ( Node
@@ -5454,7 +5450,7 @@ parseRecord indentMin state =
                         }
 
                     name =
-                        String.slice stateAtToken.offset nameEnd stateAtToken.source
+                        String.left (nameEnd - stateAtToken.offset) (String.dropLeft stateAtToken.offset stateAtToken.source)
 
                     afterName =
                         { source = stateAtToken.source
@@ -5524,7 +5520,7 @@ parseRecordUpdateFieldsAt :
     -> ParserState
     -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList Expression.RecordExprField, ParserState )
 parseRecordUpdateFieldsAt indentMin stateAtToken =
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "}" ->
             Ok
                 ( SeparatedSyntaxList.Empty
@@ -5553,7 +5549,7 @@ parseRecordUpdateFieldsAt indentMin stateAtToken =
                     { start = { row = stateAtToken.row, column = stateAtToken.column }
                     , end = { row = stateAtToken.row, column = stateAtToken.column + nameLength }
                     }
-                    (String.slice stateAtToken.offset nameEnd stateAtToken.source)
+                    (String.left (nameEnd - stateAtToken.offset) (String.dropLeft stateAtToken.offset stateAtToken.source))
                     { source = stateAtToken.source
                     , offset = nameEnd
                     , row = stateAtToken.row
@@ -5596,7 +5592,7 @@ parseRecordField indentMin fieldNameRange fieldName state =
         stateAtEquals =
             skipTrivia state
     in
-    case String.slice stateAtEquals.offset (stateAtEquals.offset + 1) stateAtEquals.source of
+    case String.left 1 (String.dropLeft stateAtEquals.offset stateAtEquals.source) of
         "=" ->
             case
                 parseExpressionNodeAt
@@ -5641,7 +5637,7 @@ parseFurtherRecordFieldsAt :
     -> ParserState
     -> Result String ( List ( Location, Expression.RecordExprField ), ParserState )
 parseFurtherRecordFieldsAt indentMin state fieldsRev stateAtToken =
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "}" ->
             Ok
                 ( List.reverse fieldsRev
@@ -5664,7 +5660,7 @@ parseFurtherRecordFieldsAt indentMin state fieldsRev stateAtToken =
                         , commentsRev = stateAtToken.commentsRev
                         }
             in
-            case String.slice stateAtFieldName.offset (stateAtFieldName.offset + 1) stateAtFieldName.source of
+            case String.left 1 (String.dropLeft stateAtFieldName.offset stateAtFieldName.source) of
                 fieldFirst ->
                     if not (isIdentifierStart fieldFirst) then
                         Err
@@ -5687,7 +5683,7 @@ parseFurtherRecordFieldsAt indentMin state fieldsRev stateAtToken =
                                 { start = { row = stateAtFieldName.row, column = stateAtFieldName.column }
                                 , end = { row = stateAtFieldName.row, column = stateAtFieldName.column + nameLength }
                                 }
-                                (String.slice stateAtFieldName.offset nameEnd stateAtFieldName.source)
+                                (String.left (nameEnd - stateAtFieldName.offset) (String.dropLeft stateAtFieldName.offset stateAtFieldName.source))
                                 { source = stateAtFieldName.source
                                 , offset = nameEnd
                                 , row = stateAtFieldName.row
@@ -5816,9 +5812,9 @@ parsePatternSuffixAt :
     -> ParserState
     -> Result String ( Node Pattern.Pattern, ParserState )
 parsePatternSuffixAt indentMin pattern state stateAtToken =
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         ":" ->
-            if String.slice (stateAtToken.offset + 1) (stateAtToken.offset + 2) stateAtToken.source == ":" then
+            if String.left 1 (String.dropLeft (stateAtToken.offset + 1) stateAtToken.source) == ":" then
                 case
                     parsePatternNodeAt
                         indentMin
@@ -5856,7 +5852,7 @@ parsePatternSuffixAt indentMin pattern state stateAtToken =
         first ->
             if
                 isIdentifierStart first
-                    && (String.slice stateAtToken.offset (skipToIdentifierEnd stateAtToken.source (stateAtToken.offset + 1)) stateAtToken.source
+                    && (String.left (skipToIdentifierEnd stateAtToken.source (stateAtToken.offset + 1) - stateAtToken.offset) (String.dropLeft stateAtToken.offset stateAtToken.source)
                             == "as"
                        )
             then
@@ -5870,7 +5866,7 @@ parsePatternSuffixAt indentMin pattern state stateAtToken =
                             , commentsRev = stateAtToken.commentsRev
                             }
                 in
-                case String.slice stateAtName.offset (stateAtName.offset + 1) stateAtName.source of
+                case String.left 1 (String.dropLeft stateAtName.offset stateAtName.source) of
                     nameFirst ->
                         if isIdentifierStart nameFirst then
                             let
@@ -5895,7 +5891,7 @@ parsePatternSuffixAt indentMin pattern state stateAtToken =
                                             { start = { row = stateAtName.row, column = stateAtName.column }
                                             , end = { row = stateAtName.row, column = stateAtName.column + nameLength }
                                             }
-                                            (String.slice stateAtName.offset nameEnd stateAtName.source)
+                                            (String.left (nameEnd - stateAtName.offset) (String.dropLeft stateAtName.offset stateAtName.source))
                                         )
                                     )
                                 , { source = stateAtName.source
@@ -5930,9 +5926,9 @@ parsePatternAtomicAt :
     -> ParserState
     -> Result String ( Node Pattern.Pattern, ParserState )
 parsePatternAtomicAt indentMin stateAtToken =
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "\"" ->
-            if String.slice stateAtToken.offset (stateAtToken.offset + 3) stateAtToken.source == "\"\"\"" then
+            if String.left 3 (String.dropLeft stateAtToken.offset stateAtToken.source) == "\"\"\"" then
                 parseStringPattern TripleQuoteTermination 3 stateAtToken
 
             else
@@ -5963,7 +5959,7 @@ parsePatternAtomicAt indentMin stateAtToken =
                         nameEnd - stateAtToken.offset
 
                     name =
-                        String.slice stateAtToken.offset nameEnd stateAtToken.source
+                        String.left (nameEnd - stateAtToken.offset) (String.dropLeft stateAtToken.offset stateAtToken.source)
                 in
                 if name == "_" then
                     Ok
@@ -6098,7 +6094,7 @@ parseNumberPattern firstCharacter state =
             literalEnd - state.offset
 
         literal =
-            String.slice state.offset literalEnd state.source
+            String.left (literalEnd - state.offset) (String.dropLeft state.offset state.source)
 
         range =
             { start = { row = state.row, column = state.column }
@@ -6150,7 +6146,7 @@ parseTuplePattern indentMin state =
                 , commentsRev = state.commentsRev
                 }
     in
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         ")" ->
             Ok
                 ( Node
@@ -6213,7 +6209,7 @@ parseFurtherTuplePatternsAt :
     -> ParserState
     -> Result String ( List ( Location, Node Pattern.Pattern ), ParserState )
 parseFurtherTuplePatternsAt indentMin state furtherRev stateAtToken =
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         ")" ->
             Ok
                 ( List.reverse furtherRev
@@ -6265,7 +6261,7 @@ parseListPattern indentMin state =
                 , commentsRev = state.commentsRev
                 }
     in
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "]" ->
             Ok
                 ( Node
@@ -6320,7 +6316,7 @@ parseFurtherListPatternsAt :
     -> ParserState
     -> Result String ( List ( Location, Node Pattern.Pattern ), ParserState )
 parseFurtherListPatternsAt indentMin state furtherRev stateAtToken =
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "]" ->
             Ok
                 ( List.reverse furtherRev
@@ -6403,7 +6399,7 @@ parseRecordPatternFieldsAt :
     -> ParserState
     -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList (Node String), ParserState )
 parseRecordPatternFieldsAt state firstField furtherRev stateAtToken =
-    case String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source of
+    case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "}" ->
             let
                 afterClose =
@@ -6447,7 +6443,7 @@ parseRecordPatternFieldsAt state firstField furtherRev stateAtToken =
                                     { start = { row = stateAtToken.row, column = stateAtToken.column }
                                     , end = { row = stateAtToken.row, column = stateAtToken.column + nameLength }
                                     }
-                                    (String.slice stateAtToken.offset nameEnd stateAtToken.source)
+                                    (String.left (nameEnd - stateAtToken.offset) (String.dropLeft stateAtToken.offset stateAtToken.source))
                                 )
                             )
                             furtherRev
@@ -6479,7 +6475,7 @@ parseRecordPatternFieldsAfterFieldAt :
     -> ParserState
     -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList (Node String), ParserState )
 parseRecordPatternFieldsAfterFieldAt state firstField furtherRev stateAtToken =
-    if String.slice stateAtToken.offset (stateAtToken.offset + 1) stateAtToken.source == "," then
+    if String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) == "," then
         let
             stateAtField =
                 skipTrivia
@@ -6490,7 +6486,7 @@ parseRecordPatternFieldsAfterFieldAt state firstField furtherRev stateAtToken =
                     , commentsRev = stateAtToken.commentsRev
                     }
         in
-        case String.slice stateAtField.offset (stateAtField.offset + 1) stateAtField.source of
+        case String.left 1 (String.dropLeft stateAtField.offset stateAtField.source) of
             fieldFirst ->
                 if isIdentifierStart fieldFirst then
                     let
@@ -6513,7 +6509,7 @@ parseRecordPatternFieldsAfterFieldAt state firstField furtherRev stateAtToken =
                             { start = { row = stateAtField.row, column = stateAtField.column }
                             , end = { row = stateAtField.row, column = stateAtField.column + nameLength }
                             }
-                            (String.slice stateAtField.offset nameEnd stateAtField.source)
+                            (String.left (nameEnd - stateAtField.offset) (String.dropLeft stateAtField.offset stateAtField.source))
                          )
                             :: furtherRev
                         )
@@ -6549,13 +6545,13 @@ skipWhitespaceAt : String -> Int -> Int -> Int -> List (Node String) -> ParserSt
 skipWhitespaceAt source offset row column commentsRev =
     let
         nextTwoChars =
-            String.slice offset (offset + 2) source
+            String.left 2 (String.dropLeft offset source)
     in
     if nextTwoChars == "\u{000D}\n" then
         skipWhitespaceAt source (offset + 2) (row + 1) 1 commentsRev
 
     else
-        case String.slice 0 1 nextTwoChars of
+        case String.left 1 nextTwoChars of
             " " ->
                 skipWhitespaceAt source (offset + 1) row (column + 1) commentsRev
 
@@ -6588,7 +6584,7 @@ skipTriviaAt source offset row column commentsRev =
 
 skipTriviaAfterWhitespace : ParserState -> ParserState
 skipTriviaAfterWhitespace state =
-    case String.slice state.offset (state.offset + 2) state.source of
+    case String.left 2 (String.dropLeft state.offset state.source) of
         "--" ->
             skipTriviaLineComment state.source state.offset state.row state.column state.commentsRev
 
@@ -6629,7 +6625,7 @@ skipTriviaLineComment source offset row column commentsRev =
             { start = { row = row, column = column }
             , end = { row = row, column = endColumn }
             }
-            (String.slice offset contentEnd source)
+            (String.left (contentEnd - offset) (String.dropLeft offset source))
             :: commentsRev
         )
 
@@ -6658,7 +6654,7 @@ skipTriviaBlockComment source offset row column startRow startColumn depth chunk
             multilineCommentRunEnd source offset
 
         run =
-            String.slice offset runEndOffset source
+            String.left (runEndOffset - offset) (String.dropLeft offset source)
 
         columnAfterRun =
             column + (runEndOffset - offset)
@@ -6728,28 +6724,24 @@ result the parser keeps.
 -}
 skipTriviaOffset : String -> Int -> Int
 skipTriviaOffset source offset =
-    if offset >= 0 then
-        let
-            offsetAfterWhitespace =
-                skipWhitespaceOffset source offset
-        in
-        case String.slice offsetAfterWhitespace (offsetAfterWhitespace + 2) source of
-            "--" ->
-                skipTriviaOffset source (lineCommentEnd source (offsetAfterWhitespace + 2))
+    let
+        offsetAfterWhitespace =
+            skipWhitespaceOffset source offset
+    in
+    case String.left 2 (String.dropLeft offsetAfterWhitespace source) of
+        "--" ->
+            skipTriviaOffset source (lineCommentEnd source (offsetAfterWhitespace + 2))
 
-            "{-" ->
-                skipTriviaOffset source (blockCommentEndOffset source (offsetAfterWhitespace + 2) 1)
+        "{-" ->
+            skipTriviaOffset source (blockCommentEndOffset source (offsetAfterWhitespace + 2) 1)
 
-            _ ->
-                offsetAfterWhitespace
-
-    else
-        offset
+        _ ->
+            offsetAfterWhitespace
 
 
 skipWhitespaceOffset : String -> Int -> Int
 skipWhitespaceOffset source offset =
-    case String.slice offset (offset + 1) source of
+    case String.left 1 (String.dropLeft offset source) of
         " " ->
             skipWhitespaceOffset source (offset + 1)
 
@@ -6768,31 +6760,27 @@ skipWhitespaceOffset source offset =
 
 blockCommentEndOffset : String -> Int -> Int -> Int
 blockCommentEndOffset source offset depth =
-    if offset >= 0 then
-        let
-            nextTwoChars =
-                String.slice offset (offset + 2) source
-        in
-        case nextTwoChars of
-            "{-" ->
-                blockCommentEndOffset source (offset + 2) (depth + 1)
+    let
+        nextTwoChars =
+            String.left 2 (String.dropLeft offset source)
+    in
+    case nextTwoChars of
+        "{-" ->
+            blockCommentEndOffset source (offset + 2) (depth + 1)
 
-            "-}" ->
-                if depth == 1 then
-                    offset + 2
+        "-}" ->
+            if depth == 1 then
+                offset + 2
 
-                else
-                    blockCommentEndOffset source (offset + 2) (depth - 1)
+            else
+                blockCommentEndOffset source (offset + 2) (depth - 1)
 
-            _ ->
-                if nextTwoChars == "" then
-                    offset
+        _ ->
+            if nextTwoChars == "" then
+                offset
 
-                else
-                    blockCommentEndOffset source (offset + 1) depth
-
-    else
-        offset
+            else
+                blockCommentEndOffset source (offset + 1) depth
 
 
 
@@ -6811,9 +6799,9 @@ consumeKeywordAt keyword keywordLength stateAtKeyword =
             stateAtKeyword.offset + keywordLength
     in
     if
-        String.slice stateAtKeyword.offset endOffset stateAtKeyword.source
+        String.left (endOffset - stateAtKeyword.offset) (String.dropLeft stateAtKeyword.offset stateAtKeyword.source)
             == keyword
-            && not (isIdentifierChar (String.slice endOffset (endOffset + 1) stateAtKeyword.source))
+            && not (isIdentifierChar (String.left 1 (String.dropLeft endOffset stateAtKeyword.source)))
     then
         Ok
             ( { row = stateAtKeyword.row, column = stateAtKeyword.column }
@@ -6833,8 +6821,8 @@ consumeKeywordAt keyword keywordLength stateAtKeyword =
 -}
 isDotToken : String -> Int -> Bool
 isDotToken source offset =
-    if String.slice offset (offset + 1) source == "." then
-        not (isOperatorChar (String.slice (offset + 1) (offset + 2) source))
+    if String.left 1 (String.dropLeft offset source) == "." then
+        not (isOperatorChar (String.left 1 (String.dropLeft (offset + 1) source)))
 
     else
         False
@@ -6842,8 +6830,8 @@ isDotToken source offset =
 
 isPipeToken : String -> Int -> Bool
 isPipeToken source offset =
-    if String.slice offset (offset + 1) source == "|" then
-        not (isOperatorChar (String.slice (offset + 1) (offset + 2) source))
+    if String.left 1 (String.dropLeft offset source) == "|" then
+        not (isOperatorChar (String.left 1 (String.dropLeft (offset + 1) source)))
 
     else
         False
@@ -6851,8 +6839,8 @@ isPipeToken source offset =
 
 isColonToken : String -> Int -> Bool
 isColonToken source offset =
-    if String.slice offset (offset + 1) source == ":" then
-        not (isOperatorChar (String.slice (offset + 1) (offset + 2) source))
+    if String.left 1 (String.dropLeft offset source) == ":" then
+        not (isOperatorChar (String.left 1 (String.dropLeft (offset + 1) source)))
 
     else
         False
@@ -6860,8 +6848,8 @@ isColonToken source offset =
 
 isEqualsToken : String -> Int -> Bool
 isEqualsToken source offset =
-    if String.slice offset (offset + 1) source == "=" then
-        not (isOperatorChar (String.slice (offset + 1) (offset + 2) source))
+    if String.left 1 (String.dropLeft offset source) == "=" then
+        not (isOperatorChar (String.left 1 (String.dropLeft (offset + 1) source)))
 
     else
         False
@@ -6880,10 +6868,10 @@ operatorTokenLength : String -> Int -> Int
 operatorTokenLength source offset =
     let
         nextTwoChars =
-            String.slice offset (offset + 2) source
+            String.left 2 (String.dropLeft offset source)
 
         second =
-            String.slice 1 2 nextTwoChars
+            String.left 1 (String.dropLeft 1 nextTwoChars)
     in
     case nextTwoChars of
         "--" ->
@@ -6896,7 +6884,7 @@ operatorTokenLength source offset =
             0
 
         _ ->
-            case String.slice 0 1 nextTwoChars of
+            case String.left 1 nextTwoChars of
                 "-" ->
                     if minusIsOperatorAt source offset then
                         1
@@ -6942,7 +6930,7 @@ operatorTokenLength source offset =
 
 minusIsOperatorAt : String -> Int -> Bool
 minusIsOperatorAt source offset =
-    case String.slice (offset + 1) (offset + 2) source of
+    case String.left 1 (String.dropLeft (offset + 1) source) of
         "" ->
             True
 
@@ -6972,7 +6960,7 @@ previousCharacterEndsExpression source offset =
         False
 
     else
-        case String.slice (offset - 1) offset source of
+        case String.left 1 (String.dropLeft (offset - 1) source) of
             ")" ->
                 True
 
@@ -7157,7 +7145,7 @@ canStartArgumentExpressionAt : String -> Int -> Bool
 canStartArgumentExpressionAt source offset =
     let
         nextTwoChars =
-            String.slice offset (offset + 2) source
+            String.left 2 (String.dropLeft offset source)
     in
     case nextTwoChars of
         ".." ->
@@ -7167,7 +7155,7 @@ canStartArgumentExpressionAt source offset =
             False
 
         _ ->
-            case String.slice 0 1 nextTwoChars of
+            case String.left 1 nextTwoChars of
                 "\"" ->
                     True
 
@@ -7184,7 +7172,7 @@ canStartArgumentExpressionAt source offset =
                     True
 
                 "." ->
-                    not (isOperatorChar (String.slice 1 2 nextTwoChars))
+                    not (isOperatorChar (String.left 1 (String.dropLeft 1 nextTwoChars)))
 
                 "-" ->
                     not (minusIsOperatorAt source offset)
@@ -7205,31 +7193,31 @@ keywords are checked first so each branch reads a whole candidate at once.
 -}
 isKeywordAt : String -> Int -> Bool
 isKeywordAt source offset =
-    case String.slice offset (offset + 4) source of
+    case String.left 4 (String.dropLeft offset source) of
         "case" ->
-            not (isIdentifierChar (String.slice (offset + 4) (offset + 5) source))
+            not (isIdentifierChar (String.left 1 (String.dropLeft (offset + 4) source)))
 
         "then" ->
-            not (isIdentifierChar (String.slice (offset + 4) (offset + 5) source))
+            not (isIdentifierChar (String.left 1 (String.dropLeft (offset + 4) source)))
 
         "else" ->
-            not (isIdentifierChar (String.slice (offset + 4) (offset + 5) source))
+            not (isIdentifierChar (String.left 1 (String.dropLeft (offset + 4) source)))
 
         _ ->
-            case String.slice offset (offset + 3) source of
+            case String.left 3 (String.dropLeft offset source) of
                 "let" ->
-                    not (isIdentifierChar (String.slice (offset + 3) (offset + 4) source))
+                    not (isIdentifierChar (String.left 1 (String.dropLeft (offset + 3) source)))
 
                 _ ->
-                    case String.slice offset (offset + 2) source of
+                    case String.left 2 (String.dropLeft offset source) of
                         "if" ->
-                            not (isIdentifierChar (String.slice (offset + 2) (offset + 3) source))
+                            not (isIdentifierChar (String.left 1 (String.dropLeft (offset + 2) source)))
 
                         "in" ->
-                            not (isIdentifierChar (String.slice (offset + 2) (offset + 3) source))
+                            not (isIdentifierChar (String.left 1 (String.dropLeft (offset + 2) source)))
 
                         "of" ->
-                            not (isIdentifierChar (String.slice (offset + 2) (offset + 3) source))
+                            not (isIdentifierChar (String.left 1 (String.dropLeft (offset + 2) source)))
 
                         _ ->
                             False
@@ -7240,28 +7228,28 @@ arguments of a named pattern.
 -}
 isPatternBoundaryKeywordAt : String -> Int -> Bool
 isPatternBoundaryKeywordAt source offset =
-    case String.slice offset (offset + 4) source of
+    case String.left 4 (String.dropLeft offset source) of
         "then" ->
-            not (isIdentifierChar (String.slice (offset + 4) (offset + 5) source))
+            not (isIdentifierChar (String.left 1 (String.dropLeft (offset + 4) source)))
 
         "else" ->
-            not (isIdentifierChar (String.slice (offset + 4) (offset + 5) source))
+            not (isIdentifierChar (String.left 1 (String.dropLeft (offset + 4) source)))
 
         _ ->
-            case String.slice offset (offset + 3) source of
+            case String.left 3 (String.dropLeft offset source) of
                 "let" ->
-                    not (isIdentifierChar (String.slice (offset + 3) (offset + 4) source))
+                    not (isIdentifierChar (String.left 1 (String.dropLeft (offset + 3) source)))
 
                 _ ->
-                    case String.slice offset (offset + 2) source of
+                    case String.left 2 (String.dropLeft offset source) of
                         "as" ->
-                            not (isIdentifierChar (String.slice (offset + 2) (offset + 3) source))
+                            not (isIdentifierChar (String.left 1 (String.dropLeft (offset + 2) source)))
 
                         "of" ->
-                            not (isIdentifierChar (String.slice (offset + 2) (offset + 3) source))
+                            not (isIdentifierChar (String.left 1 (String.dropLeft (offset + 2) source)))
 
                         "in" ->
-                            not (isIdentifierChar (String.slice (offset + 2) (offset + 3) source))
+                            not (isIdentifierChar (String.left 1 (String.dropLeft (offset + 2) source)))
 
                         _ ->
                             False
@@ -7269,7 +7257,7 @@ isPatternBoundaryKeywordAt source offset =
 
 canStartNamedPatternArgumentAt : String -> Int -> Bool
 canStartNamedPatternArgumentAt source offset =
-    case String.slice offset (offset + 1) source of
+    case String.left 1 (String.dropLeft offset source) of
         "\"" ->
             True
 
@@ -7298,7 +7286,7 @@ canStartNamedPatternArgumentAt source offset =
 
 canStartArgumentPatternAt : String -> Int -> Bool
 canStartArgumentPatternAt source offset =
-    case String.slice offset (offset + 1) source of
+    case String.left 1 (String.dropLeft offset source) of
         "(" ->
             True
 
@@ -7314,7 +7302,7 @@ canStartArgumentPatternAt source offset =
 
 canStartTypeAnnotationAt : String -> Int -> Bool
 canStartTypeAnnotationAt source offset =
-    case String.slice offset (offset + 1) source of
+    case String.left 1 (String.dropLeft offset source) of
         "(" ->
             True
 
@@ -7327,7 +7315,7 @@ canStartTypeAnnotationAt source offset =
 
 isClosingAt : String -> Int -> Bool
 isClosingAt source offset =
-    case String.slice offset (offset + 1) source of
+    case String.left 1 (String.dropLeft offset source) of
         "," ->
             True
 
@@ -7374,7 +7362,7 @@ consumeLiteral termination source startRow startColumn offset row column decoded
             findLiteralRunEnd termination source offset
 
         run =
-            String.slice offset runEndOffset source
+            String.left (runEndOffset - offset) (String.dropLeft offset source)
 
         columnAfterRun =
             column + (runEndOffset - offset)
@@ -7436,7 +7424,7 @@ consumeLiteral termination source startRow startColumn offset row column decoded
                 ("\n" :: rawChunksAfterRun)
 
         LiteralRunBackslash ->
-            case String.slice (runEndOffset + 1) (runEndOffset + 2) source of
+            case String.left 1 (String.dropLeft (runEndOffset + 1) source) of
                 "u" ->
                     consumeUnicodeEscape
                         termination
@@ -7500,11 +7488,11 @@ consumeUnicodeEscape termination source startRow startColumn escapeOffset escape
         afterPrefixOffset =
             escapeOffset + 2
     in
-    if String.slice afterPrefixOffset (afterPrefixOffset + 1) source == "{" then
+    if String.left 1 (String.dropLeft afterPrefixOffset source) == "{" then
         case scanUnicodeEscapeDigits source (afterPrefixOffset + 1) of
             Just ( digitsEndOffset, codePoint ) ->
                 if
-                    String.slice digitsEndOffset (digitsEndOffset + 1) source
+                    String.left 1 (String.dropLeft digitsEndOffset source)
                         == "}"
                         && codePoint
                         <= 0x0010FFFF
@@ -7518,7 +7506,7 @@ consumeUnicodeEscape termination source startRow startColumn escapeOffset escape
                         escapeRow
                         (escapeColumn + ((digitsEndOffset + 1) - escapeOffset))
                         (String.fromChar (Char.fromCode codePoint) :: decodedChunksRev)
-                        (String.slice escapeOffset (digitsEndOffset + 1) source :: rawChunksRev)
+                        (String.left (digitsEndOffset + 1 - escapeOffset) (String.dropLeft escapeOffset source) :: rawChunksRev)
 
                 else
                     Err ("Invalid unicode escape at " ++ locationString { row = escapeRow, column = escapeColumn } ++ ".")
@@ -7575,16 +7563,16 @@ literalEndOffset termination source offset =
 -}
 snippetAt : ParserState -> String
 snippetAt state =
-    case String.slice state.offset (state.offset + 1) state.source of
+    case String.left 1 (String.dropLeft state.offset state.source) of
         "" ->
             "<end of input>"
 
         first ->
             if isIdentifierStart first then
-                String.slice state.offset (skipToIdentifierEnd state.source (state.offset + 1)) state.source
+                String.left (skipToIdentifierEnd state.source (state.offset + 1) - state.offset) (String.dropLeft state.offset state.source)
 
             else if isDigit first then
-                String.slice state.offset (numberEnd state.source first state.offset) state.source
+                String.left (numberEnd state.source first state.offset - state.offset) (String.dropLeft state.offset state.source)
 
             else
                 first
@@ -7596,7 +7584,7 @@ snippetAt state =
 
 parseNumber : String -> Expression.Expression
 parseNumber literal =
-    if String.slice 0 2 literal == "0x" then
+    if String.left 2 literal == "0x" then
         Expression.IntegerLiteral literal
 
     else if isFloatLiteral literal then

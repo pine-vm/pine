@@ -361,6 +361,102 @@ public class SequentialIREfficiencyTests
             """);
     }
 
+    [Fact]
+    public void String_left_variable_of_String_dropLeft_compiles_to_fused_slice()
+    {
+        const string ElmModuleText =
+            """
+            module Test exposing (..)
+
+
+            testFunction takeCount skipCount source =
+                String.left takeCount (String.dropLeft skipCount source)
+            """;
+
+        var parsedEnvironment =
+            ElmCompilerTestHelper.CompileElmModules(
+                [ElmModuleText],
+                disableInlining: false).parsedEnv;
+
+        var functionValue =
+            parsedEnvironment.Modules
+            .Single(module => module.moduleName is "Test")
+            .moduleContent.FunctionDeclarations["testFunction"];
+
+        var parseCache = new PineVMParseCache();
+
+        var functionRecord =
+            FunctionRecord.ParseFunctionRecordTagged(functionValue, parseCache)
+            .Extract(error => throw new Exception(error));
+
+        var renderedFrame =
+            RenderFrame(
+                functionRecord.InnerFunction,
+                parseCache);
+
+        renderedFrame.Should().Be(
+            """
+            bacd3d53 (8):
+            0: Local_Get (2)
+            1: Local_Get (1)
+            2: Int_Mul_Const (4)
+            3: Local_Get (0)
+            4: Int_Mul_Const (4)
+            5: Slice_Skip_Var_Take_Var
+            6: Build_List_With_Prefix (2 , 1)
+              Blob [52] (0x0000003c00000043000000680000006f0000006900000063000000650000005f... | UTF32 "\u003CChoice_Type\u003E")
+              Blob [24] (0x000000530000007400000072000000690000006e00000067 | UTF32 "String")
+            7: Return
+            """);
+    }
+
+    [Fact]
+    public void String_left_constant_of_String_dropLeft_compiles_to_fused_slice()
+    {
+        const string ElmModuleText =
+            """
+            module Test exposing (..)
+
+
+            testFunction skipCount source =
+                String.left 3 (String.dropLeft skipCount source)
+            """;
+
+        var parsedEnvironment =
+            ElmCompilerTestHelper.CompileElmModules(
+                [ElmModuleText],
+                disableInlining: false).parsedEnv;
+
+        var functionValue =
+            parsedEnvironment.Modules
+            .Single(module => module.moduleName is "Test")
+            .moduleContent.FunctionDeclarations["testFunction"];
+
+        var parseCache = new PineVMParseCache();
+
+        var functionRecord =
+            FunctionRecord.ParseFunctionRecordTagged(functionValue, parseCache)
+            .Extract(error => throw new Exception(error));
+
+        var renderedFrame =
+            RenderFrame(
+                functionRecord.InnerFunction,
+                parseCache);
+
+        renderedFrame.Should().Be(
+            """
+            081793dc (6):
+            0: Local_Get (1)
+            1: Local_Get (0)
+            2: Int_Mul_Const (4)
+            3: Slice_Skip_Var_Take_Const (12)
+            4: Build_List_With_Prefix (2 , 1)
+              Blob [52] (0x0000003c00000043000000680000006f0000006900000063000000650000005f... | UTF32 "\u003CChoice_Type\u003E")
+              Blob [24] (0x000000530000007400000072000000690000006e00000067 | UTF32 "String")
+            5: Return
+            """);
+    }
+
     private static string RenderFrame(
         Expression rootExpression,
         PineVMParseCache parseCache)

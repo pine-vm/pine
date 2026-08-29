@@ -662,7 +662,7 @@ isUpperCharacter character =
 
 startsWithUpper : String -> Bool
 startsWithUpper name =
-    isUpperCharacter (String.slice 0 1 name)
+    isUpperCharacter (String.left 1 name)
 
 
 
@@ -671,7 +671,7 @@ startsWithUpper name =
 
 skipInlineWhitespace : String -> Int -> Int
 skipInlineWhitespace source offset =
-    case String.slice offset (offset + 1) source of
+    case String.left 1 (String.dropLeft offset source) of
         " " ->
             skipInlineWhitespace source (offset + 1)
 
@@ -684,7 +684,7 @@ skipInlineWhitespace source offset =
 
 skipToIdentifierEnd : String -> Int -> Int
 skipToIdentifierEnd source offset =
-    if isIdentifierChar (String.slice offset (offset + 1) source) then
+    if isIdentifierChar (String.left 1 (String.dropLeft offset source)) then
         skipToIdentifierEnd source (offset + 1)
 
     else
@@ -693,7 +693,7 @@ skipToIdentifierEnd source offset =
 
 skipToAsciiDecimalDigitEnd : String -> Int -> Int
 skipToAsciiDecimalDigitEnd source offset =
-    if isDigit (String.slice offset (offset + 1) source) then
+    if isDigit (String.left 1 (String.dropLeft offset source)) then
         skipToAsciiDecimalDigitEnd source (offset + 1)
 
     else
@@ -702,7 +702,7 @@ skipToAsciiDecimalDigitEnd source offset =
 
 skipToAsciiHexDigitEnd : String -> Int -> Int
 skipToAsciiHexDigitEnd source offset =
-    if isAsciiHexDigit (String.slice offset (offset + 1) source) then
+    if isAsciiHexDigit (String.left 1 (String.dropLeft offset source)) then
         skipToAsciiHexDigitEnd source (offset + 1)
 
     else
@@ -714,7 +714,7 @@ skipOperatorChars source offset offsetMax =
     if offset >= offsetMax then
         offset
 
-    else if isOperatorChar (String.slice offset (offset + 1) source) then
+    else if isOperatorChar (String.left 1 (String.dropLeft offset source)) then
         skipOperatorChars source (offset + 1) offsetMax
 
     else
@@ -723,7 +723,7 @@ skipOperatorChars source offset offsetMax =
 
 numberEnd : String -> String -> Int -> Int
 numberEnd source first startOffset =
-    if first == "0" && String.slice (startOffset + 1) (startOffset + 2) source == "x" then
+    if first == "0" && String.left 1 (String.dropLeft (startOffset + 1) source) == "x" then
         skipToAsciiHexDigitEnd source (startOffset + 2)
 
     else
@@ -737,12 +737,12 @@ common decimal path with one precompiled leaf, instead of re-entering the VM for
 -}
 numberEndDecimal : String -> Int -> Int
 numberEndDecimal source offset =
-    case String.slice offset (offset + 1) source of
+    case String.left 1 (String.dropLeft offset source) of
         first ->
             if isDigit first then
                 numberEndDecimal source (offset + 1)
 
-            else if first == "." && isDigit (String.slice (offset + 1) (offset + 2) source) then
+            else if first == "." && isDigit (String.left 1 (String.dropLeft (offset + 1) source)) then
                 numberEndFraction source (offset + 2)
 
             else
@@ -751,7 +751,7 @@ numberEndDecimal source offset =
 
 numberEndFraction : String -> Int -> Int
 numberEndFraction source offset =
-    case String.slice offset (offset + 1) source of
+    case String.left 1 (String.dropLeft offset source) of
         first ->
             if isDigit first then
                 numberEndFraction source (offset + 1)
@@ -762,7 +762,7 @@ numberEndFraction source offset =
 
 numberEndExponent : String -> Int -> Int
 numberEndExponent source offset =
-    case String.slice offset (offset + 1) source of
+    case String.left 1 (String.dropLeft offset source) of
         "e" ->
             numberEndExponentDigits source (offset + 1)
 
@@ -775,7 +775,7 @@ numberEndExponent source offset =
 
 numberEndExponentDigits : String -> Int -> Int
 numberEndExponentDigits source offset =
-    case String.slice offset (offset + 1) source of
+    case String.left 1 (String.dropLeft offset source) of
         "+" ->
             skipToAsciiDecimalDigitEnd source (offset + 1)
 
@@ -794,7 +794,7 @@ isFloatLiteral source =
 
 isFloatLiteralAt : String -> Int -> Bool
 isFloatLiteralAt source offset =
-    case String.slice offset (offset + 1) source of
+    case String.left 1 (String.dropLeft offset source) of
         "." ->
             True
 
@@ -816,7 +816,7 @@ CRLF line break, or at the end of input. The line break itself is left unconsume
 -}
 lineCommentEnd : String -> Int -> Int
 lineCommentEnd source offset =
-    case String.slice offset (offset + 1) source of
+    case String.left 1 (String.dropLeft offset source) of
         "" ->
             offset
 
@@ -841,11 +841,11 @@ type MultilineCommentRunEnd
 
 {-| Finds the offset where a run of plain multi-line-comment content ends: at the next `{`, `-`,
 line break, or the end of input. As with `findLiteralRunEnd`, this lets the caller take a single
-`String.slice` for the whole run.
+`String.left` over `String.dropLeft` for the whole run.
 -}
 multilineCommentRunEnd : String -> Int -> ( Int, MultilineCommentRunEnd )
 multilineCommentRunEnd source offset =
-    case String.slice offset (offset + 2) source of
+    case String.left 2 (String.dropLeft offset source) of
         "{-" ->
             ( offset, MultilineCommentRunEnd_StartComment )
 
@@ -856,7 +856,7 @@ multilineCommentRunEnd source offset =
             ( offset, MultilineCommentRunEnd_NewlineCRLF )
 
         _ ->
-            case String.slice offset (offset + 1) source of
+            case String.left 1 (String.dropLeft offset source) of
                 "" ->
                     ( offset, MultilineCommentRunEnd_EndOfInput )
 
@@ -907,7 +907,7 @@ type LiteralRunBoundary
 {-| Scans forward from `offset` while the source neither matches the termination sequence nor
 contains a backslash escape or a line break, returning the offset where that run of plain
 content ends together with the reason it stopped. Callers use this offset to take a single
-`String.slice` for the whole run instead of accumulating characters one at a time.
+`String.left` over `String.dropLeft` for the whole run instead of accumulating characters one at a time.
 -}
 findLiteralRunEnd : LiteralTermination -> String -> Int -> ( Int, LiteralRunBoundary )
 findLiteralRunEnd termination source offset =
@@ -924,7 +924,7 @@ findLiteralRunEnd termination source offset =
 
 findSingleQuotedLiteralRunEnd : String -> Int -> ( Int, LiteralRunBoundary )
 findSingleQuotedLiteralRunEnd source offset =
-    case String.slice offset (offset + 1) source of
+    case String.left 1 (String.dropLeft offset source) of
         "'" ->
             ( offset, LiteralRunTermination )
 
@@ -938,7 +938,7 @@ findSingleQuotedLiteralRunEnd source offset =
             ( offset, LiteralRunNewlineLF )
 
         "\u{000D}" ->
-            if String.slice (offset + 1) (offset + 2) source == "\n" then
+            if String.left 1 (String.dropLeft (offset + 1) source) == "\n" then
                 ( offset, LiteralRunNewlineCRLF )
 
             else
@@ -950,7 +950,7 @@ findSingleQuotedLiteralRunEnd source offset =
 
 findDoubleQuotedLiteralRunEnd : String -> Int -> ( Int, LiteralRunBoundary )
 findDoubleQuotedLiteralRunEnd source offset =
-    case String.slice offset (offset + 1) source of
+    case String.left 1 (String.dropLeft offset source) of
         "\"" ->
             ( offset, LiteralRunTermination )
 
@@ -964,7 +964,7 @@ findDoubleQuotedLiteralRunEnd source offset =
             ( offset, LiteralRunNewlineLF )
 
         "\u{000D}" ->
-            if String.slice (offset + 1) (offset + 2) source == "\n" then
+            if String.left 1 (String.dropLeft (offset + 1) source) == "\n" then
                 ( offset, LiteralRunNewlineCRLF )
 
             else
@@ -976,11 +976,11 @@ findDoubleQuotedLiteralRunEnd source offset =
 
 findTripleQuotedLiteralRunEnd : String -> Int -> ( Int, LiteralRunBoundary )
 findTripleQuotedLiteralRunEnd source offset =
-    if String.slice offset (offset + 3) source == "\"\"\"" then
+    if String.left 3 (String.dropLeft offset source) == "\"\"\"" then
         ( offset, LiteralRunTermination )
 
     else
-        case String.slice offset (offset + 1) source of
+        case String.left 1 (String.dropLeft offset source) of
             "" ->
                 ( offset, LiteralRunUnterminated )
 
@@ -991,7 +991,7 @@ findTripleQuotedLiteralRunEnd source offset =
                 ( offset, LiteralRunNewlineLF )
 
             "\u{000D}" ->
-                if String.slice (offset + 1) (offset + 2) source == "\n" then
+                if String.left 1 (String.dropLeft (offset + 1) source) == "\n" then
                     ( offset, LiteralRunNewlineCRLF )
 
                 else
@@ -1003,7 +1003,7 @@ findTripleQuotedLiteralRunEnd source offset =
 
 scanUnicodeEscapeDigits : String -> Int -> Maybe ( Int, Int )
 scanUnicodeEscapeDigits source offset =
-    case String.slice offset (offset + 1) source of
+    case String.left 1 (String.dropLeft offset source) of
         "0" ->
             Just (scanUnicodeEscapeDigitsHelp source (offset + 1) 0)
 
@@ -1076,7 +1076,7 @@ scanUnicodeEscapeDigits source offset =
 
 scanUnicodeEscapeDigitsHelp : String -> Int -> Int -> ( Int, Int )
 scanUnicodeEscapeDigitsHelp source offset value =
-    case String.slice offset (offset + 1) source of
+    case String.left 1 (String.dropLeft offset source) of
         "0" ->
             scanUnicodeEscapeDigitsHelp source (offset + 1) (value * 16)
 
@@ -1188,7 +1188,7 @@ first-order recursion. Used for hexadecimal integer literals and `\u{...}` escap
 -}
 hexStringToInt : String -> Maybe Int
 hexStringToInt digits =
-    case String.slice 0 1 digits of
+    case String.left 1 digits of
         "0" ->
             Just 0
 
@@ -1261,7 +1261,7 @@ hexStringToInt digits =
 
 convert0OrMoreHexadecimalValue : Int -> Int -> String -> Maybe Int
 convert0OrMoreHexadecimalValue value offset source =
-    case String.slice offset (offset + 1) source of
+    case String.left 1 (String.dropLeft offset source) of
         "" ->
             Just value
 
