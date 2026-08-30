@@ -141,6 +141,50 @@ public class FormatTests
     }
 
     [Fact]
+    public void FormatToString_indents_multiline_comment_contents()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            value offset =
+                if
+                    offset >= 0
+                    {-
+                    Add an explicit branch.
+                      Preserve relative indentation.
+                    -}
+                then
+                    1
+
+                else
+                    0
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+
+            value offset =
+                if
+                    offset >= 0
+                    {-
+                       Add an explicit branch.
+                         Preserve relative indentation.
+                    -}
+                then
+                    1
+
+                else
+                    0
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
     public void FormatToString_orders_imports()
     {
         var input =

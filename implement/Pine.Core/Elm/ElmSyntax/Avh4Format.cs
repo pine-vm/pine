@@ -386,8 +386,16 @@ public class Avh4Format
             Node<ParsedComment> comment)
         {
             var commentLocation = CurrentLocation();
-            var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-            var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
+
+            var formattedText =
+                comment.Value.Category is CommentCategory.BlockComment_MultiLine
+                ?
+                NormalizeMultilineBlockComment(comment.Value.Text, commentLocation.Column)
+                :
+                comment.Value.Text;
+
+            var commentEnd = CalculateCommentEndLocation(commentLocation, formattedText);
+            var formattedComment = new Node<string>(new Range(commentLocation, commentEnd), formattedText);
             var updatedComments = Comments.Add(formattedComment);
             return new FormattingContext(commentEnd.Row, commentEnd.Column, IndentSpaces, updatedComments);
         }
@@ -464,11 +472,196 @@ public class Avh4Format
         return (lineBreakCount, lastLineLength);
     }
 
+    private static string NormalizeMultilineBlockComment(
+        string commentText,
+        int startColumn)
+    {
+        var lines = commentText.Split('\n');
+
+        if (lines.Length < 2)
+            return commentText;
+
+        var closingLineIndex =
+            lines[^1].TrimStart().StartsWith("-}", System.StringComparison.Ordinal)
+            ?
+            lines.Length - 1
+            :
+            lines.Length;
+
+        var contentLines =
+            lines
+            .Skip(1)
+            .Take(closingLineIndex - 1)
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .ToList();
+
+        if (contentLines.Count > 0)
+        {
+            var minimumContentIndent = contentLines.Min(LeadingSpaceCount);
+            var targetContentIndent = startColumn - 1 + 3;
+            var indentAdjustment = targetContentIndent - minimumContentIndent;
+
+            for (var index = 1; index < closingLineIndex; index++)
+            {
+                if (string.IsNullOrWhiteSpace(lines[index]))
+                    continue;
+
+                lines[index] =
+                    indentAdjustment >= 0
+                    ?
+                    new string(' ', indentAdjustment) + lines[index]
+                    :
+                    lines[index][System.Math.Min(-indentAdjustment, LeadingSpaceCount(lines[index]))..];
+            }
+        }
+
+        if (closingLineIndex < lines.Length)
+        {
+            lines[closingLineIndex] =
+                new string(' ', startColumn - 1) +
+                lines[closingLineIndex].TrimStart();
+        }
+
+        return string.Join("\n", lines);
+    }
+
+    private static int LeadingSpaceCount(string text)
+    {
+        var count = 0;
+
+        while (count < text.Length && text[count] is ' ')
+            count++;
+
+        return count;
+    }
+
     /// <summary>
     /// Check if a range spans multiple rows.
     /// </summary>
     private static bool SpansMultipleRows(Range range) =>
         range.End.Row > range.Start.Row;
+
+    private static bool HasSyntaxLineBreak(
+        ExpressionSyntax expression,
+        Range range)
+    {
+        if (!SpansMultipleRows(range))
+            return false;
+
+        if (ContainsIntrinsicallyMultilineExpression(expression))
+            return true;
+
+        var multilineTokenRanges =
+            MultilineTokenRanges(MakeNode(range, expression))
+            .ToList();
+
+        for (var row = range.Start.Row; row < range.End.Row; row++)
+        {
+            if (!multilineTokenRanges.Any(
+                tokenRange =>
+                // Formatting may place a multiline token on the row after its containing syntax.
+                tokenRange.Start.Row <= row + 1 &&
+                row < tokenRange.End.Row))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsIntrinsicallyMultilineExpression(
+        ExpressionSyntax expression) =>
+        IsIntrinsicallyMultilineExpression(expression) ||
+        DirectExpressionChildren(expression)
+        .Any(child => ContainsIntrinsicallyMultilineExpression(child.Value));
+
+    private static IEnumerable<Range> MultilineTokenRanges(
+        Node<ExpressionSyntax> expression)
+    {
+        if (expression.Value is ExpressionSyntax.MultilineStringLiteral or ExpressionSyntax.GLSLExpression)
+        {
+            yield return expression.Range;
+            yield break;
+        }
+
+        foreach (var child in DirectExpressionChildren(expression.Value))
+        {
+            foreach (var tokenRange in MultilineTokenRanges(child))
+                yield return tokenRange;
+        }
+    }
+
+    private static IEnumerable<Node<ExpressionSyntax>> DirectExpressionChildren(
+        ExpressionSyntax expression) =>
+        expression switch
+        {
+            ExpressionSyntax.Negation negation =>
+            [negation.Expression],
+
+            ExpressionSyntax.ListExpr list =>
+            list.Elements.Nodes,
+
+            ExpressionSyntax.Parenthesized parenthesized =>
+            [parenthesized.Expression],
+
+            ExpressionSyntax.Application application =>
+            [application.Function, .. application.Arguments],
+
+            ExpressionSyntax.OperatorApplication operatorApplication =>
+            [operatorApplication.Left, operatorApplication.Right],
+
+            ExpressionSyntax.TupledExpression tuple =>
+            tuple.Elements.Nodes,
+
+            ExpressionSyntax.IfBlock ifBlock =>
+            [ifBlock.Condition, ifBlock.ThenBlock, ifBlock.ElseBlock],
+
+            ExpressionSyntax.LambdaExpression lambda =>
+            [lambda.Lambda.Expression],
+
+            ExpressionSyntax.CaseExpression caseExpression =>
+            [
+                caseExpression.CaseBlock.Expression,
+                .. caseExpression.CaseBlock.Cases.Select(caseBranch => caseBranch.Expression)
+            ],
+
+            ExpressionSyntax.LetExpression letExpression =>
+            [
+                .. LetDeclarationExpressions(letExpression.Value.Declarations),
+                letExpression.Value.Expression
+            ],
+
+            ExpressionSyntax.RecordExpr record =>
+            record.Fields.Nodes.Select(field => field.ValueExpr),
+
+            ExpressionSyntax.RecordAccess recordAccess =>
+            [recordAccess.Record],
+
+            ExpressionSyntax.RecordUpdateExpression recordUpdate =>
+            recordUpdate.Fields.Nodes.Select(field => field.ValueExpr),
+
+            _ =>
+            []
+        };
+
+    private static IEnumerable<Node<ExpressionSyntax>> LetDeclarationExpressions(
+        IEnumerable<Node<ExpressionSyntax.LetDeclaration>> declarations) =>
+        declarations.Select(
+            declaration =>
+            declaration.Value switch
+            {
+                ExpressionSyntax.LetDeclaration.LetFunction function =>
+                function.Function.Declaration.Value.Expression,
+
+                ExpressionSyntax.LetDeclaration.LetDestructuring destructuring =>
+                destructuring.Expression,
+
+                _ =>
+                throw new System.NotImplementedException(
+                    "Unexpected let declaration type: " +
+                    declaration.Value.GetType().FullName)
+            });
 
     private static bool HasMultilineOperatorAtPrecedence(
         ExpressionSyntax.OperatorApplication operatorApplication,
@@ -5096,6 +5289,9 @@ public class Avh4Format
                                 multilineOperatorPrecedence: precedenceLevelIsMultiline ? precedence : null,
                                 multilineOperatorAlignment: precedenceLevelAlignment);
 
+                        var currentNodeHasSyntaxLineBreak =
+                            HasSyntaxLineBreak(opApp, originalRange);
+
                         // Check if the right operand is on a new line in the original
                         var rightOnNewLine = opApp.Right.Range.Start.Row > opApp.Left.Range.End.Row;
 
@@ -5106,6 +5302,7 @@ public class Avh4Format
                         // (even if it starts on the same line as <|)
                         var treatAsMultiline =
                             precedenceLevelIsMultiline ||
+                            currentNodeHasSyntaxLineBreak ||
                             rightOnNewLine ||
                             (opApp.Operator.Value is "<|" && rightIsMultiline) ||
                             (opApp.Operator.Value is "|>" && forcePipeChainMultiline);

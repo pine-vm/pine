@@ -266,4 +266,96 @@ public class OperatorPrecedenceMultilineTests
 
         AssertModuleTextFormatsToItself(input);
     }
+
+    [Theory]
+    [InlineData("::")]
+    [InlineData("++")]
+    [InlineData("+")]
+    public void Multiline_left_operand_makes_current_operator_expression_multiline(string operatorName)
+    {
+        var inputTemplate =
+            """"
+            module Test exposing (..)
+
+
+            value =
+                makeToken
+                    first
+                    (Just raw) OPERATOR tokensRev
+            """";
+
+        var expectedTemplate =
+            """"
+            module Test exposing (..)
+
+
+            value =
+                makeToken
+                    first
+                    (Just raw)
+                    OPERATOR tokensRev
+            """";
+
+        AssertModuleTextFormatsToExpected(
+            inputTemplate.Replace("OPERATOR", operatorName),
+            expectedTemplate.Replace("OPERATOR", operatorName));
+    }
+
+    [Fact]
+    public void Multiline_right_operand_makes_current_operator_expression_multiline()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            value =
+                tokensRev ++ makeToken
+                    first
+                    second
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+
+            value =
+                tokensRev
+                    ++ makeToken
+                        first
+                        second
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
+    public void Newlines_inside_multiline_literal_do_not_make_operator_expression_multiline()
+    {
+        var input =
+            """""
+            module Test exposing (..)
+
+
+            value =
+                identity """
+            literal
+            """ ++ rest
+            """"";
+
+        var expected =
+            """""
+            module Test exposing (..)
+
+
+            value =
+                identity
+                    """
+            literal
+            """ ++ rest
+            """"";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
 }

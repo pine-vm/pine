@@ -565,7 +565,10 @@ public class SnapshotTestFormat
                         Range =
                         new Range(
                             Start: new Location(Row: elemRow, Column: 5),
-                            End: new Location(Row: elemRow + 1, Column: 15))
+                            End:
+                            new Location(
+                                Row: elemRow + (elem.Range.End.Row > elem.Range.Start.Row ? 1 : 0),
+                                Column: 15))
                     });
             }
 
@@ -859,7 +862,10 @@ public class SnapshotTestFormat
                     Range =
                     new Range(
                         Start: new Location(Row: elemRow, Column: 5),
-                        End: new Location(Row: elemRow + 1, Column: 15))
+                        End:
+                        new Location(
+                            Row: elemRow + (elem.Range.End.Row > elem.Range.Start.Row ? 1 : 0),
+                            Column: 15))
                 });
         }
 

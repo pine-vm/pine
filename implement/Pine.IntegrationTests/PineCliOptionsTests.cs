@@ -95,7 +95,6 @@ public class PineCliOptionsTests
         }
     }
 
-
     [Fact]
     public void Elm_test_command_exposes_filter_option()
     {
