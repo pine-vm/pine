@@ -231,4 +231,16 @@ public class ElmSyntaxParserDeclarationOrExpressionTests
 
         parsed.Should().BeOfType<ElmSyntaxParser.DeclarationOrExpression.ExpressionSyntax>();
     }
+
+    [Theory]
+    [InlineData("value : Alfa{- comment -}.Beta\nvalue = 0")]
+    [InlineData("value (Alfa{- comment -}.field) = 0")]
+    public void Comment_between_qualified_name_parts_is_rejected_outside_expressions(string elmText)
+    {
+        // Reference-tool experiments:
+        // https://github.com/Viir/super-duper-disco/blob/main/explore/internal-analysis/2026-08-30-elm-qualified-name-trivia.md
+        ElmSyntaxParser.ParseDeclarationOrExpression(elmText)
+            .IsErrOrNull()
+            .Should().NotBeNull();
+    }
 }

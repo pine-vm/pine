@@ -660,6 +660,91 @@ isUpperCharacter character =
             False
 
 
+isLowerCharacter : String -> Bool
+isLowerCharacter character =
+    case character of
+        "a" ->
+            True
+
+        "b" ->
+            True
+
+        "c" ->
+            True
+
+        "d" ->
+            True
+
+        "e" ->
+            True
+
+        "f" ->
+            True
+
+        "g" ->
+            True
+
+        "h" ->
+            True
+
+        "i" ->
+            True
+
+        "j" ->
+            True
+
+        "k" ->
+            True
+
+        "l" ->
+            True
+
+        "m" ->
+            True
+
+        "n" ->
+            True
+
+        "o" ->
+            True
+
+        "p" ->
+            True
+
+        "q" ->
+            True
+
+        "r" ->
+            True
+
+        "s" ->
+            True
+
+        "t" ->
+            True
+
+        "u" ->
+            True
+
+        "v" ->
+            True
+
+        "w" ->
+            True
+
+        "x" ->
+            True
+
+        "y" ->
+            True
+
+        "z" ->
+            True
+
+        _ ->
+            False
+
+
 startsWithUpper : String -> Bool
 startsWithUpper name =
     isUpperCharacter (String.left 1 name)

@@ -11,6 +11,18 @@ namespace Pine.Core.Tests.Elm.ElmSyntax;
 public class ElmSyntaxParserTests
 {
     [Theory]
+    [InlineData("module Main{- comment -}.Nested exposing (..)")]
+    [InlineData("module Main exposing (..)\n\nimport Alfa{- comment -}.Beta")]
+    public void Comment_between_module_name_parts_is_rejected(string elmModuleText)
+    {
+        // Reference-tool experiments:
+        // https://github.com/Viir/super-duper-disco/blob/main/explore/internal-analysis/2026-08-30-elm-qualified-name-trivia.md
+        ElmSyntaxParser.ParseModuleText(elmModuleText)
+            .IsErrOrNullable()
+            .Should().NotBeNull();
+    }
+
+    [Theory]
     [InlineData("0xe5")]
     [InlineData("0xABCDEF")]
     [InlineData("0xface")]

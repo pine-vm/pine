@@ -3607,7 +3607,7 @@ public class ElmSyntaxParser
                     if (!TryUnwrap(Consume(TokenType.Dot), out var dotToken, out var dotErr))
                         return dotErr;
 
-                    if (!TryUnwrap(ConsumeAdjacentIdentifier(dotToken, "record field name"), out var recordFieldToken, out var recordFieldErr))
+                    if (!TryUnwrap(ConsumeAdjacentLowerIdentifier(dotToken, "record field name"), out var recordFieldToken, out var recordFieldErr))
                         return recordFieldErr;
 
                     var recordAccessRange =
@@ -4163,7 +4163,7 @@ public class ElmSyntaxParser
                 if (!TryUnwrap(Consume(TokenType.Dot), out var dotToken, out var dotErr))
                     return dotErr;
 
-                if (!TryUnwrap(ConsumeAdjacentIdentifier(dotToken, "record field name"), out var recordFieldToken, out var recordFieldErr))
+                if (!TryUnwrap(ConsumeAdjacentLowerIdentifier(dotToken, "record field name"), out var recordFieldToken, out var recordFieldErr))
                     return recordFieldErr;
 
                 var recordAccessRange =
@@ -5225,6 +5225,24 @@ public class ElmSyntaxParser
                     new ElmSyntaxParseError(
                         identifier.Start,
                         "Expected " + description + " immediately after '" + previousToken.Lexeme + "'");
+            }
+
+            return identifier;
+        }
+
+        private ParseResult<Token> ConsumeAdjacentLowerIdentifier(
+            Token previousToken,
+            string description)
+        {
+            if (!TryUnwrap(ConsumeAdjacentIdentifier(previousToken, description), out var identifier, out var identifierErr))
+                return identifierErr;
+
+            if (!char.IsLower(identifier.Lexeme[0]))
+            {
+                return
+                    new ElmSyntaxParseError(
+                        identifier.Start,
+                        "Expected " + description + " to start with a lowercase letter");
             }
 
             return identifier;

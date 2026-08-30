@@ -22,6 +22,7 @@ import ElmSyntax.Concrete.Parser.StringParsing as StringParsing
         , isFloatLiteral
         , isIdentifierChar
         , isIdentifierStart
+        , isLowerCharacter
         , isOperatorChar
         , isUpperCharacter
         , isWhitespace
@@ -1074,7 +1075,7 @@ parseModuleNameRest :
     -> ParserState
     -> Result String ( Node Module.ModuleName, ParserState )
 parseModuleNameRest start endRow endColumn partsRev state =
-    parseModuleNameRestAt start endRow endColumn partsRev state (skipTrivia state)
+    parseModuleNameRestAt start endRow endColumn partsRev state state
 
 
 parseModuleNameRestAt :
@@ -1090,14 +1091,12 @@ parseModuleNameRestAt start endRow endColumn partsRev state stateAtDot =
         parseModuleNamePartAt
             start
             partsRev
-            (skipTrivia
-                { source = stateAtDot.source
-                , offset = stateAtDot.offset + 1
-                , row = stateAtDot.row
-                , column = stateAtDot.column + 1
-                , commentsRev = stateAtDot.commentsRev
-                }
-            )
+            { source = stateAtDot.source
+            , offset = stateAtDot.offset + 1
+            , row = stateAtDot.row
+            , column = stateAtDot.column + 1
+            , commentsRev = stateAtDot.commentsRev
+            }
 
     else
         Ok
@@ -4001,7 +4000,7 @@ parseRecordAccesses indentMin record state =
     if String.left 1 (String.dropLeft state.offset state.source) == "." then
         case String.left 1 (String.dropLeft (state.offset + 1) state.source) of
             fieldFirst ->
-                if isIdentifierStart fieldFirst then
+                if isLowerCharacter fieldFirst then
                     let
                         fieldEnd =
                             skipToIdentifierEnd state.source (state.offset + 2)
@@ -4224,17 +4223,16 @@ parseRecordAccessFunction : ParserState -> Result String ( Node Expression.Expre
 parseRecordAccessFunction state =
     let
         stateAtField =
-            skipTrivia
-                { source = state.source
-                , offset = state.offset + 1
-                , row = state.row
-                , column = state.column + 1
-                , commentsRev = state.commentsRev
-                }
+            { source = state.source
+            , offset = state.offset + 1
+            , row = state.row
+            , column = state.column + 1
+            , commentsRev = state.commentsRev
+            }
     in
     case String.left 1 (String.dropLeft stateAtField.offset stateAtField.source) of
         first ->
-            if isIdentifierStart first then
+            if isLowerCharacter first then
                 let
                     fieldEnd =
                         skipToIdentifierEnd stateAtField.source (stateAtField.offset + 1)
@@ -4454,20 +4452,15 @@ parseQualifiedNameRest :
     -> ( Node ( List String, String ), ParserState )
 parseQualifiedNameRest start moduleNamesRev currentName endRow endColumn state =
     if startsWithUpper currentName then
-        let
-            stateAtDot =
-                skipTrivia state
-        in
-        if isDotToken stateAtDot.source stateAtDot.offset then
+        if isDotToken state.source state.offset then
             let
                 stateAtName =
-                    skipTrivia
-                        { source = stateAtDot.source
-                        , offset = stateAtDot.offset + 1
-                        , row = stateAtDot.row
-                        , column = stateAtDot.column + 1
-                        , commentsRev = stateAtDot.commentsRev
-                        }
+                    { source = state.source
+                    , offset = state.offset + 1
+                    , row = state.row
+                    , column = state.column + 1
+                    , commentsRev = state.commentsRev
+                    }
             in
             case String.left 1 (String.dropLeft stateAtName.offset stateAtName.source) of
                 first ->

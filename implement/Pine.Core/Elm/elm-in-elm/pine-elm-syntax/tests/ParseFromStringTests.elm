@@ -79,7 +79,7 @@ directSourceParsingSuite =
             )
             directSourceParsingExpressionCases
         )
-        [ Test.test "carriage returns between declarations do not shift ranges" <|
+        ([ Test.test "carriage returns between declarations do not shift ranges" <|
             \_ ->
                 case
                     ElmSyntax.Concrete.Parser.FromString.parseFile
@@ -92,7 +92,7 @@ directSourceParsingSuite =
 
                     Err err ->
                         Expect.fail ("Expected Ok, but got Err: " ++ err)
-        , Test.test "comments inside a declaration body are collected" <|
+         , Test.test "comments inside a declaration body are collected" <|
             \_ ->
                 case
                     ElmSyntax.Concrete.Parser.FromString.parseFile
@@ -107,7 +107,7 @@ directSourceParsingSuite =
 
                     Err err ->
                         Expect.fail ("Expected Ok, but got Err: " ++ err)
-        , Test.test "comment inside a string literal is not a comment" <|
+         , Test.test "comment inside a string literal is not a comment" <|
             \_ ->
                 case
                     ElmSyntax.Concrete.Parser.FromString.parseFile
@@ -118,7 +118,20 @@ directSourceParsingSuite =
 
                     Err err ->
                         Expect.fail ("Expected Ok, but got Err: " ++ err)
-        ]
+         ]
+            ++ List.map
+                (\testCase ->
+                    Test.test testCase.title <|
+                        \_ ->
+                            case ElmSyntax.Concrete.Parser.FromString.parseFile testCase.input of
+                                Ok actual ->
+                                    Expect.fail ("Expected Err, but got Ok: " ++ Debug.toString actual)
+
+                                Err _ ->
+                                    Expect.pass
+                )
+                directSourceParsingInvalidQualifiedNameCases
+        )
 
 
 directSourceParsingExpressionCases :
@@ -180,7 +193,26 @@ directSourceParsingExpressionCases =
     , { title = "comment between qualified name parts"
       , input = "Alfa{- c -}.beta"
       , expected =
-            Expression.Identifier [ "Alfa" ] "beta"
+            Expression.Application
+                (Node (range 1 1 1 5) (Expression.Identifier [] "Alfa"))
+                [ Node (range 1 12 1 17) (Expression.RecordAccessFunction ".beta") ]
+      }
+    ]
+
+
+directSourceParsingInvalidQualifiedNameCases : List { title : String, input : String }
+directSourceParsingInvalidQualifiedNameCases =
+    [ { title = "comment between module name parts is rejected"
+      , input = "module Main{- c -}.Nested exposing (..)"
+      }
+    , { title = "comment between imported module name parts is rejected"
+      , input = "module Main exposing (..)\n\nimport Alfa{- c -}.Beta"
+      }
+    , { title = "comment between qualified type name parts is rejected"
+      , input = "module Main exposing (..)\n\nvalue : Alfa{- c -}.Beta\nvalue = 0"
+      }
+    , { title = "comment between qualified pattern name parts is rejected"
+      , input = "module Main exposing (..)\n\nvalue (Alfa{- c -}.field) = 0"
       }
     ]
 
@@ -741,6 +773,8 @@ expressionErrSuite =
     , "\\x x"
     , "let x = 1"
     , "case x of"
+    , "Alfa.{- c -}beta"
+    , "Alfa{- c -}.Beta"
     ]
         |> List.map
             (\input ->

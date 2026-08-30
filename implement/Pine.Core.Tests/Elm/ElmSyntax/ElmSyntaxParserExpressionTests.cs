@@ -213,6 +213,34 @@ public class ElmSyntaxParserExpressionTests
                 ]));
     }
 
+    [Fact]
+    public void Comment_before_dot_ends_qualified_name_and_starts_record_accessor_argument()
+    {
+        // Reference-tool experiments:
+        // https://github.com/Viir/super-duper-disco/blob/main/explore/internal-analysis/2026-08-30-elm-qualified-name-trivia.md
+        ParseAndConvert("Alfa{- comment -}.beta")
+            .Should().Be(
+            new Abstract.Expression.Application(
+                Abstract.Expression.Identifier.Create([], "Alfa"),
+                [
+                new Abstract.Expression.RecordAccessFunction(
+                    "beta",
+                    StringEncoding.ValueFromString("beta"))
+                ]));
+    }
+
+    [Theory]
+    [InlineData("Alfa.{- comment -}beta")]
+    [InlineData("Alfa{- comment -}.Beta")]
+    public void Invalid_record_accessor_forms_are_rejected(string expressionText)
+    {
+        // Reference-tool experiments:
+        // https://github.com/Viir/super-duper-disco/blob/main/explore/internal-analysis/2026-08-30-elm-qualified-name-trivia.md
+        ElmSyntaxParser.ParseExpression(expressionText)
+            .IsErrOrNull()
+            .Should().NotBeNull();
+    }
+
     [Theory]
     // Literals
     [InlineData("0")]
