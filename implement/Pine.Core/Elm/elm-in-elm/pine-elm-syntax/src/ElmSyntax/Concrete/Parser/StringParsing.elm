@@ -187,8 +187,8 @@ isIdentifierStart character =
 isIdentifierChar : String -> Bool
 isIdentifierChar character =
     {-
-    TODO: Expand code analysis to optimize form using `List.member` to get the same level of efficiency:
-    List.member char [ "_", "0", "1", ..., "9", "a", "b", ..., "z", "A", "B", ..., "Z" ]
+       TODO: Expand code analysis to optimize form using `List.member` to get the same level of efficiency:
+       List.member char [ "_", "0", "1", ..., "9", "a", "b", ..., "z", "A", "B", ..., "Z" ]
     -}
     case character of
         "_" ->
@@ -516,8 +516,8 @@ isWhitespace character =
 isOperatorChar : String -> Bool
 isOperatorChar character =
     {-
-    TODO: Expand code analysis to optimize form using `List.member` to get the same level of efficiency:
-    List.member char [ "+", "-", "/", "*", "=", ".", "$", "<", ">", ":", "&", "|", "^", "?", "%", "#", "!" ]
+       TODO: Expand code analysis to optimize form using `List.member` to get the same level of efficiency:
+       List.member char [ "+", "-", "/", "*", "=", ".", "$", "<", ">", ":", "&", "|", "^", "?", "%", "#", "!" ]
     -}
     case character of
         "+" ->

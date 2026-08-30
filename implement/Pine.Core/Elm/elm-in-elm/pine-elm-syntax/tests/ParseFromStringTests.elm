@@ -265,7 +265,7 @@ documentationCommentSuite =
 lastDeclarationDocumentation : List (Node Declaration.Declaration) -> Maybe String
 lastDeclarationDocumentation declarations =
     case List.reverse declarations of
-        Node _ (Declaration.FunctionDeclaration function) :: _ ->
+        (Node _ (Declaration.FunctionDeclaration function)) :: _ ->
             case function.documentation of
                 Just (Node _ documentation) ->
                     Just documentation
@@ -280,7 +280,7 @@ lastDeclarationDocumentation declarations =
 nodeStrings : List (Node String) -> List String
 nodeStrings nodes =
     case nodes of
-        Node _ value :: rest ->
+        (Node _ value) :: rest ->
             value :: nodeStrings rest
 
         [] ->

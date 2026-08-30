@@ -9,14 +9,14 @@ import ElmSyntax.Concrete.Range exposing (Location)
 
 {-
 
-/// <summary>
-/// Elm import statement containing target module name, optional alias and exposing list.
-/// </summary>
-public record Import(
-    Location ImportTokenLocation,
-    Node<ModuleName> ModuleName,
-    (Location AsTokenLocation, Node<ModuleName> Alias)? ModuleAlias,
-    (Location ExposingTokenLocation, Node<Exposing> ExposingList)? ExposingList);
+   /// <summary>
+   /// Elm import statement containing target module name, optional alias and exposing list.
+   /// </summary>
+   public record Import(
+       Location ImportTokenLocation,
+       Node<ModuleName> ModuleName,
+       (Location AsTokenLocation, Node<ModuleName> Alias)? ModuleAlias,
+       (Location ExposingTokenLocation, Node<Exposing> ExposingList)? ExposingList);
 
 -}
 

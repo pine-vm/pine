@@ -62,9 +62,9 @@ tokenizeHelp source offset row column tokensRev =
     if
         offset >= 0
         {-
-        Add an explicit branch to make it trivial to prove that `offset` is >= 0 for all usages below.
-        Based on that proof, compiler have an easier way to prove that `String.slice` is always called non-negative offsets,
-        which in turn allows the compile-time removal of the branches in those instances of `String.slice`
+           Add an explicit branch to make it trivial to prove that `offset` is >= 0 for all usages below.
+           Based on that proof, compiler have an easier way to prove that `String.slice` is always called non-negative offsets,
+           which in turn allows the compile-time removal of the branches in those instances of `String.slice`
         -}
     then
         case String.slice offset (offset + 1) source of
@@ -380,7 +380,8 @@ tokenizeLiteral tokenType termination source startOffset startRow startColumn to
                     consumed.decoded
                     (makeLocation startRow startColumn)
                     (makeLocation consumed.endRow consumed.endColumn)
-                    (Just consumed.raw) :: tokensRev
+                    (Just consumed.raw)
+                    :: tokensRev
                 )
 
         Err error ->
@@ -605,9 +606,9 @@ tokenizeMultilineComment source offset row column startRow startColumn tokensRev
     if
         offset >= 0
         {-
-        Add an explicit branch to make it trivial to prove that `offset` is >= 0 for all usages below.
-        Based on that proof, compiler have an easier way to prove that `String.slice` is always called non-negative offsets,
-        which in turn allows the compile-time removal of the branches in those instances of `String.slice`
+           Add an explicit branch to make it trivial to prove that `offset` is >= 0 for all usages below.
+           Based on that proof, compiler have an easier way to prove that `String.slice` is always called non-negative offsets,
+           which in turn allows the compile-time removal of the branches in those instances of `String.slice`
         -}
     then
         let
