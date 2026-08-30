@@ -7225,7 +7225,7 @@ public class Avh4Format
                 case Pattern.UnConsPattern unConsPattern:
                     {
                         // Format: head :: tail
-                        var headResult = FormatPattern(unConsPattern.Head, context);
+                        var headResult = FormatUnConsOperandPattern(unConsPattern.Head, context);
                         var currentContext = headResult.Context;
 
                         // Handle comments between head and :: operator
@@ -7267,7 +7267,7 @@ public class Avh4Format
                             currentContext = currentContext.Advance(1); // space after ::
                         }
 
-                        var tailResult = FormatPattern(unConsPattern.Tail, currentContext);
+                        var tailResult = FormatUnConsOperandPattern(unConsPattern.Tail, currentContext);
                         currentContext = tailResult.Context;
 
                         // Handle comments after tail (but within the overall pattern range)
@@ -7329,6 +7329,22 @@ public class Avh4Format
                     throw new System.NotImplementedException(
                         $"Pattern type '{pattern.GetType().Name}' not implemented in {nameof(FormatPattern)}");
             }
+        }
+
+        private FormattingResult<Node<Pattern>> FormatUnConsOperandPattern(
+            Node<Pattern> patternNode,
+            FormattingContext context)
+        {
+            if (patternNode.Value is not Pattern.NamedPattern { Arguments.Count: > 0 })
+                return FormatPattern(patternNode, context);
+
+            Pattern parenthesizedPattern =
+                new Pattern.ParenthesizedPattern(patternNode);
+
+            return
+                FormatPattern(
+                    MakeNode(patternNode.Range, parenthesizedPattern),
+                    context);
         }
 
         /// <summary>

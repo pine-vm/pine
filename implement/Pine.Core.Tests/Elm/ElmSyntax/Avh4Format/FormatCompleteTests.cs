@@ -3991,6 +3991,64 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Adds_missing_parens_around_named_pattern()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            lastDeclarationDocumentation : List (Node Declaration.Declaration) -> Maybe String
+            lastDeclarationDocumentation declarations =
+                case List.reverse declarations of
+                    Node _ (Declaration.FunctionDeclaration function) :: _ ->
+                        Nothing
+            
+                    _ ->
+                        Nothing
+
+
+            nodeStrings : List (Node String) -> List String
+            nodeStrings nodes =
+                case nodes of
+                    Node _ value :: rest ->
+                        value :: nodeStrings rest
+
+                    [] ->
+                        []
+
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+
+            lastDeclarationDocumentation : List (Node Declaration.Declaration) -> Maybe String
+            lastDeclarationDocumentation declarations =
+                case List.reverse declarations of
+                    (Node _ (Declaration.FunctionDeclaration function)) :: _ ->
+                        Nothing
+            
+                    _ ->
+                        Nothing
+
+
+            nodeStrings : List (Node String) -> List String
+            nodeStrings nodes =
+                case nodes of
+                    (Node _ value) :: rest ->
+                        value :: nodeStrings rest
+
+                    [] ->
+                        []
+            
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
     public void Stable_configurations_units()
     {
         /*
