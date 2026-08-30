@@ -4946,12 +4946,12 @@ public class ElmSyntaxParser
                     pipeLocation = pipeToken.Start;
                     ConsumeAllTrivia();
                 }
-                else if (NextTokenMatches(peek => peek.Type is TokenType.Equal))
+                else if (NextTokenMatches(IsRecordFieldSeparator))
                 {
                     // Regular record, first field parsed
                     // Put the identifier back - but we already consumed it, so we need to parse the field now
-                    if (!TryUnwrap(Consume(TokenType.Equal), out var equalsToken, out var equalsErr))
-                        return equalsErr;
+                    if (!TryUnwrap(ConsumeRecordFieldSeparator(), out var separatorToken, out var separatorErr))
+                        return separatorErr;
 
                     ConsumeAllTrivia();
 
@@ -4963,7 +4963,7 @@ public class ElmSyntaxParser
                     var recordFirstField =
                         new RecordExprField(
                             new Node<string>(nameToken.Range, nameToken.Lexeme),
-                            equalsToken.Start,
+                            separatorToken.Start,
                             valueExpr);
 
                     var recordRestFields = new List<(Location SeparatorLocation, RecordExprField Node)>();
@@ -4981,8 +4981,11 @@ public class ElmSyntaxParser
 
                         ConsumeAllTrivia();
 
-                        if (!TryUnwrap(Consume(TokenType.Equal), out var nextEqualsToken, out var nextEqualsErr))
-                            return nextEqualsErr;
+                        if (!TryUnwrap(
+                            ConsumeRecordFieldSeparator(),
+                            out var nextSeparatorToken,
+                            out var nextSeparatorErr))
+                            return nextSeparatorErr;
 
                         ConsumeAllTrivia();
 
@@ -4994,7 +4997,7 @@ public class ElmSyntaxParser
                         var nextField =
                             new RecordExprField(
                                 new Node<string>(nextFieldName.Range, nextFieldName.Lexeme),
-                                nextEqualsToken.Start,
+                                nextSeparatorToken.Start,
                                 nextValueExpr);
 
                         recordRestFields.Add((commaToken.Start, nextField));
@@ -5041,8 +5044,8 @@ public class ElmSyntaxParser
 
                 ConsumeAllTrivia();
 
-                if (!TryUnwrap(Consume(TokenType.Equal), out var equalsToken, out var equalsErr))
-                    return equalsErr;
+                if (!TryUnwrap(ConsumeRecordFieldSeparator(), out var separatorToken, out var separatorErr))
+                    return separatorErr;
 
                 ConsumeAllTrivia();
 
@@ -5054,7 +5057,7 @@ public class ElmSyntaxParser
                 firstField =
                     new RecordExprField(
                         new Node<string>(fieldName.Range, fieldName.Lexeme),
-                        equalsToken.Start,
+                        separatorToken.Start,
                         valueExpr);
 
                 // Parse remaining fields
@@ -5070,8 +5073,11 @@ public class ElmSyntaxParser
 
                     ConsumeAllTrivia();
 
-                    if (!TryUnwrap(Consume(TokenType.Equal), out var nextEqualsToken, out var nextEqualsErr))
-                        return nextEqualsErr;
+                    if (!TryUnwrap(
+                        ConsumeRecordFieldSeparator(),
+                        out var nextSeparatorToken,
+                        out var nextSeparatorErr))
+                        return nextSeparatorErr;
 
                     ConsumeAllTrivia();
 
@@ -5083,7 +5089,7 @@ public class ElmSyntaxParser
                     var nextField =
                         new RecordExprField(
                             new Node<string>(nextFieldName.Range, nextFieldName.Lexeme),
-                            nextEqualsToken.Start,
+                            nextSeparatorToken.Start,
                             nextValueExpr);
 
                     restFieldsUpdate.Add((commaToken.Start, nextField));
@@ -5122,6 +5128,22 @@ public class ElmSyntaxParser
                     rangeUpdate,
                     new SyntaxTypes.Expression.RecordExpr(
                         Fields: fieldsList));
+        }
+
+        private static bool IsRecordFieldSeparator(Token token) =>
+            token.Type is TokenType.Equal or TokenType.Colon;
+
+        private ParseResult<Token> ConsumeRecordFieldSeparator()
+        {
+            if (!IsRecordFieldSeparator(Peek))
+            {
+                return
+                    new ElmSyntaxParseError(
+                        Peek.Start,
+                        "Expected '=' or ':' as record field separator but found " + Peek.Type);
+            }
+
+            return Advance();
         }
 
         // Helper methods

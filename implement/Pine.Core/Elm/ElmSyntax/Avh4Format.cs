@@ -5045,9 +5045,9 @@ public class Avh4Format
                             }
                             else
                             {
-                                equalsLoc = afterFieldName.Advance(1).CurrentLocation(); // " = "
-                                var afterEq = afterFieldName.Advance(3); // " = "
-                                valueResult = FormatExpression(field.ValueExpr, afterEq);
+                                var singleLineResult = FormatRecordFieldSingleLine(field, ctx);
+
+                                return singleLineResult;
                             }
 
                             var fieldNameNode =
@@ -6868,18 +6868,7 @@ public class Avh4Format
                 FormattingResult<RecordExprField> FormatRecordUpdateField(
                     RecordExprField field, FormattingContext ctx)
                 {
-                    var fieldStartLoc = ctx.CurrentLocation();
-                    var afterFieldName = ctx.Advance(field.FieldName.Value.Length);
-                    var equalsLoc = afterFieldName.Advance(1).CurrentLocation(); // " = "
-                    var afterEq = afterFieldName.Advance(3); // " = "
-                    var valueResult = FormatExpression(field.ValueExpr, afterEq);
-
-                    var fieldNameNode =
-                        MakeNode(fieldStartLoc, afterFieldName.CurrentLocation(), field.FieldName.Value);
-
-                    var formattedField = new RecordExprField(fieldNameNode, equalsLoc, valueResult.FormattedNode);
-
-                    return FormattingResult<RecordExprField>.Create(formattedField, valueResult.Context);
+                    return FormatRecordFieldSingleLine(field, ctx);
                 }
 
                 // Helper to get the range of a record field
@@ -6935,6 +6924,60 @@ public class Avh4Format
                             formattedFields),
                         afterClose);
             }
+        }
+
+        private FormattingResult<RecordExprField> FormatRecordFieldSingleLine(
+            RecordExprField field,
+            FormattingContext context)
+        {
+            var fieldStartLoc = context.CurrentLocation();
+            var afterFieldName = context.Advance(field.FieldName.Value.Length);
+            var currentContext = afterFieldName;
+
+            if (field.FieldName.Range.End.Row == field.EqualsLocation.Row)
+            {
+                var commentsBeforeSeparator =
+                    commentQueries.GetOnRowBetweenColumns(
+                        field.EqualsLocation.Row,
+                        field.FieldName.Range.End.Column,
+                        field.EqualsLocation.Column);
+
+                foreach (var comment in commentsBeforeSeparator)
+                {
+                    currentContext = currentContext.Advance(1);
+                    currentContext = currentContext.FormatAndAddComment(comment);
+                }
+            }
+
+            currentContext = currentContext.Advance(1);
+            var equalsLoc = currentContext.CurrentLocation();
+            currentContext = currentContext.Advance(1);
+
+            if (field.EqualsLocation.Row == field.ValueExpr.Range.Start.Row)
+            {
+                var commentsAfterSeparator =
+                    commentQueries.GetOnRowBetweenColumns(
+                        field.EqualsLocation.Row,
+                        field.EqualsLocation.Column,
+                        field.ValueExpr.Range.Start.Column);
+
+                foreach (var comment in commentsAfterSeparator)
+                {
+                    currentContext = currentContext.Advance(1);
+                    currentContext = currentContext.FormatAndAddComment(comment);
+                }
+            }
+
+            currentContext = currentContext.Advance(1);
+            var valueResult = FormatExpression(field.ValueExpr, currentContext);
+
+            var fieldNameNode =
+                MakeNode(fieldStartLoc, afterFieldName.CurrentLocation(), field.FieldName.Value);
+
+            var formattedField =
+                new RecordExprField(fieldNameNode, equalsLoc, valueResult.FormattedNode);
+
+            return FormattingResult<RecordExprField>.Create(formattedField, valueResult.Context);
         }
 
         private static FormattingResult<ExpressionSyntax> FormatGLSLExpression(

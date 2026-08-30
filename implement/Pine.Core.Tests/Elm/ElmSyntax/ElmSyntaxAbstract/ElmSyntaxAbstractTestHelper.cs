@@ -53,7 +53,9 @@ public static class ElmSyntaxAbstractTestHelper
         {
             Imports =
             [
-                .. file.Imports.OrderBy(
+                .. file.Imports
+                .Select(NormalizeImportForSemanticComparison)
+                .OrderBy(
                     ElmSyntaxAbstractJson.ToJsonString,
                     StringComparer.Ordinal)
             ],
@@ -64,6 +66,32 @@ public static class ElmSyntaxAbstractTestHelper
                     StringComparer.Ordinal)
             ],
         };
+
+    private static Import NormalizeImportForSemanticComparison(Import import) =>
+        new(
+            import.ModuleName,
+            import.ModuleAlias,
+            import.ExposingList switch
+            {
+                null =>
+                null,
+
+                Exposing.All all =>
+                all,
+
+                Exposing.Explicit explicitExposing =>
+                new Exposing.Explicit(
+                    [
+                    .. explicitExposing.Exposes.OrderBy(
+                        ElmSyntaxAbstractJson.ToJsonString,
+                        StringComparer.Ordinal)
+                    ]),
+
+                _ =>
+                throw new NotImplementedException(
+                    $"{nameof(NormalizeImportForSemanticComparison)} does not handle exposing variant: " +
+                    import.ExposingList.GetType().Name)
+            });
 
     private static File ParseCompleteAbstract(string moduleText, string stage)
     {

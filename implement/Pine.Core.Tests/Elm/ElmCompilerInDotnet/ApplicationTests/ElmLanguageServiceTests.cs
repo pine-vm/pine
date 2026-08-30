@@ -1172,7 +1172,7 @@ public class ElmLanguageServiceTests
             InvocationCount: 9_947
             BuildListCount: 15_728
             LoopIterationCount: 8_130
-            InstructionCount: 435_385
+            InstructionCount: 435_397
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
@@ -1303,7 +1303,7 @@ public class ElmLanguageServiceTests
             InvocationCount: 12_515
             BuildListCount: 20_319
             LoopIterationCount: 10_503
-            InstructionCount: 554_998
+            InstructionCount: 555_010
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(

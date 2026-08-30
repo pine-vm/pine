@@ -213,6 +213,42 @@ public class ElmSyntaxParserExpressionTests
                 ]));
     }
 
+    [Theory]
+    [InlineData("{ alfa : 13, beta = 17 }", "{ alfa = 13, beta = 17 }")]
+    [InlineData("{ alfa = 13, beta : 17 }", "{ alfa = 13, beta = 17 }")]
+    [InlineData("{alfa:13,beta:17}", "{alfa=13,beta=17}")]
+    [InlineData(
+        "{ alfa {- before -} : {- after -} 13 }",
+        "{ alfa {- before -} = {- after -} 13 }")]
+    [InlineData("{ base | alfa : 13, beta = 17 }", "{ base | alfa = 13, beta = 17 }")]
+    [InlineData("{ base | alfa = 13, beta : 17 }", "{ base | alfa = 13, beta = 17 }")]
+    [InlineData("{ base | inner : { alfa : 13 } }", "{ base | inner = { alfa = 13 } }")]
+    [InlineData("{ base : other }", "{ base = other }")]
+    public void Record_field_colon_parses_as_equals(
+        string sourceExpression,
+        string canonicalExpression)
+    {
+        var parsedSource =
+            ElmSyntaxParser.ParseExpression(sourceExpression)
+            .Extract(err => throw new Exception("Source parse failed: " + err));
+
+        var parsedCanonical =
+            ElmSyntaxParser.ParseExpression(canonicalExpression)
+            .Extract(err => throw new Exception("Canonical parse failed: " + err));
+
+        parsedSource.Should().Be(parsedCanonical);
+    }
+
+    [Theory]
+    [InlineData("{ alfa = 13, beta :: 17 }")]
+    [InlineData("{ base : alfa = 13 }")]
+    public void Invalid_record_field_separator_recovery_is_rejected(string expressionText)
+    {
+        ElmSyntaxParser.ParseExpression(expressionText)
+            .IsErrOrNull()
+            .Should().NotBeNull();
+    }
+
     [Fact]
     public void Comment_before_dot_ends_qualified_name_and_starts_record_accessor_argument()
     {

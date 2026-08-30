@@ -314,6 +314,32 @@ public class FormatTests
             .Trim());
     }
 
+    [Theory]
+    [InlineData("{ alfa : 13, beta = 17 }", "{ alfa = 13, beta = 17 }")]
+    [InlineData("{ alfa = 13, beta : 17 }", "{ alfa = 13, beta = 17 }")]
+    [InlineData("{alfa:13,beta:17}", "{ alfa = 13, beta = 17 }")]
+    [InlineData(
+        "{ alfa {- before -} : {- after -} 13 }",
+        "{ alfa {- before -} = {- after -} 13 }")]
+    [InlineData("{ base | alfa : 13, beta = 17 }", "{ base | alfa = 13, beta = 17 }")]
+    [InlineData("{ base | alfa = 13, beta : 17 }", "{ base | alfa = 13, beta = 17 }")]
+    [InlineData("{ base | inner : { alfa : 13 } }", "{ base | inner = { alfa = 13 } }")]
+    [InlineData("{ base : other }", "{ base = other }")]
+    public void FormatToString_canonicalizes_record_field_colons(
+        string sourceExpression,
+        string canonicalExpression)
+    {
+        var input =
+            "module Test exposing (..)\n\n\nvalue =\n    " +
+            sourceExpression;
+
+        var expected =
+            "module Test exposing (..)\n\n\nvalue =\n    " +
+            canonicalExpression;
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
     [Fact]
     public void FormatToString_formats_choice_type_declaration()
     {

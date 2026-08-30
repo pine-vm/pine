@@ -29,6 +29,8 @@ suite =
     Test.describe "ParseFromStringTests"
         [ Test.describe "parseExpression_ok"
             expressionOkSuite
+        , Test.describe "record colon separators"
+            recordColonSeparatorSuite
         , Test.describe "all expression variants"
             expressionVariantSuite
         , Test.describe "nested patterns and expression boundaries"
@@ -56,6 +58,79 @@ suite =
         , Test.describe "direct source parsing"
             directSourceParsingSuite
         ]
+
+
+recordColonSeparatorSuite : List Test
+recordColonSeparatorSuite =
+    List.map
+        (\testCase ->
+            Test.test testCase.title <|
+                \_ ->
+                    case
+                        ( ElmSyntax.Concrete.Parser.FromString.parseExpression testCase.source
+                        , ElmSyntax.Concrete.Parser.FromString.parseExpression testCase.canonical
+                        )
+                    of
+                        ( Ok actual, Ok expected ) ->
+                            Expect.equal expected actual
+
+                        ( Err error, _ ) ->
+                            Expect.fail ("Source parse failed: " ++ error)
+
+                        ( _, Err error ) ->
+                            Expect.fail ("Canonical parse failed: " ++ error)
+        )
+        [ { title = "colon in first record literal field"
+          , source = "{ alfa : 13, beta = 17 }"
+          , canonical = "{ alfa = 13, beta = 17 }"
+          }
+        , { title = "colon in later record literal field"
+          , source = "{ alfa = 13, beta : 17 }"
+          , canonical = "{ alfa = 13, beta = 17 }"
+          }
+        , { title = "compact record literal with colons"
+          , source = "{alfa:13,beta:17}"
+          , canonical = "{alfa=13,beta=17}"
+          }
+        , { title = "comments around record field colon"
+          , source = "{ alfa {- before -} : {- after -} 13 }"
+          , canonical = "{ alfa {- before -} = {- after -} 13 }"
+          }
+        , { title = "colon in first record update field"
+          , source = "{ base | alfa : 13, beta = 17 }"
+          , canonical = "{ base | alfa = 13, beta = 17 }"
+          }
+        , { title = "colon in later record update field"
+          , source = "{ base | alfa = 13, beta : 17 }"
+          , canonical = "{ base | alfa = 13, beta = 17 }"
+          }
+        , { title = "nested record field colons"
+          , source = "{ base | inner : { alfa : 13 } }"
+          , canonical = "{ base | inner = { alfa = 13 } }"
+          }
+        , { title = "colon after first name remains a record literal"
+          , source = "{ base : other }"
+          , canonical = "{ base = other }"
+          }
+        ]
+        ++ List.map
+            (\testCase ->
+                Test.test testCase.title <|
+                    \_ ->
+                        case ElmSyntax.Concrete.Parser.FromString.parseExpression testCase.source of
+                            Ok actual ->
+                                Expect.fail ("Expected Err, but got Ok: " ++ Debug.toString actual)
+
+                            Err _ ->
+                                Expect.pass
+            )
+            [ { title = "double colon is rejected"
+              , source = "{ alfa = 13, beta :: 17 }"
+              }
+            , { title = "invalid assignment expression after colon is rejected"
+              , source = "{ base : alfa = 13 }"
+              }
+            ]
 
 
 {-| Covers behavior that is specific to parsing directly from the source string: trivia

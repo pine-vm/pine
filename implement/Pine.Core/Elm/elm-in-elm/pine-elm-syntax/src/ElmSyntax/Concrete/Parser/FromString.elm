@@ -5582,36 +5582,41 @@ parseRecordField :
     -> Result String ( Expression.RecordExprField, ParserState )
 parseRecordField indentMin fieldNameRange fieldName state =
     let
-        stateAtEquals =
+        stateAtSeparator =
             skipTrivia state
+
+        separatorText =
+            String.left 2 (String.dropLeft stateAtSeparator.offset stateAtSeparator.source)
+
+        separator =
+            String.left 1 separatorText
     in
-    case String.left 1 (String.dropLeft stateAtEquals.offset stateAtEquals.source) of
-        "=" ->
-            case
-                parseExpressionNodeAt
-                    indentMin
-                    0
-                    { source = stateAtEquals.source
-                    , offset = stateAtEquals.offset + 1
-                    , row = stateAtEquals.row
-                    , column = stateAtEquals.column + 1
-                    , commentsRev = stateAtEquals.commentsRev
-                    }
-            of
-                Err error ->
-                    Err error
+    if separator == "=" || (separator == ":" && separatorText /= "::") then
+        case
+            parseExpressionNodeAt
+                indentMin
+                0
+                { source = stateAtSeparator.source
+                , offset = stateAtSeparator.offset + 1
+                , row = stateAtSeparator.row
+                , column = stateAtSeparator.column + 1
+                , commentsRev = stateAtSeparator.commentsRev
+                }
+        of
+            Err error ->
+                Err error
 
-                Ok ( valueExpression, remaining ) ->
-                    Ok
-                        ( { fieldName = Node fieldNameRange fieldName
-                          , equalsLocation = { row = stateAtEquals.row, column = stateAtEquals.column }
-                          , valueExpr = valueExpression
-                          }
-                        , remaining
-                        )
+            Ok ( valueExpression, remaining ) ->
+                Ok
+                    ( { fieldName = Node fieldNameRange fieldName
+                      , equalsLocation = { row = stateAtSeparator.row, column = stateAtSeparator.column }
+                      , valueExpr = valueExpression
+                      }
+                    , remaining
+                    )
 
-        _ ->
-            Err ("Expected '=', but found '" ++ snippetAt stateAtEquals ++ "'.")
+    else
+        Err ("Expected '=' or ':', but found '" ++ snippetAt stateAtSeparator ++ "'.")
 
 
 parseFurtherRecordFields :
