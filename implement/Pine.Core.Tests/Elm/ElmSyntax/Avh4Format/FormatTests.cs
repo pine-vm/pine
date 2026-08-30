@@ -173,6 +173,78 @@ public class FormatTests
     }
 
     [Fact]
+    public void FormatToString_orders_single_line_import_exposing_items()
+    {
+        var input =
+            """"
+            module Main exposing (main)
+
+            import Example exposing (startsWithUpper, isLowerCharacter, ZType, AType, (+), Maybe(..))
+
+
+            main =
+                0
+            """";
+
+        var expected =
+            """"
+            module Main exposing (main)
+
+            import Example exposing ((+), AType, Maybe(..), ZType, isLowerCharacter, startsWithUpper)
+
+
+            main =
+                0
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
+    public void FormatToString_orders_multiline_import_exposing_items()
+    {
+        var input =
+            """"
+            module Main exposing (main)
+
+            import Example
+                exposing
+                    ( startsWithUpper
+                    , ZType
+                    , isLowerCharacter
+                    , Maybe(..)
+                    , AType
+                    , (+)
+                    )
+
+
+            main =
+                0
+            """";
+
+        var expected =
+            """"
+            module Main exposing (main)
+
+            import Example
+                exposing
+                    ( (+)
+                    , AType
+                    , Maybe(..)
+                    , ZType
+                    , isLowerCharacter
+                    , startsWithUpper
+                    )
+
+
+            main =
+                0
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
     public void FormatToString_formats_record_type_alias()
     {
         var input =

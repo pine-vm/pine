@@ -2237,7 +2237,8 @@ public class Avh4Format
         private static (Node<Exposing>, FormattingContext) FormatExposing(
             Node<Exposing> exposing,
             FormattingContext context,
-            CommentQueryHelper commentQueries)
+            CommentQueryHelper commentQueries,
+            bool sortExplicitItems = false)
         {
             return exposing.Value switch
             {
@@ -2245,13 +2246,44 @@ public class Avh4Format
                 FormatExposingAll(context),
 
                 Exposing.Explicit explicitList =>
-                FormatExposingExplicit(explicitList, context, commentQueries),
+                FormatExposingExplicit(
+                    sortExplicitItems ? SortExplicitExposingItems(explicitList) : explicitList,
+                    context,
+                    commentQueries),
 
                 _ =>
                 throw new System.NotImplementedException(
                     $"Formatting for exposing type '{exposing.Value.GetType().Name}' is not implemented " +
                     $"in {nameof(FormatExposing)} at row {exposing.Range.Start.Row}, column {exposing.Range.Start.Column}.")
             };
+        }
+
+        private static Exposing.Explicit SortExplicitExposingItems(
+            Exposing.Explicit explicitList)
+        {
+            if (explicitList.Nodes is not SeparatedSyntaxList<Node<TopLevelExpose>>.NonEmpty nonEmptyList ||
+                nonEmptyList.Rest.Count is 0)
+            {
+                return explicitList;
+            }
+
+            var sortedNodes =
+                explicitList.Nodes.Nodes
+                .OrderBy(node => GetTopLevelExposeName(node.Value), System.StringComparer.Ordinal)
+                .ToList();
+
+            return
+                explicitList with
+                {
+                    Nodes =
+                    new SeparatedSyntaxList<Node<TopLevelExpose>>.NonEmpty(
+                        sortedNodes[0],
+                        [
+                        .. nonEmptyList.Rest.Select(
+                            (item, index) =>
+                            (item.SeparatorLocation, sortedNodes[index + 1]))
+                        ])
+                };
         }
 
         private static (Node<Exposing>, FormattingContext) FormatExposingAll(FormattingContext context)
@@ -2750,7 +2782,11 @@ public class Avh4Format
                     var exposingTokenLoc = currentContext.CurrentLocation();
                     // FormatExposing expects to be positioned BEFORE "exposing" keyword
                     var (formattedExposing, afterExposingList) =
-                        FormatExposing(exposing.ExposingList, currentContext, commentQueries);
+                        FormatExposing(
+                            exposing.ExposingList,
+                            currentContext,
+                            commentQueries,
+                            sortExplicitItems: true);
 
                     exposingList = (exposingTokenLoc, formattedExposing);
                     currentContext = afterExposingList;
@@ -2762,7 +2798,11 @@ public class Avh4Format
                     var exposingTokenLoc = currentContext.CurrentLocation();
                     // FormatExposing expects to be positioned BEFORE "exposing" keyword
                     var (formattedExposing, afterExposingList) =
-                        FormatExposing(exposing.ExposingList, currentContext, commentQueries);
+                        FormatExposing(
+                            exposing.ExposingList,
+                            currentContext,
+                            commentQueries,
+                            sortExplicitItems: true);
 
                     exposingList = (exposingTokenLoc, formattedExposing);
                     currentContext = afterExposingList;
