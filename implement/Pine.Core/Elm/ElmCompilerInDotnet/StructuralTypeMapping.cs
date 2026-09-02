@@ -245,8 +245,8 @@ public static class StructuralTypeMapping
     }
 
     /// <summary>
-    /// Builds a substitution map from the type parameters in the choice type definition's
-    /// constructor argument types (type variables) to the concrete type arguments at the usage site.
+    /// Builds a substitution map from the choice type's declared parameters to the concrete type
+    /// arguments at the usage site.
     /// </summary>
     private static IReadOnlyDictionary<int, StructuralType>? BuildTypeArgumentSubstitutions(
         TypeInference.InferredType.ChoiceType choice,
@@ -258,10 +258,7 @@ public static class StructuralTypeMapping
         if (choice.TypeArguments.Count is 0)
             return ImmutableDictionary<int, StructuralType>.Empty;
 
-        // Collect type parameter names from the constructor argument types.
-        // In Elm, type parameters are the generic type variables referenced in constructor args.
-        // We collect them in order from the constructors to match with type arguments.
-        var typeParamNames = CollectTypeParameterNames(definition);
+        var typeParamNames = definition.TypeParameters;
 
         if (typeParamNames.Count != choice.TypeArguments.Count)
         {
@@ -288,70 +285,5 @@ public static class StructuralTypeMapping
         }
 
         return substitutions;
-    }
-
-    /// <summary>
-    /// Collects the distinct type parameter names (type variables) referenced across
-    /// all constructors of a choice type definition, in the order they first appear.
-    /// </summary>
-    private static IReadOnlyList<string> CollectTypeParameterNames(
-        TypeInference.ChoiceTypeDefinition definition)
-    {
-        var seen = new HashSet<string>();
-        var result = new List<string>();
-
-        for (var i = 0; i < definition.Constructors.Count; i++)
-        {
-            var constructor = definition.Constructors[i];
-
-            for (var j = 0; j < constructor.ArgumentTypes.Count; j++)
-            {
-                CollectTypeVariables(constructor.ArgumentTypes[j], seen, result);
-            }
-        }
-
-        return result;
-    }
-
-    private static void CollectTypeVariables(
-        TypeInference.InferredType type,
-        HashSet<string> seen,
-        List<string> result)
-    {
-        switch (type)
-        {
-            case TypeInference.InferredType.TypeVariable tv:
-                if (seen.Add(tv.Name))
-                    result.Add(tv.Name);
-
-                break;
-
-            case TypeInference.InferredType.FunctionType func:
-                CollectTypeVariables(func.ArgumentType, seen, result);
-                CollectTypeVariables(func.ReturnType, seen, result);
-                break;
-
-            case TypeInference.InferredType.ListType list:
-                CollectTypeVariables(list.ElementType, seen, result);
-                break;
-
-            case TypeInference.InferredType.TupleType tuple:
-                for (var i = 0; i < tuple.ElementTypes.Count; i++)
-                    CollectTypeVariables(tuple.ElementTypes[i], seen, result);
-
-                break;
-
-            case TypeInference.InferredType.RecordType record:
-                for (var i = 0; i < record.Fields.Count; i++)
-                    CollectTypeVariables(record.Fields[i].FieldType, seen, result);
-
-                break;
-
-            case TypeInference.InferredType.ChoiceType choice:
-                for (var i = 0; i < choice.TypeArguments.Count; i++)
-                    CollectTypeVariables(choice.TypeArguments[i], seen, result);
-
-                break;
-        }
     }
 }

@@ -212,7 +212,8 @@ public class StructuralTypeMappingTests
                 new TypeInference.ChoiceTypeConstructor("South", []),
                 new TypeInference.ChoiceTypeConstructor("East", []),
                 new TypeInference.ChoiceTypeConstructor("West", []),
-                ]);
+                ],
+                []);
 
         var qualifiedName =
             new QualifiedNameRef(["MyModule"], "Direction");
@@ -249,7 +250,8 @@ public class StructuralTypeMappingTests
                 [
                 new TypeInference.ChoiceTypeConstructor("Just", [new IT.TypeVariable("a")]),
                 new TypeInference.ChoiceTypeConstructor("Nothing", []),
-                ]);
+                ],
+                ["a"]);
 
         var qualifiedName =
             new QualifiedNameRef(["Maybe"], "Maybe");
@@ -284,7 +286,8 @@ public class StructuralTypeMappingTests
                 [
                 new TypeInference.ChoiceTypeConstructor("Ok", [new IT.TypeVariable("value")]),
                 new TypeInference.ChoiceTypeConstructor("Err", [new IT.TypeVariable("error")]),
-                ]);
+                ],
+                ["error", "value"]);
 
         var qualifiedName =
             new QualifiedNameRef(["Result"], "Result");
@@ -302,25 +305,13 @@ public class StructuralTypeMappingTests
 
         var result = StructuralTypeMapping.MapToStructuralType(inferred, definitions);
 
-        // The type parameters are collected from constructors in order:
-        // Ok has 'value', Err has 'error' → parameters are [value, error]
-        // But we pass [String, Int] → value=String, error=Int
-        // Wait: the order in TypeArguments at the usage site follows the declaration order.
-        // type Result error value = ... → error is first, value is second.
-        // Our CollectTypeParameterNames collects in appearance order from constructors:
-        // Ok(value) then Err(error) → [value, error]
-        // But in the InferredType.ChoiceType, TypeArguments follow the declaration order [error, value].
-        // This is a known mismatch - the parameter order from the declaration is not available
-        // in ChoiceTypeDefinition. For now, we collect from constructors.
+        var expected =
+            ST.ChoiceType.Create(
+                ImmutableDictionary<string, ImmutableList<ST>>.Empty
+                .Add("Ok", [ST.IntType.Instance])
+                .Add("Err", [ST.StringType.Instance]));
 
-        // Let's just verify the result is non-null and a ChoiceType with the right tags.
-        result.Should().NotBeNull();
-        result.Should().BeOfType<ST.ChoiceType>();
-
-        var choiceResult = (ST.ChoiceType)result!;
-        choiceResult.Tags.Count.Should().Be(2);
-        choiceResult.Tags.ContainsKey("Ok").Should().BeTrue();
-        choiceResult.Tags.ContainsKey("Err").Should().BeTrue();
+        result.Should().Be(expected);
     }
 
     [Fact]
@@ -333,7 +324,8 @@ public class StructuralTypeMappingTests
                 new TypeInference.ChoiceTypeConstructor(
                     "MkPair",
                     [new IT.TypeVariable("a"), new IT.TypeVariable("b")]),
-                ]);
+                ],
+                ["a", "b"]);
 
         var qualifiedName =
             new QualifiedNameRef(["MyModule"], "Pair");
@@ -390,7 +382,8 @@ public class StructuralTypeMappingTests
                 [
                 new TypeInference.ChoiceTypeConstructor("Leaf", [new IT.TypeVariable("a")]),
                 new TypeInference.ChoiceTypeConstructor("Branch", [treeRef, treeRef]),
-                ]);
+                ],
+                ["a"]);
 
         var qualifiedName =
             new QualifiedNameRef(["MyModule"], "Tree");
@@ -437,7 +430,8 @@ public class StructuralTypeMappingTests
                 [
                 new TypeInference.ChoiceTypeConstructor("Just", [new IT.TypeVariable("a")]),
                 new TypeInference.ChoiceTypeConstructor("Nothing", []),
-                ]);
+                ],
+                ["a"]);
 
         var qualifiedName =
             new QualifiedNameRef(["Maybe"], "Maybe");
@@ -474,7 +468,8 @@ public class StructuralTypeMappingTests
                 [
                 new TypeInference.ChoiceTypeConstructor("Just", [new IT.TypeVariable("a")]),
                 new TypeInference.ChoiceTypeConstructor("Nothing", []),
-                ]);
+                ],
+                ["a"]);
 
         var qualifiedName =
             new QualifiedNameRef(["Maybe"], "Maybe");

@@ -9,7 +9,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 /// Tests that the compiler correctly handles multiple modules defining
 /// choice type constructors with the same unqualified name but different
 /// argument counts. This verifies no cross-module tag collision occurs
-/// in the <c>ChoiceTagArgumentTypes</c> dictionary.
+/// in the <c>ChoiceTagTypes</c> dictionary.
 /// </summary>
 public class ChoiceTypeTagCollisionTests
 {

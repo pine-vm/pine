@@ -156,16 +156,16 @@ public record FunctionScc(
 /// <param name="PineKernelModuleNames">Names of Pine kernel modules.</param>
 /// <param name="FunctionDependencyLayouts">Pre-computed dependency layouts for all functions (populated before compilation).</param>
 /// <param name="FunctionTypes">Map of qualified function names to their return and parameter types.</param>
-/// <param name="ChoiceTagArgumentTypes">Map of qualified choice type tag names to their argument types (for type inference from NamedPatterns).</param>
 /// <param name="RecordTypeAliasConstructors">Map of qualified record type alias names to their field names in declaration order (for record constructors).</param>
+/// <param name="ChoiceTagTypes">Map of qualified choice type tag names to their result and argument types.</param>
 public record ModuleCompilationContext(
     IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)> AllFunctions,
     ImmutableDictionary<SyntaxModelTypes.QualifiedNameRef, CompiledFunctionInfo> CompiledFunctionsCache,
     FrozenSet<string> PineKernelModuleNames,
     IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? FunctionDependencyLayouts = null,
     IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? FunctionTypes = null,
-    IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>? ChoiceTagArgumentTypes = null,
-    IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? RecordTypeAliasConstructors = null)
+    IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? RecordTypeAliasConstructors = null,
+    IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? ChoiceTagTypes = null)
 {
     /// <summary>
     /// Creates a module compilation context from concrete Elm declarations by converting them to abstract declarations first.
@@ -176,8 +176,8 @@ public record ModuleCompilationContext(
         FrozenSet<string> pineKernelModuleNames,
         IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? functionDependencyLayouts = null,
         IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? functionTypes = null,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>? choiceTagArgumentTypes = null,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? recordTypeAliasConstructors = null)
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? recordTypeAliasConstructors = null,
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes = null)
         : this(
             allFunctions.ToDictionary(
                 kvp => kvp.Key,
@@ -190,8 +190,8 @@ public record ModuleCompilationContext(
             pineKernelModuleNames,
             functionDependencyLayouts,
             functionTypes,
-            choiceTagArgumentTypes,
-            recordTypeAliasConstructors)
+            recordTypeAliasConstructors,
+            choiceTagTypes)
     {
     }
 
@@ -390,9 +390,9 @@ public record ModuleCompilationContext(
     /// </summary>
     public int? TryGetChoiceTypeConstructorArgumentCount(SyntaxModelTypes.QualifiedNameRef qualifiedConstructorName)
     {
-        if (ChoiceTagArgumentTypes?.TryGetValue(qualifiedConstructorName, out var argTypes) ?? false)
+        if (ChoiceTagTypes?.TryGetValue(qualifiedConstructorName, out var choiceTagType) ?? false)
         {
-            return argTypes.Count;
+            return choiceTagType.ParameterTypes.Count;
         }
 
         return null;

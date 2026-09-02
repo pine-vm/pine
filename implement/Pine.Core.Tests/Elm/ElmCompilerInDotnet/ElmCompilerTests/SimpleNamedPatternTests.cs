@@ -570,4 +570,107 @@ public class SimpleNamedPatternTests
             result.Should().Be("4");
         }
     }
+
+    [Fact]
+    public void Closed_record_alias_in_named_pattern_uses_static_field_access()
+    {
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            type alias QualifiedNameRef =
+                { moduleName : List String
+                , name : String
+                }
+
+
+            type Node a
+                = Node Int a
+
+
+            type SyntaxNode
+                = FunctionNode
+                    { declaration : Node QualifiedNameRef
+                    }
+
+
+            decl syntaxNode =
+                case syntaxNode of
+                    FunctionNode { declaration } ->
+                        case declaration of
+                            Node _ { name } ->
+                                name
+            """;
+
+        var parseCache = new PineVMParseCache();
+
+        var (parsedEnv, _) =
+            ElmCompilerTestHelper.CompileElmModules(
+                [elmModuleText],
+                disableInlining: true);
+
+        var wholeProgramText =
+            ElmCompilerTestHelper.ParseAndRenderStaticProgram(
+                parsedEnv,
+                includeDeclaration: qualifiedName => qualifiedName.FullName is "Test.decl",
+                parseCache: parseCache);
+
+        wholeProgramText.Trim().Should().Be(
+            """
+            Test.decl param_1_0 =
+                param_1_2[2][3][4]
+
+            """.Trim());
+    }
+
+    [Fact]
+    public void Closed_record_alias_bound_through_nested_generic_constructor_uses_static_field_access()
+    {
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            type alias Import =
+                { moduleName : List String
+                , moduleAlias : Maybe String
+                }
+
+
+            type Node a
+                = Node Int a
+
+
+            type SyntaxNode
+                = ImportNode (Node Import)
+
+
+            decl : SyntaxNode -> List String
+            decl syntaxNode =
+                case syntaxNode of
+                    ImportNode (Node _ importValue) ->
+                        importValue.moduleName
+            """;
+
+        var parseCache = new PineVMParseCache();
+
+        var (parsedEnv, _) =
+            ElmCompilerTestHelper.CompileElmModules(
+                [elmModuleText],
+                disableInlining: true);
+
+        var wholeProgramText =
+            ElmCompilerTestHelper.ParseAndRenderStaticProgram(
+                parsedEnv,
+                includeDeclaration: qualifiedName => qualifiedName.FullName is "Test.decl",
+                parseCache: parseCache);
+
+        wholeProgramText.Trim().Should().Be(
+            """
+            Test.decl param_1_0 =
+                param_1_2[3][4]
+
+            """.Trim());
+    }
 }

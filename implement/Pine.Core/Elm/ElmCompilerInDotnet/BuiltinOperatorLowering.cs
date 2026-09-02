@@ -461,7 +461,7 @@ public static class BuiltinOperatorLowering
             {
                 if (IsEmptyList(left) ||
                     IsEmptyList(right) ||
-                    ProvesPrimitiveEqualityBuiltin(leftType, rightType, context))
+                    ProvesPrimitiveEqualityBuiltin(left, leftType, right, rightType, context))
                 {
                     return
                         BuildBuiltinApplication(
@@ -475,7 +475,7 @@ public static class BuiltinOperatorLowering
             {
                 if (IsEmptyList(left) ||
                     IsEmptyList(right) ||
-                    ProvesPrimitiveEqualityBuiltin(leftType, rightType, context))
+                    ProvesPrimitiveEqualityBuiltin(left, leftType, right, rightType, context))
                 {
                     // Lower `a /= b` (and the equivalent `Basics.neq a b`) to
                     //   `if Pine_builtin.equal [ a, b ] then Basics.False else Basics.True`
@@ -621,24 +621,60 @@ public static class BuiltinOperatorLowering
         (leftType is TypeInference.InferredType.IntType or TypeInference.InferredType.NumberType));
 
     private static bool ProvesPrimitiveEqualityBuiltin(
+        SyntaxTypes.Expression left,
         TypeInference.InferredType leftType,
+        SyntaxTypes.Expression right,
         TypeInference.InferredType rightType,
         RewriteContext context) =>
-        TypeSupportsPrimitiveEquality(leftType, context, []) ||
-        TypeSupportsPrimitiveEquality(rightType, context, []);
+        ExpressionSupportsPrimitiveEquality(left, leftType, context) ||
+        ExpressionSupportsPrimitiveEquality(right, rightType, context);
+
+    private static bool ExpressionSupportsPrimitiveEquality(
+        SyntaxTypes.Expression expression,
+        TypeInference.InferredType type,
+        RewriteContext context) =>
+        TypeSupportsPrimitiveEquality(type, context, []) ||
+        IsPayloadFreeChoiceTag(expression, context);
+
+    private static bool IsPayloadFreeChoiceTag(
+        SyntaxTypes.Expression expression,
+        RewriteContext context)
+    {
+        if (expression is not SyntaxTypes.Expression.Identifier identifier)
+            return false;
+
+        var qualifiedName =
+            identifier.QualifiedName.Namespaces.Count > 0
+            ?
+            QualifiedNameHelper.ToQualifiedNameRef(
+                identifier.QualifiedName.Namespaces,
+                identifier.QualifiedName.DeclName)
+            :
+            QualifiedNameHelper.FromQualifiedNameString(
+                context.CurrentModuleName + "." + identifier.QualifiedName.DeclName);
+
+        return
+            context.ChoiceTypeDefinitions.Any(
+                choiceType =>
+                choiceType.Key.ModuleName.SequenceEqual(qualifiedName.ModuleName) &&
+                choiceType.Value.Constructors.Any(
+                    constructor =>
+                    constructor.TagName == qualifiedName.Name &&
+                    constructor.ArgumentTypes.Count is 0));
+    }
 
     /// <summary>
     /// Returns <c>true</c> when Pine structural equality has the same semantics as Elm
     /// <c>==</c> for the given type.
     /// <para>
-    /// The <paramref name="visiting"/> set prevents infinite recursion when a choice type
-    /// refers to itself (directly or indirectly).
+    /// The <paramref name="visiting"/> map prevents infinite recursion when a choice type
+    /// refers to itself and rejects recursive occurrences with different type arguments.
     /// </para>
     /// </summary>
     private static bool TypeSupportsPrimitiveEquality(
         TypeInference.InferredType type,
         RewriteContext context,
-        HashSet<QualifiedNameRef> visiting)
+        Dictionary<QualifiedNameRef, TypeInference.InferredType.ChoiceType> visiting)
     {
         switch (type)
         {
@@ -674,8 +710,8 @@ public static class BuiltinOperatorLowering
                     // First expand aliases — the ChoiceType might actually be an alias for a concrete type.
                     if (context.AliasTypes.ContainsKey(qualifiedName))
                     {
-                        if (!visiting.Add(qualifiedName))
-                            return true;
+                        if (!visiting.TryAdd(qualifiedName, choiceType))
+                            return false;
 
                         try
                         {
@@ -707,18 +743,35 @@ public static class BuiltinOperatorLowering
                     }
 
                     // Guard against infinite recursion for recursive types.
-                    if (!visiting.Add(qualifiedName))
-                        return true;
+                    if (visiting.TryGetValue(qualifiedName, out var activeChoiceType))
+                        return InferredTypesAreEquivalent(activeChoiceType, choiceType);
+
+                    visiting.Add(qualifiedName, choiceType);
 
                     try
                     {
                         if (!context.ChoiceTypeDefinitions.TryGetValue(qualifiedName, out var definition))
                             return false;
 
+                        var declaredChoiceType =
+                            new TypeInference.InferredType.ChoiceType(
+                                choiceType.ModuleName,
+                                choiceType.TypeName,
+                                [
+                                .. definition.TypeParameters
+                                .Select(
+                                    typeParameter =>
+                                    new TypeInference.InferredType.TypeVariable(typeParameter))
+                                ]);
+
                         return
                             definition.Constructors.All(
                                 ctor =>
-                                ctor.ArgumentTypes.All(
+                                TypeInference.SpecializeTypesFromMatch(
+                                    declaredChoiceType,
+                                    choiceType,
+                                    ctor.ArgumentTypes)
+                                .All(
                                     argType =>
                                     TypeSupportsPrimitiveEquality(argType, context, visiting)));
                     }
@@ -732,6 +785,97 @@ public static class BuiltinOperatorLowering
                 return false;
         }
     }
+
+    private static bool InferredTypesAreEquivalent(
+        TypeInference.InferredType left,
+        TypeInference.InferredType right)
+    {
+        switch (left)
+        {
+            case TypeInference.InferredType.IntType:
+                return right is TypeInference.InferredType.IntType;
+
+            case TypeInference.InferredType.FloatType:
+                return right is TypeInference.InferredType.FloatType;
+
+            case TypeInference.InferredType.StringType:
+                return right is TypeInference.InferredType.StringType;
+
+            case TypeInference.InferredType.CharType:
+                return right is TypeInference.InferredType.CharType;
+
+            case TypeInference.InferredType.BoolType:
+                return right is TypeInference.InferredType.BoolType;
+
+            case TypeInference.InferredType.NumberType:
+                return right is TypeInference.InferredType.NumberType;
+
+            case TypeInference.InferredType.TupleType leftTuple:
+                return
+                    right is TypeInference.InferredType.TupleType rightTuple &&
+                    leftTuple.ElementTypes.Count == rightTuple.ElementTypes.Count &&
+                    leftTuple.ElementTypes
+                    .Zip(rightTuple.ElementTypes)
+                    .All(pair => InferredTypesAreEquivalent(pair.First, pair.Second));
+
+            case TypeInference.InferredType.RecordType leftRecord:
+                return
+                    right is TypeInference.InferredType.RecordType rightRecord &&
+                    RecordFieldsAreEquivalent(leftRecord.Fields, rightRecord.Fields);
+
+            case TypeInference.InferredType.OpenRecordType leftOpenRecord:
+                return
+                    right is TypeInference.InferredType.OpenRecordType rightOpenRecord &&
+                    leftOpenRecord.ExtensionVariable == rightOpenRecord.ExtensionVariable &&
+                    RecordFieldsAreEquivalent(leftOpenRecord.KnownFields, rightOpenRecord.KnownFields);
+
+            case TypeInference.InferredType.FunctionType leftFunction:
+                return
+                    right is TypeInference.InferredType.FunctionType rightFunction &&
+                    InferredTypesAreEquivalent(leftFunction.ArgumentType, rightFunction.ArgumentType) &&
+                    InferredTypesAreEquivalent(leftFunction.ReturnType, rightFunction.ReturnType);
+
+            case TypeInference.InferredType.ListType leftList:
+                return
+                    right is TypeInference.InferredType.ListType rightList &&
+                    InferredTypesAreEquivalent(leftList.ElementType, rightList.ElementType);
+
+            case TypeInference.InferredType.ChoiceType leftChoice:
+                return
+                    right is TypeInference.InferredType.ChoiceType rightChoice &&
+                    leftChoice.ModuleName.SequenceEqual(rightChoice.ModuleName) &&
+                    leftChoice.TypeName == rightChoice.TypeName &&
+                    leftChoice.TypeArguments.Count == rightChoice.TypeArguments.Count &&
+                    leftChoice.TypeArguments
+                    .Zip(rightChoice.TypeArguments)
+                    .All(pair => InferredTypesAreEquivalent(pair.First, pair.Second));
+
+            case TypeInference.InferredType.TypeVariable leftVariable:
+                return
+                    right is TypeInference.InferredType.TypeVariable rightVariable &&
+                    leftVariable.Name == rightVariable.Name &&
+                    leftVariable.Constraint == rightVariable.Constraint;
+
+            case TypeInference.InferredType.UnknownType:
+                return right is TypeInference.InferredType.UnknownType;
+
+            default:
+                throw new System.NotImplementedException(
+                    "InferredTypesAreEquivalent does not handle inferred type variant: " +
+                    left.GetType().Name);
+        }
+    }
+
+    private static bool RecordFieldsAreEquivalent(
+        IReadOnlyList<(string FieldName, TypeInference.InferredType FieldType)> leftFields,
+        IReadOnlyList<(string FieldName, TypeInference.InferredType FieldType)> rightFields) =>
+        leftFields.Count == rightFields.Count &&
+        leftFields
+        .Zip(rightFields)
+        .All(
+            pair =>
+            pair.First.FieldName == pair.Second.FieldName &&
+            InferredTypesAreEquivalent(pair.First.FieldType, pair.Second.FieldType));
 
     private static SyntaxTypes.Expression RewriteLetExpression(
         SyntaxTypes.Expression.LetExpression letExpression,

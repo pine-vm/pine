@@ -433,11 +433,11 @@ public static class OptimizationOpportunityFinder
                 argumentIndex++)
             {
                 parameterTypes =
-                    TypeInference.ExtractPatternBindingTypesFromInferred(
+                    TypeInference.ExtractPatternBindingTypesFromInferredWithChoiceTagTypes(
                         funcDecl.Function.Declaration.Arguments[argumentIndex],
                         inferredParameterTypes[argumentIndex],
                         parameterTypes,
-                        constructorArgumentTypes);
+                        functionTypes);
             }
 
             var expressionTypeContext =
@@ -453,6 +453,33 @@ public static class OptimizationOpportunityFinder
                     AliasTypes: aliasTypes,
                     ClosedRecordAccessFunctions:
                     wholeProgramTypeInference.ClosedRecordAccessFunctions);
+
+            var declaredParameterTypes =
+                funcDecl.Function.Signature is { } signature
+                ?
+                TypeInference.ExtractArgumentTypesFromFunctionType(
+                    TypeInference.ExpandTypeAliases(
+                        TypeInference.TypeAnnotationToInferredType(signature.TypeAnnotation),
+                        aliasTypes,
+                        qualifiedName.Namespaces))
+                :
+                [];
+
+            for (var argumentIndex = 0;
+                argumentIndex < funcDecl.Function.Declaration.Arguments.Count;
+                argumentIndex++)
+            {
+                CollectFromPattern(
+                    funcDecl.Function.Declaration.Arguments[argumentIndex],
+                    argumentIndex < declaredParameterTypes.Count
+                    ?
+                    declaredParameterTypes[argumentIndex]
+                    :
+                    new TypeInference.InferredType.UnknownType(),
+                    qualifiedName,
+                    expressionTypeContext,
+                    resultBuilder);
+            }
 
             CollectFromExpression(
                 funcDecl.Function.Declaration.Expression,
@@ -649,11 +676,11 @@ public static class OptimizationOpportunityFinder
                         argumentIndex < containingFunctionType.ParameterTypes.Count)
                     {
                         parameterTypes =
-                            TypeInference.ExtractPatternBindingTypesFromInferred(
+                            TypeInference.ExtractPatternBindingTypesFromInferredWithChoiceTagTypes(
                                 implementation.Arguments[argumentIndex],
                                 containingFunctionType.ParameterTypes[argumentIndex],
                                 parameterTypes,
-                                constructorArgumentTypes);
+                                snapshot);
                     }
                 }
 
@@ -1373,37 +1400,12 @@ public static class OptimizationOpportunityFinder
         SyntaxTypes.Pattern pattern,
         TypeInference.InferredType scrutineeType,
         ImmutableDictionary<string, TypeInference.InferredType> existingBindings,
-        ExpressionTypeContext context)
-    {
-        var constructorArgumentTypes =
-            context.ConstructorArgumentTypes.ToImmutableDictionary();
-
-        if (pattern is SyntaxTypes.Pattern.NamedPattern namedPattern)
-        {
-            var constructorName =
-                QualifiedNameHelper.ToQualifiedNameRef(
-                    namedPattern.Name.ModuleName,
-                    namedPattern.Name.Name);
-
-            if (context.FunctionTypes.TryGetValue(constructorName, out var constructorType))
-            {
-                constructorArgumentTypes =
-                    constructorArgumentTypes.SetItem(
-                        constructorName,
-                        TypeInference.SpecializeTypesFromMatch(
-                            constructorType.ReturnType,
-                            scrutineeType,
-                            constructorType.ParameterTypes));
-            }
-        }
-
-        return
-            TypeInference.ExtractPatternBindingTypesFromInferred(
-                pattern,
-                scrutineeType,
-                existingBindings,
-                constructorArgumentTypes);
-    }
+        ExpressionTypeContext context) =>
+        TypeInference.ExtractPatternBindingTypesFromInferredWithChoiceTagTypes(
+            pattern,
+            scrutineeType,
+            existingBindings,
+            context.FunctionTypes);
 
     private static ImmutableDictionary<string, TypeInference.InferredType>
         InferLetExpressionLocalBindingTypes(
@@ -1932,6 +1934,34 @@ public static class OptimizationOpportunityFinder
                                 SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatterns(
                                     letFunc.Function.Declaration.Arguments);
 
+                            IReadOnlyList<TypeInference.InferredType> letParameterTypes =
+                                letFunc.Function.Signature is { } letSignature
+                                ?
+                                TypeInference.ExtractArgumentTypesFromFunctionType(
+                                    TypeInference.ExpandTypeAliases(
+                                        TypeInference.TypeAnnotationToInferredType(
+                                            letSignature.TypeAnnotation),
+                                        expressionTypeContext.AliasTypes,
+                                        expressionTypeContext.CurrentModuleName.Split('.')))
+                                :
+                                [];
+
+                            for (var argumentIndex = 0;
+                                argumentIndex < letFunc.Function.Declaration.Arguments.Count;
+                                argumentIndex++)
+                            {
+                                CollectFromPattern(
+                                    letFunc.Function.Declaration.Arguments[argumentIndex],
+                                    argumentIndex < letParameterTypes.Count
+                                    ?
+                                    letParameterTypes[argumentIndex]
+                                    :
+                                    new TypeInference.InferredType.UnknownType(),
+                                    containing,
+                                    extendedTypeContext,
+                                    resultBuilder);
+                            }
+
                             CollectFromExpression(
                                 letFunc.Function.Declaration.Expression,
                                 containing,
@@ -1958,6 +1988,13 @@ public static class OptimizationOpportunityFinder
                             break;
 
                         case SyntaxTypes.LetDeclaration.LetDestructuring letDestr:
+                            CollectFromPattern(
+                                letDestr.Pattern,
+                                InferExpressionType(letDestr.Expression, extendedTypeContext),
+                                containing,
+                                extendedTypeContext,
+                                resultBuilder);
+
                             CollectFromExpression(
                                 letDestr.Expression,
                                 containing,
@@ -1988,6 +2025,16 @@ public static class OptimizationOpportunityFinder
                 break;
 
             case SyntaxTypes.Expression.LambdaExpression lambda:
+                foreach (var argument in lambda.Arguments)
+                {
+                    CollectFromPattern(
+                        argument,
+                        new TypeInference.InferredType.UnknownType(),
+                        containing,
+                        expressionTypeContext,
+                        resultBuilder);
+                }
+
                 CollectFromExpression(
                     lambda.Expression,
                     containing,
@@ -2044,6 +2091,13 @@ public static class OptimizationOpportunityFinder
 
                 foreach (var caseEntry in caseExpr.Cases)
                 {
+                    CollectFromPattern(
+                        caseEntry.Pattern,
+                        caseScrutineeType,
+                        containing,
+                        expressionTypeContext,
+                        resultBuilder);
+
                     var caseExpressionTypeContext =
                         expressionTypeContext with
                         {
@@ -2137,6 +2191,161 @@ public static class OptimizationOpportunityFinder
                 throw new System.NotImplementedException(
                     "CollectFromExpression does not handle expression variant: " +
                     expression.GetType().Name);
+        }
+    }
+
+    private static void CollectFromPattern(
+        SyntaxTypes.Pattern pattern,
+        TypeInference.InferredType matchedType,
+        DeclQualifiedName containing,
+        ExpressionTypeContext expressionTypeContext,
+        ImmutableHashSet<Opportunity>.Builder resultBuilder)
+    {
+        switch (pattern)
+        {
+            case SyntaxTypes.Pattern.RecordPattern recordPattern:
+                if (matchedType is not TypeInference.InferredType.RecordType)
+                {
+                    foreach (var field in recordPattern.Fields)
+                    {
+                        MaybeAdd(
+                            OpportunityCategory.RecordAccess,
+                            field.FieldName,
+                            containing,
+                            resultBuilder,
+                            new OpportunityTypeEvidence(SubjectType: matchedType));
+                    }
+                }
+
+                break;
+
+            case SyntaxTypes.Pattern.TuplePattern tuplePattern:
+                var tupleElementTypes =
+                    matchedType is TypeInference.InferredType.TupleType tupleType &&
+                    tupleType.ElementTypes.Count == tuplePattern.Elements.Count
+                    ?
+                    tupleType.ElementTypes
+                    :
+                    null;
+
+                for (var index = 0; index < tuplePattern.Elements.Count; index++)
+                {
+                    CollectFromPattern(
+                        tuplePattern.Elements[index],
+                        tupleElementTypes?[index] ?? new TypeInference.InferredType.UnknownType(),
+                        containing,
+                        expressionTypeContext,
+                        resultBuilder);
+                }
+
+                break;
+
+            case SyntaxTypes.Pattern.UnConsPattern unConsPattern:
+                var listElementType =
+                    matchedType is TypeInference.InferredType.ListType listType
+                    ?
+                    listType.ElementType
+                    :
+                    new TypeInference.InferredType.UnknownType();
+
+                CollectFromPattern(
+                    unConsPattern.Head,
+                    listElementType,
+                    containing,
+                    expressionTypeContext,
+                    resultBuilder);
+
+                CollectFromPattern(
+                    unConsPattern.Tail,
+                    matchedType,
+                    containing,
+                    expressionTypeContext,
+                    resultBuilder);
+
+                break;
+
+            case SyntaxTypes.Pattern.ListPattern listPattern:
+                var elementType =
+                    matchedType is TypeInference.InferredType.ListType matchedListType
+                    ?
+                    matchedListType.ElementType
+                    :
+                    new TypeInference.InferredType.UnknownType();
+
+                foreach (var element in listPattern.Elements)
+                {
+                    CollectFromPattern(
+                        element,
+                        elementType,
+                        containing,
+                        expressionTypeContext,
+                        resultBuilder);
+                }
+
+                break;
+
+            case SyntaxTypes.Pattern.NamedPattern namedPattern:
+                var constructorName =
+                    QualifiedNameHelper.ToQualifiedNameRef(
+                        namedPattern.Name.ModuleName,
+                        namedPattern.Name.Name);
+
+                IReadOnlyList<TypeInference.InferredType>? constructorArgumentTypes = null;
+
+                if (expressionTypeContext.FunctionTypes.TryGetValue(constructorName, out var constructorType))
+                {
+                    constructorArgumentTypes =
+                        TypeInference.SpecializeTypesFromMatch(
+                            constructorType.ReturnType,
+                            matchedType,
+                            constructorType.ParameterTypes);
+                }
+                else if (expressionTypeContext.ConstructorArgumentTypes.TryGetValue(
+                    constructorName,
+                    out var argumentTypes))
+                {
+                    constructorArgumentTypes = argumentTypes;
+                }
+
+                for (var index = 0; index < namedPattern.Arguments.Count; index++)
+                {
+                    CollectFromPattern(
+                        namedPattern.Arguments[index],
+                        constructorArgumentTypes is not null && index < constructorArgumentTypes.Count
+                        ?
+                        constructorArgumentTypes[index]
+                        :
+                        new TypeInference.InferredType.UnknownType(),
+                        containing,
+                        expressionTypeContext,
+                        resultBuilder);
+                }
+
+                break;
+
+            case SyntaxTypes.Pattern.AsPattern asPattern:
+                CollectFromPattern(
+                    asPattern.Pattern,
+                    matchedType,
+                    containing,
+                    expressionTypeContext,
+                    resultBuilder);
+
+                break;
+
+            case SyntaxTypes.Pattern.AllPattern:
+            case SyntaxTypes.Pattern.VarPattern:
+            case SyntaxTypes.Pattern.UnitPattern:
+            case SyntaxTypes.Pattern.CharPattern:
+            case SyntaxTypes.Pattern.StringPattern:
+            case SyntaxTypes.Pattern.IntPattern:
+            case SyntaxTypes.Pattern.FloatPattern:
+                break;
+
+            default:
+                throw new System.NotImplementedException(
+                    "CollectFromPattern does not handle pattern variant: " +
+                    pattern.GetType().Name);
         }
     }
 

@@ -694,11 +694,26 @@ public class ElmCompiler
                     TypeInference.GetFunctionParameterTypes(declaration));
         }
 
-        // Build choice type tag argument types dictionary keyed by qualified constructor name.
+        var typeAliasDefinitions =
+            ImmutableDictionary<SyntaxModelTypes.QualifiedNameRef, TypeInference.TypeAliasDefinition>.Empty;
+
+        foreach (var elmModuleSyntax in modulesForCompilation)
+        {
+            var moduleName =
+                string.Join(
+                    ".",
+                    ElmSyntaxAbstract.Module.GetModuleName(elmModuleSyntax.ModuleDefinition));
+
+            typeAliasDefinitions =
+                typeAliasDefinitions.SetItems(
+                    TypeInference.BuildTypeAliasDefinitions(elmModuleSyntax, moduleName));
+        }
+
+        // Build choice type tag types dictionary keyed by qualified constructor name.
         // We use qualified names to avoid cross-module collisions such as
         // ParserFast.Good vs Parser.Advanced.Good.
-        var choiceTagArgumentTypes =
-            new Dictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>();
+        var choiceTagTypes =
+            new Dictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>();
 
         foreach (var elmModuleSyntax in modulesForCompilation)
         {
@@ -711,6 +726,15 @@ public class ElmCompiler
 
             foreach (var typeDecl in typeDeclarations)
             {
+                var choiceType =
+                    new TypeInference.InferredType.ChoiceType(
+                        moduleName,
+                        typeDecl.TypeDeclaration.Name,
+                        [
+                        .. typeDecl.TypeDeclaration.Generics.Select(
+                            generic => new TypeInference.InferredType.TypeVariable(generic))
+                        ]);
+
                 foreach (var ctor in typeDecl.TypeDeclaration.Constructors)
                 {
                     var ctorName = ctor.Name;
@@ -723,12 +747,15 @@ public class ElmCompiler
                     foreach (var argNode in ctor.Arguments)
                     {
                         var argType =
-                            TypeInference.TypeAnnotationToInferredType(argNode);
+                            TypeInference.ExpandTypeAliases(
+                                TypeInference.TypeAnnotationToInferredType(argNode),
+                                typeAliasDefinitions,
+                                moduleName);
 
                         argTypes.Add(argType);
                     }
 
-                    choiceTagArgumentTypes[qualifiedCtorName] = argTypes;
+                    choiceTagTypes[qualifiedCtorName] = new FunctionTypeInfo(choiceType, argTypes);
                 }
             }
         }
@@ -774,8 +801,8 @@ public class ElmCompiler
                 CompiledFunctionsCache: [],
                 PineKernelModuleNames: s_pineKernelModuleNamesDefault,
                 FunctionTypes: functionTypes,
-                ChoiceTagArgumentTypes: choiceTagArgumentTypes,
-                RecordTypeAliasConstructors: recordTypeAliasConstructors);
+                RecordTypeAliasConstructors: recordTypeAliasConstructors,
+                ChoiceTagTypes: choiceTagTypes);
 
         // Pre-compute dependency layouts and SCCs for all functions BEFORE compilation
         var (dependencyLayouts, functionToScc, sccsInDependencyOrder) =
@@ -1367,7 +1394,7 @@ public class ElmCompiler
                             paramExpr,
                             scrutineeType: parameterTypesByIndex[i],
                             recordTypeAliasFields: context.RecordTypeAliasConstructors,
-                            choiceTagArgumentTypes: context.ChoiceTagArgumentTypes);
+                            choiceTagTypes: context.ChoiceTagTypes);
 
                     foreach (var kvp in analysis.Bindings)
                     {
@@ -1380,7 +1407,7 @@ public class ElmCompiler
             var parameterTypes =
                 ExtractParameterTypes(
                     declaration.Function,
-                    context.ChoiceTagArgumentTypes,
+                    context.ChoiceTagTypes,
                     context.FunctionTypes,
                     moduleName);
 
@@ -1728,11 +1755,17 @@ public class ElmCompiler
 
     private static ImmutableDictionary<string, TypeInference.InferredType> ExtractParameterTypes(
         ElmSyntaxAbstract.FunctionStruct function,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>? constructorArgumentTypes,
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes,
         IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? functionTypes,
         string currentModuleName)
     {
         var parameterTypes = ImmutableDictionary<string, TypeInference.InferredType>.Empty;
+
+        var constructorArgumentTypes =
+            choiceTagTypes?
+            .ToDictionary(
+                entry => entry.Key,
+                entry => entry.Value.ParameterTypes);
 
         if (function.Signature is { } signature)
         {

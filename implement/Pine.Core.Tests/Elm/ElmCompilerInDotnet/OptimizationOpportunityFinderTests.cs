@@ -106,6 +106,188 @@ public class OptimizationOpportunityFinderTests
     }
 
     [Fact]
+    public void Reports_record_accesses_in_open_record_parameter_pattern()
+    {
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                selectName { age, name } =
+                    name
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.selectName: record-access: age
+            Test.selectName: record-access: name
+            """.Trim());
+    }
+
+    [Fact]
+    public void Reports_record_access_in_open_record_let_pattern()
+    {
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                selectName record =
+                    let
+                        { name } =
+                            record
+                    in
+                    name
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.selectName: record-access: name
+            """.Trim());
+    }
+
+    [Fact]
+    public void Reports_record_access_in_open_record_case_pattern()
+    {
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                selectName record =
+                    case record of
+                        { name } ->
+                            name
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.selectName: record-access: name
+            """.Trim());
+    }
+
+    [Fact]
+    public void Does_not_report_record_access_in_closed_record_pattern()
+    {
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                selectName : { age : Int, name : String } -> String
+                selectName { age, name } =
+                    name
+                """);
+
+        rendered.Should().Be("");
+    }
+
+    [Fact]
+    public void Does_not_report_record_access_in_closed_record_let_function_pattern()
+    {
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                selectName =
+                    let
+                        fromPerson : { age : Int, name : String } -> String
+                        fromPerson { age, name } =
+                            name
+                    in
+                    fromPerson { age = 40, name = "Ada" }
+                """);
+
+        rendered.Should().Be("");
+    }
+
+    [Fact]
+    public void Does_not_report_record_access_reached_through_closed_record_pattern_binding()
+    {
+        var opportunities =
+            OptimizationOpportunityFinder.FindOptimizationOpportunities(
+                [
+                """
+                module Syntax exposing (Node(..), SyntaxNode(..))
+
+
+                type alias QualifiedNameRef =
+                    { moduleName : List String
+                    , name : String
+                    }
+
+
+                type Node a
+                    = Node Int a
+
+
+                type SyntaxNode
+                    = FunctionNode
+                        { declaration : Node QualifiedNameRef
+                        }
+                """,
+                """
+                module Test exposing (..)
+
+                import Syntax exposing (SyntaxNode)
+
+
+                selectName syntaxNode =
+                    case syntaxNode of
+                        Syntax.FunctionNode { declaration } ->
+                            case declaration of
+                                Syntax.Node _ { name } ->
+                                    name
+                """
+                ]);
+
+        opportunities.Should().NotContain(
+            opportunity => opportunity.Category == OpportunityCategory.RecordAccess);
+    }
+
+    [Fact]
+    public void Does_not_report_record_access_reached_through_nested_generic_constructor_binding()
+    {
+        var opportunities =
+            OptimizationOpportunityFinder.FindOptimizationOpportunities(
+                [
+                """
+                module Test exposing (..)
+
+
+                type alias Import =
+                    { moduleName : List String
+                    , moduleAlias : Maybe String
+                    }
+
+
+                type Node a
+                    = Node Int a
+
+
+                type SyntaxNode
+                    = ImportNode (Node Import)
+
+
+                selectModuleName : SyntaxNode -> List String
+                selectModuleName syntaxNode =
+                    case syntaxNode of
+                        ImportNode (Node _ importValue) ->
+                            importValue.moduleName
+                """
+                ]);
+
+        opportunities.Should().NotContain(
+            opportunity => opportunity.Category == OpportunityCategory.RecordAccess);
+    }
+
+    [Fact]
     public void Reports_record_operations_on_let_bound_open_record()
     {
         var rendered =
@@ -886,6 +1068,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
+            Test.useRecord: record-access: go
             Test.useRecord: higher-order-parameter-direct: go
             """.Trim());
     }
@@ -1755,6 +1938,8 @@ public class OptimizationOpportunityFinderTests
             """
             Test.caller: higher-order-parameter-indirect: f @ distance 1
             Test.caller: higher-order-parameter-indirect: h @ distance 1
+            Test.liftedLambda: record-access: finalizer
+            Test.liftedLambda: record-access: handler
             Test.liftedLambda: higher-order-parameter-direct: finalizer
             Test.liftedLambda: higher-order-parameter-direct: handler
             """.Trim());
@@ -1822,7 +2007,7 @@ public class OptimizationOpportunityFinderTests
     }
 
     [Fact]
-    public void Reports_all_opportunities_remaining_in_language_service_and_concrete_parser()
+    public void Reports_all_opportunities_remaining_in_language_service_and_syntax_parser()
     {
         var compilerSources = BundledFiles.CompilerSourceContainerFilesDefault.Value;
         var sourceTree = BundledFiles.ElmKernelModulesDefault.Value;
@@ -1848,7 +2033,7 @@ public class OptimizationOpportunityFinderTests
                 file =>
                 file.path.SequenceEqual(["LanguageService.elm"]) ||
                 file.path.SequenceEqual(["LanguageServiceAnalysis.elm"]) ||
-                file.path.Take(3).SequenceEqual(["ElmSyntax", "Concrete", "Parser"]))
+                file.path.Take(1).SequenceEqual(["ElmSyntax"]))
             .Select(file => (System.Collections.Generic.IReadOnlyList<string>)file.path)
             .ToList();
 
@@ -1865,7 +2050,7 @@ public class OptimizationOpportunityFinderTests
                 opportunity =>
                 opportunity.ContainingDecl.Namespaces.SequenceEqual(["LanguageService"]) ||
                 opportunity.ContainingDecl.Namespaces.SequenceEqual(["LanguageServiceAnalysis"]) ||
-                opportunity.ContainingDecl.Namespaces.Take(3).SequenceEqual(["ElmSyntax", "Concrete", "Parser"]))
+                opportunity.ContainingDecl.Namespaces.Take(1).SequenceEqual(["ElmSyntax"]))
             .ToImmutableHashSet();
 
         var countsByModuleAndCategory =
@@ -1873,10 +2058,10 @@ public class OptimizationOpportunityFinderTests
             .GroupBy(
                 opportunity =>
                 (Module:
-                    opportunity.ContainingDecl.Namespaces.Take(3)
-                .SequenceEqual(["ElmSyntax", "Concrete", "Parser"])
+                    opportunity.ContainingDecl.Namespaces.Take(1)
+                .SequenceEqual(["ElmSyntax"])
                 ?
-                "ElmSyntax.Concrete.Parser"
+                "ElmSyntax"
                 :
                 opportunity.ContainingDecl.Namespaces[0],
                 opportunity.Category))
@@ -1890,20 +2075,22 @@ public class OptimizationOpportunityFinderTests
 
         renderedCounts.Should().Be(
             """
-            ElmSyntax.Concrete.Parser: RootLevelChoiceTagWrapper: 167
+            ElmSyntax: BasicsCompare: 1
+            ElmSyntax: HigherOrderParameter_Direct: 2
+            ElmSyntax: RootLevelChoiceTagWrapper: 196
             LanguageService: BasicsCompare: 3
             LanguageService: RootLevelChoiceTagWrapper: 32
             LanguageServiceAnalysis: RootLevelChoiceTagWrapper: 7
             """.Trim());
 
         opportunities.Should().NotContain(
-            opportunity => opportunity.Category == OpportunityCategory.RecordAccess);
-
-        opportunities.Should().NotContain(
             opportunity => opportunity.Category == OpportunityCategory.BasicsEq);
 
         opportunities.Should().NotContain(
             opportunity => opportunity.Category == OpportunityCategory.BasicsAppend);
+
+        opportunities.Should().NotContain(
+            opportunity => opportunity.Category == OpportunityCategory.RecordAccess);
     }
 
     private static string FindAndRender(

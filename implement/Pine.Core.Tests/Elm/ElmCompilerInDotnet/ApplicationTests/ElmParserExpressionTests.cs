@@ -369,10 +369,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 1_019
-            BuildListCount: 1_266
+            InvocationCount: 1_015
+            BuildListCount: 1_261
             LoopIterationCount: 0
-            InstructionCount: 20_672
+            InstructionCount: 20_585
             """);
     }
 

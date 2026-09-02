@@ -210,16 +210,16 @@ public class PatternCompiler
                     scrutineeType: scrutineeType,
                     recordTypeAliasFields:
                     context.ModuleCompilationContext.RecordTypeAliasConstructors,
-                    choiceTagArgumentTypes:
-                    context.ModuleCompilationContext.ChoiceTagArgumentTypes);
+                    choiceTagTypes:
+                    context.ModuleCompilationContext.ChoiceTagTypes);
 
             // Extract binding types from the pattern
             var patternBindingTypes =
-                TypeInference.ExtractPatternBindingTypesFromInferred(
+                TypeInference.ExtractPatternBindingTypesFromInferredWithChoiceTagTypes(
                     pattern,
                     scrutineeType,
                     [],
-                    context.ModuleCompilationContext.ChoiceTagArgumentTypes);
+                    context.ModuleCompilationContext.ChoiceTagTypes);
 
             // Create case context with both bindings and binding types
             var caseContext = context;
@@ -389,16 +389,16 @@ public class PatternCompiler
                     scrutineeType: scrutineeType,
                     recordTypeAliasFields:
                     innerContext.ModuleCompilationContext.RecordTypeAliasConstructors,
-                    choiceTagArgumentTypes:
-                    innerContext.ModuleCompilationContext.ChoiceTagArgumentTypes);
+                    choiceTagTypes:
+                    innerContext.ModuleCompilationContext.ChoiceTagTypes);
 
             // Extract binding types from the pattern
             var patternBindingTypes =
-                TypeInference.ExtractPatternBindingTypesFromInferred(
+                TypeInference.ExtractPatternBindingTypesFromInferredWithChoiceTagTypes(
                     pattern,
                     scrutineeType,
                     [],
-                    innerContext.ModuleCompilationContext.ChoiceTagArgumentTypes);
+                    innerContext.ModuleCompilationContext.ChoiceTagTypes);
 
             // Create case context with both bindings and binding types
             var caseContext = innerContext;
@@ -494,7 +494,7 @@ public class PatternCompiler
             scrutinee,
             scrutineeType: null,
             recordTypeAliasFields: null,
-            choiceTagArgumentTypes: null,
+            choiceTagTypes: null,
             topLevelRecordFieldNamesOverride: recordFieldNames);
 
     /// <summary>
@@ -518,13 +518,13 @@ public class PatternCompiler
         Expression scrutinee,
         TypeInference.InferredType? scrutineeType,
         IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>? choiceTagArgumentTypes = null) =>
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes = null) =>
         AnalyzePatternRecursive(
             pattern,
             scrutinee,
             scrutineeType: scrutineeType,
             recordTypeAliasFields: recordTypeAliasFields,
-            choiceTagArgumentTypes: choiceTagArgumentTypes,
+            choiceTagTypes: choiceTagTypes,
             topLevelRecordFieldNamesOverride: null);
 
     private static PatternAnalysis AnalyzePatternRecursive(
@@ -532,7 +532,7 @@ public class PatternCompiler
         Expression scrutinee,
         TypeInference.InferredType? scrutineeType,
         IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>? choiceTagArgumentTypes = null,
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes = null,
         IReadOnlyList<string>? topLevelRecordFieldNamesOverride = null)
     {
         return pattern switch
@@ -563,11 +563,11 @@ public class PatternCompiler
                 scrutinee,
                 scrutineeType,
                 recordTypeAliasFields,
-                choiceTagArgumentTypes,
+                choiceTagTypes,
                 topLevelRecordFieldNamesOverride),
 
             SyntaxTypes.Pattern.ListPattern listPattern =>
-            AnalyzeListPattern(listPattern, scrutinee, scrutineeType, recordTypeAliasFields, choiceTagArgumentTypes),
+            AnalyzeListPattern(listPattern, scrutinee, scrutineeType, recordTypeAliasFields, choiceTagTypes),
 
             SyntaxTypes.Pattern.UnConsPattern unConsPattern =>
             AnalyzeUnConsPattern(
@@ -575,13 +575,13 @@ public class PatternCompiler
                 scrutinee,
                 scrutineeType,
                 recordTypeAliasFields,
-                choiceTagArgumentTypes),
+                choiceTagTypes),
 
             SyntaxTypes.Pattern.TuplePattern tuplePattern =>
-            AnalyzeTuplePattern(tuplePattern, scrutinee, scrutineeType, recordTypeAliasFields, choiceTagArgumentTypes),
+            AnalyzeTuplePattern(tuplePattern, scrutinee, scrutineeType, recordTypeAliasFields, choiceTagTypes),
 
             SyntaxTypes.Pattern.NamedPattern namedPattern =>
-            AnalyzeNamedPattern(namedPattern, scrutinee, recordTypeAliasFields, choiceTagArgumentTypes),
+            AnalyzeNamedPattern(namedPattern, scrutinee, scrutineeType, recordTypeAliasFields, choiceTagTypes),
 
             SyntaxTypes.Pattern.RecordPattern recordPattern =>
             AnalyzeRecordPattern(
@@ -603,7 +603,7 @@ public class PatternCompiler
         Expression scrutinee,
         TypeInference.InferredType? scrutineeType,
         IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>? choiceTagArgumentTypes)
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes)
     {
         if (listPattern.Elements.Count is 0)
         {
@@ -643,7 +643,7 @@ public class PatternCompiler
                     elementExpr,
                     elementType,
                     recordTypeAliasFields,
-                    choiceTagArgumentTypes);
+                    choiceTagTypes);
 
             allBindings = allBindings.SetItems(elementAnalysis.Bindings);
 
@@ -673,7 +673,7 @@ public class PatternCompiler
         Expression scrutinee,
         TypeInference.InferredType? scrutineeType,
         IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>? choiceTagArgumentTypes)
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes)
     {
         var headExpr = BuiltinHelpers.ApplyBuiltinHead(scrutinee);
         var tailExpr = BuiltinHelpers.ApplyBuiltinSkip(1, scrutinee);
@@ -693,7 +693,7 @@ public class PatternCompiler
                 headExpr,
                 elementType,
                 recordTypeAliasFields,
-                choiceTagArgumentTypes);
+                choiceTagTypes);
 
         var tailAnalysis =
             AnalyzePatternRecursive(
@@ -701,7 +701,7 @@ public class PatternCompiler
                 tailExpr,
                 scrutineeType,
                 recordTypeAliasFields,
-                choiceTagArgumentTypes);
+                choiceTagTypes);
 
         var allBindings =
             ImmutableDictionary<string, Expression>.Empty
@@ -745,7 +745,7 @@ public class PatternCompiler
         Expression scrutinee,
         TypeInference.InferredType? scrutineeType,
         IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>? choiceTagArgumentTypes)
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes)
     {
         if (AsConstantPattern(tuplePattern) is { } constantValue)
         {
@@ -787,7 +787,7 @@ public class PatternCompiler
                     elementExpr,
                     elementType,
                     recordTypeAliasFields,
-                    choiceTagArgumentTypes);
+                    choiceTagTypes);
 
             allBindings = allBindings.SetItems(elementAnalysis.Bindings);
 
@@ -815,8 +815,9 @@ public class PatternCompiler
     private static PatternAnalysis AnalyzeNamedPattern(
         SyntaxTypes.Pattern.NamedPattern namedPattern,
         Expression scrutinee,
+        TypeInference.InferredType? scrutineeType,
         IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>? choiceTagArgumentTypes)
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes)
     {
         var tagName = namedPattern.Name.Name;
 
@@ -848,16 +849,24 @@ public class PatternCompiler
             // static field-access path.
             IReadOnlyList<TypeInference.InferredType>? ctorArgTypes = null;
 
-            if (choiceTagArgumentTypes is not null)
+            if (choiceTagTypes is not null)
             {
                 var ctorQualifiedName =
                     new SyntaxModelTypes.QualifiedNameRef(
                         namedPattern.Name.ModuleName,
                         namedPattern.Name.Name);
 
-                if (choiceTagArgumentTypes.TryGetValue(ctorQualifiedName, out var argTypes))
+                if (choiceTagTypes.TryGetValue(ctorQualifiedName, out var choiceTagType))
                 {
-                    ctorArgTypes = argTypes;
+                    ctorArgTypes =
+                        scrutineeType is null
+                        ?
+                        choiceTagType.ParameterTypes
+                        :
+                        TypeInference.SpecializeTypesFromMatch(
+                            choiceTagType.ReturnType,
+                            scrutineeType,
+                            choiceTagType.ParameterTypes);
                 }
             }
 
@@ -879,7 +888,7 @@ public class PatternCompiler
                         argExpr,
                         scrutineeType: argType,
                         recordTypeAliasFields: recordTypeAliasFields,
-                        choiceTagArgumentTypes: choiceTagArgumentTypes);
+                        choiceTagTypes: choiceTagTypes);
 
                 allBindings = allBindings.SetItems(argAnalysis.Bindings);
 
@@ -998,7 +1007,7 @@ public class PatternCompiler
         Expression scrutinee,
         TypeInference.InferredType? scrutineeType,
         IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>? choiceTagArgumentTypes,
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes,
         IReadOnlyList<string>? topLevelRecordFieldNamesOverride)
     {
         // First, analyze the inner pattern
@@ -1008,7 +1017,7 @@ public class PatternCompiler
                 scrutinee,
                 scrutineeType,
                 recordTypeAliasFields,
-                choiceTagArgumentTypes,
+                choiceTagTypes,
                 topLevelRecordFieldNamesOverride);
 
         // Add the "as" binding - this binds the entire scrutinee to the alias name
@@ -1173,10 +1182,10 @@ public class PatternCompiler
         Expression scrutinee,
         TypeInference.InferredType? scrutineeType,
         IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>? choiceTagArgumentTypes = null)
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes = null)
     {
         var analysis =
-            AnalyzePattern(pattern, scrutinee, scrutineeType, recordTypeAliasFields, choiceTagArgumentTypes);
+            AnalyzePattern(pattern, scrutinee, scrutineeType, recordTypeAliasFields, choiceTagTypes);
 
         return analysis.Bindings;
     }

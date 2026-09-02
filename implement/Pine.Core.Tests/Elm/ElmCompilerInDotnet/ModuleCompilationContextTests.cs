@@ -52,9 +52,12 @@ public class ModuleCompilationContextTests
                 new Dictionary<QualifiedNameRef, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)>(),
                 compiledFunctionsCache: [],
                 pineKernelModuleNames: FrozenSet.Create<string>([]),
-                choiceTagArgumentTypes: new Dictionary<QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>
+                choiceTagTypes: new Dictionary<QualifiedNameRef, FunctionTypeInfo>
                 {
-                    [constructorName] = [TypeInference.InferredType.Int(), TypeInference.InferredType.Bool()]
+                    [constructorName] =
+                    new(
+                        new TypeInference.InferredType.UnknownType(),
+                        [TypeInference.InferredType.Int(), TypeInference.InferredType.Bool()])
                 },
                 recordTypeAliasConstructors: new Dictionary<QualifiedNameRef, IReadOnlyList<string>>
                 {

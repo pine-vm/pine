@@ -2856,7 +2856,7 @@ public static class TypeInference
                     for (var i = 0; i < namedPattern.Arguments.Count; i++)
                     {
                         bindings =
-                            ExtractPatternBindingTypesFromInferredInternal(
+                            ExtractPatternBindingTypesFromInferred(
                                 namedPattern.Arguments[i],
                                 argTypes[i],
                                 bindings,
@@ -2948,14 +2948,58 @@ public static class TypeInference
         ImmutableDictionary<string, InferredType> existingBindings,
         IReadOnlyDictionary<QualifiedNameRef, IReadOnlyList<InferredType>>? constructorArgumentTypes)
     {
-        return ExtractPatternBindingTypesFromInferredInternal(pattern, inferredType, existingBindings, constructorArgumentTypes);
+        return
+            ExtractPatternBindingTypesFromInferredInternal(
+                pattern,
+                inferredType,
+                existingBindings,
+                constructorArgumentTypes is null
+                ?
+                null
+                :
+                (constructorName, _) =>
+                constructorArgumentTypes.TryGetValue(constructorName, out var argumentTypes)
+                ?
+                argumentTypes
+                :
+                null);
+    }
+
+    /// <summary>
+    /// Extracts binding types from a pattern using complete choice-tag types.
+    /// Constructor arguments are specialized recursively from the type matched at each named pattern.
+    /// </summary>
+    public static ImmutableDictionary<string, InferredType> ExtractPatternBindingTypesFromInferredWithChoiceTagTypes(
+        SyntaxTypes.Pattern pattern,
+        InferredType inferredType,
+        ImmutableDictionary<string, InferredType> existingBindings,
+        IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes)
+    {
+        return
+            ExtractPatternBindingTypesFromInferredInternal(
+                pattern,
+                inferredType,
+                existingBindings,
+                choiceTagTypes is null
+                ?
+                null
+                :
+                (constructorName, matchedType) =>
+                choiceTagTypes.TryGetValue(constructorName, out var choiceTagType)
+                ?
+                SpecializeTypesFromMatch(
+                    choiceTagType.ReturnType,
+                    matchedType,
+                    choiceTagType.ParameterTypes)
+                :
+                null);
     }
 
     private static ImmutableDictionary<string, InferredType> ExtractPatternBindingTypesFromInferredInternal(
         SyntaxTypes.Pattern pattern,
         InferredType inferredType,
         ImmutableDictionary<string, InferredType> bindings,
-        IReadOnlyDictionary<QualifiedNameRef, IReadOnlyList<InferredType>>? constructorArgumentTypes)
+        Func<QualifiedNameRef, InferredType, IReadOnlyList<InferredType>?>? resolveConstructorArgumentTypes)
     {
         switch (pattern)
         {
@@ -2977,8 +3021,32 @@ public static class TypeInference
                                 tuplePattern.Elements[i],
                                 tupleType.ElementTypes[i],
                                 bindings,
-                                constructorArgumentTypes);
+                                resolveConstructorArgumentTypes);
                     }
+                }
+
+                return bindings;
+
+            case SyntaxTypes.Pattern.RecordPattern recordPattern:
+                IReadOnlyList<(string FieldName, InferredType FieldType)>? recordFields = null;
+
+                if (inferredType is InferredType.RecordType recordType)
+                    recordFields = recordType.Fields;
+
+                else if (inferredType is InferredType.OpenRecordType openRecordType)
+                    recordFields = openRecordType.KnownFields;
+
+                if (recordFields is null)
+                    return bindings;
+
+                foreach (var field in recordPattern.Fields)
+                {
+                    var matchingField =
+                        recordFields.FirstOrDefault(
+                            candidate => candidate.FieldName == field.FieldName);
+
+                    if (matchingField.FieldType is not null)
+                        bindings = bindings.SetItem(field.FieldName, matchingField.FieldType);
                 }
 
                 return bindings;
@@ -2986,8 +3054,9 @@ public static class TypeInference
             case SyntaxTypes.Pattern.NamedPattern namedPattern:
 
                 // NamedPattern - look up constructor argument types
-                if (constructorArgumentTypes is not null &&
-                    constructorArgumentTypes.TryGetValue(QualifiedNameToRef(namedPattern.Name), out var argTypes) &&
+                if (resolveConstructorArgumentTypes?.Invoke(
+                    QualifiedNameToRef(namedPattern.Name),
+                    inferredType) is { } argTypes &&
                     argTypes.Count == namedPattern.Arguments.Count)
                 {
                     for (var i = 0; i < namedPattern.Arguments.Count; i++)
@@ -2997,7 +3066,7 @@ public static class TypeInference
                                 namedPattern.Arguments[i],
                                 argTypes[i],
                                 bindings,
-                                constructorArgumentTypes);
+                                resolveConstructorArgumentTypes);
                     }
                 }
 
@@ -3030,14 +3099,14 @@ public static class TypeInference
                         unConsPattern.Head,
                         elementType,
                         bindings,
-                        constructorArgumentTypes);
+                        resolveConstructorArgumentTypes);
 
                 return
                     ExtractPatternBindingTypesFromInferredInternal(
                         unConsPattern.Tail,
                         inferredType,
                         bindings,
-                        constructorArgumentTypes);
+                        resolveConstructorArgumentTypes);
 
             case SyntaxTypes.Pattern.ListPattern listPattern:
                 InferredType? listElementType =
@@ -3068,7 +3137,7 @@ public static class TypeInference
                             elementPattern,
                             listElementType,
                             bindings,
-                            constructorArgumentTypes);
+                            resolveConstructorArgumentTypes);
                 }
 
                 return bindings;
@@ -3081,7 +3150,7 @@ public static class TypeInference
                         asPattern.Pattern,
                         inferredType,
                         bindings,
-                        constructorArgumentTypes);
+                        resolveConstructorArgumentTypes);
 
             case SyntaxTypes.Pattern.AllPattern:
 
@@ -4359,10 +4428,11 @@ public static class TypeInference
         IReadOnlyList<InferredType> ArgumentTypes);
 
     /// <summary>
-    /// Describes all value constructors of a choice type.
+    /// Describes a choice type's declared parameters and all its value constructors.
     /// </summary>
     public record ChoiceTypeDefinition(
-        IReadOnlyList<ChoiceTypeConstructor> Constructors);
+        IReadOnlyList<ChoiceTypeConstructor> Constructors,
+        IReadOnlyList<string> TypeParameters);
 
     /// <summary>
     /// Builds a dictionary mapping each choice type in the given modules to its
@@ -4398,7 +4468,9 @@ public static class TypeInference
                 .ToList();
 
             result[QualifiedNameHelper.ToQualifiedNameRef(key.Namespaces, typeStruct.Name)] =
-                new ChoiceTypeDefinition(constructors);
+                new ChoiceTypeDefinition(
+                    constructors,
+                    typeStruct.Generics);
         }
 
         return result.ToImmutableDictionary();

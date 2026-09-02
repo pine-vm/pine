@@ -836,6 +836,191 @@ public class BuiltinOperatorLoweringTests
             """.Trim());
     }
 
+    [Fact]
+    public void Lowers_eq_for_user_defined_choice_field_reached_through_imported_record_alias()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Model exposing (ExposedType, Optional(..), Range)
+
+
+                type alias Range =
+                    { start : Int
+                    , end : Int
+                    }
+
+
+                type Optional a
+                    = Present a
+                    | Absent
+
+
+                type alias ExposedType =
+                    { open : Optional Range }
+                """,
+                """
+                module Test exposing (..)
+
+                import Model as ConcreteExposing
+
+
+                isSameOpen : ConcreteExposing.ExposedType -> ConcreteExposing.Optional ConcreteExposing.Range -> Bool
+                isSameOpen exposedType expected =
+                    exposedType.open == expected
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            """
+            Test.isSameOpen : Model.ExposedType -> Model.Optional Model.Range -> Bool
+            Test.isSameOpen exposedType expected =
+                Pine_builtin.equal
+                    [ exposedType.open, expected ]
+            """.Trim());
+    }
+
+    [Fact]
+    public void Lowers_eq_when_user_defined_payload_free_tag_proves_value_contains_no_Dict_or_Set()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                type Optional a
+                    = Present a
+                    | Absent
+
+
+                isAbsent value =
+                    value == Absent
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            """
+            type Test.Optional a
+                = Present a
+                | Absent
+
+
+            Test.isAbsent value =
+                Pine_builtin.equal
+                    [ value, Test.Absent ]
+            """.Trim());
+    }
+
+    [Fact]
+    public void Does_not_lower_eq_for_user_defined_choice_containing_Dict()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+                import Dict exposing (Dict)
+
+
+                type Optional a
+                    = Present a
+                    | Absent
+
+
+                equal : Optional d -> Optional d -> Bool
+                equal left right =
+                    left == right
+                """);
+
+        var rendered = RenderCanonicalized(loweredModule);
+
+        rendered.Trim().Should().Be(
+            """
+            type Test.Optional a
+                = Present a
+                | Absent
+
+
+            Test.equal : Test.Optional d -> Test.Optional d -> Bool
+            Test.equal left right =
+                Basics.eq
+                    left
+                    right
+
+            """.Trim());
+    }
+
+    [Fact]
+    public void Does_not_lower_eq_for_recursive_choice_with_differently_instantiated_Dict_payload()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+                import Dict exposing (Dict)
+
+
+                type Recursive a
+                    = More (Recursive (Dict Int a))
+                    | End
+
+
+                equal : Recursive Int -> Recursive Int -> Bool
+                equal left right =
+                    left == right
+                """);
+
+        var rendered = RenderCanonicalized(loweredModule);
+
+        rendered.Should().NotContain("Pine_builtin.equal");
+        rendered.Should().Contain("Basics.eq");
+    }
+
+    [Fact]
+    public void Lowers_eq_for_recursive_user_defined_choice_with_safe_payload()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                type Recursive a
+                    = More a (Recursive a)
+                    | End
+
+
+                equal : Recursive Int -> Recursive Int -> Bool
+                equal left right =
+                    left == right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Contain("Pine_builtin.equal");
+    }
+
+    [Fact]
+    public void Choice_type_arguments_follow_declared_parameter_order()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+                import Dict exposing (Dict)
+
+
+                type OnlySecond ignored payload
+                    = OnlySecond payload
+
+
+                equal : OnlySecond (Dict Int Int) Int -> OnlySecond (Dict Int Int) Int -> Bool
+                equal left right =
+                    left == right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Contain("Pine_builtin.equal");
+    }
+
     // ============================================================
     // Lowering of `/=` / `Basics.neq` to a negated `Pine_builtin.equal`
     // expressed as `if Pine_builtin.equal [ a, b ] then Basics.False else Basics.True`.
@@ -1379,21 +1564,27 @@ public class BuiltinOperatorLoweringTests
             """.Trim());
     }
 
-    private static SyntaxTypes.File LowerOperators(string moduleText)
+    private static SyntaxTypes.File LowerOperators(params string[] moduleTexts)
     {
-        var parsedModule =
-            ElmSyntaxParser.ParseModuleText(moduleText)
-            .Extract(err => throw new Exception("Failed parsing: " + err));
-
         var parsedModules =
-            new[] { SyntaxTypes.FromFullSyntaxModel.Convert(parsedModule) };
+            moduleTexts
+            .Select(
+                moduleText =>
+                ElmSyntaxParser.ParseModuleText(moduleText)
+                .Extract(err => throw new Exception("Failed parsing: " + err)))
+            .ToList();
+
+        var parsedModulesAbstract =
+            parsedModules
+            .Select(SyntaxTypes.FromFullSyntaxModel.Convert)
+            .ToList();
 
         var canonicalizedModules =
-            Canonicalization.CanonicalizeOrThrow([parsedModule])
+            Canonicalization.CanonicalizeOrThrow(parsedModules)
             .Extract(err => throw new Exception("Failed canonicalization: " + err));
 
         var orderedCanonicalizedModules =
-            parsedModules
+            parsedModulesAbstract
             .Select(
                 module =>
                 canonicalizedModules[SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value]

@@ -154,4 +154,36 @@ public class TypeInferenceRecordAccessTests
 
         inferredType.Should().BeOfType<TypeInference.InferredType.UnknownType>();
     }
+
+    [Fact]
+    public void User_defined_payload_free_constructor_is_inferred_from_constructor_metadata()
+    {
+        var optionalType =
+            new TypeInference.InferredType.ChoiceType(
+                ["Model"],
+                "Optional",
+                [new TypeInference.InferredType.TypeVariable("item")]);
+
+        var inferredType =
+            TypeInference.InferExpressionType(
+                Abs(new SyntaxTypes.Expression.FunctionOrValue(["Model"], "Absent")),
+                parameterNames: new Dictionary<string, int>(),
+                parameterTypes: new Dictionary<string, TypeInference.InferredType>(),
+                localBindingTypes: null,
+                currentModuleName: "Test",
+                functionTypes:
+                new Dictionary<QualifiedNameRef, FunctionTypeInfo>
+                {
+                    [new QualifiedNameRef(["Model"], "Absent")] =
+                    new(optionalType, [])
+                });
+
+        var inferredOptionalType =
+            inferredType.Should().BeOfType<TypeInference.InferredType.ChoiceType>().Subject;
+
+        inferredOptionalType.ModuleName.Should().Equal("Model");
+        inferredOptionalType.TypeName.Should().Be("Optional");
+        inferredOptionalType.TypeArguments.Should().ContainSingle()
+            .Which.Should().BeOfType<TypeInference.InferredType.TypeVariable>();
+    }
 }

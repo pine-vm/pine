@@ -1419,10 +1419,11 @@ public class ExpressionCompiler
 
                     // Extract binding types from the pattern using the inferred type
                     newBindingTypes =
-                        TypeInference.ExtractPatternBindingTypesFromInferred(
+                        TypeInference.ExtractPatternBindingTypesFromInferredWithChoiceTagTypes(
                             letDestructuring.Pattern,
                             destructuredExprType,
-                            newBindingTypes);
+                            newBindingTypes,
+                            context.ModuleCompilationContext.ChoiceTagTypes);
 
                     // Update the let context with the new types
                     letContext = letContext.WithReplacedLocalBindingsAndTypes(newBindings, newBindingTypes);
@@ -1447,8 +1448,8 @@ public class ExpressionCompiler
                             scrutineeType: destructuredExprType,
                             recordTypeAliasFields:
                             context.ModuleCompilationContext.RecordTypeAliasConstructors,
-                            choiceTagArgumentTypes:
-                            context.ModuleCompilationContext.ChoiceTagArgumentTypes);
+                            choiceTagTypes:
+                            context.ModuleCompilationContext.ChoiceTagTypes);
 
                     foreach (var kvp in patternBindings)
                     {
