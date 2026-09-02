@@ -664,12 +664,7 @@ topLevelDeclarations parsedModule =
 
 declarationIsTopLevel : LanguageServiceAnalysis.DeclarationOccurrence -> Bool
 declarationIsTopLevel occurrence =
-    case occurrence.scope of
-        LanguageServiceAnalysis.TopLevelScope ->
-            True
-
-        LanguageServiceAnalysis.LocalScope _ ->
-            False
+    occurrence.scopePath == []
 
 
 exposedTopLevelDeclarations : ParsedModuleCache -> List LanguageServiceAnalysis.DeclarationOccurrence
@@ -1104,7 +1099,7 @@ findImportedModuleByImportedName importedName importedModules =
 
 type alias ModuleResolutionContext =
     { -- Declarations visible without qualification, first match wins
-      localItems : List ( String, ( LanguageServiceAnalysis.DeclarationScope, ResolvedDeclaration ) )
+      localItems : List ( String, ( Path, ResolvedDeclaration ) )
     , importedModules : List ( List String, ImportedModule )
     }
 
@@ -1133,13 +1128,13 @@ ownDeclarationsForContext :
     -> ParsedModuleCache
     -> LanguageServiceInterface.FileLocation
     -> List LanguageServiceAnalysis.DeclarationOccurrence
-    -> List ( String, ( LanguageServiceAnalysis.DeclarationScope, ResolvedDeclaration ) )
+    -> List ( String, ( Path, ResolvedDeclaration ) )
 ownDeclarationsForContext topLevel parsedModule fileLocation occurrences =
     case occurrences of
         occurrence :: rest ->
             if declarationIsTopLevel occurrence == topLevel then
                 ( occurrence.name
-                , ( occurrence.scope
+                , ( occurrence.scopePath
                   , { fileLocation = fileLocation
                     , parsedModule = parsedModule
                     , occurrence = occurrence
@@ -1157,7 +1152,7 @@ ownDeclarationsForContext topLevel parsedModule fileLocation occurrences =
 
 exposedImportedDeclarationsForContext :
     List ImportedModule
-    -> List ( String, ( LanguageServiceAnalysis.DeclarationScope, ResolvedDeclaration ) )
+    -> List ( String, ( Path, ResolvedDeclaration ) )
 exposedImportedDeclarationsForContext importedModules =
     case importedModules of
         importedModule :: rest ->
@@ -1170,7 +1165,7 @@ exposedImportedDeclarationsForContext importedModules =
 
 exposedDeclarationsForContext :
     ImportedModule
-    -> List ( String, ( LanguageServiceAnalysis.DeclarationScope, ResolvedDeclaration ) )
+    -> List ( String, ( Path, ResolvedDeclaration ) )
 exposedDeclarationsForContext importedModule =
     case importedModule.exposingList of
         Nothing ->
@@ -1185,12 +1180,12 @@ exposedDeclarationsForContext importedModule =
 exposedDeclarationsForContextHelp :
     ImportedModule
     -> List LanguageServiceAnalysis.DeclarationOccurrence
-    -> List ( String, ( LanguageServiceAnalysis.DeclarationScope, ResolvedDeclaration ) )
+    -> List ( String, ( Path, ResolvedDeclaration ) )
 exposedDeclarationsForContextHelp importedModule occurrences =
     case occurrences of
         occurrence :: rest ->
             ( occurrence.name
-            , ( LanguageServiceAnalysis.TopLevelScope
+            , ( []
               , { fileLocation = importedModule.fileLocation
                 , parsedModule = importedModule.parsedModule
                 , occurrence = occurrence
@@ -1205,12 +1200,12 @@ exposedDeclarationsForContextHelp importedModule occurrences =
 
 implicitImportsForContext :
     List ResolvedDeclaration
-    -> List ( String, ( LanguageServiceAnalysis.DeclarationScope, ResolvedDeclaration ) )
+    -> List ( String, ( Path, ResolvedDeclaration ) )
 implicitImportsForContext resolvedDeclarations =
     case resolvedDeclarations of
         resolved :: rest ->
             ( resolved.occurrence.name
-            , ( LanguageServiceAnalysis.TopLevelScope, resolved )
+            , ( [], resolved )
             )
                 :: implicitImportsForContext rest
 
@@ -1290,17 +1285,12 @@ resolveReferenceInContext context reference =
             Nothing ->
                 Nothing
 
-            Just ( scope, resolved ) ->
-                case scope of
-                    LanguageServiceAnalysis.TopLevelScope ->
-                        Just resolved
+            Just ( scopePath, resolved ) ->
+                if ElmSyntax.Path.isPrefixOf scopePath reference.path then
+                    Just resolved
 
-                    LanguageServiceAnalysis.LocalScope scopePath ->
-                        if ElmSyntax.Path.isPrefixOf scopePath reference.path then
-                            Just resolved
-
-                        else
-                            Nothing
+                else
+                    Nothing
 
     else
         case Common.assocListGet reference.moduleName context.importedModules of
@@ -2390,21 +2380,20 @@ localDeclarationsAtLocation :
 localDeclarationsAtLocation parsedModule location occurrences =
     case occurrences of
         occurrence :: rest ->
-            case occurrence.scope of
-                LanguageServiceAnalysis.TopLevelScope ->
-                    localDeclarationsAtLocation parsedModule location rest
+            if occurrence.scopePath == [] then
+                localDeclarationsAtLocation parsedModule location rest
 
-                LanguageServiceAnalysis.LocalScope scopePath ->
-                    case rangeAtPathInModule parsedModule scopePath SelectWhole of
-                        Nothing ->
+            else
+                case rangeAtPathInModule parsedModule occurrence.scopePath SelectWhole of
+                    Nothing ->
+                        localDeclarationsAtLocation parsedModule location rest
+
+                    Just scopeRange ->
+                        if rangeContainsLocation location scopeRange then
+                            occurrence :: localDeclarationsAtLocation parsedModule location rest
+
+                        else
                             localDeclarationsAtLocation parsedModule location rest
-
-                        Just scopeRange ->
-                            if rangeContainsLocation location scopeRange then
-                                occurrence :: localDeclarationsAtLocation parsedModule location rest
-
-                            else
-                                localDeclarationsAtLocation parsedModule location rest
 
         [] ->
             []

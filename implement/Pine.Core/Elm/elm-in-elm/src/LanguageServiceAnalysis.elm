@@ -25,18 +25,6 @@ import ElmSyntax.Abstract.TypeAnnotation
 import ElmSyntax.Path exposing (Path, Selection(..), Step(..))
 
 
-{-| Visibility of a declared name.
-
-`LocalScope` carries the path of the syntax node that limits visibility, so
-containment tests are structural (`ElmSyntax.Path.isPrefixOf`) instead of
-range based.
-
--}
-type DeclarationScope
-    = TopLevelScope
-    | LocalScope Path
-
-
 type DeclarationKind
     = FunctionOrValueDeclarationKind
     | TypeAliasDeclarationKind
@@ -57,7 +45,7 @@ type DocumentationSource
 type alias DeclarationOccurrence =
     { name : String
     , kind : DeclarationKind
-    , scope : DeclarationScope
+    , scopePath : Path
     , isExposed : Bool
 
     -- Path and selection covering the complete declaration
@@ -145,19 +133,18 @@ markTopLevelValuesExposed exposingList occurrences =
                exposing list at the point they are collected, so exposure of
                top level value declarations is decided here.
             -}
-            (case occurrence.scope of
-                LocalScope _ ->
-                    occurrence
+            (if occurrence.scopePath /= [] then
+                occurrence
 
-                TopLevelScope ->
-                    case occurrence.kind of
-                        FunctionOrValueDeclarationKind ->
-                            { occurrence
-                                | isExposed = exposesFunction occurrence.name exposingList
-                            }
+             else
+                case occurrence.kind of
+                    FunctionOrValueDeclarationKind ->
+                        { occurrence
+                            | isExposed = exposesFunction occurrence.name exposingList
+                        }
 
-                        _ ->
-                            occurrence
+                    _ ->
+                        occurrence
             )
                 :: markTopLevelValuesExposed exposingList rest
 
@@ -219,7 +206,7 @@ declarationOccurrencesInDeclaration exposingList declarationIndex declaration =
         ElmSyntax.Abstract.Declaration.AliasDeclaration typeAlias ->
             [ { name = typeAlias.name
               , kind = TypeAliasDeclarationKind
-              , scope = TopLevelScope
+              , scopePath = []
               , isExposed = exposesTypeOrAlias typeAlias.name exposingList
               , declarationPath = declarationPath
               , declarationSelection = SelectDeclarationWithoutDocumentation
@@ -245,7 +232,7 @@ declarationOccurrencesInDeclaration exposingList declarationIndex declaration =
             in
             { name = choiceType.name
             , kind = ChoiceTypeDeclarationKind
-            , scope = TopLevelScope
+            , scopePath = []
             , isExposed = isExposed
             , declarationPath = declarationPath
             , declarationSelection = SelectDeclarationWithoutDocumentation
@@ -316,7 +303,7 @@ declarationOccurrencesForFunction exposingList declarationSelection declarationP
     List.concat
         [ [ { name = implementation.name
             , kind = FunctionOrValueDeclarationKind
-            , scope = TopLevelScope
+            , scopePath = []
             , isExposed = exposesFunction implementation.name exposingList
             , declarationPath = declarationPath
             , declarationSelection = declarationSelection
@@ -346,7 +333,7 @@ declarationOccurrencesForChoiceTags declarationPath choiceTypeName isExposed con
         constructor :: rest ->
             { name = constructor.name
             , kind = ChoiceTypeTagDeclarationKind
-            , scope = TopLevelScope
+            , scopePath = []
             , isExposed = isExposed
             , declarationPath =
                 ElmSyntax.Path.appendStep
@@ -382,13 +369,15 @@ declarationOccurrencesForArguments :
 declarationOccurrencesForArguments annotationPath maybeTypeAnnotation implementationPath argumentIndex arguments =
     case arguments of
         argument :: rest ->
-            declarationOccurrencesInPattern
+            (declarationOccurrencesInPattern
                 (annotationPathForArgument argumentIndex annotationPath maybeTypeAnnotation)
                 (ElmSyntax.Path.appendStep
                     implementationPath
                     (StepArgument argumentIndex)
                 )
                 argument
+                |> localizeDeclarationOccurrences implementationPath
+            )
                 ++ declarationOccurrencesForArguments
                     annotationPath
                     maybeTypeAnnotation
@@ -449,7 +438,7 @@ declarationOccurrencesInPattern annotationPath path pattern =
         ElmSyntax.Abstract.Pattern.VarPattern name ->
             [ { name = name
               , kind = FunctionOrValueDeclarationKind
-              , scope = TopLevelScope
+              , scopePath = []
               , isExposed = False
               , declarationPath = path
               , declarationSelection = SelectWhole
@@ -556,7 +545,7 @@ localizeDeclarationOccurrences : Path -> List DeclarationOccurrence -> List Decl
 localizeDeclarationOccurrences path occurrences =
     case occurrences of
         occurrence :: rest ->
-            { occurrence | scope = LocalScope path }
+            { occurrence | scopePath = path }
                 :: localizeDeclarationOccurrences path rest
 
         [] ->

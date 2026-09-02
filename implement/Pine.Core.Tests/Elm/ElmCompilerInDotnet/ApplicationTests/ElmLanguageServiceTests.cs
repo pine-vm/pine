@@ -831,20 +831,20 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
-            InvocationCount: 4_326
-            BuildListCount: 7_056
-            LoopIterationCount: 3_331
-            InstructionCount: 190_726
+            InvocationCount: 4_350
+            BuildListCount: 7_102
+            LoopIterationCount: 3_349
+            InstructionCount: 191_508
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
             """
-            CompiledExpressionCount: 182
-            InvocationCountTotal: 3_727
+            CompiledExpressionCount: 184
+            InvocationCountTotal: 3_741
             InvocationCountAverage: 20
             InvocationCountPercentile10: 1
             InvocationCountMedian: 4
-            InvocationCountPercentile90: 18
+            InvocationCountPercentile90: 16
             """);
     }
 
@@ -913,6 +913,56 @@ public class ElmLanguageServiceTests
             ElmValue.RenderAsElmExpression(value).expressionString;
 
         rendered.Should().Be(ReferencesScenario_ExpectedResponse);
+    }
+
+    [Fact]
+    public void References_resolution_limits_argument_patterns_to_their_function()
+    {
+        const string ModuleText =
+            """
+            module Main exposing (..)
+
+            withSimple argument =
+                argument
+
+            outsideSimple =
+                argument
+
+            withTuple ( first, second ) =
+                first + second
+
+            outsideTuple =
+                first + second
+
+            """;
+
+        var preparedApp = s_referencesScenarioPreparedApp.Value;
+
+        string ReferencesAt(int line, int column)
+        {
+            var rootExpression =
+                BuildReferencesScenarioRootExpression(
+                    workspaceFiles: [("src/Main.elm", ModuleText)],
+                    queryFilePath: "src/Main.elm",
+                    positionLineNumber: line,
+                    positionColumn: column);
+
+            var result =
+                Core.Elm.ElmSyntax.ElmSyntaxInterpreter.InterpretAsElmValue(
+                    rootExpression,
+                    preparedApp);
+
+            return
+                ElmValue.RenderAsElmExpression(
+                    result.Extract(err => throw new Exception(err.ToString())))
+                .expressionString;
+        }
+
+        ReferencesAt(line: 4, column: 5).Should().Be(
+            """TextDocumentReferencesResponse [ { fileLocation = WorkspaceFileLocation "src/Main.elm", range = { endColumn = 13, endLineNumber = 4, startColumn = 5, startLineNumber = 4 } } ]""");
+
+        ReferencesAt(line: 10, column: 5).Should().Be(
+            """TextDocumentReferencesResponse [ { fileLocation = WorkspaceFileLocation "src/Main.elm", range = { endColumn = 10, endLineNumber = 10, startColumn = 5, startLineNumber = 10 } } ]""");
     }
 
     /// <summary>
@@ -1169,16 +1219,16 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
-            InvocationCount: 9_947
-            BuildListCount: 15_728
-            LoopIterationCount: 8_130
-            InstructionCount: 435_397
+            InvocationCount: 9_991
+            BuildListCount: 15_819
+            LoopIterationCount: 8_151
+            InstructionCount: 436_746
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
             """
-            CompiledExpressionCount: 238
-            InvocationCountTotal: 8_612
+            CompiledExpressionCount: 240
+            InvocationCountTotal: 8_638
             InvocationCountAverage: 36
             InvocationCountPercentile10: 2
             InvocationCountMedian: 5
@@ -1300,16 +1350,16 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
-            InvocationCount: 12_515
-            BuildListCount: 20_319
-            LoopIterationCount: 10_503
-            InstructionCount: 555_010
+            InvocationCount: 12_667
+            BuildListCount: 20_614
+            LoopIterationCount: 10_572
+            InstructionCount: 558_756
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
             """
-            CompiledExpressionCount: 238
-            InvocationCountTotal: 10_730
+            CompiledExpressionCount: 240
+            InvocationCountTotal: 10_810
             InvocationCountAverage: 45
             InvocationCountPercentile10: 2
             InvocationCountMedian: 6
