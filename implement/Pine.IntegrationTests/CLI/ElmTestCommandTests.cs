@@ -128,6 +128,157 @@ public class ElmTestCommandTests
     }
 
 
+    [Theory]
+    [InlineData(null, 3, "First", "Unique Test")]
+    [InlineData("SELECTED GROUP", 2, "First", null)]
+    [InlineData("unique test", 1, null, "Unique Test")]
+    [InlineData("tests/tests.elm", 3, "First", "Unique Test")]
+    public void List_tests_includes_metadata_and_applies_filter(
+        string? filter,
+        int expectedTestCount,
+        string? expectedFirstName,
+        string? expectedUniqueName)
+    {
+        var projectDirectory = CreateTestProject(FilterTestsModule);
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            var exitCode =
+                TestCommand.Execute(
+                    projectDirectory,
+                    colorMode: FormatCommandColorMode.Never,
+                    console: console,
+                    filter: filter,
+                    listTests: true);
+
+            var rendered = output.ToString();
+
+            exitCode.Should().Be(0);
+            rendered.Should().Contain($"Available tests ({expectedTestCount})");
+            rendered.Should().Contain("tests/Tests.elm");
+            rendered.Should().Contain("Root");
+            rendered.Should().Contain("└──");
+            rendered.Contains('\u001b').Should().BeFalse();
+
+            if (expectedFirstName is null)
+                rendered.Should().NotContain("First");
+            else
+                rendered.Should().Contain(expectedFirstName);
+
+            if (expectedUniqueName is null)
+                rendered.Should().NotContain("Unique Test");
+            else
+                rendered.Should().Contain(expectedUniqueName);
+        }
+        finally
+        {
+            Directory.Delete(projectDirectory, recursive: true);
+        }
+    }
+
+
+    [Fact]
+    public void Filter_includes_matches_from_both_file_paths_and_test_descriptions()
+    {
+        var projectDirectory = CreateTestProject(FilterTestsModule);
+        var testsDirectory = Path.Combine(projectDirectory, "tests");
+
+        File.WriteAllText(
+            Path.Combine(testsDirectory, "SelectedFile.elm"),
+            """
+            module SelectedFile exposing (suite)
+
+            import Expect
+            import Test exposing (Test)
+
+            suite : Test
+            suite =
+                Test.test "File path match" <|
+                    \_ ->
+                        Expect.pass
+            """,
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            var exitCode =
+                TestCommand.Execute(
+                    projectDirectory,
+                    colorMode: FormatCommandColorMode.Never,
+                    console: console,
+                    filter: "selected",
+                    listTests: true);
+
+            exitCode.Should().Be(0);
+            output.ToString().Should().Contain("Available tests (3)");
+            output.ToString().Should().Contain("tests/SelectedFile.elm");
+            output.ToString().Should().Contain("Selected Group");
+        }
+        finally
+        {
+            Directory.Delete(projectDirectory, recursive: true);
+        }
+    }
+
+
+    [Fact]
+    public void List_tests_uses_colors_when_enabled()
+    {
+        var projectDirectory = CreateTestProject(FilterTestsModule);
+        var (console, output) = CreateConsole(AnsiSupport.Yes);
+
+        try
+        {
+            var exitCode =
+                TestCommand.Execute(
+                    projectDirectory,
+                    colorMode: FormatCommandColorMode.Always,
+                    console: console,
+                    listTests: true);
+
+            var rendered = output.ToString();
+
+            exitCode.Should().Be(0);
+            rendered.Should().Contain("\u001b[1mAvailable tests (3)");
+            rendered.Should().Contain("\u001b[93mRoot");
+            rendered.Should().Contain("\u001b[32mFirst");
+        }
+        finally
+        {
+            Directory.Delete(projectDirectory, recursive: true);
+        }
+    }
+
+
+    [Fact]
+    public void List_tests_does_not_count_empty_descriptions_as_tests()
+    {
+        var projectDirectory = CreateTestProject(EmptyGroupTestsModule);
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            var exitCode =
+                TestCommand.Execute(
+                    projectDirectory,
+                    colorMode: FormatCommandColorMode.Never,
+                    console: console,
+                    listTests: true);
+
+            exitCode.Should().Be(0);
+            output.ToString().Should().Contain("Available tests (0)");
+            output.ToString().Should().NotContain("Empty group");
+        }
+        finally
+        {
+            Directory.Delete(projectDirectory, recursive: true);
+        }
+    }
+
+
     [Fact]
     public void No_Elm_test_modules_reports_error()
     {
@@ -293,6 +444,19 @@ public class ElmTestCommandTests
                     \_ ->
                         71 |> Expect.equal 71
                 ]
+        """;
+
+
+    private const string EmptyGroupTestsModule =
+        """
+        module Tests exposing (..)
+
+        import Test exposing (Test)
+
+
+        suite : Test
+        suite =
+            Test.describe "Empty group" []
         """;
 
 

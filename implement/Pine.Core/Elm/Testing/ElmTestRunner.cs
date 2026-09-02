@@ -28,7 +28,8 @@ public static class ElmTestRunner
     public static ElmTestRun CompileAndRunTests(
         string appDirectory,
         IPineVM? pineVm = null,
-        string? filter = null)
+        string? filter = null,
+        bool listTests = false)
     {
         appDirectory = Path.GetFullPath(appDirectory);
 
@@ -76,6 +77,7 @@ public static class ElmTestRunner
 
                     return
                         (file.path,
+                        filePathText: string.Join('/', file.path),
                         moduleName: moduleHeader.ModuleName,
                         moduleNameText: string.Join('.', moduleHeader.ModuleName));
                 })
@@ -121,15 +123,37 @@ public static class ElmTestRunner
                     "Did not find declaration '" + testModule.moduleNameText + ".suite'");
             }
 
-            DiscoverTests(suiteValue, path: [], discoveredTests);
+            DiscoverTests(
+                suiteValue,
+                filePath: testModule.filePathText,
+                descriptionPath: [],
+                discoveredTests);
         }
 
         if (filter is { } filterText)
         {
             discoveredTests.RemoveAll(
                 test =>
+                !test.FilePath.Contains(filterText, StringComparison.OrdinalIgnoreCase) &&
                 !test.Path.Any(
-                    name => name.Contains(filterText, StringComparison.OrdinalIgnoreCase)));
+                    pathItem =>
+                    pathItem.Contains(filterText, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        if (listTests)
+        {
+            return
+                new ElmTestRun.Listed(
+                    [
+                    ..                    discoveredTests
+                    .Where(test => test.Kind is not DiscoveredTestKind.EmptyGroup)
+                    .Select(
+                        test =>
+                        new ListedTest(
+                            test.FilePath,
+                            [.. test.Path.SkipLast(1)],
+                            test.Path[^1]))
+                    ]);
         }
 
         var parseCache = new PineVMParseCache();
@@ -425,7 +449,8 @@ public static class ElmTestRunner
 
     private static void DiscoverTests(
         PineValue testValue,
-        IReadOnlyList<string> path,
+        string filePath,
+        IReadOnlyList<string> descriptionPath,
         List<DiscoveredTest> discoveredTests)
     {
         var (tag, arguments) = ParseTaggedValue(testValue);
@@ -436,7 +461,7 @@ public static class ElmTestRunner
                 throw new InvalidOperationException("Describe must contain two arguments");
 
             var groupName = ParseElmString(arguments.Span[0]);
-            var groupPath = path.Append(groupName).ToImmutableArray();
+            var groupPath = descriptionPath.Append(groupName).ToImmutableArray();
 
             if (arguments.Span[1] is not PineValue.ListValue children)
                 throw new InvalidOperationException("Describe children must be a list");
@@ -445,6 +470,7 @@ public static class ElmTestRunner
             {
                 discoveredTests.Add(
                     new DiscoveredTest(
+                        filePath,
                         groupPath,
                         DiscoveredTestKind.EmptyGroup,
                         Thunk: null));
@@ -453,7 +479,7 @@ public static class ElmTestRunner
             }
 
             foreach (var child in children.Items.Span)
-                DiscoverTests(child, groupPath, discoveredTests);
+                DiscoverTests(child, filePath, groupPath, discoveredTests);
 
             return;
         }
@@ -465,7 +491,8 @@ public static class ElmTestRunner
 
             discoveredTests.Add(
                 new DiscoveredTest(
-                    [.. path, ParseElmString(arguments.Span[0])],
+                    filePath,
+                    [.. descriptionPath, ParseElmString(arguments.Span[0])],
                     DiscoveredTestKind.Runnable,
                     arguments.Span[1]));
 
@@ -479,7 +506,8 @@ public static class ElmTestRunner
 
             discoveredTests.Add(
                 new DiscoveredTest(
-                    [.. path, ParseElmString(arguments.Span[0])],
+                    filePath,
+                    [.. descriptionPath, ParseElmString(arguments.Span[0])],
                     DiscoveredTestKind.Todo,
                     Thunk: null));
 
@@ -522,6 +550,7 @@ public static class ElmTestRunner
 
 
     private sealed record DiscoveredTest(
+        string FilePath,
         IReadOnlyList<string> Path,
         DiscoveredTestKind Kind,
         PineValue? Thunk);
@@ -1021,6 +1050,64 @@ public sealed record CompletedTest
 
 
 /// <summary>
+/// Describes a discovered Elm test.
+/// </summary>
+public sealed record ListedTest
+{
+    /// <summary>
+    /// Creates a description of a discovered Elm test.
+    /// </summary>
+    public ListedTest(
+        string filePath,
+        IReadOnlyList<string> descriptionPath,
+        string name)
+    {
+        FilePath = filePath;
+        DescriptionPath = descriptionPath;
+        Name = name;
+    }
+
+    /// <summary>
+    /// Gets the test module's path relative to the Elm project.
+    /// </summary>
+    public string FilePath { get; init; }
+
+    /// <summary>
+    /// Gets the path of nested descriptions containing the test.
+    /// </summary>
+    public IReadOnlyList<string> DescriptionPath { get; init; }
+
+    /// <summary>
+    /// Gets the test name.
+    /// </summary>
+    public string Name { get; init; }
+
+    /// <inheritdoc/>
+    public bool Equals(ListedTest? other) =>
+        ReferenceEquals(this, other) ||
+        (other is not null &&
+        FilePath == other.FilePath &&
+        DescriptionPath.SequenceEqual(other.DescriptionPath, StringComparer.Ordinal) &&
+        Name == other.Name);
+
+    /// <inheritdoc/>
+    public override int GetHashCode()
+    {
+        var hashCode = new HashCode();
+
+        hashCode.Add(FilePath, StringComparer.Ordinal);
+
+        foreach (var description in DescriptionPath)
+            hashCode.Add(description, StringComparer.Ordinal);
+
+        hashCode.Add(Name, StringComparer.Ordinal);
+
+        return hashCode.ToHashCode();
+    }
+}
+
+
+/// <summary>
 /// Contains a styled fragment of rendered test output.
 /// </summary>
 public sealed record TestOutputFragment
@@ -1101,6 +1188,41 @@ public abstract record ElmTestRun
         IReadOnlyList<CompletedTest> Tests,
         TimeSpan Duration)
         : ElmTestRun;
+
+    /// <summary>
+    /// Contains tests discovered without running them.
+    /// </summary>
+    public sealed record Listed : ElmTestRun
+    {
+        /// <summary>
+        /// Creates a result containing tests discovered without running them.
+        /// </summary>
+        public Listed(IReadOnlyList<ListedTest> tests)
+        {
+            Tests = tests;
+        }
+
+        /// <summary>
+        /// Gets the discovered tests.
+        /// </summary>
+        public IReadOnlyList<ListedTest> Tests { get; init; }
+
+        /// <inheritdoc/>
+        public bool Equals(Listed? other) =>
+            ReferenceEquals(this, other) ||
+            (other is not null && Tests.SequenceEqual(other.Tests));
+
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            var hashCode = new HashCode();
+
+            foreach (var test in Tests)
+                hashCode.Add(test);
+
+            return hashCode.ToHashCode();
+        }
+    }
 
     /// <summary>
     /// Represents a test run for a project without Elm test modules.

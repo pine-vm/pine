@@ -1,6 +1,7 @@
 using Pine.Core.Elm.Testing;
 using Spectre.Console;
 using System;
+using System.Collections.Generic;
 using System.CommandLine;
 using System.IO;
 using System.Linq;
@@ -29,19 +30,27 @@ public static class TestCommand
             new Option<string?>("--filter")
             {
                 Description =
-                "Only run tests whose test or group name contains this value (case-insensitive)."
+                "Only include tests whose file path, description, or name contains this value (case-insensitive)."
+            };
+
+        var listTestsOption =
+            new Option<bool>("--list-tests")
+            {
+                Description = "List tests without running them."
             };
 
         command.Add(sourceArgument);
         command.Add(colorOption);
         command.Add(filterOption);
+        command.Add(listTestsOption);
 
         command.SetAction(
             parseResult =>
             Execute(
                 source: parseResult.GetValue(sourceArgument) ?? Environment.CurrentDirectory,
                 colorMode: parseResult.GetValue(colorOption),
-                filter: parseResult.GetValue(filterOption)));
+                filter: parseResult.GetValue(filterOption),
+                listTests: parseResult.GetValue(listTestsOption)));
 
         return command;
     }
@@ -52,7 +61,8 @@ public static class TestCommand
         FormatCommandColorMode? colorMode = null,
         IAnsiConsole? console = null,
         IAnsiConsole? errorConsole = null,
-        string? filter = null)
+        string? filter = null,
+        bool listTests = false)
     {
         FormatCommandColorMode resolvedColorMode;
 
@@ -82,7 +92,8 @@ public static class TestCommand
             ElmTestRunner.CompileAndRunTests(
                 source,
                 pineVm: IntermediateVM.SetupVM.Create(),
-                filter: filter);
+                filter: filter,
+                listTests: listTests);
 
         if (testRun is ElmTestRun.NoTestModules noTestModules)
         {
@@ -99,6 +110,16 @@ public static class TestCommand
                 errorConsole.Profile.Out.Writer.WriteLine(message);
 
             return 1;
+        }
+
+        if (testRun is ElmTestRun.Listed listed)
+        {
+            WriteTestList(
+                console,
+                listed.Tests,
+                useColor: resolvedColorMode is not FormatCommandColorMode.Never);
+
+            return 0;
         }
 
         if (testRun is not ElmTestRun.Completed completed)
@@ -128,6 +149,98 @@ public static class TestCommand
             0
             :
             1;
+    }
+
+
+    private static void WriteTestList(
+        IAnsiConsole console,
+        IReadOnlyList<ListedTest> tests,
+        bool useColor)
+    {
+        var tree =
+            new Tree(
+                new Text(
+                    $"Available tests ({tests.Count})",
+                    ListStyle(TestCommandTheme.ListHeading)))
+            {
+                Guide = TreeGuide.Line,
+                Style = ListStyle(TestCommandTheme.Default),
+            };
+
+        foreach (var testsInFile in
+            tests
+            .GroupBy(test => test.FilePath, StringComparer.Ordinal)
+            .OrderBy(group => group.Key, StringComparer.Ordinal))
+        {
+            var fileNode =
+                tree.AddNode(
+                    new Text(
+                        testsInFile.Key,
+                        ListStyle(TestCommandTheme.ListFile)));
+
+            AddDescriptionNodes(
+                fileNode,
+                [.. testsInFile],
+                descriptionDepth: 0,
+                useColor);
+        }
+
+        console.Write(tree);
+        console.WriteLine();
+
+        Style ListStyle(Style colorStyle) =>
+            useColor
+            ?
+            colorStyle
+            :
+            Style.Plain;
+    }
+
+
+    private static void AddDescriptionNodes(
+        TreeNode parent,
+        IReadOnlyList<ListedTest> tests,
+        int descriptionDepth,
+        bool useColor)
+    {
+        foreach (var test in
+            tests
+            .Where(test => test.DescriptionPath.Count == descriptionDepth)
+            .OrderBy(test => test.Name, StringComparer.Ordinal))
+        {
+            parent.AddNode(
+                new Text(
+                    test.Name,
+                    ListStyle(TestCommandTheme.ListTest)));
+        }
+
+        foreach (var testsInDescription in
+            tests
+            .Where(test => test.DescriptionPath.Count > descriptionDepth)
+            .GroupBy(
+                test => test.DescriptionPath[descriptionDepth],
+                StringComparer.Ordinal)
+            .OrderBy(group => group.Key, StringComparer.Ordinal))
+        {
+            var descriptionNode =
+                parent.AddNode(
+                    new Text(
+                        testsInDescription.Key,
+                        ListStyle(TestCommandTheme.ListDescription)));
+
+            AddDescriptionNodes(
+                descriptionNode,
+                [.. testsInDescription],
+                descriptionDepth + 1,
+                useColor);
+        }
+
+        Style ListStyle(Style colorStyle) =>
+            useColor
+            ?
+            colorStyle
+            :
+            Style.Plain;
     }
 
 
@@ -189,5 +302,17 @@ public static class TestCommand
 
         public static Style Highlighted { get; } =
             new(foreground: Color.Default, decoration: Decoration.Invert);
+
+        public static Style ListHeading { get; } =
+            new(foreground: Color.Default, decoration: Decoration.Bold);
+
+        public static Style ListFile { get; } =
+            new(foreground: Color.Default, decoration: Decoration.Bold);
+
+        public static Style ListDescription { get; } =
+            new(foreground: Color.Yellow);
+
+        public static Style ListTest { get; } =
+            new(foreground: Color.Green);
     }
 }

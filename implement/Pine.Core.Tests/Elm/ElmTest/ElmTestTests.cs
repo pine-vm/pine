@@ -37,6 +37,34 @@ public class ElmTestTests
 
 
     [Fact]
+    public void Listed_test_and_listing_equality_is_structural()
+    {
+        var first =
+            new ListedTest(
+                "tests/Tests.elm",
+                ["Root", "Group"],
+                "test name");
+
+        var second =
+            new ListedTest(
+                new string("tests/Tests.elm".ToCharArray()),
+                [new string("Root".ToCharArray()), new string("Group".ToCharArray())],
+                new string("test name".ToCharArray()));
+
+        first.Equals(second).Should().BeTrue();
+        (first == second).Should().BeTrue();
+        first.GetHashCode().Should().Be(second.GetHashCode());
+
+        var firstListing = new ElmTestRun.Listed([first]);
+        var secondListing = new ElmTestRun.Listed([second]);
+
+        firstListing.Equals(secondListing).Should().BeTrue();
+        (firstListing == secondListing).Should().BeTrue();
+        firstListing.GetHashCode().Should().Be(secondListing.GetHashCode());
+    }
+
+
+    [Fact]
     public void Verify_elm_test_results_for_scenarios_from_files()
     {
         var results =
