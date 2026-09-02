@@ -2057,13 +2057,7 @@ public class OptimizationOpportunityFinderTests
             opportunities
             .GroupBy(
                 opportunity =>
-                (Module:
-                    opportunity.ContainingDecl.Namespaces.Take(1)
-                .SequenceEqual(["ElmSyntax"])
-                ?
-                "ElmSyntax"
-                :
-                opportunity.ContainingDecl.Namespaces[0],
+                (Module: string.Join('.', opportunity.ContainingDecl.Namespaces),
                 opportunity.Category))
             .OrderBy(group => group.Key.Module, System.StringComparer.Ordinal)
             .ThenBy(group => group.Key.Category)
@@ -2075,9 +2069,14 @@ public class OptimizationOpportunityFinderTests
 
         renderedCounts.Should().Be(
             """
-            ElmSyntax: BasicsCompare: 1
-            ElmSyntax: HigherOrderParameter_Direct: 2
-            ElmSyntax: RootLevelChoiceTagWrapper: 196
+            ElmSyntax.Abstract.ConvertFromConcrete: BasicsCompare: 1
+            ElmSyntax.Abstract.ConvertFromConcrete: RootLevelChoiceTagWrapper: 6
+            ElmSyntax.Concrete.Node: HigherOrderParameter_Direct: 2
+            ElmSyntax.Concrete.Node: RootLevelChoiceTagWrapper: 8
+            ElmSyntax.Concrete.Parser.FromString: RootLevelChoiceTagWrapper: 115
+            ElmSyntax.Concrete.Parser.StringParsing: RootLevelChoiceTagWrapper: 35
+            ElmSyntax.Concrete.Parser.TokensFromString: RootLevelChoiceTagWrapper: 17
+            ElmSyntax.Concrete.SourceLookup: RootLevelChoiceTagWrapper: 15
             LanguageService: BasicsCompare: 3
             LanguageService: RootLevelChoiceTagWrapper: 32
             LanguageServiceAnalysis: RootLevelChoiceTagWrapper: 7
