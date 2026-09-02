@@ -30,7 +30,9 @@ jobs:
         pine-vm.org,
         www.microsoft.com,
         learn.microsoft.com,
-        microsoft.github.io/language-server-protocol
+        learn.microsoft.com,
+        microsoft.github.io/language-server-protocol,
+        code.visualstudio.com
 
     # You can define any steps you want, and they will run before the agent starts.
     # If you do not check out your code, Copilot will do this for you.
