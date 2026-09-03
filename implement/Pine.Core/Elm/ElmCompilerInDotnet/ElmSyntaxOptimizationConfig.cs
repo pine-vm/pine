@@ -21,5 +21,11 @@ public abstract record ElmSyntaxOptimizationConfig
     /// The optimization pipeline runs.
     /// </summary>
     public sealed record SyntaxOptimizationEnabled
-        : ElmSyntaxOptimizationConfig;
+        : ElmSyntaxOptimizationConfig
+    {
+        /// <summary>
+        /// Removes fully applied <c>Debug.log</c> calls while preserving their value arguments.
+        /// </summary>
+        public bool RemoveDebugLogApplications { get; init; } = true;
+    }
 }

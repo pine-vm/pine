@@ -548,7 +548,7 @@ public class ElmCompiler
         // siblings before the lift packs their captured environment into a tuple parameter.
         List<ElmSyntaxAbstract.File> lambdaLiftedModules;
 
-        if (syntaxOptimization is ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled)
+        if (syntaxOptimization is ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled optimizationConfig)
         {
             var loweredBeforeLambdaLifting =
                 BuiltinOperatorLowering.Apply(
@@ -564,6 +564,12 @@ public class ElmCompiler
                 ReconstructModulesFromFlatDict(
                     loweredBeforeLambdaLifting.Extract(err => throw new NotImplementedException(err)),
                     canonicalizedModules);
+
+            if (optimizationConfig.RemoveDebugLogApplications)
+            {
+                canonicalizedModules =
+                    [.. canonicalizedModules.Select(DebugLogRemoval.RewriteFile)];
+            }
         }
 
         lambdaLiftedModules =
