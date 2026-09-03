@@ -168,7 +168,7 @@ public class OperatorCompiler
 
         if (operatorApp.Operator is "/")
         {
-            return CompilationError.UnsupportedOperator(operatorApp.Operator);
+            return CoreBasics.Float_div(leftCompiled, rightCompiled);
         }
 
         return CompilationError.UnsupportedOperator(operatorApp.Operator);

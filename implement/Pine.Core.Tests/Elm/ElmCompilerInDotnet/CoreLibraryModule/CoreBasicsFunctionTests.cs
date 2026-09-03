@@ -76,6 +76,48 @@ public class CoreBasicsFunctionTests
     }
 
     [Fact]
+    public void Float_div_int_7_by_int_2()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Float_div_FunctionValue(),
+                [
+                ElmValue.Integer(7),
+                ElmValue.Integer(2)
+                ]);
+
+        resultValue.Should().Be(ElmValue.ElmFloat.Normalized(7, 2));
+    }
+
+    [Fact]
+    public void Float_div_float_by_float()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Float_div_FunctionValue(),
+                [
+                ElmValue.ElmFloat.Normalized(3, 2),
+                ElmValue.ElmFloat.Normalized(3, 4)
+                ]);
+
+        resultValue.Should().Be(ElmValue.Integer(2));
+    }
+
+    [Fact]
+    public void Float_div_by_negative_value_normalizes_sign()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Float_div_FunctionValue(),
+                [
+                ElmValue.Integer(3),
+                ElmValue.Integer(-2)
+                ]);
+
+        resultValue.Should().Be(ElmValue.ElmFloat.Normalized(-3, 2));
+    }
+
+    [Fact]
     public void Number_negate_17()
     {
         var resultValue =

@@ -10,6 +10,22 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 public class OperatorApplicationTests
 {
     [Fact]
+    public void Float_division_infix()
+    {
+        var result = CompileValueDeclaration("7 / 2");
+
+        result.Should().Be(ElmValue.ElmFloat.Normalized(7, 2));
+    }
+
+    [Fact]
+    public void Float_division_prefix()
+    {
+        var result = CompileValueDeclaration("(/) 3 4");
+
+        result.Should().Be(ElmValue.ElmFloat.Normalized(3, 4));
+    }
+
+    [Fact]
     public void Cons_infix_prepend_to_list()
     {
         var elmModuleText =
@@ -286,5 +302,30 @@ public class OperatorApplicationTests
                 new ElmValue.ElmList(
                     [new ElmValue.ElmInteger(1), new ElmValue.ElmInteger(2), new ElmValue.ElmInteger(3)]));
         }
+    }
+
+    private static ElmValue CompileValueDeclaration(string expression)
+    {
+        var elmModuleText =
+            $$"""
+            module Test exposing (..)
+
+            result =
+                {{expression}}
+            """;
+
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
+                [elmModuleText],
+                disableInlining: false).parsedEnv;
+
+        var resultValue =
+            parsedEnv.Modules
+            .Single(module => module.moduleName is "Test")
+            .moduleContent.FunctionDeclarations["result"];
+
+        return
+            ElmValueEncoding.PineValueAsElmValue(resultValue, null, null)
+            .Extract(err => throw new Exception("Failed decoding result: " + err));
     }
 }

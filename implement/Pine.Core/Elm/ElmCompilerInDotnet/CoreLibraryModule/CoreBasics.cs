@@ -92,6 +92,11 @@ public class CoreBasics
             return "mul";
         }
 
+        if (functionValue == Float_div_FunctionValue())
+        {
+            return "fdiv";
+        }
+
         if (functionValue == Int_div_FunctionValue())
         {
             return "idiv";
@@ -225,6 +230,12 @@ public class CoreBasics
                 TypeInference.InferredType.Number()
                 ],
                 args => Generic_Mul(args[0], args[1])),
+
+            // (/) : Float -> Float -> Float
+            "fdiv" =>
+            new CoreFunctionInfo(
+                [TypeInference.InferredType.Float(), TypeInference.InferredType.Float(), TypeInference.InferredType.Float()],
+                args => Float_div(args[0], args[1])),
 
             // (//) : Int -> Int -> Int
             "idiv" =>
@@ -494,6 +505,7 @@ public class CoreBasics
             "+" => "add",
             "-" => "sub",
             "*" => "mul",
+            "/" => "fdiv",
             "//" => "idiv",
             "==" => "eq",
             "/=" => "neq",
@@ -532,6 +544,9 @@ public class CoreBasics
 
             "mul" =>
             Mul_FunctionValue(),
+
+            "fdiv" =>
+            Float_div_FunctionValue(),
 
             "idiv" =>
             Int_div_FunctionValue(),
@@ -627,7 +642,7 @@ public class CoreBasics
     /// </summary>
     public static IReadOnlyList<string> KnownDeclarationNames { get; } =
         [
-            "add", "sub", "mul",
+            "add", "sub", "mul", "fdiv",
             "idiv", "modBy", "remainderBy",
             "eq", "neq", "compare",
             "lt", "gt", "le", "ge",
@@ -759,6 +774,31 @@ public class CoreBasics
     public static PineValue Mul_FunctionValue()
     {
         return BinaryFunctionValue(Internal_Generic_Mul);
+    }
+
+    /// <summary>
+    /// (/) : Float -> Float -> Float
+    /// <para>
+    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#(/)"/>
+    /// </para>
+    /// </summary>
+    public static Expression Float_div(
+        Expression dividend,
+        Expression divisor)
+    {
+        return
+            BinaryApplication(
+                functionValue: Float_div_FunctionValue(),
+                left: dividend,
+                right: divisor);
+    }
+
+    /// <summary>
+    /// (/) : Float -> Float -> Float
+    /// </summary>
+    public static PineValue Float_div_FunctionValue()
+    {
+        return BinaryFunctionValue(Internal_Float_div);
     }
 
     /// <summary>
@@ -2415,6 +2455,71 @@ public class CoreBasics
                 condition: multiplicandIsFloat,
                 trueBranch: multiplicandFloatBranch,
                 falseBranch: multiplicandNotFloatBranch);
+    }
+
+    private static Expression Internal_Float_div(
+        Expression dividend,
+        Expression divisor)
+    {
+        var dividendIsFloat =
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                ChoiceTagName(dividend),
+                s_elmFloatTypeTagNameLiteral);
+
+        var divisorIsFloat =
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                ChoiceTagName(divisor),
+                s_elmFloatTypeTagNameLiteral);
+
+        var dividendNumerator = ChoiceArgument(dividend, 0);
+        var dividendDenominator = ChoiceArgument(dividend, 1);
+        var divisorNumerator = ChoiceArgument(divisor, 0);
+        var divisorDenominator = ChoiceArgument(divisor, 1);
+
+        var numerator =
+            Expression.ConditionalInst(
+                condition: dividendIsFloat,
+                trueBranch:
+                Expression.ConditionalInst(
+                    condition: divisorIsFloat,
+                    trueBranch: BuiltinMul(dividendNumerator, divisorDenominator),
+                    falseBranch: dividendNumerator),
+                falseBranch:
+                Expression.ConditionalInst(
+                    condition: divisorIsFloat,
+                    trueBranch: BuiltinMul(dividend, divisorDenominator),
+                    falseBranch: dividend));
+
+        var denominator =
+            Expression.ConditionalInst(
+                condition: dividendIsFloat,
+                trueBranch:
+                Expression.ConditionalInst(
+                    condition: divisorIsFloat,
+                    trueBranch: BuiltinMul(dividendDenominator, divisorNumerator),
+                    falseBranch: BuiltinMul(dividendDenominator, divisor)),
+                falseBranch:
+                Expression.ConditionalInst(
+                    condition: divisorIsFloat,
+                    trueBranch: divisorNumerator,
+                    falseBranch: divisor));
+
+        var denominatorNonNegative =
+            BuiltinIntIsSortedAsc(LiteralInt(0), denominator);
+
+        var signAdjustedNumerator =
+            Expression.ConditionalInst(
+                condition: denominatorNonNegative,
+                trueBranch: numerator,
+                falseBranch: BuiltinMul(LiteralInt(-1), numerator));
+
+        var absoluteDenominator =
+            Expression.ConditionalInst(
+                condition: denominatorNonNegative,
+                trueBranch: denominator,
+                falseBranch: BuiltinMul(LiteralInt(-1), denominator));
+
+        return NormalizeFloatResult(signAdjustedNumerator, absoluteDenominator);
     }
 
     private static Expression Internal_Generic_Sub(
