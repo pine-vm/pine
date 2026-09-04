@@ -1368,6 +1368,200 @@ public class ElmLanguageServiceTests
     }
 
     /// <summary>
+    /// Complex Elm module used by
+    /// <see cref="Document_symbol_request_returns_symbols_for_module_with_complex_syntax"/>.
+    /// Contains multiple custom choice types (with primitive, tuple, and record-shaped tags),
+    /// a type alias with nested record fields, parameterized type declarations, and
+    /// functions with type signatures, recursive branching, nested let-in expressions,
+    /// case-of expressions, and local functions.
+    /// </summary>
+    private const string ComplexDocumentSymbolsScenario_ModuleText =
+        """
+        module ComplexSyntax exposing
+            ( Status(..)
+            , Config
+            , Tree(..)
+            , buildReport
+            , transformTree
+            )
+
+
+        type Status
+            = Inactive
+            | Pending Int { retries : Int, label : String }
+            | Completed String
+
+
+        type alias Config =
+            { maxDepth : Int
+            , enableLogging : Bool
+            , threshold : Int
+            }
+
+
+        type Tree a
+            = Leaf a
+            | Branch (Tree a) (Tree a)
+
+
+        transformTree : (a -> b) -> Tree a -> Tree b
+        transformTree mapper tree =
+            case tree of
+                Leaf value ->
+                    Leaf (mapper value)
+
+                Branch left right ->
+                    let
+                        transformedLeft =
+                            transformTree mapper left
+
+                        transformedRight =
+                            transformTree mapper right
+                    in
+                    Branch transformedLeft transformedRight
+
+
+        buildReport : Config -> Status -> Tree Int -> { summary : String, total : Int, isApproved : Bool }
+        buildReport config status tree =
+            let
+                multiplier =
+                    case status of
+                        Inactive ->
+                            0
+
+                        Pending code details ->
+                            if details.retries > config.threshold then
+                                code * 2
+
+                            else
+                                code + details.retries
+
+                        Completed _ ->
+                            10
+
+                foldTree : Tree Int -> Int
+                foldTree current =
+                    case current of
+                        Leaf n ->
+                            let
+                                scaled =
+                                    n * multiplier
+                            in
+                            if scaled > 100 then
+                                scaled + config.maxDepth
+
+                            else
+                                scaled
+
+                        Branch l r ->
+                            foldTree l + foldTree r
+
+                treeTotal =
+                    foldTree tree
+
+                approved =
+                    treeTotal >= config.threshold && config.enableLogging
+            in
+            { summary =
+                "Status evaluated with total: "
+                    ++ (if approved then
+                            "PASS"
+
+                        else
+                            "FAIL"
+                       )
+            , total = treeTotal
+            , isApproved = approved
+            }
+
+        """;
+
+    private const string ComplexDocumentSymbolsScenario_FilePath = "src/ComplexSyntax.elm";
+
+    private const string ComplexDocumentSymbolsScenario_ExpectedResponse =
+        """TextDocumentSymbolResponse [ DocumentSymbol { children = [ DocumentSymbol { children = [], kind = SymbolKind_EnumMember, name = "Inactive", range = { endColumn = 15, endLineNumber = 11, startColumn = 7, startLineNumber = 11 }, selectionRange = { endColumn = 15, endLineNumber = 11, startColumn = 7, startLineNumber = 11 } }, DocumentSymbol { children = [], kind = SymbolKind_EnumMember, name = "Pending", range = { endColumn = 52, endLineNumber = 12, startColumn = 7, startLineNumber = 12 }, selectionRange = { endColumn = 14, endLineNumber = 12, startColumn = 7, startLineNumber = 12 } }, DocumentSymbol { children = [], kind = SymbolKind_EnumMember, name = "Completed", range = { endColumn = 23, endLineNumber = 13, startColumn = 7, startLineNumber = 13 }, selectionRange = { endColumn = 16, endLineNumber = 13, startColumn = 7, startLineNumber = 13 } } ], kind = SymbolKind_Enum, name = "Status", range = { endColumn = 23, endLineNumber = 13, startColumn = 1, startLineNumber = 10 }, selectionRange = { endColumn = 12, endLineNumber = 10, startColumn = 6, startLineNumber = 10 } }, DocumentSymbol { children = [], kind = SymbolKind_Struct, name = "Config", range = { endColumn = 6, endLineNumber = 20, startColumn = 1, startLineNumber = 16 }, selectionRange = { endColumn = 18, endLineNumber = 16, startColumn = 12, startLineNumber = 16 } }, DocumentSymbol { children = [ DocumentSymbol { children = [], kind = SymbolKind_EnumMember, name = "Leaf", range = { endColumn = 13, endLineNumber = 24, startColumn = 7, startLineNumber = 24 }, selectionRange = { endColumn = 11, endLineNumber = 24, startColumn = 7, startLineNumber = 24 } }, DocumentSymbol { children = [], kind = SymbolKind_EnumMember, name = "Branch", range = { endColumn = 31, endLineNumber = 25, startColumn = 7, startLineNumber = 25 }, selectionRange = { endColumn = 13, endLineNumber = 25, startColumn = 7, startLineNumber = 25 } } ], kind = SymbolKind_Enum, name = "Tree", range = { endColumn = 31, endLineNumber = 25, startColumn = 1, startLineNumber = 23 }, selectionRange = { endColumn = 10, endLineNumber = 23, startColumn = 6, startLineNumber = 23 } }, DocumentSymbol { children = [], kind = SymbolKind_Function, name = "transformTree", range = { endColumn = 52, endLineNumber = 42, startColumn = 1, startLineNumber = 28 }, selectionRange = { endColumn = 14, endLineNumber = 29, startColumn = 1, startLineNumber = 29 } }, DocumentSymbol { children = [], kind = SymbolKind_Function, name = "buildReport", range = { endColumn = 6, endLineNumber = 96, startColumn = 1, startLineNumber = 45 }, selectionRange = { endColumn = 12, endLineNumber = 46, startColumn = 1, startLineNumber = 46 } } ]""";
+
+    /// <summary>
+    /// Exercises a <c>TextDocumentSymbolRequest</c> against an Elm module with complex
+    /// contents, deeper declaration syntax (custom choice types with varied constructor
+    /// payloads, type alias records, parameterized types), and deeper expression syntax
+    /// (nested let-in bindings, case-of branches, recursive branching, and local functions).
+    /// Asserts the returned document symbol hierarchy as well as aggregated performance
+    /// counters and invocation counts.
+    /// </summary>
+    [Fact]
+    public void Document_symbol_request_returns_symbols_for_module_with_complex_syntax()
+    {
+        var reports = new List<EvaluationReport>();
+        var invocationCountReports = new List<InvocationCountReport>();
+
+        var initStatePine = EvaluateZeroArgTestDeclaration("initState");
+
+        var (addModuleResult, addModuleReport, addModuleInvocationCounts) =
+            ApplyWithProfilingAndInvocationCounts(
+                "addWorkspaceFile",
+                [
+                ElmValueEncoding.ElmValueAsPineValue(ElmString(ComplexDocumentSymbolsScenario_FilePath)),
+                ElmValueEncoding.ElmValueAsPineValue(ElmString(ComplexDocumentSymbolsScenario_ModuleText)),
+                initStatePine,
+                ]);
+
+        reports.Add(addModuleReport);
+        invocationCountReports.Add(addModuleInvocationCounts);
+
+        var stateAfterModule =
+            ((PineValue.ListValue)addModuleResult).Items.Span[1];
+
+        var (symbolsResult, symbolsReport, symbolsInvocationCounts) =
+            ApplyWithProfilingAndInvocationCounts(
+                "textDocumentSymbol",
+                [
+                ElmValueEncoding.ElmValueAsPineValue(ElmString(ComplexDocumentSymbolsScenario_FilePath)),
+                stateAfterModule,
+                ]);
+
+        reports.Add(symbolsReport);
+        invocationCountReports.Add(symbolsInvocationCounts);
+
+        var responsePine =
+            ((PineValue.ListValue)symbolsResult).Items.Span[0];
+
+        var responseElmValue =
+            ElmValueEncoding.PineValueAsElmValue(responsePine, null, null)
+            .Extract(err => throw new Exception("Failed to decode response: " + err));
+
+        var responseAsExpression =
+            ElmValue.RenderAsElmExpression(responseElmValue);
+
+        responseAsExpression.expressionString.Should().Be(ComplexDocumentSymbolsScenario_ExpectedResponse);
+
+        var aggregateCounters =
+            PerformanceCounters.Aggregate(
+                reports.Select(r => r.Counters));
+
+        var aggregateInvocationCounts =
+            InvocationCountReport.Aggregate(invocationCountReports);
+
+        PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
+            """
+            InvocationCount: 15_133
+            BuildListCount: 22_801
+            LoopIterationCount: 15_123
+            InstructionCount: 741_814
+            """);
+
+        InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
+            """
+            CompiledExpressionCount: 236
+            InvocationCountTotal: 13_548
+            InvocationCountAverage: 57
+            InvocationCountPercentile10: 1
+            InvocationCountMedian: 7
+            InvocationCountPercentile90: 75
+            """);
+    }
+
+    /// <summary>
     /// Builds the generic wrapper Elm module that drives the references scenarios
     /// through the <see cref="ElmSyntaxInterpreter"/>. The module is independent of
     /// any concrete scenario: it embeds no workspace file texts or query positions.
