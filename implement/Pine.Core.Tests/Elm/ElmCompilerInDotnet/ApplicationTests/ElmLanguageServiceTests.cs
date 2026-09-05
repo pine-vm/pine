@@ -79,6 +79,7 @@ public class ElmLanguageServiceTests
                     { fileLocation = LanguageServiceInterface.WorkspaceFileLocation filePath
                     , positionLineNumber = lineNumber
                     , positionColumn = column
+                    , includeDeclaration = False
                     }
                 )
                 state
@@ -134,6 +135,7 @@ public class ElmLanguageServiceTests
                     { fileLocation = LanguageServiceInterface.WorkspaceFileLocation filePath
                     , positionLineNumber = lineNumber
                     , positionColumn = column
+                    , includeDeclaration = False
                     }
                 )
                 state
@@ -831,16 +833,16 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
-            InvocationCount: 3_368
-            BuildListCount: 5_554
-            LoopIterationCount: 2_511
-            InstructionCount: 148_209
+            InvocationCount: 3_381
+            BuildListCount: 5_601
+            LoopIterationCount: 2_543
+            InstructionCount: 149_600
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
             """
-            CompiledExpressionCount: 179
-            InvocationCountTotal: 2_919
+            CompiledExpressionCount: 181
+            InvocationCountTotal: 2_932
             InvocationCountAverage: 16
             InvocationCountPercentile10: 1
             InvocationCountMedian: 4
@@ -913,6 +915,33 @@ public class ElmLanguageServiceTests
             ElmValue.RenderAsElmExpression(value).expressionString;
 
         rendered.Should().Be(ReferencesScenario_ExpectedResponse);
+    }
+
+    [Fact]
+    public void References_request_includes_one_canonical_declaration()
+    {
+        var rootExpression =
+            BuildReferencesScenarioRootExpression(
+                workspaceFiles:
+                [
+                    ("src/ModuleA.elm", ReferencesScenario_ModuleAText),
+                    ("src/ModuleB.elm", ReferencesScenario_ModuleBText),
+                ],
+                queryFilePath: ReferencesScenario_QueryFilePath,
+                positionLineNumber: ReferencesScenario_PositionLineNumber,
+                positionColumn: ReferencesScenario_PositionColumn,
+                includeDeclaration: true);
+
+        var result =
+            Core.Elm.ElmSyntax.ElmSyntaxInterpreter.InterpretAsElmValue(
+                rootExpression,
+                s_referencesScenarioPreparedApp.Value);
+
+        var value =
+            result.Extract(err => throw new Exception(err.ToString()));
+
+        ElmValue.RenderAsElmExpression(value).expressionString.Should().Be(
+            """TextDocumentReferencesResponse [ { fileLocation = WorkspaceFileLocation "src/ModuleA.elm", range = { endColumn = 7, endLineNumber = 4, startColumn = 1, startLineNumber = 4 } }, { fileLocation = WorkspaceFileLocation "src/ModuleA.elm", range = { endColumn = 32, endLineNumber = 1, startColumn = 26, startLineNumber = 1 } }, { fileLocation = WorkspaceFileLocation "src/ModuleB.elm", range = { endColumn = 19, endLineNumber = 7, startColumn = 13, startLineNumber = 7 } }, { fileLocation = WorkspaceFileLocation "src/ModuleB.elm", range = { endColumn = 38, endLineNumber = 7, startColumn = 32, startLineNumber = 7 } } ]""");
     }
 
     [Fact]
@@ -1219,16 +1248,16 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
-            InvocationCount: 8_270
-            BuildListCount: 13_148
-            LoopIterationCount: 6_702
-            InstructionCount: 362_328
+            InvocationCount: 8_291
+            BuildListCount: 13_203
+            LoopIterationCount: 6_742
+            InstructionCount: 364_063
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
             """
-            CompiledExpressionCount: 234
-            InvocationCountTotal: 7_183
+            CompiledExpressionCount: 236
+            InvocationCountTotal: 7_204
             InvocationCountAverage: 31
             InvocationCountPercentile10: 2
             InvocationCountMedian: 5
@@ -1350,16 +1379,16 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
-            InvocationCount: 10_620
-            BuildListCount: 17_441
-            LoopIterationCount: 8_930
-            InstructionCount: 475_420
+            InvocationCount: 10_752
+            BuildListCount: 17_723
+            LoopIterationCount: 8_996
+            InstructionCount: 481_168
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
             """
             CompiledExpressionCount: 235
-            InvocationCountTotal: 9_143
+            InvocationCountTotal: 9_269
             InvocationCountAverage: 39
             InvocationCountPercentile10: 2
             InvocationCountMedian: 6
@@ -1544,17 +1573,17 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
-            InvocationCount: 15_133
-            BuildListCount: 22_801
-            LoopIterationCount: 15_123
-            InstructionCount: 741_814
+            InvocationCount: 15_336
+            BuildListCount: 23_269
+            LoopIterationCount: 15_216
+            InstructionCount: 751_684
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
             """
             CompiledExpressionCount: 236
-            InvocationCountTotal: 13_548
-            InvocationCountAverage: 57
+            InvocationCountTotal: 13_746
+            InvocationCountAverage: 58
             InvocationCountPercentile10: 1
             InvocationCountMedian: 7
             InvocationCountPercentile90: 75
@@ -1617,8 +1646,9 @@ public class ElmLanguageServiceTests
             + "    -> String\n"
             + "    -> Int\n"
             + "    -> Int\n"
+            + "    -> Bool\n"
             + "    -> LanguageServiceInterface.Response\n"
-            + "referencesScenarioResponse workspaceFiles queryFilePath positionLineNumber positionColumn =\n"
+            + "referencesScenarioResponse workspaceFiles queryFilePath positionLineNumber positionColumn includeDeclaration =\n"
             + "    let\n"
             + "        state0 : LanguageService.LanguageServiceState\n"
             + "        state0 =\n"
@@ -1634,6 +1664,7 @@ public class ElmLanguageServiceTests
             + "                    { fileLocation = LanguageServiceInterface.WorkspaceFileLocation queryFilePath\n"
             + "                    , positionLineNumber = positionLineNumber\n"
             + "                    , positionColumn = positionColumn\n"
+            + "                    , includeDeclaration = includeDeclaration\n"
             + "                    }\n"
             + "                )\n"
             + "                stateWithFiles\n"
@@ -1659,7 +1690,8 @@ public class ElmLanguageServiceTests
         IReadOnlyList<(string path, string text)> workspaceFiles,
         string queryFilePath,
         int positionLineNumber,
-        int positionColumn)
+        int positionColumn,
+        bool includeDeclaration = false)
     {
         var workspaceFilesLiteral =
             "[ "
@@ -1676,7 +1708,8 @@ public class ElmLanguageServiceTests
             + "    " + workspaceFilesLiteral + "\n"
             + "    " + EncodeAsElmStringLiteral(queryFilePath) + "\n"
             + "    " + positionLineNumber + "\n"
-            + "    " + positionColumn + "\n";
+            + "    " + positionColumn + "\n"
+            + "    " + (includeDeclaration ? "True" : "False") + "\n";
     }
 
     /// <summary>

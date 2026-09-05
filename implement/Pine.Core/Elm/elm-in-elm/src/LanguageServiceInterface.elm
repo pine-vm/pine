@@ -78,7 +78,11 @@ type alias ProvideDefinitionRequestStruct =
 
 
 type alias ProvideReferencesRequestStruct =
-    ProvideHoverRequestStruct
+    { fileLocation : FileLocation
+    , positionLineNumber : Int
+    , positionColumn : Int
+    , includeDeclaration : Bool
+    }
 
 
 type alias RenameParams =

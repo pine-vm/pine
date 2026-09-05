@@ -1,5 +1,14 @@
 # Pine Changelog - Implement
 
+## 2026-09-05 - Expanded VS Code Extension and Language Server
+
++ Added feature: Reference count CodeLens: Displays reference counts (`0 references`, `1 reference`, `N references`) above declarations at Elm module scope and opens VS Code's references peek view when selected.
+  - Implemented lazy resolution via LSP `textDocument/codeLens` and `codeLens/resolve`, keeping initial document discovery fast.
+  - Support for `context.includeDeclaration` in reference requests to present both canonical declaration location and call sites in the peek view.
+  - Added debounced `workspace/codeLens/refresh` notifications on document updates and file changes when supported by the client.
+  - Full backward compatibility with older servers: CodeLens capability negotiation ensures older servers remain functional without errors.
++ Incremented Pine VS Code extension version to 0.3.6.
+
 ## 2026-08-21 - Elm Compiler - Migrate Elm choice encoding to flat `<Choice_Type>` layout
 
 Elm choice values now use the canonical flat layout

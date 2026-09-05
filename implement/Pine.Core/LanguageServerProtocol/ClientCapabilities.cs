@@ -13,7 +13,8 @@ public record ClientCapabilities(
 /// </summary>
 public record ClientCapabilitiesWorkspace(
     DidChangeWatchedFilesClientCapabilities? DidChangeWatchedFiles,
-    bool? WorkspaceFolders);
+    bool? WorkspaceFolders,
+    CodeLensWorkspaceClientCapabilities? CodeLens = null);
 
 
 /// <summary>
@@ -31,7 +32,30 @@ public record TextDocumentClientCapabilities(
     CompletionClientCapabilities? Completion,
     PublishDiagnosticsClientCapabilities? PublishDiagnostics,
     DocumentSymbolClientCapabilities? DocumentSymbol,
-    RenameClientCapabilities? Rename);
+    RenameClientCapabilities? Rename,
+    CodeLensClientCapabilities? CodeLens = null);
+
+
+/// <summary>
+/// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#codeLensClientCapabilities
+/// </summary>
+public record CodeLensClientCapabilities(
+    bool? DynamicRegistration,
+    CodeLensClientCapabilitiesResolveSupport? ResolveSupport);
+
+
+/// <summary>
+/// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#codeLensClientCapabilities
+/// </summary>
+public record CodeLensClientCapabilitiesResolveSupport(
+    System.Collections.Generic.IReadOnlyList<string> Properties);
+
+
+/// <summary>
+/// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#codeLensWorkspaceClientCapabilities
+/// </summary>
+public record CodeLensWorkspaceClientCapabilities(
+    bool? RefreshSupport);
 
 
 /// <summary>
@@ -68,4 +92,3 @@ public record RenameClientCapabilities(
     bool? DynamicRegistration,
     bool? PrepareSupport,
     bool? HonorsChangeAnnotations);
-

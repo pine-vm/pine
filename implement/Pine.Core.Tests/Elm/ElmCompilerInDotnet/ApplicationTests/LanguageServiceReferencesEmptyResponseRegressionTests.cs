@@ -121,6 +121,7 @@ public class LanguageServiceReferencesEmptyResponseRegressionTests
                     { fileLocation = LanguageServiceInterface.WorkspaceFileLocation filePath
                     , positionLineNumber = lineNumber
                     , positionColumn = column
+                    , includeDeclaration = False
                     }
                 )
                 state
@@ -183,6 +184,7 @@ public class LanguageServiceReferencesEmptyResponseRegressionTests
                     LanguageService.DeclarationRange
                         (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
                         []
+                        (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
 
                 sl =
                     LanguageService.LocationInFile fl dr
@@ -205,6 +207,7 @@ public class LanguageServiceReferencesEmptyResponseRegressionTests
                     LanguageService.DeclarationRange
                         (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
                         []
+                        (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
 
                 sl =
                     LanguageService.LocationInFile fl dr
@@ -235,6 +238,7 @@ public class LanguageServiceReferencesEmptyResponseRegressionTests
                     LanguageService.DeclarationRange
                         (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
                         []
+                        (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
 
                 sl =
                     LanguageService.LocationInFile fl dr
@@ -274,6 +278,7 @@ public class LanguageServiceReferencesEmptyResponseRegressionTests
                     LanguageService.DeclarationRange
                         (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
                         []
+                        (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
 
                 sl =
                     LanguageService.LocationInFile fl dr
@@ -339,6 +344,7 @@ public class LanguageServiceReferencesEmptyResponseRegressionTests
                     LanguageService.DeclarationRange
                         (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
                         []
+                        (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
 
                 sl =
                     LanguageService.LocationInFile fl dr
@@ -374,6 +380,7 @@ public class LanguageServiceReferencesEmptyResponseRegressionTests
                     LanguageService.DeclarationRange
                         (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
                         []
+                        (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
 
                 sl =
                     LanguageService.LocationInFile fl dr
@@ -413,6 +420,7 @@ public class LanguageServiceReferencesEmptyResponseRegressionTests
                     LanguageService.DeclarationRange
                         (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
                         []
+                        (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
 
                 sl =
                     LanguageService.LocationInFile fl dr
@@ -457,6 +465,7 @@ public class LanguageServiceReferencesEmptyResponseRegressionTests
                     LanguageService.DeclarationRange
                         (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
                         []
+                        (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
 
                 sl =
                     LanguageService.LocationInFile fl dr
@@ -495,6 +504,7 @@ public class LanguageServiceReferencesEmptyResponseRegressionTests
                             LanguageService.DeclarationRange
                                 (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
                                 []
+                                (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
 
                         sl =
                             LanguageService.LocationInFile fl dr
@@ -527,6 +537,7 @@ public class LanguageServiceReferencesEmptyResponseRegressionTests
                     LanguageService.DeclarationRange
                         (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
                         []
+                        (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
 
                 sl =
                     LanguageService.LocationInFile fl dr
@@ -549,6 +560,7 @@ public class LanguageServiceReferencesEmptyResponseRegressionTests
                     LanguageService.DeclarationRange
                         (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
                         []
+                        (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
 
                 sl =
                     LanguageService.LocationInFile fl dr
@@ -584,6 +596,7 @@ public class LanguageServiceReferencesEmptyResponseRegressionTests
                     LanguageService.DeclarationRange
                         (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
                         []
+                        (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
 
                 sl =
                     LanguageService.LocationInFile fl dr
@@ -619,6 +632,7 @@ public class LanguageServiceReferencesEmptyResponseRegressionTests
                     LanguageService.DeclarationRange
                         (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
                         []
+                        (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
 
                 sl =
                     LanguageService.LocationInFile fl dr
@@ -649,6 +663,7 @@ public class LanguageServiceReferencesEmptyResponseRegressionTests
                     LanguageService.DeclarationRange
                         (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
                         []
+                        (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
 
                 sl =
                     LanguageService.LocationInFile fl dr
@@ -708,6 +723,7 @@ public class LanguageServiceReferencesEmptyResponseRegressionTests
                     LanguageService.DeclarationRange
                         (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
                         []
+                        (LanguageService.Range ( 1, 1 ) ( 1, 5 ))
 
                 sl =
                     LanguageService.LocationInFile fl dr
@@ -970,7 +986,7 @@ public class LanguageServiceReferencesEmptyResponseRegressionTests
     {
         AssertProbeRendersAs(
             "probe_synthetic_triple_identity",
-            "[ Range [ 7, 7 ] [ 7, 13 ], LocationInFile (WorkspaceFileLocation \"src/X.elm\") (DeclarationRange (Range [ 1, 1 ] [ 1, 5 ]) []), \"doc-identity\" ]");
+            "[ Range [ 7, 7 ] [ 7, 13 ], LocationInFile (WorkspaceFileLocation \"src/X.elm\") (DeclarationRange (Range [ 1, 1 ] [ 1, 5 ]) [] (Range [ 1, 1 ] [ 1, 5 ])), \"doc-identity\" ]");
     }
 
     /// <summary>
@@ -983,7 +999,7 @@ public class LanguageServiceReferencesEmptyResponseRegressionTests
     {
         AssertProbeRendersAs(
             "probe_synthetic_triple_via_maybe_destructure",
-            "[ [ Range [ 7, 7 ] [ 7, 13 ], LocationInFile (WorkspaceFileLocation \"src/X.elm\") (DeclarationRange (Range [ 1, 1 ] [ 1, 5 ]) []), \"doc-maybe\" ] ]");
+            "[ [ Range [ 7, 7 ] [ 7, 13 ], LocationInFile (WorkspaceFileLocation \"src/X.elm\") (DeclarationRange (Range [ 1, 1 ] [ 1, 5 ]) [] (Range [ 1, 1 ] [ 1, 5 ])), \"doc-maybe\" ] ]");
     }
 
     /// <summary>
@@ -996,7 +1012,7 @@ public class LanguageServiceReferencesEmptyResponseRegressionTests
     {
         AssertProbeRendersAs(
             "probe_synthetic_triple_via_listMapFind",
-            "[ [ Range [ 7, 7 ] [ 7, 13 ], LocationInFile (WorkspaceFileLocation \"src/X.elm\") (DeclarationRange (Range [ 1, 1 ] [ 1, 5 ]) []), \"doc-listMapFind\" ] ]");
+            "[ [ Range [ 7, 7 ] [ 7, 13 ], LocationInFile (WorkspaceFileLocation \"src/X.elm\") (DeclarationRange (Range [ 1, 1 ] [ 1, 5 ]) [] (Range [ 1, 1 ] [ 1, 5 ])), \"doc-listMapFind\" ] ]");
     }
 
     /// <summary>

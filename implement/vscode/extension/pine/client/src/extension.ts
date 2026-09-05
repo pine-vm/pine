@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { commands, workspace, ExtensionContext, window, OutputChannel } from 'vscode';
+import { commands, workspace, ExtensionContext, window, Location, OutputChannel, Position, Uri } from 'vscode';
 
 import {
     CloseAction,
@@ -12,6 +12,9 @@ import {
 } from 'vscode-languageclient/node';
 
 let client: LanguageClient;
+
+type CommandExecutor =
+    (command: string, ...rest: any[]) => Thenable<any>;
 
 
 const langServerExecutablePathDefault: string =
@@ -147,18 +150,66 @@ export function activate(context: ExtensionContext) {
             'pine.showLanguageServerClientLog',
             () => client.outputChannel.show()));
 
+    context.subscriptions.push(
+        commands.registerCommand(
+            'pine.client.peekReferences',
+            (documentUri: unknown, position: unknown) =>
+                showReferences(documentUri, position)));
+
     console.log("client start...");
 
     // Start the client. This will also launch the server
     client.start();
     console.log("client started");
 
-    // listen for configuration changes
-    workspace.onDidChangeConfiguration(e => {
-        if (e.affectsConfiguration('pineLanguageServer.trace.server')) {
+}
 
+export async function showReferences(
+    documentUri: unknown,
+    position: unknown,
+    executeCommand: CommandExecutor = commands.executeCommand): Promise<void> {
+
+    if (typeof documentUri !== 'string' || !isProtocolPosition(position)) {
+        return;
+    }
+
+    try {
+        const uri = Uri.parse(documentUri);
+        const vscodePosition = new Position(position.line, position.character);
+
+        const locations =
+            await executeCommand(
+                'vscode.executeReferenceProvider',
+                uri,
+                vscodePosition) as Location[] | undefined;
+
+        if (!Array.isArray(locations) || locations.length === 0) {
+            return;
         }
-    });
+
+        await executeCommand(
+            'editor.action.showReferences',
+            uri,
+            vscodePosition,
+            locations);
+    } catch (error) {
+        pineOutputChannel.appendLine(
+            'Failed to show references: ' +
+            (error instanceof Error ? error.message : String(error)));
+    }
+}
+
+function isProtocolPosition(value: unknown): value is { line: number; character: number } {
+    if (typeof value !== 'object' || value === null) {
+        return false;
+    }
+
+    const position = value as { line?: unknown; character?: unknown };
+
+    return Number.isInteger(position.line) &&
+        Number.isInteger(position.character) &&
+        (position.line as number) >= 0 &&
+        (position.character as number) >= 0;
 }
 
 export function deactivate(): Thenable<void> | undefined {

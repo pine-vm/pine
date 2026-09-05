@@ -5,39 +5,44 @@
 
 import * as vscode from 'vscode';
 import * as assert from 'assert';
-import { getDocUri, activate } from './helper';
+import { getDocUri, activate, sleep } from './helper';
 
-suite('Should do completion', () => {
-	const docUri = getDocUri('completion.txt');
+suite('Reference CodeLens', () => {
+	const docUri = getDocUri('src/Main.elm');
 
-	test('Completes JS/TS in txt file', async () => {
-		await testCompletion(docUri, new vscode.Position(0, 0), {
-			items: [
-				{ label: 'JavaScript', kind: vscode.CompletionItemKind.Text },
-				{ label: 'TypeScript', kind: vscode.CompletionItemKind.Text }
-			]
-		});
+	test('Shows usage count and includes the declaration in navigation', async () => {
+		await activate(docUri);
+
+		const lenses = await waitForResolvedCodeLenses(docUri);
+		const helperLens =
+			lenses.find(lens => lens.command?.title === '2 references');
+
+		assert.ok(helperLens?.command);
+		assert.equal(helperLens.command.command, 'pine.client.peekReferences');
+
+		const references = await vscode.commands.executeCommand<vscode.Location[]>(
+			'vscode.executeReferenceProvider',
+			docUri,
+			new vscode.Position(4, 0));
+
+		assert.equal(references.length, 3);
+		assert.deepEqual(references[0].range, new vscode.Range(4, 0, 4, 6));
 	});
 });
 
-async function testCompletion(
-	docUri: vscode.Uri,
-	position: vscode.Position,
-	expectedCompletionList: vscode.CompletionList
-) {
-	await activate(docUri);
+async function waitForResolvedCodeLenses(docUri: vscode.Uri): Promise<vscode.CodeLens[]> {
+	for (let attempt = 0; attempt < 30; attempt++) {
+		const lenses = await vscode.commands.executeCommand<vscode.CodeLens[]>(
+			'vscode.executeCodeLensProvider',
+			docUri,
+			20);
 
-	// Executing the command `vscode.executeCompletionItemProvider` to simulate triggering completion
-	const actualCompletionList = (await vscode.commands.executeCommand(
-		'vscode.executeCompletionItemProvider',
-		docUri,
-		position
-	)) as vscode.CompletionList;
+		if (lenses?.some(lens => lens.command)) {
+			return lenses;
+		}
 
-	assert.ok(actualCompletionList.items.length >= 2);
-	expectedCompletionList.items.forEach((expectedItem, i) => {
-		const actualItem = actualCompletionList.items[i];
-		assert.equal(actualItem.label, expectedItem.label);
-		assert.equal(actualItem.kind, expectedItem.kind);
-	});
+		await sleep(500);
+	}
+
+	throw new Error('Timed out waiting for resolved CodeLens results.');
 }

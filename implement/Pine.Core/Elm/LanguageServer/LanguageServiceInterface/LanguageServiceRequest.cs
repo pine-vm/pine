@@ -89,7 +89,7 @@ public abstract record Request
     /// <summary>
     /// Requests document references.
     /// </summary>
-    public record TextDocumentReferencesRequest(ProvideHoverRequestStruct Request)
+    public record TextDocumentReferencesRequest(ProvideReferencesRequestStruct Request)
         : Request;
 
     /// <summary>
@@ -117,6 +117,26 @@ public record ProvideHoverRequestStruct(
     FileLocation FileLocation,
     int PositionLineNumber,
     int PositionColumn);
+
+/*
+
+type alias ProvideReferencesRequestStruct =
+    { fileLocation : FileLocation
+    , positionLineNumber : Int
+    , positionColumn : Int
+    , includeDeclaration : Bool
+    }
+
+ * */
+
+/// <summary>
+/// Identifies a source position and whether its declaration should be included.
+/// </summary>
+public record ProvideReferencesRequestStruct(
+    FileLocation FileLocation,
+    int PositionLineNumber,
+    int PositionColumn,
+    bool IncludeDeclaration);
 
 /*
 
@@ -285,6 +305,31 @@ public static class RequestEncoding
                     IntegerEncoding.EncodeSignedInteger(provideHoverRequest.PositionLineNumber)),
                     ("positionColumn",
                     IntegerEncoding.EncodeSignedInteger(provideHoverRequest.PositionColumn)),
+                ]);
+    }
+
+    /// <summary>
+    /// Encodes a references request.
+    /// </summary>
+    public static PineValue Encode(ProvideReferencesRequestStruct provideReferencesRequest)
+    {
+        return
+            ElmValueEncoding.ElmRecordAsPineValue(
+                [
+                    ("fileLocation",
+                    ElmValueEncoding.ElmValueAsPineValue(
+                        FileLocationEncoding.EncodeAsElmValue(provideReferencesRequest.FileLocation))),
+                    ("positionLineNumber",
+                    IntegerEncoding.EncodeSignedInteger(provideReferencesRequest.PositionLineNumber)),
+                    ("positionColumn",
+                    IntegerEncoding.EncodeSignedInteger(provideReferencesRequest.PositionColumn)),
+                    ("includeDeclaration",
+                    ElmValueEncoding.ElmValueAsPineValue(
+                        provideReferencesRequest.IncludeDeclaration
+                        ?
+                        ElmValue.TrueValue
+                        :
+                        ElmValue.FalseValue)),
                 ]);
     }
 
