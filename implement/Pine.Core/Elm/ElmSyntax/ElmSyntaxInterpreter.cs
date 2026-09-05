@@ -3042,7 +3042,7 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<
         ElmSyntaxAbstract.Expression.LetExpression, LetGroupPlan>
-        s_letGroupPlanCache = new();
+        s_letGroupPlanCache = [];
 
     /// <summary>
     /// Result of the static analysis of a <c>let</c> binding group. All fields are derived

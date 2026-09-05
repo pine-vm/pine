@@ -93,7 +93,7 @@ public sealed class WebBrowserPage : IAsyncDisposable
         var headers =
             options.Headers is null
             ?
-            new Dictionary<string, string>()
+            []
             :
             new Dictionary<string, string>(options.Headers, StringComparer.OrdinalIgnoreCase);
 

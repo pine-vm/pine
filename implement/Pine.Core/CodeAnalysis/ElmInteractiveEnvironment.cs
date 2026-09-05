@@ -89,6 +89,7 @@ public static class ElmInteractiveEnvironment
     /// <param name="pineVM">Implementation of the Pine virtual machine used for evaluation.</param>
     /// <param name="functionRecord">The parsed function (possibly with partially collected arguments).</param>
     /// <param name="arguments">Additional argument values to append.</param>
+    /// <param name="cancellationToken">Token used to cancel evaluation.</param>
     /// <returns>The result of evaluating the function application (Ok: value, Err: error message).</returns>
     public static Result<string, PineValue> ApplyFunction(
         PineVM.IPineVM pineVM,

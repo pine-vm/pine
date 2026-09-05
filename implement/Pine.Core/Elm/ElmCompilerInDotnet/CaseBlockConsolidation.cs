@@ -577,7 +577,7 @@ internal static class CaseBlockConsolidation
     // ------------------------------------------------------------------
 
     /// <summary>
-    /// If <paramref name="caseExpr"/>'s scrutinee is, after peeling
+    /// If <paramref name="outerCase"/>'s scrutinee is, after peeling
     /// <see cref="SyntaxTypes.Expression.ParenthesizedExpression"/> /
     /// <see cref="SyntaxTypes.Expression.LetExpression"/>, another
     /// <see cref="SyntaxTypes.Expression.CaseExpression"/>, AND every

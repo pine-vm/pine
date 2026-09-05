@@ -3170,6 +3170,7 @@ public static class TypeInference
     /// </summary>
     /// <param name="file">The parsed Elm file.</param>
     /// <param name="moduleName">The module name for qualifying function names.</param>
+    /// <param name="aliasDefinitions">Optional precomputed type alias definitions.</param>
     /// <returns>A dictionary mapping qualified function names to their inferred types.</returns>
     public static ImmutableDictionary<string, InferredType> BuildFunctionSignaturesMap(
         SyntaxTypes.File file,

@@ -369,8 +369,7 @@ public partial class ElmSyntaxInterpreter
     /// Fully Pine-encodable values are compared via
     /// <see cref="PineValueInProcess.AreEqual(PineValueInProcess, PineValueInProcess)"/>. Values
     /// that embed one of the interpreter's opaque variants — closures
-    /// (<see cref="ElmClosureInProcess"/>), boxed function-bearing values
-    /// (<see cref="ElmValueBox"/>), partially-applied tag/record constructors
+    /// (<see cref="ElmClosureInProcess"/>), partially-applied tag/record constructors
     /// (<see cref="ElmChoiceTagConstructorInProcess"/>, <see cref="ElmRecordTypeConstructorInProcess"/>)
     /// and record-access chains (<see cref="ElmRecordAccessChainInProcess"/>) — are compared
     /// structurally: composite list/tagged values are descended into element-wise so that opaque

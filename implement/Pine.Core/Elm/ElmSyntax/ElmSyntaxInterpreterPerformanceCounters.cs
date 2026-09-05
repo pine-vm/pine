@@ -23,7 +23,7 @@ namespace Pine.Core.Elm.ElmSyntax;
 /// </param>
 /// <param name="FunctionValueApplicationCount">
 /// Number of applications of an already-evaluated function value. This counts every time the
-/// interpreter applies arguments to an <see cref="ElmValue.ElmFunction"/> closure obtained as
+/// interpreter applies arguments to an <see cref="ElmSyntaxInterpreter.ElmClosureInProcess"/> obtained as
 /// the result of evaluating a sub-expression — typically a higher-order argument, a let-bound
 /// partial application, or a lambda.
 /// </param>

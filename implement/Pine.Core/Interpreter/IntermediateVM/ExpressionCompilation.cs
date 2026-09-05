@@ -74,6 +74,9 @@ public record ExpressionCompilation(
     /// <param name="enableTailRecursionOptimization">Whether tail-recursion optimization should be enabled.</param>
     /// <param name="skipInlining">Predicate deciding whether a subexpression should skip inlining for a given environment constraint.</param>
     /// <param name="reducedExpressionCache">Optional cache for reduced expressions reused during compilation.</param>
+    /// <param name="pathMaxLowExclusive">Exclusive lower bound for path lengths compiled to specialized instructions.</param>
+    /// <param name="pathMaxHighInclusive">Inclusive upper bound for path lengths compiled to specialized instructions.</param>
+    /// <param name="disableGenericApplicationChainConsolidation">Whether generic application-chain consolidation should be disabled.</param>
     public static ExpressionCompilation CompileExpression(
         Expression rootExpression,
         IReadOnlyList<PineValueClass> specializations,
@@ -168,6 +171,9 @@ public record ExpressionCompilation(
     /// <param name="enableTailRecursionOptimization">Whether tail-recursion optimization should be enabled.</param>
     /// <param name="skipInlining">Predicate deciding whether a subexpression should skip inlining for a given environment constraint.</param>
     /// <param name="reducedExpressionCache">Optional cache for reduced expressions reused during compilation.</param>
+    /// <param name="pathMaxLowExclusive">Exclusive lower bound for path lengths compiled to specialized instructions.</param>
+    /// <param name="pathMaxHighInclusive">Inclusive upper bound for path lengths compiled to specialized instructions.</param>
+    /// <param name="disableGenericApplicationChainConsolidation">Whether generic application-chain consolidation should be disabled.</param>
     public static IReadOnlyList<StackInstruction> InstructionsFromExpressionTransitive(
         Expression rootExpression,
         PineValueClass? envConstraintId,

@@ -1376,7 +1376,7 @@ internal static class HigherOrderParameterAnalysis
     /// terminal <c>VarPattern</c> / <c>AsPattern</c> cases it does not
     /// require the argument to be a bare reference. Instead, it uses
     /// <see cref="SyntaxTypes.SyntaxAnalysis.CollectRemainingFreeVariables(SyntaxTypes.Expression)"/> together with
-    /// <see cref="SyntaxTypes.SyntaxAnalysis.AddFlowingNamesOf"/> to find every
+    /// <c>SyntaxAnalysis.AddFlowingNamesOf</c> to find every
     /// caller-owned name whose value can flow into the argument
     /// expression — directly (free variable in the argument) or via
     /// chained let-binding right-hand sides recorded in

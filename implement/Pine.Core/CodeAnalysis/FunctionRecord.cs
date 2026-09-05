@@ -91,6 +91,7 @@ public abstract record ParsedFunctionValue
 /// <param name="ParameterCount">Total number of parameters expected.</param>
 /// <param name="EnvFunctions">Captured function values used by the closure.</param>
 /// <param name="ArgumentsAlreadyCollected">Arguments already supplied (for partial application scenarios).</param>
+/// <param name="UsesNestedArgFormat">Whether the function uses the nested argument representation.</param>
 public record FunctionRecord(
     Expression InnerFunction,
     int ParameterCount,

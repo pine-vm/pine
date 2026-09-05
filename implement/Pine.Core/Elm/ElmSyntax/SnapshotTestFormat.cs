@@ -1070,6 +1070,7 @@ public class SnapshotTestFormat
     /// <param name="declaration">
     /// The Elm declaration syntax model to render.
     /// </param>
+    /// <param name="nameMap">Optional mapping used to rewrite qualified names while rendering.</param>
     /// <returns>
     /// The rendered declaration text without leading or trailing whitespace.
     /// </returns>

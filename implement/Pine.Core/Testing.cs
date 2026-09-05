@@ -191,7 +191,6 @@ public static class Testing
     /// {slice of expected}
     ///    ↑ (expected)
     /// </code>
-    /// When <paramref name="quoteSlices"/> is true, the slices are wrapped in double quotes.
     /// </summary>
     public static string RenderCoreStringDifference(
         string actualText,

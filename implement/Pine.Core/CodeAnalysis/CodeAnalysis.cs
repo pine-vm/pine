@@ -1915,7 +1915,7 @@ public class CodeAnalysis
     /// <summary>
     /// A precomputed template for recognizing the consolidated form produced by the
     /// generic-application chain consolidation optimization in
-    /// <see cref="ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(Expression.Eval, PineVMParseCache)"/>.
+    /// <see cref="ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(Expression.Eval, PineVMParseCache, ReductionConfig)"/>.
     /// <para>
     /// When the optimization is applied to
     /// <c>BuildGenericFunctionApplication(Literal(<paramref name="FunctionValue"/>), [arg0, ..., arg{<paramref name="DepthK"/>-1}])</c>

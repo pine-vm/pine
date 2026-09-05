@@ -30,10 +30,6 @@ namespace Pine.Core.CodeAnalysis;
 /// will attempt to inline <see cref="Expression.Eval"/> nodes. Intended for diagnostic /
 /// inspection scenarios where the caller wants to observe the
 /// pre-inlining shape of the expression tree.</param>
-/// during reduction, leaving <see cref="Expression.Eval"/> nodes whose
-/// encoded operand is a known constant un-inlined. Intended for diagnostic /
-/// inspection scenarios where the caller wants to observe the
-/// pre-inlining shape of the expression tree.</param>
 public record struct ReductionConfig(
     bool DisableGenericApplicationChainConsolidation,
     int InlineEvalEnvironmentSizeLimit)

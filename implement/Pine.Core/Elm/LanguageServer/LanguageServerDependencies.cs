@@ -210,17 +210,13 @@ public sealed class MutableDocumentTextSource : IDocumentTextSource
 /// <summary>
 /// Host-independent settings of a language server.
 /// </summary>
-/// <param name="ServerVersion">
-/// Version reported to the client in the <c>initialize</c> response.
-/// </param>
-/// <param name="MaxConcurrencyCount">
-/// Maximum number of exclusively leased language-service workers.
-/// </param>
 public sealed record LanguageServerOptions
 {
     /// <summary>
     /// Initializes language server options and enforces that at least one worker can be leased concurrently.
     /// </summary>
+    /// <param name="ServerVersion">Version reported to the client in the <c>initialize</c> response.</param>
+    /// <param name="MaxConcurrencyCount">Maximum number of exclusively leased language-service workers.</param>
     public LanguageServerOptions(
         string ServerVersion,
         int MaxConcurrencyCount = 4)

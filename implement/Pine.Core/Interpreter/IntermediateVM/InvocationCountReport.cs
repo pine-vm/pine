@@ -241,7 +241,7 @@ public readonly record struct InvocationCountReport(
 /// <para>
 /// Typical usage: create a builder, pass <see cref="Add"/> as the
 /// <c>reportEnteredStackFrame</c> argument to
-/// <see cref="PineVM.EvaluateExpressionOnCustomStack"/>, then call
+/// <c>PineVM.EvaluateExpressionOnCustomStack</c>, then call
 /// <see cref="ToReport"/> after the evaluation finishes to obtain the histogram.
 /// </para>
 ///

@@ -2063,7 +2063,7 @@ public class ElmCompiler
 
     /// <summary>
     /// Module-list flavoured overload of
-    /// <see cref="ValidateStage(OptimizedElmSyntaxDeclarations, string)"/>.
+    /// <see cref="ValidateStage"/>.
     /// </summary>
     private static string? ValidateStage(
         IReadOnlyList<ElmSyntaxAbstract.File> modules,
