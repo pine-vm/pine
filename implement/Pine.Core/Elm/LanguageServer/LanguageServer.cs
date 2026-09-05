@@ -57,6 +57,9 @@ public class LanguageServer(
 
     private readonly Lock _documentStateLock = new();
 
+    private readonly Dictionary<string, long> _documentGenerations =
+        new(System.StringComparer.Ordinal);
+
     private readonly Dictionary<string, DocumentUpdateWork> _pendingDocumentUpdates =
         new(System.StringComparer.Ordinal);
 
@@ -64,6 +67,46 @@ public class LanguageServer(
         new(System.StringComparer.Ordinal);
 
     private long _nextDocumentUpdateSequence;
+
+    private long _nextFormattingRequestSequence;
+
+    private const int FormattingRequestCapacity = 8;
+
+    private readonly SemaphoreSlim _formattingRequestCapacity =
+        new(FormattingRequestCapacity, FormattingRequestCapacity);
+
+    private readonly SemaphoreSlim _formattingConcurrency = new(initialCount: 1, maxCount: 1);
+
+    private int _queuedFormattingRequestCount;
+
+    private int _activeFormattingRequestCount;
+
+    private const int FormattingDiagnosticsCapacity = 16;
+
+    private readonly SemaphoreSlim _formattingDiagnosticsCapacity =
+        new(FormattingDiagnosticsCapacity, FormattingDiagnosticsCapacity);
+
+    private readonly SemaphoreSlim _formattingDiagnosticsConcurrency =
+        new(initialCount: 1, maxCount: 1);
+
+    private readonly Lock _formattingDiagnosticsLock = new();
+
+    private readonly Dictionary<string, CancellationTokenSource> _formattingDiagnosticsCancellations =
+        new(System.StringComparer.Ordinal);
+
+    private sealed record DocumentFormattingSnapshot(
+        string DocumentUri,
+        string Content,
+        int? ClientVersion,
+        long DocumentGeneration,
+        long? PendingUpdateSequence,
+        int? LanguageServiceVersion,
+        string SourceOrigin);
+
+    private readonly record struct DocumentIdentity(
+        bool IsOpen,
+        int? ClientVersion,
+        long DocumentGeneration);
 
     private sealed class DocumentUpdateWork(
         string documentUri,
@@ -155,6 +198,33 @@ public class LanguageServer(
     private void Log(string message)
     {
         _logDelegate?.Invoke(message);
+    }
+
+    private long IncrementDocumentGenerationLocked(string documentUri)
+    {
+        _documentGenerations.TryGetValue(documentUri, out var previousGeneration);
+
+        var generation = previousGeneration + 1;
+
+        _documentGenerations[documentUri] = generation;
+
+        return generation;
+    }
+
+    private DocumentIdentity GetDocumentIdentityLocked(string documentUri)
+    {
+        var isOpen = _clientTextDocumentContents.ContainsKey(documentUri);
+
+        int? clientVersion =
+            _clientTextDocumentVersions.TryGetValue(documentUri, out var version)
+            ?
+            version
+            :
+            null;
+
+        _documentGenerations.TryGetValue(documentUri, out var generation);
+
+        return new DocumentIdentity(isOpen, clientVersion, generation);
     }
 
     /// <summary>
@@ -578,8 +648,11 @@ public class LanguageServer(
 
         _allSeenDocumentUris[decodedUri] = decodedUri;
 
-        DocumentUpdateWork update;
+        DocumentUpdateWork? update = null;
         DocumentUpdateWork? supersededUpdate;
+        int acceptedVersion = 0;
+        int pendingUpdateCount = 0;
+        string? ignoredReason = null;
 
         lock (_documentStateLock)
         {
@@ -588,28 +661,41 @@ public class LanguageServer(
             if (_clientTextDocumentVersions.TryGetValue(decodedUri, out var currentVersion) &&
                 currentVersion > textDocument.Version)
             {
-                Log(
+                ignoredReason =
                     "Ignoring stale open document version " + textDocument.Version +
-                    " because current version is " + currentVersion);
+                    " because current version is " + currentVersion;
 
-                return;
+                supersededUpdate = null;
             }
+            else
+            {
+                _clientTextDocumentContents[decodedUri] = textDocument.Text;
+                _clientTextDocumentVersions[decodedUri] = textDocument.Version;
+                IncrementDocumentGenerationLocked(decodedUri);
 
-            _clientTextDocumentContents[decodedUri] = textDocument.Text;
-            _clientTextDocumentVersions[decodedUri] = textDocument.Version;
-
-            (update, supersededUpdate) =
-                RegisterDocumentUpdateLocked(
-                    decodedUri,
-                    textDocument.Version,
-                    textDocument.Text);
+                (update, supersededUpdate, acceptedVersion, pendingUpdateCount) =
+                    RegisterDocumentUpdateLocked(
+                        decodedUri,
+                        textDocument.Version,
+                        textDocument.Text);
+            }
         }
+
+        if (ignoredReason is not null)
+        {
+            Log(ignoredReason);
+            return;
+        }
+
+        LogDocumentUpdateQueued(update!, acceptedVersion, pendingUpdateCount);
 
         BumpSourceRevision();
 
-        CancelSupersededDocumentUpdate(supersededUpdate, update);
+        CancelSupersededDocumentUpdate(supersededUpdate, update!);
 
-        await ProcessDocumentUpdateAsync(update, "opening document");
+        await Task.Yield();
+
+        await ProcessDocumentUpdateAsync(update!, "opening document");
     }
 
     /// <summary>
@@ -653,36 +739,48 @@ public class LanguageServer(
 
         var newContent = contentChanges[^1].Text;
 
-        DocumentUpdateWork update;
+        DocumentUpdateWork? update = null;
         DocumentUpdateWork? supersededUpdate;
+        int acceptedVersion = 0;
+        int pendingUpdateCount = 0;
+        string? ignoredReason = null;
 
         lock (_documentStateLock)
         {
             if (_closedTextDocuments.ContainsKey(textDocumentUri))
             {
-                Log("Ignoring change for closed document " + textDocumentUri);
-                return;
+                ignoredReason = "Ignoring change for closed document " + textDocumentUri;
+                supersededUpdate = null;
             }
-
-            if (_clientTextDocumentVersions.TryGetValue(textDocumentUri, out var currentVersion) &&
-                textDocument.Version <= currentVersion)
+            else if (_clientTextDocumentVersions.TryGetValue(textDocumentUri, out var currentVersion) &&
+                     textDocument.Version <= currentVersion)
             {
-                Log(
+                ignoredReason =
                     "Ignoring stale document version " + textDocument.Version +
-                    " because current version is " + currentVersion);
-
-                return;
+                    " because current version is " + currentVersion;
+                supersededUpdate = null;
             }
+            else
+            {
+                _clientTextDocumentContents[textDocumentUri] = newContent;
+                _clientTextDocumentVersions[textDocumentUri] = textDocument.Version;
+                IncrementDocumentGenerationLocked(textDocumentUri);
 
-            _clientTextDocumentContents[textDocumentUri] = newContent;
-            _clientTextDocumentVersions[textDocumentUri] = textDocument.Version;
-
-            (update, supersededUpdate) =
-                RegisterDocumentUpdateLocked(
-                    textDocumentUri,
-                    textDocument.Version,
-                    newContent);
+                (update, supersededUpdate, acceptedVersion, pendingUpdateCount) =
+                    RegisterDocumentUpdateLocked(
+                        textDocumentUri,
+                        textDocument.Version,
+                        newContent);
+            }
         }
+
+        if (ignoredReason is not null)
+        {
+            Log(ignoredReason);
+            return;
+        }
+
+        LogDocumentUpdateQueued(update!, acceptedVersion, pendingUpdateCount);
 
         BumpSourceRevision();
 
@@ -694,12 +792,15 @@ public class LanguageServer(
             " chars distributed over " +
             CommandLineInterface.FormatIntegerForDisplay(linesCount) + " lines");
 
-        CancelSupersededDocumentUpdate(supersededUpdate, update);
+        CancelSupersededDocumentUpdate(supersededUpdate, update!);
 
-        await ProcessDocumentUpdateAsync(update, "changing document");
+        await Task.Yield();
+
+        await ProcessDocumentUpdateAsync(update!, "changing document");
     }
 
-    private (DocumentUpdateWork Update, DocumentUpdateWork? SupersededUpdate)
+    private (DocumentUpdateWork Update, DocumentUpdateWork? SupersededUpdate,
+        int AcceptedVersion, int PendingUpdateCount)
         RegisterDocumentUpdateLocked(
         string documentUri,
         int version,
@@ -717,13 +818,19 @@ public class LanguageServer(
         _pendingDocumentUpdates[documentUri] = update;
         _languageServiceDocumentVersions.TryGetValue(documentUri, out var acceptedVersion);
 
+        return (update, supersededUpdate, acceptedVersion, _pendingDocumentUpdates.Count);
+    }
+
+    private void LogDocumentUpdateQueued(
+        DocumentUpdateWork update,
+        int acceptedVersion,
+        int pendingUpdateCount)
+    {
         Log(
-            "Queued document update " + update.Sequence + " for " + documentUri +
-            " version " + version + "; " + _pendingDocumentUpdates.Count +
+            "Queued document update " + update.Sequence + " for " + update.DocumentUri +
+            " version " + update.Version + "; " + pendingUpdateCount +
             " documents have pending updates; latest accepted version is " +
             acceptedVersion);
-
-        return (update, supersededUpdate);
     }
 
     private void CancelSupersededDocumentUpdate(
@@ -778,6 +885,8 @@ public class LanguageServer(
                 return;
             }
 
+            var completionWasSuperseded = false;
+
             lock (_documentStateLock)
             {
                 if (!_pendingDocumentUpdates.TryGetValue(update.DocumentUri, out var currentUpdate) ||
@@ -785,15 +894,22 @@ public class LanguageServer(
                     !_clientTextDocumentVersions.TryGetValue(update.DocumentUri, out var currentVersion) ||
                     currentVersion != update.Version)
                 {
-                    Log(
-                        "Discarding completion of superseded document update " + update.Sequence +
-                        " for " + update.DocumentUri + " version " + update.Version);
-
-                    return;
+                    completionWasSuperseded = true;
                 }
+                else
+                {
+                    _languageServiceDocumentVersions[update.DocumentUri] = update.Version;
+                    _pendingDocumentUpdates.Remove(update.DocumentUri);
+                }
+            }
 
-                _languageServiceDocumentVersions[update.DocumentUri] = update.Version;
-                _pendingDocumentUpdates.Remove(update.DocumentUri);
+            if (completionWasSuperseded)
+            {
+                Log(
+                    "Discarding completion of superseded document update " + update.Sequence +
+                    " for " + update.DocumentUri + " version " + update.Version);
+
+                return;
             }
 
             Log(
@@ -830,11 +946,19 @@ public class LanguageServer(
     /// <summary>
     /// Applies a text document close notification.
     /// </summary>
-    public void TextDocument_didClose(TextDocumentIdentifier textDocument)
+    public void TextDocument_didClose(TextDocumentIdentifier textDocument) =>
+        TextDocument_didCloseAsync(textDocument).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Applies a text document close notification asynchronously without holding the RPC ingress lane
+    /// while the language service state is restored from workspace storage.
+    /// </summary>
+    public async Task TextDocument_didCloseAsync(TextDocumentIdentifier textDocument)
     {
         var decodedUri = DocumentUriCleaned(textDocument.Uri);
 
         DocumentUpdateWork? pendingUpdate;
+        long closeGeneration;
 
         lock (_documentStateLock)
         {
@@ -843,6 +967,7 @@ public class LanguageServer(
             _clientTextDocumentContents.TryRemove(decodedUri, out var _);
             _clientTextDocumentVersions.TryRemove(decodedUri, out var _);
             _closedTextDocuments[decodedUri] = 0;
+            closeGeneration = IncrementDocumentGenerationLocked(decodedUri);
         }
 
         if (pendingUpdate is not null)
@@ -860,7 +985,9 @@ public class LanguageServer(
             "TextDocument_didClose: " + decodedUri +
             " (" + _clientTextDocumentContents.Count + " open remaining)");
 
-        if (GetLanguageServiceState("closing document") is not { } languageServiceState)
+        await Task.Yield();
+
+        if (await GetLanguageServiceStateAsync("closing document", CancellationToken.None) is not { } languageServiceState)
         {
             return;
         }
@@ -884,33 +1011,158 @@ public class LanguageServer(
             backingContent = OkFileOrNull(readResult)?.Text;
         }
 
+        var reopenedBeforeWorkspaceMutation = false;
+
         lock (_documentStateLock)
         {
             if (_clientTextDocumentContents.ContainsKey(decodedUri))
             {
-                return;
-            }
-
-            if (backingContent is not null)
-            {
-                languageServiceState.AddFile(decodedUri, backingContent);
-            }
-            else
-            {
-                languageServiceState.DeleteFile(decodedUri);
+                reopenedBeforeWorkspaceMutation = true;
             }
         }
 
-        if (backingContent is null)
+        if (reopenedBeforeWorkspaceMutation)
+        {
+            Log(
+                "Skipping workspace fallback for closed document " + decodedUri +
+                " at generation " + closeGeneration +
+                " because the document reopened while its backing content was read");
+
+            return;
+        }
+
+        if (backingContent is not null)
+        {
+            languageServiceState.AddFile(decodedUri, backingContent);
+        }
+        else
+        {
+            languageServiceState.DeleteFile(decodedUri);
+        }
+
+        RestoreOpenDocumentAfterWorkspaceMutation(
+            languageServiceState,
+            decodedUri,
+            closeGeneration,
+            "close fallback");
+
+        if (backingContent is null && !IsDocumentOpen(decodedUri))
         {
             RemoveDiagnosticsEntryPoint(decodedUri);
+        }
+    }
+
+    private bool IsDocumentOpen(string documentUri)
+    {
+        lock (_documentStateLock)
+        {
+            return _clientTextDocumentContents.ContainsKey(documentUri);
+        }
+    }
+
+    private void RestoreOpenDocumentAfterWorkspaceMutation(
+        ILanguageServiceSession languageServiceState,
+        string documentUri,
+        long appliedGeneration,
+        string operation)
+    {
+        while (true)
+        {
+            string? currentOpenContent;
+            int? currentVersion;
+            long currentGeneration;
+            var documentIsOpen = false;
+
+            lock (_documentStateLock)
+            {
+                _documentGenerations.TryGetValue(documentUri, out currentGeneration);
+
+                if (currentGeneration == appliedGeneration)
+                {
+                    return;
+                }
+
+                documentIsOpen =
+                    _clientTextDocumentContents.TryGetValue(documentUri, out currentOpenContent);
+
+                currentVersion =
+                    documentIsOpen &&
+                    _clientTextDocumentVersions.TryGetValue(documentUri, out var version)
+                    ?
+                    version
+                    :
+                    null;
+            }
+
+            if (documentIsOpen)
+            {
+                Log(
+                    "Reapplying client-owned content for " + documentUri +
+                    " after " + operation + " raced with document generation " +
+                    currentGeneration + "; client version: " +
+                    FormatOptionalInteger(currentVersion) + "; previous applied generation: " +
+                    appliedGeneration);
+
+                languageServiceState.AddFile(documentUri, currentOpenContent!);
+            }
+            else
+            {
+                var readResult = workspace.ReadFile(documentUri);
+
+                string? workspaceContent = null;
+
+                if (readResult.IsErrOrNull() is { } readError)
+                {
+                    Log(
+                        "Failed reading " + documentUri + " while reconciling " + operation +
+                        " at document generation " + currentGeneration + ": " +
+                        readError.Kind + ": " + readError.Message);
+                }
+                else
+                {
+                    workspaceContent = OkFileOrNull(readResult)?.Text;
+                }
+
+                lock (_documentStateLock)
+                {
+                    if (!_documentGenerations.TryGetValue(documentUri, out var generationAfterRead) ||
+                        generationAfterRead != currentGeneration ||
+                        _clientTextDocumentContents.ContainsKey(documentUri))
+                    {
+                        continue;
+                    }
+                }
+
+                Log(
+                    "Reapplying workspace-owned content for " + documentUri +
+                    " after " + operation + " raced with document generation " +
+                    currentGeneration + "; previous applied generation: " + appliedGeneration +
+                    "; workspace content exists: " + (workspaceContent is not null));
+
+                if (workspaceContent is null)
+                {
+                    languageServiceState.DeleteFile(documentUri);
+                }
+                else
+                {
+                    languageServiceState.AddFile(documentUri, workspaceContent);
+                }
+            }
+
+            appliedGeneration = currentGeneration;
         }
     }
 
     /// <summary>
     /// Applies watched workspace file changes.
     /// </summary>
-    public void Workspace_didChangeWatchedFiles(IReadOnlyList<FileEvent> changesBeforeDecode)
+    public void Workspace_didChangeWatchedFiles(IReadOnlyList<FileEvent> changesBeforeDecode) =>
+        Workspace_didChangeWatchedFilesAsync(changesBeforeDecode).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Applies watched workspace file changes asynchronously without blocking the RPC ingress lane.
+    /// </summary>
+    public async Task Workspace_didChangeWatchedFilesAsync(IReadOnlyList<FileEvent> changesBeforeDecode)
     {
         var changes =
             changesBeforeDecode
@@ -926,12 +1178,17 @@ public class LanguageServer(
             "Workspace_didChangeWatchedFiles: " + changes.Count + " changes: " +
             string.Join(", ", changes.Select(change => change.Uri)));
 
-        ProcessFileChanges(changes);
+        await Task.Yield();
+
+        await ProcessFileChangesAsync(changes);
     }
 
-    private void ProcessFileChanges(IReadOnlyList<FileEvent> changes)
+    private void ProcessFileChanges(IReadOnlyList<FileEvent> changes) =>
+        ProcessFileChangesAsync(changes).GetAwaiter().GetResult();
+
+    private async Task ProcessFileChangesAsync(IReadOnlyList<FileEvent> changes)
     {
-        if (GetLanguageServiceState("processing file changes") is not { } languageServiceState)
+        if (await GetLanguageServiceStateAsync("processing file changes", CancellationToken.None) is not { } languageServiceState)
         {
             return;
         }
@@ -940,35 +1197,62 @@ public class LanguageServer(
 
         foreach (var change in changes)
         {
-            /*
-             * Contents managed by the client take precedence over the contents seen on the
-             * backing store: the client may have unsaved changes for that document.
-             * */
+            var documentIsOpen = false;
+
             lock (_documentStateLock)
             {
-                if (_clientTextDocumentContents.TryGetValue(change.Uri, out var openDocumentContent))
-                {
-                    languageServiceState.AddFile(change.Uri, openDocumentContent);
-                    continue;
-                }
+                documentIsOpen = _clientTextDocumentContents.ContainsKey(change.Uri);
+            }
+
+            if (documentIsOpen)
+            {
+                Log(
+                    "Ignoring workspace file change " + change.Type + " for " + change.Uri +
+                    " because the document content is client-owned");
+
+                continue;
             }
 
             if (change.Type is FileChangeType.Deleted)
             {
+                long deleteGeneration;
+
                 lock (_documentStateLock)
                 {
-                    if (_clientTextDocumentContents.TryGetValue(change.Uri, out var openDocumentContent))
+                    if (_clientTextDocumentContents.ContainsKey(change.Uri))
                     {
-                        languageServiceState.AddFile(change.Uri, openDocumentContent);
-                        continue;
+                        documentIsOpen = true;
+                        deleteGeneration = 0;
                     }
-
-                    languageServiceState.DeleteFile(change.Uri);
+                    else
+                    {
+                        deleteGeneration = IncrementDocumentGenerationLocked(change.Uri);
+                    }
                 }
+
+                if (documentIsOpen)
+                {
+                    Log(
+                        "Ignoring workspace deletion for " + change.Uri +
+                        " because the document opened before the deletion was applied");
+
+                    continue;
+                }
+
+                languageServiceState.DeleteFile(change.Uri);
+
+                RestoreOpenDocumentAfterWorkspaceMutation(
+                    languageServiceState,
+                    change.Uri,
+                    deleteGeneration,
+                    "workspace deletion");
 
                 anyChangeApplied = true;
 
-                RemoveDiagnosticsEntryPoint(change.Uri);
+                if (!IsDocumentOpen(change.Uri))
+                {
+                    RemoveDiagnosticsEntryPoint(change.Uri);
+                }
 
                 continue;
             }
@@ -1002,28 +1286,48 @@ public class LanguageServer(
                 "Read file " + change.Uri + " with " +
                 CommandLineInterface.FormatIntegerForDisplay(file.Text.Length) +
                 " chars in " +
-                CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) +
+                CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) +
                 " ms");
 
             clock.Restart();
 
+            long workspaceGeneration;
+
             lock (_documentStateLock)
             {
-                if (_clientTextDocumentContents.TryGetValue(change.Uri, out var openDocumentContent))
+                if (_clientTextDocumentContents.ContainsKey(change.Uri))
                 {
-                    languageServiceState.AddFile(change.Uri, openDocumentContent);
+                    documentIsOpen = true;
+                    workspaceGeneration = 0;
                 }
                 else
                 {
-                    languageServiceState.AddFile(change.Uri, file.Text);
-                    anyChangeApplied = true;
+                    workspaceGeneration = IncrementDocumentGenerationLocked(change.Uri);
                 }
             }
 
+            if (documentIsOpen)
+            {
+                Log(
+                    "Ignoring workspace file change " + change.Type + " for " + change.Uri +
+                    " because the document opened while its workspace content was read");
+
+                continue;
+            }
+
+            languageServiceState.AddFile(change.Uri, file.Text);
+            anyChangeApplied = true;
+
+            RestoreOpenDocumentAfterWorkspaceMutation(
+                languageServiceState,
+                change.Uri,
+                workspaceGeneration,
+                "workspace " + change.Type);
+
             Log(
                 "Processed file " + change.Uri + " in language service in " +
-                CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) +
-                " ms");
+                CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) +
+                " ms at document generation " + workspaceGeneration);
 
             if (IsElmJsonDocumentUri(change.Uri))
             {
@@ -1139,51 +1443,72 @@ public class LanguageServer(
         FormattingOptions options,
         CancellationToken cancellationToken = default)
     {
+        var requestSequence = Interlocked.Increment(ref _nextFormattingRequestSequence);
         var textDocumentUri = DocumentUriCleaned(textDocument.Uri);
+        var totalClock = System.Diagnostics.Stopwatch.StartNew();
 
-        Log("TextDocument_formatting: " + textDocumentUri);
+        Log(
+            "Formatting request " + requestSequence + " received for " + textDocumentUri +
+            "; queued formatting requests: " + Volatile.Read(ref _queuedFormattingRequestCount) +
+            "; active formatting requests: " + Volatile.Read(ref _activeFormattingRequestCount));
 
-        string? textDocumentContentBefore;
+        DocumentFormattingSnapshot? snapshot;
+        double documentStateLockWaitMilliseconds;
+        double workspaceReadMilliseconds;
 
-        lock (_documentStateLock)
+        try
         {
-            _clientTextDocumentContents.TryGetValue(textDocumentUri, out textDocumentContentBefore);
+            snapshot =
+                CaptureDocumentFormattingSnapshot(
+                    textDocumentUri,
+                    out documentStateLockWaitMilliseconds,
+                    out workspaceReadMilliseconds);
         }
-
-        if (textDocumentContentBefore is not null)
+        catch (System.Exception exception)
         {
-            Log("Found document " + textDocumentUri + " in client-managed state");
-        }
-        else
-        {
-            var readResult = workspace.ReadFile(textDocumentUri);
+            Log(
+                "Formatting request " + requestSequence + " failed while capturing source for " +
+                textDocumentUri + " after " +
+                CommandLineInterface.FormatIntegerForDisplay(totalClock.ElapsedMilliseconds) +
+                " ms: " + exception);
 
-            if (readResult.IsErrOrNull() is { } readError)
-            {
-                Log(
-                    "Failed reading " + textDocumentUri + " for formatting: " +
-                    readError.Kind + ": " + readError.Message);
-            }
-            else
-            {
-                textDocumentContentBefore = OkFileOrNull(readResult)?.Text;
-            }
-        }
-
-        if (textDocumentContentBefore is null)
-        {
             return [];
         }
 
-        IReadOnlyList<string> linesBefore =
-            [.. textDocumentContentBefore.ModuleLines()];
+        if (snapshot is null)
+        {
+            Log(
+                "Formatting request " + requestSequence + " found no source for " +
+                textDocumentUri + " after " +
+                CommandLineInterface.FormatIntegerForDisplay(totalClock.ElapsedMilliseconds) +
+                " ms; document-state lock wait: " +
+                FormatDurationMilliseconds(documentStateLockWaitMilliseconds) +
+                " ms; workspace read: " +
+                FormatDurationMilliseconds(workspaceReadMilliseconds) +
+                " ms; returning no edits");
+
+            return [];
+        }
+
+        var linesBeforeCount = snapshot.Content.ModuleLines().Count();
 
         Log(
-            "Document " + textDocumentUri + " had " +
-            CommandLineInterface.FormatIntegerForDisplay(linesBefore.Count) +
+            "Formatting request " + requestSequence + " captured " + snapshot.SourceOrigin +
+            " source for " + textDocumentUri + " after " +
+            CommandLineInterface.FormatIntegerForDisplay(totalClock.ElapsedMilliseconds) +
+            " ms; document-state lock wait: " +
+            FormatDurationMilliseconds(documentStateLockWaitMilliseconds) +
+            " ms; workspace read: " +
+            FormatDurationMilliseconds(workspaceReadMilliseconds) +
+            " ms; client version: " + FormatOptionalInteger(snapshot.ClientVersion) +
+            "; document generation: " + snapshot.DocumentGeneration +
+            "; pending document update: " + FormatOptionalInteger(snapshot.PendingUpdateSequence) +
+            "; language-service version: " + FormatOptionalInteger(snapshot.LanguageServiceVersion) +
+            "; " +
+            CommandLineInterface.FormatIntegerForDisplay(linesBeforeCount) +
             " lines and " +
-            CommandLineInterface.FormatIntegerForDisplay(textDocumentContentBefore.Length) +
-            " chars before");
+            CommandLineInterface.FormatIntegerForDisplay(snapshot.Content.Length) +
+            " chars");
 
         var formatClock = System.Diagnostics.Stopwatch.StartNew();
 
@@ -1192,35 +1517,47 @@ public class LanguageServer(
         try
         {
             formatResult =
-                await documentFormatter.FormatAsync(
-                    textDocumentUri,
-                    textDocumentContentBefore,
+                await RunDocumentFormatterAsync(
+                    requestSequence,
+                    snapshot,
                     options,
+                    totalClock,
                     cancellationToken);
+
+            cancellationToken.ThrowIfCancellationRequested();
         }
         catch (System.OperationCanceledException)
         {
-            Log("Client cancellation observed while formatting " + textDocumentUri);
+            Log(
+                "Formatting request " + requestSequence + " for " + textDocumentUri +
+                " observed client cancellation after " +
+                CommandLineInterface.FormatIntegerForDisplay(totalClock.ElapsedMilliseconds) +
+                " ms");
+
             throw;
         }
         catch (System.Exception e)
         {
-            Log("Error: Failed formatting document " + textDocumentUri + ": " + e);
+            Log(
+                "Formatting request " + requestSequence + " failed for " + textDocumentUri +
+                " after " +
+                CommandLineInterface.FormatIntegerForDisplay(totalClock.ElapsedMilliseconds) +
+                " ms: " + e);
+
             return [];
         }
 
         if (formatResult.IsErrOrNull() is { } formatError)
         {
             Log(
-                "Exiting because formatting " + textDocumentUri + " failed: " +
-                formatError.Kind + ": " + formatError.Message);
+                "Formatting request " + requestSequence + " completed formatter execution for " +
+                textDocumentUri + " with " + formatError.Kind + " after " +
+                CommandLineInterface.FormatIntegerForDisplay(formatClock.ElapsedMilliseconds) +
+                " ms formatter time and " +
+                CommandLineInterface.FormatIntegerForDisplay(totalClock.ElapsedMilliseconds) +
+                " ms total: " + formatError.Message);
 
-            /*
-             * Even when formatting could not produce new content (for example because of
-             * syntax errors), publish diagnostics so the user can see them right away.
-             * Locations refer to the unchanged document content.
-             * */
-            await PublishFormattingDiagnosticsAsync(textDocumentUri, cancellationToken);
+            QueueFormattingDiagnostics(requestSequence, snapshot);
 
             return [];
         }
@@ -1232,52 +1569,340 @@ public class LanguageServer(
         }
 
         Log(
-            "Completed formatting " + textDocumentUri + " in " +
-            CommandLineInterface.FormatIntegerForDisplay((int)formatClock.Elapsed.TotalMilliseconds) +
-            " ms");
+            "Formatting request " + requestSequence + " completed formatter execution for " +
+            textDocumentUri + " in " +
+            CommandLineInterface.FormatIntegerForDisplay(formatClock.ElapsedMilliseconds) +
+            " ms formatter time and " +
+            CommandLineInterface.FormatIntegerForDisplay(totalClock.ElapsedMilliseconds) +
+            " ms total");
+
+        DocumentIdentity currentIdentity;
 
         lock (_documentStateLock)
         {
-            if (_clientTextDocumentContents.TryGetValue(textDocumentUri, out var currentContent) &&
-                currentContent == textDocumentContentBefore)
-            {
-                _clientTextDocumentContents[textDocumentUri] = newContent;
-            }
+            currentIdentity = GetDocumentIdentityLocked(textDocumentUri);
+        }
+
+        var snapshotIdentity =
+            new DocumentIdentity(
+                IsOpen: snapshot.SourceOrigin is "client",
+                snapshot.ClientVersion,
+                snapshot.DocumentGeneration);
+
+        if (currentIdentity != snapshotIdentity)
+        {
+            Log(
+                "Formatting request " + requestSequence + " suppressing stale result for " +
+                textDocumentUri + " after " +
+                CommandLineInterface.FormatIntegerForDisplay(totalClock.ElapsedMilliseconds) +
+                " ms; captured identity: " + FormatDocumentIdentity(snapshotIdentity) +
+                "; current identity: " + FormatDocumentIdentity(currentIdentity));
+
+            return [];
         }
 
         var textEdits =
-            ComputeTextEditsForDocumentFormat(textDocumentContentBefore, newContent);
+            ComputeTextEditsForDocumentFormat(snapshot.Content, newContent);
 
         Log(
-            "Formatting document " + textDocumentUri + ": Computed " +
+            "Formatting request " + requestSequence + " returning " +
             textEdits.Count + " text edits with " +
-            textEdits.Sum(te => te.NewText.Length) + " aggregate chars replaced or added");
-
-        /*
-         * Publish diagnostics for the formatted document. The client will apply the returned
-         * edits, so locations refer to the formatted content. Publishing (even an empty list)
-         * ensures stale diagnostics are removed on formatting.
-         * */
-        await PublishFormattingDiagnosticsAsync(textDocumentUri, cancellationToken);
+            textEdits.Sum(te => te.NewText.Length) + " aggregate chars replaced or added for " +
+            textDocumentUri + " after " +
+            CommandLineInterface.FormatIntegerForDisplay(totalClock.ElapsedMilliseconds) +
+            " ms total; captured identity remains current: " +
+            FormatDocumentIdentity(currentIdentity));
 
         return textEdits;
     }
 
-    private ValueTask PublishFormattingDiagnosticsAsync(
-        string textDocumentUri,
+    private DocumentFormattingSnapshot? CaptureDocumentFormattingSnapshot(
+        string documentUri,
+        out double documentStateLockWaitMilliseconds,
+        out double workspaceReadMilliseconds)
+    {
+        DocumentFormattingSnapshot? snapshot = null;
+        var lockWaitClock = System.Diagnostics.Stopwatch.StartNew();
+
+        lock (_documentStateLock)
+        {
+            if (_clientTextDocumentContents.TryGetValue(documentUri, out var clientContent))
+            {
+                snapshot =
+                    CreateDocumentFormattingSnapshotLocked(
+                        documentUri,
+                        clientContent,
+                        sourceOrigin: "client");
+            }
+        }
+
+        documentStateLockWaitMilliseconds = lockWaitClock.Elapsed.TotalMilliseconds;
+        workspaceReadMilliseconds = 0;
+
+        if (snapshot is not null)
+        {
+            return snapshot;
+        }
+
+        var workspaceReadClock = System.Diagnostics.Stopwatch.StartNew();
+        var readResult = workspace.ReadFile(documentUri);
+        workspaceReadMilliseconds = workspaceReadClock.Elapsed.TotalMilliseconds;
+
+        if (readResult.IsErrOrNull() is { } readError)
+        {
+            Log(
+                "Failed reading " + documentUri + " from workspace for formatting: " +
+                readError.Kind + ": " + readError.Message);
+
+            return null;
+        }
+
+        var workspaceFile = OkFileOrNull(readResult);
+
+        lockWaitClock.Restart();
+
+        lock (_documentStateLock)
+        {
+            if (_clientTextDocumentContents.TryGetValue(documentUri, out var clientContent))
+            {
+                snapshot =
+                    CreateDocumentFormattingSnapshotLocked(
+                        documentUri,
+                        clientContent,
+                        sourceOrigin: "client");
+            }
+            else if (workspaceFile is not null)
+            {
+                snapshot =
+                    CreateDocumentFormattingSnapshotLocked(
+                        documentUri,
+                        workspaceFile.Text,
+                        sourceOrigin: "workspace");
+            }
+        }
+
+        documentStateLockWaitMilliseconds += lockWaitClock.Elapsed.TotalMilliseconds;
+
+        return snapshot;
+    }
+
+    private DocumentFormattingSnapshot CreateDocumentFormattingSnapshotLocked(
+        string documentUri,
+        string content,
+        string sourceOrigin)
+    {
+        int? clientVersion =
+            _clientTextDocumentVersions.TryGetValue(documentUri, out var version)
+            ?
+            version
+            :
+            null;
+
+        _documentGenerations.TryGetValue(documentUri, out var documentGeneration);
+
+        long? pendingUpdateSequence =
+            _pendingDocumentUpdates.TryGetValue(documentUri, out var pendingUpdate)
+            ?
+            pendingUpdate.Sequence
+            :
+            null;
+
+        int? languageServiceVersion =
+            _languageServiceDocumentVersions.TryGetValue(documentUri, out var acceptedVersion)
+            ?
+            acceptedVersion
+            :
+            null;
+
+        return
+            new DocumentFormattingSnapshot(
+                documentUri,
+                content,
+                clientVersion,
+                documentGeneration,
+                pendingUpdateSequence,
+                languageServiceVersion,
+                sourceOrigin);
+    }
+
+    private async Task<Result<DocumentFormattingError, string>> RunDocumentFormatterAsync(
+        long requestSequence,
+        DocumentFormattingSnapshot snapshot,
+        FormattingOptions options,
+        System.Diagnostics.Stopwatch totalClock,
         CancellationToken cancellationToken)
+    {
+        if (!_formattingRequestCapacity.Wait(0))
+        {
+            Log(
+                "Formatting request " + requestSequence + " rejected for " +
+                snapshot.DocumentUri + " because dedicated formatting capacity " +
+                FormattingRequestCapacity + " is full");
+
+            throw new System.InvalidOperationException(
+                "Dedicated formatting request capacity is full.");
+        }
+
+        var queuedCount = Interlocked.Increment(ref _queuedFormattingRequestCount);
+
+        Log(
+            "Formatting request " + requestSequence + " queued for dedicated execution for " +
+            snapshot.DocumentUri + "; queue depth: " + queuedCount +
+            "; active formatting requests: " + Volatile.Read(ref _activeFormattingRequestCount));
+
+        try
+        {
+            try
+            {
+                await _formattingConcurrency.WaitAsync(cancellationToken);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _queuedFormattingRequestCount);
+            }
+
+            var activeCount = Interlocked.Increment(ref _activeFormattingRequestCount);
+
+            try
+            {
+                Log(
+                    "Formatting request " + requestSequence + " starting formatter for " +
+                    snapshot.DocumentUri + " after " +
+                    CommandLineInterface.FormatIntegerForDisplay(totalClock.ElapsedMilliseconds) +
+                    " ms total; active formatting requests: " + activeCount);
+
+                return
+                    await Task.Factory.StartNew(
+                        () =>
+                        documentFormatter
+                        .FormatAsync(
+                            snapshot.DocumentUri,
+                            snapshot.Content,
+                            options,
+                            cancellationToken)
+                        .AsTask(),
+                        cancellationToken,
+                        TaskCreationOptions.DenyChildAttach | TaskCreationOptions.LongRunning,
+                        TaskScheduler.Default)
+                    .Unwrap();
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _activeFormattingRequestCount);
+                _formattingConcurrency.Release();
+            }
+        }
+        finally
+        {
+            _formattingRequestCapacity.Release();
+        }
+    }
+
+    private void QueueFormattingDiagnostics(
+        long requestSequence,
+        DocumentFormattingSnapshot snapshot)
     {
         if (formattingDiagnosticsProvider is not { } provider)
         {
-            return ValueTask.CompletedTask;
+            return;
         }
 
-        return
-            RunDiagnosticsAsync(
-                provider,
-                textDocumentUri,
-                cancellationToken);
+        if (!_formattingDiagnosticsCapacity.Wait(0))
+        {
+            Log(
+                "Formatting request " + requestSequence +
+                " skipped background failure diagnostics for " + snapshot.DocumentUri +
+                " because diagnostics capacity " + FormattingDiagnosticsCapacity + " is full");
+
+            return;
+        }
+
+        var cancellation = new CancellationTokenSource();
+        CancellationTokenSource? supersededCancellation;
+
+        lock (_formattingDiagnosticsLock)
+        {
+            _formattingDiagnosticsCancellations.Remove(
+                snapshot.DocumentUri,
+                out supersededCancellation);
+
+            _formattingDiagnosticsCancellations[snapshot.DocumentUri] = cancellation;
+        }
+
+        supersededCancellation?.Cancel();
+
+        Log(
+            "Formatting request " + requestSequence + " queued failure diagnostics for " +
+            snapshot.DocumentUri + " at document generation " + snapshot.DocumentGeneration);
+
+        _ =
+            Task.Run(
+                async () =>
+                {
+                    try
+                    {
+                        await _formattingDiagnosticsConcurrency.WaitAsync(cancellation.Token);
+
+                        try
+                        {
+                            await RunDiagnosticsAsync(
+                                provider,
+                                snapshot.DocumentUri,
+                                cancellation.Token);
+                        }
+                        finally
+                        {
+                            _formattingDiagnosticsConcurrency.Release();
+                        }
+
+                        Log(
+                            "Formatting request " + requestSequence +
+                            " completed background failure diagnostics for " +
+                            snapshot.DocumentUri);
+                    }
+                    catch (System.OperationCanceledException) when (cancellation.IsCancellationRequested)
+                    {
+                        Log(
+                            "Formatting request " + requestSequence +
+                            " canceled superseded background failure diagnostics for " +
+                            snapshot.DocumentUri);
+                    }
+                    catch (System.Exception exception)
+                    {
+                        Log(
+                            "Formatting request " + requestSequence +
+                            " background failure diagnostics failed for " +
+                            snapshot.DocumentUri + ": " + exception);
+                    }
+                    finally
+                    {
+                        lock (_formattingDiagnosticsLock)
+                        {
+                            if (_formattingDiagnosticsCancellations.TryGetValue(
+                                snapshot.DocumentUri,
+                                out var currentCancellation) &&
+                                ReferenceEquals(currentCancellation, cancellation))
+                            {
+                                _formattingDiagnosticsCancellations.Remove(snapshot.DocumentUri);
+                            }
+                        }
+
+                        cancellation.Dispose();
+                        _formattingDiagnosticsCapacity.Release();
+                    }
+                });
     }
+
+    private static string FormatDocumentIdentity(DocumentIdentity identity) =>
+        "open=" + identity.IsOpen +
+        ", version=" + FormatOptionalInteger(identity.ClientVersion) +
+        ", generation=" + identity.DocumentGeneration;
+
+    private static string FormatOptionalInteger(long? value) =>
+        value?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none";
+
+    private static string FormatDurationMilliseconds(double value) =>
+        value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>
     /// Provides hover information for a text document position.
@@ -1706,6 +2331,8 @@ public class LanguageServer(
             var appliedToOpenDocument = false;
             DocumentUpdateWork? update = null;
             DocumentUpdateWork? supersededUpdate = null;
+            var acceptedVersion = 0;
+            var pendingUpdateCount = 0;
 
             lock (_documentStateLock)
             {
@@ -1718,19 +2345,24 @@ public class LanguageServer(
                 {
                     _clientTextDocumentContents[textDocumentUri] = text;
                     appliedToOpenDocument = true;
+                    IncrementDocumentGenerationLocked(textDocumentUri);
 
                     _clientTextDocumentVersions.TryGetValue(textDocumentUri, out var version);
 
-                    (update, supersededUpdate) =
+                    (update, supersededUpdate, acceptedVersion, pendingUpdateCount) =
                         RegisterDocumentUpdateLocked(textDocumentUri, version, text);
                 }
             }
 
             if (appliedToOpenDocument)
             {
+                LogDocumentUpdateQueued(update!, acceptedVersion, pendingUpdateCount);
+
                 BumpSourceRevision();
 
                 CancelSupersededDocumentUpdate(supersededUpdate, update!);
+
+                await Task.Yield();
 
                 await ProcessDocumentUpdateAsync(update!, "saving document");
             }
@@ -1739,7 +2371,13 @@ public class LanguageServer(
                 Log(
                     "Ignoring text from save notification for document which is not open: " +
                     textDocumentUri);
+
+                await Task.Yield();
             }
+        }
+        else
+        {
+            await Task.Yield();
         }
 
         await RunDiagnosticsAsync(diagnosticsProvider, textDocumentUri, cancellationToken);

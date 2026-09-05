@@ -1,10 +1,12 @@
 using Pine.Core;
 using Pine.Elm;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.CommandLine;
 using System.IO;
 using System.Text;
+using System.Threading;
 
 namespace Pine.CLI;
 
@@ -73,11 +75,91 @@ public static class LangServerCommand
 
                     Console.Error.WriteLine("Creating log file at " + logFilePath);
 
-                    Directory.CreateDirectory(logFileDir);
+                    try
+                    {
+                        Directory.CreateDirectory(logFileDir);
 
-                    logFileStreams.Add(
-                        new FileStream(path: logFilePath, FileMode.Create, FileAccess.ReadWrite, FileShare.Read));
+                        logFileStreams.Add(
+                            new FileStream(path: logFilePath, FileMode.Create, FileAccess.ReadWrite, FileShare.Read));
+                    }
+                    catch (Exception exception)
+                    {
+                        Console.Error.WriteLine(
+                            "Failed creating optional language-server log file at " +
+                            logFilePath + ": " + exception);
+                    }
                 }
+
+                const int LogQueueCapacity = 4096;
+
+                var logLines = new BlockingCollection<string>(LogQueueCapacity);
+                long droppedLogLineCount = 0;
+
+                void WriteLogLine(string lineContent)
+                {
+                    try
+                    {
+                        Console.Error.WriteLine(lineContent);
+                    }
+                    catch
+                    {
+                    }
+
+                    for (var index = logFileStreams.Count - 1; 0 <= index; --index)
+                    {
+                        try
+                        {
+                            logFileStreams[index].Write(Encoding.UTF8.GetBytes(lineContent + "\n"));
+                            logFileStreams[index].Flush();
+                        }
+                        catch (Exception exception)
+                        {
+                            try
+                            {
+                                logFileStreams[index].Dispose();
+                            }
+                            catch
+                            {
+                            }
+
+                            logFileStreams.RemoveAt(index);
+
+                            try
+                            {
+                                Console.Error.WriteLine(
+                                    DateTimeOffset.UtcNow.ToString("HH-mm-ss.fff") +
+                                    ": Disabled failed language-server log file sink: " + exception);
+                            }
+                            catch
+                            {
+                            }
+                        }
+                    }
+                }
+
+                _ =
+                    System.Threading.Tasks.Task.Factory.StartNew(
+                        () =>
+                        {
+                            foreach (var lineContent in logLines.GetConsumingEnumerable())
+                            {
+                                var dropped = Interlocked.Exchange(ref droppedLogLineCount, 0);
+
+                                if (0 < dropped)
+                                {
+                                    WriteLogLine(
+                                        DateTimeOffset.UtcNow.ToString("HH-mm-ss.fff") +
+                                        ": Language-server log queue dropped " + dropped +
+                                        " lines after reaching capacity " + LogQueueCapacity);
+                                }
+
+                                WriteLogLine(lineContent);
+                            }
+                        },
+                        CancellationToken.None,
+                        System.Threading.Tasks.TaskCreationOptions.DenyChildAttach |
+                        System.Threading.Tasks.TaskCreationOptions.LongRunning,
+                        System.Threading.Tasks.TaskScheduler.Default);
 
                 void Log(string content)
                 {
@@ -85,12 +167,9 @@ public static class LangServerCommand
 
                     var lineContent = timeText + ": " + content;
 
-                    Console.Error.WriteLine(lineContent);
-
-                    foreach (var logFileStream in logFileStreams)
+                    if (!logLines.TryAdd(lineContent))
                     {
-                        logFileStream.Write(Encoding.UTF8.GetBytes(lineContent + "\n"));
-                        logFileStream.Flush();
+                        Interlocked.Increment(ref droppedLogLineCount);
                     }
                 }
 
@@ -117,7 +196,7 @@ public static class LangServerCommand
                     new StreamJsonRpc.HeaderDelimitedMessageHandler(
                         sendingStream: Console.OpenStandardOutput(),
                         receivingStream: Console.OpenStandardInput(),
-                        formatter: LanguageServerRpcTarget.JsonRpcMessageFormatterDefault());
+                        formatter: LanguageServerRpcTarget.JsonRpcMessageFormatterDefault(Log));
 
                 var jsonRpcTarget = new LanguageServerRpcTarget(languageServer, LogDelegate: Log);
 
@@ -132,7 +211,7 @@ public static class LangServerCommand
 
                 while (true)
                 {
-                    System.Threading.Thread.Sleep(TimeSpan.FromSeconds(1));
+                    Thread.Sleep(TimeSpan.FromSeconds(1));
                 }
 
                 return 0;

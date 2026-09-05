@@ -35,10 +35,18 @@ public class LanguageServerDiagnosticsTests
     {
         private readonly ConcurrentQueue<PublishDiagnosticsParams> _published = new();
 
-        public void Publish(PublishDiagnosticsParams publishParams) =>
+        private TaskCompletionSource _nextPublication =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void Publish(PublishDiagnosticsParams publishParams)
+        {
             _published.Enqueue(publishParams);
+            _nextPublication.TrySetResult();
+        }
 
         public IReadOnlyList<PublishDiagnosticsParams> All => [.. _published];
+
+        public Task NextPublication => _nextPublication.Task;
 
         public IReadOnlyList<string> Messages(string documentUri) =>
             [
@@ -53,6 +61,9 @@ public class LanguageServerDiagnosticsTests
         public void Clear()
         {
             _published.Clear();
+
+            _nextPublication =
+                new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         }
     }
 
@@ -428,7 +439,7 @@ public class LanguageServerDiagnosticsTests
     }
 
     [Fact]
-    public async Task Formatting_returns_edits_and_updates_the_open_document()
+    public async Task Formatting_returns_edits_without_updating_the_open_document()
     {
         var provider = new StubDiagnosticsProvider();
 
@@ -461,12 +472,11 @@ public class LanguageServerDiagnosticsTests
             .Should().Be("module Main exposing (..)\n\n\nname =\n 0\n");
 
         server.TryGetDocumentText(documentUri)
-            .Should().Be("module Main exposing (..)\n\n\nname =\n 0\n");
+            .Should().Be("module Main exposing (..)\n\n\nname =\n  0\n");
 
-        formattingProvider.Requests.Should().Equal(documentUri);
+        formattingProvider.Requests.Should().BeEmpty();
 
-        published.All.Should().ContainSingle()
-            .Which.Uri.Should().Be(documentUri);
+        published.All.Should().BeEmpty();
     }
 
     [Fact]
@@ -499,6 +509,8 @@ public class LanguageServerDiagnosticsTests
                 new FormattingOptions());
 
         edits.Should().BeEmpty();
+
+        await published.NextPublication.WaitAsync(System.TimeSpan.FromSeconds(5));
 
         published.Messages(documentUri).Should().Equal("syntax error");
     }

@@ -92,7 +92,7 @@ public class LanguageServerDocumentSyncTests
             var completed =
                 await Task.WhenAny(
                     session.TwoFilesStarted,
-                    Task.Delay(System.TimeSpan.FromSeconds(5)));
+                    Task.Delay(TimeSpan.FromSeconds(5)));
 
             completed.Should().Be(session.TwoFilesStarted);
             session.MaximumActiveRequests.Should().BeGreaterThan(1);
@@ -148,8 +148,8 @@ public class LanguageServerDocumentSyncTests
                 " version 2 with " +
                 CommandLineInterface.FormatIntegerForDisplay(changedContent.Length) +
                 " chars in language service in ",
-                System.StringComparison.Ordinal) &&
-            log.EndsWith(" ms", System.StringComparison.Ordinal));
+                StringComparison.Ordinal) &&
+            log.EndsWith(" ms", StringComparison.Ordinal));
 
         /*
          * The contents from the client take precedence over the contents on the backing store.
@@ -204,7 +204,7 @@ public class LanguageServerDocumentSyncTests
                 new VersionedTextDocumentIdentifier(documentUri, Version: 3),
                 [new TextDocumentContentChangeEvent(null, null, "version 3")]);
 
-        await Task.WhenAll(opened, second, third).WaitAsync(System.TimeSpan.FromSeconds(5));
+        await Task.WhenAll(opened, second, third).WaitAsync(TimeSpan.FromSeconds(5));
 
         session.AcceptedContent.Should().Be("version 3");
         session.CanceledCount.Should().Be(2);
@@ -234,12 +234,13 @@ public class LanguageServerDocumentSyncTests
                         new Position(0, 0)),
                     cancellation.Token));
 
-        await session.Started.WaitAsync(System.TimeSpan.FromSeconds(5));
+        await session.Started.WaitAsync(TimeSpan.FromSeconds(5));
         cancellation.Cancel();
 
         Func<Task> awaitHover = async () => await hover;
 
         await awaitHover.Should().ThrowAsync<System.OperationCanceledException>();
+
         logs.Should().Contain(
             log => log.Contains("Client cancellation observed while handling ProvideHoverRequest"));
     }
