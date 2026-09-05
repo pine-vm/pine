@@ -17,7 +17,7 @@ public static class CopyAppStateCommand
     {
         var command = new Command("copy-app-state", "Copy the state of an Elm backend app.");
 
-        var sourceArgument = new Argument<string>("source");
+        var sourceArgument = PineCliCommand.RequiredArgument("source");
 
         var destinationArgument =
             new Argument<string?>("destination")
@@ -37,7 +37,7 @@ public static class CopyAppStateCommand
         command.SetAction(
             (parseResult) =>
             {
-                var source = parseResult.GetValue(sourceArgument);
+                var source = parseResult.GetRequiredValue(sourceArgument);
                 var destination = parseResult.GetValue(destinationArgument);
                 var sourcePassword = parseResult.GetValue(sourcePasswordOption);
                 var destinationPassword = parseResult.GetValue(destinationPasswordOption);

@@ -6,10 +6,12 @@ public static class ElmCommand
 {
     public static Command Create()
     {
-        var command = new Command("elm", "Elm development tools.");
-
-        command.Add(Elm.FormatCommand.Create());
-        command.Add(Elm.TestCommand.Create());
+        var command =
+            new Command("elm", "Elm development tools.")
+            {
+                Elm.FormatCommand.Create(),
+                Elm.TestCommand.Create()
+            };
 
         return command;
     }

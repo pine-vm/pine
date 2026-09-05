@@ -16,7 +16,7 @@ public static class ListFunctionsCommand
         var command =
             new Command("list-functions", "List the functions exposed by an Elm app for application on a database.");
 
-        var siteArgument = new Argument<string>("process-site");
+        var siteArgument = PineCliCommand.RequiredArgument("process-site");
 
         var sitePasswordOption = new Option<string?>("--site-password");
 
@@ -26,7 +26,7 @@ public static class ListFunctionsCommand
         command.SetAction(
             (parseResult) =>
             {
-                var site = parseResult.GetValue(siteArgument);
+                var site = parseResult.GetRequiredValue(siteArgument);
                 var sitePassword = parseResult.GetValue(sitePasswordOption);
 
                 var actualPassword = sitePassword ?? UserSecrets.LoadPasswordForSite(site);

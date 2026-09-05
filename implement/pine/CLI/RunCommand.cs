@@ -18,7 +18,7 @@ public static class RunCommand
     {
         var command = new Command("run", "Run an Elm app.");
 
-        var entryPointArgument = new Argument<string>("entry-point-module");
+        var entryPointArgument = PineCliCommand.RequiredArgument("entry-point-module");
 
         var inputDirectoryOption = new Option<string?>("--input-directory");
 
@@ -28,7 +28,7 @@ public static class RunCommand
         command.SetAction(
             (parseResult) =>
             {
-                var entryPoint = parseResult.GetValue(entryPointArgument);
+                var entryPoint = parseResult.GetRequiredValue(entryPointArgument);
                 var inputDirectory = parseResult.GetValue(inputDirectoryOption);
 
                 var actualInputDirectory = inputDirectory ?? Environment.CurrentDirectory;

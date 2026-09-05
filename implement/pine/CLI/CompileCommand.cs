@@ -22,14 +22,14 @@ public static class CompileCommand
                 "compile",
                 "Compile app source code the same way as would be done when deploying a web service.");
 
-        var sourceArgument = new Argument<string>("source");
+        var sourceArgument = PineCliCommand.RequiredArgument("source");
 
         command.Add(sourceArgument);
 
         command.SetAction(
             (parseResult) =>
             {
-                var source = parseResult.GetValue(sourceArgument);
+                var source = parseResult.GetRequiredValue(sourceArgument);
 
                 var compileReport = CompileAppAndSaveCompositionToZipArchive(source).report;
 

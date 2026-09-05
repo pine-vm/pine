@@ -19,6 +19,12 @@ public class PineCliCommand
 
     internal static int AdminInterfaceDefaultPort => 4000;
 
+    internal static Argument<string> RequiredArgument(string name) =>
+        new(name)
+        {
+            Arity = ArgumentArity.ExactlyOne
+        };
+
     internal static int Invoke(string[] args)
     {
         return MainLessDispose(args, dynamicPGOShare: null);

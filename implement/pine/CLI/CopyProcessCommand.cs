@@ -13,7 +13,7 @@ public static class CopyProcessCommand
         var command =
             new Command("copy-process", "Copy all files needed to restore a process and store them in a zip archive.");
 
-        var siteArgument = new Argument<string>("process-site");
+        var siteArgument = PineCliCommand.RequiredArgument("process-site");
 
         var sitePasswordOption = new Option<string?>("--site-password");
 
@@ -23,7 +23,7 @@ public static class CopyProcessCommand
         command.SetAction(
             (parseResult) =>
             {
-                var site = parseResult.GetValue(siteArgument);
+                var site = parseResult.GetRequiredValue(siteArgument);
                 var sitePassword = parseResult.GetValue(sitePasswordOption);
 
                 var actualSite = MapSiteForCommandLineArgument(site);

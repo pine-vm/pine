@@ -20,9 +20,9 @@ public static class DeployCommand
                 "deploy",
                 "Deploy an app to an Elm backend process. Deployment implies migration from the previous app state if not specified otherwise.");
 
-        var sourceArgument = new Argument<string>("source");
+        var sourceArgument = PineCliCommand.RequiredArgument("source");
 
-        var siteArgument = new Argument<string>("process-site");
+        var siteArgument = PineCliCommand.RequiredArgument("process-site");
 
         var sitePasswordOption = new Option<string?>("--site-password");
 
@@ -36,8 +36,8 @@ public static class DeployCommand
         command.SetAction(
             (parseResult) =>
             {
-                var source = parseResult.GetValue(sourceArgument);
-                var site = parseResult.GetValue(siteArgument);
+                var source = parseResult.GetRequiredValue(sourceArgument);
+                var site = parseResult.GetRequiredValue(siteArgument);
                 var sitePassword = parseResult.GetValue(sitePasswordOption);
                 var initAppState = parseResult.GetValue(initAppStateOption);
 

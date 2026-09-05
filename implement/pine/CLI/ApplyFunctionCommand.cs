@@ -18,9 +18,9 @@ public static class ApplyFunctionCommand
         var command =
             new Command("apply-function", "Apply an Elm function on a database containing the state of an Elm app.");
 
-        var siteArgument = new Argument<string>("process-site");
+        var siteArgument = PineCliCommand.RequiredArgument("process-site");
 
-        var functionNameArgument = new Argument<string>("function-name");
+        var functionNameArgument = PineCliCommand.RequiredArgument("function-name");
 
         var sitePasswordOption = new Option<string?>("--site-password");
 
@@ -42,10 +42,10 @@ public static class ApplyFunctionCommand
         command.SetAction(
             (parseResult) =>
             {
-                var site = parseResult.GetValue(siteArgument);
-                var functionName = parseResult.GetValue(functionNameArgument);
+                var site = parseResult.GetRequiredValue(siteArgument);
+                var functionName = parseResult.GetRequiredValue(functionNameArgument);
                 var sitePassword = parseResult.GetValue(sitePasswordOption);
-                var arguments = parseResult.GetValue(argumentOption);
+                var arguments = parseResult.GetValue(argumentOption) ?? [];
                 var commitResultingState = parseResult.GetValue(commitResultingStateOption);
 
                 var actualPassword = sitePassword ?? UserSecrets.LoadPasswordForSite(site);

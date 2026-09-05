@@ -17,7 +17,7 @@ public static class DescribeCommand
                 "describe",
                 "Describe the artifact at the given location. Valid locations can also be URLs into git repositories or paths in the local file system.");
 
-        var sourcePathParameter = new Argument<string>("source-path");
+        var sourcePathParameter = PineCliCommand.RequiredArgument("source-path");
 
         var listBlobsOption = new Option<bool>("--list-blobs");
 
@@ -34,7 +34,7 @@ public static class DescribeCommand
         command.SetAction(
             (parseResult) =>
             {
-                var sourcePath = parseResult.GetValue(sourcePathParameter);
+                var sourcePath = parseResult.GetRequiredValue(sourcePathParameter);
                 var listBlobs = parseResult.GetValue(listBlobsOption);
                 var compileZipArchive = parseResult.GetValue(compileZipArchiveOption);
 

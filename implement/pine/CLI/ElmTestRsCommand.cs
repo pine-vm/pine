@@ -35,7 +35,7 @@ public static class ElmTestRsCommand
 
                 var elmTestResult = CompileAndElmTestRs(source: source ?? Environment.CurrentDirectory);
 
-                static void saveTextToFileAndReportToConsole(string filePath, string text)
+                static void SaveTextToFileAndReportToConsole(string filePath, string text)
                 {
                     filePath = Path.GetFullPath(filePath);
 
@@ -45,10 +45,10 @@ public static class ElmTestRsCommand
                     Console.WriteLine("Saved " + text?.Length + " characters to " + filePath);
                 }
 
-                if (elmTestRsOutput != null)
+                if (elmTestRsOutput is not null)
                 {
-                    saveTextToFileAndReportToConsole(elmTestRsOutput + ".stdout", elmTestResult.ProcessOutput.StandardOutput ?? "");
-                    saveTextToFileAndReportToConsole(elmTestRsOutput + ".stderr", elmTestResult.ProcessOutput.StandardError ?? "");
+                    SaveTextToFileAndReportToConsole(elmTestRsOutput + ".stdout", elmTestResult.ProcessOutput.StandardOutput ?? "");
+                    SaveTextToFileAndReportToConsole(elmTestRsOutput + ".stderr", elmTestResult.ProcessOutput.StandardError ?? "");
                 }
 
                 if (0 < elmTestResult.ProcessOutput.StandardError?.Length)
@@ -101,7 +101,7 @@ public static class ElmTestRsCommand
     {
         var (_, compiledAppFiles) = CompileCommand.CompileApp(source);
 
-        if (compiledAppFiles == null)
+        if (compiledAppFiles is null)
             throw new Exception("Compilation failed");
 
         return ElmTestRs.Run(compiledAppFiles);

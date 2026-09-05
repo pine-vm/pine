@@ -14,7 +14,7 @@ public static class TruncateProcessHistoryCommand
                 "truncate-process-history",
                 "Remove parts of the process history that are not needed to restore the process.");
 
-        var siteArgument = new Argument<string>("process-site");
+        var siteArgument = PineCliCommand.RequiredArgument("process-site");
 
         var sitePasswordOption = new Option<string?>("--site-password");
 
@@ -24,7 +24,7 @@ public static class TruncateProcessHistoryCommand
         command.SetAction(
             (parseResult) =>
             {
-                var site = parseResult.GetValue(siteArgument);
+                var site = parseResult.GetRequiredValue(siteArgument);
                 var sitePassword = parseResult.GetValue(sitePasswordOption);
 
                 var actualPassword = sitePassword ?? UserSecrets.LoadPasswordForSite(site);

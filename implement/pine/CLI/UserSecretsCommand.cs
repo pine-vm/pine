@@ -10,9 +10,9 @@ public static class UserSecretsCommand
     {
         var command = new Command("user-secrets", "Manage passwords for accessing the admin interfaces of servers.");
 
-        var siteArgument = new Argument<string>("site");
+        var siteArgument = PineCliCommand.RequiredArgument("site");
 
-        var passwordArgument = new Argument<string>("password");
+        var passwordArgument = PineCliCommand.RequiredArgument("password");
 
         var storeCommand =
             new Command("store", "Store a password for a site")
@@ -24,8 +24,8 @@ public static class UserSecretsCommand
         storeCommand.SetAction(
             (parseResult) =>
             {
-                var site = parseResult.GetValue(siteArgument);
-                var password = parseResult.GetValue(passwordArgument);
+                var site = parseResult.GetRequiredValue(siteArgument);
+                var password = parseResult.GetRequiredValue(passwordArgument);
 
                 UserSecrets.StorePasswordForSite(site, password);
 

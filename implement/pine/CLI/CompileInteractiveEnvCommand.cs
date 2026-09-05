@@ -24,7 +24,8 @@ public static class CompileInteractiveEnvCommand
             new Option<string[]>("--env-source")
             {
                 AllowMultipleArgumentsPerToken = true,
-                Arity = ArgumentArity.ZeroOrMore
+                Arity = ArgumentArity.OneOrMore,
+                Required = true
             };
 
         var outputCompactBuildOption =
@@ -56,7 +57,7 @@ public static class CompileInteractiveEnvCommand
         command.SetAction(
             (parseResult) =>
             {
-                var envSources = parseResult.GetValue(envSourceOption);
+                var envSources = parseResult.GetRequiredValue(envSourceOption);
                 var outputCompactBuild = parseResult.GetValue(outputCompactBuildOption);
                 var rootModuleFilePaths = parseResult.GetValue(rootModuleFilePathOption);
                 var skipLowering = parseResult.GetValue(skipLoweringOption);

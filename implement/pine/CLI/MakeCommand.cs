@@ -28,7 +28,7 @@ public static class MakeCommand
     {
         var command = new Command("make", "Compile Elm code into JavaScript, HTML, or other files.");
 
-        var entryPointElmFileArgument = new Argument<string>("path-to-elm-file");
+        var entryPointElmFileArgument = PineCliCommand.RequiredArgument("path-to-elm-file");
 
         var outputOption = new Option<string?>("--output");
 
@@ -47,7 +47,7 @@ public static class MakeCommand
         command.SetAction(
             (parseResult) =>
             {
-                var entryPoint = parseResult.GetValue(entryPointElmFileArgument);
+                var entryPoint = parseResult.GetRequiredValue(entryPointElmFileArgument);
                 var output = parseResult.GetValue(outputOption);
                 var inputDirectory = parseResult.GetValue(inputDirectoryOption);
                 var debug = parseResult.GetValue(debugOption);
@@ -118,7 +118,7 @@ public static class MakeCommand
                 "Unexpected result type from loading input directory: " + loadInputDirectoryResult);
         }
 
-        Result<string, LoadForMakeResult> loadForElmMake()
+        Result<string, LoadForMakeResult> LoadForElmMake()
         {
             if (0 < loadInputDirectoryFailedFiles.Count)
             {
@@ -295,7 +295,7 @@ public static class MakeCommand
                     });
         }
 
-        var loadSourceFilesResult = loadForElmMake();
+        var loadSourceFilesResult = LoadForElmMake();
 
         if (loadSourceFilesResult.IsErrOrNull() is { } loadSourceFilesErr)
         {

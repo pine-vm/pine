@@ -27,7 +27,12 @@ public static class RunCacheServerCommand
                 Arity = ArgumentArity.ZeroOrMore
             };
 
-        var fileCacheDirectoryOption = new Option<string>("--file-cache-directory");
+        var fileCacheDirectoryOption =
+            new Option<string>("--file-cache-directory")
+            {
+                Arity = ArgumentArity.ExactlyOne,
+                Required = true
+            };
 
         command.Add(gitCloneUrlPrefixOption);
         command.Add(urlOption);
@@ -36,16 +41,16 @@ public static class RunCacheServerCommand
         command.SetAction(
             (parseResult) =>
             {
-                var urls = parseResult.GetValue(urlOption);
-                var gitCloneUrlPrefixes = parseResult.GetValue(gitCloneUrlPrefixOption);
-                var fileCacheDirectory = parseResult.GetValue(fileCacheDirectoryOption);
+                var urls = parseResult.GetValue(urlOption) ?? [];
+                var gitCloneUrlPrefixes = parseResult.GetValue(gitCloneUrlPrefixOption) ?? [];
+                var fileCacheDirectory = parseResult.GetRequiredValue(fileCacheDirectoryOption);
 
                 Console.WriteLine("Starting HTTP server with git cache...");
 
                 var serverTask =
                     GitPartialForCommitServer.Run(
-                        urls: urls!,
-                        gitCloneUrlPrefixes: gitCloneUrlPrefixes!,
+                        urls: urls,
+                        gitCloneUrlPrefixes: gitCloneUrlPrefixes,
                         fileCacheDirectory: fileCacheDirectory);
 
                 Console.WriteLine("Completed starting HTTP server with git cache at '" + string.Join(", ", urls) + "'.");
