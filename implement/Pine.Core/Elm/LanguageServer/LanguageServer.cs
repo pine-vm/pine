@@ -8,6 +8,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -70,6 +71,16 @@ public class LanguageServer(
 
     private long _nextFormattingRequestSequence;
 
+    private const int CodeLensRefreshDebounceMilliseconds = 200;
+
+    private readonly Lock _codeLensRefreshLock = new();
+
+    private CancellationTokenSource? _codeLensRefreshDelayCancellation;
+
+    private System.Func<Task>? _requestCodeLensRefresh;
+
+    private bool _clientSupportsCodeLensRefresh;
+
     private const int FormattingRequestCapacity = 8;
 
     private readonly SemaphoreSlim _formattingRequestCapacity =
@@ -108,6 +119,12 @@ public class LanguageServer(
         int? ClientVersion,
         long DocumentGeneration);
 
+    private static readonly JsonSerializerOptions CodeLensDataJsonSerializerOptions =
+        new()
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        };
+
     private sealed class DocumentUpdateWork(
         string documentUri,
         int version,
@@ -125,6 +142,11 @@ public class LanguageServer(
         public string Content { get; } = content;
 
         public long Sequence { get; } = sequence;
+
+        private readonly TaskCompletionSource _completion =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task Completion => _completion.Task;
 
         public CancellationToken CancellationToken
         {
@@ -153,6 +175,8 @@ public class LanguageServer(
                 _cancellation = null;
             }
         }
+
+        public void Complete() => _completion.TrySetResult();
     }
 
     private IReadOnlyList<WorkspaceFolder> _workspaceFolders = [];
@@ -243,6 +267,14 @@ public class LanguageServer(
     }
 
     /// <summary>
+    /// Sets the channel used to request that the client refresh all CodeLens displays.
+    /// </summary>
+    public void SetCodeLensRefreshPublisher(System.Func<Task>? requestCodeLensRefresh)
+    {
+        _requestCodeLensRefresh = requestCodeLensRefresh;
+    }
+
+    /// <summary>
     /// Returns the text currently known for a document: the client-managed content when the
     /// document is open, otherwise the content from the workspace.
     /// </summary>
@@ -282,6 +314,9 @@ public class LanguageServer(
 
         _workspaceFolders = initializeParams.WorkspaceFolders ?? [];
 
+        _clientSupportsCodeLensRefresh =
+            initializeParams.Capabilities.Workspace?.CodeLens?.RefreshSupport ?? false;
+
         var requests = new List<KeyValuePair<string, object>>();
 
         if (initializeParams.Capabilities.Workspace?.DidChangeWatchedFiles?.DynamicRegistration ?? false)
@@ -317,6 +352,8 @@ public class LanguageServer(
                     DocumentSymbolProvider = true,
 
                     ReferencesProvider = true,
+
+                    CodeLensProvider = new CodeLensOptions(ResolveProvider: true),
 
                     RenameProvider = true,
 
@@ -919,6 +956,8 @@ public class LanguageServer(
                 " chars in language service in " +
                 CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) +
                 " ms");
+
+            QueueCodeLensRefresh();
         }
         catch (System.OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -939,6 +978,7 @@ public class LanguageServer(
                 }
             }
 
+            update.Complete();
             update.Dispose();
         }
     }
@@ -1045,6 +1085,8 @@ public class LanguageServer(
             decodedUri,
             closeGeneration,
             "close fallback");
+
+        QueueCodeLensRefresh();
 
         if (backingContent is null && !IsDocumentOpen(decodedUri))
         {
@@ -1341,6 +1383,73 @@ public class LanguageServer(
         }
 
         LoadDirectDependenciesFromElmJsonFiles(languageServiceState);
+
+        if (anyChangeApplied)
+        {
+            QueueCodeLensRefresh();
+        }
+    }
+
+    private void QueueCodeLensRefresh()
+    {
+        if (!_clientSupportsCodeLensRefresh ||
+            _requestCodeLensRefresh is null ||
+            WorkspaceInitializationTask?.IsCompleted != true)
+        {
+            return;
+        }
+
+        var cancellation = new CancellationTokenSource();
+        CancellationTokenSource? supersededCancellation;
+
+        lock (_codeLensRefreshLock)
+        {
+            supersededCancellation = _codeLensRefreshDelayCancellation;
+            _codeLensRefreshDelayCancellation = cancellation;
+        }
+
+        supersededCancellation?.Cancel();
+        supersededCancellation?.Dispose();
+
+        _ = PublishCodeLensRefreshAfterDelayAsync(cancellation);
+    }
+
+    private async Task PublishCodeLensRefreshAfterDelayAsync(
+        CancellationTokenSource cancellation)
+    {
+        try
+        {
+            await Task.Delay(CodeLensRefreshDebounceMilliseconds, cancellation.Token);
+
+            System.Func<Task>? publisher;
+
+            lock (_codeLensRefreshLock)
+            {
+                if (!ReferenceEquals(_codeLensRefreshDelayCancellation, cancellation))
+                {
+                    return;
+                }
+
+                _codeLensRefreshDelayCancellation = null;
+                publisher = _requestCodeLensRefresh;
+            }
+
+            if (publisher is not null)
+            {
+                await publisher();
+            }
+        }
+        catch (System.OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+        }
+        catch (System.Exception exception)
+        {
+            Log("Failed requesting workspace/codeLens/refresh: " + exception);
+        }
+        finally
+        {
+            cancellation.Dispose();
+        }
     }
 
     private void CollectDirectDependenciesFromElmJsonFile(string elmJson)
@@ -2177,24 +2286,192 @@ public class LanguageServer(
     }
 
     /// <summary>
+    /// Provides unresolved reference-count lenses for module-level declarations in a document.
+    /// </summary>
+    public IReadOnlyList<Protocol.CodeLens> TextDocument_codeLens(
+        CodeLensParams codeLensParams,
+        CancellationToken cancellationToken = default)
+    {
+        var documentUri = DocumentUriCleaned(codeLensParams.TextDocument.Uri);
+
+        WaitForPendingDocumentUpdate(documentUri, cancellationToken);
+
+        if (!TryCaptureCodeLensDocumentIdentity(documentUri, out var identity))
+        {
+            Log("Skipping CodeLens discovery for document state not accepted by the language service: " + documentUri);
+            return [];
+        }
+
+        var symbols =
+            TextDocument_documentSymbol(
+               codeLensParams.TextDocument with { Uri = documentUri },
+               cancellationToken);
+
+        if (!CodeLensDocumentIdentityRemainsCurrent(documentUri, identity))
+        {
+            Log("Suppressing stale CodeLens discovery result for " + documentUri);
+            return [];
+        }
+
+        return
+            [
+            ..symbols.Select(
+               symbol =>
+               {
+                   var displayPosition = symbol.Range.Start;
+                   var declarationPosition = symbol.SelectionRange.Start;
+                   var data =
+                       JsonSerializer.SerializeToElement(
+                           new CodeLensResolveData(
+                               documentUri,
+                               declarationPosition,
+                               identity.ClientVersion,
+                               identity.DocumentGeneration),
+                           CodeLensDataJsonSerializerOptions);
+
+                   return
+                       new Protocol.CodeLens(
+                           Range: new Range(displayPosition, displayPosition),
+                           Command: null,
+                           Data: data);
+               })
+            ];
+    }
+
+    /// <summary>
+    /// Resolves a reference-count lens by querying usage locations for its declaration.
+    /// </summary>
+    public Protocol.CodeLens CodeLens_resolve(
+        Protocol.CodeLens codeLens,
+        CancellationToken cancellationToken = default)
+    {
+        CodeLensResolveData? data;
+
+        try
+        {
+            data =
+               codeLens.Data?.Deserialize<CodeLensResolveData>(
+                   CodeLensDataJsonSerializerOptions);
+        }
+        catch (JsonException exception)
+        {
+            Log("Leaving CodeLens unresolved because its data is invalid: " + exception.Message);
+            return codeLens with { Command = null };
+        }
+
+        if (data is null ||
+            !TryCaptureCodeLensDocumentIdentity(data.DocumentUri, out var identity) ||
+            identity.ClientVersion != data.ClientVersion ||
+            identity.DocumentGeneration != data.DocumentGeneration)
+        {
+            Log("Leaving stale or invalid CodeLens unresolved");
+            return codeLens with { Command = null };
+        }
+
+        var references =
+            TextDocument_references(
+               new Protocol.ReferenceParams(
+                   new TextDocumentIdentifier(data.DocumentUri),
+                   data.Position,
+                   new ReferenceContext(IncludeDeclaration: false)),
+               cancellationToken);
+
+        if (!CodeLensDocumentIdentityRemainsCurrent(data.DocumentUri, identity))
+        {
+            Log("Suppressing stale CodeLens resolution result for " + data.DocumentUri);
+            return codeLens with { Command = null };
+        }
+
+        var referenceCount = references.Count;
+
+        return
+            codeLens with
+            {
+                Command =
+                   new Protocol.Command(
+                       Title: referenceCount + (referenceCount is 1 ? " reference" : " references"),
+                       Identifier: "pine.client.peekReferences",
+                       Arguments: [data.DocumentUri, data.Position]),
+            };
+    }
+
+    private bool TryCaptureCodeLensDocumentIdentity(
+        string documentUri,
+        out DocumentIdentity identity)
+    {
+        lock (_documentStateLock)
+        {
+            identity = GetDocumentIdentityLocked(documentUri);
+
+            return
+               identity.IsOpen &&
+               !_pendingDocumentUpdates.ContainsKey(documentUri) &&
+               _languageServiceDocumentVersions.TryGetValue(documentUri, out var acceptedVersion) &&
+               identity.ClientVersion == acceptedVersion;
+        }
+    }
+
+    private void WaitForPendingDocumentUpdate(
+        string documentUri,
+        CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            Task? pendingCompletion;
+
+            lock (_documentStateLock)
+            {
+                pendingCompletion =
+                    _pendingDocumentUpdates.TryGetValue(documentUri, out var pendingUpdate)
+                    ?
+                    pendingUpdate.Completion
+                    :
+                    null;
+            }
+
+            if (pendingCompletion is null)
+            {
+                return;
+            }
+
+            pendingCompletion.WaitAsync(cancellationToken).GetAwaiter().GetResult();
+        }
+    }
+
+    private bool CodeLensDocumentIdentityRemainsCurrent(
+        string documentUri,
+        DocumentIdentity expectedIdentity)
+    {
+        lock (_documentStateLock)
+        {
+            return
+               GetDocumentIdentityLocked(documentUri) == expectedIdentity &&
+               !_pendingDocumentUpdates.ContainsKey(documentUri) &&
+               _languageServiceDocumentVersions.TryGetValue(documentUri, out var acceptedVersion) &&
+               expectedIdentity.ClientVersion == acceptedVersion;
+        }
+    }
+
+    /// <summary>
     /// Provides reference locations for a text document position.
     /// </summary>
     public IReadOnlyList<Location> TextDocument_references(
-        TextDocumentPositionParams positionParams,
+        Protocol.ReferenceParams referenceParams,
         CancellationToken cancellationToken = default)
     {
-        var textDocumentUri = DocumentUriCleaned(positionParams.TextDocument.Uri);
+        var textDocumentUri = DocumentUriCleaned(referenceParams.TextDocument.Uri);
 
         var clock = System.Diagnostics.Stopwatch.StartNew();
 
-        Log("TextDocument_references: " + textDocumentUri + " at " + positionParams.Position);
+        Log("TextDocument_references: " + textDocumentUri + " at " + referenceParams.Position);
 
         var provideReferenceResult =
             TextDocumentReferencesRequest(
-                new ProvideHoverRequestStruct(
+                new ProvideReferencesRequestStruct(
                     InterfaceFileLocationFromUri(textDocumentUri),
-                    PositionLineNumber: (int)positionParams.Position.Line + 1,
-                    PositionColumn: (int)positionParams.Position.Character + 1),
+                    PositionLineNumber: (int)referenceParams.Position.Line + 1,
+                    PositionColumn: (int)referenceParams.Position.Character + 1,
+                    IncludeDeclaration: referenceParams.Context.IncludeDeclaration),
                 cancellationToken);
 
         {
@@ -2943,7 +3220,7 @@ public class LanguageServer(
     /// Requests reference locations from the language service.
     /// </summary>
     public Result<string, IReadOnlyList<LocationInFile>> TextDocumentReferencesRequest(
-        ProvideHoverRequestStruct referenceRequest,
+        ProvideReferencesRequestStruct referenceRequest,
         CancellationToken cancellationToken = default)
     {
         var genericRequestResult =

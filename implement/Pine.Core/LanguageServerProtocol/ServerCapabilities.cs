@@ -16,7 +16,8 @@ public record ServerCapabilities(
     bool? TypeDefinitionProvider = null,
     bool? DocumentSymbolProvider = null,
     bool? ReferencesProvider = null,
-    bool? RenameProvider = null);
+    bool? RenameProvider = null,
+    CodeLensOptions? CodeLensProvider = null);
 
 /// <summary>
 /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocumentSyncKind

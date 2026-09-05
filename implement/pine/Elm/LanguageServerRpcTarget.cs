@@ -32,6 +32,9 @@ public record LanguageServerRpcTarget(
 
             Server.SetDiagnosticsPublisher(
                 value is null ? null : PublishDiagnostics);
+
+            Server.SetCodeLensRefreshPublisher(
+                value is null ? null : RequestCodeLensRefreshAsync);
         }
     }
 
@@ -422,12 +425,32 @@ public record LanguageServerRpcTarget(
         }
     }
 
+    [JsonRpcMethod("textDocument/codeLens", UseSingleObjectParameterDeserialization = true)]
+    public async Task<IReadOnlyList<CodeLens>> TextDocument_codeLens(
+        CodeLensParams codeLensParams,
+        CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+
+        return Server.TextDocument_codeLens(codeLensParams, cancellationToken);
+    }
+
+    [JsonRpcMethod("codeLens/resolve", UseSingleObjectParameterDeserialization = true)]
+    public async Task<CodeLens> CodeLens_resolve(
+        CodeLens codeLens,
+        CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+
+        return Server.CodeLens_resolve(codeLens, cancellationToken);
+    }
+
     /// <summary>
     /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_references
     /// </summary>
     [JsonRpcMethod("textDocument/references", UseSingleObjectParameterDeserialization = true)]
     public async Task<IReadOnlyList<Location>> TextDocument_references(
-        TextDocumentPositionParams referenceParams,
+        ReferenceParams referenceParams,
         CancellationToken cancellationToken)
     {
         var callSequence = Interlocked.Increment(ref _rpcCallSequence);
@@ -554,6 +577,16 @@ public record LanguageServerRpcTarget(
         Log($"Publishing {parameters.Diagnostics.Count} diagnostics for {parameters.Uri}");
 
         await jsonRpc.NotifyAsync("textDocument/publishDiagnostics", parameters);
+    }
+
+    private async Task RequestCodeLensRefreshAsync()
+    {
+        if (JsonRpc is not { } jsonRpc)
+        {
+            return;
+        }
+
+        await jsonRpc.InvokeAsync<object?>("workspace/codeLens/refresh", []);
     }
 
     private void PublishDiagnostics(PublishDiagnosticsParams parameters)

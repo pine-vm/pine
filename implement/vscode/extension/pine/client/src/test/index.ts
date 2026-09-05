@@ -3,7 +3,7 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 import * as path from 'path';
-import * as Mocha from 'mocha';
+import Mocha = require('mocha');
 import * as glob from 'glob';
 
 export function run(): Promise<void> {
@@ -15,29 +15,36 @@ export function run(): Promise<void> {
 	mocha.timeout(100000);
 
 	const testsRoot = __dirname;
+	const compatibilityMode = process.env.PINE_TEST_MODE === 'old-server';
 
 	return new Promise((resolve, reject) => {
-		glob('**.test.js', { cwd: testsRoot }, (err, files) => {
-			if (err) {
-				return reject(err);
-			}
+		glob(
+			compatibilityMode ? 'compatibility.test.js' : '**.test.js',
+			{
+				cwd: testsRoot,
+				ignore: compatibilityMode ? [] : ['compatibility.test.js']
+			},
+			(err, files) => {
+				if (err) {
+					return reject(err);
+				}
 
-			// Add files to the test suite
-			files.forEach(f => mocha.addFile(path.resolve(testsRoot, f)));
+				// Add files to the test suite
+				files.forEach(f => mocha.addFile(path.resolve(testsRoot, f)));
 
-			try {
-				// Run the mocha test
-				mocha.run(failures => {
-					if (failures > 0) {
-						reject(new Error(`${failures} tests failed.`));
-					} else {
-						resolve();
-					}
-				});
-			} catch (err) {
-				console.error(err);
-				reject(err);
-			}
-		});
+				try {
+					// Run the mocha test
+					mocha.run(failures => {
+						if (failures > 0) {
+							reject(new Error(`${failures} tests failed.`));
+						} else {
+							resolve();
+						}
+					});
+				} catch (err) {
+					console.error(err);
+					reject(err);
+				}
+			});
 	});
 }

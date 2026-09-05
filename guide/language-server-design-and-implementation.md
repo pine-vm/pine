@@ -78,7 +78,7 @@ This keeps intermediate versions produced during rapid typing from accumulating 
 
 #### Request Cancellation
 
-For LSP requests such as hover, completion, definition, references, rename, document symbols, and formatting, the RPC boundary accepts a cancellation token. StreamJsonRpc connects that token to the base protocol's [`$/cancelRequest`](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#cancelRequest) notification, and cancellation flows through the language-service scheduler into Pine VM evaluation.
+For LSP requests such as hover, completion, definition, references, rename, document symbols, formatting, and CodeLens (including resolve), the RPC boundary accepts a cancellation token. StreamJsonRpc connects that token to the base protocol's [`$/cancelRequest`](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#cancelRequest) notification, and cancellation flows through the language-service scheduler into Pine VM evaluation.
 
 The LSP base protocol defines no general server capability flag for request cancellation. It is therefore not added to `ServerCapabilities`; the server continues to announce each implemented request provider and its [`TextDocumentSyncOptions`](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocumentSyncOptions) during initialization. The similarly named `serverCancelSupport` field is specific to [semantic tokens](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_semanticTokens) and does not apply to document synchronization or general requests.
 

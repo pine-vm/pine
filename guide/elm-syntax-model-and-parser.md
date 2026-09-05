@@ -8,7 +8,7 @@ The Elm syntax model and Elm syntax parser in Pine support the following applica
 
 + Generation of diagnostics pointing to parts of the source code, including all compilation errors.
 
-+ Production of semantic information for functionality in language servers and IDEs (e.g., ‘Find All References’, ‘Rename Symbol’)
++ Production of semantic information for functionality in language servers and IDEs (e.g., ‘Find All References’, ‘Rename Symbol’, reference count CodeLens)
 
 + Formatting and pretty printing: Need to preserve literal forms. Some numbers and strings can be written in more than one form, and we do not always want the formatter to erase these differences.
 

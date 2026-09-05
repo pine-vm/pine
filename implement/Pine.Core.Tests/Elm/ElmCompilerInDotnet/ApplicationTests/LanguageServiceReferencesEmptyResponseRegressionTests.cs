@@ -121,6 +121,7 @@ public class LanguageServiceReferencesEmptyResponseRegressionTests
                     { fileLocation = LanguageServiceInterface.WorkspaceFileLocation filePath
                     , positionLineNumber = lineNumber
                     , positionColumn = column
+                    , includeDeclaration = False
                     }
                 )
                 state

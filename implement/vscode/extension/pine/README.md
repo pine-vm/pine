@@ -14,6 +14,7 @@ Elm developer tools packaged as [Visual Studio Code](https://code.visualstudio.c
 + Go to symbol - module outline
 + Find All References
 + Rename Symbol - renames a symbol across files
++ Reference count CodeLens - shows reference counts above declarations and opens references peek view
 
 ## Install
 

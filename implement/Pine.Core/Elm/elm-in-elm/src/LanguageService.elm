@@ -91,6 +91,8 @@ type DeclarationRange
         Range
         -- Instances of the own name, used for renaming
         (List Range)
+        -- Single name used for definition and references navigation
+        Range
 
 
 type Range
@@ -435,16 +437,21 @@ declarationRangeOfOccurrence :
     -> LanguageServiceAnalysis.DeclarationOccurrence
     -> Maybe DeclarationRange
 declarationRangeOfOccurrence parsedModule occurrence =
-    case rangeAtPathInModule parsedModule occurrence.declarationPath occurrence.declarationSelection of
-        Nothing ->
-            Nothing
-
-        Just wholeRange ->
+    case
+        ( rangeAtPathInModule parsedModule occurrence.declarationPath occurrence.declarationSelection
+        , rangeAtPathInModule parsedModule occurrence.declarationPath SelectName
+        )
+    of
+        ( Just wholeRange, Just canonicalNameRange ) ->
             Just
                 (DeclarationRange
                     wholeRange
                     (rangesAtNamePaths parsedModule occurrence.namePaths)
+                    canonicalNameRange
                 )
+
+        _ ->
+            Nothing
 
 
 rangesAtNamePaths : ParsedModuleCache -> List Path -> List Range
@@ -464,12 +471,16 @@ rangesAtNamePaths parsedModule paths =
 
 moduleDeclarationRange : ParsedModuleCache -> Maybe DeclarationRange
 moduleDeclarationRange parsedModule =
-    case rangeAtPathInModule parsedModule [ StepModuleDefinition ] SelectWhole of
-        Nothing ->
-            Nothing
+    case
+        ( rangeAtPathInModule parsedModule [ StepModuleDefinition ] SelectWhole
+        , rangeAtPathInModule parsedModule [ StepModuleDefinition ] SelectName
+        )
+    of
+        ( Just wholeRange, Just canonicalNameRange ) ->
+            Just (DeclarationRange wholeRange [] canonicalNameRange)
 
-        Just wholeRange ->
-            Just (DeclarationRange wholeRange [])
+        _ ->
+            Nothing
 
 
 
@@ -757,7 +768,7 @@ hoverItemsAtLocation fileLocation location languageServiceState =
                                         Nothing ->
                                             Nothing
 
-                                        Just (DeclarationRange _ nameRanges) ->
+                                        Just (DeclarationRange _ nameRanges _) ->
                                             case findRangeContainingLocation location nameRanges of
                                                 Nothing ->
                                                     Nothing
@@ -1427,7 +1438,7 @@ locationsFromDeclarationLocations :
     -> List LanguageServiceInterface.LocationInFile
 locationsFromDeclarationLocations locations =
     case locations of
-        (LocationInFile fileLocation (DeclarationRange (Range ( startRow, startColumn ) ( endRow, endColumn )) _)) :: rest ->
+        (LocationInFile fileLocation (DeclarationRange (Range ( startRow, startColumn ) ( endRow, endColumn )) _ _)) :: rest ->
             { fileLocation = fileLocation
             , range =
                 { startLineNumber = startRow
@@ -1518,7 +1529,7 @@ documentSymbolFromOccurrence parsedModule allOccurrences occurrence =
         Nothing ->
             Nothing
 
-        Just (DeclarationRange wholeRange _) ->
+        Just (DeclarationRange wholeRange _ _) ->
             let
                 selectionRange : Range
                 selectionRange =
@@ -1650,8 +1661,14 @@ textDocumentReferences referenceRequest languageServiceState =
         Nothing ->
             []
 
-        Just ( _, references ) ->
-            locationsFromReferenceGroups references
+        Just ( ( declarationFileLocation, DeclarationRange _ _ canonicalNameRange ), references ) ->
+            (if referenceRequest.includeDeclaration then
+                locationsFromRanges declarationFileLocation [ canonicalNameRange ]
+
+             else
+                []
+            )
+                ++ locationsFromReferenceGroups references
 
 
 locationsFromReferenceGroups :
@@ -2083,7 +2100,7 @@ textDocumentRename renameParams languageServiceState =
         Just ( ( LanguageServiceInterface.ElmPackageFileLocation _ _, _ ), _ ) ->
             []
 
-        Just ( ( LanguageServiceInterface.WorkspaceFileLocation declFilePath, DeclarationRange _ declNamesRanges ), referencesGroupedByFilePath ) ->
+        Just ( ( LanguageServiceInterface.WorkspaceFileLocation declFilePath, DeclarationRange _ declNamesRanges _ ), referencesGroupedByFilePath ) ->
             let
                 newName : String
                 newName =
