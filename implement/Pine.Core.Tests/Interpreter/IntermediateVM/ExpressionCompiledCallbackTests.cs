@@ -219,4 +219,50 @@ public class ExpressionCompiledCallbackTests
         vm.EvaluateExpression(expression, PineValue.EmptyBlob)
             .IsOkOrNull().Should().Be(IntegerEncoding.EncodeSignedInteger(11));
     }
+
+    [Fact]
+    public void Shared_cache_reuses_compilation_across_VM_instances()
+    {
+        var cache = new ConcurrentExpressionCompilationCache();
+        var compilationCount = 0;
+
+        Core.Interpreter.IntermediateVM.PineVM CreateVm() =>
+            Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
+                evalCache: null,
+                evaluationConfigDefault: null,
+                reportFunctionApplication: null,
+                compilationEnvClasses: null,
+                disableReductionInCompilation: true,
+                selectPrecompiled: null,
+                skipInlineForExpression: _ => false,
+                enableTailRecursionOptimization: false,
+                parseCache: null,
+                precompiledLeaves: null,
+                reportEnterPrecompiledLeaf: null,
+                reportExitPrecompiledLeaf: null,
+                optimizationParametersSerial: null,
+                cacheFileStore: null,
+                reportExpressionCompiled:
+                (in _) =>
+                compilationCount++,
+                tryGetExpressionCompilation: cache.TryGet,
+                getOrAddExpressionCompilation: cache.GetOrAdd);
+
+        var expression =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.int_add),
+                Expression.ListInst(
+                    [
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(5)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(8))
+                    ]));
+
+        CreateVm().EvaluateExpression(expression, PineValue.EmptyBlob)
+            .IsOkOrNull().Should().Be(IntegerEncoding.EncodeSignedInteger(13));
+
+        CreateVm().EvaluateExpression(expression, PineValue.EmptyBlob)
+            .IsOkOrNull().Should().Be(IntegerEncoding.EncodeSignedInteger(13));
+
+        compilationCount.Should().Be(1);
+    }
 }

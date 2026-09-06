@@ -91,7 +91,9 @@ public static class SetupVM
         OptimizationParametersSerial? optimizationParametersSerial = null,
         IFileStore? cacheFileStore = null,
         IInvocationCacheAccess? invocationCache = null,
-        InvocationCacheConfiguration? invocationCacheConfiguration = null)
+        InvocationCacheConfiguration? invocationCacheConfiguration = null,
+        TryGetExpressionCompilation? tryGetExpressionCompilation = null,
+        GetOrAddExpressionCompilation? getOrAddExpressionCompilation = null)
     {
         precompiledLeaves ??= DefaultPrecompiledLeaves;
 
@@ -114,6 +116,8 @@ public static class SetupVM
                 optimizationParametersSerial: optimizationParametersSerial,
                 cacheFileStore: cacheFileStore,
                 invocationCache: invocationCache,
-                invocationCacheConfiguration: invocationCacheConfiguration);
+                invocationCacheConfiguration: invocationCacheConfiguration,
+                tryGetExpressionCompilation: tryGetExpressionCompilation,
+                getOrAddExpressionCompilation: getOrAddExpressionCompilation);
     }
 }

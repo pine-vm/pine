@@ -65,6 +65,10 @@ public class PineVM : ICancellablePineVM
 
     private readonly IReadOnlyDictionary<Expression, ExpressionCompilation>? _expressionCompilationOverrides;
 
+    private readonly TryGetExpressionCompilation _tryGetExpressionCompilation;
+
+    private readonly GetOrAddExpressionCompilation _getOrAddExpressionCompilation;
+
     private readonly bool _disableDirectContinueForSimpleEval;
 
     private readonly bool _disableDirectEvalForSimpleTemplate;
@@ -97,8 +101,24 @@ public class PineVM : ICancellablePineVM
         ReportTailLoopIteration? reportTailLoopIteration = null,
         ReportExpressionCompiled? reportExpressionCompiled = null,
         IInvocationCacheAccess? invocationCache = null,
-        InvocationCacheConfiguration? invocationCacheConfiguration = null)
+        InvocationCacheConfiguration? invocationCacheConfiguration = null,
+        TryGetExpressionCompilation? tryGetExpressionCompilation = null,
+        GetOrAddExpressionCompilation? getOrAddExpressionCompilation = null)
     {
+        if ((tryGetExpressionCompilation is null) != (getOrAddExpressionCompilation is null))
+        {
+            throw new ArgumentException(
+                "Configure both expression-compilation cache delegates or neither.");
+        }
+
+        if (tryGetExpressionCompilation is null)
+        {
+            var expressionCompilationCache = new ConcurrentExpressionCompilationCache();
+
+            tryGetExpressionCompilation = expressionCompilationCache.TryGet;
+            getOrAddExpressionCompilation = expressionCompilationCache.GetOrAdd;
+        }
+
         return
             new PineVM(
                 evalCache: evalCache,
@@ -125,7 +145,9 @@ public class PineVM : ICancellablePineVM
                 reportTailLoopIteration: reportTailLoopIteration,
                 reportExpressionCompiled: reportExpressionCompiled,
                 invocationCache: invocationCache,
-                invocationCacheConfiguration: invocationCacheConfiguration);
+                invocationCacheConfiguration: invocationCacheConfiguration,
+                tryGetExpressionCompilation: tryGetExpressionCompilation,
+                getOrAddExpressionCompilation: getOrAddExpressionCompilation!);
 
     }
 
@@ -146,6 +168,8 @@ public class PineVM : ICancellablePineVM
         IFileStore? cacheFileStore,
         ReportExecutedStackInstruction? reportExecutedStackInstruction,
         IReadOnlyDictionary<Expression, ExpressionCompilation>? expressionCompilationOverrides,
+        TryGetExpressionCompilation tryGetExpressionCompilation,
+        GetOrAddExpressionCompilation getOrAddExpressionCompilation,
         int pathMaxLowExclusive = ExpressionCompilation.DefaultPathMaxLowExclusive,
         int pathMaxHighInclusive = ExpressionCompilation.DefaultPathMaxHighInclusive,
         bool disableGenericApplicationChainConsolidation = false,
@@ -219,6 +243,9 @@ public class PineVM : ICancellablePineVM
 
         _expressionCompilationOverrides = expressionCompilationOverrides;
 
+        _tryGetExpressionCompilation = tryGetExpressionCompilation;
+        _getOrAddExpressionCompilation = getOrAddExpressionCompilation;
+
         _pathMaxLowExclusive = pathMaxLowExclusive;
 
         _pathMaxHighInclusive = pathMaxHighInclusive;
@@ -269,14 +296,7 @@ public class PineVM : ICancellablePineVM
         return evalReport.ReturnValue.Evaluate();
     }
 
-    readonly Dictionary<Expression, ExpressionEntry> _expressionCompilationDict = [];
-
     readonly Dictionary<(Expression, ReductionConfig), Expression> _reducedExpressionDict = [];
-
-    private record struct ExpressionEntry(
-        ExpressionCompilation Compilation,
-        string ExpressionHashBase16,
-        OptimizationParametersSerial.ExpressionConfig? OptimizationConfig);
 
     readonly static ConcurrentPineValueHashCache s_mutableCacheValueHash = new();
 
@@ -307,33 +327,37 @@ public class PineVM : ICancellablePineVM
                 Specialization: null);
     }
 
-    private ExpressionEntry GetExpressionEntry(
+    private ExpressionCompilationCacheEntry GetExpressionEntry(
         Expression rootExpression)
     {
-        if (_expressionCompilationDict.TryGetValue(rootExpression, out var cachedCompilation))
+        if (_tryGetExpressionCompilation(rootExpression, out var cachedCompilation))
         {
             return cachedCompilation;
         }
 
-        var compilation = ExpressionEntryLessCache(rootExpression);
+        return
+            _getOrAddExpressionCompilation(
+                rootExpression,
+                () =>
+                {
+                    var compilation = ExpressionEntryLessCache(rootExpression);
 
-        _expressionCompilationDict[rootExpression] = compilation;
+                    if (_reportExpressionCompiled is { } reportExpressionCompiled)
+                    {
+                        var compiledNotification =
+                            new ExpressionCompiled(
+                                Expression: rootExpression,
+                                ExpressionHashBase16: compilation.ExpressionHashBase16,
+                                Compilation: compilation.Compilation);
 
-        if (_reportExpressionCompiled is { } reportExpressionCompiled)
-        {
-            var compiledNotification =
-                new ExpressionCompiled(
-                    Expression: rootExpression,
-                    ExpressionHashBase16: compilation.ExpressionHashBase16,
-                    Compilation: compilation.Compilation);
+                        reportExpressionCompiled(in compiledNotification);
+                    }
 
-            reportExpressionCompiled(in compiledNotification);
-        }
-
-        return compilation;
+                    return compilation;
+                });
     }
 
-    private ExpressionEntry ExpressionEntryLessCache(Expression rootExpression)
+    private ExpressionCompilationCacheEntry ExpressionEntryLessCache(Expression rootExpression)
     {
         if (_expressionCompilationOverrides?.TryGetValue(rootExpression, out var overrideCompilation) is true)
         {
@@ -343,7 +367,7 @@ public class PineVM : ICancellablePineVM
                 PineValueHashFlat.ComputeHashForValue(overrideExprValue);
 
             return
-                new ExpressionEntry(
+                new ExpressionCompilationCacheEntry(
                     Compilation: overrideCompilation,
                     ExpressionHashBase16: Convert.ToHexStringLower(overrideExprHashBytes.Span),
                     OptimizationConfig: null);
@@ -400,7 +424,7 @@ public class PineVM : ICancellablePineVM
         }
 
         return
-            new ExpressionEntry(
+            new ExpressionCompilationCacheEntry(
                 Compilation: compilation,
                 ExpressionHashBase16: exprHashBase16,
                 OptimizationConfig: optimizationConfig);
@@ -735,7 +759,7 @@ public class PineVM : ICancellablePineVM
                         }
                     }
 
-                    if (!_expressionCompilationDict.ContainsKey(expression) &&
+                    if (!_tryGetExpressionCompilation(expression, out _) &&
                         !(_expressionCompilationOverrides?.ContainsKey(expression) ?? false))
                     {
                         if (!_disableDirectContinueForSimpleEval &&

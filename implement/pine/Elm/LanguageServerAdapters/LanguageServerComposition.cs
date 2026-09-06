@@ -65,7 +65,11 @@ public static class LanguageServerComposition
         string pineAppVersionId,
         Action<string>? logDelegate = null) =>
         new LanguageServiceSessionFactory(
-            invocationCache => CreatePineVM(invocationCache),
+            (invocationCache, expressionCompilationCache) =>
+            IntermediateVM.SetupVM.Create(
+                invocationCache: invocationCache,
+                tryGetExpressionCompilation: expressionCompilationCache.TryGet,
+                getOrAddExpressionCompilation: expressionCompilationCache.GetOrAdd),
             CreateDefaultCompilationCache(pineAppVersionId),
             logDelegate);
 
