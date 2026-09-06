@@ -96,7 +96,7 @@ public class PineCliOptionsTests
     }
 
     [Fact]
-    public void Elm_test_command_exposes_filter_list_and_workers_options()
+    public void Elm_test_command_exposes_filter_list_workers_and_duration_options()
     {
         var result = RunPine("elm", "test", "--help");
 
@@ -104,6 +104,7 @@ public class PineCliOptionsTests
         result.StandardOutput.Should().Contain("--filter");
         result.StandardOutput.Should().Contain("--list-tests");
         result.StandardOutput.Should().Contain("--workers");
+        result.StandardOutput.Should().Contain("--report-durations");
         result.StandardError.Should().BeEmpty();
     }
 
@@ -125,9 +126,11 @@ public class PineCliOptionsTests
             result.ExitCode.Should().Be(200);
             result.StandardError.Should().BeEmpty();
             result.StandardOutput.Should().Contain(sourcePath);
+
             result.StandardOutput.Should().Contain(
                 "2:1: I cannot find the end of this multi-line comment:\n\n" +
                 "2| {- unclosed\n   ^^\nAdd a -} somewhere after this to end the comment.");
+
             File.ReadAllText(sourcePath).Should().Be(Source);
         }
         finally
@@ -155,11 +158,14 @@ public class PineCliOptionsTests
             result.StandardError.Should().BeEmpty();
             result.StandardOutput.Should().Contain(sourcePath);
             result.StandardOutput.Should().Contain("SYNTAX ERRORS (2)");
+
             result.StandardOutput.Should().Contain(
                 "3:12: Numbers cannot end with a dot like this:\n\n" +
                 "3| first = 903.\n              ^\nSwitching to 903 or 903.0 will work though!");
+
             result.StandardOutput.Should().Contain(
                 "8:1: I am trying to parse a declaration, but I am getting stuck here:\n\n8| \n   ^");
+
             result.StandardOutput.IndexOf("3:12:", StringComparison.Ordinal)
                 .Should().BeLessThan(result.StandardOutput.IndexOf("8:1:", StringComparison.Ordinal));
 

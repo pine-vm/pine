@@ -94,7 +94,9 @@ public class ElmTestTests
                 "input-app");
 
         var factoryCalls = 0;
+        var discoveredTestCount = 0;
         var sharedCaches = new ConcurrentBag<object>();
+        var workersObservedDiscovery = new ConcurrentBag<bool>();
 
         var testRun =
             ElmTestRunner.CompileAndRunTests(
@@ -105,13 +107,18 @@ public class ElmTestTests
                 {
                     Interlocked.Increment(ref factoryCalls);
                     sharedCaches.Add(caches);
+                    workersObservedDiscovery.Add(Volatile.Read(ref discoveredTestCount) is 3);
 
                     return ElmCompilerTestHelper.PineVMForProfiling(_ => { });
-                });
+                },
+                onTestsDiscovered:
+                testCount =>
+                Interlocked.Exchange(ref discoveredTestCount, testCount));
 
         testRun.Should().BeOfType<ElmTestRun.Completed>();
         factoryCalls.Should().Be(3);
         sharedCaches.Distinct(ReferenceEqualityComparer.Instance).Should().HaveCount(1);
+        workersObservedDiscovery.Should().OnlyContain(observed => observed);
     }
 
 

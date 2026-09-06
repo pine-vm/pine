@@ -43,14 +43,16 @@ public static class ElmTestRunner
         string appDirectory,
         IPineVM? pineVm = null,
         string? filter = null,
-        bool listTests = false) =>
+        bool listTests = false,
+        Action<int>? onTestsDiscovered = null) =>
         CompileAndRunTests(
             appDirectory,
             pineVm,
             filter,
             listTests,
             workers: 1,
-            pineVmFactory: null);
+            pineVmFactory: null,
+            onTestsDiscovered);
 
 
     /// <summary>
@@ -61,7 +63,8 @@ public static class ElmTestRunner
         int workers,
         Func<IInvocationCacheAccess, PineVMSharedCaches, IPineVM> pineVmFactory,
         string? filter = null,
-        bool listTests = false)
+        bool listTests = false,
+        Action<int>? onTestsDiscovered = null)
     {
         ArgumentNullException.ThrowIfNull(pineVmFactory);
 
@@ -72,7 +75,8 @@ public static class ElmTestRunner
                 filter,
                 listTests,
                 workers,
-                pineVmFactory);
+                pineVmFactory,
+                onTestsDiscovered);
     }
 
 
@@ -82,7 +86,8 @@ public static class ElmTestRunner
         string? filter,
         bool listTests,
         int workers,
-        Func<IInvocationCacheAccess, PineVMSharedCaches, IPineVM>? pineVmFactory)
+        Func<IInvocationCacheAccess, PineVMSharedCaches, IPineVM>? pineVmFactory,
+        Action<int>? onTestsDiscovered)
     {
         if (workers < 1)
             throw new ArgumentOutOfRangeException(nameof(workers), "Worker count must be at least one.");
@@ -91,6 +96,8 @@ public static class ElmTestRunner
 
         if (!Directory.Exists(appDirectory))
             throw new DirectoryNotFoundException("Elm project directory not found: " + appDirectory);
+
+        var compilationStopwatch = Stopwatch.StartNew();
 
         var appFiles =
             Filesystem.GetFilesFromDirectory(
@@ -212,6 +219,10 @@ public static class ElmTestRunner
                     ]);
         }
 
+        compilationStopwatch.Stop();
+
+        onTestsDiscovered?.Invoke(discoveredTests.Count);
+
         var stopwatch = Stopwatch.StartNew();
 
         IReadOnlyList<CompletedTest> completedTests;
@@ -276,7 +287,13 @@ public static class ElmTestRunner
 
         stopwatch.Stop();
 
-        return new ElmTestRun.Completed(completedTests, stopwatch.Elapsed);
+        return
+            new ElmTestRun.Completed(
+                completedTests,
+                compilationStopwatch.Elapsed + stopwatch.Elapsed)
+            {
+                CompilationDuration = compilationStopwatch.Elapsed
+            };
     }
 
 
@@ -364,7 +381,9 @@ public static class ElmTestRunner
     public static StructuredTestOutput RenderTestResults(
         IReadOnlyList<CompletedTest> tests,
         bool includeTestDetails,
-        TimeSpan? duration = null)
+        TimeSpan? duration = null,
+        TimeSpan? compilationDuration = null,
+        bool includeRunningMessage = true)
     {
         var fragments = new List<TestOutputFragment>();
         var passedCount = tests.Count(test => test.Kind is CompletedTestKind.Passed);
@@ -377,10 +396,13 @@ public static class ElmTestRunner
 
         var todoCount = tests.Count(test => test.Kind is CompletedTestKind.Todo);
 
-        Append(
-            "Running " + tests.Count + " test" +
-            (tests.Count is 1 ? "." : "s.") + "\n\n",
-            TestOutputStyle.Default);
+        if (includeRunningMessage)
+        {
+            Append(
+                "Running " + tests.Count + " test" +
+                (tests.Count is 1 ? "." : "s.") + "\n\n",
+                TestOutputStyle.Default);
+        }
 
         if (includeTestDetails)
         {
@@ -485,6 +507,14 @@ public static class ElmTestRunner
                 Math.Round(elapsed.TotalMilliseconds).ToString(System.Globalization.CultureInfo.InvariantCulture) +
                 " ms\n",
                 TestOutputStyle.Default);
+
+            if (compilationDuration is { } compilationElapsed)
+            {
+                Append("  Compilation:    ", TestOutputStyle.Dark);
+                Append(FormatDuration(compilationElapsed) + "\n", TestOutputStyle.Default);
+                Append("  Test execution: ", TestOutputStyle.Dark);
+                Append(FormatDuration(elapsed - compilationElapsed) + "\n", TestOutputStyle.Default);
+            }
         }
 
         Append("Passed:   ", TestOutputStyle.Dark);
@@ -502,6 +532,10 @@ public static class ElmTestRunner
 
         void Append(string text, TestOutputStyle style) =>
             fragments.Add(new TestOutputFragment(text, style));
+
+        static string FormatDuration(TimeSpan elapsed) =>
+            Math.Round(elapsed.TotalMilliseconds).ToString(System.Globalization.CultureInfo.InvariantCulture) +
+            " ms";
 
         void AppendEqualityValue(string value, string other)
         {
@@ -1301,7 +1335,13 @@ public abstract record ElmTestRun
     public sealed record Completed(
         IReadOnlyList<CompletedTest> Tests,
         TimeSpan Duration)
-        : ElmTestRun;
+        : ElmTestRun
+    {
+        /// <summary>
+        /// Gets the portion of <see cref="Duration"/> spent compiling and discovering tests.
+        /// </summary>
+        public TimeSpan CompilationDuration { get; init; }
+    }
 
     /// <summary>
     /// Contains tests discovered without running them.

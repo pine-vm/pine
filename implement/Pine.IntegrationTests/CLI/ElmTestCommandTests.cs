@@ -49,12 +49,21 @@ public class ElmTestCommandTests
                     projectDirectory,
                     colorMode: FormatCommandColorMode.Never,
                     console: console,
-                    workers: 2);
+                    workers: 2,
+                    reportDurations: true);
+
+            var rendered = output.ToString();
+            var runningMessageIndex = rendered.IndexOf("Running 3 tests", StringComparison.Ordinal);
 
             exitCode.Should().Be(1);
-            output.ToString().Should().Contain("Running 3 tests");
-            output.ToString().Should().Contain("Passed:   2");
-            output.ToString().Should().Contain("Failed:   1");
+            runningMessageIndex.Should().BeGreaterThanOrEqualTo(0);
+            rendered.LastIndexOf("Running 3 tests", StringComparison.Ordinal).Should().Be(runningMessageIndex);
+            runningMessageIndex.Should().BeLessThan(rendered.IndexOf("TEST RUN", StringComparison.Ordinal));
+            rendered.Should().Contain("Duration:");
+            rendered.Should().Contain("Compilation:");
+            rendered.Should().Contain("Test execution:");
+            rendered.Should().Contain("Passed:   2");
+            rendered.Should().Contain("Failed:   1");
         }
         finally
         {
@@ -215,11 +224,13 @@ public class ElmTestCommandTests
 
             if (expectedFirstName is null)
                 rendered.Should().NotContain("First");
+
             else
                 rendered.Should().Contain(expectedFirstName);
 
             if (expectedUniqueName is null)
                 rendered.Should().NotContain("Unique Test");
+
             else
                 rendered.Should().Contain(expectedUniqueName);
         }

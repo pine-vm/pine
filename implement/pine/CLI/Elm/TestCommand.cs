@@ -46,11 +46,18 @@ public static class TestCommand
                 "Number of worker threads. Defaults to " + DefaultWorkerCount() + "."
             };
 
+        var reportDurationsOption =
+            new Option<bool>("--report-durations")
+            {
+                Description = "Show detailed durations, including compilation and test execution."
+            };
+
         command.Add(sourceArgument);
         command.Add(colorOption);
         command.Add(filterOption);
         command.Add(listTestsOption);
         command.Add(workersOption);
+        command.Add(reportDurationsOption);
 
         command.SetAction(
             parseResult =>
@@ -59,7 +66,8 @@ public static class TestCommand
                 colorMode: parseResult.GetValue(colorOption),
                 filter: parseResult.GetValue(filterOption),
                 listTests: parseResult.GetValue(listTestsOption),
-                workers: parseResult.GetValue(workersOption)));
+                workers: parseResult.GetValue(workersOption),
+                reportDurations: parseResult.GetValue(reportDurationsOption)));
 
         return command;
     }
@@ -72,7 +80,8 @@ public static class TestCommand
         IAnsiConsole? errorConsole = null,
         string? filter = null,
         bool listTests = false,
-        int? workers = null)
+        int? workers = null,
+        bool reportDurations = false)
     {
         FormatCommandColorMode resolvedColorMode;
 
@@ -124,7 +133,15 @@ public static class TestCommand
                     expressionEncodingCache: sharedCaches.EncodedExpressions,
                     reducedExpressionCache: sharedCaches.ReducedExpressions),
                 filter: filter,
-                listTests: listTests);
+                listTests: listTests,
+                onTestsDiscovered:
+                testCount =>
+                {
+                    console.Write(
+                        new Text(
+                            "Running " + testCount + " test" +
+                            (testCount is 1 ? "." : "s.") + "\n\n"));
+                });
 
         if (testRun is ElmTestRun.NoTestModules noTestModules)
         {
@@ -160,7 +177,14 @@ public static class TestCommand
             ElmTestRunner.RenderTestResults(
                 completed.Tests,
                 includeTestDetails: true,
-                completed.Duration);
+                duration: completed.Duration,
+                compilationDuration:
+                reportDurations
+                ?
+                completed.CompilationDuration
+                :
+                null,
+                includeRunningMessage: false);
 
         if (resolvedColorMode is FormatCommandColorMode.Never)
         {
