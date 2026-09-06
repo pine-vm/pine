@@ -2,9 +2,11 @@ using AwesomeAssertions;
 using Pine.Core.Elm.Testing;
 using Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmTest;
@@ -61,6 +63,55 @@ public class ElmTestTests
         firstListing.Equals(secondListing).Should().BeTrue();
         (firstListing == secondListing).Should().BeTrue();
         firstListing.GetHashCode().Should().Be(secondListing.GetHashCode());
+    }
+
+
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(2, 1)]
+    [InlineData(3, 1)]
+    [InlineData(4, 2)]
+    [InlineData(8, 4)]
+    public void Default_worker_count_uses_requested_cpu_formula(
+        int processorCount,
+        int expectedWorkerCount)
+    {
+        ElmTestRunner.DefaultWorkerCount(processorCount).Should().Be(expectedWorkerCount);
+    }
+
+
+    [Fact]
+    public void Requested_workers_share_caches_and_use_separate_vms()
+    {
+        var testCasesDirectory =
+            TestResultSummary.FindTestDataDirectory(
+                Path.Combine("Elm", "CommandElmTest"));
+
+        var appDirectory =
+            Path.Combine(
+                testCasesDirectory,
+                "single-suite-three-equal-all-pass",
+                "input-app");
+
+        var factoryCalls = 0;
+        var sharedCaches = new ConcurrentBag<object>();
+
+        var testRun =
+            ElmTestRunner.CompileAndRunTests(
+                appDirectory,
+                workers: 3,
+                pineVmFactory:
+                (_, caches) =>
+                {
+                    Interlocked.Increment(ref factoryCalls);
+                    sharedCaches.Add(caches);
+
+                    return ElmCompilerTestHelper.PineVMForProfiling(_ => { });
+                });
+
+        testRun.Should().BeOfType<ElmTestRun.Completed>();
+        factoryCalls.Should().Be(3);
+        sharedCaches.Distinct(ReferenceEqualityComparer.Instance).Should().HaveCount(1);
     }
 
 

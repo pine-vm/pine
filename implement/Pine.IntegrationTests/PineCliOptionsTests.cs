@@ -96,13 +96,14 @@ public class PineCliOptionsTests
     }
 
     [Fact]
-    public void Elm_test_command_exposes_filter_and_list_options()
+    public void Elm_test_command_exposes_filter_list_and_workers_options()
     {
         var result = RunPine("elm", "test", "--help");
 
         result.ExitCode.Should().Be(0);
         result.StandardOutput.Should().Contain("--filter");
         result.StandardOutput.Should().Contain("--list-tests");
+        result.StandardOutput.Should().Contain("--workers");
         result.StandardError.Should().BeEmpty();
     }
 

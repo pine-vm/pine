@@ -3,6 +3,7 @@ using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Files;
 using Pine.Core.IntermediateVM;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.IO;
 using System;
 using System.Collections.Generic;
@@ -11,6 +12,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 using IPineVM = Pine.Core.PineVM.IPineVM;
 using IntermediatePineVM = Pine.Core.Interpreter.IntermediateVM.PineVM;
@@ -23,14 +26,67 @@ namespace Pine.Core.Elm.Testing;
 public static class ElmTestRunner
 {
     /// <summary>
+    /// Computes the default worker count for the available logical processor count.
+    /// </summary>
+    public static int DefaultWorkerCount(int processorCount) =>
+        Math.Max(
+            1,
+            Math.Min(
+                processorCount / 2,
+                processorCount - 2));
+
+
+    /// <summary>
     /// Compiles and runs the tests in an Elm project.
     /// </summary>
     public static ElmTestRun CompileAndRunTests(
         string appDirectory,
         IPineVM? pineVm = null,
         string? filter = null,
+        bool listTests = false) =>
+        CompileAndRunTests(
+            appDirectory,
+            pineVm,
+            filter,
+            listTests,
+            workers: 1,
+            pineVmFactory: null);
+
+
+    /// <summary>
+    /// Compiles and runs the tests in an Elm project using isolated workers with shared caches.
+    /// </summary>
+    public static ElmTestRun CompileAndRunTests(
+        string appDirectory,
+        int workers,
+        Func<IInvocationCacheAccess, PineVMSharedCaches, IPineVM> pineVmFactory,
+        string? filter = null,
         bool listTests = false)
     {
+        ArgumentNullException.ThrowIfNull(pineVmFactory);
+
+        return
+            CompileAndRunTests(
+                appDirectory,
+                pineVm: null,
+                filter,
+                listTests,
+                workers,
+                pineVmFactory);
+    }
+
+
+    private static ElmTestRun CompileAndRunTests(
+        string appDirectory,
+        IPineVM? pineVm,
+        string? filter,
+        bool listTests,
+        int workers,
+        Func<IInvocationCacheAccess, PineVMSharedCaches, IPineVM>? pineVmFactory)
+    {
+        if (workers < 1)
+            throw new ArgumentOutOfRangeException(nameof(workers), "Worker count must be at least one.");
+
         appDirectory = Path.GetFullPath(appDirectory);
 
         if (!Directory.Exists(appDirectory))
@@ -156,98 +212,149 @@ public static class ElmTestRunner
                     ]);
         }
 
-        var parseCache = new PineVMParseCache();
-        pineVm ??= CreatePineVm();
-        var completedTests = new List<CompletedTest>(discoveredTests.Count);
         var stopwatch = Stopwatch.StartNew();
 
-        foreach (var discoveredTest in discoveredTests)
+        IReadOnlyList<CompletedTest> completedTests;
+
+        if (pineVm is not null)
         {
-            if (discoveredTest.Kind is DiscoveredTestKind.Todo)
-            {
-                completedTests.Add(
-                    new CompletedTest(
-                        discoveredTest.Path,
-                        CompletedTestKind.Todo,
-                        failure: null));
+            var parseCache = new PineVMParseCache();
 
-                continue;
-            }
+            completedTests =
+                discoveredTests
+                .Select(test => RunTest(test, pineVm, parseCache))
+                .ToImmutableArray();
+        }
+        else
+        {
+            var sharedInvocationCache = new ConcurrentInvocationCache();
+            var sharedPineVMCaches = new PineVMSharedCaches();
+            var completedTestsByIndex = new CompletedTest[discoveredTests.Count];
+            var nextTestIndex = -1;
+            var workerCount = Math.Min(workers, discoveredTests.Count);
 
-            if (discoveredTest.Kind is DiscoveredTestKind.EmptyGroup)
-            {
-                completedTests.Add(
-                    new CompletedTest(
-                        discoveredTest.Path,
-                        CompletedTestKind.FailedEmptyGroup,
-                        failure: null));
+            pineVmFactory ??= CreatePineVm;
 
-                continue;
-            }
+            var workerTasks =
+                Enumerable.Range(0, workerCount)
+                .Select(
+                    _ =>
+                    Task.Run(
+                        () =>
+                        {
+                            var invocationCache =
+                                new BufferedInvocationCacheAccess(sharedInvocationCache);
 
-            if (discoveredTest.Thunk is null)
-                throw new InvalidOperationException("Runnable test has no thunk");
+                            var workerPineVm =
+                                pineVmFactory(invocationCache, sharedPineVMCaches);
 
-            var functionRecord =
-                FunctionRecord.ParseFunctionRecordTagged(discoveredTest.Thunk, parseCache)
-                .Extract(error => throw new InvalidOperationException("Failed parsing test thunk: " + error));
+                            try
+                            {
+                                while (Interlocked.Increment(ref nextTestIndex) is var testIndex &&
+                                    testIndex < discoveredTests.Count)
+                                {
+                                    completedTestsByIndex[testIndex] =
+                                        RunTest(
+                                            discoveredTests[testIndex],
+                                            workerPineVm,
+                                            sharedPineVMCaches.ParsedExpressions);
 
-            var expectationValue =
-                ElmInteractiveEnvironment.ApplyFunction(pineVm, functionRecord, [PineValue.EmptyList])
-                .Extract(error => throw new InvalidOperationException("Failed evaluating test thunk: " + error));
+                                    invocationCache.MergeIntoShared();
+                                }
+                            }
+                            finally
+                            {
+                                invocationCache.MergeIntoShared();
+                            }
+                        }))
+                .ToArray();
 
-            var (expectationTag, expectationArguments) = ParseTaggedValue(expectationValue);
+            Task.WhenAll(workerTasks).GetAwaiter().GetResult();
 
-            if (expectationTag is "Pass")
-            {
-                completedTests.Add(
-                    new CompletedTest(
-                        discoveredTest.Path,
-                        CompletedTestKind.Passed,
-                        failure: null));
-
-                continue;
-            }
-
-            if (expectationTag is "ComparisonFailure")
-            {
-                if (expectationArguments.Length is not 3)
-                    throw new InvalidOperationException("ComparisonFailure must contain three arguments");
-
-                completedTests.Add(
-                    new CompletedTest(
-                        discoveredTest.Path,
-                        CompletedTestKind.Failed,
-                        new EqualityFailure(
-                            description: ParseElmString(expectationArguments.Span[0]),
-                            actual: ParseElmString(expectationArguments.Span[1]),
-                            expected: ParseElmString(expectationArguments.Span[2]))));
-
-                continue;
-            }
-
-            if (expectationTag is "Fail")
-            {
-                if (expectationArguments.Length is not 1)
-                    throw new InvalidOperationException("Fail must contain one argument");
-
-                completedTests.Add(
-                    new CompletedTest(
-                        discoveredTest.Path,
-                        CompletedTestKind.Failed,
-                        new MessageFailure(
-                            message: ParseElmString(expectationArguments.Span[0]))));
-
-                continue;
-            }
-
-            throw new InvalidOperationException(
-                "Unsupported expectation tag: " + expectationTag);
+            completedTests = completedTestsByIndex;
         }
 
         stopwatch.Stop();
 
         return new ElmTestRun.Completed(completedTests, stopwatch.Elapsed);
+    }
+
+
+    private static CompletedTest RunTest(
+        DiscoveredTest discoveredTest,
+        IPineVM pineVm,
+        PineVMParseCache parseCache)
+    {
+        if (discoveredTest.Kind is DiscoveredTestKind.Todo)
+        {
+            return
+                new CompletedTest(
+                    discoveredTest.Path,
+                    CompletedTestKind.Todo,
+                    failure: null);
+        }
+
+        if (discoveredTest.Kind is DiscoveredTestKind.EmptyGroup)
+        {
+            return
+                new CompletedTest(
+                    discoveredTest.Path,
+                    CompletedTestKind.FailedEmptyGroup,
+                    failure: null);
+        }
+
+        if (discoveredTest.Thunk is null)
+            throw new InvalidOperationException("Runnable test has no thunk");
+
+        var functionRecord =
+            FunctionRecord.ParseFunctionRecordTagged(discoveredTest.Thunk, parseCache)
+            .Extract(error => throw new InvalidOperationException("Failed parsing test thunk: " + error));
+
+        var expectationValue =
+            ElmInteractiveEnvironment.ApplyFunction(pineVm, functionRecord, [PineValue.EmptyList])
+            .Extract(error => throw new InvalidOperationException("Failed evaluating test thunk: " + error));
+
+        var (expectationTag, expectationArguments) = ParseTaggedValue(expectationValue);
+
+        if (expectationTag is "Pass")
+        {
+            return
+                new CompletedTest(
+                    discoveredTest.Path,
+                    CompletedTestKind.Passed,
+                    failure: null);
+        }
+
+        if (expectationTag is "ComparisonFailure")
+        {
+            if (expectationArguments.Length is not 3)
+                throw new InvalidOperationException("ComparisonFailure must contain three arguments");
+
+            return
+                new CompletedTest(
+                    discoveredTest.Path,
+                    CompletedTestKind.Failed,
+                    new EqualityFailure(
+                        description: ParseElmString(expectationArguments.Span[0]),
+                        actual: ParseElmString(expectationArguments.Span[1]),
+                        expected: ParseElmString(expectationArguments.Span[2])));
+        }
+
+        if (expectationTag is "Fail")
+        {
+            if (expectationArguments.Length is not 1)
+                throw new InvalidOperationException("Fail must contain one argument");
+
+            return
+                new CompletedTest(
+                    discoveredTest.Path,
+                    CompletedTestKind.Failed,
+                    new MessageFailure(
+                        message: ParseElmString(expectationArguments.Span[0])));
+        }
+
+        throw new InvalidOperationException(
+            "Unsupported expectation tag: " + expectationTag);
     }
 
 
@@ -429,7 +536,9 @@ public static class ElmTestRunner
     }
 
 
-    private static IntermediatePineVM CreatePineVm() =>
+    private static IntermediatePineVM CreatePineVm(
+        IInvocationCacheAccess invocationCache,
+        PineVMSharedCaches sharedCaches) =>
         IntermediatePineVM.CreateCustom(
             evalCache: null,
             evaluationConfigDefault: null,
@@ -439,12 +548,17 @@ public static class ElmTestRunner
             selectPrecompiled: null,
             skipInlineForExpression: _ => false,
             enableTailRecursionOptimization: true,
-            parseCache: null,
+            parseCache: sharedCaches.ParsedExpressions,
             precompiledLeaves: SetupVM.DefaultPrecompiledLeaves,
             reportEnterPrecompiledLeaf: null,
             reportExitPrecompiledLeaf: null,
             optimizationParametersSerial: null,
-            cacheFileStore: null);
+            cacheFileStore: null,
+            invocationCache: invocationCache,
+            tryGetExpressionCompilation: sharedCaches.ExpressionCompilations.TryGet,
+            getOrAddExpressionCompilation: sharedCaches.ExpressionCompilations.GetOrAdd,
+            expressionEncodingCache: sharedCaches.EncodedExpressions,
+            reducedExpressionCache: sharedCaches.ReducedExpressions);
 
 
     private static void DiscoverTests(

@@ -1,6 +1,6 @@
 using AwesomeAssertions;
-using Pine.Core.CommonEncodings;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Elm.LanguageServer;
 using Pine.Core.Elm.LanguageServer.LanguageServiceInterface;

@@ -37,6 +37,58 @@ public class ElmTestCommandTests
 
 
     [Fact]
+    public void Workers_option_runs_tests_in_parallel()
+    {
+        var projectDirectory = CreateTestProject(FilterTestsModule);
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            var exitCode =
+                TestCommand.Execute(
+                    projectDirectory,
+                    colorMode: FormatCommandColorMode.Never,
+                    console: console,
+                    workers: 2);
+
+            exitCode.Should().Be(1);
+            output.ToString().Should().Contain("Running 3 tests");
+            output.ToString().Should().Contain("Passed:   2");
+            output.ToString().Should().Contain("Failed:   1");
+        }
+        finally
+        {
+            Directory.Delete(projectDirectory, recursive: true);
+        }
+    }
+
+
+    [Fact]
+    public void Workers_option_rejects_values_smaller_than_one()
+    {
+        var projectDirectory = CreateTestProject(PassingTestsModule);
+        var (errorConsole, errorOutput) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            var exitCode =
+                TestCommand.Execute(
+                    projectDirectory,
+                    colorMode: FormatCommandColorMode.Never,
+                    errorConsole: errorConsole,
+                    workers: 0);
+
+            exitCode.Should().Be(1);
+            errorOutput.ToString().Should().Contain("The --workers value must be at least 1.");
+        }
+        finally
+        {
+            Directory.Delete(projectDirectory, recursive: true);
+        }
+    }
+
+
+    [Fact]
     public void Failure_output_uses_elm_test_rs_colors()
     {
         var projectDirectory = CreateTestProject(FailingTestsModule);

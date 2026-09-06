@@ -39,10 +39,18 @@ public static class TestCommand
                 Description = "List tests without running them."
             };
 
+        var workersOption =
+            new Option<int?>("--workers")
+            {
+                Description =
+                "Number of worker threads. Defaults to " + DefaultWorkerCount() + "."
+            };
+
         command.Add(sourceArgument);
         command.Add(colorOption);
         command.Add(filterOption);
         command.Add(listTestsOption);
+        command.Add(workersOption);
 
         command.SetAction(
             parseResult =>
@@ -50,7 +58,8 @@ public static class TestCommand
                 source: parseResult.GetValue(sourceArgument) ?? Environment.CurrentDirectory,
                 colorMode: parseResult.GetValue(colorOption),
                 filter: parseResult.GetValue(filterOption),
-                listTests: parseResult.GetValue(listTestsOption)));
+                listTests: parseResult.GetValue(listTestsOption),
+                workers: parseResult.GetValue(workersOption)));
 
         return command;
     }
@@ -62,7 +71,8 @@ public static class TestCommand
         IAnsiConsole? console = null,
         IAnsiConsole? errorConsole = null,
         string? filter = null,
-        bool listTests = false)
+        bool listTests = false,
+        int? workers = null)
     {
         FormatCommandColorMode resolvedColorMode;
 
@@ -88,10 +98,31 @@ public static class TestCommand
 
         console ??= CreateSystemConsole(Console.Out, resolvedColorMode);
 
+        var resolvedWorkers =
+            workers ?? DefaultWorkerCount();
+
+        if (resolvedWorkers < 1)
+        {
+            errorConsole ??= CreateSystemConsole(Console.Error, resolvedColorMode);
+            errorConsole.Write(new Text("Error: ", TestCommandTheme.Failure));
+            errorConsole.WriteLine("The --workers value must be at least 1.");
+
+            return 1;
+        }
+
         var testRun =
             ElmTestRunner.CompileAndRunTests(
                 source,
-                pineVm: IntermediateVM.SetupVM.Create(),
+                workers: resolvedWorkers,
+                pineVmFactory:
+                (invocationCache, sharedCaches) =>
+                IntermediateVM.SetupVM.Create(
+                    invocationCache: invocationCache,
+                    parseCache: sharedCaches.ParsedExpressions,
+                    tryGetExpressionCompilation: sharedCaches.ExpressionCompilations.TryGet,
+                    getOrAddExpressionCompilation: sharedCaches.ExpressionCompilations.GetOrAdd,
+                    expressionEncodingCache: sharedCaches.EncodedExpressions,
+                    reducedExpressionCache: sharedCaches.ReducedExpressions),
                 filter: filter,
                 listTests: listTests);
 
@@ -273,6 +304,8 @@ public static class TestCommand
                 Out = new AnsiConsoleOutput(writer),
             });
 
+    private static int DefaultWorkerCount() =>
+        ElmTestRunner.DefaultWorkerCount(Environment.ProcessorCount);
 
     private static class TestCommandTheme
     {
