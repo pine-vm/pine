@@ -1,5 +1,10 @@
 # Pine Changelog - Implement
 
+## 2026-09-06 - VS Code Extension Package Fix
+
++ Fixed packaging for VS Code extension: included `vscode-languageserver-textdocument` in the extension bundle so language client and server start properly on activation.
++ Incremented Pine VS Code extension version to 0.3.7.
+
 ## 2026-09-05 - Expanded VS Code Extension and Language Server
 
 + Added feature: Reference count CodeLens: Displays reference counts (`0 references`, `1 reference`, `N references`) above declarations at Elm module scope and opens VS Code's references peek view when selected.
