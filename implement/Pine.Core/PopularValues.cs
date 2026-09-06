@@ -886,5 +886,23 @@ public static class PopularValues
                     [tagBE, ElmValue.Integer(i)]);
             }
         }
+
+        {
+            /* Common location values used in Elm syntax trees
+             * https://github.com/pine-vm/pine/blob/325bd311a0e78bb1ce00fb3c7047d09bb784384c/implement/Pine.Core/Elm/elm-in-elm/pine-elm-syntax/src/ElmSyntax/Concrete/Range.elm#L40-L46
+             * */
+
+            for (var row = 1; row < 3_000; row++)
+            {
+                for (var column = 1; column < 16; column++)
+                {
+                    yield return ElmValue.RecordInstance(
+                        [
+                        ("column", ElmValue.Integer(column)),
+                        ("row", ElmValue.Integer(row)),
+                        ]);
+                }
+            }
+        }
     }
 }

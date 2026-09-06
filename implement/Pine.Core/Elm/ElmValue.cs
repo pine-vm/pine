@@ -297,9 +297,6 @@ public abstract record ElmValue
     /// Creates an <see cref="ElmTag"/> instance with the specified tag name and arguments.
     /// This method may return a cached instance for frequently used tags.
     /// </summary>
-    /// <param name="tagName">The name of the tag.</param>
-    /// <param name="arguments">The arguments associated with the tag.</param>
-    /// <returns>An <see cref="ElmTag"/> instance.</returns>
     public static ElmTag TagInstance(string tagName, IReadOnlyList<ElmValue> arguments)
     {
         var tagStruct =
@@ -311,6 +308,23 @@ public abstract record ElmValue
         }
 
         return new ElmTag(tagStruct);
+    }
+
+    /// <summary>
+    /// Creates an <see cref="ElmRecord"/> instance from a read-only list of field name-value pairs.
+    /// </summary>
+    public static ElmRecord RecordInstance(IReadOnlyList<(string FieldName, ElmValue Value)> fields)
+    {
+        var newInstance = new ElmRecord(fields);
+
+        if (ReusedInstances.Instance.ElmValues is { } reusedInstances &&
+            reusedInstances.TryGetValue(newInstance, out var reusedInstance) &&
+            reusedInstance is ElmRecord reusedRecord)
+        {
+            return reusedRecord;
+        }
+
+        return newInstance;
     }
 
     /// <summary>
