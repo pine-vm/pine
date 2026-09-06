@@ -5,7 +5,6 @@ using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.PineVM;
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Threading;
 using Xunit;
 
@@ -93,7 +92,7 @@ public class EvaluationCancellationTests
                 environment,
                 s_unboundedConfig,
                 reportEnteredStackFrame:
-                (in EnteredStackFrame enteredFrame) =>
+                (in enteredFrame) =>
                 {
                     if (enteredFrame.FrameExpression == expression)
                     {
@@ -129,7 +128,7 @@ public class EvaluationCancellationTests
                 StackInstruction.Push_Literal(PineValue.EmptyList),
                 new StackInstruction(
                     StackInstructionKind.Switch_Jump_If_Equal_Const,
-                    SwitchJumpTable: ImmutableDictionary<PineValue, int>.Empty),
+                    SwitchJumpTable: []),
                 StackInstruction.Push_Literal(PineValue.EmptyList),
                 StackInstruction.Return,
             ],
@@ -137,7 +136,7 @@ public class EvaluationCancellationTests
                 StackInstruction.Push_Literal(PineValue.EmptyList),
                 StackInstruction.Push_Literal(IntegerEncoding.EncodeSignedInteger(0)),
                 StackInstruction.Switch_Jump_If_Slice_Skip_Var_Equal_Const(
-                    ImmutableDictionary<PineValue, int>.Empty),
+                    []),
                 StackInstruction.Push_Literal(PineValue.EmptyList),
                 StackInstruction.Return,
             ],
@@ -178,7 +177,7 @@ public class EvaluationCancellationTests
                     PineValue.EmptyList,
                     s_unboundedConfig,
                     reportEnteredStackFrame:
-                    (in EnteredStackFrame enteredFrame) =>
+                    (in enteredFrame) =>
                     {
                         if (enteredFrame.FrameExpression == targetExpression)
                         {

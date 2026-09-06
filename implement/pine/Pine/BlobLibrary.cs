@@ -236,10 +236,11 @@ public class BlobLibrary
          * [...]
          * */
 
-        var handler = new HttpClientHandler
-        {
-            AutomaticDecompression = DecompressionMethods.All
-        };
+        var handler =
+            new HttpClientHandler
+            {
+                AutomaticDecompression = DecompressionMethods.All
+            };
 
         using var httpClient = new HttpClient(handler);
 
@@ -256,10 +257,11 @@ public class BlobLibrary
     {
         return
             sourceUrls
-            .Select(sourceUrl =>
-            DownloadFromUrlAndExtractBlobs(sourceUrl)
-            .Where(BlobHasSHA256(sha256)).Cast<ReadOnlyMemory<byte>?>()
-            .FirstOrDefault())
+            .Select(
+                sourceUrl =>
+                DownloadFromUrlAndExtractBlobs(sourceUrl)
+                .Where(BlobHasSHA256(sha256)).Cast<ReadOnlyMemory<byte>?>()
+                .FirstOrDefault())
             .WhereHasValue()
             .FirstOrDefault(defaultValue: null);
     }

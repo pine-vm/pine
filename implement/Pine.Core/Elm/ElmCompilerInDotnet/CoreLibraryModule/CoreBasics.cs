@@ -234,7 +234,11 @@ public class CoreBasics
             // (/) : Float -> Float -> Float
             "fdiv" =>
             new CoreFunctionInfo(
-                [TypeInference.InferredType.Float(), TypeInference.InferredType.Float(), TypeInference.InferredType.Float()],
+                [
+                TypeInference.InferredType.Float(),
+                TypeInference.InferredType.Float(),
+                TypeInference.InferredType.Float()
+                ],
                 args => Float_div(args[0], args[1])),
 
             // (//) : Int -> Int -> Int

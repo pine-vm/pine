@@ -42,6 +42,7 @@ public class ElmSyntaxDiagnosticsProviderTests
         diagnostic.Range.Should().Be(new LspRange(new Position(1, 0), new Position(1, 2)));
         diagnostic.Severity.Should().Be(DiagnosticSeverity.Error);
         diagnostic.Source.Should().Be("elm syntax");
+
         diagnostic.Message.Should().Be(
             "I cannot find the end of this multi-line comment:\n\n\n" +
             "Add a -} somewhere after this to end the comment.\n\n" +
@@ -55,6 +56,7 @@ public class ElmSyntaxDiagnosticsProviderTests
     {
         const string Source =
             "module Main exposing (..)\n\nfirst = 903.\n\nsize : Int\ncount = 1\n\nvalid = 1\n\n{-| documentation -}\n";
+
         var parsed = ElmSyntaxParser.ParseModuleText(Source).IsOkOrNull();
         parsed.Should().NotBeNull();
         parsed!.IncompleteDeclarations.Should().HaveCount(2);
@@ -65,15 +67,19 @@ public class ElmSyntaxDiagnosticsProviderTests
         var diagnostics = result.IsOkOrNull().Should().ContainSingle().Subject.Diagnostics;
 
         diagnostics.Should().HaveCount(3);
+
         diagnostics.Select(d => d.Range).Should().Equal(
             new LspRange(new Position(2, 11), new Position(2, 11)),
             new LspRange(new Position(5, 0), new Position(5, 0)),
             new LspRange(new Position(10, 0), new Position(10, 0)));
+
         diagnostics[0].Message.Should().Be(
             "Numbers cannot end with a dot like this:\n\n\nSwitching to 903 or 903.0 will work though!");
+
         diagnostics[1].Message.Should().Be(
             "I just saw a type annotation for `size`, but it is followed by a definition for\n" +
             "`count`:\n\n\nThese names do not match! Is there a typo?\n\n    count -> size");
+
         diagnostics[2].Message.Should().StartWith(
             "I am trying to parse a declaration, but I am getting stuck here:");
     }
@@ -101,23 +107,33 @@ public class ElmSyntaxDiagnosticsProviderTests
                     new ElmSyntaxProblem.Expected(
                         new ExpectedSyntax.Keyword("exposing"),
                         new FoundSyntax(FoundSyntaxKind.EndOfFile, ""))));
+
         var later = earlier with { Region = new SyntaxRange(new Location(4, 2), new Location(5, 3)) };
-        var tied = earlier with
-        {
-            Kind = new ElmSyntaxErrorKind.Parse(
-                new ElmSyntaxProblem.Expected(
-                    new ExpectedSyntax.Token(SyntaxTokenKind.CloseParen),
-                    new FoundSyntax(FoundSyntaxKind.EndOfFile, "")))
-        };
-        var validation = earlier with
-        {
-            Kind = new ElmSyntaxErrorKind.ModuleValidation(ModuleValidationProblem.PortInPackage)
-        };
+
+        var tied =
+            earlier with
+            {
+                Kind =
+                new ElmSyntaxErrorKind.Parse(
+                    new ElmSyntaxProblem.Expected(
+                        new ExpectedSyntax.Token(SyntaxTokenKind.CloseParen),
+                        new FoundSyntax(FoundSyntaxKind.EndOfFile, "")))
+            };
+
+        var validation =
+            earlier with
+            {
+                Kind = new ElmSyntaxErrorKind.ModuleValidation(ModuleValidationProblem.PortInPackage)
+            };
 
         var diagnostics =
             ElmLanguageServer.ComputeSyntaxErrorDiagnostics("", [later, validation, earlier, tied]);
 
-        diagnostics.Select(d => d.Message).Should().Equal("Expected `exposing`.", "Expected CloseParen.", "Expected `exposing`.");
+        diagnostics.Select(d => d.Message).Should().Equal(
+            "Expected `exposing`.",
+            "Expected CloseParen.",
+            "Expected `exposing`.");
+
         diagnostics.Select(d => d.Range).Should().Equal(
             new LspRange(new Position(1, 4), new Position(1, 6)),
             new LspRange(new Position(1, 4), new Position(1, 6)),
@@ -134,8 +150,14 @@ public class ElmSyntaxDiagnosticsProviderTests
     [InlineData(int.MaxValue, int.MaxValue, int.MaxValue, int.MaxValue,
         int.MaxValue - 1, int.MaxValue - 1, int.MaxValue - 1, int.MaxValue - 1)]
     public void Syntax_diagnostics_clamp_invalid_coordinates_and_keep_ranges_ordered(
-        int startRow, int startColumn, int endRow, int endColumn,
-        int expectedStartLine, int expectedStartCharacter, int expectedEndLine, int expectedEndCharacter)
+        int startRow,
+        int startColumn,
+        int endRow,
+        int endColumn,
+        int expectedStartLine,
+        int expectedStartCharacter,
+        int expectedEndLine,
+        int expectedEndCharacter)
     {
         var error =
             new ElmSyntaxParseError(

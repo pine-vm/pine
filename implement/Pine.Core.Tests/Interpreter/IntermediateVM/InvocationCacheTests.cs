@@ -102,6 +102,7 @@ public class InvocationCacheTests
         var dictionary = new InvocationCache();
         var access = new InvocationCacheAccessFromDictionary(dictionary);
         var expression = PineValue.Blob([1]);
+
         var key =
             new EvalCacheEntryKey(
                 expression,
@@ -232,11 +233,13 @@ public class InvocationCacheTests
     public void Persistent_cache_ignores_entries_without_matching_configuration()
     {
         var fileStore = new FileStoreFromConcurrentDictionary();
+
         var persistent =
             new PersistentInvocationCacheAccess(
                 memoryCache: null,
                 fileStore,
                 OptimizationParametersSerial.Empty);
+
         var key = BuildKey(1);
 
         persistent.MayContainExpression(key.ExprValue).Should().BeFalse();

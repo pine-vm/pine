@@ -28,10 +28,12 @@ public class RevisionedOperationSchedulerTests
                     attempts.AddOrUpdate(operation, 1, (_, count) => count + 1);
                     await Task.Delay(operation is 1 ? 30 : 1, cancellationToken);
                     var nextState = state + operation;
-                    return new RevisionedOperationAttempt<string, string>(
-                        nextState,
-                        nextState,
-                        CanCompleteSpeculatively: false);
+
+                    return
+                        new RevisionedOperationAttempt<string, string>(
+                            nextState,
+                            nextState,
+                            CanCompleteSpeculatively: false);
                 },
                 statesEqual: StringComparer.Ordinal.Equals);
 
@@ -59,6 +61,7 @@ public class RevisionedOperationSchedulerTests
                 (_, operation, state, _) =>
                 {
                     Interlocked.Increment(ref attemptCount);
+
                     return
                         ValueTask.FromResult(
                             new RevisionedOperationAttempt<string, string>(
@@ -133,10 +136,12 @@ public class RevisionedOperationSchedulerTests
                     try
                     {
                         await Task.Delay(10, cancellationToken);
-                        return new RevisionedOperationAttempt<int, int>(
-                            state,
-                            operation,
-                            CanCompleteSpeculatively: true);
+
+                        return
+                            new RevisionedOperationAttempt<int, int>(
+                                state,
+                                operation,
+                                CanCompleteSpeculatively: true);
                     }
                     finally
                     {
@@ -226,10 +231,11 @@ public class RevisionedOperationSchedulerTests
                         throw new InvalidOperationException("failure");
                     }
 
-                    return new RevisionedOperationAttempt<int, int>(
-                        state + operation,
-                        state + operation,
-                        CanCompleteSpeculatively: false);
+                    return
+                        new RevisionedOperationAttempt<int, int>(
+                            state + operation,
+                            state + operation,
+                            CanCompleteSpeculatively: false);
                 },
                 statesEqual: (left, right) => left == right);
 

@@ -385,7 +385,10 @@ public class ProcessStoreReaderInFileStore(
                 fromOk: loadComponentResult =>
                 {
                     if (Convert.ToHexStringLower(_hashCache.GetHash(loadComponentResult).Span) != componentHashBase16)
-                        throw new Exception("Unexpected content in file " + componentHashBase16 + ": Content hash does not match.");
+                    {
+                        throw new Exception(
+                            "Unexpected content in file " + componentHashBase16 + ": Content hash does not match.");
+                    }
 
                     return loadComponentResult;
                 });
@@ -418,7 +421,10 @@ public class ProcessStoreReaderInFileStore(
                 JsonSerializer.Deserialize<ProvisionalReductionRecordInFile>(fileContent.Value[payloadStartIndex..].Span)!;
 
             if (reducedCompositionHash != reductionRecordFromFile.reducedCompositionHashBase16)
-                throw new Exception("Unexpected content in file " + string.Join("/", filePath) + ", composition hash does not match.");
+            {
+                throw new Exception(
+                    "Unexpected content in file " + string.Join("/", filePath) + ", composition hash does not match.");
+            }
 
             return reductionRecordFromFile;
         }

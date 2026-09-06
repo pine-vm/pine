@@ -49,6 +49,7 @@ public class LanguageServerCodeLensTests
             new Range(
                 new Position(Line: 2, Character: 0),
                 new Position(Line: 2, Character: 0)));
+
         lens.Command.Should().BeNull();
 
         var data =
@@ -68,6 +69,7 @@ public class LanguageServerCodeLensTests
         resolved.Command.Should().NotBeNull();
         resolved.Command!.Title.Should().Be("2 references");
         resolved.Command.Identifier.Should().Be("pine.client.peekReferences");
+
         resolved.Command.Arguments.Should().BeEquivalentTo(
             new object[] { DocumentUri, new Position(Line: 3, Character: 0) });
 

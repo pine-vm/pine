@@ -85,13 +85,17 @@ public class ModuleParseErrorTests
                         foreach (var includeSource in new[] { false, true })
                         {
                             var original = error;
-                            var json = JsonNode.Parse(
+
+                            var json =
+                                JsonNode.Parse(
                                 ElmSyntaxErrorRenderer.RenderJson(source, error,
                                     new("Input.elm", IncludeSource: includeSource)))!;
+
                             var message = json["errors"]![0]!["problems"]![0]!["message"]!.AsArray();
 
                             ElmSyntaxErrorRenderer.RenderPlainText(source, error, includeSource)
                                 .Should().Be(string.Concat(message.Select(part => MessageText(part!))));
+
                             error.Should().Be(original);
                         }
                     }
@@ -212,17 +216,21 @@ public class ModuleParseErrorTests
             "    \"{{snippet}} {{carets}} {{definition}} {{found}} {{unknown}}\" \\ \t <&> é 🐟";
 
         var source = "-- prelude" + newline + "contextValue =" + newline + SourceLine;
-        var error = new ElmSyntaxParseError(
-            new Range(new Location(3, 5), new Location(3, 7)),
-            new Range(new Location(2, 1), new Location(3, 7)),
-            new ElmSyntaxErrorKind.Parse(new ElmSyntaxProblem.Grammar(SyntaxErrorBranch.DefBody)));
+
+        var error =
+            new ElmSyntaxParseError(
+                new Range(new Location(3, 5), new Location(3, 7)),
+                new Range(new Location(2, 1), new Location(3, 7)),
+                new ElmSyntaxErrorKind.Parse(new ElmSyntaxProblem.Grammar(SyntaxErrorBranch.DefBody)));
 
         foreach (var includeSource in new[] { false, true })
         {
             foreach (var includeStyling in new[] { false, true })
             {
-                var json = JsonNode.Parse(ElmSyntaxErrorRenderer.RenderJson(source, error,
+                var json =
+                    JsonNode.Parse(ElmSyntaxErrorRenderer.RenderJson(source, error,
                     new("src/Input.elm", IncludeSource: includeSource, IncludeStyling: includeStyling)))!;
+
                 var message = json["errors"]![0]!["problems"]![0]!["message"]!.AsArray();
 
                 message[0]!.GetValue<string>().Should().Be(
@@ -242,12 +250,20 @@ public class ModuleParseErrorTests
         const string Annotated = "{{defined}}\"\\é";
         const string Defined = "{{annotated}}{{snippet}}{{unknown}}";
         var range = new Range(new Location(1, 1), new Location(1, 2));
-        var error = new ElmSyntaxParseError(range, null,
-            new ElmSyntaxErrorKind.Parse(
-                new ElmSyntaxProblem.AnnotationNameMismatch(new LocatedIdentifier(Annotated, range), Defined)));
 
-        var options = new ElmSyntaxErrorJsonOptions("Input.elm",
-            IncludeSource: false, IncludeStyling: includeStyling);
+        var error =
+            new ElmSyntaxParseError(
+                range,
+                null,
+                new ElmSyntaxErrorKind.Parse(
+                    new ElmSyntaxProblem.AnnotationNameMismatch(new LocatedIdentifier(Annotated, range), Defined)));
+
+        var options =
+            new ElmSyntaxErrorJsonOptions(
+                "Input.elm",
+                IncludeSource: false,
+                IncludeStyling: includeStyling);
+
         var json = JsonNode.Parse(ElmSyntaxErrorRenderer.RenderJson("", error, options))!;
         var message = json["errors"]![0]!["problems"]![0]!["message"]!.AsArray();
 
@@ -266,25 +282,35 @@ public class ModuleParseErrorTests
     {
         const string Spelling = "{{found}}{{snippet}}{{carets}}{{unknown}}\"\\é";
         var found = new FoundSyntax(FoundSyntaxKind.Keyword, Spelling);
-        var error = new ElmSyntaxParseError(
-            new Range(new Location(1, 1), new Location(1, 2)), null,
-            new ElmSyntaxErrorKind.Parse(new ElmSyntaxProblem.Grammar(SyntaxErrorBranch.DeclReserved, found)));
+
+        var error =
+            new ElmSyntaxParseError(
+                new Range(new Location(1, 1), new Location(1, 2)),
+                null,
+                new ElmSyntaxErrorKind.Parse(new ElmSyntaxProblem.Grammar(SyntaxErrorBranch.DeclReserved, found)));
+
         var options = new ElmSyntaxErrorJsonOptions("Input.elm", IncludeSource: false);
         var json = JsonNode.Parse(ElmSyntaxErrorRenderer.RenderJson("", error, options))!;
         var message = json["errors"]![0]!["problems"]![0]!["message"]!.AsArray();
 
         message[0]!.GetValue<string>().Should().Be(
             "I was not expecting to run into the `" + Spelling + "` keyword here:\n\n");
+
         message[2]!.GetValue<string>().Should().Be(
             "\nIt is reserved for writing `" + Spelling + "` expressions. Try using a different name?\n\n");
+
         message[4]!.GetValue<string>().Should().StartWith(
             ": If you are trying to write an `" + Spelling + "` expression");
 
-        var expected = error with
-        {
-            Kind = new ElmSyntaxErrorKind.Parse(new ElmSyntaxProblem.Expected(new ExpectedSyntax.Keyword(Spelling), found))
-        };
+        var expected =
+            error with
+            {
+                Kind =
+                new ElmSyntaxErrorKind.Parse(new ElmSyntaxProblem.Expected(new ExpectedSyntax.Keyword(Spelling), found))
+            };
+
         var expectedJson = JsonNode.Parse(ElmSyntaxErrorRenderer.RenderJson("", expected, options))!;
+
         expectedJson["errors"]![0]!["problems"]![0]!["message"]!.AsArray().Select(MessageText)
             .Should().Equal("Expected `" + Spelling + "`.");
     }
@@ -299,9 +325,13 @@ public class ModuleParseErrorTests
     {
         var source = "module Input exposing (..)\n\n" + declaration + "\n";
         var error = ElmSyntaxErrorRenderer.CollectErrors(ElmSyntaxParser.ParseModuleText(source)).Single();
-        var json = JsonNode.Parse(ElmSyntaxErrorRenderer.RenderJson(source, error,
+
+        var json =
+            JsonNode.Parse(ElmSyntaxErrorRenderer.RenderJson(source, error,
             new("Input.elm", IncludeSource: false)))!;
-        var styledText = json["errors"]![0]!["problems"]![0]!["message"]!.AsArray()
+
+        var styledText =
+            json["errors"]![0]!["problems"]![0]!["message"]!.AsArray()
             .OfType<JsonObject>().Select(part => part["string"]!.GetValue<string>());
 
         styledText.Should().Contain(firstSuggestion).And.Contain(secondSuggestion);
@@ -315,9 +345,13 @@ public class ModuleParseErrorTests
         const string Path = "folder\\{{path}}\"é.elm";
         const string Expected = "{{declaredModule}}\"\\\n<&>é";
         const string Declared = "{{expectedModule}}{{snippet}}";
-        var error = new ElmSyntaxParseError(
-            new Range(new Location(1, 2), new Location(1, 4)), null,
-            new ElmSyntaxErrorKind.ModuleValidation(ModuleValidationProblem.ModuleNameMismatch, Expected, Declared));
+
+        var error =
+            new ElmSyntaxParseError(
+                new Range(new Location(1, 2), new Location(1, 4)),
+                null,
+                new ElmSyntaxErrorKind.ModuleValidation(ModuleValidationProblem.ModuleNameMismatch, Expected, Declared));
+
         var options = new ElmSyntaxErrorJsonOptions(Path, IncludeSource: false, WriteIndented: writeIndented);
         var text = ElmSyntaxErrorRenderer.RenderJson("", error, options);
         using var document = JsonDocument.Parse(text);
@@ -338,7 +372,13 @@ public class ModuleParseErrorTests
         region.GetProperty("start").GetProperty("line").GetInt32().Should().Be(0);
         region.GetProperty("start").GetProperty("column").GetInt32().Should().Be(1);
         region.GetProperty("end").GetProperty("column").GetInt32().Should().Be(3);
-        message[1].EnumerateObject().Select(property => property.Name).Should().Equal("bold", "underline", "color", "string");
+
+        message[1].EnumerateObject().Select(property => property.Name).Should().Equal(
+            "bold",
+            "underline",
+            "color",
+            "string");
+
         message[1].GetProperty("bold").GetBoolean().Should().BeFalse();
         message[1].GetProperty("underline").GetBoolean().Should().BeFalse();
         message[1].GetProperty("color").GetString().Should().Be("RED");
@@ -349,10 +389,12 @@ public class ModuleParseErrorTests
         message[7].GetProperty("underline").GetBoolean().Should().BeTrue();
         text.Contains('\n').Should().Be(writeIndented);
 
-        var missing = error with
-        {
-            Kind = new ElmSyntaxErrorKind.ModuleValidation(ModuleValidationProblem.ModuleNameMissing, Expected)
-        };
+        var missing =
+            error with
+            {
+                Kind = new ElmSyntaxErrorKind.ModuleValidation(ModuleValidationProblem.ModuleNameMissing, Expected)
+            };
+
         var missingJson = JsonNode.Parse(ElmSyntaxErrorRenderer.RenderJson("", missing, options))!;
         missingJson["errors"]![0]!["problems"]![0]!["message"]![2]!.GetValue<string>().Should().Be(" " + Expected + " ");
     }
@@ -363,14 +405,19 @@ public class ModuleParseErrorTests
     [InlineData("{{snippet}}\n\n\"\\<&>é\r\n{{shaderDetail}}\n", "    {{snippet}}\n    \n    \"\\<&>é\r\n    {{shaderDetail}}\n    ")]
     public void SyntaxError_JSON_preserves_opaque_shader_detail(string detail, string indented)
     {
-        var error = new ElmSyntaxParseError(
-            new Range(new Location(1, 1), new Location(1, 1)), null,
-            new ElmSyntaxErrorKind.Parse(new ElmSyntaxProblem.Shader(ShaderProblem.Invalid, UpstreamDetail: detail)));
-        var json = JsonNode.Parse(ElmSyntaxErrorRenderer.RenderJson("", error,
+        var error =
+            new ElmSyntaxParseError(
+                new Range(new Location(1, 1), new Location(1, 1)),
+                null,
+                new ElmSyntaxErrorKind.Parse(new ElmSyntaxProblem.Shader(ShaderProblem.Invalid, UpstreamDetail: detail)));
+
+        var json =
+            JsonNode.Parse(ElmSyntaxErrorRenderer.RenderJson("", error,
             new("Input.elm", IncludeSource: false, IncludeStyling: false)))!;
 
         json["errors"]![0]!["problems"]![0]!["message"]![2]!.GetValue<string>().Should().Be(
-            "\nI use a 3rd party GLSL parser for now, and I did my best to extract their error\nmessage:\n\n" + indented);
+            "\nI use a 3rd party GLSL parser for now, and I did my best to extract their error\nmessage:\n\n" +
+            indented);
     }
 
     [Fact]
@@ -554,35 +601,56 @@ public class ModuleParseErrorTests
         var source = System.IO.File.ReadAllText(DiagnosticsSourcePath());
         var nodes = CSharpSyntaxTree.ParseText(source).GetRoot().DescendantNodes().ToArray();
 
-        nodes.Where(node => node is
+        nodes.Where(
+            node => node is
             ThrowStatementSyntax or ThrowExpressionSyntax or TryStatementSyntax or
             ForStatementSyntax or ForEachStatementSyntax or WhileStatementSyntax or DoStatementSyntax)
             .Should().BeEmpty();
-        nodes.OfType<AssignmentExpressionSyntax>().Should().OnlyContain(assignment =>
+
+        nodes.OfType<AssignmentExpressionSyntax>().Should().OnlyContain(
+            assignment =>
             assignment.Parent is InitializerExpressionSyntax &&
             assignment.Parent.RawKind == (int)SyntaxKind.WithInitializerExpression);
-        nodes.OfType<PrefixUnaryExpressionSyntax>().Should().NotContain(expression =>
+
+        nodes.OfType<PrefixUnaryExpressionSyntax>().Should().NotContain(
+            expression =>
             expression.RawKind == (int)SyntaxKind.PreIncrementExpression ||
             expression.RawKind == (int)SyntaxKind.PreDecrementExpression);
-        nodes.OfType<PostfixUnaryExpressionSyntax>().Should().NotContain(expression =>
+
+        nodes.OfType<PostfixUnaryExpressionSyntax>().Should().NotContain(
+            expression =>
             expression.RawKind == (int)SyntaxKind.PostIncrementExpression ||
             expression.RawKind == (int)SyntaxKind.PostDecrementExpression);
-        nodes.OfType<ParameterSyntax>().Should().OnlyContain(parameter =>
+
+        nodes.OfType<ParameterSyntax>().Should().OnlyContain(
+            parameter =>
             !parameter.Modifiers.Any(token => token.RawKind == (int)SyntaxKind.RefKeyword ||
                 token.RawKind == (int)SyntaxKind.OutKeyword));
+
         nodes.OfType<ArgumentSyntax>().Should().OnlyContain(argument => argument.RefKindKeyword.RawKind == 0);
-        nodes.OfType<FieldDeclarationSyntax>().Should().OnlyContain(field =>
-            field.Modifiers.Any(token => token.RawKind == (int)SyntaxKind.ReadOnlyKeyword ||
-                token.RawKind == (int)SyntaxKind.ConstKeyword));
-        nodes.OfType<AccessorDeclarationSyntax>().Should().NotContain(accessor =>
+
+        nodes.OfType<FieldDeclarationSyntax>().Should().OnlyContain(
+            field =>
+            field.Modifiers.Any(
+                token => token.RawKind == (int)SyntaxKind.ReadOnlyKeyword ||
+                    token.RawKind == (int)SyntaxKind.ConstKeyword));
+
+        nodes.OfType<AccessorDeclarationSyntax>().Should().NotContain(
+            accessor =>
             accessor.RawKind == (int)SyntaxKind.SetAccessorDeclaration);
-        nodes.OfType<GenericNameSyntax>().Should().NotContain(name => name.Identifier.ValueText == "List" ||
-            name.Identifier.ValueText == "Stack");
+
+        nodes.OfType<GenericNameSyntax>().Should().NotContain(
+            name => name.Identifier.ValueText == "List" ||
+                name.Identifier.ValueText == "Stack");
+
         nodes.OfType<IdentifierNameSyntax>().Should().NotContain(name => name.Identifier.ValueText == "StringBuilder");
     }
 
     private static string DiagnosticsSourcePath([CallerFilePath] string testPath = "") =>
-        Path.GetFullPath(Path.Combine(Path.GetDirectoryName(testPath)!, "../../../Pine.Core/Elm/ElmSyntax/ElmSyntaxDiagnostics.cs"));
+        Path.GetFullPath(
+            Path.Combine(
+                Path.GetDirectoryName(testPath)!,
+                "../../../Pine.Core/Elm/ElmSyntax/ElmSyntaxDiagnostics.cs"));
 
     [Theory]
     [InlineData("", EscapeProblem.UnicodeShort, null)]
@@ -603,6 +671,7 @@ public class ModuleParseErrorTests
 
         diagnostic.Error.Kind.Should().Be(
             new ElmSyntaxErrorKind.Parse(new ElmSyntaxProblem.Escape(problem, digits.Length, code)));
+
         diagnostic.Error.Region.Should().Be(new Range(new Location(2, 10), new Location(2, 14 + digits.Length)));
         diagnostic.Error.ContextRange.Should().BeNull();
     }
@@ -622,16 +691,22 @@ public class ModuleParseErrorTests
     [Fact]
     public void SyntaxError_diagnostic_reader_is_reentrant()
     {
-        var sources = new[]
-        {
-            "module Test exposing (..)\nvalue = 1",
-            "module Test exposing (..)\nfirst =\n\nsecond = \"\\q\"",
-            "port module Test exposing (..)\nport send : String -> Cmd msg",
-            "module Test exposing (..)\n{-| documentation -}"
-        };
+        var sources =
+            new[]
+            {
+                "module Test exposing (..)\nvalue = 1",
+                "module Test exposing (..)\nfirst =\n\nsecond = \"\\q\"",
+                "port module Test exposing (..)\nport send : String -> Cmd msg",
+                "module Test exposing (..)\n{-| documentation -}"
+            };
+
         var expected = sources.Select(ElmSyntaxDiagnostics.Parse).ToArray();
-        var results = Enumerable.Range(0, 64).AsParallel()
-            .Select(index => (Index: index % sources.Length, Diagnostics: ElmSyntaxDiagnostics.Parse(sources[index % sources.Length])))
+
+        var results =
+            Enumerable.Range(0, 64).AsParallel()
+            .Select(
+                index =>
+                (Index: index % sources.Length, Diagnostics: ElmSyntaxDiagnostics.Parse(sources[index % sources.Length])))
             .ToArray();
 
         foreach (var result in results)
@@ -644,25 +719,31 @@ public class ModuleParseErrorTests
     [InlineData("\r")]
     public void SyntaxError_lexical_failure_preserves_first_error_and_recovery_cursor(string newline)
     {
-        var source = string.Join(newline,
-            "module Test exposing (..)",
-            "first = \"\\q\\u{}\"",
-            "",
-            "second = 01.2e+",
-            "",
-            "third = '😀'",
-            "");
+        var source =
+            string.Join(
+                newline,
+                "module Test exposing (..)",
+                "first = \"\\q\\u{}\"",
+                "",
+                "second = 01.2e+",
+                "",
+                "third = '😀'",
+                "");
+
         var diagnostics = ElmSyntaxDiagnostics.Parse(source);
 
         diagnostics.Select(d => d.Error.Kind).Should().Equal(
             new ElmSyntaxErrorKind.Parse(new ElmSyntaxProblem.Escape(EscapeProblem.Unknown)),
             new ElmSyntaxErrorKind.Parse(new ElmSyntaxProblem.Number(NumberProblem.End, "01")));
+
         diagnostics.Select(d => d.Declaration).Should().Equal(
             new Range(new Location(2, 1), new Location(2, 17)),
             new Range(new Location(4, 1), new Location(4, 16)));
+
         diagnostics.Select(d => d.Error.Region).Should().Equal(
             new Range(new Location(2, 10), new Location(2, 12)),
             new Range(new Location(4, 16), new Location(4, 16)));
+
         ElmSyntaxDiagnostics.Parse(source).Should().Equal(diagnostics);
     }
 
@@ -682,10 +763,13 @@ public class ModuleParseErrorTests
 
         if (problem is null)
             diagnostics.Should().BeEmpty();
+
         else
+        {
             diagnostics.Single().Error.Kind.Should().BeOfType<ElmSyntaxErrorKind.Parse>()
                 .Which.Problem.Should().BeOfType<ElmSyntaxProblem.Shader>()
                 .Which.SyntaxProblem.Should().Be(problem);
+        }
     }
 
     [Theory]
@@ -704,26 +788,33 @@ public class ModuleParseErrorTests
         const int Count = 8192;
         static string Repeated(string text) => string.Concat(Enumerable.Repeat(text, Count));
 
-        var body = kind switch
-        {
-            "whitespace" => Repeated(" \r\n") + "value = 1",
-            "string" => "value = \"" + Repeated("😀x") + "\"",
-            "identifier" => "value = a" + Repeated("b"),
-            "comments" => Repeated("{-") + "nested" + Repeated("-}") + "\nvalue = 1",
-            "list" => "value = [" + Repeated("1,") + "2]",
-            "application" => "value = f " + Repeated("x "),
-            "type" => "type alias Long = " + Repeated("Int -> ") + "Int",
-            "record" => "value = {" + Repeated("field = 1,") + "last = 2}",
-            "declarations" => Repeated("value = 1\n"),
-            "recovery" => Repeated("value =\n\n"),
-            _ => throw new ArgumentOutOfRangeException(nameof(kind))
-        };
+        var body =
+            kind switch
+            {
+                "whitespace" => Repeated(" \r\n") + "value = 1",
+                "string" => "value = \"" + Repeated("😀x") + "\"",
+                "identifier" => "value = a" + Repeated("b"),
+                "comments" => Repeated("{-") + "nested" + Repeated("-}") + "\nvalue = 1",
+                "list" => "value = [" + Repeated("1,") + "2]",
+                "application" => "value = f " + Repeated("x "),
+                "type" => "type alias Long = " + Repeated("Int -> ") + "Int",
+                "record" => "value = {" + Repeated("field = 1,") + "last = 2}",
+                "declarations" => Repeated("value = 1\n"),
+                "recovery" => Repeated("value =\n\n"),
+
+                _ =>
+                throw new ArgumentOutOfRangeException(nameof(kind))
+            };
+
         var diagnostics = ElmSyntaxDiagnostics.Parse("module Test exposing (..)\n\n" + body);
 
         diagnostics.Should().HaveCount(kind == "recovery" ? Count : 0);
+
         if (kind == "recovery")
+        {
             diagnostics.Select(d => d.Declaration!.Start.Row).Should().Equal(
                 Enumerable.Range(0, Count).Select(index => 3 + index * 2));
+        }
     }
 
     private static string DescribeBranch(ElmSyntaxErrorKind kind)

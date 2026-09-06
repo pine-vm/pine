@@ -210,7 +210,7 @@ public class PineVMInstructionTraceTests
                     LoopIterationCountLimit: null,
                     StackDepthLimit: null),
                 reportEnteredStackFrame:
-                (in EnteredStackFrame enteredStackFrame) =>
+                (in enteredStackFrame) =>
                 enteredFrames.Add(enteredStackFrame));
 
         var result =

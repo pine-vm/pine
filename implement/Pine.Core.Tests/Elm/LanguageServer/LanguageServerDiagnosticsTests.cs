@@ -196,6 +196,7 @@ public class LanguageServerDiagnosticsTests
         syntaxProvider.SetResult(
             documentUri,
             Result<DiagnosticsProviderError, IReadOnlyList<DocumentDiagnostics>>.ok([]));
+
         fallbackProvider.SetResult(
             documentUri,
             Result<DiagnosticsProviderError, IReadOnlyList<DocumentDiagnostics>>.err(

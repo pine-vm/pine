@@ -150,7 +150,8 @@ public class CompileExpressionTests
 
         var switchInstruction =
             compiled.Generic.Instructions
-            .Single(instruction =>
+            .Single(
+                instruction =>
                 instruction.Kind is
                 StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const);
 
