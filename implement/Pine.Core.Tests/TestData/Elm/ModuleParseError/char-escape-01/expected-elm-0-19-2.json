@@ -1,0 +1,48 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNKNOWN ESCAPE",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 9
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 11
+                        }
+                    },
+                    "message": [
+                        "Backslashes always start escaped characters, but I do not recognize this one:\n\n3| value = '\\q'\n            ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^^"
+                        },
+                        "\nValid escape characters include:\n\n",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "    \\n\n    \\r\n    \\t\n    \\\"\n    \\'\n    \\\\\n    \\u{003D}"
+                        },
+                        "\n\nDo you want one of those instead? Maybe you need \\\\ to escape a backslash?\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": The last style lets encode ANY character by its Unicode code point. That\nmeans \\u{0009} and \\t are the same. You can use that style for anything not\ncovered by the other six escapes!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

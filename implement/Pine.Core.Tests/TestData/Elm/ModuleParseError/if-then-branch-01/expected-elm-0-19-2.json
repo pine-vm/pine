@@ -1,0 +1,55 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "MISSING EXPRESSION",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 21
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 21
+                        }
+                    },
+                    "message": [
+                        "I am partway through parsing an `if` expression, but I got stuck here:\n\n3| value = if True then else 2\n                        ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI was expecting to see an expression like ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "42"
+                        },
+                        " or ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "\"hello\""
+                        },
+                        ". Once there is something\nthere, I can probably give a more specific hint!\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": This can also happen if I run into reserved words like `let` or `as`\nunexpectedly. Or if I run into operators in unexpected spots. Point is, there\nare a couple ways I can get confused and give sort of weird advice!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

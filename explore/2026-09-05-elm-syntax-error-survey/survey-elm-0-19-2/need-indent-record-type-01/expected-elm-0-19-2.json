@@ -1,0 +1,41 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/need-indent-record-type-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "NEED MORE INDENTATION",
+                    "region": {
+                        "start": {
+                            "line": 4,
+                            "column": 0
+                        },
+                        "end": {
+                            "line": 4,
+                            "column": 0
+                        }
+                    },
+                    "message": [
+                        "I was partway through parsing a record type, but I got stuck here:\n\n4|   { x : Int\n5| }\n   ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI need this curly brace to be indented more. Try adding some spaces before it!\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": If you are trying to define a record type across multiple lines, I\nrecommend using this format:\n\n    { name : String\n    , age : Int\n    , height : Float\n    }\n\nNotice that each line starts with some indentation. Usually two or four spaces.\nThis is the stylistic convention in the Elm ecosystem."
+                    ]
+                }
+            ]
+        }
+    ]
+}

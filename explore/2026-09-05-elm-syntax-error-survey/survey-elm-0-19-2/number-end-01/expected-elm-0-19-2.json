@@ -1,0 +1,34 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/number-end-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "WEIRD NUMBER",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 10
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 10
+                        }
+                    },
+                    "message": [
+                        "I thought I was reading a number, but I ran into some weird stuff here:\n\n3| value = 1e\n             ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI recognize numbers in the following formats:\n\n    42\n    3.14\n    6.022e23\n    0x002B\n\nSo is there a way to write it like one of those?"
+                    ]
+                }
+            ]
+        }
+    ]
+}

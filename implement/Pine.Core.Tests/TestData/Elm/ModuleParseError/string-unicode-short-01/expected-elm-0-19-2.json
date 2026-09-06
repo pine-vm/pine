@@ -1,0 +1,41 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "BAD UNICODE ESCAPE",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 9
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 15
+                        }
+                    },
+                    "message": [
+                        "Every code point needs at least four digits:\n\n3| value = \"\\u{12}\"\n            ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^^^^^^"
+                        },
+                        "\nTry ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "GREEN",
+                            "string": "\\u{0012}"
+                        },
+                        " instead?"
+                    ]
+                }
+            ]
+        }
+    ]
+}

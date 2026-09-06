@@ -175,6 +175,41 @@ public class LanguageServerDiagnosticsTests
     }
 
     [Fact]
+    public async Task DidSave_clears_stale_syntax_diagnostics_when_fallback_provider_fails()
+    {
+        var syntaxProvider = new StubDiagnosticsProvider();
+        var fallbackProvider = new StubDiagnosticsProvider();
+        var provider = new CompositeDiagnosticsProvider(syntaxProvider, fallbackProvider);
+        var (server, published) = CreateServer(provider);
+        var documentUri = VirtualWorkspace.DocumentUri("Main.elm");
+
+        syntaxProvider.SetResult(
+            documentUri,
+            Result<DiagnosticsProviderError, IReadOnlyList<DocumentDiagnostics>>.ok(
+                [new DocumentDiagnostics(documentUri, [DiagnosticWithMessage("syntax error")])]));
+
+        await server.TextDocument_didSaveAsync(
+            new DidSaveTextDocumentParams(new TextDocumentIdentifier(documentUri), Text: null));
+
+        published.Messages(documentUri).Should().Equal("syntax error");
+
+        syntaxProvider.SetResult(
+            documentUri,
+            Result<DiagnosticsProviderError, IReadOnlyList<DocumentDiagnostics>>.ok([]));
+        fallbackProvider.SetResult(
+            documentUri,
+            Result<DiagnosticsProviderError, IReadOnlyList<DocumentDiagnostics>>.err(
+                new DiagnosticsProviderError(
+                    DiagnosticsProviderErrorKind.ProviderFailure,
+                    "compiler unavailable")));
+
+        await server.TextDocument_didSaveAsync(
+            new DidSaveTextDocumentParams(new TextDocumentIdentifier(documentUri), Text: null));
+
+        published.Messages(documentUri).Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Diagnostics_from_a_failed_run_retain_the_previous_diagnostics()
     {
         var provider = new StubDiagnosticsProvider();

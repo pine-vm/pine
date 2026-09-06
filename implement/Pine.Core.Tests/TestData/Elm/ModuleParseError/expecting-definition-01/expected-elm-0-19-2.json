@@ -1,0 +1,48 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "EXPECTING DEFINITION",
+                    "region": {
+                        "start": {
+                            "line": 3,
+                            "column": 0
+                        },
+                        "end": {
+                            "line": 3,
+                            "column": 0
+                        }
+                    },
+                    "message": [
+                        "I just saw the type annotation for `value` so I was expecting to see its\ndefinition here:\n\n3| value : Int\n4| \n   ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nType annotations always appear directly above the relevant definition, without\nanything else in between. (Not even doc comments!)\n\nHere is a valid definition (with a type annotation) for reference:\n\n    greet : String -> String\n    greet name =\n      ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "\"Hello \""
+                        },
+                        " ++ name ++ ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "\"!\""
+                        },
+                        "\n\nThe top line (called a \"type annotation\") is optional. You can leave it off if\nyou want. As you get more comfortable with Elm and as your project grows, it\nbecomes more and more valuable to add them though! They work great as\ncompiler-verified documentation, and they often improve error messages!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

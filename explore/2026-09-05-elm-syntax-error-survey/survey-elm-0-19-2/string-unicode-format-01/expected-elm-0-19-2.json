@@ -1,0 +1,41 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/string-unicode-format-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "BAD UNICODE ESCAPE",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 9
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 11
+                        }
+                    },
+                    "message": [
+                        "I ran into an invalid Unicode escape:\n\n3| value = \"\\u1234\"\n            ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^^"
+                        },
+                        "\nHere are some examples of valid Unicode escapes:\n\n",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "    \\u{0041}\n    \\u{03BB}\n    \\u{6728}\n    \\u{1F60A}"
+                        },
+                        "\n\nNotice that the code point is always surrounded by curly braces. Maybe you are\nmissing the opening or closing curly brace?"
+                    ]
+                }
+            ]
+        }
+    ]
+}

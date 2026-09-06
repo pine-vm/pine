@@ -790,11 +790,12 @@ public class LanguageServer(
                 supersededUpdate = null;
             }
             else if (_clientTextDocumentVersions.TryGetValue(textDocumentUri, out var currentVersion) &&
-                     textDocument.Version <= currentVersion)
+                textDocument.Version <= currentVersion)
             {
                 ignoredReason =
                     "Ignoring stale document version " + textDocument.Version +
                     " because current version is " + currentVersion;
+
                 supersededUpdate = null;
             }
             else
@@ -2304,8 +2305,8 @@ public class LanguageServer(
 
         var symbols =
             TextDocument_documentSymbol(
-               codeLensParams.TextDocument with { Uri = documentUri },
-               cancellationToken);
+                codeLensParams.TextDocument with { Uri = documentUri },
+                cancellationToken);
 
         if (!CodeLensDocumentIdentityRemainsCurrent(documentUri, identity))
         {
@@ -2316,25 +2317,26 @@ public class LanguageServer(
         return
             [
             ..symbols.Select(
-               symbol =>
-               {
-                   var displayPosition = symbol.Range.Start;
-                   var declarationPosition = symbol.SelectionRange.Start;
-                   var data =
-                       JsonSerializer.SerializeToElement(
-                           new CodeLensResolveData(
-                               documentUri,
-                               declarationPosition,
-                               identity.ClientVersion,
-                               identity.DocumentGeneration),
-                           CodeLensDataJsonSerializerOptions);
+                symbol =>
+                {
+                    var displayPosition = symbol.Range.Start;
+                    var declarationPosition = symbol.SelectionRange.Start;
 
-                   return
-                       new Protocol.CodeLens(
-                           Range: new Range(displayPosition, displayPosition),
-                           Command: null,
-                           Data: data);
-               })
+                    var data =
+                        JsonSerializer.SerializeToElement(
+                            new CodeLensResolveData(
+                                documentUri,
+                                declarationPosition,
+                                identity.ClientVersion,
+                                identity.DocumentGeneration),
+                            CodeLensDataJsonSerializerOptions);
+
+                    return
+                        new Protocol.CodeLens(
+                            Range: new Range(displayPosition, displayPosition),
+                            Command: null,
+                            Data: data);
+                })
             ];
     }
 
@@ -2350,7 +2352,7 @@ public class LanguageServer(
         try
         {
             data =
-               codeLens.Data?.Deserialize<CodeLensResolveData>(
+                codeLens.Data?.Deserialize<CodeLensResolveData>(
                    CodeLensDataJsonSerializerOptions);
         }
         catch (JsonException exception)
@@ -2370,11 +2372,11 @@ public class LanguageServer(
 
         var references =
             TextDocument_references(
-               new Protocol.ReferenceParams(
-                   new TextDocumentIdentifier(data.DocumentUri),
-                   data.Position,
-                   new ReferenceContext(IncludeDeclaration: false)),
-               cancellationToken);
+                new Protocol.ReferenceParams(
+                    new TextDocumentIdentifier(data.DocumentUri),
+                    data.Position,
+                    new ReferenceContext(IncludeDeclaration: false)),
+                cancellationToken);
 
         if (!CodeLensDocumentIdentityRemainsCurrent(data.DocumentUri, identity))
         {
@@ -2388,10 +2390,10 @@ public class LanguageServer(
             codeLens with
             {
                 Command =
-                   new Protocol.Command(
-                       Title: referenceCount + (referenceCount is 1 ? " reference" : " references"),
-                       Identifier: "pine.client.peekReferences",
-                       Arguments: [data.DocumentUri, data.Position]),
+                new Protocol.Command(
+                    Title: referenceCount + (referenceCount is 1 ? " reference" : " references"),
+                    Identifier: "pine.client.peekReferences",
+                    Arguments: [data.DocumentUri, data.Position]),
             };
     }
 
@@ -2404,10 +2406,10 @@ public class LanguageServer(
             identity = GetDocumentIdentityLocked(documentUri);
 
             return
-               identity.IsOpen &&
-               !_pendingDocumentUpdates.ContainsKey(documentUri) &&
-               _languageServiceDocumentVersions.TryGetValue(documentUri, out var acceptedVersion) &&
-               identity.ClientVersion == acceptedVersion;
+                identity.IsOpen &&
+                !_pendingDocumentUpdates.ContainsKey(documentUri) &&
+                _languageServiceDocumentVersions.TryGetValue(documentUri, out var acceptedVersion) &&
+                identity.ClientVersion == acceptedVersion;
         }
     }
 
@@ -2445,10 +2447,10 @@ public class LanguageServer(
         lock (_documentStateLock)
         {
             return
-               GetDocumentIdentityLocked(documentUri) == expectedIdentity &&
-               !_pendingDocumentUpdates.ContainsKey(documentUri) &&
-               _languageServiceDocumentVersions.TryGetValue(documentUri, out var acceptedVersion) &&
-               expectedIdentity.ClientVersion == acceptedVersion;
+                GetDocumentIdentityLocked(documentUri) == expectedIdentity &&
+                !_pendingDocumentUpdates.ContainsKey(documentUri) &&
+                _languageServiceDocumentVersions.TryGetValue(documentUri, out var acceptedVersion) &&
+                expectedIdentity.ClientVersion == acceptedVersion;
         }
     }
 
@@ -2975,72 +2977,48 @@ public class LanguageServer(
         directoryUri + "/";
 
     /// <summary>
-    /// Computes language-server diagnostics for syntax errors in an Elm module, reusing the
-    /// locations and messages reported by the Elm syntax parser. Each diagnostic has severity
-    /// 'error' and source "elm syntax".
+    /// Computes language-server diagnostics directly from the Elm syntax parser.
+    /// Each diagnostic has severity 'error' and source "elm syntax".
     /// <para>
     /// Returns an empty list when the module parses cleanly (it may still need formatting).
-    /// When the module cannot be parsed at all, a single diagnostic is reported at the start
-    /// of the document carrying the parser's error message.
+    /// Fatal and recovered errors use their primary source regions, not declaration extents.
     /// </para>
     /// </summary>
     public static IReadOnlyList<Diagnostic> ComputeSyntaxErrorDiagnostics(string moduleText)
+        =>
+        ComputeSyntaxErrorDiagnostics(
+            moduleText,
+            ElmSyntaxErrorRenderer.CollectErrors(ElmSyntaxParser.ParseModuleText(moduleText)));
+
+    /// <summary>
+    /// Composes LSP diagnostics from structured parse errors in source order, excluding module validation.
+    /// One-based primary regions are converted to nonnegative, ordered, zero-based ranges.
+    /// </summary>
+    internal static IReadOnlyList<Diagnostic> ComputeSyntaxErrorDiagnostics(
+        string moduleText,
+        IEnumerable<ElmSyntaxParseError> errors)
     {
-        const string DiagnosticSource = "elm syntax";
-
-        var formatResult =
-            ElmFormat.FormatModuleTextReportingSyntaxErrors(moduleText);
-
-        if (formatResult.IsErrOrNullable() is { } parseErr)
-        {
-            var locationMapped =
-                new Position(
-                    Line: (uint)parseErr.Location.Row - 1,
-                    Character: (uint)parseErr.Location.Column - 1);
-
-            // The module could not be parsed at all (e.g. malformed module header).
-            // Report a single diagnostic at the start of the document.
-            return
-                [
-                new Diagnostic(
-                    Range: new Range(
-                        Start: locationMapped,
-                        End: locationMapped),
-                    Severity: DiagnosticSeverity.Error,
-                    Code: null,
-                    Source: DiagnosticSource,
-                    Message: parseErr.ToString(),
-                    CodeDescription: null,
-                    Tags: null,
-                    RelatedInformation: null)
-                ];
-        }
-
-        if (formatResult.IsOkOrNull() is not { } formatOk)
-        {
-            throw new System.NotImplementedException(
-                "Unexpected ElmFormat.FormatModuleTextReportingSyntaxErrors result: " + formatResult.GetType());
-        }
-
         return
             [
-            ..formatOk.SyntaxErrors
+            ..errors
+            .Where(error => error.Kind is ElmSyntaxErrorKind.Parse)
+            .OrderBy(error => error.Region.Start.Row)
+            .ThenBy(error => error.Region.Start.Column)
             .Select(
                 syntaxError =>
                 {
                     // The Elm syntax parser uses 1-based rows/columns; LSP uses 0-based positions.
-                    var startLine = System.Math.Max(0, syntaxError.Location.Row - 1);
-                    var startChar = System.Math.Max(0, syntaxError.Location.Column - 1);
+                    var startLine = System.Math.Max(1, syntaxError.Region.Start.Row) - 1;
+                    var startChar = System.Math.Max(1, syntaxError.Region.Start.Column) - 1;
 
-                    // Highlight from the error location to the end of the incomplete declaration.
-                    var endLine = System.Math.Max(0, syntaxError.Range.End.Row - 1);
-                    var endChar = System.Math.Max(0, syntaxError.Range.End.Column - 1);
+                    var endLine = System.Math.Max(1, syntaxError.Region.End.Row) - 1;
+                    var endChar = System.Math.Max(1, syntaxError.Region.End.Column) - 1;
 
                     // Guard against an end that precedes the start.
                     if (endLine < startLine || (endLine == startLine && endChar < startChar))
                     {
                         endLine = startLine;
-                        endChar = startChar + 1;
+                        endChar = startChar;
                     }
 
                     return
@@ -3050,8 +3028,8 @@ public class LanguageServer(
                                 End: new Position(Line: (uint)endLine, Character: (uint)endChar)),
                             Severity: DiagnosticSeverity.Error,
                             Code: null,
-                            Source: DiagnosticSource,
-                            Message: syntaxError.Message,
+                            Source: "elm syntax",
+                            Message: ElmSyntaxErrorRenderer.RenderPlainText(moduleText, syntaxError),
                             CodeDescription: null,
                             Tags: null,
                             RelatedInformation: null);

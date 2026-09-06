@@ -1,0 +1,34 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "NO TABS",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 7
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 7
+                        }
+                    },
+                    "message": [
+                        "I ran into a tab, but tabs are not allowed in Elm files.\n\n3| value =\t1\n          ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nReplace the tab with spaces."
+                    ]
+                }
+            ]
+        }
+    ]
+}

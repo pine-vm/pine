@@ -1,0 +1,55 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/port-colon-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "PORT PROBLEM",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 10
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 10
+                        }
+                    },
+                    "message": [
+                        "I just saw the start of a `port` declaration, but then I got stuck here:\n\n3| port send String\n             ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI was expecting to see a colon next. And then a type that tells me what type of\nvalues are going to flow through.\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": Here are some example `port` declarations for reference:\n\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "port"
+                        },
+                        " send : String -> Cmd msg\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "port"
+                        },
+                        " receive : (String -> msg) -> Sub msg\n\nThe first line defines a `send` port so you can send strings out to JavaScript.\nMaybe you send them on a WebSocket or put them into IndexedDB. The second line\ndefines a `receive` port so you can receive strings from JavaScript. Maybe you\nget receive messages when new WebSocket messages come in or when the IndexedDB\nis changed for some external reason."
+                    ]
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,48 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/let-problem-alignment-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "LET PROBLEM",
+                    "region": {
+                        "start": {
+                            "line": 5,
+                            "column": 7
+                        },
+                        "end": {
+                            "line": 5,
+                            "column": 7
+                        }
+                    },
+                    "message": [
+                        "I was partway through parsing a `let` expression, but I got stuck here:\n\n4|     let\n5|         x = 1\n6|        y = 2\n          ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nBased on the indentation, I was expecting to see the ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "in"
+                        },
+                        " keyword next. Is there a\ntypo?\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": This can also happen if you are trying to define another value within the\n`let` but it is not indented enough. Make sure each definition has exactly the\nsame amount of spaces before it. They should line up exactly!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

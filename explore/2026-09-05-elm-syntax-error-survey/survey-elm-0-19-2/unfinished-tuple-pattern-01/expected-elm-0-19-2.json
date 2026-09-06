@@ -1,0 +1,55 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/unfinished-tuple-pattern-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNFINISHED TUPLE PATTERN",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 10
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 10
+                        }
+                    },
+                    "message": [
+                        "I am partway through parsing a tuple pattern, but I got stuck here:\n\n3| value ( a,\n             ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI was expecting to see a pattern next. I am expecting the final result to be\nsomething like ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "(x,y)"
+                        },
+                        " or ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "(name, _)"
+                        },
+                        ".\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": I can get confused by indentation in cases like this, so the problem may\nbe that the next part is not indented enough?"
+                    ]
+                }
+            ]
+        }
+    ]
+}

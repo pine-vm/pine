@@ -1,0 +1,48 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/unexpected-port-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNEXPECTED PORTS",
+                    "region": {
+                        "start": {
+                            "line": 0,
+                            "column": 0
+                        },
+                        "end": {
+                            "line": 0,
+                            "column": 6
+                        }
+                    },
+                    "message": [
+                        "You are declaring ports in a normal module.\n\n1| module Input exposing (..)\n   ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^^^^^^"
+                        },
+                        "\nSwitch this to say ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "port module"
+                        },
+                        " instead, marking that this module contains port\ndeclarations.\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": Ports are not a traditional FFI for calling JS functions directly. They\nneed a different mindset! Read <https://elm-lang.org/0.19.2/ports> to learn the\nsyntax and how to use it effectively."
+                    ]
+                }
+            ]
+        }
+    ]
+}

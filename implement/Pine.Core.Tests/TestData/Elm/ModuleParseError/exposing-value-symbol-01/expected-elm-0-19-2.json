@@ -1,0 +1,62 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "PROBLEM IN EXPOSING",
+                    "region": {
+                        "start": {
+                            "line": 0,
+                            "column": 23
+                        },
+                        "end": {
+                            "line": 0,
+                            "column": 23
+                        }
+                    },
+                    "message": [
+                        "I got stuck while parsing these exposed values:\n\n1| module Input exposing (,)\n                          ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI do not have an exact recommendation, so here are some valid examples of\n`exposing` for reference:\n\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "import"
+                        },
+                        " Html ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "exposing"
+                        },
+                        " (..)\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "import"
+                        },
+                        " Basics ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "exposing"
+                        },
+                        " (Int, Float, Bool(..), (+), not, sqrt)\n\nThese examples show how to expose types, variants, operators, and functions.\nEverything should be some permutation of these examples, just with different\nnames."
+                    ]
+                }
+            ]
+        }
+    ]
+}

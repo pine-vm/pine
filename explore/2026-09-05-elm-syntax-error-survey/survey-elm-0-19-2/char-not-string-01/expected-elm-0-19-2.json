@@ -1,0 +1,55 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/char-not-string-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "NEEDS DOUBLE QUOTES",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 8
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 12
+                        }
+                    },
+                    "message": [
+                        "The following string uses single quotes:\n\n3| value = 'ab'\n           ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^^^^"
+                        },
+                        "\nPlease switch to double quotes instead:\n\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "'this'"
+                        },
+                        " => ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "GREEN",
+                            "string": "\"this\""
+                        },
+                        "\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": Elm uses double quotes for strings like \"hello\", whereas it uses single\nquotes for individual characters like 'a' and 'ø'. This distinction helps with\ncode like (String.any (\\c -> c == 'X') \"90210\") where you are inspecting\nindividual characters."
+                    ]
+                }
+            ]
+        }
+    ]
+}

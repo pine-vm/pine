@@ -1,0 +1,83 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "PROBLEM IN RECORD",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 10
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 10
+                        }
+                    },
+                    "message": [
+                        "I just started parsing a record, but I got stuck here:\n\n3| value = { , }\n             ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI was expecting to see a record field defined next, so I am looking for a name\nlike ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "userName"
+                        },
+                        " or ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "plantHeight"
+                        },
+                        ".\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": Field names must start with a lower-case letter. After that, you can use\nany sequence of letters, numbers, and underscores.\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": If you are trying to define a record across multiple lines, I recommend\nusing this format:\n\n    { name = ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "\"Alice\""
+                        },
+                        "\n    , age = ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "42"
+                        },
+                        "\n    , height = ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "1.75"
+                        },
+                        "\n    }\n\nNotice that each line starts with some indentation. Usually two or four spaces.\nThis is the stylistic convention in the Elm ecosystem."
+                    ]
+                }
+            ]
+        }
+    ]
+}

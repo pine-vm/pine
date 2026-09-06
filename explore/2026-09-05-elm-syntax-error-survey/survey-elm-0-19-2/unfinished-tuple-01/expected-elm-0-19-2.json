@@ -1,0 +1,55 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/unfinished-tuple-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNFINISHED TUPLE",
+                    "region": {
+                        "start": {
+                            "line": 3,
+                            "column": 8
+                        },
+                        "end": {
+                            "line": 3,
+                            "column": 8
+                        }
+                    },
+                    "message": [
+                        "I think I am in the middle of parsing a tuple. I just saw a comma, so I was\nexpecting to see an expression next.\n\n4|     ( 1,\n           ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nA tuple looks like ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "(3,4)"
+                        },
+                        " or ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "(\"Tom\",42)"
+                        },
+                        ", so I think there is an expression\nmissing here?\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": I can get confused by indentation in cases like this, so maybe you have an\nexpression but it is not indented enough?"
+                    ]
+                }
+            ]
+        }
+    ]
+}

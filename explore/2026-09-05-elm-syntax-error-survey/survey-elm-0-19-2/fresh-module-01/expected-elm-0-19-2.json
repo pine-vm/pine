@@ -1,0 +1,55 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/fresh-module-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "SYNTAX PROBLEM",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 1
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 1
+                        }
+                    },
+                    "message": [
+                        "I got stuck here:\n\n3|  module Other exposing (..)\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI am not sure what is going on, but I recommend starting an Elm file with the\nfollowing lines:\n\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "import"
+                        },
+                        " Html\n    \n    main =\n      Html.text ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "\"Hello!\""
+                        },
+                        "\n\nYou should be able to copy those lines directly into your file. Check out the\nexamples at <https://elm-lang.org/examples> for more help getting started!\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": This can also happen when something is indented too much!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

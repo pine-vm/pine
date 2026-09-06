@@ -1,0 +1,41 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/expr-bad-equals-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNEXPECTED EQUALS",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 10
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 10
+                        }
+                    },
+                    "message": [
+                        "I was not expecting to see this equals sign:\n\n3| value = 1 = 2\n             ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nMaybe you want == instead? To check if two values are equal?\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": I may be getting confused by your indentation. I think I am still parsing\nthe `value` definition. Is this supposed to be part of a definition after that?\nIf so, the problem may be a bit before the equals sign. I need all definitions\nto be indented exactly the same amount, so the problem may be that this new\ndefinition has too many spaces in front of it."
+                    ]
+                }
+            ]
+        }
+    ]
+}

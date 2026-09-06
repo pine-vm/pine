@@ -1,0 +1,55 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/record-expr-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "MISSING EXPRESSION",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 14
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 14
+                        }
+                    },
+                    "message": [
+                        "I am partway through parsing a record, but I got stuck here:\n\n3| value = { x = }\n                 ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI was expecting to see an expression like ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "42"
+                        },
+                        " or ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "\"hello\""
+                        },
+                        ". Once there is something\nthere, I can probably give a more specific hint!\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": This can also happen if I run into reserved words like `let` or `as`\nunexpectedly. Or if I run into operators in unexpected spots. Point is, there\nare a couple ways I can get confused and give sort of weird advice!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,55 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "WEIRD DECLARATION",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 0
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 0
+                        }
+                    },
+                    "message": [
+                        "I am trying to parse a declaration, but I am getting stuck here:\n\n3| ,\n   ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nWhen a line has no spaces at the beginning, I expect it to be a declaration like\none of these:\n\n    greet : String -> String\n    greet name =\n      ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "\"Hello \""
+                        },
+                        " ++ name ++ ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "\"!\""
+                        },
+                        "\n    \n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "type"
+                        },
+                        " User = Anonymous | LoggedIn String\n\nTry to make your declaration look like one of those? Or if this is not supposed\nto be a declaration, try adding some spaces before it?"
+                    ]
+                }
+            ]
+        }
+    ]
+}

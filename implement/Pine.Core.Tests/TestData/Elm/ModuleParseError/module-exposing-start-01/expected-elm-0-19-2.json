@@ -1,0 +1,62 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNFINISHED MODULE DECLARATION",
+                    "region": {
+                        "start": {
+                            "line": 0,
+                            "column": 21
+                        },
+                        "end": {
+                            "line": 0,
+                            "column": 21
+                        }
+                    },
+                    "message": [
+                        "I am parsing an `module` declaration, but I got stuck here:\n\n1| module Input exposing\n                        ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nHere are some examples of valid `module` declarations:\n\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "module"
+                        },
+                        " Main ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "exposing"
+                        },
+                        " (..)\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "module"
+                        },
+                        " Dict ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "exposing"
+                        },
+                        " (Dict, empty, get)\n\nI generally recommend using an explicit exposing list. I can skip compiling a\nbunch of files when the public interface of a module stays the same, so exposing\nfewer values can help improve compile times!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

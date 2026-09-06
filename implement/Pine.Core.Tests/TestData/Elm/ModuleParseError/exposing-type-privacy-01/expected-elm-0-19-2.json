@@ -1,0 +1,55 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "PROBLEM EXPOSING CUSTOM TYPE VARIANTS",
+                    "region": {
+                        "start": {
+                            "line": 0,
+                            "column": 29
+                        },
+                        "end": {
+                            "line": 0,
+                            "column": 29
+                        }
+                    },
+                    "message": [
+                        "It looks like you are trying to expose the variants of a custom type:\n\n1| module Input exposing (Thing(.))\n                                ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nYou need to write something like ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "Status(..)"
+                        },
+                        " or ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "Entity(..)"
+                        },
+                        " though. It is all or\nnothing, otherwise `case` expressions could miss a variant and crash!\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": It is often best to keep the variants hidden! If someone pattern matches\non the variants, it is a MAJOR change if any new variants are added. Suddenly\ntheir `case` expressions do not cover all variants! So if you do not need people\nto pattern match, keep the variants hidden and expose functions to construct\nvalues of this type. This way you can add new variants as a MINOR change!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,55 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/expr-dot-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "EXPECTING RECORD ACCESSOR",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 9
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 9
+                        }
+                    },
+                    "message": [
+                        "I am trying to parse a record accessor here:\n\n3| value = .\n            ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nSomething like ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": ".name"
+                        },
+                        " or ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": ".price"
+                        },
+                        " that accesses a value from a record.\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": Record field names must start with a lower case letter!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,34 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "WEIRD HEXIDECIMAL",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 10
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 10
+                        }
+                    },
+                    "message": [
+                        "I thought I was reading a hexidecimal number until I got here:\n\n3| value = 0x\n             ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nValid hexidecimal digits include 0123456789abcdefABCDEF, so I can only recognize\nthings like this:\n\n    0x2B\n    0x002B\n    0x00ffb3"
+                    ]
+                }
+            ]
+        }
+    ]
+}

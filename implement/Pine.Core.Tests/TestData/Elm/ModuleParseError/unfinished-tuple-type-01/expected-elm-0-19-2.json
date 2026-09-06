@@ -1,0 +1,55 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNFINISHED TUPLE TYPE",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 14
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 14
+                        }
+                    },
+                    "message": [
+                        "I think I am in the middle of parsing a tuple type. I just saw a comma, so I was\nexpecting to see a type next.\n\n3| value : ( Int,\n                 ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nA tuple type looks like ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "(Float,Float)"
+                        },
+                        " or ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "(String,Int)"
+                        },
+                        ", so I think there is a\ntype missing here?\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": I can get confused by indentation in cases like this, so maybe you have an\nexpression but it is not indented enough?"
+                    ]
+                }
+            ]
+        }
+    ]
+}

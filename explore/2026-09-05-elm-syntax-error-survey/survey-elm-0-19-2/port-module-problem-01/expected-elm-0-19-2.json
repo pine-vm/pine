@@ -1,0 +1,83 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/port-module-problem-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNFINISHED PORT MODULE DECLARATION",
+                    "region": {
+                        "start": {
+                            "line": 0,
+                            "column": 11
+                        },
+                        "end": {
+                            "line": 0,
+                            "column": 11
+                        }
+                    },
+                    "message": [
+                        "I am parsing an `port module` declaration, but I got stuck here:\n\n1| port module\n              ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nHere are some examples of valid `port module` declarations:\n\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "port"
+                        },
+                        " ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "module"
+                        },
+                        " WebSockets ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "exposing"
+                        },
+                        " (send, listen, keepAlive)\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "port"
+                        },
+                        " ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "module"
+                        },
+                        " Maps ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "exposing"
+                        },
+                        " (Location, goto)\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": Read <https://elm-lang.org/0.19.2/ports> for more help."
+                    ]
+                }
+            ]
+        }
+    ]
+}

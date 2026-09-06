@@ -1,0 +1,1 @@
+module Input exposing (Thing(.))

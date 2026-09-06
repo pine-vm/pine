@@ -1,0 +1,48 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/def-body-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNFINISHED DEFINITION",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 7
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 7
+                        }
+                    },
+                    "message": [
+                        "I got stuck while parsing the `value` definition:\n\n3| value =\n          ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI was expecting to see an expression next. What is it equal to?\n\nHere is a valid definition (with a type annotation) for reference:\n\n    greet : String -> String\n    greet name =\n      ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "\"Hello \""
+                        },
+                        " ++ name ++ ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "\"!\""
+                        },
+                        "\n\nThe top line (called a \"type annotation\") is optional. You can leave it off if\nyou want. As you get more comfortable with Elm and as your project grows, it\nbecomes more and more valuable to add them though! They work great as\ncompiler-verified documentation, and they often improve error messages!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

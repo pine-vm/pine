@@ -1,0 +1,48 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNFINISHED ANONYMOUS FUNCTION",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 12
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 12
+                        }
+                    },
+                    "message": [
+                        "I just saw the beginning of an anonymous function, so I was expecting to see an\narrow next:\n\n3| value = \\x 1\n               ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nThe syntax for anonymous functions is ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "(\\x -> x + 1)"
+                        },
+                        " so I am missing the arrow\nand the body of the function.\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": It is possible that I am confused about indetation! I generally recommend\nswitching to named functions if the definition cannot fit inline nicely, so\neither (1) try to fit the whole anonymous function on one line or (2) break the\nwhole thing out into a named function. Things tend to be clearer that way!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

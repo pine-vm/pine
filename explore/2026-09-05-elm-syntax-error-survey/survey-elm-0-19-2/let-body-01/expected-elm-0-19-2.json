@@ -1,0 +1,62 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/let-body-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNFINISHED LET",
+                    "region": {
+                        "start": {
+                            "line": 5,
+                            "column": 4
+                        },
+                        "end": {
+                            "line": 5,
+                            "column": 4
+                        }
+                    },
+                    "message": [
+                        "I was partway through parsing a `let` expression, but I got stuck here:\n\n4|   let\n5|     x = 1\n6|   in\n       ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI was expecting an expression next. Tell me what should happen with the value\nyou just defined!\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": Here is an example with a valid `let` expression for reference:\n\n    viewPerson person =\n      ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "let"
+                        },
+                        "\n        fullName =\n          person.firstName ++ ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "\" \""
+                        },
+                        " ++ person.lastName\n      ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "in"
+                        },
+                        "\n      div [] [ text fullName ]\n\nHere we defined a `viewPerson` function that turns a person into some HTML. We\nuse a `let` expression to define the `fullName` we want to show. Notice the\nindentation! The `fullName` is indented more than the `let` keyword, and the\nactual value of `fullName` is indented a bit more than that. That is important!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

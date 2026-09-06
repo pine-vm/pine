@@ -1,0 +1,34 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "SYNTAX PROBLEM",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 10
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 10
+                        }
+                    },
+                    "message": [
+                        "I got stuck here:\n\n3| value = 1 ;\n             ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nWhatever I am running into is confusing me a lot! Normally I can give fairly\nspecific hints, but something is really tripping me up this time."
+                    ]
+                }
+            ]
+        }
+    ]
+}

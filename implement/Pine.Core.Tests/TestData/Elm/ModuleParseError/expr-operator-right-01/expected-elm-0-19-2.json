@@ -1,0 +1,55 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "MISSING EXPRESSION",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 11
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 11
+                        }
+                    },
+                    "message": [
+                        "I was expecting to see an expression after this + operator:\n\n3| value = 1 +\n              ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nYou can just put anything for now, like ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "42"
+                        },
+                        " or ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "\"hello\""
+                        },
+                        ". Once there is something\nthere, I can probably give a more specific hint!\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": I may be getting confused by your indentation? The easiest way to make\nsure this is not an indentation problem is to put the expression on the right of\nthe + operator on the same line."
+                    ]
+                }
+            ]
+        }
+    ]
+}

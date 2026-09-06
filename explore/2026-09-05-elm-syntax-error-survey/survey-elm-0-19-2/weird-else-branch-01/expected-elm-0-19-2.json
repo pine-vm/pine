@@ -1,0 +1,41 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/weird-else-branch-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "WEIRD ELSE BRANCH",
+                    "region": {
+                        "start": {
+                            "line": 5,
+                            "column": 0
+                        },
+                        "end": {
+                            "line": 5,
+                            "column": 4
+                        }
+                    },
+                    "message": [
+                        "I was partway through an `if` expression when I got stuck here:\n\n4|     if True then\n5|         1\n6| else\n   ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^^^^"
+                        },
+                        "\nI think this ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "else"
+                        },
+                        " keyword needs to be indented more. Try adding some spaces\nbefore it."
+                    ]
+                }
+            ]
+        }
+    ]
+}

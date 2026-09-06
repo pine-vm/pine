@@ -1,0 +1,48 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "PROBLEM IN TYPE ALIAS",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 16
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 16
+                        }
+                    },
+                    "message": [
+                        "I was partway through parsing a type alias, but I got stuck here:\n\n3| type alias T = (,)\n                   ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI was expecting to see a type next. Try putting ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "Int"
+                        },
+                        " or ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "String"
+                        },
+                        " for now?"
+                    ]
+                }
+            ]
+        }
+    ]
+}

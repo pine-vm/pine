@@ -1,0 +1,83 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/case-branch-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNFINISHED CASE",
+                    "region": {
+                        "start": {
+                            "line": 4,
+                            "column": 8
+                        },
+                        "end": {
+                            "line": 4,
+                            "column": 8
+                        }
+                    },
+                    "message": [
+                        "I was partway through parsing a `case` expression, but I got stuck here:\n\n4|   case x of\n5|     _ ->\n           ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI was expecting to see an expression next. What should I do when I run into this\nparticular pattern?\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": Here is an example of a valid `case` expression for reference.\n\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "case"
+                        },
+                        " maybeWidth ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "of"
+                        },
+                        "\n      ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "BLUE",
+                            "string": "Just"
+                        },
+                        " width ->\n        width + ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "200"
+                        },
+                        "\n\n      ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "BLUE",
+                            "string": "Nothing"
+                        },
+                        " ->\n        ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "400"
+                        },
+                        "\n\nNotice the indentation. Each pattern is aligned, and each branch is indented a\nbit more than the corresponding pattern. That is important!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

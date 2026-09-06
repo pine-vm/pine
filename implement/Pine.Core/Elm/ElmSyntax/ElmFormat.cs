@@ -31,7 +31,11 @@ public static class ElmFormat
     /// </param>
     public record ModuleFormatResult(
         string FormattedText,
-        IReadOnlyList<ModuleSyntaxError> SyntaxErrors);
+        IReadOnlyList<ModuleSyntaxError> SyntaxErrors)
+    {
+        /// <summary>Original structured diagnostics, before any formatting or presentation.</summary>
+        public IReadOnlyList<ElmSyntaxParseError> ParseErrors { get; init; } = [];
+    }
 
     /// <summary>
     /// Formats Elm module source code, preserving the original linebreak style (LF or CRLF).
@@ -136,9 +140,21 @@ public static class ElmFormat
                 new ModuleSyntaxError(
                     Location: node.Value.ParseError.Location,
                     Range: node.Range,
-                    Message: node.Value.ParseError.Message))
+                    Message: ElmSyntaxErrorRenderer.RenderConcise(node.Value.ParseError))),
+            .. parsed.AdditionalParseErrors.Select(
+                error =>
+                new ModuleSyntaxError(
+                    error.Location,
+                    error.ContextRange ?? error.Region,
+                    ElmSyntaxErrorRenderer.RenderConcise(error)))
             ];
 
-        return new ModuleFormatResult(rendered, syntaxErrors);
+        return
+            new ModuleFormatResult(
+                rendered,
+                [.. syntaxErrors.OrderBy(error => error.Location.Row).ThenBy(error => error.Location.Column)])
+            {
+                ParseErrors = ElmSyntaxErrorRenderer.CollectErrors(parseResult)
+            };
     }
 }

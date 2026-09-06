@@ -273,20 +273,23 @@ public static class FormatCommandShared
                 sortedFormatErrors.Count + sortedDiagnostics.Count);
         }
 
+        if (sortedFormatErrors.Count is not 0)
+        {
+            WriteFilesWithErrors(console, sortedFormatErrors, showDetailedOverview);
+        }
+
+        if (sortedDiagnostics.Count is not 0)
+        {
+            WriteFileDiagnostics(console, sortedDiagnostics);
+        }
+
+        if (sortedFormatErrors.Count is not 0 || (verifyNoChanges && sortedDiagnostics.Count is not 0))
+        {
+            return 200;
+        }
+
         if (verifyNoChanges)
         {
-            if (sortedFormatErrors.Count is not 0)
-            {
-                WriteFilesWithErrors(console, sortedFormatErrors, showDetailedOverview);
-                return 200;
-            }
-
-            if (sortedDiagnostics.Count is not 0)
-            {
-                WriteFileDiagnostics(console, sortedDiagnostics);
-                return 200;
-            }
-
             if (sortedNeedsFormatting.Count is not 0)
             {
                 WriteFilesNeedingFormatting(
@@ -299,17 +302,6 @@ public static class FormatCommandShared
 
             WriteSuccessMessage(console, sortedAlreadyFormatted.Count, verifyNoChanges);
             return 0;
-        }
-
-        if (sortedFormatErrors.Count is not 0)
-        {
-            WriteFilesWithErrors(console, sortedFormatErrors, showDetailedOverview);
-            return 200;
-        }
-
-        if (sortedDiagnostics.Count is not 0)
-        {
-            WriteFileDiagnostics(console, sortedDiagnostics);
         }
 
         if (!showDetailedOverview)

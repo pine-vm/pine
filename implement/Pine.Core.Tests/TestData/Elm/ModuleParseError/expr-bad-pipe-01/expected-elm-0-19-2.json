@@ -1,0 +1,34 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNEXPECTED SYMBOL",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 10
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 10
+                        }
+                    },
+                    "message": [
+                        "I was not expecting this vertical bar:\n\n3| value = 1 | 2\n             ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nVertical bars should only appear in custom type declarations. Maybe you want ||\ninstead?"
+                    ]
+                }
+            ]
+        }
+    ]
+}

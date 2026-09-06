@@ -1,0 +1,34 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "BAD UNICODE ESCAPE",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 9
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 20
+                        }
+                    },
+                    "message": [
+                        "This is not a valid code point:\n\n3| value = \"\\u{1234567}\"\n            ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^^^^^^^^^^^"
+                        },
+                        "\nThe valid code points are between 0 and 10FFFF inclusive."
+                    ]
+                }
+            ]
+        }
+    ]
+}

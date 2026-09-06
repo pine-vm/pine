@@ -1,0 +1,76 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/import-name-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "EXPECTING IMPORT NAME",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 7
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 7
+                        }
+                    },
+                    "message": [
+                        "I was parsing an `import` until I got stuck here:\n\n3| import lower\n          ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI was expecting to see a module name next, like in these examples:\n\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "import"
+                        },
+                        " Dict\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "import"
+                        },
+                        " Maybe\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "import"
+                        },
+                        " Html.Attributes ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "as"
+                        },
+                        " A\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "import"
+                        },
+                        " Json.Decode ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "exposing"
+                        },
+                        " (..)\n\nNotice that the module names all start with capital letters. That is required!\n\nRead <https://elm-lang.org/0.19.2/imports> to learn more."
+                    ]
+                }
+            ]
+        }
+    ]
+}

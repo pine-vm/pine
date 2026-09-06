@@ -1,0 +1,76 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "EXPECTING IMPORT ALIAS",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 15
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 15
+                        }
+                    },
+                    "message": [
+                        "I was parsing an `import` until I got stuck here:\n\n3| import Html as lower\n                  ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI was expecting to see an alias next, like in these examples:\n\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "import"
+                        },
+                        " Html.Attributes ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "as"
+                        },
+                        " Attr\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "import"
+                        },
+                        " WebGL.Texture ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "as"
+                        },
+                        " Texture\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "import"
+                        },
+                        " Json.Decode ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "as"
+                        },
+                        " D\n\nNotice that the alias always starts with a capital letter. That is required!\n\nRead <https://elm-lang.org/0.19.2/imports> to learn more."
+                    ]
+                }
+            ]
+        }
+    ]
+}

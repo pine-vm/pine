@@ -1,0 +1,41 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "RESERVED SYMBOL",
+                    "region": {
+                        "start": {
+                            "line": 0,
+                            "column": 24
+                        },
+                        "end": {
+                            "line": 0,
+                            "column": 24
+                        }
+                    },
+                    "message": [
+                        "I cannot expose this as an operator:\n\n1| module Input exposing ((=))\n                           ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nMaybe you want ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "(==)"
+                        },
+                        " instead?"
+                    ]
+                }
+            ]
+        }
+    ]
+}

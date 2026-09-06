@@ -1,0 +1,55 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNEXPECTED SYMBOL",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 10
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 10
+                        }
+                    },
+                    "message": [
+                        "I was not expecting to run into the \"has type\" symbol here:\n\n3| value = 1 : 2\n             ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nMaybe you want ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "GREEN",
+                            "string": "::"
+                        },
+                        " instead? To put something on the front of a list?\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": The single colon is reserved for type annotations and record types, but I\nthink I am parsing the definition of `value` right now.\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": I may be getting confused by your indentation. Is this supposed to be part\nof a type annotation AFTER the `value` definition? If so, the problem may be a\nbit before the \"has type\" symbol. I need all definitions to be exactly aligned\n(with exactly the same indentation) so the problem may be that this new\ndefinition is indented a bit too much."
+                    ]
+                }
+            ]
+        }
+    ]
+}

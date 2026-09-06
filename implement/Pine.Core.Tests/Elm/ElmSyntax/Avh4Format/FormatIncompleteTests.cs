@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using Xunit;
 
@@ -80,7 +81,7 @@ public class FormatIncompleteTests
         incompleteDecl.Value.ParseError.Location.Row.Should().BeGreaterThanOrEqualTo(6);
 
         // The ErrorMessage should be non-empty
-        incompleteDecl.Value.ParseError.Message.Should().NotBeEmpty();
+        ElmSyntaxErrorRenderer.RenderConcise(incompleteDecl.Value.ParseError).Should().NotBeEmpty();
     }
 
     [Fact]
@@ -149,8 +150,12 @@ public class FormatIncompleteTests
 
         incompleteDecl.Value.ParseError.Location.Should().Be(new Location(13, 5));
 
-        // The ErrorMessage should describe the issue unexpected open bracket
-        incompleteDecl.Value.ParseError.Message.Should().Contain("OpenBracket");
+        incompleteDecl.Value.ParseError.Kind.Should().Be(
+            new ElmSyntaxErrorKind.Parse(
+                new ElmSyntaxProblem.Grammar(
+                    SyntaxErrorBranch.TrecordType,
+                    new FoundSyntax(FoundSyntaxKind.Delimiter, "["),
+                    SyntaxErrorSite.TypeAlias)));
     }
 
     [Fact]

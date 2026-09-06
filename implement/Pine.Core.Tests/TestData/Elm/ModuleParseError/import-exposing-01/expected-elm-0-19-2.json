@@ -1,0 +1,62 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNFINISHED IMPORT",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 20
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 20
+                        }
+                    },
+                    "message": [
+                        "I was parsing an `import` until I got stuck here:\n\n3| import Html exposing\n                       ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI was expecting to see the list of exposed values next. For example, here are\ntwo ways to expose values from the `Html` module:\n\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "import"
+                        },
+                        " Html ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "exposing"
+                        },
+                        " (..)\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "import"
+                        },
+                        " Html ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "exposing"
+                        },
+                        " (Html, div, text)\n\nI generally recommend the second style. It is more explicit, making it much\neasier to figure out where values are coming from in large projects!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

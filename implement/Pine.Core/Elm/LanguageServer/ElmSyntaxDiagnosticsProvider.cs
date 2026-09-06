@@ -81,6 +81,8 @@ public class CompositeDiagnosticsProvider(
         string entryPointDocumentUri,
         CancellationToken cancellationToken)
     {
+        Result<DiagnosticsProviderError, IReadOnlyList<DocumentDiagnostics>>? successfulFirstResult = null;
+
         var firstResult =
             await first.GetDiagnosticsAsync(entryPointDocumentUri, cancellationToken);
 
@@ -100,6 +102,8 @@ public class CompositeDiagnosticsProvider(
                     "Unexpected diagnostics result type: " + firstResult.GetType());
             }
 
+            successfulFirstResult = firstResult;
+
             var anyDiagnostic = false;
 
             foreach (var documentDiagnostics in firstDiagnostics)
@@ -117,6 +121,24 @@ public class CompositeDiagnosticsProvider(
             }
         }
 
-        return await second.GetDiagnosticsAsync(entryPointDocumentUri, cancellationToken);
+        var secondResult =
+            await second.GetDiagnosticsAsync(entryPointDocumentUri, cancellationToken);
+
+        if (secondResult.IsErrOrNull() is { } secondError &&
+            successfulFirstResult is { } firstSuccess)
+        {
+            /*
+             * The first provider authoritatively reported that its previous diagnostics are gone.
+             * Preserve that successful result when the fallback fails so the language server can
+             * publish an empty list instead of retaining stale syntax diagnostics.
+             */
+            logDelegate?.Invoke(
+                "Second diagnostics provider failed for " + entryPointDocumentUri + ": " +
+                secondError.Kind + ": " + secondError.Message);
+
+            return firstSuccess;
+        }
+
+        return secondResult;
     }
 }

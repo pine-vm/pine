@@ -1,0 +1,41 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "K:\\test\\Repos\\pine\\implement\\Pine.Core\\Elm\\elm-in-elm\\src\\Pine.elm",
+            "name": "Pine",
+            "problems": [
+                {
+                    "title": "UNEXPECTED COMMA",
+                    "region": {
+                        "start": {
+                            "line": 81,
+                            "column": 25
+                        },
+                        "end": {
+                            "line": 81,
+                            "column": 25
+                        }
+                    },
+                    "message": [
+                        "I got stuck on this comma:\n\n81|     | DescribePathEnd a ,\n                            ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI do not think I am parsing a list or tuple right now. Try deleting the comma?\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": If this is supposed to be part of a list, the problem may be a bit\nearlier. Perhaps the opening [ is missing? Or perhaps some value in the list has\nan extra closing ] that is making me think the list ended earlier? The same\nkinds of things could be going wrong if this is supposed to be a tuple."
+                    ]
+                }
+            ]
+        }
+    ]
+}

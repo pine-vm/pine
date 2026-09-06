@@ -1,0 +1,41 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNFINISHED IF",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 22
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 22
+                        }
+                    },
+                    "message": [
+                        "I was expecting to see an `else` branch after this:\n\n3| value = if True then 1\n                         ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI know what to do when the condition is True, but what happens when it is False?\nAdd an ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "else"
+                        },
+                        " branch to handle that scenario!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

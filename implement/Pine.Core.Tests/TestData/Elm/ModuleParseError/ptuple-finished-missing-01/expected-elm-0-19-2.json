@@ -1,0 +1,41 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNFINISHED PARENTHESES",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 12
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 12
+                        }
+                    },
+                    "message": [
+                        "I was partway through parsing a pattern, but I got stuck here:\n\n3| value (x, y = 1\n               ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI was expecting a closing parenthesis next, so try adding a ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": ")"
+                        },
+                        " to see if that\nhelps?"
+                    ]
+                }
+            ]
+        }
+    ]
+}

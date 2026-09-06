@@ -1,0 +1,83 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/case-arrow-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "MISSING ARROW",
+                    "region": {
+                        "start": {
+                            "line": 4,
+                            "column": 6
+                        },
+                        "end": {
+                            "line": 4,
+                            "column": 6
+                        }
+                    },
+                    "message": [
+                        "I am partway through parsing a `case` expression, but I got stuck here:\n\n4|   case x of\n5|     _ 1\n         ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI was expecting to see an arrow next.\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": Sometimes I get confused by indentation, so try to make your `case` look\nsomething like this:\n\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "case"
+                        },
+                        " maybeWidth ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "of"
+                        },
+                        "\n      ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "BLUE",
+                            "string": "Just"
+                        },
+                        " width ->\n        width + ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "200"
+                        },
+                        "\n\n      ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "BLUE",
+                            "string": "Nothing"
+                        },
+                        " ->\n        ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "400"
+                        },
+                        "\n\nNotice the indentation! Patterns are aligned with each other. Same indentation.\nThe expressions after each arrow are all indented a bit more than the patterns.\nThat is important!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,69 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/alias-indent-body-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNFINISHED TYPE ALIAS",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 18
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 18
+                        }
+                    },
+                    "message": [
+                        "I am partway through parsing a type alias, but I got stuck here:\n\n3| type alias Thing =\n                     ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI was expecting to see a type next. Something as simple as ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "Int"
+                        },
+                        " or ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "Float"
+                        },
+                        " would\nwork!\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": Here is an example of a valid `type alias` for reference:\n\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "type"
+                        },
+                        " ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "alias"
+                        },
+                        " Person =\n      { name : String\n      , age : Int\n      , height : Float\n      }\n\nThis would let us use `Person` as a shorthand for that record type. Using this\nshorthand makes type annotations much easier to read, and makes changing code\neasier if you decide later that there is more to a person than age and height!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

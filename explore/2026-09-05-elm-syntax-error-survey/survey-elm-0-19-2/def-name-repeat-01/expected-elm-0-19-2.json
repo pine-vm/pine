@@ -1,0 +1,48 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/def-name-repeat-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "PROBLEM IN DEFINITION",
+                    "region": {
+                        "start": {
+                            "line": 3,
+                            "column": 6
+                        },
+                        "end": {
+                            "line": 3,
+                            "column": 6
+                        }
+                    },
+                    "message": [
+                        "I got stuck while parsing the `value` definition:\n\n3| value : Int\n4| value : Int\n         ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI am not sure what is going wrong exactly, so here is a valid definition (with\nan optional type annotation) for reference:\n\n    greet : String -> String\n    greet name =\n      ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "\"Hello \""
+                        },
+                        " ++ name ++ ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "\"!\""
+                        },
+                        "\n\nTry to use that format!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

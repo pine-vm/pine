@@ -1,0 +1,48 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNFINISHED CUSTOM TYPE",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 18
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 18
+                        }
+                    },
+                    "message": [
+                        "I am partway through parsing a custom type, but I got stuck here:\n\n3| type Thing = A B |\n                     ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI just saw a vertical bar, so I was expecting to see another variant defined\nnext.\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": Here is an example of a valid `type` declaration for reference:\n\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "type"
+                        },
+                        " Status\n      = Failure\n      | Waiting\n      | Success String\n\nThis defines a new `Status` type with three variants. This could be useful if we\nare waiting for an HTTP request. Maybe we start with `Waiting` and then switch\nto `Failure` or `Success \"message from server\"` depending on how things go.\nNotice that the Success variant has some associated data, allowing us to store a\nString if the request goes well!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

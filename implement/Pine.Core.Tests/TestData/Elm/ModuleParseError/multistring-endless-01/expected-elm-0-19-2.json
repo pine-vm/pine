@@ -1,0 +1,48 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "ENDLESS STRING",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 8
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 11
+                        }
+                    },
+                    "message": [
+                        "I cannot find the end of this multi-line string:\n\n3| value = \"\"\"abc\n           ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^^^"
+                        },
+                        "\nAdd a \"\"\" somewhere after this to end the string.\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": Here is a valid multi-line string for reference:\n\n",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "    \"\"\"\n    # Multi-line Strings\n    \n    - start with triple double quotes\n    - write whatever you want\n    - no need to escape newlines or double quotes\n    - end with triple double quotes\n    \"\"\""
+                        },
+                        ""
+                    ]
+                }
+            ]
+        }
+    ]
+}

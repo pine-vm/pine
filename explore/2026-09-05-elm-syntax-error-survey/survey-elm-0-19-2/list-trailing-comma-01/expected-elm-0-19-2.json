@@ -1,0 +1,62 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/list-trailing-comma-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNFINISHED LIST",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 11
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 11
+                        }
+                    },
+                    "message": [
+                        "I was expecting to see another list entry after that last comma:\n\n3| value = [1,]\n              ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nTrailing commas are not allowed in lists, so the fix may be to delete the comma?\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": I recommend using the following format for lists that span multiple lines:\n\n    [ ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "\"Alice\""
+                        },
+                        "\n    , ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "\"Bob\""
+                        },
+                        "\n    , ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "\"Chuck\""
+                        },
+                        "\n    ]\n\nNotice that each line starts with some indentation. Usually two or four spaces.\nThis is the stylistic convention in the Elm ecosystem."
+                    ]
+                }
+            ]
+        }
+    ]
+}

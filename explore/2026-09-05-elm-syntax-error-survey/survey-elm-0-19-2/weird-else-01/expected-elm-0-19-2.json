@@ -1,0 +1,48 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/weird-else-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNFINISHED IF",
+                    "region": {
+                        "start": {
+                            "line": 6,
+                            "column": 5
+                        },
+                        "end": {
+                            "line": 6,
+                            "column": 5
+                        }
+                    },
+                    "message": [
+                        "I was expecting to see more of this `if` expression, but I got stuck here:\n\n4|   if True then\n5|     1\n6|   else if\n7|     2\n        ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI was expecting to see the ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "then"
+                        },
+                        " keyword next.\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": I can be confused by indentation. Maybe something is not indented enough?"
+                    ]
+                }
+            ]
+        }
+    ]
+}

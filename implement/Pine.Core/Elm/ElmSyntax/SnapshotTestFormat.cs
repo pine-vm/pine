@@ -43,7 +43,10 @@ public class SnapshotTestFormat
                 Imports: file.Imports,
                 Declarations: [.. file.Declarations.Select(FormatDeclaration)],
                 Comments: file.Comments,
-                IncompleteDeclarations: file.IncompleteDeclarations);
+                IncompleteDeclarations: file.IncompleteDeclarations)
+            {
+                AdditionalParseErrors = file.AdditionalParseErrors
+            };
     }
 
     private static Node<Declaration> FormatDeclaration(Node<Declaration> node)

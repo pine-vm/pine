@@ -1,0 +1,62 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "NEED MORE INDENTATION",
+                    "region": {
+                        "start": {
+                            "line": 4,
+                            "column": 0
+                        },
+                        "end": {
+                            "line": 4,
+                            "column": 0
+                        }
+                    },
+                    "message": [
+                        "I was partway through parsing a record, but I got stuck here:\n\n4|   { x = 1\n5| }\n   ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI need this curly brace to be indented more. Try adding some spaces before it!\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": If you are trying to define a record across multiple lines, I recommend\nusing this format:\n\n    { name = ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "\"Alice\""
+                        },
+                        "\n    , age = ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "42"
+                        },
+                        "\n    , height = ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "1.75"
+                        },
+                        "\n    }\n\nNotice that each line starts with some indentation. Usually two or four spaces.\nThis is the stylistic convention in the Elm ecosystem."
+                    ]
+                }
+            ]
+        }
+    ]
+}

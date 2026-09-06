@@ -1,0 +1,69 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/decl-upper-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNEXPECTED CAPITAL LETTER",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 0
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 0
+                        }
+                    },
+                    "message": [
+                        "Declarations always start with a lower-case letter, so I am getting stuck here:\n\n3| Foo = 1\n   ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nTry a name like ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "GREEN",
+                            "string": "foo"
+                        },
+                        " instead?\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": Here are a couple valid declarations for reference:\n\n    greet : String -> String\n    greet name =\n      ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "\"Hello \""
+                        },
+                        " ++ name ++ ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "\"!\""
+                        },
+                        "\n    \n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "type"
+                        },
+                        " User = Anonymous | LoggedIn String\n\nNotice that they always start with a lower-case letter. Capitalization matters!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

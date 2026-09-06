@@ -1,0 +1,83 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "RESERVED WORD",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 0
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 2
+                        }
+                    },
+                    "message": [
+                        "I was not expecting to run into the `if` keyword here:\n\n3| if = 1\n   ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^^"
+                        },
+                        "\nIt is reserved for writing `if` expressions. Try using a different name?\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": If you are trying to write an `if` expression, it needs to be part of a\ndefinition. So you could write something like this instead:\n\n    greet name =\n      ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "if"
+                        },
+                        " name == ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "\"Abraham Lincoln\""
+                        },
+                        " ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "then"
+                        },
+                        " ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "\"Greetings Mr. President.\""
+                        },
+                        " ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "else"
+                        },
+                        " ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "\"Hey!\""
+                        },
+                        "\n\nThis defines a `reviewPowerLevel` function that you can use elsewhere in your\nprogram."
+                    ]
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,48 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/case-unexpected-operator-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "PROBLEM IN PATTERN",
+                    "region": {
+                        "start": {
+                            "line": 3,
+                            "column": 2
+                        },
+                        "end": {
+                            "line": 3,
+                            "column": 2
+                        }
+                    },
+                    "message": [
+                        "I wanted to parse a pattern next, but I got stuck here:\n\n4|   + -> 1\n     ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI am not sure why I am getting stuck exactly. I just know that I want a pattern\nnext. Something as simple as ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "maybeHeight"
+                        },
+                        " or ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "result"
+                        },
+                        " would work!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

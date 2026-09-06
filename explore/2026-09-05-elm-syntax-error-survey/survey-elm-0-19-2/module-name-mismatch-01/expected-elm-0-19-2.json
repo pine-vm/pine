@@ -1,0 +1,55 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/module-name-mismatch-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "MODULE NAME MISMATCH",
+                    "region": {
+                        "start": {
+                            "line": 0,
+                            "column": 7
+                        },
+                        "end": {
+                            "line": 0,
+                            "column": 12
+                        }
+                    },
+                    "message": [
+                        "It looks like this module name is out of sync:\n\n1| module Wrong exposing (..)\n          ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^^^^^"
+                        },
+                        "\nI need it to match the file path, so I was expecting to see `Input` here. Make\nthe following change, and you should be all set!\n\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "Wrong"
+                        },
+                        " -> ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "GREEN",
+                            "string": "Input"
+                        },
+                        "\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": I require that module names correspond to file paths. This makes it much\neasier to explore unfamiliar codebases! So if you want to keep the current\nmodule name, try renaming the file instead."
+                    ]
+                }
+            ]
+        }
+    ]
+}

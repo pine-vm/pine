@@ -1,0 +1,48 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/type-start-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "PROBLEM IN TYPE ANNOTATION",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 8
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 8
+                        }
+                    },
+                    "message": [
+                        "I was partway through parsing the `value` type annotation, but I got stuck here:\n\n3| value : @\n           ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI was expecting to see a type next. Try putting ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "Int"
+                        },
+                        " or ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "String"
+                        },
+                        " for now?"
+                    ]
+                }
+            ]
+        }
+    ]
+}

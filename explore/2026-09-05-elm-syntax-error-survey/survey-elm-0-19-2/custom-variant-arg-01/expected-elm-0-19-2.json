@@ -1,0 +1,48 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/custom-variant-arg-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNFINISHED RECORD TYPE",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 16
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 16
+                        }
+                    },
+                    "message": [
+                        "I just saw the opening curly brace of a record type, but then I got stuck here:\n\n3| type Thing = A {\n                   ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI am expecting a record like ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "{ name : String, age : Int }"
+                        },
+                        " here. Try defining\nsome fields of your own?\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": I may be confused by indentation. For example, if you are trying to define\na record type across multiple lines, I recommend using this format:\n\n    { name : String\n    , age : Int\n    , height : Float\n    }\n\nNotice that each line starts with some indentation. Usually two or four spaces.\nThis is the stylistic convention in the Elm ecosystem."
+                    ]
+                }
+            ]
+        }
+    ]
+}

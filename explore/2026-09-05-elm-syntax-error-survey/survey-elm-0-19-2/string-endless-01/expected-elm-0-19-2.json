@@ -1,0 +1,55 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/string-endless-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "ENDLESS STRING",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 12
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 12
+                        }
+                    },
+                    "message": [
+                        "I got to the end of the line without seeing the closing double quote:\n\n3| value = \"abc\n               ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nStrings look like ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "GREEN",
+                            "string": "\"this\""
+                        },
+                        " with double quotes on each end. Is the closing double\nquote missing in your code?\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": For a string that spans multiple lines, you can use the multi-line string\nsyntax like this:\n\n",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "    \"\"\"\n    # Multi-line Strings\n    \n    - start with triple double quotes\n    - write whatever you want\n    - no need to escape newlines or double quotes\n    - end with triple double quotes\n    \"\"\""
+                        },
+                        ""
+                    ]
+                }
+            ]
+        }
+    ]
+}

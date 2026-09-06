@@ -532,11 +532,26 @@ public class ElmLanguageServerTests
 
         diagnostic.Severity.Should().Be(DiagnosticSeverity.Error);
         diagnostic.Source.Should().Be("elm syntax");
-        diagnostic.Message.Should().NotBeNullOrWhiteSpace();
+        diagnostic.Message.Should().Be("Unexpected syntax at this location.");
 
         // The parser reports 1-based row/column; LSP positions are 0-based.
         // The error is on the 'beta' line (row 7 -> line 6) at the '?' token (column 8 -> char 7).
         diagnostic.Range.Start.Line.Should().Be(6);
         diagnostic.Range.Start.Character.Should().Be(7);
+        diagnostic.Range.End.Should().Be(diagnostic.Range.Start);
+    }
+
+    [Fact]
+    public void ComputeSyntaxErrorDiagnostics_reports_fatal_primary_region()
+    {
+        var diagnostics = ElmLanguageServer.ComputeSyntaxErrorDiagnostics("\n{- unclosed\n");
+        var diagnostic = diagnostics.Should().ContainSingle().Subject;
+
+        diagnostic.Range.Start.Should().Be(new Position(1, 0));
+        diagnostic.Range.End.Should().Be(new Position(1, 2));
+        diagnostic.Severity.Should().Be(DiagnosticSeverity.Error);
+        diagnostic.Source.Should().Be("elm syntax");
+        diagnostic.Message.Should().StartWith("I cannot find the end of this multi-line comment:");
+        diagnostic.Message.Should().Contain("Add a -} somewhere after this to end the comment.");
     }
 }

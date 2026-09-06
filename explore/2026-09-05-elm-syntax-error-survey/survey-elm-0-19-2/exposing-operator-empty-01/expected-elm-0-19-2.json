@@ -1,0 +1,55 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/exposing-operator-empty-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "PROBLEM IN EXPOSING",
+                    "region": {
+                        "start": {
+                            "line": 0,
+                            "column": 24
+                        },
+                        "end": {
+                            "line": 0,
+                            "column": 24
+                        }
+                    },
+                    "message": [
+                        "I just saw an open parenthesis, so I was expecting an operator next:\n\n1| module Input exposing (())\n                           ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nIt is possible to expose operators, so I was expecting to see something like ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "(+)"
+                        },
+                        "\nor ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "(|=)"
+                        },
+                        " or ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "(||)"
+                        },
+                        " after I saw that open parenthesis."
+                    ]
+                }
+            ]
+        }
+    ]
+}

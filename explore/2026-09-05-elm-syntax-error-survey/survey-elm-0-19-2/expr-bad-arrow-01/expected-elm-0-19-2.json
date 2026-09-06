@@ -1,0 +1,41 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/expr-bad-arrow-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNEXPECTED ARROW",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 10
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 12
+                        }
+                    },
+                    "message": [
+                        "I was partway through parsing an expression when I got stuck on this arrow:\n\n3| value = 1 -> 2\n             ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^^"
+                        },
+                        "\nArrows should only appear in `case` expressions and anonymous functions.\nMaybe it was supposed to be a > sign instead?\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": The syntax for anonymous functions is (\\x -> x + 1) so the arguments all\nappear after the backslash and before the arrow. Maybe a backslash is missing\nearlier?"
+                    ]
+                }
+            ]
+        }
+    ]
+}

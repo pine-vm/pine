@@ -1,0 +1,41 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/no-ports-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "NO PORTS",
+                    "region": {
+                        "start": {
+                            "line": 0,
+                            "column": 0
+                        },
+                        "end": {
+                            "line": 0,
+                            "column": 11
+                        }
+                    },
+                    "message": [
+                        "This module does not declare any ports, but it says it will:\n\n1| port module Input exposing (..)\n   ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^^^^^^^^^^^"
+                        },
+                        "\nSwitch this to ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "module"
+                        },
+                        " and you should be all set!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

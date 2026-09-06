@@ -183,6 +183,7 @@ public class TypeInferenceRecordAccessTests
 
         inferredOptionalType.ModuleName.Should().Equal("Model");
         inferredOptionalType.TypeName.Should().Be("Optional");
+
         inferredOptionalType.TypeArguments.Should().ContainSingle()
             .Which.Should().BeOfType<TypeInference.InferredType.TypeVariable>();
     }

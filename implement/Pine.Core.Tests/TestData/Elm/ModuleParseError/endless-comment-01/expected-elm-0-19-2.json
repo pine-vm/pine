@@ -1,0 +1,41 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "ENDLESS COMMENT",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 0
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 2
+                        }
+                    },
+                    "message": [
+                        "I cannot find the end of this multi-line comment:\n\n3| {- unclosed\n   ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^^"
+                        },
+                        "\nAdd a -} somewhere after this to end the comment.\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Hint"
+                        },
+                        ": Multi-line comments can be nested in Elm, so {- {- -} -} is a comment that\nhappens to contain another comment. Like parentheses and curly braces, the start\nand end markers must always be balanced. Maybe that is the problem?"
+                    ]
+                }
+            ]
+        }
+    ]
+}

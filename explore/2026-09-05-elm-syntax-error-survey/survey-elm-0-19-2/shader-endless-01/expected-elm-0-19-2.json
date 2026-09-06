@@ -1,0 +1,34 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/shader-endless-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "ENDLESS SHADER",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 8
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 8
+                        }
+                    },
+                    "message": [
+                        "I cannot find the end of this shader:\n\n3| value = [glsl| void main() {\n           ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nAdd a |] somewhere after this to end the shader."
+                    ]
+                }
+            ]
+        }
+    ]
+}

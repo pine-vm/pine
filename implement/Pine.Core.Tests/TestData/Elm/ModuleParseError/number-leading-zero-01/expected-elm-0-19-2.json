@@ -1,0 +1,41 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "LEADING ZEROS",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 9
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 9
+                        }
+                    },
+                    "message": [
+                        "I do not accept numbers with leading zeros:\n\n3| value = 012\n            ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nJust delete the leading zeros and it should work!\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": Some languages let you to specify octal numbers by adding a leading zero.\nSo in C, writing 0111 is the same as writing 73. Some people are used to that,\nbut others probably want it to equal 111. Either path is going to surprise\npeople from certain backgrounds, so Elm tries to avoid this whole situation."
+                    ]
+                }
+            ]
+        }
+    ]
+}

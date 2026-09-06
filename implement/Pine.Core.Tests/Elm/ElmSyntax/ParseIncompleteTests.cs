@@ -34,7 +34,7 @@ public class ParseIncompleteTests
     }
 
     static string RenderParseError(ElmSyntaxParseError elmSyntaxParseError) =>
-        $"Error at {elmSyntaxParseError.Location.Row}:{elmSyntaxParseError.Location.Column}: {elmSyntaxParseError.Message}";
+        $"Error at {elmSyntaxParseError.Location.Row}:{elmSyntaxParseError.Location.Column}: {ElmSyntaxErrorRenderer.RenderConcise(elmSyntaxParseError)}";
 
     [Fact]
     public void First_declaration_complete_second_incomplete()
@@ -89,7 +89,7 @@ public class ParseIncompleteTests
         // The ErrorLocation should point to where the actual parsing error occurred
         // For "decl_b =", the error occurs after the equals sign when expecting an expression
         RenderParseError(incompleteDecl.Value.ParseError).Should()
-            .Be("Error at 8:1: Unfinished definition");
+            .Be("Error at 8:9: Unfinished definition");
     }
 
     [Fact]

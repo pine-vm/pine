@@ -1,0 +1,76 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "EXPECTING MODULE NAME",
+                    "region": {
+                        "start": {
+                            "line": 0,
+                            "column": 12
+                        },
+                        "end": {
+                            "line": 0,
+                            "column": 12
+                        }
+                    },
+                    "message": [
+                        "I was parsing an `module` declaration until I got stuck here:\n\n1| port module lower exposing (..)\n               ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI was expecting to see the module name next, like in these examples:\n\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "port"
+                        },
+                        " ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "module"
+                        },
+                        " WebSockets ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "exposing"
+                        },
+                        " (send, listen, keepAlive)\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "port"
+                        },
+                        " ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "module"
+                        },
+                        " Maps ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "exposing"
+                        },
+                        " (Location, goto)\n\nNotice that the module names start with capital letters. That is required!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

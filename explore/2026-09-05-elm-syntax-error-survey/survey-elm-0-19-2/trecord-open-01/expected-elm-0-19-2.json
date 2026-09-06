@@ -1,0 +1,41 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/trecord-open-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNFINISHED RECORD TYPE",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 17
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 17
+                        }
+                    },
+                    "message": [
+                        "I just started parsing a record type, but I got stuck here:\n\n3| type alias T = { , }\n                    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nRecord types look like ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "{ name : String, age : Int },"
+                        },
+                        " so I was expecting to see a\nfield name next."
+                    ]
+                }
+            ]
+        }
+    ]
+}

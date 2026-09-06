@@ -1,0 +1,48 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/func-body-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNFINISHED ANONYMOUS FUNCTION",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 13
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 13
+                        }
+                    },
+                    "message": [
+                        "I was expecting to see the body of your anonymous function next:\n\n3| value = \\x ->\n                ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nThe syntax for anonymous functions is ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "(\\x -> x + 1)"
+                        },
+                        " so I am missing all the\nstuff after the arrow!\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": It is possible that I am confused about indetation! I generally recommend\nswitching to named functions if the definition cannot fit inline nicely, so\neither (1) try to fit the whole anonymous function on one line or (2) break the\nwhole thing out into a named function. Things tend to be clearer that way!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

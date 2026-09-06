@@ -1,0 +1,69 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "PORT PROBLEM",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 5
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 5
+                        }
+                    },
+                    "message": [
+                        "I just saw the start of a `port` declaration, but then I got stuck here:\n\n3| port if : String -> Cmd msg\n        ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI was expecting to see a name like ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "send"
+                        },
+                        " or ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "receive"
+                        },
+                        " next. Something that starts\nwith a lower-case letter.\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": Here are some example `port` declarations for reference:\n\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "port"
+                        },
+                        " send : String -> Cmd msg\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "port"
+                        },
+                        " receive : (String -> msg) -> Sub msg\n\nThe first line defines a `send` port so you can send strings out to JavaScript.\nMaybe you send them on a WebSocket or put them into IndexedDB. The second line\ndefines a `receive` port so you can receive strings from JavaScript. Maybe you\nget receive messages when new WebSocket messages come in or when the IndexedDB\nis changed for some external reason."
+                    ]
+                }
+            ]
+        }
+    ]
+}

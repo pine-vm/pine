@@ -125,7 +125,7 @@ public sealed class WorkspaceFromFileStoreMounts : ILanguageServerWorkspace
                         IsPathPrefix(requestedPath, mount.UriParts.PathComponents))
                     .Select(
                         mount =>
-                        (mount, directoryPath: (IImmutableList<string>)ImmutableArray<string>.Empty)));
+                        (mount, directoryPath: (IImmutableList<string>)[])));
 
             foreach (var (mount, directoryPath) in mountDirectories)
             {

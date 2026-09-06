@@ -1,0 +1,34 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "SHADER PROBLEM",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 20
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 20
+                        }
+                    },
+                    "message": [
+                        "I ran into a problem while parsing this GLSL block.\n\n3| value = [glsl| nope |]\n                       ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI use a 3rd party GLSL parser for now, and I did my best to extract their error\nmessage:\n\n    unexpected end of input\n    expecting \"/\", space, \"[\", letter, \"_\" or \";\""
+                    ]
+                }
+            ]
+        }
+    ]
+}

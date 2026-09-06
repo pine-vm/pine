@@ -17,6 +17,12 @@ public record File(
     IReadOnlyList<Node<string>> Comments,
     IReadOnlyList<Node<IncompleteDeclaration>> IncompleteDeclarations)
 {
+    /// <summary>
+    /// Recovered errors that do not replace a declaration, such as an expected declaration at EOF
+    /// after a documentation comment. Keeping these separate preserves the comment's syntax node.
+    /// </summary>
+    public IReadOnlyList<ElmSyntaxParseError> AdditionalParseErrors { get; init; } = [];
+
     /// <inheritdoc/>
     public virtual bool Equals(File? other)
     {
@@ -31,7 +37,8 @@ public record File(
             Enumerable.SequenceEqual(Imports, other.Imports) &&
             Enumerable.SequenceEqual(Declarations, other.Declarations) &&
             Enumerable.SequenceEqual(Comments, other.Comments) &&
-            Enumerable.SequenceEqual(IncompleteDeclarations, other.IncompleteDeclarations);
+            Enumerable.SequenceEqual(IncompleteDeclarations, other.IncompleteDeclarations) &&
+            Enumerable.SequenceEqual(AdditionalParseErrors, other.AdditionalParseErrors);
     }
 
     /// <inheritdoc/>
@@ -51,6 +58,9 @@ public record File(
             hashCode.Add(item);
 
         foreach (var item in IncompleteDeclarations)
+            hashCode.Add(item);
+
+        foreach (var item in AdditionalParseErrors)
             hashCode.Add(item);
 
         return hashCode.ToHashCode();

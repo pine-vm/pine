@@ -1,0 +1,90 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/module-name-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "EXPECTING MODULE NAME",
+                    "region": {
+                        "start": {
+                            "line": 0,
+                            "column": 7
+                        },
+                        "end": {
+                            "line": 0,
+                            "column": 7
+                        }
+                    },
+                    "message": [
+                        "I was parsing an `module` declaration until I got stuck here:\n\n1| module lower exposing (..)\n          ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI was expecting to see the module name next, like in these examples:\n\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "module"
+                        },
+                        " Dict ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "exposing"
+                        },
+                        " (..)\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "module"
+                        },
+                        " Maybe ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "exposing"
+                        },
+                        " (..)\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "module"
+                        },
+                        " Html.Attributes ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "exposing"
+                        },
+                        " (..)\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "module"
+                        },
+                        " Json.Decode ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "exposing"
+                        },
+                        " (..)\n\nNotice that the module names all start with capital letters. That is required!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

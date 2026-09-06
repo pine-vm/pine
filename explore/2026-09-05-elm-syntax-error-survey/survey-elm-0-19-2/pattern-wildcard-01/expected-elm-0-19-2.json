@@ -1,0 +1,48 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/pattern-wildcard-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNEXPECTED NAME",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 6
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 9
+                        }
+                    },
+                    "message": [
+                        "Variable names cannot start with underscores like this:\n\n3| value _foo = 1\n         ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^^^"
+                        },
+                        "\nYou can either have an underscore like ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "_"
+                        },
+                        " to ignore the value, or you can have a\nname like ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "foo"
+                        },
+                        " to use the matched value."
+                    ]
+                }
+            ]
+        }
+    ]
+}

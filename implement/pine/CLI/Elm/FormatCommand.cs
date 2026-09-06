@@ -87,7 +87,7 @@ public static class FormatCommand
 
         if (formatResult.IsErrOrNullable() is { } formatError)
         {
-            return new FormatFileResult.Error(formatError.ToString());
+            return new FormatFileResult.Error(ToDiagnostic(formatError).RenderText());
         }
 
         var formatOk =
@@ -98,13 +98,8 @@ public static class FormatCommand
                 formatResult.GetType());
 
         var diagnostics =
-            formatOk.SyntaxErrors
-            .Select(
-                error =>
-                new FormatFileDiagnostic(
-                    Message: error.Message,
-                    Line: error.Location.Row,
-                    Column: error.Location.Column))
+            formatOk.ParseErrors
+            .Select(ToDiagnostic)
             .ToList();
 
         return
@@ -115,5 +110,11 @@ public static class FormatCommand
             new FormatFileResult.Changed(
                 formatOk.FormattedText,
                 diagnostics);
+
+        FormatFileDiagnostic ToDiagnostic(ElmSyntaxParseError error) =>
+            new(
+                Message: ElmSyntaxErrorRenderer.RenderPlainText(fileContent, error, includeSource: true),
+                Line: error.Region.Start.Row,
+                Column: error.Region.Start.Column);
     }
 }

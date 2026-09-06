@@ -61,7 +61,8 @@ public class Avh4Format
             formatted with
             {
                 Comments = formattedComments,
-                IncompleteDeclarations = formattedIncompleteDeclarations
+                IncompleteDeclarations = formattedIncompleteDeclarations,
+                AdditionalParseErrors = file.AdditionalParseErrors
             };
     }
 

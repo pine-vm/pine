@@ -1,0 +1,48 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/def-name-match-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "NAME MISMATCH",
+                    "region": {
+                        "start": {
+                            "line": 3,
+                            "column": 0
+                        },
+                        "end": {
+                            "line": 3,
+                            "column": 0
+                        }
+                    },
+                    "message": [
+                        "I just saw a type annotation for `value`, but it is followed by a definition for\n`other`:\n\n3| value : Int\n4| other = 1\n   ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nThese names do not match! Is there a typo?\n\n    ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "other"
+                        },
+                        " -> ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "GREEN",
+                            "string": "value"
+                        },
+                        ""
+                    ]
+                }
+            ]
+        }
+    ]
+}

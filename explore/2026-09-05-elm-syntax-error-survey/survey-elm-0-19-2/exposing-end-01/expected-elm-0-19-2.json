@@ -1,0 +1,34 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/exposing-end-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNFINISHED EXPOSING",
+                    "region": {
+                        "start": {
+                            "line": 0,
+                            "column": 25
+                        },
+                        "end": {
+                            "line": 0,
+                            "column": 25
+                        }
+                    },
+                    "message": [
+                        "I was partway through parsing exposed values, but I got stuck here:\n\n1| module Input exposing (x y)\n                            ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nMaybe there is a comma missing before this?"
+                    ]
+                }
+            ]
+        }
+    ]
+}

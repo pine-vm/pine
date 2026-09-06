@@ -1,0 +1,55 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "PROBLEM IN RECORD TYPE",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 26
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 26
+                        }
+                    },
+                    "message": [
+                        "I am partway through parsing a record type, but I got stuck here:\n\n3| type alias T = { x : Int, }\n                             ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI was expecting to see another record field defined next, so I am looking for a\nname like ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "userName"
+                        },
+                        " or ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "plantHeight"
+                        },
+                        ".\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": If you are trying to define a record type across multiple lines, I\nrecommend using this format:\n\n    { name : String\n    , age : Int\n    , height : Float\n    }\n\nNotice that each line starts with some indentation. Usually two or four spaces.\nThis is the stylistic convention in the Elm ecosystem."
+                    ]
+                }
+            ]
+        }
+    ]
+}

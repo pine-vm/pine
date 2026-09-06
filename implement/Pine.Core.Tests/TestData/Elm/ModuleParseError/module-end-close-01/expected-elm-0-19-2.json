@@ -1,0 +1,34 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "STRAY PARENTHESIS",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 0
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 0
+                        }
+                    },
+                    "message": [
+                        "I was not expecting to see a parenthesis here:\n\n3| )\n   ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nThis ) does not match up with an earlier open parenthesis. Try deleting it?"
+                    ]
+                }
+            ]
+        }
+    ]
+}

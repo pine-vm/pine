@@ -1,0 +1,41 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "src/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "EXTRA COMMA",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 25
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 25
+                        }
+                    },
+                    "message": [
+                        "I am partway through parsing a record type, but I got stuck here:\n\n3| type alias T = { x : Int,, y : Int }\n                            ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI am seeing two commas in a row. This is the second one!\n\nJust delete one of the commas and you should be all set!\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": If you are trying to define a record type across multiple lines, I\nrecommend using this format:\n\n    { name : String\n    , age : Int\n    , height : Float\n    }\n\nNotice that each line starts with some indentation. Usually two or four spaces.\nThis is the stylistic convention in the Elm ecosystem."
+                    ]
+                }
+            ]
+        }
+    ]
+}

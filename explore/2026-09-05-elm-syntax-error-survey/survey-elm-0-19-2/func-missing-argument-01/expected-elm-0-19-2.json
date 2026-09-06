@@ -1,0 +1,55 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/func-missing-argument-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "MISSING ARGUMENT",
+                    "region": {
+                        "start": {
+                            "line": 3,
+                            "column": 5
+                        },
+                        "end": {
+                            "line": 3,
+                            "column": 5
+                        }
+                    },
+                    "message": [
+                        "I just saw the beginning of an anonymous function, so I was expecting to see an\nargument next:\n\n4|     \\\n        ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nSomething like ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "x"
+                        },
+                        " or ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "name"
+                        },
+                        ". Anything that starts with a lower case letter!\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": The syntax for anonymous functions is (\\x -> x + 1) where the backslash is\nmeant to look a bit like a lambda if you squint. This visual pun seemed like a\nbetter idea at the time!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

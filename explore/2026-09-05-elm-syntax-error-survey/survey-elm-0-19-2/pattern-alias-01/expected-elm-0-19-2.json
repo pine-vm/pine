@@ -1,0 +1,83 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/pattern-alias-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNFINISHED PATTERN",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 11
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 11
+                        }
+                    },
+                    "message": [
+                        "I was expecting to see a variable name after the `as` keyword:\n\n3| value (x as) = 1\n              ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nThe `as` keyword lets you write patterns like ((",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "x"
+                        },
+                        ",",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "y"
+                        },
+                        ") ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "CYAN",
+                            "string": "as"
+                        },
+                        "",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": " point"
+                        },
+                        ") so you can refer\nto individual parts of the tuple with ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "x"
+                        },
+                        " and ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "y"
+                        },
+                        " or you refer to the whole thing\nwith ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "point"
+                        },
+                        ".\n\nSo I was expecting to see a variable name after the `as` keyword here. Sometimes\npeople just want to use `as` as a variable name though. Try using a different\nname in that case!"
+                    ]
+                }
+            ]
+        }
+    ]
+}

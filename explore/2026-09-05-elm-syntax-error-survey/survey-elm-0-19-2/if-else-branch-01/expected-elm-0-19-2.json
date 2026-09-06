@@ -1,0 +1,41 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/if-else-branch-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNFINISHED IF",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 27
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 27
+                        }
+                    },
+                    "message": [
+                        "I got stuck after the start of this `else` branch:\n\n3| value = if True then 1 else\n                              ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^"
+                        },
+                        "\nI was expecting to see an expression next. Maybe it is not filled in yet?\n\n",
+                        {
+                            "bold": false,
+                            "underline": true,
+                            "color": null,
+                            "string": "Note"
+                        },
+                        ": I can be confused by indentation, so if the `else` branch is already\npresent, it may not be indented enough for me to recognize it."
+                    ]
+                }
+            ]
+        }
+    ]
+}

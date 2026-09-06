@@ -1,0 +1,41 @@
+{
+    "type": "compile-errors",
+    "errors": [
+        {
+            "path": "/home/runner/work/super-duper-disco/super-duper-disco/explore/2026-09-05-elm-syntax-error-survey/survey-elm-0-19-2/pattern-float-01/Input.elm",
+            "name": "Input",
+            "problems": [
+                {
+                    "title": "UNEXPECTED PATTERN",
+                    "region": {
+                        "start": {
+                            "line": 2,
+                            "column": 6
+                        },
+                        "end": {
+                            "line": 2,
+                            "column": 9
+                        }
+                    },
+                    "message": [
+                        "I cannot pattern match with floating point numbers:\n\n3| value 1.2 = 1\n         ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "RED",
+                            "string": "^^^"
+                        },
+                        "\nEquality on floats can be unreliable, so you usually want to check that they are\nnearby with some sort of ",
+                        {
+                            "bold": false,
+                            "underline": false,
+                            "color": "yellow",
+                            "string": "(abs (actual - expected) < 0.001)"
+                        },
+                        " check."
+                    ]
+                }
+            ]
+        }
+    ]
+}
