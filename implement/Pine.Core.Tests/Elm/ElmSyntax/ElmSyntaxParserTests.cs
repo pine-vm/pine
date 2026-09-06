@@ -10,6 +10,41 @@ namespace Pine.Core.Tests.Elm.ElmSyntax;
 
 public class ElmSyntaxParserTests
 {
+    [Fact]
+    public void Parses_outdented_record_type_argument_in_record_field()
+    {
+        var input =
+            """
+            module Test exposing (..)
+
+            type alias Token =
+                { tokenType : TokenType
+              {}
+                , lexeme : String
+                }
+            """;
+
+        var parsedFile =
+            ElmSyntaxParser.ParseModuleText(input)
+            .Extract(err => throw new System.Exception(err.ToString()));
+
+        var aliasDeclaration =
+            parsedFile.Declarations[0].Value.Should().BeOfType<Declaration.AliasDeclaration>().Subject;
+
+        var recordType =
+            aliasDeclaration.TypeAlias.TypeAnnotation.Value.Should().BeOfType<TypeAnnotation.Record>().Subject;
+
+        var fields =
+            recordType.RecordDefinition.Fields.Should()
+            .BeOfType<SeparatedSyntaxList<Node<RecordField>>.NonEmpty>().Subject;
+
+        var tokenType =
+            fields.First.Value.FieldType.Value.Should().BeOfType<TypeAnnotation.Typed>().Subject;
+
+        tokenType.TypeArguments.Should().ContainSingle()
+            .Which.Value.Should().BeOfType<TypeAnnotation.Record>();
+    }
+
     [Theory]
     [InlineData("module Main{- comment -}.Nested exposing (..)")]
     [InlineData("module Main exposing (..)\n\nimport Alfa{- comment -}.Beta")]

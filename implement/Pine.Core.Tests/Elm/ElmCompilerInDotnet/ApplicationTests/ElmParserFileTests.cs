@@ -218,13 +218,33 @@ public class ElmParserFileTests
 
         result.valueAsExpression.expressionString.Should().Be(
             ExpectedMinimalModuleExpression);
+    }
+
+    [Fact]
+    public void File_with_outdented_record_type_argument_in_record_field()
+    {
+        var moduleText =
+            """
+            module Test exposing (..)
+
+            type alias Token =
+                { tokenType : TokenType
+              {}
+                , lexeme : String
+                }
+            """;
+
+        var result =
+            ParseFileAndRender(moduleText);
+
+        result.valueAsExpression.expressionString.Should().StartWith("Ok ");
 
         result.counts.Should().Be(
             """
-            InvocationCount: 690
-            BuildListCount: 987
-            LoopIterationCount: 624
-            InstructionCount: 29_978
+            InvocationCount: 792
+            BuildListCount: 1_148
+            LoopIterationCount: 768
+            InstructionCount: 35_311
             """);
     }
 

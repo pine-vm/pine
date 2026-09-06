@@ -3026,7 +3026,8 @@ public class ElmSyntaxParser
 
                 while (NextTokenMatches(
                     peek =>
-                    lessApplication.Range.Start.Column < peek.Start.Column &&
+                    (lessApplication.Range.Start.Column < peek.Start.Column ||
+                    peek.Type is TokenType.OpenBrace) &&
                     indentMin < peek.Start.Column &&
                     CanStartTypeAnnotation(peek)))
                 {
@@ -3199,7 +3200,7 @@ public class ElmSyntaxParser
                         ConsumeAllTrivia();
 
                         if (!TryUnwrap(
-                            ParseTypeAnnotation(indentMin: firstIdentifier.Start.Column),
+                            ParseTypeAnnotation(indentMin),
                             out var fieldTypeAnnotation,
                             out var fieldTypeAnnotationErr))
                             return fieldTypeAnnotationErr;
@@ -3237,7 +3238,7 @@ public class ElmSyntaxParser
                             ConsumeAllTrivia();
 
                             if (!TryUnwrap(
-                                ParseTypeAnnotation(indentMin: nextFieldNameToken.Start.Column),
+                                ParseTypeAnnotation(indentMin),
                                 out var nextFieldTypeAnnotation,
                                 out var nextFieldTypeAnnotationErr))
                                 return nextFieldTypeAnnotationErr;
@@ -3278,7 +3279,7 @@ public class ElmSyntaxParser
                         ConsumeAllTrivia();
 
                         if (!TryUnwrap(
-                            ParseTypeAnnotation(indentMin: fieldNameToken.Start.Column),
+                            ParseTypeAnnotation(indentMin),
                             out var fieldTypeAnnotation,
                             out var fieldTypeAnnotationErr))
                             return fieldTypeAnnotationErr;
@@ -3317,7 +3318,7 @@ public class ElmSyntaxParser
                             ConsumeAllTrivia();
 
                             if (!TryUnwrap(
-                                ParseTypeAnnotation(indentMin: nextFieldNameToken.Start.Column),
+                                ParseTypeAnnotation(indentMin),
                                 out var nextFieldTypeAnnotation,
                                 out var nextFieldTypeAnnotationErr))
                                 return nextFieldTypeAnnotationErr;

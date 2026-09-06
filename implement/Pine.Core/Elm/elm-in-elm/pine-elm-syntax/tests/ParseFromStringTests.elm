@@ -193,6 +193,17 @@ directSourceParsingSuite =
 
                     Err err ->
                         Expect.fail ("Expected Ok, but got Err: " ++ err)
+         , Test.test "outdented record type argument in a record field" <|
+            \_ ->
+                case
+                    ElmSyntax.Concrete.Parser.FromString.parseFile
+                        "module Main exposing (..)\n\ntype alias Token =\n    { tokenType : TokenType\n  {}\n    , lexeme : String\n    }"
+                of
+                    Ok _ ->
+                        Expect.pass
+
+                    Err err ->
+                        Expect.fail ("Expected Ok, but got Err: " ++ err)
          ]
             ++ List.map
                 (\testCase ->

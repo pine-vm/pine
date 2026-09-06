@@ -3045,7 +3045,6 @@ parseTypeAnnotationOnTypedArg indentMin typedArgResult =
                 TypeAnnotation.Typed typedName [] ->
                     collectTypeApplicationArgs
                         indentMin
-                        lessAppRange.start.column
                         typedName
                         (Node lessAppRange lessAppValue)
                         []
@@ -3057,31 +3056,36 @@ parseTypeAnnotationOnTypedArg indentMin typedArgResult =
 
 collectTypeApplicationArgs :
     Int
-    -> Int
     -> Node ( List String, String )
     -> Node TypeAnnotation.TypeAnnotation
     -> List (Node TypeAnnotation.TypeAnnotation)
     -> ParserState
     -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
-collectTypeApplicationArgs indentMin lessAppStartColumn typedName lessApp argumentsRev state =
-    collectTypeApplicationArgsAt indentMin lessAppStartColumn typedName lessApp argumentsRev state (skipTrivia state)
+collectTypeApplicationArgs indentMin typedName lessApp argumentsRev state =
+    collectTypeApplicationArgsAt indentMin typedName lessApp argumentsRev state (skipTrivia state)
 
 
 collectTypeApplicationArgsAt :
     Int
-    -> Int
     -> Node ( List String, String )
     -> Node TypeAnnotation.TypeAnnotation
     -> List (Node TypeAnnotation.TypeAnnotation)
     -> ParserState
     -> ParserState
     -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
-collectTypeApplicationArgsAt indentMin lessAppStartColumn typedName lessApp argumentsRev state stateAtArgument =
+collectTypeApplicationArgsAt indentMin typedName lessApp argumentsRev state stateAtArgument =
+    let
+        (Node lessAppInitialRange _) =
+            lessApp
+    in
     if
         stateAtArgument.column
-            > lessAppStartColumn
-            && stateAtArgument.column
             > indentMin
+            && (stateAtArgument.column
+                    > lessAppInitialRange.start.column
+                    || String.left 1 (String.dropLeft stateAtArgument.offset stateAtArgument.source)
+                    == "{"
+               )
             && canStartTypeAnnotationAt stateAtArgument.source stateAtArgument.offset
     then
         case parseTypeAnnotationTypedArg indentMin stateAtArgument of
@@ -3091,7 +3095,6 @@ collectTypeApplicationArgsAt indentMin lessAppStartColumn typedName lessApp argu
             Ok ( argument, remaining ) ->
                 collectTypeApplicationArgs
                     indentMin
-                    lessAppStartColumn
                     typedName
                     lessApp
                     (argument :: argumentsRev)
@@ -3145,6 +3148,7 @@ parseTypeAnnotationTypedArgAt indentMin stateAtToken =
 
         "{" ->
             parseRecordTypeAnnotation
+                indentMin
                 { row = stateAtToken.row, column = stateAtToken.column }
                 { source = stateAtToken.source
                 , offset = stateAtToken.offset + 1
@@ -3307,18 +3311,20 @@ parseFurtherTypeAnnotationsAt indentMin openParenLocation first restRev stateAtT
 
 
 parseRecordTypeAnnotation :
-    Location
+    Int
+    -> Location
     -> ParserState
     -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
-parseRecordTypeAnnotation openBraceLocation state =
-    parseRecordTypeAnnotationAt openBraceLocation (skipTrivia state)
+parseRecordTypeAnnotation indentMin openBraceLocation state =
+    parseRecordTypeAnnotationAt indentMin openBraceLocation (skipTrivia state)
 
 
 parseRecordTypeAnnotationAt :
-    Location
+    Int
+    -> Location
     -> ParserState
     -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
-parseRecordTypeAnnotationAt openBraceLocation stateAtToken =
+parseRecordTypeAnnotationAt indentMin openBraceLocation stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "}" ->
             Ok
@@ -3364,6 +3370,7 @@ parseRecordTypeAnnotationAt openBraceLocation stateAtToken =
                 in
                 if isPipeToken stateAtPipe.source stateAtPipe.offset then
                     parseGenericRecordBody
+                        indentMin
                         openBraceLocation
                         (Node
                             { start = { row = stateAtToken.row, column = stateAtToken.column }
@@ -3380,21 +3387,22 @@ parseRecordTypeAnnotationAt openBraceLocation stateAtToken =
                         }
 
                 else
-                    case parseTypeRecordFieldFromName stateAtToken of
+                    case parseTypeRecordFieldFromName indentMin stateAtToken of
                         Err error ->
                             Err error
 
                         Ok ( firstField, _, afterFirst ) ->
-                            finishOrContinueRecord openBraceLocation firstField [] afterFirst
+                            finishOrContinueRecord indentMin openBraceLocation firstField [] afterFirst
 
 
 parseGenericRecordBody :
-    Location
+    Int
+    -> Location
     -> Node String
     -> Location
     -> ParserState
     -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
-parseGenericRecordBody openBraceLocation genericName pipeLocation state =
+parseGenericRecordBody indentMin openBraceLocation genericName pipeLocation state =
     let
         nodeRecordDefStart =
             { row = pipeLocation.row, column = pipeLocation.column + 1 }
@@ -3426,12 +3434,13 @@ parseGenericRecordBody openBraceLocation genericName pipeLocation state =
                 )
 
         _ ->
-            case parseTypeRecordFieldFromName stateAtToken of
+            case parseTypeRecordFieldFromName indentMin stateAtToken of
                 Err error ->
                     Err error
 
                 Ok ( firstField, fieldEnd, afterField ) ->
                     finishOrContinueGenericRecord
+                        indentMin
                         openBraceLocation
                         genericName
                         pipeLocation
@@ -3443,7 +3452,8 @@ parseGenericRecordBody openBraceLocation genericName pipeLocation state =
 
 
 finishOrContinueGenericRecord :
-    Location
+    Int
+    -> Location
     -> Node String
     -> Location
     -> Location
@@ -3452,12 +3462,13 @@ finishOrContinueGenericRecord :
     -> List ( Location, Node TypeAnnotation.RecordField )
     -> ParserState
     -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
-finishOrContinueGenericRecord openBraceLocation genericName pipeLocation nodeRecordDefStart firstField lastEnd restRev state =
-    finishOrContinueGenericRecordAt openBraceLocation genericName pipeLocation nodeRecordDefStart firstField lastEnd restRev (skipTrivia state)
+finishOrContinueGenericRecord indentMin openBraceLocation genericName pipeLocation nodeRecordDefStart firstField lastEnd restRev state =
+    finishOrContinueGenericRecordAt indentMin openBraceLocation genericName pipeLocation nodeRecordDefStart firstField lastEnd restRev (skipTrivia state)
 
 
 finishOrContinueGenericRecordAt :
-    Location
+    Int
+    -> Location
     -> Node String
     -> Location
     -> Location
@@ -3466,7 +3477,7 @@ finishOrContinueGenericRecordAt :
     -> List ( Location, Node TypeAnnotation.RecordField )
     -> ParserState
     -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
-finishOrContinueGenericRecordAt openBraceLocation genericName pipeLocation nodeRecordDefStart firstField lastEnd restRev stateAtToken =
+finishOrContinueGenericRecordAt indentMin openBraceLocation genericName pipeLocation nodeRecordDefStart firstField lastEnd restRev stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "}" ->
             Ok
@@ -3493,6 +3504,7 @@ finishOrContinueGenericRecordAt openBraceLocation genericName pipeLocation nodeR
         "," ->
             case
                 parseTypeRecordFieldFromName
+                    indentMin
                     { source = stateAtToken.source
                     , offset = stateAtToken.offset + 1
                     , row = stateAtToken.row
@@ -3505,6 +3517,7 @@ finishOrContinueGenericRecordAt openBraceLocation genericName pipeLocation nodeR
 
                 Ok ( nextField, nextEnd, afterNext ) ->
                     finishOrContinueGenericRecord
+                        indentMin
                         openBraceLocation
                         genericName
                         pipeLocation
@@ -3523,22 +3536,24 @@ finishOrContinueGenericRecordAt openBraceLocation genericName pipeLocation nodeR
 
 
 finishOrContinueRecord :
-    Location
+    Int
+    -> Location
     -> Node TypeAnnotation.RecordField
     -> List ( Location, Node TypeAnnotation.RecordField )
     -> ParserState
     -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
-finishOrContinueRecord openBraceLocation firstField restRev state =
-    finishOrContinueRecordAt openBraceLocation firstField restRev (skipTrivia state)
+finishOrContinueRecord indentMin openBraceLocation firstField restRev state =
+    finishOrContinueRecordAt indentMin openBraceLocation firstField restRev (skipTrivia state)
 
 
 finishOrContinueRecordAt :
-    Location
+    Int
+    -> Location
     -> Node TypeAnnotation.RecordField
     -> List ( Location, Node TypeAnnotation.RecordField )
     -> ParserState
     -> Result String ( Node TypeAnnotation.TypeAnnotation, ParserState )
-finishOrContinueRecordAt openBraceLocation firstField restRev stateAtToken =
+finishOrContinueRecordAt indentMin openBraceLocation firstField restRev stateAtToken =
     case String.left 1 (String.dropLeft stateAtToken.offset stateAtToken.source) of
         "}" ->
             Ok
@@ -3560,6 +3575,7 @@ finishOrContinueRecordAt openBraceLocation firstField restRev stateAtToken =
         "," ->
             case
                 parseTypeRecordFieldFromName
+                    indentMin
                     { source = stateAtToken.source
                     , offset = stateAtToken.offset + 1
                     , row = stateAtToken.row
@@ -3572,6 +3588,7 @@ finishOrContinueRecordAt openBraceLocation firstField restRev stateAtToken =
 
                 Ok ( nextField, _, afterNext ) ->
                     finishOrContinueRecord
+                        indentMin
                         openBraceLocation
                         firstField
                         (( { row = stateAtToken.row, column = stateAtToken.column }, nextField ) :: restRev)
@@ -3586,16 +3603,18 @@ finishOrContinueRecordAt openBraceLocation firstField restRev stateAtToken =
 
 
 parseTypeRecordFieldFromName :
-    ParserState
+    Int
+    -> ParserState
     -> Result String ( Node TypeAnnotation.RecordField, Location, ParserState )
-parseTypeRecordFieldFromName state =
-    parseTypeRecordFieldFromNameAt (skipTrivia state)
+parseTypeRecordFieldFromName indentMin state =
+    parseTypeRecordFieldFromNameAt indentMin (skipTrivia state)
 
 
 parseTypeRecordFieldFromNameAt :
-    ParserState
+    Int
+    -> ParserState
     -> Result String ( Node TypeAnnotation.RecordField, Location, ParserState )
-parseTypeRecordFieldFromNameAt stateAtName =
+parseTypeRecordFieldFromNameAt indentMin stateAtName =
     case String.left 1 (String.dropLeft stateAtName.offset stateAtName.source) of
         first ->
             if not (isIdentifierStart first) then
@@ -3631,7 +3650,7 @@ parseTypeRecordFieldFromNameAt stateAtName =
                     ":" ->
                         case
                             parseTypeAnnotation
-                                stateAtName.column
+                                indentMin
                                 { source = stateAtColon.source
                                 , offset = stateAtColon.offset + 1
                                 , row = stateAtColon.row
