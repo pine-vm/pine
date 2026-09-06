@@ -145,7 +145,7 @@ public abstract record SeparatedSyntaxList<TNode>
 
             default:
                 throw new System.NotImplementedException(
-                    "Unexpected type: " + this.GetType().FullName);
+                    "Unexpected type: " + GetType().FullName);
         }
     }
 

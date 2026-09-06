@@ -602,7 +602,7 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
         bool skipWritingComponentSecondTime)
     {
         this.getTimeForCompositionLogBatch = getTimeForCompositionLogBatch;
-        this._fileStore = fileStore;
+        _fileStore = fileStore;
         this.skipWritingComponentSecondTime = skipWritingComponentSecondTime;
 
         var originalProcessStoreReader = new ProcessStoreReaderInFileStore(fileStoreReader);

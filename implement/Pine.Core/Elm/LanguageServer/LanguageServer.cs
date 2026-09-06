@@ -310,7 +310,7 @@ public class LanguageServer(
             "LSP request cancellation is enabled through $/cancelRequest; " +
             "the base protocol defines no server capability flag for it");
 
-        this._initializeParams = initializeParams;
+        _initializeParams = initializeParams;
 
         _workspaceFolders = initializeParams.WorkspaceFolders ?? [];
 
@@ -1114,7 +1114,7 @@ public class LanguageServer(
             string? currentOpenContent;
             int? currentVersion;
             long currentGeneration;
-            var documentIsOpen = false;
+            bool documentIsOpen;
 
             lock (_documentStateLock)
             {
@@ -1842,7 +1842,7 @@ public class LanguageServer(
         System.Diagnostics.Stopwatch totalClock,
         CancellationToken cancellationToken)
     {
-        if (!_formattingRequestCapacity.Wait(0))
+        if (!_formattingRequestCapacity.Wait(0, cancellationToken))
         {
             Log(
                 "Formatting request " + requestSequence + " rejected for " +

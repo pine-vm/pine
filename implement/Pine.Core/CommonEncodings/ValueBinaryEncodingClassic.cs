@@ -429,7 +429,7 @@ public static class ValueBinaryEncodingClassic
     public static IEnumerable<(long declId, PineValue declValue)>
         DecodeSequence(ReadOnlyMemory<byte> sourceBytes)
     {
-        Exception? firstException = null;
+        Exception? firstException;
 
         try
         {
