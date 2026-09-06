@@ -1,3 +1,4 @@
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.IO;
 using Pine.Core.PineVM;
@@ -12,10 +13,7 @@ namespace Pine.Core.Elm.LanguageServer;
 /// </summary>
 public class LanguageServiceSessionFactory : ILanguageServiceSessionFactory
 {
-    private readonly Func<
-        IInvocationCacheAccess,
-        ConcurrentExpressionCompilationCache,
-        IPineVM>
+    private readonly Func<IInvocationCacheAccess, PineVMSharedCaches, IPineVM>
         _pineVMFactory;
 
     private readonly IFileStore? _compilationCache;
@@ -30,7 +28,8 @@ public class LanguageServiceSessionFactory : ILanguageServiceSessionFactory
         IFileStore? compilationCache = null,
         Action<string>? logDelegate = null)
         : this(
-            (_, _) => pineVMFactory(),
+            (Func<IInvocationCacheAccess, PineVMSharedCaches, IPineVM>)
+            ((_, _) => pineVMFactory()),
             compilationCache,
             logDelegate)
     {
@@ -45,7 +44,8 @@ public class LanguageServiceSessionFactory : ILanguageServiceSessionFactory
         IFileStore? compilationCache = null,
         Action<string>? logDelegate = null)
         : this(
-            (invocationCache, _) => pineVMFactory(invocationCache),
+            (Func<IInvocationCacheAccess, PineVMSharedCaches, IPineVM>)
+            ((invocationCache, _) => pineVMFactory(invocationCache)),
             compilationCache,
             logDelegate)
     {
@@ -57,6 +57,46 @@ public class LanguageServiceSessionFactory : ILanguageServiceSessionFactory
     /// </summary>
     public LanguageServiceSessionFactory(
         Func<IInvocationCacheAccess, ConcurrentExpressionCompilationCache, IPineVM> pineVMFactory,
+        IFileStore? compilationCache = null,
+        Action<string>? logDelegate = null)
+        : this(
+            (invocationCache, sharedCaches) =>
+            pineVMFactory(invocationCache, sharedCaches.ExpressionCompilations),
+            compilationCache,
+            logDelegate)
+    {
+        ArgumentNullException.ThrowIfNull(pineVMFactory);
+    }
+
+    /// <summary>
+    /// Creates a factory whose VM instances use shared invocation, expression-compilation, and parse caches.
+    /// </summary>
+    public LanguageServiceSessionFactory(
+        Func<
+            IInvocationCacheAccess,
+            ConcurrentExpressionCompilationCache,
+            PineVMParseCache,
+            IPineVM>
+        pineVMFactory,
+        IFileStore? compilationCache = null,
+        Action<string>? logDelegate = null)
+        : this(
+            (invocationCache, sharedCaches) =>
+            pineVMFactory(
+                invocationCache,
+                sharedCaches.ExpressionCompilations,
+                sharedCaches.ParsedExpressions),
+            compilationCache,
+            logDelegate)
+    {
+        ArgumentNullException.ThrowIfNull(pineVMFactory);
+    }
+
+    /// <summary>
+    /// Creates a factory whose VM instances consume a complete set of shared caches.
+    /// </summary>
+    public LanguageServiceSessionFactory(
+        Func<IInvocationCacheAccess, PineVMSharedCaches, IPineVM> pineVMFactory,
         IFileStore? compilationCache = null,
         Action<string>? logDelegate = null)
     {
@@ -76,21 +116,24 @@ public class LanguageServiceSessionFactory : ILanguageServiceSessionFactory
         cancellationToken.ThrowIfCancellationRequested();
 
         var sharedCache = new ConcurrentInvocationCache();
-        var sharedExpressionCompilationCache = new ConcurrentExpressionCompilationCache();
+        var sharedPineVMCaches = new PineVMSharedCaches();
 
         ScheduledLanguageServiceSession.Worker CreateWorker()
         {
             var workerCache = new BufferedInvocationCacheAccess(sharedCache);
-            var pineVM = _pineVMFactory(workerCache, sharedExpressionCompilationCache);
 
-            return new ScheduledLanguageServiceSession.Worker(pineVM, workerCache);
+            return
+                new ScheduledLanguageServiceSession.Worker(
+                    CreatePineVM: () => _pineVMFactory(workerCache, sharedPineVMCaches),
+                    InvocationCache: workerCache);
         }
 
         var firstWorker = CreateWorker();
+        var initializationPineVM = firstWorker.CreatePineVM();
 
         var programResult =
             LanguageServiceState.CompileLanguageServiceProgram(
-                firstWorker.PineVM,
+                initializationPineVM,
                 _compilationCache,
                 _logDelegate);
 

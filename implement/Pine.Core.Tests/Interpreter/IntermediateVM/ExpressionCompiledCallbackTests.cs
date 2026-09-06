@@ -265,4 +265,53 @@ public class ExpressionCompiledCallbackTests
 
         compilationCount.Should().Be(1);
     }
+
+    [Fact]
+    public void Shared_auxiliary_caches_survive_VM_replacement()
+    {
+        var sharedCaches = new PineVMSharedCaches();
+
+        Core.Interpreter.IntermediateVM.PineVM CreateVm() =>
+            Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
+                evalCache: null,
+                evaluationConfigDefault: null,
+                reportFunctionApplication: null,
+                compilationEnvClasses: null,
+                disableReductionInCompilation: false,
+                selectPrecompiled: null,
+                skipInlineForExpression: _ => false,
+                enableTailRecursionOptimization: false,
+                parseCache: sharedCaches.ParsedExpressions,
+                precompiledLeaves: null,
+                reportEnterPrecompiledLeaf: null,
+                reportExitPrecompiledLeaf: null,
+                optimizationParametersSerial: null,
+                cacheFileStore: null,
+                expressionEncodingCache: sharedCaches.EncodedExpressions,
+                reducedExpressionCache: sharedCaches.ReducedExpressions);
+
+        var expression =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.int_add),
+                Expression.ListInst(
+                    [
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(21)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(34))
+                    ]));
+
+        CreateVm().EvaluateExpression(expression, PineValue.EmptyBlob)
+            .IsOkOrNull().Should().Be(IntegerEncoding.EncodeSignedInteger(55));
+
+        var encodedExpressionCount = sharedCaches.EncodedExpressions.Count;
+        var reducedExpressionCount = sharedCaches.ReducedExpressions.Count;
+
+        encodedExpressionCount.Should().BeGreaterThan(0);
+        reducedExpressionCount.Should().BeGreaterThan(0);
+
+        CreateVm().EvaluateExpression(expression, PineValue.EmptyBlob)
+            .IsOkOrNull().Should().Be(IntegerEncoding.EncodeSignedInteger(55));
+
+        sharedCaches.EncodedExpressions.Count.Should().Be(encodedExpressionCount);
+        sharedCaches.ReducedExpressions.Count.Should().Be(reducedExpressionCount);
+    }
 }

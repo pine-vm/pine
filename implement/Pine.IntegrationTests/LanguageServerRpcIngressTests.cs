@@ -39,7 +39,7 @@ public class LanguageServerRpcIngressTests
                 documentFormatter: new DelegateDocumentFormatter(
                     (source, _) =>
                     ValueTask.FromResult(Result<DocumentFormattingError, string>.ok(source.Replace("  0", "    0")))),
-                options: new LanguageServerOptions(ServerVersion: "test"),
+                options: new LanguageServerOptions(serverVersion: "test"),
                 logDelegate: logs.Add,
                 formattingDiagnosticsProvider: null);
 
@@ -149,7 +149,7 @@ public class LanguageServerRpcIngressTests
                 documentFormatter: new DelegateDocumentFormatter(
                     (source, _) =>
                     ValueTask.FromResult(Result<DocumentFormattingError, string>.ok(source.Replace("  0", "    0")))),
-                options: new LanguageServerOptions(ServerVersion: "test"),
+                options: new LanguageServerOptions(serverVersion: "test"),
                 logDelegate: logs.Add,
                 formattingDiagnosticsProvider: null);
 

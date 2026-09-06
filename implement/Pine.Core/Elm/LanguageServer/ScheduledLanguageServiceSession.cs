@@ -17,7 +17,7 @@ internal sealed class ScheduledLanguageServiceSession(
     Action<string>? logDelegate) : ILanguageServiceSession
 {
     internal sealed record Worker(
-        IPineVM PineVM,
+        Func<IPineVM> CreatePineVM,
         BufferedInvocationCacheAccess InvocationCache);
 
     private readonly RevisionedOperationScheduler<
@@ -39,10 +39,12 @@ internal sealed class ScheduledLanguageServiceSession(
             execute:
             (worker, request, state, cancellationToken) =>
             {
+                var pineVM = worker.CreatePineVM();
+
                 var transition =
                     LanguageServiceState.ApplyRequest(
                         program,
-                        worker.PineVM,
+                        pineVM,
                         state,
                         request,
                         cancellationToken);

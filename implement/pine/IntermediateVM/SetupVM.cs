@@ -93,7 +93,9 @@ public static class SetupVM
         IInvocationCacheAccess? invocationCache = null,
         InvocationCacheConfiguration? invocationCacheConfiguration = null,
         TryGetExpressionCompilation? tryGetExpressionCompilation = null,
-        GetOrAddExpressionCompilation? getOrAddExpressionCompilation = null)
+        GetOrAddExpressionCompilation? getOrAddExpressionCompilation = null,
+        PineVMExpressionEncodingCache? expressionEncodingCache = null,
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null)
     {
         precompiledLeaves ??= DefaultPrecompiledLeaves;
 
@@ -118,6 +120,8 @@ public static class SetupVM
                 invocationCache: invocationCache,
                 invocationCacheConfiguration: invocationCacheConfiguration,
                 tryGetExpressionCompilation: tryGetExpressionCompilation,
-                getOrAddExpressionCompilation: getOrAddExpressionCompilation);
+                getOrAddExpressionCompilation: getOrAddExpressionCompilation,
+                expressionEncodingCache: expressionEncodingCache,
+                reducedExpressionCache: reducedExpressionCache);
     }
 }

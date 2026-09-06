@@ -65,11 +65,14 @@ public static class LanguageServerComposition
         string pineAppVersionId,
         Action<string>? logDelegate = null) =>
         new LanguageServiceSessionFactory(
-            (invocationCache, expressionCompilationCache) =>
+            (invocationCache, sharedCaches) =>
             IntermediateVM.SetupVM.Create(
                 invocationCache: invocationCache,
-                tryGetExpressionCompilation: expressionCompilationCache.TryGet,
-                getOrAddExpressionCompilation: expressionCompilationCache.GetOrAdd),
+                parseCache: sharedCaches.ParsedExpressions,
+                tryGetExpressionCompilation: sharedCaches.ExpressionCompilations.TryGet,
+                getOrAddExpressionCompilation: sharedCaches.ExpressionCompilations.GetOrAdd,
+                expressionEncodingCache: sharedCaches.EncodedExpressions,
+                reducedExpressionCache: sharedCaches.ReducedExpressions),
             CreateDefaultCompilationCache(pineAppVersionId),
             logDelegate);
 
@@ -147,7 +150,7 @@ public static class LanguageServerComposition
                 elmPackageSource: elmPackageSource,
                 diagnosticsProvider: diagnosticsProvider,
                 documentFormatter: CreateDocumentFormatter(logDelegate),
-                options: new LanguageServerOptions(ServerVersion: pineAppVersionId),
+                options: new LanguageServerOptions(serverVersion: pineAppVersionId),
                 logDelegate: logDelegate,
                 formattingDiagnosticsProvider: syntaxDiagnosticsProvider);
 

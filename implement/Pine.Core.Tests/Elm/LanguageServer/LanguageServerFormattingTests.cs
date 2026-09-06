@@ -442,7 +442,7 @@ public class LanguageServerFormattingTests
             EmptyElmPackageSource.Instance,
             new StubDiagnosticsProvider(),
             formatter,
-            new LanguageServerOptions(ServerVersion: "test"),
+            new LanguageServerOptions(serverVersion: "test"),
             logDelegate,
             formattingDiagnosticsProvider);
 

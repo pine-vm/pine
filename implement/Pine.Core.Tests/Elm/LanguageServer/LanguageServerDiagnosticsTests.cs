@@ -84,7 +84,7 @@ public class LanguageServerDiagnosticsTests
                 EmptyElmPackageSource.Instance,
                 diagnosticsProvider,
                 documentFormatter ?? new StubDocumentFormatter(text => text),
-                new LanguageServerOptions(ServerVersion: "test"),
+                new LanguageServerOptions(serverVersion: "test"),
                 logDelegate: null,
                 formattingDiagnosticsProvider);
 

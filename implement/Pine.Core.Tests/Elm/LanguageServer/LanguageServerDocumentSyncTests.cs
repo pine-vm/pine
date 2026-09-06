@@ -52,7 +52,7 @@ public class LanguageServerDocumentSyncTests
             elmPackageSource ?? EmptyElmPackageSource.Instance,
             diagnosticsProvider ?? new StubDiagnosticsProvider(),
             documentFormatter ?? new StubDocumentFormatter(text => text),
-            new LanguageServerOptions(ServerVersion: "test"),
+            new LanguageServerOptions(serverVersion: "test"),
             logDelegate,
             formattingDiagnosticsProvider);
 

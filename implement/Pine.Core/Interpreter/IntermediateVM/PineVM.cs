@@ -53,7 +53,7 @@ public class PineVM : ICancellablePineVM
     /// </summary>
     public readonly PineVMParseCache ParseCache;
 
-    private readonly Dictionary<Expression, PineValue> _encodeExpressionCache = [];
+    private readonly PineVMExpressionEncodingCache _expressionEncodingCache;
 
     private readonly IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? _precompiledLeaves;
 
@@ -68,6 +68,8 @@ public class PineVM : ICancellablePineVM
     private readonly TryGetExpressionCompilation _tryGetExpressionCompilation;
 
     private readonly GetOrAddExpressionCompilation _getOrAddExpressionCompilation;
+
+    private readonly IDictionary<(Expression, ReductionConfig), Expression> _reducedExpressionCache;
 
     private readonly bool _disableDirectContinueForSimpleEval;
 
@@ -103,7 +105,9 @@ public class PineVM : ICancellablePineVM
         IInvocationCacheAccess? invocationCache = null,
         InvocationCacheConfiguration? invocationCacheConfiguration = null,
         TryGetExpressionCompilation? tryGetExpressionCompilation = null,
-        GetOrAddExpressionCompilation? getOrAddExpressionCompilation = null)
+        GetOrAddExpressionCompilation? getOrAddExpressionCompilation = null,
+        PineVMExpressionEncodingCache? expressionEncodingCache = null,
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null)
     {
         if ((tryGetExpressionCompilation is null) != (getOrAddExpressionCompilation is null))
         {
@@ -147,7 +151,13 @@ public class PineVM : ICancellablePineVM
                 invocationCache: invocationCache,
                 invocationCacheConfiguration: invocationCacheConfiguration,
                 tryGetExpressionCompilation: tryGetExpressionCompilation,
-                getOrAddExpressionCompilation: getOrAddExpressionCompilation!);
+                getOrAddExpressionCompilation: getOrAddExpressionCompilation!,
+                expressionEncodingCache:
+                expressionEncodingCache ??
+                new PineVMExpressionEncodingCache(),
+                reducedExpressionCache:
+                reducedExpressionCache ??
+                new Dictionary<(Expression, ReductionConfig), Expression>());
 
     }
 
@@ -170,6 +180,8 @@ public class PineVM : ICancellablePineVM
         IReadOnlyDictionary<Expression, ExpressionCompilation>? expressionCompilationOverrides,
         TryGetExpressionCompilation tryGetExpressionCompilation,
         GetOrAddExpressionCompilation getOrAddExpressionCompilation,
+        PineVMExpressionEncodingCache expressionEncodingCache,
+        IDictionary<(Expression, ReductionConfig), Expression> reducedExpressionCache,
         int pathMaxLowExclusive = ExpressionCompilation.DefaultPathMaxLowExclusive,
         int pathMaxHighInclusive = ExpressionCompilation.DefaultPathMaxHighInclusive,
         bool disableGenericApplicationChainConsolidation = false,
@@ -245,6 +257,8 @@ public class PineVM : ICancellablePineVM
 
         _tryGetExpressionCompilation = tryGetExpressionCompilation;
         _getOrAddExpressionCompilation = getOrAddExpressionCompilation;
+        _expressionEncodingCache = expressionEncodingCache;
+        _reducedExpressionCache = reducedExpressionCache;
 
         _pathMaxLowExclusive = pathMaxLowExclusive;
 
@@ -295,8 +309,6 @@ public class PineVM : ICancellablePineVM
 
         return evalReport.ReturnValue.Evaluate();
     }
-
-    readonly Dictionary<(Expression, ReductionConfig), Expression> _reducedExpressionDict = [];
 
     readonly static ConcurrentPineValueHashCache s_mutableCacheValueHash = new();
 
@@ -400,7 +412,7 @@ public class PineVM : ICancellablePineVM
                 disableReduction: _disableReductionInCompilation,
                 skipInlining: SkipInlining,
                 enableTailRecursionOptimization: _enableTailRecursionOptimization,
-                reducedExpressionCache: _reducedExpressionDict,
+                reducedExpressionCache: _reducedExpressionCache,
                 pathMaxLowExclusive: _pathMaxLowExclusive,
                 pathMaxHighInclusive: _pathMaxHighInclusive,
                 disableGenericApplicationChainConsolidation: _disableGenericApplicationChainConsolidation);
@@ -2586,19 +2598,8 @@ public class PineVM : ICancellablePineVM
     }
 
     private PineValue EncodeExpressionAsValue(Expression expression)
-    {
-        if (_encodeExpressionCache.TryGetValue(expression, out var cachedValue))
-        {
-            return (PineValue.ListValue)cachedValue;
-        }
-
-        var expressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(expression);
-
-        _encodeExpressionCache[expression] = expressionValue;
-
-        return expressionValue;
-    }
+        =>
+        _expressionEncodingCache.GetOrEncode(expression);
 
     private Result<string, Expression> ParseExpression(PineValue expressionValue)
     {
@@ -2607,7 +2608,7 @@ public class PineVM : ICancellablePineVM
 
         if (fromCache.IsOkOrNull() is { } parseOk)
         {
-            _encodeExpressionCache[parseOk] = expressionValue;
+            _expressionEncodingCache.RegisterParsedEncoding(parseOk, expressionValue);
         }
 
         return fromCache;

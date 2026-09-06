@@ -188,7 +188,7 @@ public class LanguageServerCodeLensTests
                 EmptyElmPackageSource.Instance,
                 new StubDiagnosticsProvider(),
                 new StubDocumentFormatter(text => text),
-                new LanguageServerOptions(ServerVersion: "test"));
+                new LanguageServerOptions(serverVersion: "test"));
 
         return (server, session);
     }

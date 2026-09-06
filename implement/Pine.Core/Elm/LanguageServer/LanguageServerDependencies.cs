@@ -215,16 +215,16 @@ public sealed record LanguageServerOptions
     /// <summary>
     /// Initializes language server options and enforces that at least one worker can be leased concurrently.
     /// </summary>
-    /// <param name="ServerVersion">Version reported to the client in the <c>initialize</c> response.</param>
-    /// <param name="MaxConcurrencyCount">Maximum number of exclusively leased language-service workers.</param>
+    /// <param name="serverVersion">Version reported to the client in the <c>initialize</c> response.</param>
+    /// <param name="maxConcurrencyCount">Maximum number of exclusively leased language-service workers.</param>
     public LanguageServerOptions(
-        string ServerVersion,
-        int MaxConcurrencyCount = 4)
+        string serverVersion,
+        int maxConcurrencyCount = 4)
     {
-        System.ArgumentOutOfRangeException.ThrowIfLessThan(MaxConcurrencyCount, 1);
+        System.ArgumentOutOfRangeException.ThrowIfLessThan(maxConcurrencyCount, 1);
 
-        this.ServerVersion = ServerVersion;
-        this.MaxConcurrencyCount = MaxConcurrencyCount;
+        ServerVersion = serverVersion;
+        MaxConcurrencyCount = maxConcurrencyCount;
     }
 
     /// <summary>
