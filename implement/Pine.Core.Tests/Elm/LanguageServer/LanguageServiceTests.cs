@@ -134,12 +134,106 @@ public class LanguageServiceTests
         vmCreationCount.Should().Be(2);
     }
 
+    [Fact]
+    public void Failed_request_publishes_buffered_cache_entries_for_the_next_attempt()
+    {
+        var vmCreationCount = 0;
+        var sharedInvocationCache = new ConcurrentInvocationCache();
+
+        var cacheKey =
+            new EvalCacheEntryKey(
+                ExpressionEncoding.EncodeExpressionAsValue(Expression.EnvironmentInstance),
+                StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyList));
+
+        var cachedValue = PineValue.Blob([1]);
+
+        ScheduledLanguageServiceSession.Worker CreateWorker()
+        {
+            var workerCache = new BufferedInvocationCacheAccess(sharedInvocationCache);
+
+            return
+                new ScheduledLanguageServiceSession.Worker(
+                    CreatePineVM:
+                    () =>
+                    new CacheProgressPineVM(
+                        workerCache,
+                        cacheKey,
+                        cachedValue,
+                        shouldFail: vmCreationCount++ is 0),
+                    InvocationCache: workerCache);
+        }
+
+        var function =
+            new FunctionRecord(
+                InnerFunction: Expression.EnvironmentInstance,
+                ParameterCount: 2,
+                EnvFunctions: ReadOnlyMemory<PineValue>.Empty,
+                ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty);
+
+        var session =
+            new ScheduledLanguageServiceSession(
+                new LanguageServiceState.LanguageServiceProgram(
+                    new LanguageServiceInterfaceStruct(function, function),
+                    PineValue.EmptyList),
+                maxConcurrencyCount: 1,
+                firstWorker: CreateWorker(),
+                createWorker: CreateWorker,
+                logDelegate: null);
+
+        var firstRequest =
+            () => session.DeleteFile("file:///workspace/Main.elm");
+
+        firstRequest.Should().Throw<InvalidOperationException>()
+            .WithMessage("instruction count budget exhausted");
+
+        sharedInvocationCache.TryGet(cacheKey, out var sharedValue).Should().BeTrue();
+        sharedValue.Should().Be(cachedValue);
+
+        session.DeleteFile("file:///workspace/Main.elm")
+            .Should().BeOfType<Result<string, Response.WorkspaceSummaryResponse>.Ok>();
+    }
+
+
     private sealed class WorkspaceSummaryResponsePineVM : IPineVM
     {
         public Result<string, PineValue> EvaluateExpression(
             Expression expression,
             PineValue environment)
         {
+            var response =
+                ElmValueEncoding.TagAsPineValue(
+                    "WorkspaceSummaryResponse",
+                    []);
+
+            var responseOk =
+                ElmValueEncoding.TagAsPineValue(
+                    "Ok",
+                    [response]);
+
+            return PineValue.List([responseOk, PineValue.EmptyBlob]);
+        }
+    }
+
+    private sealed class CacheProgressPineVM(
+        IInvocationCacheAccess invocationCache,
+        EvalCacheEntryKey cacheKey,
+        PineValue cachedValue,
+        bool shouldFail)
+        : IPineVM
+    {
+        public Result<string, PineValue> EvaluateExpression(
+            Expression expression,
+            PineValue environment)
+        {
+            if (shouldFail)
+            {
+                invocationCache.TryAdd(cacheKey, cachedValue).Should().BeTrue();
+                throw new InvalidOperationException("instruction count budget exhausted");
+            }
+
+            invocationCache.TryGet(cacheKey, out var sharedValue).Should().BeTrue();
+            sharedValue.Should().Be(cachedValue);
+
             var response =
                 ElmValueEncoding.TagAsPineValue(
                     "WorkspaceSummaryResponse",
