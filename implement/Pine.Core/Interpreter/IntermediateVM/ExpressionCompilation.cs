@@ -369,16 +369,16 @@ public record ExpressionCompilation(
             return expressionReduced;
         }
 
-        Expression? TryInlineParseAndEval(
-            Expression.Eval parseAndEvalExpr)
+        Expression? TryInlineEval(
+            Expression.Eval evalExpr)
         {
-            if (parseAndEvalExpr.Encoded.ReferencesEnvironment)
+            if (evalExpr.Encoded.ReferencesEnvironment)
             {
                 return null;
             }
 
             if (ReducePineExpression.TryEvalIndependent(
-                parseAndEvalExpr.Encoded,
+                evalExpr.Encoded,
                 parseCache).Value is not { } exprValue)
             {
                 return null;
@@ -406,7 +406,7 @@ public record ExpressionCompilation(
             var inlinedExpr =
                 ReducePineExpression.SubstituteEnvironmentNode(
                     parseOk,
-                    parseAndEvalExpr.Environment);
+                    evalExpr.Environment);
 
             if (disableRecurseAfterInline)
             {
@@ -461,7 +461,7 @@ public record ExpressionCompilation(
                  * Recursive self-calls and calls to ancestors-being-inlined are NOT
                  * excluded from the path-max metric. While the inliner's own recursion
                  * check refuses to expand them further, leaving them as residual
-                 * <see cref="Expression.ParseAndEval"/> nodes still incurs a dynamic
+                 * <see cref="Expression.Eval"/> nodes still incurs a dynamic
                  * invocation per traversal of the worst path. Rejecting bodies whose
                  * worst path contains too many such residual calls is what keeps tests
                  * like <c>Int_div_1_000_000_by_257</c> within their invocation-count
@@ -534,7 +534,7 @@ public record ExpressionCompilation(
              * already bounded by the static `SubexpressionCount` cap.
              */
             {
-                var pmPre = ComputeParseAndEvalPathMax(inlinedExprReduced, IsExpansionCandidateForFirstInliner);
+                var pmPre = ComputeEvalPathMax(inlinedExprReduced, IsExpansionCandidateForFirstInliner);
 
                 if (pathMaxLowExclusive < pmPre && pmPre <= pathMaxHighInclusive)
                 {
@@ -559,7 +559,7 @@ public record ExpressionCompilation(
             return inlinedFinal;
         }
 
-        Expression InlineParseAndEvalRecursive(
+        Expression InlineEvalRecursive(
             Expression expression,
             bool underConditional)
         {
@@ -586,17 +586,17 @@ public record ExpressionCompilation(
                         if (expr is Expression.Conditional conditional)
                         {
                             var conditionInlined =
-                                InlineParseAndEvalRecursive(
+                                InlineEvalRecursive(
                                     conditional.Condition,
                                     underConditional: underConditional);
 
                             var falseBranchInlined =
-                                InlineParseAndEvalRecursive(
+                                InlineEvalRecursive(
                                     conditional.FalseBranch,
                                     underConditional: true);
 
                             var trueBranchInlined =
-                                InlineParseAndEvalRecursive(
+                                InlineEvalRecursive(
                                     conditional.TrueBranch,
                                     underConditional: true);
 
@@ -616,9 +616,9 @@ public record ExpressionCompilation(
                                     trueBranch: trueBranchInlined);
                         }
 
-                        if (expr is Expression.Eval parseAndEval)
+                        if (expr is Expression.Eval evalExpr)
                         {
-                            if (TryInlineParseAndEval(parseAndEval) is { } inlined)
+                            if (TryInlineEval(evalExpr) is { } inlined)
                             {
                                 return inlined;
                             }
@@ -630,7 +630,7 @@ public record ExpressionCompilation(
         }
 
         var expressionInlined =
-            InlineParseAndEvalRecursive(
+            InlineEvalRecursive(
                 expressionReduced,
                 underConditional: false);
 
@@ -668,7 +668,7 @@ public record ExpressionCompilation(
     /// separately by the <c>SubexpressionCount</c> threshold.
     /// </para>
     /// </summary>
-    internal static int ComputeParseAndEvalPathMax(
+    internal static int ComputeEvalPathMax(
         Expression expression,
         Func<Expression.Eval, bool> isExpansionCandidate)
     {
@@ -676,20 +676,20 @@ public record ExpressionCompilation(
         {
             case Expression.Conditional conditional:
                 {
-                    var condP = ComputeParseAndEvalPathMax(conditional.Condition, isExpansionCandidate);
-                    var trueP = ComputeParseAndEvalPathMax(conditional.TrueBranch, isExpansionCandidate);
-                    var falseP = ComputeParseAndEvalPathMax(conditional.FalseBranch, isExpansionCandidate);
+                    var condP = ComputeEvalPathMax(conditional.Condition, isExpansionCandidate);
+                    var trueP = ComputeEvalPathMax(conditional.TrueBranch, isExpansionCandidate);
+                    var falseP = ComputeEvalPathMax(conditional.FalseBranch, isExpansionCandidate);
 
                     return condP + Math.Max(trueP, falseP);
                 }
 
-            case Expression.Eval parseAndEval:
+            case Expression.Eval evalExpr:
                 {
-                    var encP = ComputeParseAndEvalPathMax(parseAndEval.Encoded, isExpansionCandidate);
-                    var envP = ComputeParseAndEvalPathMax(parseAndEval.Environment, isExpansionCandidate);
+                    var encP = ComputeEvalPathMax(evalExpr.Encoded, isExpansionCandidate);
+                    var envP = ComputeEvalPathMax(evalExpr.Environment, isExpansionCandidate);
 
                     var selfContribution =
-                        isExpansionCandidate(parseAndEval) ? 1 : 0;
+                        isExpansionCandidate(evalExpr) ? 1 : 0;
 
                     return selfContribution + encP + envP;
                 }
@@ -700,17 +700,17 @@ public record ExpressionCompilation(
 
                     for (var i = 0; i < list.Items.Count; i++)
                     {
-                        sumP += ComputeParseAndEvalPathMax(list.Items[i], isExpansionCandidate);
+                        sumP += ComputeEvalPathMax(list.Items[i], isExpansionCandidate);
                     }
 
                     return sumP;
                 }
 
             case Expression.Builtin kernelApp:
-                return ComputeParseAndEvalPathMax(kernelApp.Input, isExpansionCandidate);
+                return ComputeEvalPathMax(kernelApp.Input, isExpansionCandidate);
 
             case Expression.Label stringTag:
-                return ComputeParseAndEvalPathMax(stringTag.Tagged, isExpansionCandidate);
+                return ComputeEvalPathMax(stringTag.Tagged, isExpansionCandidate);
 
             default:
                 return 0;
@@ -816,8 +816,8 @@ public record ExpressionCompilation(
             return expressionReduced;
         }
 
-        Expression? TryInlineParseAndEval(
-            Expression.Eval parseAndEvalExpr,
+        Expression? TryInlineEval(
+            Expression.Eval evalExpr,
             bool noRecursion)
         {
             Expression? ContinueReduceForKnownExprValue(PineValue exprValue)
@@ -847,7 +847,7 @@ public record ExpressionCompilation(
                 var inlinedExpr =
                     ReducePineExpression.SubstituteEnvironmentNode(
                         expression: parseOk,
-                        environmentReplacement: parseAndEvalExpr.Environment);
+                        environmentReplacement: evalExpr.Environment);
 
                 if (disableRecurseAfterInline)
                 {
@@ -900,7 +900,7 @@ public record ExpressionCompilation(
                      * Recursive self-calls and calls to ancestors-being-inlined are NOT
                      * excluded from the path-max metric. See the corresponding comment on
                      * <see cref="IsExpansionCandidateForFirstInliner"/> for the rationale
-                     * (residual <see cref="Expression.ParseAndEval"/> nodes still cost a
+                     * (residual <see cref="Expression.Eval"/> nodes still cost a
                      * dynamic invocation per traversal, and rejecting bodies with too many
                      * of them along the worst path keeps tests like
                      * <c>Int_div_1_000_000_by_257</c> within their invocation-count budget).
@@ -916,7 +916,7 @@ public record ExpressionCompilation(
                     }
 
                     var pathInvocations =
-                        ComputeParseAndEvalPathMax(
+                        ComputeEvalPathMax(
                             inlinedExprReduced,
                             IsExpansionCandidateForSecondInliner);
 
@@ -953,10 +953,10 @@ public record ExpressionCompilation(
                 return inlinedFinal;
             }
 
-            if (!parseAndEvalExpr.Encoded.ReferencesEnvironment)
+            if (!evalExpr.Encoded.ReferencesEnvironment)
             {
                 if (ReducePineExpression.TryEvalIndependent(
-                    parseAndEvalExpr.Encoded,
+                    evalExpr.Encoded,
                     parseCache).Value is { } evalExprOk)
                 {
                     return ContinueReduceForKnownExprValue(evalExprOk);
@@ -966,7 +966,7 @@ public record ExpressionCompilation(
             return null;
         }
 
-        Expression InlineParseAndEvalRecursive(
+        Expression InlineEvalRecursive(
             Expression expression,
             bool underConditional)
         {
@@ -993,17 +993,17 @@ public record ExpressionCompilation(
                         if (expr is Expression.Conditional conditional)
                         {
                             var conditionInlined =
-                                InlineParseAndEvalRecursive(
+                                InlineEvalRecursive(
                                     conditional.Condition,
                                     underConditional: underConditional);
 
                             var falseBranchInlined =
-                                InlineParseAndEvalRecursive(
+                                InlineEvalRecursive(
                                     conditional.FalseBranch,
                                     underConditional: true);
 
                             var trueBranchInlined =
-                                InlineParseAndEvalRecursive(
+                                InlineEvalRecursive(
                                     conditional.TrueBranch,
                                     underConditional: true);
 
@@ -1023,9 +1023,9 @@ public record ExpressionCompilation(
                                     trueBranch: trueBranchInlined);
                         }
 
-                        if (expr is Expression.Eval parseAndEval)
+                        if (expr is Expression.Eval evalExpr)
                         {
-                            if (TryInlineParseAndEval(parseAndEval, noRecursion: underConditional) is { } inlined)
+                            if (TryInlineEval(evalExpr, noRecursion: underConditional) is { } inlined)
                             {
                                 return inlined;
                             }
@@ -1037,7 +1037,7 @@ public record ExpressionCompilation(
         }
 
         var expressionInlined =
-            InlineParseAndEvalRecursive(
+            InlineEvalRecursive(
                 expressionReduced,
                 underConditional: false);
 
@@ -1138,10 +1138,10 @@ public record ExpressionCompilation(
                 }
             }
 
-            if (expression is Expression.Eval parseAndEval)
+            if (expression is Expression.Eval evalExpr)
             {
-                stack.Push(parseAndEval.Encoded);
-                stack.Push(parseAndEval.Environment);
+                stack.Push(evalExpr.Encoded);
+                stack.Push(evalExpr.Environment);
             }
 
             if (expression is Expression.Builtin kernelApp)
