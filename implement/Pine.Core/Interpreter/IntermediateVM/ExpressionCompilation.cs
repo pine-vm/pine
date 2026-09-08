@@ -404,18 +404,9 @@ public record ExpressionCompilation(
              * */
 
             var inlinedExpr =
-                ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-                    findReplacement:
-                    descendant =>
-                    {
-                        if (descendant is Expression.Environment)
-                        {
-                            return parseAndEvalExpr.Environment;
-                        }
-
-                        return null;
-                    },
-                    parseOk).expr;
+                ReducePineExpression.SubstituteEnvironmentNode(
+                    parseOk,
+                    parseAndEvalExpr.Environment);
 
             if (disableRecurseAfterInline)
             {
@@ -608,6 +599,15 @@ public record ExpressionCompilation(
                                 InlineParseAndEvalRecursive(
                                     conditional.TrueBranch,
                                     underConditional: true);
+
+                            if (conditionInlined == conditional.Condition &&
+                                falseBranchInlined == conditional.FalseBranch &&
+                                trueBranchInlined == conditional.TrueBranch)
+                            {
+                                return conditional;
+
+                                // TODO: return null; for further reduction.
+                            }
 
                             return
                                 Expression.ConditionalInst(
@@ -845,18 +845,9 @@ public record ExpressionCompilation(
                  * */
 
                 var inlinedExpr =
-                    ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-                        findReplacement:
-                        descendant =>
-                        {
-                            if (descendant is Expression.Environment)
-                            {
-                                return parseAndEvalExpr.Environment;
-                            }
-
-                            return null;
-                        },
-                        parseOk).expr;
+                    ReducePineExpression.SubstituteEnvironmentNode(
+                        expression: parseOk,
+                        environmentReplacement: parseAndEvalExpr.Environment);
 
                 if (disableRecurseAfterInline)
                 {
@@ -1016,6 +1007,15 @@ public record ExpressionCompilation(
                                     conditional.TrueBranch,
                                     underConditional: true);
 
+                            if (conditionInlined == conditional.Condition &&
+                                falseBranchInlined == conditional.FalseBranch &&
+                                trueBranchInlined == conditional.TrueBranch)
+                            {
+                                return conditional;
+
+                                // TODO: return null; for further reduction.
+                            }
+
                             return
                                 Expression.ConditionalInst(
                                     condition: conditionInlined,
@@ -1067,6 +1067,9 @@ public record ExpressionCompilation(
                 findReplacement:
                 descendant =>
                 {
+                    if (descendant is Expression.Litral)
+                        return null;
+
                     if (CodeAnalysis.CodeAnalysis.TryParseAsLiteral(descendant) is { } literal)
                     {
                         return Expression.LitralInst(literal);

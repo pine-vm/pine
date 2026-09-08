@@ -796,18 +796,9 @@ public class CodeAnalysis
                     }
 
                     var inlinedExpr =
-                        ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-                            findReplacement:
-                            descendant =>
-                            {
-                                if (descendant is Expression.Environment)
-                                {
-                                    return parseAndEval.Environment;
-                                }
-
-                                return null;
-                            },
-                            childExpr).expr;
+                        ReducePineExpression.SubstituteEnvironmentNode(
+                            expression: childExpr,
+                            environmentReplacement: parseAndEval.Environment);
 
                     var inlinedExprReduced =
                         ReducePineExpression.ReduceExpressionBottomUp(

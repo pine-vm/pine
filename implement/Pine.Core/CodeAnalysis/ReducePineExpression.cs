@@ -2202,7 +2202,7 @@ public class ReducePineExpression
                 parseCache,
                 reducedExpressionCache);
 
-        var substituted = SubstituteEnvironmentNode(expression: innerExprReduced, replacement: evalExpr.Environment);
+        var substituted = SubstituteEnvironmentNode(expression: innerExprReduced, environmentReplacement: evalExpr.Environment);
 
         var reducedViaEval =
             ReduceExpressionBottomUp(
@@ -2620,9 +2620,12 @@ public class ReducePineExpression
         }
     }
 
-    private static Expression SubstituteEnvironmentNode(Expression expression, Expression replacement) =>
+    /// <summary>
+    /// Substitutes all <see cref="Expression.Environment"/> nodes in an expression tree with the given replacement expression.
+    /// </summary>
+    public static Expression SubstituteEnvironmentNode(Expression expression, Expression environmentReplacement) =>
         TransformPineExpressionWithOptionalReplacement(
-            findReplacement: e => e is Expression.Environment ? replacement : null,
+            findReplacement: e => e is Expression.Environment ? environmentReplacement : null,
             expression: expression).expr;
 
     /// <summary>
