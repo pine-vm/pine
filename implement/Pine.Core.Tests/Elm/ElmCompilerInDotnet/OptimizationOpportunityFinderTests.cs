@@ -2073,8 +2073,8 @@ public class OptimizationOpportunityFinderTests
             ElmSyntax.Abstract.ConvertFromConcrete: RootLevelChoiceTagWrapper: 6
             ElmSyntax.Concrete.Node: HigherOrderParameter_Direct: 2
             ElmSyntax.Concrete.Node: RootLevelChoiceTagWrapper: 8
-            ElmSyntax.Concrete.Parser.FromString: RootLevelChoiceTagWrapper: 115
-            ElmSyntax.Concrete.Parser.StringParsing: RootLevelChoiceTagWrapper: 35
+            ElmSyntax.Concrete.Parser.FromString: RootLevelChoiceTagWrapper: 113
+            ElmSyntax.Concrete.Parser.StringParsing: RootLevelChoiceTagWrapper: 36
             ElmSyntax.Concrete.Parser.TokensFromString: RootLevelChoiceTagWrapper: 17
             ElmSyntax.Concrete.SourceLookup: RootLevelChoiceTagWrapper: 15
             LanguageService: BasicsCompare: 3

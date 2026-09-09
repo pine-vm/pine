@@ -17,22 +17,15 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
 /// (<c>ElmSyntax.Concrete.Parser.FromString</c>) and the tokenizer
 /// (<c>ElmSyntax.Concrete.Parser.TokensFromString</c>). Because both parsers call the same
 /// declarations, a single set of leaves accelerates both.
-/// <para>
-/// The location-aware whitespace scanner is the one exception: it tracks the parser state of
-/// <c>ElmSyntax.Concrete.Parser.FromString</c> (including the comments collected so far) and
-/// therefore lives in that module. It is still generic over all trivia rather than tied to any
-/// subset of the grammar.
-/// </para>
 /// </summary>
 public static class ElmSyntaxConcreteParserPrecompiledLeaves
 {
     private const string StringParsingModuleName = "ElmSyntax.Concrete.Parser.StringParsing";
 
-    private const string FromStringModuleName = "ElmSyntax.Concrete.Parser.FromString";
-
     private static readonly string[] s_stringParsingFunctionNames =
         [
             "skipInlineWhitespace",
+            "skipWhitespaceAt",
             "skipToIdentifierEnd",
             "skipToAsciiDecimalDigitEnd",
             "skipToAsciiHexDigitEnd",
@@ -44,16 +37,11 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
             "skipOperatorChars",
         ];
 
-    private static readonly string[] s_fromStringFunctionNames =
-        [
-            "skipWhitespaceAt",
-        ];
-
     /// <summary>Gets the leaf key for skipping inline whitespace.</summary>
     public static PineValue SkipInlineWhitespaceLeafKey => LeafKey(StringParsingModuleName, "skipInlineWhitespace");
 
     /// <summary>Gets the leaf key for skipping whitespace with location tracking.</summary>
-    public static PineValue SkipWhitespaceAtLeafKey => LeafKey(FromStringModuleName, "skipWhitespaceAt");
+    public static PineValue SkipWhitespaceAtLeafKey => LeafKey(StringParsingModuleName, "skipWhitespaceAt");
 
     /// <summary>Gets the leaf key for scanning to an identifier's end.</summary>
     public static PineValue SkipToIdentifierEndLeafKey => LeafKey(StringParsingModuleName, "skipToIdentifierEnd");
@@ -116,8 +104,7 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
             mergedTree.EnumerateFilesTransitive()
             .Where(
                 file =>
-                file.path[^1].Equals("StringParsing.elm", StringComparison.OrdinalIgnoreCase) ||
-                file.path[^1].Equals("FromString.elm", StringComparison.OrdinalIgnoreCase))
+                file.path[^1].Equals("StringParsing.elm", StringComparison.OrdinalIgnoreCase))
             .Select(file => (IReadOnlyList<string>)file.path)
             .ToList();
 
@@ -138,7 +125,6 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
         var infos = new Dictionary<(string moduleName, string functionName), LeafInfo>();
 
         AddModuleFunctions(StringParsingModuleName, s_stringParsingFunctionNames);
-        AddModuleFunctions(FromStringModuleName, s_fromStringFunctionNames);
 
         return infos;
 
@@ -177,7 +163,7 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     /// </summary>
     public static PineValue? SkipWhitespaceAtLeafDelegate(PineValue environment)
     {
-        if (!EnvironmentMatches(environment, FromStringModuleName, "skipWhitespaceAt") ||
+        if (!EnvironmentMatches(environment, StringParsingModuleName, "skipWhitespaceAt") ||
             !TryGetStringBytes(environment.ValueFromPathOrEmptyList([1]), out var source) ||
             !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([2]), out var offset) ||
             !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([3]), out var row) ||
@@ -189,12 +175,12 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
         var scanned = ScanWhitespace(source, offset, row, column);
 
         return
-            ParserStateValue(
-                environment.ValueFromPathOrEmptyList([1]),
-                scanned.Offset,
-                scanned.Row,
-                scanned.Column,
-                environment.ValueFromPathOrEmptyList([5]));
+            PineValue.List(
+                [
+                IntegerValue(scanned.Offset),
+                IntegerValue(scanned.Row),
+                IntegerValue(scanned.Column),
+                ]);
     }
 
     /// <summary>Scans from the current offset to an identifier's end.</summary>
@@ -515,48 +501,6 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
         return new(offset, row, column);
     }
 
-    private static bool TryGetLocation(
-        PineValue value,
-        out BigInteger row,
-        out BigInteger column)
-    {
-        if (!TryGetRecordField(value, s_rowFieldName, out var rowValue) ||
-            !TryGetRecordField(value, s_columnFieldName, out var columnValue) ||
-            !TryParseNonnegativeInteger(rowValue, out row) ||
-            !TryParseNonnegativeInteger(columnValue, out column))
-        {
-            row = 0;
-            column = 0;
-            return false;
-        }
-
-        return true;
-    }
-
-    private static bool TryGetRecordField(
-        PineValue record,
-        PineValue fieldName,
-        out PineValue value)
-    {
-        if (record is PineValue.ListValue recordList &&
-            recordList.Items.Length % 2 is 1 &&
-            recordList.Items.Length >= 3 &&
-            recordList.Items.Span[0] == ElmValue.ElmRecordTypeTagNameAsValue)
-        {
-            for (var index = 1; index + 1 < recordList.Items.Length; index += 2)
-            {
-                if (recordList.Items.Span[index] == fieldName)
-                {
-                    value = recordList.Items.Span[index + 1];
-                    return true;
-                }
-            }
-        }
-
-        value = PineValue.EmptyList;
-        return false;
-    }
-
     private static bool TryGetStringBytes(PineValue value, out ReadOnlyMemory<byte> bytes)
     {
         if (value is PineValue.ListValue stringValue &&
@@ -655,27 +599,6 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     private static PineValue LiteralRunResult(BigInteger offset, string boundaryTag) =>
         PineValue.List([IntegerValue(offset), Tag(boundaryTag)]);
 
-    private static PineValue ParserStateValue(
-        PineValue sourceValue,
-        BigInteger offset,
-        BigInteger row,
-        BigInteger column,
-        PineValue commentsRevValue) =>
-        PineValue.List(
-            [
-            ElmValue.ElmRecordTypeTagNameAsValue,
-            s_columnFieldName,
-            IntegerValue(column),
-            s_commentsRevFieldName,
-            commentsRevValue,
-            s_offsetFieldName,
-            IntegerValue(offset),
-            s_rowFieldName,
-            IntegerValue(row),
-            s_sourceFieldName,
-            sourceValue,
-            ]);
-
     private static PineValue IntegerValue(BigInteger value) =>
         ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(value));
 
@@ -695,16 +618,6 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     private static readonly PineValue s_false = Tag("False");
 
     private static readonly PineValue s_nothing = Tag("Nothing");
-
-    private static readonly PineValue s_columnFieldName = StringEncoding.ValueFromString("column");
-
-    private static readonly PineValue s_commentsRevFieldName = StringEncoding.ValueFromString("commentsRev");
-
-    private static readonly PineValue s_offsetFieldName = StringEncoding.ValueFromString("offset");
-
-    private static readonly PineValue s_rowFieldName = StringEncoding.ValueFromString("row");
-
-    private static readonly PineValue s_sourceFieldName = StringEncoding.ValueFromString("source");
 
     private static readonly PineValue s_singleQuoteTermination = Tag("SingleQuoteTermination");
 

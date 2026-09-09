@@ -35,6 +35,7 @@ import ElmSyntax.Concrete.Parser.StringParsing as StringParsing
         , scanUnicodeEscapeDigits
         , skipOperatorChars
         , skipToIdentifierEnd
+        , skipWhitespaceAt
         , startsWithUpper
         )
 import ElmSyntax.Concrete.Pattern as Pattern
@@ -6558,93 +6559,57 @@ skipTrivia state =
     skipTriviaAt state.source state.offset state.row state.column state.commentsRev
 
 
-skipWhitespaceAt : String -> Int -> Int -> Int -> List (Node String) -> ParserState
-skipWhitespaceAt source offset row column commentsRev =
-    let
-        nextTwoChars =
-            String.left 2 (String.dropLeft offset source)
-    in
-    if nextTwoChars == "\u{000D}\n" then
-        skipWhitespaceAt source (offset + 2) (row + 1) 1 commentsRev
-
-    else
-        case String.left 1 nextTwoChars of
-            " " ->
-                skipWhitespaceAt source (offset + 1) row (column + 1) commentsRev
-
-            "\n" ->
-                skipWhitespaceAt source (offset + 1) (row + 1) 1 commentsRev
-
-            "\t" ->
-                skipWhitespaceAt source (offset + 1) row (column + 1) commentsRev
-
-            "\u{000D}" ->
-                skipWhitespaceAt source (offset + 1) (row + 1) 1 commentsRev
-
-            _ ->
-                { source = source
-                , offset = offset
-                , row = row
-                , column = column
-                , commentsRev = commentsRev
-                }
-
-
 {-| The trivia scan after at least one character of trivia was consumed: unlike `skipTrivia` it
 always builds the resulting state, because the position it starts at already differs from the one
 its caller started at.
 -}
 skipTriviaAt : String -> Int -> Int -> Int -> List (Node String) -> ParserState
 skipTriviaAt source offset row column commentsRev =
-    skipTriviaAfterWhitespace (skipWhitespaceAt source offset row column commentsRev)
-
-
-skipTriviaAfterWhitespace : ParserState -> ParserState
-skipTriviaAfterWhitespace state =
-    case String.left 2 (String.dropLeft state.offset state.source) of
+    let
+        ( afterOffset, afterRow, afterColumn ) =
+            skipWhitespaceAt source offset row column
+    in
+    case String.left 2 (String.dropLeft afterOffset source) of
         "--" ->
-            skipTriviaLineComment state.source state.offset state.row state.column state.commentsRev
+            let
+                contentEnd =
+                    lineCommentEnd source (afterOffset + 2)
+
+                endColumn =
+                    afterColumn + (contentEnd - afterOffset)
+            in
+            skipTriviaAt
+                source
+                contentEnd
+                afterRow
+                endColumn
+                (Node
+                    { start = { row = afterRow, column = afterColumn }
+                    , end = { row = afterRow, column = endColumn }
+                    }
+                    (String.left (contentEnd - afterOffset) (String.dropLeft afterOffset source))
+                    :: commentsRev
+                )
 
         "{-" ->
             skipTriviaBlockComment
-                state.source
-                (state.offset + 2)
-                state.row
-                (state.column + 2)
-                state.row
-                state.column
+                source
+                (afterOffset + 2)
+                afterRow
+                (afterColumn + 2)
+                afterRow
+                afterColumn
                 1
                 [ "{-" ]
-                state.commentsRev
+                commentsRev
 
         _ ->
-            state
-
-
-{-| Collects the line comment starting at `offset` and continues the trivia scan after it. The
-line break terminating the comment is not part of the comment's lexeme or range.
--}
-skipTriviaLineComment : String -> Int -> Int -> Int -> List (Node String) -> ParserState
-skipTriviaLineComment source offset row column commentsRev =
-    let
-        contentEnd =
-            lineCommentEnd source (offset + 2)
-
-        endColumn =
-            column + (contentEnd - offset)
-    in
-    skipTriviaAt
-        source
-        contentEnd
-        row
-        endColumn
-        (Node
-            { start = { row = row, column = column }
-            , end = { row = row, column = endColumn }
+            { source = source
+            , offset = afterOffset
+            , row = afterRow
+            , column = afterColumn
+            , commentsRev = commentsRev
             }
-            (String.left (contentEnd - offset) (String.dropLeft offset source))
-            :: commentsRev
-        )
 
 
 {-| Collects a (possibly nested, possibly multi-line) block comment with all line breaks

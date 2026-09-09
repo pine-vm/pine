@@ -82,14 +82,11 @@ public static class SetupVM
     private const string ConcreteParserStringParsingPrefix =
         PrecompiledLeafValueNamePrefix + "ElmSyntax.Concrete.Parser.StringParsing/";
 
-    private const string ConcreteParserFromStringPrefix =
-        PrecompiledLeafValueNamePrefix + "ElmSyntax.Concrete.Parser.FromString/";
-
     private const string ConcreteParserSkipInlineWhitespaceName =
         ConcreteParserStringParsingPrefix + "skipInlineWhitespace";
 
     private const string ConcreteParserSkipWhitespaceAtName =
-        ConcreteParserFromStringPrefix + "skipWhitespaceAt";
+        ConcreteParserStringParsingPrefix + "skipWhitespaceAt";
 
     private const string ConcreteParserSkipToIdentifierEndName =
         ConcreteParserStringParsingPrefix + "skipToIdentifierEnd";

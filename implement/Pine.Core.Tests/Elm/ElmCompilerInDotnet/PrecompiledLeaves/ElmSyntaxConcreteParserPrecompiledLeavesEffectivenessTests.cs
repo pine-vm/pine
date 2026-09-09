@@ -38,13 +38,9 @@ public class ElmSyntaxConcreteParserPrecompiledLeavesEffectivenessTests
             in
             { whitespace = StringParsing.skipInlineWhitespace "                                x" 0
             , trivia =
-                (FromString.skipWhitespaceAt
-                    "  \u{000D}\n  value"
-                    0
-                    1
-                    1
-                    []
-                ).offset
+                case StringParsing.skipWhitespaceAt "  \u{000D}\n  value" 0 1 1 of
+                    ( offset, _, _ ) ->
+                        offset
             , identifier = StringParsing.skipToIdentifierEnd "identifier0123456789_rest!" 0
             , decimal = StringParsing.skipToAsciiDecimalDigitEnd "01234567890123456789x" 0
             , hexadecimal = StringParsing.skipToAsciiHexDigitEnd "0123456789abcdefABCDEFx" 0

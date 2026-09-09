@@ -767,6 +767,30 @@ skipInlineWhitespace source offset =
             offset
 
 
+skipWhitespaceAt : String -> Int -> Int -> Int -> ( Int, Int, Int )
+skipWhitespaceAt source offset row column =
+    case String.left 2 (String.dropLeft offset source) of
+        "\u{000D}\n" ->
+            skipWhitespaceAt source (offset + 2) (row + 1) 1
+
+        _ ->
+            case String.left 1 (String.dropLeft offset source) of
+                " " ->
+                    skipWhitespaceAt source (offset + 1) row (column + 1)
+
+                "\n" ->
+                    skipWhitespaceAt source (offset + 1) (row + 1) 1
+
+                "\t" ->
+                    skipWhitespaceAt source (offset + 1) row (column + 1)
+
+                "\u{000D}" ->
+                    skipWhitespaceAt source (offset + 1) (row + 1) 1
+
+                _ ->
+                    ( offset, row, column )
+
+
 skipToIdentifierEnd : String -> Int -> Int
 skipToIdentifierEnd source offset =
     if isIdentifierChar (String.left 1 (String.dropLeft offset source)) then
