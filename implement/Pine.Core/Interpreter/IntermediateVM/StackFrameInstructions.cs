@@ -160,7 +160,10 @@ public record StackFrameInstructions(
         {
             var inst = instructions[i];
 
-            if (inst.Kind is StackInstructionKind.Local_Get or StackInstructionKind.Local_Set)
+            if (inst.Kind is
+                StackInstructionKind.Local_Get or
+                StackInstructionKind.Local_Set or
+                StackInstructionKind.Local_Set_Descending)
             {
                 if (inst.LocalIndex is null)
                 {

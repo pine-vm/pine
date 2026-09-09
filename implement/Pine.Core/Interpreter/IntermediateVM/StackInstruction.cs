@@ -39,7 +39,7 @@ public enum StackInstructionKind
     Local_Get,
 
     /// <summary>
-    /// Drop the top value from the stack.
+    /// Drop <see cref="StackInstruction.SkipCount"/> values from the top of the stack.
     /// </summary>
     Pop,
 
@@ -457,6 +457,13 @@ public enum StackInstructionKind
     /// Depends on the property <see cref="StackInstruction.SwitchJumpTable"/>.
     /// </summary>
     Switch_Jump_If_Slice_Skip_Var_Equal_Const,
+
+    /// <summary>
+    /// Copy <see cref="StackInstruction.TakeCount"/> values from the stack into locals,
+    /// starting at <see cref="StackInstruction.LocalIndex"/> and descending.
+    /// The values are not popped from the stack.
+    /// </summary>
+    Local_Set_Descending,
 }
 
 /// <summary>
@@ -582,6 +589,13 @@ public record StackInstruction(
         new(StackInstructionKind.Local_Set, LocalIndex: index);
 
     /// <summary>
+    /// Creates a <see cref="StackInstructionKind.Local_Set_Descending"/> instruction that copies
+    /// values from the stack into descending local indexes.
+    /// </summary>
+    public static StackInstruction Local_Set_Descending(int index, int takeCount) =>
+        new(StackInstructionKind.Local_Set_Descending, LocalIndex: index, TakeCount: takeCount);
+
+    /// <summary>
     /// Creates a <see cref="StackInstructionKind.Local_Get"/> instruction that loads the local variable
     /// at the given index and pushes it onto the stack.
     /// </summary>
@@ -603,10 +617,17 @@ public record StackInstruction(
         new(StackInstructionKind.Build_List_With_Prefix, Literal: prefix, TakeCount: takeCount);
 
     /// <summary>
-    /// A pre-built <see cref="StackInstructionKind.Pop"/> instruction.
+    /// A pre-built <see cref="StackInstructionKind.Pop"/> instruction that drops one value.
     /// </summary>
     public static readonly StackInstruction Pop =
-        new(StackInstructionKind.Pop);
+        new(StackInstructionKind.Pop, SkipCount: 1);
+
+    /// <summary>
+    /// Creates a <see cref="StackInstructionKind.Pop"/> instruction that drops the given number
+    /// of values from the top of the stack.
+    /// </summary>
+    public static StackInstruction PopMultiple(int skipCount) =>
+        new(StackInstructionKind.Pop, SkipCount: skipCount);
 
     /// <summary>
     /// A pre-built <see cref="StackInstructionKind.Length"/> instruction.
@@ -1243,6 +1264,21 @@ public record StackInstruction(
                         "Missing LocalIndex for LocalSet instruction")
                     ])),
 
+            StackInstructionKind.Local_Set_Descending =>
+            new InstructionDetails(
+                PopCount: 0,
+                PushCount: 0,
+                Display:
+                () => InstructionDisplay.WithoutDetailLines(
+                    [
+                    instruction.LocalIndex?.ToString()
+                    ?? throw new Exception(
+                       "Missing LocalIndex for LocalSetDescending instruction"),
+                    instruction.TakeCount?.ToString()
+                    ?? throw new Exception(
+                       "Missing TakeCount for LocalSetDescending instruction")
+                    ])),
+
             StackInstructionKind.Local_Get =>
             new InstructionDetails(
                 PopCount: 0,
@@ -1257,10 +1293,18 @@ public record StackInstruction(
 
             StackInstructionKind.Pop =>
             new InstructionDetails(
-                PopCount: 1,
+                PopCount:
+                instruction.SkipCount
+                ?? throw new Exception(
+                    "Missing SkipCount for Pop instruction"),
                 PushCount: 0,
                 Display:
-                InstructionDetails.DisplayNoDetails),
+                () => InstructionDisplay.WithoutDetailLines(
+                    [
+                    instruction.SkipCount?.ToString()
+                    ?? throw new Exception(
+                        "Missing SkipCount for Pop instruction")
+                    ])),
 
             StackInstructionKind.Length =>
             new InstructionDetails(

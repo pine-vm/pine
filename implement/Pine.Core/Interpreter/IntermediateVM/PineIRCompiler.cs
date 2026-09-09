@@ -1109,14 +1109,18 @@ public class PineIRCompiler
                     parseCache);
         }
 
-        for (var parameterIndex = context.StackFrameParameters.ParamsPaths.Count - 1;
-            parameterIndex >= 0;
-            parameterIndex--)
+        var parameterCount =
+            context.StackFrameParameters.ParamsPaths.Count;
+
+        if (parameterCount is not 0)
         {
             result =
                 result
-                .AppendInstruction(StackInstruction.Local_Set(parameterIndex))
-                .AppendInstruction(StackInstruction.Pop);
+                .AppendInstruction(
+                    StackInstruction.Local_Set_Descending(
+                        index: parameterCount - 1,
+                        takeCount: parameterCount))
+                .AppendInstruction(StackInstruction.PopMultiple(parameterCount));
         }
 
         return result;

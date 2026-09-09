@@ -1648,6 +1648,33 @@ public class PineVM : ICancellablePineVM
                             continue;
                         }
 
+                    case StackInstructionKind.Local_Set_Descending:
+                        {
+                            var localIndex =
+                                currentInstruction.LocalIndex
+                                ??
+                                throw new Exception("Invalid operation form: Missing local index");
+
+                            var takeCount =
+                                currentInstruction.TakeCount
+                                ??
+                                throw new Exception("Invalid operation form: Missing take count");
+
+                            if (takeCount < 0 || takeCount > localIndex + 1)
+                                throw new Exception("Invalid operation form: Local range extends below index zero");
+
+                            for (var depth = 0; depth < takeCount; depth++)
+                            {
+                                currentFrame.LocalSet(
+                                    localIndex - depth,
+                                    currentFrame.PeekFromStack(depth));
+                            }
+
+                            currentFrame.InstructionPointer++;
+
+                            continue;
+                        }
+
                     case StackInstructionKind.Local_Get:
                         {
                             var value =
@@ -2445,7 +2472,10 @@ public class PineVM : ICancellablePineVM
 
                     case StackInstructionKind.Pop:
                         {
-                            currentFrame.PopTopmostFromStack();
+                            currentFrame.PopFromStack(
+                                currentInstruction.SkipCount
+                                ??
+                                throw new Exception("Invalid operation form: Missing skip count"));
 
                             currentFrame.InstructionPointer++;
 

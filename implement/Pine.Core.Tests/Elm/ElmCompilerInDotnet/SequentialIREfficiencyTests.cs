@@ -12,6 +12,54 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 public class SequentialIREfficiencyTests
 {
     [Fact]
+    public void Tail_loop_parameter_updates_use_batched_instructions()
+    {
+        const string ElmModuleText =
+            """
+            module Test exposing (..)
+
+
+            testFunction remaining first second =
+                if remaining <= 0 then
+                    first
+
+                else
+                    testFunction (remaining - 1) second first
+            """;
+
+        var parsedEnvironment =
+            ElmCompilerTestHelper.CompileElmModules(
+                [ElmModuleText],
+                disableInlining: false).parsedEnv;
+
+        var functionValue =
+            parsedEnvironment.Modules
+            .Single(module => module.moduleName is "Test")
+            .moduleContent.FunctionDeclarations["testFunction"];
+
+        var parseCache = new PineVMParseCache();
+
+        var functionRecord =
+            FunctionRecord.ParseFunctionRecordTagged(functionValue, parseCache)
+            .Extract(error => throw new Exception(error));
+
+        var renderedFrame =
+            RenderFrame(
+                functionRecord.InnerFunction,
+                parseCache);
+
+        renderedFrame.Should().Contain(
+            """
+            Local_Set_Descending (3 , 4)
+            """);
+
+        renderedFrame.Should().Contain(
+            """
+            Pop (4)
+            """);
+    }
+
+    [Fact]
     public void Case_block_with_two_literal_uncons_patterns()
     {
         const string ElmModuleText =

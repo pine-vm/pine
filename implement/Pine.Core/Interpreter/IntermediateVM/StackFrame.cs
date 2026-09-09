@@ -147,6 +147,34 @@ public record StackFrame(
 
         return itemValue;
     }
+
+    /// <summary>
+    /// Returns a value at the given depth from the top of the evaluation stack without removing it.
+    /// </summary>
+    public PineValueInProcess PeekFromStack(int depth)
+    {
+        var stackIndex = StackPointer - depth - 1;
+
+        if (stackIndex < 0)
+            throw new InvalidOperationException("PeekFromStack called beyond stack depth");
+
+        return
+            StackValues.Span[stackIndex]
+            ??
+            throw new InvalidOperationException("Invalid program code: null reference on peek from stack");
+    }
+
+    /// <summary>
+    /// Drops the given number of values from the top of the evaluation stack.
+    /// </summary>
+    public void PopFromStack(int count)
+    {
+        if (count < 0 || count > StackPointer)
+            throw new InvalidOperationException("PopFromStack called with invalid count");
+
+        StackValues.Span.Slice(StackPointer - count, count).Clear();
+        StackPointer -= count;
+    }
 }
 
 /// <summary>
