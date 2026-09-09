@@ -796,7 +796,7 @@ public class CodeAnalysis
                     }
 
                     var inlinedExpr =
-                        ReducePineExpression.SubstituteEnvironmentNode(
+                        ExpressionSubstituteEnvironment.SubstituteEnvironmentNode(
                             expression: childExpr,
                             environmentReplacement: parseAndEval.Environment);
 

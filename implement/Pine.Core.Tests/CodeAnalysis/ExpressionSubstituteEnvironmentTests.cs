@@ -6,7 +6,7 @@ using Xunit;
 
 namespace Pine.Core.Tests.CodeAnalysis;
 
-public class SubstituteEnvironmentNodeTests
+public class ExpressionSubstituteEnvironmentTests
 {
     [Fact]
     public void Environment_root_is_replaced_with_the_provided_instance()
@@ -14,7 +14,7 @@ public class SubstituteEnvironmentNodeTests
         var replacement = Expression.LitralInst(PineValue.Blob([1]));
 
         var substituted =
-            ReducePineExpression.SubstituteEnvironmentNode(
+            ExpressionSubstituteEnvironment.SubstituteEnvironmentNode(
                 Expression.EnvironmentInstance,
                 replacement);
 
@@ -47,7 +47,7 @@ public class SubstituteEnvironmentNodeTests
                     trueBranch: unchanged));
 
         var substituted =
-            ReducePineExpression.SubstituteEnvironmentNode(expression, replacement);
+            ExpressionSubstituteEnvironment.SubstituteEnvironmentNode(expression, replacement);
 
         substituted.Should().NotBeSameAs(expression);
 
@@ -94,7 +94,7 @@ public class SubstituteEnvironmentNodeTests
 
         foreach (var expression in expressions)
         {
-            ReducePineExpression.SubstituteEnvironmentNode(expression, replacement)
+            ExpressionSubstituteEnvironment.SubstituteEnvironmentNode(expression, replacement)
                 .Should().BeSameAs(expression);
         }
     }
@@ -117,7 +117,7 @@ public class SubstituteEnvironmentNodeTests
         var replacement = Expression.LitralInst(PineValue.Blob([7]));
 
         var substituted =
-            ReducePineExpression.SubstituteEnvironmentNode(expression, replacement)
+            ExpressionSubstituteEnvironment.SubstituteEnvironmentNode(expression, replacement)
             .Should().BeOfType<Expression.List>().Subject;
 
         substituted.Should().NotBeSameAs(expression);
@@ -137,7 +137,7 @@ public class SubstituteEnvironmentNodeTests
         var replacement = Expression.LitralInst(PineValue.Blob([8]));
 
         var substituted =
-            ReducePineExpression.SubstituteEnvironmentNode(expression, replacement)
+            ExpressionSubstituteEnvironment.SubstituteEnvironmentNode(expression, replacement)
             .Should().BeOfType<Expression.List>().Subject;
 
         substituted.Items[0].Should().BeSameAs(substituted.Items[1]);
@@ -163,7 +163,7 @@ public class SubstituteEnvironmentNodeTests
                     trueBranch: Expression.EnvironmentInstance));
 
         for (var i = 0; i < 10; ++i)
-            _ = ReducePineExpression.SubstituteEnvironmentNode(expression, equivalentEnvironment);
+            _ = ExpressionSubstituteEnvironment.SubstituteEnvironmentNode(expression, equivalentEnvironment);
 
         var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
 
@@ -172,7 +172,7 @@ public class SubstituteEnvironmentNodeTests
         for (var i = 0; i < 100; ++i)
         {
             substituted =
-                ReducePineExpression.SubstituteEnvironmentNode(
+                ExpressionSubstituteEnvironment.SubstituteEnvironmentNode(
                     expression,
                     equivalentEnvironment);
         }

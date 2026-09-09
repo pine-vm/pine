@@ -404,7 +404,7 @@ public record ExpressionCompilation(
              * */
 
             var inlinedExpr =
-                ReducePineExpression.SubstituteEnvironmentNode(
+                ExpressionSubstituteEnvironment.SubstituteEnvironmentNode(
                     parseOk,
                     evalExpr.Environment);
 
@@ -845,7 +845,7 @@ public record ExpressionCompilation(
                  * */
 
                 var inlinedExpr =
-                    ReducePineExpression.SubstituteEnvironmentNode(
+                    ExpressionSubstituteEnvironment.SubstituteEnvironmentNode(
                         expression: parseOk,
                         environmentReplacement: evalExpr.Environment);
 
