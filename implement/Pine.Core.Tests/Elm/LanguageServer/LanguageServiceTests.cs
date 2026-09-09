@@ -43,6 +43,39 @@ public class LanguageServiceTests
     }
 
     [Fact]
+    public void Failed_hover_request_reports_document_and_position()
+    {
+        const string EvaluationError = "Loop iteration count limit exceeded: 10_000_000";
+
+        var function =
+            new FunctionRecord(
+               InnerFunction: Expression.EnvironmentInstance,
+               ParameterCount: 2,
+               EnvFunctions: ReadOnlyMemory<PineValue>.Empty,
+               ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty);
+
+        var languageService =
+            new LanguageServiceState(
+               new LanguageServiceInterfaceStruct(function, function),
+               PineValue.EmptyList,
+               new FailingPineVM(EvaluationError));
+
+        var request =
+            new ProvideHoverRequestStruct(
+               new FileLocation.WorkspaceFileLocation("src/Frontend/PineLogo.elm"),
+               PositionLineNumber: 159,
+               PositionColumn: 42);
+
+        var provideHover = () => languageService.ProvideHover(request);
+
+        provideHover.Should().Throw<Exception>()
+            .WithMessage(
+               "Failed to handle request " +
+               "(ProvideHoverRequest for Workspace: src/Frontend/PineLogo.elm at line 159, column 42): " +
+               EvaluationError);
+    }
+
+    [Fact]
     public void Compilation_uses_caller_supplied_cache_without_compiling()
     {
         var sourceTree = FileTree.EmptyTree;
@@ -212,6 +245,14 @@ public class LanguageServiceTests
 
             return PineValue.List([responseOk, PineValue.EmptyBlob]);
         }
+    }
+
+    private sealed class FailingPineVM(string error) : IPineVM
+    {
+        public Result<string, PineValue> EvaluateExpression(
+            Expression expression,
+            PineValue environment) =>
+            error;
     }
 
     private sealed class CacheProgressPineVM(

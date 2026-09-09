@@ -390,7 +390,9 @@ public class LanguageServiceState(
         {
             if (handleRequestResult.IsErrOrNull() is { } requestError)
             {
-                throw new System.Exception("Failed to handle request: " + requestError);
+                throw new System.Exception(
+                    "Failed to handle request (" + Request.Describe(request) + "): " +
+                    requestError);
             }
         }
 

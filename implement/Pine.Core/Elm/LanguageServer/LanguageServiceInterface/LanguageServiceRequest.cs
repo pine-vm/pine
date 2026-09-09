@@ -97,6 +97,69 @@ public abstract record Request
     /// </summary>
     public record TextDocumentRenameRequest(RenameParams Request)
         : Request;
+
+    /// <summary>
+    /// Formats the request identity and source location without including document contents.
+    /// </summary>
+    public static string Describe(Request request) =>
+        request switch
+        {
+            AddWorkspaceFileRequest addFile =>
+            "AddWorkspaceFileRequest for " + addFile.FilePath,
+
+            DeleteWorkspaceFileRequest deleteFile =>
+            "DeleteWorkspaceFileRequest for " + deleteFile.FilePath,
+
+            AddElmPackageVersionRequest addPackage =>
+            "AddElmPackageVersionRequest for " +
+            addPackage.ElmPackageVersionIdentifer.PackageName + "@" +
+            addPackage.ElmPackageVersionIdentifer.VersionTag,
+
+            ProvideHoverRequest hover =>
+            "ProvideHoverRequest for " + DescribePosition(hover.Request),
+
+            ProvideCompletionItemsRequest completion =>
+            "ProvideCompletionItemsRequest for " +
+            completion.Request.FilePathOpenedInEditor +
+            " at line " + completion.Request.CursorLineNumber +
+            ", column " + completion.Request.CursorColumn,
+
+            ProvideDefinitionRequest definition =>
+            "ProvideDefinitionRequest for " + DescribePosition(definition.Request),
+
+            TextDocumentSymbolRequest documentSymbol =>
+            "TextDocumentSymbolRequest for " + documentSymbol.FilePath,
+
+            TextDocumentReferencesRequest references =>
+            "TextDocumentReferencesRequest for " +
+            DescribePosition(
+                references.Request.FileLocation,
+                references.Request.PositionLineNumber,
+                references.Request.PositionColumn),
+
+            TextDocumentRenameRequest rename =>
+            "TextDocumentRenameRequest for " +
+            rename.Request.FilePath +
+            " at line " + rename.Request.PositionLineNumber +
+            ", column " + rename.Request.PositionColumn,
+
+            _ =>
+            throw new System.NotImplementedException(
+                nameof(Describe) + " does not handle request variant: " +
+                request.GetType().Name),
+        };
+
+    private static string DescribePosition(ProvideHoverRequestStruct request) =>
+        DescribePosition(
+            request.FileLocation,
+            request.PositionLineNumber,
+            request.PositionColumn);
+
+    private static string DescribePosition(
+        FileLocation fileLocation,
+        int lineNumber,
+        int column) =>
+        fileLocation + " at line " + lineNumber + ", column " + column;
 }
 
 /*
