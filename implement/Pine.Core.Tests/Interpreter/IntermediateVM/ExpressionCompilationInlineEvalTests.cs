@@ -9,7 +9,7 @@ namespace Pine.Core.Tests.Interpreter.IntermediateVM;
 public class ExpressionCompilationInlineEvalTests
 {
     [Fact]
-    public void Traverses_all_composite_expression_types_and_tracks_conditional_branches()
+    public void Traverses_all_composite_expression_types_and_tracks_condition_count()
     {
         var literal = Expression.LitralInst(PineValue.Blob([1]));
         var replacement = Expression.LitralInst(PineValue.Blob([2]));
@@ -31,15 +31,15 @@ public class ExpressionCompilationInlineEvalTests
                         targetEval)
                     ]));
 
-        var visits = new List<(Expression.Eval eval, bool underConditional)>();
+        var visits = new List<(Expression.Eval eval, int conditionCount)>();
 
         var inlined =
             ExpressionCompilation.InlineEvalRecursive(
                 expression,
-                underConditional: false,
-                (eval, underConditional) =>
+                conditionCount: 0,
+                (eval, conditionCount) =>
                 {
-                    visits.Add((eval, underConditional));
+                    visits.Add((eval, conditionCount));
 
                     return eval == targetEval ? replacement : null;
                 });
@@ -78,8 +78,8 @@ public class ExpressionCompilationInlineEvalTests
         inlinedConditional.TrueBranch.Should().BeSameAs(replacement);
 
         visits.Count(visit => visit.eval == containingEval).Should().Be(1);
-        visits.Count(visit => visit.eval == targetEval && !visit.underConditional).Should().Be(1);
-        visits.Count(visit => visit.eval == targetEval && visit.underConditional).Should().Be(1);
+        visits.Count(visit => visit.eval == targetEval && visit.conditionCount is 0).Should().Be(1);
+        visits.Count(visit => visit.eval == targetEval && visit.conditionCount is 1).Should().Be(1);
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public class ExpressionCompilationInlineEvalTests
         var inlined =
             ExpressionCompilation.InlineEvalRecursive(
                 expression,
-                underConditional: false,
+                conditionCount: 0,
                 (eval, _) =>
                 {
                     ++visits;
@@ -121,14 +121,14 @@ public class ExpressionCompilationInlineEvalTests
         var inlined =
             ExpressionCompilation.InlineEvalRecursive(
                 expression,
-                underConditional: false,
+                conditionCount: 0,
                 (eval, _) => null);
 
         inlined.Should().BeSameAs(expression);
     }
 
     [Fact]
-    public void Reuses_unchanged_list_and_visits_shared_items_once_per_conditional_context()
+    public void Reuses_unchanged_list_and_visits_shared_items_once_per_condition_count()
     {
         var literal = Expression.LitralInst(PineValue.Blob([1]));
         var eval = new Expression.Eval(literal, Expression.EnvironmentInstance);
@@ -140,19 +140,49 @@ public class ExpressionCompilationInlineEvalTests
                 list,
                 list);
 
-        var visits = new List<bool>();
+        var visits = new List<int>();
 
         var inlined =
             ExpressionCompilation.InlineEvalRecursive(
                 expression,
-                underConditional: false,
-                (_, underConditional) =>
+                conditionCount: 0,
+                (_, conditionCount) =>
                 {
-                    visits.Add(underConditional);
+                    visits.Add(conditionCount);
                     return null;
                 });
 
         inlined.Should().BeSameAs(expression);
-        visits.Should().Equal(false, true);
+        visits.Should().Equal(0, 1);
+    }
+
+    [Fact]
+    public void Increments_condition_count_for_each_nested_conditional_branch()
+    {
+        var literal = Expression.LitralInst(PineValue.Blob([1]));
+        var eval = new Expression.Eval(literal, Expression.EnvironmentInstance);
+
+        var expression =
+            Expression.ConditionalInst(
+                eval,
+                Expression.ConditionalInst(
+                    eval,
+                    eval,
+                    eval),
+                eval);
+
+        var visits = new List<int>();
+
+        _ =
+            ExpressionCompilation.InlineEvalRecursive(
+                expression,
+                conditionCount: 3,
+                (_, conditionCount) =>
+                {
+                    visits.Add(conditionCount);
+                    return null;
+                });
+
+        visits.Should().Equal(3, 4, 5);
     }
 }

@@ -562,7 +562,7 @@ public record ExpressionCompilation(
         var expressionInlined =
             InlineEvalRecursive(
                 expressionReduced,
-                underConditional: false,
+                conditionCount: 0,
                 (eval, _) => TryInlineEval(eval));
 
         var expressionInlinedReduced =
@@ -581,25 +581,25 @@ public record ExpressionCompilation(
 
     internal static Expression InlineEvalRecursive(
         Expression expression,
-        bool underConditional,
-        Func<Expression.Eval, bool, Expression?> tryInlineEval)
+        int conditionCount,
+        Func<Expression.Eval, int, Expression?> tryInlineEval)
     {
         if (expression.EvalCount is 0)
             return expression;
 
-        return InlineEvalRecursiveWithCache(expression, underConditional, tryInlineEval, cache: []);
+        return InlineEvalRecursiveWithCache(expression, conditionCount, tryInlineEval, cache: []);
     }
 
     private static Expression InlineEvalRecursiveWithCache(
         Expression expression,
-        bool underConditional,
-        Func<Expression.Eval, bool, Expression?> tryInlineEval,
-        Dictionary<(Expression expression, bool underConditional), Expression> cache)
+        int conditionCount,
+        Func<Expression.Eval, int, Expression?> tryInlineEval,
+        Dictionary<(Expression expression, int conditionCount), Expression> cache)
     {
         if (expression.EvalCount is 0)
             return expression;
 
-        var cacheKey = (expression, underConditional);
+        var cacheKey = (expression, conditionCount);
 
         if (cache.TryGetValue(cacheKey, out var cached))
             return cached;
@@ -607,7 +607,7 @@ public record ExpressionCompilation(
         Expression inlined;
 
         if (expression is Expression.Eval evalExpr &&
-            tryInlineEval(evalExpr, underConditional) is { } inlinedEval)
+            tryInlineEval(evalExpr, conditionCount) is { } inlinedEval)
         {
             inlined = inlinedEval;
         }
@@ -655,7 +655,7 @@ public record ExpressionCompilation(
                 var inlinedItem =
                     InlineEvalRecursiveWithCache(
                         item,
-                        underConditional,
+                        conditionCount,
                         tryInlineEval,
                         cache);
 
@@ -686,14 +686,14 @@ public record ExpressionCompilation(
             var encodedInlined =
                 InlineEvalRecursiveWithCache(
                     eval.Encoded,
-                    underConditional,
+                    conditionCount,
                     tryInlineEval,
                     cache);
 
             var environmentInlined =
                 InlineEvalRecursiveWithCache(
                     eval.Environment,
-                    underConditional,
+                    conditionCount,
                     tryInlineEval,
                     cache);
 
@@ -711,7 +711,7 @@ public record ExpressionCompilation(
             var inputInlined =
                 InlineEvalRecursiveWithCache(
                     builtin.Input,
-                    underConditional,
+                    conditionCount,
                     tryInlineEval,
                     cache);
 
@@ -742,21 +742,21 @@ public record ExpressionCompilation(
             var conditionInlined =
                 InlineEvalRecursiveWithCache(
                     conditional.Condition,
-                    underConditional,
+                    conditionCount,
                     tryInlineEval,
                     cache);
 
             var falseBranchInlined =
                 InlineEvalRecursiveWithCache(
                     conditional.FalseBranch,
-                    underConditional: true,
+                    conditionCount: conditionCount + 1,
                     tryInlineEval,
                     cache);
 
             var trueBranchInlined =
                 InlineEvalRecursiveWithCache(
                     conditional.TrueBranch,
-                    underConditional: true,
+                    conditionCount: conditionCount + 1,
                     tryInlineEval,
                     cache);
 
@@ -779,7 +779,7 @@ public record ExpressionCompilation(
             var taggedInlined =
                 InlineEvalRecursiveWithCache(
                     label.Tagged,
-                    underConditional,
+                    conditionCount,
                     tryInlineEval,
                     cache);
 
@@ -1111,8 +1111,9 @@ public record ExpressionCompilation(
         var expressionInlined =
             InlineEvalRecursive(
                 expressionReduced,
-                underConditional: false,
-                TryInlineEval);
+                conditionCount: 0,
+                (eval, conditionCount) =>
+                TryInlineEval(eval, noRecursion: 0 < conditionCount));
 
         var expressionInlinedReduced =
             ReducePineExpression.ReduceExpressionBottomUp(
