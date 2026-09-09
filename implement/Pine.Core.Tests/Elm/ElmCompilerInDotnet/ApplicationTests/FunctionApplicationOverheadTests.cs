@@ -325,7 +325,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 5
             BuildListCount: 3
             LoopIterationCount: 0
-            InstructionCount: 24
+            InstructionCount: 23
             """);
     }
 
@@ -353,7 +353,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 9
             BuildListCount: 15
             LoopIterationCount: 0
-            InstructionCount: 64
+            InstructionCount: 62
             """);
     }
 
@@ -379,7 +379,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 7
             BuildListCount: 4
             LoopIterationCount: 0
-            InstructionCount: 32
+            InstructionCount: 31
             """);
     }
 
@@ -411,7 +411,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 12
             BuildListCount: 8
             LoopIterationCount: 0
-            InstructionCount: 90
+            InstructionCount: 89
             """);
     }
 
@@ -747,7 +747,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 4
             BuildListCount: 2
             LoopIterationCount: 0
-            InstructionCount: 19
+            InstructionCount: 18
             """);
     }
 
@@ -776,7 +776,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 8
             BuildListCount: 5
             LoopIterationCount: 0
-            InstructionCount: 40
+            InstructionCount: 37
             """);
     }
 
@@ -819,7 +819,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 64
             BuildListCount: 44
             LoopIterationCount: 0
-            InstructionCount: 507
+            InstructionCount: 504
             """);
     }
 
@@ -857,7 +857,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 12
             BuildListCount: 8
             LoopIterationCount: 0
-            InstructionCount: 94
+            InstructionCount: 93
             """);
     }
 
@@ -902,7 +902,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 64
             BuildListCount: 44
             LoopIterationCount: 0
-            InstructionCount: 527
+            InstructionCount: 524
             """);
     }
 
@@ -935,7 +935,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 12
             BuildListCount: 8
             LoopIterationCount: 0
-            InstructionCount: 93
+            InstructionCount: 92
             """);
     }
 
@@ -976,7 +976,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 64
             BuildListCount: 44
             LoopIterationCount: 0
-            InstructionCount: 527
+            InstructionCount: 524
             """);
     }
 }

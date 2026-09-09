@@ -464,6 +464,12 @@ public enum StackInstructionKind
     /// The values are not popped from the stack.
     /// </summary>
     Local_Set_Descending,
+
+    /// <summary>
+    /// Evaluates the expression encoded in <see cref="StackInstruction.Literal"/>
+    /// using the environment from the top of the stack.
+    /// </summary>
+    Eval_Const,
 }
 
 /// <summary>
@@ -890,6 +896,13 @@ public record StackInstruction(
     /// </summary>
     public static readonly StackInstruction Eval_Binary =
         new(StackInstructionKind.Eval_Binary);
+
+    /// <summary>
+    /// Creates a <see cref="StackInstructionKind.Eval_Const"/> instruction that evaluates
+    /// the given encoded expression using the environment from the top of the stack.
+    /// </summary>
+    public static StackInstruction Eval_Const(PineValue expressionValue) =>
+        new(StackInstructionKind.Eval_Const, Literal: expressionValue);
 
     /// <summary>
     /// Creates a <see cref="StackInstructionKind.Invoke_StackFrame_Const"/> instruction that invokes
@@ -1676,6 +1689,18 @@ public record StackInstruction(
                 PopCount: 2,
                 PushCount: 1,
                 Display: InstructionDetails.DisplayNoDetails),
+
+            StackInstructionKind.Eval_Const =>
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                Display: () => InstructionDisplay.WithoutDetailLines(
+                    [
+                    literalDisplayString(
+                        instruction.Literal
+                        ?? throw new Exception(
+                            "Missing Literal for EvalConst instruction"))
+                    ])),
 
             StackInstructionKind.Invoke_StackFrame_Const =>
             new InstructionDetails(

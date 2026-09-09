@@ -69,7 +69,7 @@ public class InvokeStackFrameConstTests
                 genericInstructions: listLengthInstructions);
 
         report.ReturnValue.Evaluate().Should().Be(expectedReturnValue);
-        report.InstructionCount.Should().Be(32);
+        report.InstructionCount.Should().Be(31);
         report.InvocationCount.Should().Be(4);
         report.BuildListCount.Should().Be(0);
         report.LoopIterationCount.Should().Be(0);
@@ -172,7 +172,7 @@ public class InvokeStackFrameConstTests
 
         report.ReturnValue.Evaluate().Should().Be(expectedReturnValue);
 
-        report.InstructionCount.Should().Be(53);
+        report.InstructionCount.Should().Be(52);
         report.InvocationCount.Should().Be(7);
         report.BuildListCount.Should().Be(0);
         report.LoopIterationCount.Should().Be(0);
@@ -289,7 +289,7 @@ public class InvokeStackFrameConstTests
                 genericInstructions: factorialEntryInstructions);
 
         report.ReturnValue.Evaluate().Should().Be(expectedReturnValue);
-        report.InstructionCount.Should().Be(46);
+        report.InstructionCount.Should().Be(45);
         report.InvocationCount.Should().Be(6);
         report.BuildListCount.Should().Be(0);
         report.LoopIterationCount.Should().Be(0);
@@ -422,7 +422,7 @@ public class InvokeStackFrameConstTests
                 genericInstructions: fibonacciEntryInstructions);
 
         report.ReturnValue.Evaluate().Should().Be(expectedReturnValue);
-        report.InstructionCount.Should().Be(330);
+        report.InstructionCount.Should().Be(329);
         report.InvocationCount.Should().Be(42);
         report.BuildListCount.Should().Be(0);
         report.LoopIterationCount.Should().Be(0);
@@ -486,7 +486,7 @@ public class InvokeStackFrameConstTests
                 genericInstructions: rootInstructions);
 
         report.ReturnValue.Evaluate().Should().Be(expectedReturnValue);
-        report.InstructionCount.Should().Be(8);
+        report.InstructionCount.Should().Be(7);
         report.InvocationCount.Should().Be(2);
         report.BuildListCount.Should().Be(0);
         report.LoopIterationCount.Should().Be(0);
@@ -550,13 +550,13 @@ public class InvokeStackFrameConstTests
                 ]);
 
         report.ReturnValue.Evaluate().Should().Be(expectedReturnValue);
-        report.InstructionCount.Should().Be(6);
+        report.InstructionCount.Should().Be(5);
         report.InvocationCount.Should().Be(1);
         report.BuildListCount.Should().Be(0);
         report.LoopIterationCount.Should().Be(0);
 
         StackInstructionTraceRenderer.RenderInstructionTrace(trace)
-            .Should().Contain("Eval_Binary");
+            .Should().Contain("Eval_Const");
     }
 
     [Fact]
@@ -687,7 +687,7 @@ public class InvokeStackFrameConstTests
 
         report.ReturnValue.Evaluate().Should().Be(expectedReturnValue);
 
-        report.InstructionCount.Should().Be(56);
+        report.InstructionCount.Should().Be(55);
         report.InvocationCount.Should().Be(8);
         report.BuildListCount.Should().Be(0);
         report.LoopIterationCount.Should().Be(0);

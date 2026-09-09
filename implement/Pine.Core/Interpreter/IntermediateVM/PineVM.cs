@@ -2079,6 +2079,57 @@ public class PineVM : ICancellablePineVM
                             }
                         }
 
+                    case StackInstructionKind.Eval_Const:
+                        {
+                            ++evalCount;
+
+                            if (IncrementInvocationCountAndEnforceLimits() is { } limitError)
+                            {
+                                return limitError;
+                            }
+
+                            var expressionValue =
+                                currentInstruction.Literal
+                                ??
+                                throw new Exception("Invalid operation form: Missing literal");
+
+                            var environmentValue = currentFrame.PopTopmostFromStack();
+
+                            var followingInstruction =
+                                currentFrame.Instructions.Instructions[currentFrame.InstructionPointer + 1];
+
+                            var replaceCurrentFrame =
+                                followingInstruction.Kind is StackInstructionKind.Return;
+
+                            var parseResult = ParseExpression(expressionValue);
+
+                            if (parseResult.IsErrOrNull() is { } parseErr)
+                            {
+                                return
+                                    BuildParseExpressionError(
+                                        parseErr,
+                                        expressionValue,
+                                        environmentValue);
+                            }
+
+                            if (parseResult.IsOkOrNull() is not { } parseOk)
+                            {
+                                throw new NotImplementedException(
+                                    "Unexpected result type: " + parseResult.GetType().FullName);
+                            }
+
+                            if (InvokePrecompiledOrBuildStackFrame(
+                                expressionValue: expressionValue,
+                                parseOk,
+                                environmentValue,
+                                replaceCurrentFrame: replaceCurrentFrame) is { } error)
+                            {
+                                return error;
+                            }
+
+                            continue;
+                        }
+
                     case StackInstructionKind.Jump_Const:
                         {
                             if (CheckCancellation() is { } cancellationError)

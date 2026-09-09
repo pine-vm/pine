@@ -27,6 +27,24 @@ public class PineControlFlowGraphTests
     }
 
     [Fact]
+    public void Round_trip_preserves_constant_expression_invoke()
+    {
+        StackInstruction[] instructions =
+            [
+                StackInstruction.Local_Get(0),
+                StackInstruction.Eval_Const(PineValue.EmptyList),
+                StackInstruction.Return,
+            ];
+
+        var graph = PineControlFlowGraph.FromInstructions(instructions);
+
+        graph.Blocks.Should().HaveCount(2);
+        graph.Blocks[0].Terminator.Should().BeOfType<PineControlFlowTerminator.Invoke>();
+        graph.Blocks[1].Terminator.Should().BeOfType<PineControlFlowTerminator.Return>();
+        graph.LowerToStackInstructions().Should().Equal(instructions);
+    }
+
+    [Fact]
     public void Backedge_with_empty_stack_round_trips()
     {
         StackInstruction[] instructions =

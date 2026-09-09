@@ -159,6 +159,14 @@ public class PineVMInstructionTraceTests
 
         result.IsOkOrNull().Should().Be(nestedEnvironment);
 
+        trace
+            .Where(item => item.FrameExpression.Equals(expression))
+            .Select(item => item.Instruction)
+            .Should().Equal(
+                StackInstruction.Push_Literal(nestedEnvironment),
+                StackInstruction.Eval_Const(
+                    ExpressionEncoding.EncodeExpressionAsValue(Expression.EnvironmentInstance)));
+
         var nestedFrameTrace =
             trace.First(item => item.FrameExpression.Equals(Expression.EnvironmentInstance));
 

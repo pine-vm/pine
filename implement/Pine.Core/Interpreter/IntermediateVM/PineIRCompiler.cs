@@ -1009,6 +1009,13 @@ public class PineIRCompiler
                 context,
                 parseCache);
 
+        if (evalExpr.Encoded is Expression.Litral literalEncodedExpression)
+        {
+            return
+                afterEnvironment.AppendInstruction(
+                    StackInstruction.Eval_Const(literalEncodedExpression.Value));
+        }
+
         var afterExpr =
             afterEnvironment.ContinueWithExpression(
                 evalExpr.Encoded,
@@ -1030,11 +1037,7 @@ public class PineIRCompiler
     {
         if (guardExpressionValues.Count is not 1)
         {
-            return
-                prior
-                .ContinueWithExpression(evalExpr.Environment, context, parseCache)
-                .ContinueWithExpression(evalExpr.Encoded, context, parseCache)
-                .AppendInstruction(StackInstruction.Eval_Binary);
+            return CompileNormalEval(evalExpr, context, prior, parseCache);
         }
 
         var (afterEncoded, encodedLocalIndex) =
