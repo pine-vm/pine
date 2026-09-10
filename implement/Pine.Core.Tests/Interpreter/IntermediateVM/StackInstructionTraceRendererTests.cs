@@ -1,8 +1,11 @@
 using AwesomeAssertions;
+using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Interpreter.IntermediateVM;
+using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using Xunit;
 
@@ -64,6 +67,91 @@ public class StackInstructionTraceRendererTests
               Blob [28] (0x0000004c00000069000000740000006500000072000000610000006c | UTF32 "Literal")
             12. depth=2 ip=0 Push_Literal (Blob [2] (0x0403 | int 3))
             """);
+    }
+
+    [Fact]
+    public void RenderStackFrameInstructions_renders_absolute_jump_destinations_and_incoming_locations()
+    {
+        var switchJumpTable =
+            new Dictionary<PineValue, int>
+            {
+                [IntegerEncoding.EncodeSignedInteger(1)] = 2,
+                [IntegerEncoding.EncodeSignedInteger(2)] = 3,
+            }
+            .ToImmutableDictionary();
+
+        var frameInstructions =
+            new StackFrameInstructions(
+                Parameters: StaticFunctionInterface.FromPathsSorted([]),
+                Instructions:
+                [
+                StackInstruction.Jump_Unconditional(6),
+                StackInstruction.Push_Literal(IntegerEncoding.EncodeSignedInteger(7)),
+                StackInstruction.Jump_If_Equal(4, IntegerEncoding.EncodeSignedInteger(7)),
+                StackInstruction.Push_Literal(IntegerEncoding.EncodeSignedInteger(1)),
+                new StackInstruction(
+                    StackInstructionKind.Switch_Jump_If_Equal_Const,
+                    SwitchJumpTable: switchJumpTable),
+                StackInstruction.Push_Literal(IntegerEncoding.EncodeSignedInteger(0)),
+                StackInstruction.Push_Literal(IntegerEncoding.EncodeSignedInteger(1)),
+                StackInstruction.Push_Literal(IntegerEncoding.EncodeSignedInteger(2)),
+                StackInstruction.Return,
+                ]);
+
+        StackInstructionTraceRenderer.RenderStackFrameInstructions(frameInstructions)
+            .Should()
+            .Be(
+                """
+                0: Jump_Const (6, 6)
+                1: Push_Literal (Blob [2] (0x0407 | int 7))
+                2: Jump_If_Equal_Const (Blob [2] (0x0407 | int 7) , 4, 6)
+                3: Push_Literal (Blob [2] (0x0401 | int 1))
+                4: Switch_Jump_If_Equal_Const (2)
+                  case Blob [2] (0x0401 | int 1): jump (2, 6)
+                  case Blob [2] (0x0402 | int 2): jump (3, 7)
+                5: Push_Literal (Blob [2] (0x0400 | int 0))
+                jumps_arriving_from 3 (0, 2, 4)
+                6: Push_Literal (Blob [2] (0x0401 | int 1))
+                jumps_arriving_from 1 (4)
+                7: Push_Literal (Blob [2] (0x0402 | int 2))
+                8: Return
+                """);
+    }
+
+    [Fact]
+    public void Default_literal_rendering_appends_hash_only_for_non_simple_values()
+    {
+        var complexBlob = PineValue.Blob([255]);
+        var listValue = PineValue.List([complexBlob]);
+
+        var expectedBlobHash =
+            Convert.ToHexStringLower(PineValueHashTree.ComputeHash(complexBlob).Span)[..8];
+
+        var expectedListHash =
+            Convert.ToHexStringLower(PineValueHashTree.ComputeHash(listValue).Span)[..8];
+
+        var frameInstructions =
+            new StackFrameInstructions(
+                Parameters: StaticFunctionInterface.FromPathsSorted([]),
+                Instructions:
+                [
+                StackInstruction.Push_Literal(complexBlob),
+                StackInstruction.Push_Literal(listValue),
+                StackInstruction.Push_Literal(StringEncoding.ValueFromString("text")),
+                StackInstruction.Push_Literal(IntegerEncoding.EncodeSignedInteger(3)),
+                StackInstruction.Return,
+                ]);
+
+        StackInstructionTraceRenderer.RenderStackFrameInstructions(frameInstructions)
+            .Should()
+            .Be(
+                $"""
+                0: Push_Literal (Blob [1] (0xff | hash 0x{expectedBlobHash}))
+                1: Push_Literal (List [1] (1 | hash 0x{expectedListHash}))
+                2: Push_Literal (Blob [16] (0x00000074000000650000007800000074 | UTF32 "text"))
+                3: Push_Literal (Blob [2] (0x0403 | int 3))
+                4: Return
+                """);
     }
 
     [Fact]

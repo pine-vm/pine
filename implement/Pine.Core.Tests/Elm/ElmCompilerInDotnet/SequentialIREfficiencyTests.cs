@@ -102,9 +102,10 @@ public class SequentialIREfficiencyTests
             8820d122 (8):
             0: Local_Get (0)
             1: Take_Const (2)
-            2: Jump_If_Equal_Const (List [2] (2) , 3)
+            2: Jump_If_Equal_Const (List [2] (2 | hash 0xd072f1c4) , 3, 5)
             3: Local_Get (0)
             4: Return
+            jumps_arriving_from 1 (2)
             5: Local_Get (0)
             6: Skip_Const (2)
             7: Return
@@ -186,7 +187,7 @@ public class SequentialIREfficiencyTests
              2: Local_Get (0)
              3: Int_Less_Than_Or_Equal_Const (13)
              4: Logical_And_Binary
-             5: Jump_If_Equal_Const (Blob [1] (0x04) , 21)
+             5: Jump_If_Equal_Const (Blob [1] (0x04 | hash 0x06db1cc6) , 21, 26)
              6: Local_Get (1)
              7: Skip_Head_Const (2)
              8: Local_Set (2)
@@ -195,13 +196,13 @@ public class SequentialIREfficiencyTests
             11: Local_Get (2)
             12: Build_List_With_Prefix (1 , 1)
               Blob [24] (0x0000004c000000690000007400000072000000610000006c | UTF32 "Litral")
-            13: Push_Literal (List [1] (1))
+            13: Push_Literal (List [1] (1 | hash 0xcb2c8951))
             14: Build_List_With_Prefix (2 , 2)
               Blob [16] (0x0000004c000000690000007300000074 | UTF32 "List")
-              List [2] (2)
+              List [2] (2 | hash 0x476058cb)
             15: Build_List_With_Prefix (2 , 1)
               Blob [16] (0x0000004500000076000000610000006c | UTF32 "Eval")
-              List [2] (79)
+              List [2] (79 | hash 0x28d30c5c)
             16: Local_Set (3)
             17: Eval_Binary
             18: Local_Set (4)
@@ -211,7 +212,8 @@ public class SequentialIREfficiencyTests
             22: Local_Get (4)
             23: Int_Sub_Binary
             24: Slice_Skip_Var_Take_Var
-            25: Jump_Const (11)
+            25: Jump_Const (11, 36)
+            jumps_arriving_from 1 (5)
             26: Local_Get (1)
             27: Skip_Head_Const (2)
             28: Local_Get (0)
@@ -223,14 +225,17 @@ public class SequentialIREfficiencyTests
             33: Int_Add_Generic
             34: Int_Mul_Const (4)
             35: Slice_Skip_Var_Take_Var
+            jumps_arriving_from 1 (25)
             36: Local_Set (2)
             37: Switch_Jump_If_Equal_Const (2)
-              case Blob [16] (0x000000610000006c0000006600000061 | UTF32 "alfa"): jump 3
-              case Blob [16] (0x00000062000000650000007400000061 | UTF32 "beta"): jump 5
+              case Blob [16] (0x000000610000006c0000006600000061 | UTF32 "alfa"): jump (3, 40)
+              case Blob [16] (0x00000062000000650000007400000061 | UTF32 "beta"): jump (5, 42)
             38: Push_Literal (Blob [2] (0x044f | int 79))
             39: Return
+            jumps_arriving_from 1 (37)
             40: Push_Literal (Blob [2] (0x0447 | int 71))
             41: Return
+            jumps_arriving_from 1 (37)
             42: Push_Literal (Blob [2] (0x0449 | int 73))
             43: Return
             """);
@@ -301,14 +306,15 @@ public class SequentialIREfficiencyTests
             2: Take_Const (4)
             3: Local_Set (1)
             4: Switch_Jump_If_Equal_Const (2)
-              case Blob [4] (0x00000041 | UTF32 "A"): jump 4
-              case Blob [4] (0x00000042 | UTF32 "B"): jump 4
+              case Blob [4] (0x00000041 | UTF32 "A"): jump (4, 8)
+              case Blob [4] (0x00000042 | UTF32 "B"): jump (4, 8)
             5: Local_Get (1)
             6: Build_List_With_Prefix (2 , 1)
               Blob [52] (0x0000003c00000043000000680000006f0000006900000063000000650000005f... | UTF32 "\u003CChoice_Type\u003E")
               Blob [24] (0x000000530000007400000072000000690000006e00000067 | UTF32 "String")
             7: Return
-            8: Push_Literal (List [3] (3))
+            jumps_arriving_from 1 (4)
+            8: Push_Literal (List [3] (3 | hash 0xc0894db7))
             9: Return
             """);
     }
@@ -384,10 +390,11 @@ public class SequentialIREfficiencyTests
             2386c060 (22):
              0: Local_Get (1)
              1: Push_Literal (Blob [2] (0x0400 | int 0))
-             2: Slice_Skip_Var_Equal_Const (Blob [1] (0x04))
-             3: Jump_If_Equal_Const (Blob [1] (0x04) , 3)
-             4: Push_Literal (Blob [1] (0x02))
+             2: Slice_Skip_Var_Equal_Const (Blob [1] (0x04 | hash 0x06db1cc6))
+             3: Jump_If_Equal_Const (Blob [1] (0x04 | hash 0x06db1cc6) , 3, 6)
+             4: Push_Literal (Blob [1] (0x02 | hash 0xf0989139))
              5: Return
+            jumps_arriving_from 1 (3)
              6: Local_Get (0)
              7: Skip_Head_Const (2)
              8: Local_Get (1)
@@ -400,11 +407,12 @@ public class SequentialIREfficiencyTests
             15: Slice_Skip_Var_Take_Var
             16: Local_Set (2)
             17: Switch_Jump_If_Equal_Const (2)
-              case Blob [4] (0x00000041 | UTF32 "A"): jump 3
-              case Blob [4] (0x00000042 | UTF32 "B"): jump 3
-            18: Push_Literal (Blob [1] (0x02))
+              case Blob [4] (0x00000041 | UTF32 "A"): jump (3, 20)
+              case Blob [4] (0x00000042 | UTF32 "B"): jump (3, 20)
+            18: Push_Literal (Blob [1] (0x02 | hash 0xf0989139))
             19: Return
-            20: Push_Literal (Blob [1] (0x04))
+            jumps_arriving_from 1 (17)
+            20: Push_Literal (Blob [1] (0x04 | hash 0x06db1cc6))
             21: Return
             """);
     }

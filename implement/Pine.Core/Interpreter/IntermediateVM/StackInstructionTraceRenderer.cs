@@ -1,3 +1,4 @@
+using Pine.Core.Addressing;
 using Pine.Core.CommonEncodings;
 using System;
 using System.Collections.Generic;
@@ -23,8 +24,9 @@ public static class StackInstructionTraceRenderer
     /// <summary>
     /// Default blob rendering configuration used by this renderer.
     /// <para>
-    /// The default order is Base16 first, then UTF-32 string decoding, then strict Pine integer decoding.
-    /// String and integer mappings contribute no text when they do not apply.
+    /// The default order is Base16 first, then UTF-32 string decoding, strict Pine integer decoding,
+    /// and the canonical hash for values that are neither strings nor integers.
+    /// String, integer, and hash mappings contribute no text when they do not apply.
     /// </para>
     /// </summary>
     public static readonly IReadOnlyList<BlobRepresentation> DefaultBlobRepresentations =
@@ -113,8 +115,28 @@ public static class StackInstructionTraceRenderer
             maxCharCount: maxUtf32StringCharCount,
             noStringRepresentation: ""),
         BuildBlobRepresentationStrictPineInteger(
-            noIntegerRepresentation: "")
+            noIntegerRepresentation: ""),
+        BuildBlobRepresentationCanonicalHash()
         ];
+
+    /// <summary>
+    /// Builds a blob representation containing its canonical Pine value hash, except for blobs that
+    /// are valid UTF-32 strings or strictly encoded Pine integers.
+    /// </summary>
+    public static BlobRepresentation BuildBlobRepresentationCanonicalHash() =>
+        new(
+            blob =>
+            {
+                if (StringEncoding.StringFromBlobValue(blob.Bytes).IsOkOrNull() is not null ||
+                    IntegerEncoding.ParseSignedIntegerStrict(blob.Bytes.Span).IsOkOrNullable() is not null)
+                {
+                    return null;
+                }
+
+                return
+                    "hash 0x" +
+                    Convert.ToHexStringLower(PineValueHashTree.ComputeHash(blob).Span)[..8];
+            });
 
     /// <summary>
     /// Renders a sequence of executed stack instructions as text.
@@ -201,6 +223,7 @@ public static class StackInstructionTraceRenderer
     /// <summary>
     /// Renders the instructions in a <see cref="StackFrameInstructions"/> instance as a multi-line text.
     /// Each instruction is prefixed with its zero-based index and rendered using the default blob representations.
+    /// Jump destinations include their absolute index and are preceded by their incoming jump locations.
     /// </summary>
     /// <param name="frameInstructions">The frame instructions to render.</param>
     /// <param name="blobRepresentations">
@@ -220,22 +243,37 @@ public static class StackInstructionTraceRenderer
         var indexWidth =
             (frameInstructions.Instructions.Count - 1).ToString().Length;
 
-        return
-            string.Join(
-                '\n',
-                frameInstructions.Instructions.Select(
-                    (instruction, index) =>
-                    index.ToString().PadLeft(indexWidth) + ": " +
-                    RenderInstruction(
-                        instruction,
-                        blobRepresentations: blobRepresentations,
-                        renderBlobContents: renderBlobContents)));
+        var jumpsArrivingFrom =
+            BuildJumpsArrivingFrom(frameInstructions.Instructions);
+
+        var lines = new List<string>(frameInstructions.Instructions.Count + jumpsArrivingFrom.Count);
+
+        for (var index = 0; index < frameInstructions.Instructions.Count; ++index)
+        {
+            if (jumpsArrivingFrom.TryGetValue(index, out var sourceIndexes))
+            {
+                lines.Add(
+                    "jumps_arriving_from " + sourceIndexes.Count +
+                    " (" + string.Join(", ", sourceIndexes) + ")");
+            }
+
+            lines.Add(
+                index.ToString().PadLeft(indexWidth) + ": " +
+                RenderInstruction(
+                    frameInstructions.Instructions[index],
+                    blobRepresentations: blobRepresentations,
+                    renderBlobContents: renderBlobContents,
+                    instructionIndex: index));
+        }
+
+        return string.Join('\n', lines);
     }
 
     private static string RenderInstruction(
         StackInstruction instruction,
         IReadOnlyList<BlobRepresentation>? blobRepresentations,
-        Func<PineValue.BlobValue, IReadOnlyList<string>, string>? renderBlobContents)
+        Func<PineValue.BlobValue, IReadOnlyList<string>, string>? renderBlobContents,
+        int? instructionIndex = null)
     {
         return
             StackInstruction.RenderInstructionDisplay(
@@ -244,7 +282,51 @@ public static class StackInstructionTraceRenderer
                 RenderLiteral(
                     value,
                     blobRepresentations: blobRepresentations,
-                    renderBlobContents: renderBlobContents));
+                    renderBlobContents: renderBlobContents),
+                instructionIndex: instructionIndex);
+    }
+
+    private static IReadOnlyDictionary<int, IReadOnlyList<int>> BuildJumpsArrivingFrom(
+        IReadOnlyList<StackInstruction> instructions)
+    {
+        var arrivals = new Dictionary<int, HashSet<int>>();
+
+        for (var sourceIndex = 0; sourceIndex < instructions.Count; ++sourceIndex)
+        {
+            var instruction = instructions[sourceIndex];
+
+            IEnumerable<int> jumpOffsets =
+                instruction.Kind switch
+                {
+                    StackInstructionKind.Jump_Const or StackInstructionKind.Jump_If_Equal_Const =>
+                    instruction.JumpOffset is { } jumpOffset ? [jumpOffset] : [],
+
+                    StackInstructionKind.Switch_Jump_If_Equal_Const or
+                    StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const =>
+                    instruction.SwitchJumpTable?.Values ?? [],
+
+                    _ =>
+                    []
+                };
+
+            foreach (var jumpOffset in jumpOffsets)
+            {
+                var destinationIndex = sourceIndex + jumpOffset;
+
+                if (!arrivals.TryGetValue(destinationIndex, out var sourceIndexes))
+                {
+                    sourceIndexes = [];
+                    arrivals.Add(destinationIndex, sourceIndexes);
+                }
+
+                sourceIndexes.Add(sourceIndex);
+            }
+        }
+
+        return
+            arrivals.ToDictionary(
+                entry => entry.Key,
+                entry => (IReadOnlyList<int>)[.. entry.Value.Order()]);
     }
 
     private static string RenderLiteral(
@@ -253,7 +335,15 @@ public static class StackInstructionTraceRenderer
         Func<PineValue.BlobValue, IReadOnlyList<string>, string>? renderBlobContents)
     {
         if (value is not PineValue.BlobValue blob)
-            return StackInstruction.LiteralDisplayStringDefault(value);
+        {
+            var defaultDisplay = StackInstruction.LiteralDisplayStringDefault(value);
+
+            return
+                defaultDisplay[..^1] +
+                " | hash 0x" +
+                Convert.ToHexStringLower(PineValueHashTree.ComputeHash(value).Span)[..8] +
+                ")";
+        }
 
         var representations =
             (blobRepresentations ?? DefaultBlobRepresentations)

@@ -1118,11 +1118,17 @@ public record StackInstruction(
     public static string RenderInstructionDisplay(
         StackInstruction instruction,
         Func<PineValue, string> literalDisplayString,
-        int? detailLinesIndent = 2)
+        int? detailLinesIndent = 2,
+        int? instructionIndex = null)
     {
         var details = GetDetails(instruction, literalDisplayString);
 
-        var rendered = details.Display();
+        var rendered =
+            AddAbsoluteJumpDestinations(
+                instruction,
+                details.Display(),
+                literalDisplayString,
+                instructionIndex);
 
         var argumentsText =
             rendered.Arguments.Count is 0
@@ -1161,6 +1167,57 @@ public record StackInstruction(
         }
 
         return stringBuilder.ToString();
+    }
+
+    private static InstructionDisplay AddAbsoluteJumpDestinations(
+        StackInstruction instruction,
+        InstructionDisplay display,
+        Func<PineValue, string> literalDisplayString,
+        int? instructionIndex)
+    {
+        if (instructionIndex is not { } currentIndex)
+            return display;
+
+        if (instruction.Kind is StackInstructionKind.Jump_Const or StackInstructionKind.Jump_If_Equal_Const)
+        {
+            var jumpOffset =
+                instruction.JumpOffset
+                ?? throw new Exception("Missing JumpOffset for jump instruction");
+
+            return
+                display with
+                {
+                    Arguments =
+                    [
+                    .. display.Arguments.Take(display.Arguments.Count - 1),
+                    jumpOffset + ", " + (currentIndex + jumpOffset)
+                    ]
+                };
+        }
+
+        if (instruction.Kind is
+            StackInstructionKind.Switch_Jump_If_Equal_Const or
+            StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const)
+        {
+            var switchJumpTable =
+                instruction.SwitchJumpTable
+                ?? throw new Exception("Missing SwitchTable for switch jump instruction");
+
+            return
+                display with
+                {
+                    DetailLines =
+                    [.. switchJumpTable
+                    .OrderBy(kvp => kvp.Value)
+                    .ThenBy(kvp => literalDisplayString(kvp.Key), StringComparer.Ordinal)
+                    .Select(
+                        kvp =>
+                        "case " + literalDisplayString(kvp.Key) +
+                        ": jump (" + kvp.Value + ", " + (currentIndex + kvp.Value) + ")")]
+                };
+        }
+
+        return display;
     }
 
     /// <summary>
