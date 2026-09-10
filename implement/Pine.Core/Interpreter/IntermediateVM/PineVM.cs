@@ -1752,8 +1752,13 @@ public class PineVM : ICancellablePineVM
                             continue;
                         }
 
-                    case StackInstructionKind.Int_Sub_Binary:
+                    case StackInstructionKind.Int_Mul_Const_Add_Binary:
                         {
+                            var multiplier =
+                                currentInstruction.IntegerLiteral
+                                ??
+                                throw new Exception("Invalid operation form: Missing literal value");
+
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
@@ -1765,7 +1770,7 @@ public class PineVM : ICancellablePineVM
                                 if (right.AsInteger() is { } rightInt)
                                 {
                                     resultValue =
-                                        PineValueInProcess.CreateInteger(leftInt - rightInt);
+                                        PineValueInProcess.CreateInteger(leftInt + multiplier * rightInt);
                                 }
                             }
 

@@ -317,9 +317,10 @@ public enum StackInstructionKind
     Int_Add_Generic,
 
     /// <summary>
-    /// Subtract the top value from the second value on the stack.
+    /// Multiply the top value on the stack with the integer literal from
+    /// <see cref="StackInstruction.IntegerLiteral"/> and add it to the second value.
     /// </summary>
-    Int_Sub_Binary,
+    Int_Mul_Const_Add_Binary,
 
     /// <summary>
     /// Multiply the top two values on the stack.
@@ -712,10 +713,11 @@ public record StackInstruction(
         new(StackInstructionKind.Int_Add_Generic);
 
     /// <summary>
-    /// A pre-built <see cref="StackInstructionKind.Int_Sub_Binary"/> instruction.
+    /// Creates a <see cref="StackInstructionKind.Int_Mul_Const_Add_Binary"/> instruction that multiplies
+    /// the top value on the stack by the given integer constant and adds it to the second value.
     /// </summary>
-    public static readonly StackInstruction Int_Sub_Binary =
-        new(StackInstructionKind.Int_Sub_Binary);
+    public static StackInstruction Int_Mul_Const_Add_Binary(BigInteger integerLiteral) =>
+        new(StackInstructionKind.Int_Mul_Const_Add_Binary, IntegerLiteral: integerLiteral);
 
     /// <summary>
     /// Creates a <see cref="StackInstructionKind.Int_Mul_Const"/> instruction that multiplies
@@ -1131,7 +1133,18 @@ public record StackInstruction(
             string.Join(" , ", rendered.Arguments)
             + ")";
 
-        var headerText = instruction.Kind.ToString() + argumentsText;
+        var renderAsSubtraction =
+            instruction.Kind is StackInstructionKind.Int_Mul_Const_Add_Binary &&
+            instruction.IntegerLiteral == BigInteger.MinusOne;
+
+        var instructionName =
+            renderAsSubtraction
+            ?
+            "Int_Sub_Binary"
+            :
+            instruction.Kind.ToString();
+
+        var headerText = instructionName + argumentsText;
 
         if (rendered.DetailLines.Count is 0 || !detailLinesIndent.HasValue)
             return headerText;
@@ -1754,11 +1767,21 @@ public record StackInstruction(
                 PushCount: 1,
                 Display: InstructionDetails.DisplayNoDetails),
 
-            StackInstructionKind.Int_Sub_Binary =>
+            StackInstructionKind.Int_Mul_Const_Add_Binary =>
             new InstructionDetails(
                 PopCount: 2,
                 PushCount: 1,
-                Display: InstructionDetails.DisplayNoDetails),
+                Display: () =>
+                    instruction.IntegerLiteral == BigInteger.MinusOne
+                    ?
+                    InstructionDisplay.NoDetails
+                    :
+                    InstructionDisplay.WithoutDetailLines(
+                        [
+                        instruction.IntegerLiteral?.ToString()
+                        ?? throw new Exception(
+                            "Missing IntegerLiteral for IntMulConstAddBinary instruction")
+                        ])),
 
             StackInstructionKind.Int_Mul_Binary =>
             new InstructionDetails(

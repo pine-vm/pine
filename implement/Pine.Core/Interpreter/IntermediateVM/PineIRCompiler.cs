@@ -2077,7 +2077,7 @@ public class PineIRCompiler
 
                     addOps =
                         addOps.AppendInstruction(
-                            StackInstruction.Int_Sub_Binary);
+                        StackInstruction.Int_Mul_Const_Add_Binary(-1));
                 }
             }
             else
@@ -2143,7 +2143,7 @@ public class PineIRCompiler
 
                         addOps =
                             addOps.AppendInstruction(
-                                StackInstruction.Int_Sub_Binary);
+                                StackInstruction.Int_Mul_Const_Add_Binary(-1));
                     }
 
                     if (constItemsSum != 0 || varItemsAdd.Count + varItemsSubtract.Count < 2)

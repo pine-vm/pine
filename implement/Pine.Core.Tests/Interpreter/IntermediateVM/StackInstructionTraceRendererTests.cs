@@ -10,6 +10,20 @@ namespace Pine.Core.Tests.Interpreter.IntermediateVM;
 
 public class StackInstructionTraceRendererTests
 {
+    [Theory]
+    [InlineData(-1, "Int_Sub_Binary")]
+    [InlineData(0, "Int_Mul_Const_Add_Binary (0)")]
+    [InlineData(4, "Int_Mul_Const_Add_Binary (4)")]
+    public void Int_mul_const_add_binary_uses_legacy_subtraction_rendering_for_minus_one(
+        int multiplier,
+        string expected)
+    {
+        StackInstruction.Int_Mul_Const_Add_Binary(multiplier)
+            .ToString()
+            .Should()
+            .Be(expected);
+    }
+
     [Fact]
     public void RenderInstructionTraceWithDefaultBlobRepresentations_renders_index_depth_and_blob_mappings()
     {
