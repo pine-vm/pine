@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.CodeGen;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Interpreter.IntermediateVM;
@@ -96,6 +97,133 @@ public class DirectTailLoopCompilationTests
                 ExpressionEncoding.EncodeExpressionAsValue(Expression.EnvironmentInstance),
                 IntegerEncoding.EncodeSignedInteger(0),
                 ]));
+    }
+
+    [Fact]
+    public void Literal_encoded_tail_call_to_different_expression_uses_eval_const_without_loop_guard()
+    {
+        var expression =
+                new Expression.Eval(
+                    encoded:
+                    Expression.LitralInst(
+                        ExpressionEncoding.EncodeExpressionAsValue(
+                            Expression.EnvironmentInstance)),
+                    environment: Expression.EnvironmentInstance);
+
+        var compilation =
+                ExpressionCompilation.CompileExpression(
+                    expression,
+                    specializations: [],
+                    parseCache: new(),
+                    disableReduction: true,
+                    enableTailRecursionOptimization: true,
+                    skipInlining: (_, _) => false);
+
+        compilation.Generic.Instructions
+                .Should().ContainSingle(
+                    instruction => instruction.Kind == StackInstructionKind.Eval_Const);
+
+        compilation.Generic.Instructions
+                .Should().NotContain(
+                    instruction =>
+                    instruction.Kind == StackInstructionKind.Jump_If_Equal_Const ||
+                    instruction.Kind == StackInstructionKind.Jump_Const);
+    }
+
+    [Fact]
+    public void Literal_encoded_tail_call_with_invalid_encoding_uses_eval_const_without_loop_guard()
+    {
+        var expression =
+            new Expression.Eval(
+                    encoded: Expression.LitralInst(PineValue.EmptyList),
+                    environment: Expression.EnvironmentInstance);
+
+        var compilation =
+            ExpressionCompilation.CompileExpression(
+                    expression,
+                    specializations: [],
+                    parseCache: new(),
+                    disableReduction: true,
+                    enableTailRecursionOptimization: true,
+                    skipInlining: (_, _) => false);
+
+        compilation.Generic.Instructions
+            .Should().ContainSingle(
+                    instruction => instruction.Kind == StackInstructionKind.Eval_Const);
+
+        compilation.Generic.Instructions
+            .Should().NotContain(
+                    instruction =>
+                    instruction.Kind == StackInstructionKind.Jump_If_Equal_Const ||
+                    instruction.Kind == StackInstructionKind.Jump_Const);
+    }
+
+    [Fact]
+    public void Literal_encoded_tail_call_to_root_compiles_to_backward_jump_without_loop_guard()
+    {
+        var rootAlternative = Expression.EnvironmentInstance;
+
+        var expression =
+            new Expression.Eval(
+                    encoded:
+                    Expression.LitralInst(
+                        ExpressionEncoding.EncodeExpressionAsValue(rootAlternative)),
+                    environment: Expression.EnvironmentInstance);
+
+        var instructions =
+            PineIRCompiler.CompileExpression(
+                    expression,
+                    rootExprAlternativeForms: [rootAlternative],
+                    envClass: null,
+                    parametersAsLocals: StaticFunctionInterface.FromExpression(expression),
+                    parseCache: new(),
+                    enableTailRecursionOptimization: true)
+            .Instructions;
+
+        instructions
+            .Should().ContainSingle(
+                    instruction =>
+                    instruction.Kind == StackInstructionKind.Jump_Const &&
+                    instruction.JumpOffset < 0);
+
+        instructions
+            .Should().NotContain(
+                    instruction =>
+                    instruction.Kind == StackInstructionKind.Jump_If_Equal_Const ||
+                    instruction.Kind == StackInstructionKind.Eval_Const ||
+                    instruction.Kind == StackInstructionKind.Eval_Binary);
+    }
+
+    [Fact]
+    public void Unresolved_tail_call_retains_loop_guard()
+    {
+        var expression =
+                new Expression.Eval(
+                    encoded: EnvironmentPath([0]),
+                    environment: EnvironmentPath([1]));
+
+        var compilation =
+                ExpressionCompilation.CompileExpression(
+                    expression,
+                    specializations: [],
+                    parseCache: new(),
+                    disableReduction: true,
+                    enableTailRecursionOptimization: true,
+                    skipInlining: (_, _) => false);
+
+        compilation.Generic.Instructions
+                .Should().ContainSingle(
+                    instruction => instruction.Kind == StackInstructionKind.Jump_If_Equal_Const);
+
+        compilation.Generic.Instructions
+                .Should().Contain(
+                    instruction =>
+                    instruction.Kind == StackInstructionKind.Jump_Const &&
+                    instruction.JumpOffset < 0);
+
+        compilation.Generic.Instructions
+                .Should().ContainSingle(
+                    instruction => instruction.Kind == StackInstructionKind.Eval_Binary);
     }
 
     [Fact]

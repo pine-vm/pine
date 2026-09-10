@@ -123,6 +123,12 @@ public class PineIRCompiler
         PineValueClass? EnvironmentClass,
         IReadOnlyList<PineValue> GuardExpressionValues);
 
+    private enum TailCallToRootResolution
+    {
+        Direct,
+        KnownNormalInvocation,
+        Unresolved,
+    }
 
     /// <summary>
     /// Recursively compile an expression into a flat list of instructions.
@@ -169,7 +175,7 @@ public class PineIRCompiler
                 parseCache);
     }
 
-    private static bool IsDirectTailCallToRoot(
+    private static TailCallToRootResolution ResolveTailCallToRoot(
         Expression.Eval tailCall,
         IReadOnlySet<Expression> rootExpressionForms,
         PineValueClass? envClass,
@@ -184,16 +190,24 @@ public class PineIRCompiler
                 tailCall.Encoded,
                 envClass);
 
-        if (TryEvalIndependent(encodedExpression, parseCache) is not { } encodedValue ||
-            parseCache.ParseExpression(encodedValue).IsOkOrNull() is not { } parsedExpression ||
-            !rootExpressionForms.Contains(parsedExpression))
+        if (TryEvalIndependent(encodedExpression, parseCache) is not { } encodedValue)
         {
-            return false;
+            return TailCallToRootResolution.Unresolved;
+        }
+
+        if (parseCache.ParseExpression(encodedValue).IsOkOrNull() is not { } parsedExpression)
+        {
+            return TailCallToRootResolution.KnownNormalInvocation;
+        }
+
+        if (!rootExpressionForms.Contains(parsedExpression))
+        {
+            return TailCallToRootResolution.KnownNormalInvocation;
         }
 
         if (envClass is null)
         {
-            return true;
+            return TailCallToRootResolution.Direct;
         }
 
         foreach (var constraint in envClass.ParsedItems)
@@ -208,14 +222,18 @@ public class PineIRCompiler
                     nextValueExpression,
                     envClass);
 
-            if (TryEvalIndependent(nextValueExpressionWithConstraint, parseCache) is not { } nextValue ||
-                !nextValue.Equals(constraint.Value))
+            if (TryEvalIndependent(nextValueExpressionWithConstraint, parseCache) is not { } nextValue)
             {
-                return false;
+                return TailCallToRootResolution.Unresolved;
+            }
+
+            if (!nextValue.Equals(constraint.Value))
+            {
+                return TailCallToRootResolution.KnownNormalInvocation;
             }
         }
 
-        return true;
+        return TailCallToRootResolution.Direct;
     }
 
     /// <summary>
@@ -953,19 +971,21 @@ public class PineIRCompiler
         if (context.IsTailPosition &&
             context.TailLoop is { } tailLoop)
         {
-            var isDirect =
-                IsDirectTailCallToRoot(
+            var tailCallResolution =
+                ResolveTailCallToRoot(
                     evalExpr,
                     tailLoop.RootExpressionForms,
                     tailLoop.EnvironmentClass,
                     parseCache);
 
-            if (!isDirect && tailLoop.EnvironmentClass is not null)
+            if (tailCallResolution is TailCallToRootResolution.KnownNormalInvocation ||
+                tailCallResolution is TailCallToRootResolution.Unresolved &&
+                tailLoop.EnvironmentClass is not null)
             {
                 return CompileNormalEval(evalExpr, context, prior, parseCache);
             }
 
-            if (!isDirect)
+            if (tailCallResolution is TailCallToRootResolution.Unresolved)
             {
                 return
                     CompileGuardedJumpToLoop(
