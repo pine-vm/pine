@@ -808,7 +808,8 @@ public class ElmCompiler
                 PineKernelModuleNames: s_pineKernelModuleNamesDefault,
                 FunctionTypes: functionTypes,
                 RecordTypeAliasConstructors: recordTypeAliasConstructors,
-                ChoiceTagTypes: choiceTagTypes);
+                ChoiceTagTypes: choiceTagTypes,
+                TypeAliasDefinitions: typeAliasDefinitions);
 
         // Pre-compute dependency layouts and SCCs for all functions BEFORE compilation
         var (dependencyLayouts, functionToScc, sccsInDependencyOrder) =

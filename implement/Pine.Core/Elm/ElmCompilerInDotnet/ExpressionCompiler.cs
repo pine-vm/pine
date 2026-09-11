@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Numerics;
 
+using SyntaxModelTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
@@ -1039,7 +1040,7 @@ public class ExpressionCompiler
         var fieldName = expr.FieldName;
 
         // Try to get the record type to compute field index at compile time
-        var recordType = TryGetRecordType(expr.Record, context);
+        var recordType = TryGetRecordTypeForAccess(expr.Record, context);
 
         if (recordType is not null)
         {
@@ -1056,7 +1057,10 @@ public class ExpressionCompiler
                 // Record structure: [ElmRecordTag, [[field1, field2, ...]]]
                 // Each field is [fieldName, fieldValue]
                 // To get field at index N: skip N fields, take head, get value (index 1)
-                return CompileRecordAccessWithKnownIndex(recordExpr, fieldIndex.idx);
+                return
+                    CompileRecordAccessWithKnownIndex(
+                        recordExpr,
+                        fieldIndex.idx);
             }
         }
 
@@ -1128,10 +1132,10 @@ public class ExpressionCompiler
     /// Compiles a record field access when the field index is known at compile time.
     /// This avoids runtime iteration through fields.
     /// </summary>
-    private static Expression CompileRecordAccessWithKnownIndex(Expression recordExpr, int fieldIndex)
+    private static Expression CompileRecordAccessWithKnownIndex(
+        Expression recordExpr,
+        int fieldIndex)
     {
-        // New flat record layout: [tag, name0, value0, name1, value1, ...].
-        // Field value at sorted index N is at position 2*N + 2 in the outer list.
         var valueSlot = 2 * fieldIndex + 2;
 
         return
@@ -1142,7 +1146,7 @@ public class ExpressionCompiler
     /// <summary>
     /// Tries to determine if an expression has a known record type with field names.
     /// </summary>
-    private static TypeInference.InferredType.RecordType? TryGetRecordType(
+    private static TypeInference.InferredType.RecordType? TryGetRecordTypeForAccess(
         SyntaxTypes.Expression expression,
         ExpressionCompilationContext context)
     {
@@ -1152,21 +1156,80 @@ public class ExpressionCompiler
         {
             var varName = funcOrValue.QualifiedName.DeclName;
 
-            // Check local binding types first
-            if (context.TryGetLocalBindingType(varName) is TypeInference.InferredType.RecordType localRecordType)
+            // Local bindings shadow parameters, including when no type was inferred for the binding.
+            if (context.TryGetLocalBinding(varName) is not null)
             {
-                return localRecordType;
+                return
+                    context.TryGetLocalBindingType(varName) is
+                    TypeInference.InferredType.RecordType localRecordType
+                    ?
+                    localRecordType
+                    :
+                    null;
             }
 
             // Check parameter types
-            if (context.ParameterTypes.TryGetValue(varName, out var paramType) &&
-                paramType is TypeInference.InferredType.RecordType paramRecordType)
+            if (context.TryGetParameterIndex(varName) is not null &&
+                context.ParameterTypes.TryGetValue(varName, out var paramType))
             {
-                return paramRecordType;
+                if (paramType is TypeInference.InferredType.RecordType paramRecordType)
+                    return paramRecordType;
+
+                if (TryExpandDirectRecordAlias(paramType, context) is not { } aliasRecordType)
+                    return null;
+
+                return aliasRecordType;
             }
         }
 
         return null;
+    }
+
+    private static TypeInference.InferredType.RecordType? TryExpandDirectRecordAlias(
+        TypeInference.InferredType type,
+        ExpressionCompilationContext context)
+    {
+        if (type is TypeInference.InferredType.RecordType recordType)
+            return recordType;
+
+        if (type is not TypeInference.InferredType.ChoiceType choiceType ||
+            context.ModuleCompilationContext.TypeAliasDefinitions is not { } aliasDefinitions)
+        {
+            return null;
+        }
+
+        var aliasName =
+            new SyntaxModelTypes.QualifiedNameRef(
+                choiceType.ModuleName.Count is 0
+                ?
+                context.CurrentModuleName.Split('.')
+                :
+                choiceType.ModuleName,
+                choiceType.TypeName);
+
+        var aliasIsLocal =
+            aliasName.ModuleName.SequenceEqual(context.CurrentModuleName.Split('.'));
+
+        var aliasModuleContainsFunctions =
+            context.ModuleCompilationContext.AllFunctions.Keys.Any(
+                functionName => functionName.ModuleName.SequenceEqual(aliasName.ModuleName));
+
+        var aliasesInModule =
+            aliasDefinitions.Keys.Count(
+                candidate => candidate.ModuleName.SequenceEqual(aliasName.ModuleName));
+
+        // Imported aliases from modules with runtime declarations or multiple aliases do not
+        // yet carry enough canonical provenance to rule out an incorrectly associated layout.
+        if ((!aliasIsLocal && (aliasModuleContainsFunctions || aliasesInModule is not 1)) ||
+            !aliasDefinitions.TryGetValue(aliasName, out var aliasDefinition) ||
+            aliasDefinition.AliasedType is not TypeInference.InferredType.RecordType)
+        {
+            return null;
+        }
+
+        return
+            TypeInference.ExpandTypeAliases(type, aliasDefinitions, context.CurrentModuleName.Split('.'))
+            as TypeInference.InferredType.RecordType;
     }
 
     private static Result<CompilationError, Expression> CompileOperatorApplication(

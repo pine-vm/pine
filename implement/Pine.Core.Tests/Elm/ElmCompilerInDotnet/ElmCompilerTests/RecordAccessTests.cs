@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
@@ -9,6 +10,75 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 
 public class RecordAccessTests
 {
+    [Fact]
+    public void Closed_record_local_alias_compiles_to_index_based_lookup()
+    {
+        var rendered =
+            CompileAndRenderDeclaration(
+                [
+                """
+                module Test exposing (..)
+
+
+                type alias ParserState =
+                    { source : String
+                    , offset : Int
+                    , row : Int
+                    , column : Int
+                    }
+
+
+                getSource : ParserState -> String
+                getSource state =
+                    state.source
+                """
+                ],
+                DeclQualifiedName.FromString("Test.getSource"));
+
+        rendered.Should().Be(
+            """
+            Test.getSource param_1_0 =
+                param_1_8
+            """.Trim() + "\n");
+    }
+
+    [Fact]
+    public void Closed_record_imported_alias_compiles_to_index_based_lookup()
+    {
+        var rendered =
+            CompileAndRenderDeclaration(
+                [
+                """
+                module Model exposing (ParserState)
+
+
+                type alias ParserState =
+                    { source : String
+                    , offset : Int
+                    , row : Int
+                    , column : Int
+                    }
+                """,
+                """
+                module Test exposing (..)
+
+                import Model exposing (ParserState)
+
+
+                getSource : ParserState -> String
+                getSource state =
+                    state.source
+                """
+                ],
+                DeclQualifiedName.FromString("Test.getSource"));
+
+        rendered.Should().Be(
+            """
+            Test.getSource param_1_0 =
+                param_1_8
+            """.Trim() + "\n");
+    }
+
     [Fact]
     public void Record_access_function_applied_directly()
     {
@@ -643,5 +713,27 @@ public class RecordAccessTests
 
             asString.expressionString.Should().Be("""Ok [ "App" ]""");
         }
+    }
+
+    private static string CompileAndRenderDeclaration(
+        IReadOnlyList<string> elmModulesTexts,
+        DeclQualifiedName declarationName)
+    {
+        var parseCache = new PineVMParseCache();
+
+        var (parsedEnv, _) =
+            ElmCompilerTestHelper.CompileElmModules(
+                elmModulesTexts,
+                disableInlining: true);
+
+        var rendered =
+            ElmCompilerTestHelper.ParseAndRenderStaticProgram(
+                parsedEnv,
+                includeDeclaration: declaration => declaration == declarationName,
+                parseCache);
+
+        var declarationStart = rendered.IndexOf(declarationName.FullName + " ", StringComparison.Ordinal);
+
+        return declarationStart < 0 ? rendered : rendered[declarationStart..];
     }
 }

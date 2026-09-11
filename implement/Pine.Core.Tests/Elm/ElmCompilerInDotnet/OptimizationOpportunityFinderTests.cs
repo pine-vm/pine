@@ -87,7 +87,7 @@ public class OptimizationOpportunityFinderTests
     }
 
     [Fact]
-    public void Reports_closed_record_alias_accesses_that_compiler_does_not_specialize()
+    public void Does_not_report_closed_record_alias_accesses_specialized_by_compiler()
     {
         var rendered =
             FindAndRender(
@@ -108,13 +108,7 @@ public class OptimizationOpportunityFinderTests
                     ( state.source, state.offset, state.row, state.column )
                 """);
 
-        rendered.Should().Be(
-            """
-            Test.inspect: record-access: column [provenance: unresolved-named-alias; semantic-layout: { column : Int, offset : Int, row : Int, source : String }]
-            Test.inspect: record-access: offset [provenance: unresolved-named-alias; semantic-layout: { column : Int, offset : Int, row : Int, source : String }]
-            Test.inspect: record-access: row [provenance: unresolved-named-alias; semantic-layout: { column : Int, offset : Int, row : Int, source : String }]
-            Test.inspect: record-access: source [provenance: unresolved-named-alias; semantic-layout: { column : Int, offset : Int, row : Int, source : String }]
-            """.Trim());
+        rendered.Should().Be("");
     }
 
     [Fact]
@@ -139,7 +133,6 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.advance: record-access: offset [provenance: unresolved-named-alias; semantic-layout: { offset : Int, source : String }]
             Test.advance: record-update: offset [provenance: unresolved-named-alias; semantic-layout: { offset : Int, source : String }]
             """.Trim());
     }
@@ -2219,23 +2212,17 @@ public class OptimizationOpportunityFinderTests
 
         renderedCounts.Should().Be(
             """
-            ElmSyntax.Abstract.ConvertFromConcrete: RecordAccess: 33
             ElmSyntax.Abstract.ConvertFromConcrete: BasicsCompare: 1
             ElmSyntax.Abstract.ConvertFromConcrete: RootLevelChoiceTagWrapper: 6
             ElmSyntax.Concrete.Node: HigherOrderParameter_Direct: 2
             ElmSyntax.Concrete.Node: RootLevelChoiceTagWrapper: 8
-            ElmSyntax.Concrete.Parser.FromString: RecordAccess: 414
             ElmSyntax.Concrete.Parser.FromString: RootLevelChoiceTagWrapper: 113
             ElmSyntax.Concrete.Parser.StringParsing: RootLevelChoiceTagWrapper: 36
             ElmSyntax.Concrete.Parser.TokensFromString: RootLevelChoiceTagWrapper: 17
-            ElmSyntax.Concrete.Range: RecordAccess: 4
-            ElmSyntax.Concrete.SourceLookup: RecordAccess: 11
             ElmSyntax.Concrete.SourceLookup: RootLevelChoiceTagWrapper: 15
-            LanguageService: RecordAccess: 96
             LanguageService: RecordUpdate: 4
             LanguageService: BasicsCompare: 3
             LanguageService: RootLevelChoiceTagWrapper: 32
-            LanguageServiceAnalysis: RecordAccess: 12
             LanguageServiceAnalysis: RootLevelChoiceTagWrapper: 7
             """.Trim());
 

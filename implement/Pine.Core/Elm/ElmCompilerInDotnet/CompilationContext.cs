@@ -158,6 +158,7 @@ public record FunctionScc(
 /// <param name="FunctionTypes">Map of qualified function names to their return and parameter types.</param>
 /// <param name="RecordTypeAliasConstructors">Map of qualified record type alias names to their field names in declaration order (for record constructors).</param>
 /// <param name="ChoiceTagTypes">Map of qualified choice type tag names to their result and argument types.</param>
+/// <param name="TypeAliasDefinitions">Map of qualified type alias names to definitions used for expanding types during emission.</param>
 public record ModuleCompilationContext(
     IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)> AllFunctions,
     ImmutableDictionary<SyntaxModelTypes.QualifiedNameRef, CompiledFunctionInfo> CompiledFunctionsCache,
@@ -165,7 +166,8 @@ public record ModuleCompilationContext(
     IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? FunctionDependencyLayouts = null,
     IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? FunctionTypes = null,
     IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? RecordTypeAliasConstructors = null,
-    IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? ChoiceTagTypes = null)
+    IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? ChoiceTagTypes = null,
+    IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, TypeInference.TypeAliasDefinition>? TypeAliasDefinitions = null)
 {
     /// <summary>
     /// Creates a module compilation context from concrete Elm declarations by converting them to abstract declarations first.
@@ -177,7 +179,8 @@ public record ModuleCompilationContext(
         IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? functionDependencyLayouts = null,
         IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? functionTypes = null,
         IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? recordTypeAliasConstructors = null,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes = null)
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes = null,
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, TypeInference.TypeAliasDefinition>? typeAliasDefinitions = null)
         : this(
             allFunctions.ToDictionary(
                 kvp => kvp.Key,
@@ -191,7 +194,8 @@ public record ModuleCompilationContext(
             functionDependencyLayouts,
             functionTypes,
             recordTypeAliasConstructors,
-            choiceTagTypes)
+            choiceTagTypes,
+            typeAliasDefinitions)
     {
     }
 

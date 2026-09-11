@@ -1764,7 +1764,12 @@ public static class OptimizationOpportunityFinder
         switch (expression)
         {
             case SyntaxTypes.Expression.RecordAccess recordAccess:
-                if (GetRecordOperationProvenance(recordAccess.Record, expressionTypeContext) is { } provenance)
+                var recordAccessType =
+                    InferExpressionType(recordAccess.Record, expressionTypeContext);
+
+                if (GetRecordOperationProvenance(recordAccess.Record, expressionTypeContext) is { } provenance &&
+                    !(provenance is RecordOperationProvenance.UnresolvedNamedAlias &&
+                    recordAccessType is TypeInference.InferredType.RecordType))
                 {
                     MaybeAdd(
                         OpportunityCategory.RecordAccess,
@@ -1772,8 +1777,7 @@ public static class OptimizationOpportunityFinder
                         containing,
                         resultBuilder,
                         new OpportunityTypeEvidence(
-                            SubjectType:
-                            InferExpressionType(recordAccess.Record, expressionTypeContext)),
+                            SubjectType: recordAccessType),
                         recordOperationProvenance: provenance);
                 }
 
