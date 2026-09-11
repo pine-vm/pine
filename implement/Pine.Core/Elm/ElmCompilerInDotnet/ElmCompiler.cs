@@ -1759,7 +1759,7 @@ public class ElmCompiler
         return dependencies;
     }
 
-    private static ImmutableDictionary<string, TypeInference.InferredType> ExtractParameterTypes(
+    internal static ImmutableDictionary<string, TypeInference.InferredType> ExtractParameterTypes(
         ElmSyntaxAbstract.FunctionStruct function,
         IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes,
         IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? functionTypes,

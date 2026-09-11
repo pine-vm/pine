@@ -87,6 +87,64 @@ public class OptimizationOpportunityFinderTests
     }
 
     [Fact]
+    public void Reports_closed_record_alias_accesses_that_compiler_does_not_specialize()
+    {
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                type alias ParserState =
+                    { source : String
+                    , offset : Int
+                    , row : Int
+                    , column : Int
+                    }
+
+
+                inspect : ParserState -> ( String, Int, Int, Int )
+                inspect state =
+                    ( state.source, state.offset, state.row, state.column )
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.inspect: record-access: column
+            Test.inspect: record-access: offset
+            Test.inspect: record-access: row
+            Test.inspect: record-access: source
+            """.Trim());
+    }
+
+    [Fact]
+    public void Reports_closed_record_alias_update_that_compiler_does_not_specialize()
+    {
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                type alias ParserState =
+                    { source : String
+                    , offset : Int
+                    }
+
+
+                advance : ParserState -> ParserState
+                advance state =
+                    { state | offset = Pine_kernel.int_add [ state.offset, 1 ] }
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.advance: record-access: offset
+            Test.advance: record-update: offset
+            """.Trim());
+    }
+
+    [Fact]
     public void Reports_record_access_on_inferred_open_record()
     {
         var rendered =
@@ -2069,16 +2127,23 @@ public class OptimizationOpportunityFinderTests
 
         renderedCounts.Should().Be(
             """
+            ElmSyntax.Abstract.ConvertFromConcrete: RecordAccess: 33
             ElmSyntax.Abstract.ConvertFromConcrete: BasicsCompare: 1
             ElmSyntax.Abstract.ConvertFromConcrete: RootLevelChoiceTagWrapper: 6
             ElmSyntax.Concrete.Node: HigherOrderParameter_Direct: 2
             ElmSyntax.Concrete.Node: RootLevelChoiceTagWrapper: 8
+            ElmSyntax.Concrete.Parser.FromString: RecordAccess: 414
             ElmSyntax.Concrete.Parser.FromString: RootLevelChoiceTagWrapper: 113
             ElmSyntax.Concrete.Parser.StringParsing: RootLevelChoiceTagWrapper: 36
             ElmSyntax.Concrete.Parser.TokensFromString: RootLevelChoiceTagWrapper: 17
+            ElmSyntax.Concrete.Range: RecordAccess: 4
+            ElmSyntax.Concrete.SourceLookup: RecordAccess: 11
             ElmSyntax.Concrete.SourceLookup: RootLevelChoiceTagWrapper: 15
+            LanguageService: RecordAccess: 96
+            LanguageService: RecordUpdate: 4
             LanguageService: BasicsCompare: 3
             LanguageService: RootLevelChoiceTagWrapper: 32
+            LanguageServiceAnalysis: RecordAccess: 12
             LanguageServiceAnalysis: RootLevelChoiceTagWrapper: 7
             """.Trim());
 
@@ -2088,8 +2153,6 @@ public class OptimizationOpportunityFinderTests
         opportunities.Should().NotContain(
             opportunity => opportunity.Category == OpportunityCategory.BasicsAppend);
 
-        opportunities.Should().NotContain(
-            opportunity => opportunity.Category == OpportunityCategory.RecordAccess);
     }
 
     private static string FindAndRender(

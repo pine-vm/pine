@@ -225,7 +225,8 @@ public static class OptimizationOpportunityFinder
         IReadOnlyDictionary<
             ElmSyntax.SyntaxModel.QualifiedNameRef,
             TypeInference.TypeAliasDefinition> AliasTypes,
-        ISet<SyntaxTypes.Expression.RecordAccessFunction> ClosedRecordAccessFunctions);
+        ISet<SyntaxTypes.Expression.RecordAccessFunction> ClosedRecordAccessFunctions,
+        ImmutableHashSet<string> ParametersWithRecordTypesUnavailableToEmitter);
 
     private sealed record WholeProgramTypeInference(
         ImmutableDictionary<ElmSyntax.SyntaxModel.QualifiedNameRef, FunctionTypeInfo> FunctionTypes,
@@ -417,6 +418,13 @@ public static class OptimizationOpportunityFinder
 
             var parameterTypes = inferredFunctionType.parameterTypes;
 
+            var emitterParameterTypes =
+                ElmCompiler.ExtractParameterTypes(
+                    funcDecl.Function,
+                    functionTypes,
+                    functionTypes,
+                    string.Join(".", qualifiedName.Namespaces));
+
             var qualifiedNameRef =
                 QualifiedNameHelper.FromQualifiedNameString(qualifiedName.FullName);
 
@@ -452,7 +460,16 @@ public static class OptimizationOpportunityFinder
                     ConstructorArgumentTypes: constructorArgumentTypes,
                     AliasTypes: aliasTypes,
                     ClosedRecordAccessFunctions:
-                    wholeProgramTypeInference.ClosedRecordAccessFunctions);
+                    wholeProgramTypeInference.ClosedRecordAccessFunctions,
+                    ParametersWithRecordTypesUnavailableToEmitter:
+                    parameterTypes
+                    .Where(
+                        parameter =>
+                        parameter.Value is TypeInference.InferredType.RecordType &&
+                        (!emitterParameterTypes.TryGetValue(parameter.Key, out var emitterType) ||
+                        emitterType is not TypeInference.InferredType.RecordType))
+                    .Select(parameter => parameter.Key)
+                    .ToImmutableHashSet());
 
             var declaredParameterTypes =
                 funcDecl.Function.Signature is { } signature
@@ -695,7 +712,8 @@ public static class OptimizationOpportunityFinder
                         FunctionTypes: snapshot,
                         ConstructorArgumentTypes: constructorArgumentTypes,
                         AliasTypes: aliasTypes,
-                        ClosedRecordAccessFunctions: closedRecordAccessFunctions);
+                        ClosedRecordAccessFunctions: closedRecordAccessFunctions,
+                        ParametersWithRecordTypesUnavailableToEmitter: []);
 
                 CollectFunctionTypeSuggestions(
                     implementation.Expression,
@@ -2351,8 +2369,22 @@ public static class OptimizationOpportunityFinder
 
     private static bool RequiresGenericRecordOperation(
         SyntaxTypes.Expression expression,
-        ExpressionTypeContext context) =>
-        InferExpressionType(expression, context) is not TypeInference.InferredType.RecordType;
+        ExpressionTypeContext context)
+    {
+        if (InferExpressionType(expression, context) is not TypeInference.InferredType.RecordType)
+        {
+            return true;
+        }
+
+        return
+            expression is SyntaxTypes.Expression.Identifier
+            {
+                QualifiedName.Namespaces.Count: 0
+            } identifier &&
+            context.ParametersWithRecordTypesUnavailableToEmitter.Contains(
+                identifier.QualifiedName.DeclName) &&
+            !context.LocalBindingExpressions.ContainsKey(identifier.QualifiedName.DeclName);
+    }
 
     private static TypeInference.InferredType InferExpressionType(
         SyntaxTypes.Expression expression,
