@@ -141,6 +141,12 @@ public sealed record Opportunity(
     /// </summary>
     public OpportunityTypeEvidence? TypeEvidence { get; init; }
 
+    /// <summary>
+    /// Explains why the compiler emits a generic record operation at this site.
+    /// It is excluded from opportunity identity so diagnostic enrichment does not change counts.
+    /// </summary>
+    public RecordOperationProvenance? RecordOperationProvenance { get; init; }
+
     /// <inheritdoc/>
     public bool Equals(Opportunity? other) =>
         other is not null &&
@@ -189,6 +195,34 @@ public sealed record OpportunityTypeEvidence(
     IReadOnlyList<TypeInference.InferredType>? ArgumentTypes = null);
 
 /// <summary>
+/// Identifies the compiler limitation or source-level genericity that prevents
+/// a record access or update from using a statically known field layout.
+/// </summary>
+public enum RecordOperationProvenance
+{
+    /// <summary>The source type is an explicitly or implicitly open record.</summary>
+    OpenRecordSourceType,
+
+    /// <summary>A named record alias was not expanded for the emitter.</summary>
+    UnresolvedNamedAlias,
+
+    /// <summary>The emitter has no usable record type for a function parameter.</summary>
+    MissingParameterType,
+
+    /// <summary>The emitter has no usable record type for a local binding.</summary>
+    MissingLocalBindingType,
+
+    /// <summary>The emitter only resolves layouts for identifiers, not this expression form.</summary>
+    NonIdentifierRecordExpression,
+
+    /// <summary>A record-access function escaped without a closed expected argument type.</summary>
+    RecordAccessFunctionEscaped,
+
+    /// <summary>No more specific source of the missing record layout is known.</summary>
+    UnknownRecordLayout,
+}
+
+/// <summary>
 /// Static analysis used in tests to verify that the Elm compiler has lowered
 /// or specialized away the generic operations described in
 /// <c>guide/optimizing-for-runtime-efficiency-in-elm-programs.md</c>.
@@ -226,7 +260,7 @@ public static class OptimizationOpportunityFinder
             ElmSyntax.SyntaxModel.QualifiedNameRef,
             TypeInference.TypeAliasDefinition> AliasTypes,
         ISet<SyntaxTypes.Expression.RecordAccessFunction> ClosedRecordAccessFunctions,
-        ImmutableHashSet<string> ParametersWithRecordTypesUnavailableToEmitter);
+        ImmutableDictionary<string, RecordOperationProvenance> RecordParameterProvenance);
 
     private sealed record WholeProgramTypeInference(
         ImmutableDictionary<ElmSyntax.SyntaxModel.QualifiedNameRef, FunctionTypeInfo> FunctionTypes,
@@ -461,15 +495,22 @@ public static class OptimizationOpportunityFinder
                     AliasTypes: aliasTypes,
                     ClosedRecordAccessFunctions:
                     wholeProgramTypeInference.ClosedRecordAccessFunctions,
-                    ParametersWithRecordTypesUnavailableToEmitter:
+                    RecordParameterProvenance:
                     parameterTypes
                     .Where(
                         parameter =>
                         parameter.Value is TypeInference.InferredType.RecordType &&
                         (!emitterParameterTypes.TryGetValue(parameter.Key, out var emitterType) ||
                         emitterType is not TypeInference.InferredType.RecordType))
-                    .Select(parameter => parameter.Key)
-                    .ToImmutableHashSet());
+                    .ToImmutableDictionary(
+                        parameter => parameter.Key,
+                        parameter =>
+                        emitterParameterTypes.TryGetValue(parameter.Key, out var emitterType) &&
+                        emitterType is TypeInference.InferredType.ChoiceType
+                        ?
+                        RecordOperationProvenance.UnresolvedNamedAlias
+                        :
+                        RecordOperationProvenance.MissingParameterType));
 
             var declaredParameterTypes =
                 funcDecl.Function.Signature is { } signature
@@ -713,7 +754,7 @@ public static class OptimizationOpportunityFinder
                         ConstructorArgumentTypes: constructorArgumentTypes,
                         AliasTypes: aliasTypes,
                         ClosedRecordAccessFunctions: closedRecordAccessFunctions,
-                        ParametersWithRecordTypesUnavailableToEmitter: []);
+                        RecordParameterProvenance: []);
 
                 CollectFunctionTypeSuggestions(
                     implementation.Expression,
@@ -1723,7 +1764,7 @@ public static class OptimizationOpportunityFinder
         switch (expression)
         {
             case SyntaxTypes.Expression.RecordAccess recordAccess:
-                if (RequiresGenericRecordOperation(recordAccess.Record, expressionTypeContext))
+                if (GetRecordOperationProvenance(recordAccess.Record, expressionTypeContext) is { } provenance)
                 {
                     MaybeAdd(
                         OpportunityCategory.RecordAccess,
@@ -1732,7 +1773,8 @@ public static class OptimizationOpportunityFinder
                         resultBuilder,
                         new OpportunityTypeEvidence(
                             SubjectType:
-                            InferExpressionType(recordAccess.Record, expressionTypeContext)));
+                            InferExpressionType(recordAccess.Record, expressionTypeContext)),
+                        recordOperationProvenance: provenance);
                 }
 
                 CollectFromExpression(
@@ -1753,7 +1795,9 @@ public static class OptimizationOpportunityFinder
                         OpportunityCategory.RecordAccess,
                         recordAccessFunction.FieldName,
                         containing,
-                        resultBuilder);
+                        resultBuilder,
+                        recordOperationProvenance:
+                        RecordOperationProvenance.RecordAccessFunctionEscaped);
                 }
 
                 break;
@@ -1763,12 +1807,12 @@ public static class OptimizationOpportunityFinder
                     new SyntaxTypes.Expression.Identifier(
                         DeclQualifiedName.Create([], recordUpdate.RecordName));
 
-                var isOpenRecordUpdate =
-                    RequiresGenericRecordOperation(recordUpdateExpression, expressionTypeContext);
+                var recordUpdateProvenance =
+                    GetRecordOperationProvenance(recordUpdateExpression, expressionTypeContext);
 
                 foreach (var field in recordUpdate.Fields)
                 {
-                    if (isOpenRecordUpdate)
+                    if (recordUpdateProvenance is { } updateProvenance)
                     {
                         MaybeAdd(
                             OpportunityCategory.RecordUpdate,
@@ -1777,7 +1821,8 @@ public static class OptimizationOpportunityFinder
                             resultBuilder,
                             new OpportunityTypeEvidence(
                                 SubjectType:
-                                InferExpressionType(recordUpdateExpression, expressionTypeContext)));
+                                InferExpressionType(recordUpdateExpression, expressionTypeContext)),
+                            recordOperationProvenance: updateProvenance);
                     }
 
                     CollectFromExpression(
@@ -2231,7 +2276,9 @@ public static class OptimizationOpportunityFinder
                             field.FieldName,
                             containing,
                             resultBuilder,
-                            new OpportunityTypeEvidence(SubjectType: matchedType));
+                            new OpportunityTypeEvidence(SubjectType: matchedType),
+                            recordOperationProvenance:
+                            ProvenanceFromUnresolvedRecordType(matchedType));
                     }
                 }
 
@@ -2367,24 +2414,63 @@ public static class OptimizationOpportunityFinder
         }
     }
 
-    private static bool RequiresGenericRecordOperation(
+    private static RecordOperationProvenance? GetRecordOperationProvenance(
         SyntaxTypes.Expression expression,
         ExpressionTypeContext context)
     {
-        if (InferExpressionType(expression, context) is not TypeInference.InferredType.RecordType)
+        var semanticType = InferExpressionType(expression, context);
+
+        if (semanticType is TypeInference.InferredType.RecordType)
         {
-            return true;
+            if (expression is SyntaxTypes.Expression.Identifier
+                {
+                    QualifiedName.Namespaces.Count: 0
+                } closedRecordIdentifier)
+            {
+                if (context.RecordParameterProvenance.TryGetValue(
+                    closedRecordIdentifier.QualifiedName.DeclName,
+                    out var provenance))
+                {
+                    return provenance;
+                }
+            }
+
+            return null;
         }
 
-        return
-            expression is SyntaxTypes.Expression.Identifier
+        if (semanticType is TypeInference.InferredType.OpenRecordType)
+        {
+            return RecordOperationProvenance.OpenRecordSourceType;
+        }
+
+        if (expression is not SyntaxTypes.Expression.Identifier
             {
                 QualifiedName.Namespaces.Count: 0
-            } identifier &&
-            context.ParametersWithRecordTypesUnavailableToEmitter.Contains(
-                identifier.QualifiedName.DeclName) &&
-            !context.LocalBindingExpressions.ContainsKey(identifier.QualifiedName.DeclName);
+            } identifier)
+        {
+            return RecordOperationProvenance.NonIdentifierRecordExpression;
+        }
+
+        if (context.LocalBindingExpressions.ContainsKey(identifier.QualifiedName.DeclName))
+        {
+            return RecordOperationProvenance.MissingLocalBindingType;
+        }
+
+        if (context.ParameterNames.ContainsKey(identifier.QualifiedName.DeclName))
+        {
+            return RecordOperationProvenance.MissingParameterType;
+        }
+
+        return RecordOperationProvenance.UnknownRecordLayout;
     }
+
+    private static RecordOperationProvenance ProvenanceFromUnresolvedRecordType(
+        TypeInference.InferredType type) =>
+        type is TypeInference.InferredType.OpenRecordType
+        ?
+        RecordOperationProvenance.OpenRecordSourceType
+        :
+        RecordOperationProvenance.UnknownRecordLayout;
 
     private static TypeInference.InferredType InferExpressionType(
         SyntaxTypes.Expression expression,
@@ -2907,12 +2993,14 @@ public static class OptimizationOpportunityFinder
         string description,
         DeclQualifiedName containing,
         ImmutableHashSet<Opportunity>.Builder resultBuilder,
-        OpportunityTypeEvidence? typeEvidence = null)
+        OpportunityTypeEvidence? typeEvidence = null,
+        RecordOperationProvenance? recordOperationProvenance = null)
     {
         resultBuilder.Add(
             new Opportunity(containing, category, description)
             {
-                TypeEvidence = typeEvidence
+                TypeEvidence = typeEvidence,
+                RecordOperationProvenance = recordOperationProvenance
             });
     }
 

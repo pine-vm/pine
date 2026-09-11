@@ -61,6 +61,7 @@ public static class OptimizationOpportunityRenderer
             sb.Append(ToDisplayName(sorted[i].Category));
             sb.Append(": ");
             sb.Append(sorted[i].Description);
+            AppendRecordOperationProvenance(sb, sorted[i]);
         }
 
         return sb.ToString();
@@ -104,11 +105,124 @@ public static class OptimizationOpportunityRenderer
                 sb.Append(entry.ContainingDecl.FullName);
                 sb.Append(": ");
                 sb.Append(entry.Description);
+                AppendRecordOperationProvenance(sb, entry);
             }
         }
 
         return sb.ToString();
     }
+
+    private static void AppendRecordOperationProvenance(
+        StringBuilder builder,
+        Opportunity opportunity)
+    {
+        if (opportunity.RecordOperationProvenance is not { } provenance)
+            return;
+
+        builder.Append(" [provenance: ");
+        builder.Append(ToDisplayName(provenance));
+
+        if (opportunity.TypeEvidence?.SubjectType is TypeInference.InferredType.RecordType recordType)
+        {
+            builder.Append("; semantic-layout: ");
+            builder.Append(RenderRecordType(recordType));
+        }
+
+        builder.Append(']');
+    }
+
+    private static string ToDisplayName(RecordOperationProvenance provenance) =>
+        provenance switch
+        {
+            RecordOperationProvenance.OpenRecordSourceType => "open-record-source-type",
+            RecordOperationProvenance.UnresolvedNamedAlias => "unresolved-named-alias",
+            RecordOperationProvenance.MissingParameterType => "missing-parameter-type",
+            RecordOperationProvenance.MissingLocalBindingType => "missing-local-binding-type",
+            RecordOperationProvenance.NonIdentifierRecordExpression => "non-identifier-record-expression",
+            RecordOperationProvenance.RecordAccessFunctionEscaped => "record-access-function-escaped",
+            RecordOperationProvenance.UnknownRecordLayout => "unknown-record-layout",
+
+            _ =>
+            throw new System.NotImplementedException(
+                "OptimizationOpportunityRenderer.ToDisplayName does not handle provenance: " +
+                provenance),
+        };
+
+    private static string RenderRecordType(TypeInference.InferredType.RecordType recordType) =>
+        "{ " +
+        string.Join(
+            ", ",
+            recordType.Fields.Select(
+                field =>
+                field.FieldName + " : " + RenderInferredType(field.FieldType))) +
+        " }";
+
+    private static string RenderInferredType(TypeInference.InferredType type) =>
+        type switch
+        {
+            TypeInference.InferredType.IntType => "Int",
+            TypeInference.InferredType.FloatType => "Float",
+            TypeInference.InferredType.StringType => "String",
+            TypeInference.InferredType.CharType => "Char",
+            TypeInference.InferredType.BoolType => "Bool",
+            TypeInference.InferredType.NumberType => "number",
+            TypeInference.InferredType.TypeVariable variable => variable.Name,
+            TypeInference.InferredType.UnknownType => "?",
+
+            TypeInference.InferredType.ListType list =>
+            "List " + RenderInferredTypeParenIfComposite(list.ElementType),
+
+            TypeInference.InferredType.TupleType tuple =>
+            "(" + string.Join(", ", tuple.ElementTypes.Select(RenderInferredType)) + ")",
+
+            TypeInference.InferredType.RecordType record => RenderRecordType(record),
+
+            TypeInference.InferredType.OpenRecordType openRecord =>
+            "{ " + openRecord.ExtensionVariable + " | " +
+            string.Join(
+                ", ",
+                openRecord.KnownFields.Select(
+                    field =>
+                    field.FieldName + " : " + RenderInferredType(field.FieldType))) +
+            " }",
+
+            TypeInference.InferredType.FunctionType function =>
+            RenderInferredTypeParenIfFunction(function.ArgumentType) +
+            " -> " +
+            RenderInferredType(function.ReturnType),
+
+            TypeInference.InferredType.ChoiceType choice =>
+            string.Join(".", choice.ModuleName.Append(choice.TypeName)) +
+            (choice.TypeArguments.Count is 0
+            ?
+            ""
+            :
+            " " +
+            string.Join(
+                " ",
+                choice.TypeArguments.Select(RenderInferredTypeParenIfComposite))),
+
+            _ =>
+            throw new System.NotImplementedException(
+                "OptimizationOpportunityRenderer.RenderInferredType does not handle type: " +
+                type.GetType().Name),
+        };
+
+    private static string RenderInferredTypeParenIfFunction(TypeInference.InferredType type) =>
+        type is TypeInference.InferredType.FunctionType
+        ?
+        "(" + RenderInferredType(type) + ")"
+        :
+        RenderInferredType(type);
+
+    private static string RenderInferredTypeParenIfComposite(TypeInference.InferredType type) =>
+        type is TypeInference.InferredType.FunctionType or
+            TypeInference.InferredType.ChoiceType { TypeArguments.Count: > 0 } or
+            TypeInference.InferredType.OpenRecordType
+        ?
+        "(" + RenderInferredType(type) + ")"
+        :
+        RenderInferredType(type);
 
     internal static string RenderRootLevelWrapperParameterDescription(
         int parameterIndex,

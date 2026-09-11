@@ -44,7 +44,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.showName: record-access: name
+            Test.showName: record-access: name [provenance: open-record-source-type]
             """.Trim());
     }
 
@@ -64,8 +64,8 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.bumpAge: record-access: age
-            Test.bumpAge: record-update: age
+            Test.bumpAge: record-access: age [provenance: open-record-source-type]
+            Test.bumpAge: record-update: age [provenance: open-record-source-type]
             """.Trim());
     }
 
@@ -110,10 +110,10 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.inspect: record-access: column
-            Test.inspect: record-access: offset
-            Test.inspect: record-access: row
-            Test.inspect: record-access: source
+            Test.inspect: record-access: column [provenance: unresolved-named-alias; semantic-layout: { column : Int, offset : Int, row : Int, source : String }]
+            Test.inspect: record-access: offset [provenance: unresolved-named-alias; semantic-layout: { column : Int, offset : Int, row : Int, source : String }]
+            Test.inspect: record-access: row [provenance: unresolved-named-alias; semantic-layout: { column : Int, offset : Int, row : Int, source : String }]
+            Test.inspect: record-access: source [provenance: unresolved-named-alias; semantic-layout: { column : Int, offset : Int, row : Int, source : String }]
             """.Trim());
     }
 
@@ -139,8 +139,100 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.advance: record-access: offset
-            Test.advance: record-update: offset
+            Test.advance: record-access: offset [provenance: unresolved-named-alias; semantic-layout: { offset : Int, source : String }]
+            Test.advance: record-update: offset [provenance: unresolved-named-alias; semantic-layout: { offset : Int, source : String }]
+            """.Trim());
+    }
+
+    [Fact]
+    public void Reports_missing_parameter_type_provenance_with_semantic_layout()
+    {
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                getName record =
+                    record.name
+
+
+                caller =
+                    getName { name = "Ada" }
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.getName: record-access: name [provenance: missing-parameter-type; semantic-layout: { name : String }]
+            """.Trim());
+    }
+
+    [Fact]
+    public void Reports_missing_local_binding_type_provenance()
+    {
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                selectName condition left right =
+                    let
+                        selected =
+                            if condition then
+                                left
+
+                            else
+                                right
+                    in
+                    selected.name
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.selectName: record-access: name [provenance: missing-local-binding-type]
+            """.Trim());
+    }
+
+    [Fact]
+    public void Reports_non_identifier_record_expression_provenance()
+    {
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                identity value =
+                    value
+
+
+                getName record =
+                    (identity record).name
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.getName: record-access: name [provenance: non-identifier-record-expression]
+            """.Trim());
+    }
+
+    [Fact]
+    public void Reports_escaped_record_access_function_provenance()
+    {
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                getName =
+                    .name
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.getName: record-access: name [provenance: record-access-function-escaped]
             """.Trim());
     }
 
@@ -159,7 +251,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.showName: record-access: name
+            Test.showName: record-access: name [provenance: open-record-source-type]
             """.Trim());
     }
 
@@ -178,8 +270,8 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.selectName: record-access: age
-            Test.selectName: record-access: name
+            Test.selectName: record-access: age [provenance: unknown-record-layout]
+            Test.selectName: record-access: name [provenance: unknown-record-layout]
             """.Trim());
     }
 
@@ -202,7 +294,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.selectName: record-access: name
+            Test.selectName: record-access: name [provenance: open-record-source-type]
             """.Trim());
     }
 
@@ -223,7 +315,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.selectName: record-access: name
+            Test.selectName: record-access: name [provenance: unknown-record-layout]
             """.Trim());
     }
 
@@ -365,8 +457,8 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.copyName: record-access: name
-            Test.copyName: record-update: name
+            Test.copyName: record-access: name [provenance: open-record-source-type]
+            Test.copyName: record-update: name [provenance: open-record-source-type]
             """.Trim());
     }
 
@@ -503,7 +595,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.deeplyNested: record-access: value
+            Test.deeplyNested: record-access: value [provenance: open-record-source-type]
             Test.deeplyNested: Basics.arithmetic: add
             """.Trim());
     }
@@ -529,7 +621,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.cold: record-access: y
+            Test.cold: record-access: y [provenance: open-record-source-type]
             """.Trim());
     }
 
@@ -576,7 +668,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.cold: record-access: y
+            Test.cold: record-access: y [provenance: open-record-source-type]
             """.Trim());
     }
 
@@ -602,7 +694,7 @@ public class OptimizationOpportunityFinderTests
         // The == finding is suppressed but record-access.x still shows.
         rendered.Should().Be(
             """
-            Test.mixed: record-access: x
+            Test.mixed: record-access: x [provenance: open-record-source-type]
             """.Trim());
     }
 
@@ -1126,7 +1218,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.useRecord: record-access: go
+            Test.useRecord: record-access: go [provenance: unknown-record-layout]
             Test.useRecord: higher-order-parameter-direct: go
             """.Trim());
     }
@@ -1259,7 +1351,7 @@ public class OptimizationOpportunityFinderTests
         rendered.Should().Be(
             """
             record-access:
-              Test.showName: name
+              Test.showName: name [provenance: open-record-source-type]
 
             Basics.arithmetic:
               Test.addThings: add
@@ -1963,7 +2055,7 @@ public class OptimizationOpportunityFinderTests
             Test.apply: higher-order-parameter-direct: f
             Test.forwarderOne: higher-order-parameter-indirect: f @ distance 1
             Test.forwarderTwo: higher-order-parameter-indirect: f @ distance 2
-            Test.showName: record-access: name
+            Test.showName: record-access: name [provenance: open-record-source-type]
             """.Trim());
     }
 
@@ -1996,8 +2088,8 @@ public class OptimizationOpportunityFinderTests
             """
             Test.caller: higher-order-parameter-indirect: f @ distance 1
             Test.caller: higher-order-parameter-indirect: h @ distance 1
-            Test.liftedLambda: record-access: finalizer
-            Test.liftedLambda: record-access: handler
+            Test.liftedLambda: record-access: finalizer [provenance: unknown-record-layout]
+            Test.liftedLambda: record-access: handler [provenance: unknown-record-layout]
             Test.liftedLambda: higher-order-parameter-direct: finalizer
             Test.liftedLambda: higher-order-parameter-direct: handler
             """.Trim());
