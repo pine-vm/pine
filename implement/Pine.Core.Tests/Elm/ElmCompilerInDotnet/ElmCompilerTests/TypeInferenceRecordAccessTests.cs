@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System.Collections.Generic;
@@ -172,9 +173,9 @@ public class TypeInferenceRecordAccessTests
                 localBindingTypes: null,
                 currentModuleName: "Test",
                 functionTypes:
-                new Dictionary<QualifiedNameRef, FunctionTypeInfo>
+                new Dictionary<DeclQualifiedName, FunctionTypeInfo>
                 {
-                    [new QualifiedNameRef(["Model"], "Absent")] =
+                    [DeclQualifiedName.Create(["Model"], "Absent")] =
                     new(optionalType, [])
                 });
 

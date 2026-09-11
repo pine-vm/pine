@@ -1,9 +1,9 @@
+using Pine.Core.CodeAnalysis;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
-using SyntaxModelTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 using ConcreteSyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
@@ -18,14 +18,14 @@ internal static class QualifiedNameHelper
         :
         string.Join(".", moduleName) + "." + name;
 
-    public static string ToQualifiedNameString(SyntaxModelTypes.QualifiedNameRef qualifiedName) =>
-        ToQualifiedNameString(qualifiedName.ModuleName, qualifiedName.Name);
+    public static string ToQualifiedNameString(DeclQualifiedName qualifiedName) =>
+        qualifiedName.FullName;
 
-    public static SyntaxModelTypes.QualifiedNameRef ToQualifiedNameRef(IReadOnlyList<string> moduleName, string name) =>
-        new(moduleName, name);
+    public static DeclQualifiedName ToDeclQualifiedName(IReadOnlyList<string> moduleName, string name) =>
+        DeclQualifiedName.Create(moduleName, name);
 
-    public static SyntaxModelTypes.QualifiedNameRef FromQualifiedNameString(string qualifiedName) =>
-        SyntaxModelTypes.QualifiedNameRef.FromFullName(qualifiedName);
+    public static DeclQualifiedName FromQualifiedNameString(string qualifiedName) =>
+        DeclQualifiedName.FromString(qualifiedName);
 }
 
 /// <summary>
@@ -160,27 +160,27 @@ public record FunctionScc(
 /// <param name="ChoiceTagTypes">Map of qualified choice type tag names to their result and argument types.</param>
 /// <param name="TypeAliasDefinitions">Map of qualified type alias names to definitions used for expanding types during emission.</param>
 public record ModuleCompilationContext(
-    IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)> AllFunctions,
-    ImmutableDictionary<SyntaxModelTypes.QualifiedNameRef, CompiledFunctionInfo> CompiledFunctionsCache,
+    IReadOnlyDictionary<DeclQualifiedName, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)> AllFunctions,
+    ImmutableDictionary<DeclQualifiedName, CompiledFunctionInfo> CompiledFunctionsCache,
     FrozenSet<string> PineKernelModuleNames,
-    IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? FunctionDependencyLayouts = null,
-    IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? FunctionTypes = null,
-    IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? RecordTypeAliasConstructors = null,
-    IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? ChoiceTagTypes = null,
-    IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, TypeInference.TypeAliasDefinition>? TypeAliasDefinitions = null)
+    IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? FunctionDependencyLayouts = null,
+    IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? FunctionTypes = null,
+    IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? RecordTypeAliasConstructors = null,
+    IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? ChoiceTagTypes = null,
+    IReadOnlyDictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition>? TypeAliasDefinitions = null)
 {
     /// <summary>
     /// Creates a module compilation context from concrete Elm declarations by converting them to abstract declarations first.
     /// </summary>
     public ModuleCompilationContext(
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, (string moduleName, string functionName, ConcreteSyntaxTypes.Declaration.FunctionDeclaration declaration)> allFunctions,
-        ImmutableDictionary<SyntaxModelTypes.QualifiedNameRef, CompiledFunctionInfo> compiledFunctionsCache,
+        IReadOnlyDictionary<DeclQualifiedName, (string moduleName, string functionName, ConcreteSyntaxTypes.Declaration.FunctionDeclaration declaration)> allFunctions,
+        ImmutableDictionary<DeclQualifiedName, CompiledFunctionInfo> compiledFunctionsCache,
         FrozenSet<string> pineKernelModuleNames,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? functionDependencyLayouts = null,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? functionTypes = null,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? recordTypeAliasConstructors = null,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes = null,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, TypeInference.TypeAliasDefinition>? typeAliasDefinitions = null)
+        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? functionDependencyLayouts = null,
+        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? functionTypes = null,
+        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? recordTypeAliasConstructors = null,
+        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? choiceTagTypes = null,
+        IReadOnlyDictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition>? typeAliasDefinitions = null)
         : this(
             allFunctions.ToDictionary(
                 kvp => kvp.Key,
@@ -221,7 +221,7 @@ public record ModuleCompilationContext(
     /// Creates a new context with the specified function added to the cache.
     /// </summary>
     public ModuleCompilationContext WithCompiledFunction(
-        SyntaxModelTypes.QualifiedNameRef name,
+        DeclQualifiedName name,
         PineValue value,
         PineValue encodedBody,
         IReadOnlyList<string> dependencyLayout,
@@ -253,7 +253,7 @@ public record ModuleCompilationContext(
     /// Creates a new context with the specified dependency layouts.
     /// </summary>
     public ModuleCompilationContext WithDependencyLayouts(
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>> layouts) =>
+        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>> layouts) =>
         this with { FunctionDependencyLayouts = layouts };
 
     /// <summary>
@@ -267,7 +267,7 @@ public record ModuleCompilationContext(
     /// <summary>
     /// Gets a compiled function from the cache.
     /// </summary>
-    public PineValue? TryGetCompiledFunctionValue(SyntaxModelTypes.QualifiedNameRef qualifiedName)
+    public PineValue? TryGetCompiledFunctionValue(DeclQualifiedName qualifiedName)
     {
         if (CompiledFunctionsCache.TryGetValue(qualifiedName, out var info))
         {
@@ -287,7 +287,7 @@ public record ModuleCompilationContext(
     /// Gets compiled function info including dependency layout from the cache.
     /// </summary>
     public CompiledFunctionInfo? TryGetCompiledFunctionInfo(
-        SyntaxModelTypes.QualifiedNameRef qualifiedName) =>
+        DeclQualifiedName qualifiedName) =>
         CompiledFunctionsCache.TryGetValue(qualifiedName, out var info) ? info : null;
 
     /// <summary>
@@ -301,7 +301,7 @@ public record ModuleCompilationContext(
     /// <summary>
     /// Gets the pre-computed dependency layout for a function.
     /// </summary>
-    public IReadOnlyList<string>? TryGetDependencyLayout(SyntaxModelTypes.QualifiedNameRef qualifiedName)
+    public IReadOnlyList<string>? TryGetDependencyLayout(DeclQualifiedName qualifiedName)
     {
         if (FunctionDependencyLayouts?.TryGetValue(qualifiedName, out var result) ?? false)
         {
@@ -322,7 +322,7 @@ public record ModuleCompilationContext(
     /// Gets function info from the all functions dictionary.
     /// </summary>
     public (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)? TryGetFunctionInfo(
-        SyntaxModelTypes.QualifiedNameRef qualifiedName)
+        DeclQualifiedName qualifiedName)
     {
         if (AllFunctions.TryGetValue(qualifiedName, out var result))
         {
@@ -347,7 +347,7 @@ public record ModuleCompilationContext(
     /// <summary>
     /// Gets the recorded type information for a function.
     /// </summary>
-    public FunctionTypeInfo? TryGetFunctionTypeInfo(SyntaxModelTypes.QualifiedNameRef qualifiedName)
+    public FunctionTypeInfo? TryGetFunctionTypeInfo(DeclQualifiedName qualifiedName)
     {
         if (FunctionTypes?.TryGetValue(qualifiedName, out var functionTypeInfo) ?? false)
         {
@@ -370,7 +370,7 @@ public record ModuleCompilationContext(
     /// <summary>
     /// Tries to get the field names for a record type alias constructor.
     /// </summary>
-    public IReadOnlyList<string>? TryGetRecordConstructorFieldNames(SyntaxModelTypes.QualifiedNameRef qualifiedName)
+    public IReadOnlyList<string>? TryGetRecordConstructorFieldNames(DeclQualifiedName qualifiedName)
     {
         if (RecordTypeAliasConstructors?.TryGetValue(qualifiedName, out var names) ?? false)
         {
@@ -392,7 +392,7 @@ public record ModuleCompilationContext(
     /// <summary>
     /// Gets the number of arguments expected by a choice type constructor.
     /// </summary>
-    public int? TryGetChoiceTypeConstructorArgumentCount(SyntaxModelTypes.QualifiedNameRef qualifiedConstructorName)
+    public int? TryGetChoiceTypeConstructorArgumentCount(DeclQualifiedName qualifiedConstructorName)
     {
         if (ChoiceTagTypes?.TryGetValue(qualifiedConstructorName, out var choiceTagType) ?? false)
         {
@@ -418,7 +418,7 @@ public record ExpressionCompilationContext(
     ModuleCompilationContext ModuleCompilationContext,
     CodeAnalysis.PineVMParseCache ParseCache,
     IDictionary<(Expression, CodeAnalysis.ReductionConfig), Expression>? ReducedExpressionCache,
-    IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? FunctionTypes = null)
+    IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? FunctionTypes = null)
 {
 
     /// <summary>

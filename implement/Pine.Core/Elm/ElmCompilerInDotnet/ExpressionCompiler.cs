@@ -1,3 +1,4 @@
+using Pine.Core.CodeAnalysis;
 using Pine.Core.CodeGen;
 using Pine.Core.CommonEncodings;
 using System;
@@ -6,7 +7,6 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Numerics;
 
-using SyntaxModelTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
@@ -1199,7 +1199,7 @@ public class ExpressionCompiler
         }
 
         var aliasName =
-            new SyntaxModelTypes.QualifiedNameRef(
+            DeclQualifiedName.Create(
                 choiceType.ModuleName.Count is 0
                 ?
                 context.CurrentModuleName.Split('.')
@@ -1208,15 +1208,15 @@ public class ExpressionCompiler
                 choiceType.TypeName);
 
         var aliasIsLocal =
-            aliasName.ModuleName.SequenceEqual(context.CurrentModuleName.Split('.'));
+            aliasName.Namespaces.SequenceEqual(context.CurrentModuleName.Split('.'));
 
         var aliasModuleContainsFunctions =
             context.ModuleCompilationContext.AllFunctions.Keys.Any(
-                functionName => functionName.ModuleName.SequenceEqual(aliasName.ModuleName));
+                functionName => functionName.Namespaces.SequenceEqual(aliasName.Namespaces));
 
         var aliasesInModule =
             aliasDefinitions.Keys.Count(
-                candidate => candidate.ModuleName.SequenceEqual(aliasName.ModuleName));
+                candidate => candidate.Namespaces.SequenceEqual(aliasName.Namespaces));
 
         // Imported aliases from modules with runtime declarations or multiple aliases do not
         // yet carry enough canonical provenance to rule out an incorrectly associated layout.

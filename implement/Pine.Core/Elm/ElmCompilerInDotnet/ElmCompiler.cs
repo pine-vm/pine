@@ -663,7 +663,7 @@ public class ElmCompiler
 
 
         var allFunctions =
-            new Dictionary<SyntaxModelTypes.QualifiedNameRef, (string moduleName, string functionName, ElmSyntaxAbstract.Declaration.FunctionDeclaration declaration)>();
+            new Dictionary<DeclQualifiedName, (string moduleName, string functionName, ElmSyntaxAbstract.Declaration.FunctionDeclaration declaration)>();
 
         foreach (var elmModuleSyntax in modulesForCompilation)
         {
@@ -683,14 +683,14 @@ public class ElmCompiler
                     declaration.Function.Declaration.Name;
 
                 var qualifiedName =
-                    QualifiedNameHelper.ToQualifiedNameRef(moduleName, functionName);
+                    QualifiedNameHelper.ToDeclQualifiedName(moduleName, functionName);
 
                 allFunctions[qualifiedName] = (moduleNameFlattened, functionName, declaration);
             }
         }
 
         // Build function type metadata dictionary for type inference
-        var functionTypes = new Dictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>();
+        var functionTypes = new Dictionary<DeclQualifiedName, FunctionTypeInfo>();
 
         foreach (var (qualifiedName, (_, _, declaration)) in allFunctions)
         {
@@ -701,7 +701,7 @@ public class ElmCompiler
         }
 
         var typeAliasDefinitions =
-            ImmutableDictionary<SyntaxModelTypes.QualifiedNameRef, TypeInference.TypeAliasDefinition>.Empty;
+            ImmutableDictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition>.Empty;
 
         foreach (var elmModuleSyntax in modulesForCompilation)
         {
@@ -719,7 +719,7 @@ public class ElmCompiler
         // We use qualified names to avoid cross-module collisions such as
         // ParserFast.Good vs Parser.Advanced.Good.
         var choiceTagTypes =
-            new Dictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>();
+            new Dictionary<DeclQualifiedName, FunctionTypeInfo>();
 
         foreach (var elmModuleSyntax in modulesForCompilation)
         {
@@ -746,7 +746,7 @@ public class ElmCompiler
                     var ctorName = ctor.Name;
 
                     var qualifiedCtorName =
-                        QualifiedNameHelper.ToQualifiedNameRef(moduleName, ctorName);
+                        QualifiedNameHelper.ToDeclQualifiedName(moduleName, ctorName);
 
                     var argTypes = new List<TypeInference.InferredType>();
 
@@ -769,7 +769,7 @@ public class ElmCompiler
         // Build record type alias constructors dictionary
         // A type alias for a record type creates an implicit constructor function
         // where argument order matches the field order in the type alias declaration
-        var recordTypeAliasConstructors = new Dictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>();
+        var recordTypeAliasConstructors = new Dictionary<DeclQualifiedName, IReadOnlyList<string>>();
 
         foreach (var elmModuleSyntax in modulesForCompilation)
         {
@@ -794,7 +794,7 @@ public class ElmCompiler
                         .Select(f => f.FieldName)
                         .ToList();
 
-                    var qualifiedName = QualifiedNameHelper.ToQualifiedNameRef(moduleName, aliasName);
+                    var qualifiedName = QualifiedNameHelper.ToDeclQualifiedName(moduleName, aliasName);
                     recordTypeAliasConstructors[qualifiedName] = fieldNames;
                 }
             }
@@ -1005,7 +1005,7 @@ public class ElmCompiler
     /// </returns>
     public static (IReadOnlyDictionary<string, IReadOnlyList<string>> layouts, IReadOnlyDictionary<string, FunctionScc> functionToScc, IReadOnlyList<FunctionScc> sccsInDependencyOrder)
         ComputeDependencyLayoutsAndSccs(
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, (string moduleName, string functionName, ElmSyntaxAbstract.Declaration.FunctionDeclaration declaration)> allFunctions,
+        IReadOnlyDictionary<DeclQualifiedName, (string moduleName, string functionName, ElmSyntaxAbstract.Declaration.FunctionDeclaration declaration)> allFunctions,
         ModuleCompilationContext context)
     {
         var allQualifiedFunctionNames =
@@ -1762,8 +1762,8 @@ public class ElmCompiler
 
     internal static ImmutableDictionary<string, TypeInference.InferredType> ExtractParameterTypes(
         ElmSyntaxAbstract.FunctionStruct function,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? functionTypes,
+        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? choiceTagTypes,
+        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? functionTypes,
         string currentModuleName)
     {
         var parameterTypes = ImmutableDictionary<string, TypeInference.InferredType>.Empty;

@@ -1,3 +1,4 @@
+using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using System;
 using System.Collections.Generic;
@@ -5,7 +6,6 @@ using System.Collections.Immutable;
 using System.Linq;
 
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
-using SyntaxModelTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -517,8 +517,8 @@ public class PatternCompiler
         SyntaxTypes.Pattern pattern,
         Expression scrutinee,
         TypeInference.InferredType? scrutineeType,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes = null) =>
+        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? recordTypeAliasFields,
+        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? choiceTagTypes = null) =>
         AnalyzePatternRecursive(
             pattern,
             scrutinee,
@@ -531,8 +531,8 @@ public class PatternCompiler
         SyntaxTypes.Pattern pattern,
         Expression scrutinee,
         TypeInference.InferredType? scrutineeType,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes = null,
+        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? recordTypeAliasFields,
+        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? choiceTagTypes = null,
         IReadOnlyList<string>? topLevelRecordFieldNamesOverride = null)
     {
         return pattern switch
@@ -602,8 +602,8 @@ public class PatternCompiler
         SyntaxTypes.Pattern.ListPattern listPattern,
         Expression scrutinee,
         TypeInference.InferredType? scrutineeType,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes)
+        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? recordTypeAliasFields,
+        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? choiceTagTypes)
     {
         if (listPattern.Elements.Count is 0)
         {
@@ -672,8 +672,8 @@ public class PatternCompiler
         SyntaxTypes.Pattern.UnConsPattern unConsPattern,
         Expression scrutinee,
         TypeInference.InferredType? scrutineeType,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes)
+        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? recordTypeAliasFields,
+        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? choiceTagTypes)
     {
         var headExpr = BuiltinHelpers.ApplyBuiltinHead(scrutinee);
         var tailExpr = BuiltinHelpers.ApplyBuiltinSkip(1, scrutinee);
@@ -744,8 +744,8 @@ public class PatternCompiler
         SyntaxTypes.Pattern.TuplePattern tuplePattern,
         Expression scrutinee,
         TypeInference.InferredType? scrutineeType,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes)
+        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? recordTypeAliasFields,
+        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? choiceTagTypes)
     {
         if (AsConstantPattern(tuplePattern) is { } constantValue)
         {
@@ -816,8 +816,8 @@ public class PatternCompiler
         SyntaxTypes.Pattern.NamedPattern namedPattern,
         Expression scrutinee,
         TypeInference.InferredType? scrutineeType,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes)
+        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? recordTypeAliasFields,
+        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? choiceTagTypes)
     {
         var tagName = namedPattern.Name.Name;
 
@@ -852,7 +852,7 @@ public class PatternCompiler
             if (choiceTagTypes is not null)
             {
                 var ctorQualifiedName =
-                    new SyntaxModelTypes.QualifiedNameRef(
+                    DeclQualifiedName.Create(
                         namedPattern.Name.ModuleName,
                         namedPattern.Name.Name);
 
@@ -1006,8 +1006,8 @@ public class PatternCompiler
         SyntaxTypes.Pattern.AsPattern asPattern,
         Expression scrutinee,
         TypeInference.InferredType? scrutineeType,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes,
+        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? recordTypeAliasFields,
+        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? choiceTagTypes,
         IReadOnlyList<string>? topLevelRecordFieldNamesOverride)
     {
         // First, analyze the inner pattern
@@ -1119,7 +1119,7 @@ public class PatternCompiler
     /// </param>
     public static IReadOnlyList<string>? SortedRecordFieldNamesFromInferredType(
         TypeInference.InferredType inferredType,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? recordTypeAliasFields = null)
+        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? recordTypeAliasFields = null)
     {
         if (inferredType is TypeInference.InferredType.RecordType recordType)
         {
@@ -1135,7 +1135,7 @@ public class PatternCompiler
             inferredType is TypeInference.InferredType.ChoiceType choiceType)
         {
             var qualifiedName =
-                QualifiedNameHelper.ToQualifiedNameRef(choiceType.ModuleName, choiceType.TypeName);
+                QualifiedNameHelper.ToDeclQualifiedName(choiceType.ModuleName, choiceType.TypeName);
 
             if (recordTypeAliasFields.TryGetValue(qualifiedName, out var aliasFields))
             {
@@ -1181,8 +1181,8 @@ public class PatternCompiler
         SyntaxTypes.Pattern pattern,
         Expression scrutinee,
         TypeInference.InferredType? scrutineeType,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes = null)
+        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? recordTypeAliasFields,
+        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? choiceTagTypes = null)
     {
         var analysis =
             AnalyzePattern(pattern, scrutinee, scrutineeType, recordTypeAliasFields, choiceTagTypes);

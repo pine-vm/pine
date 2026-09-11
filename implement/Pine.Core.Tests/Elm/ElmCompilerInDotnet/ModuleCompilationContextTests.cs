@@ -1,6 +1,6 @@
 using AwesomeAssertions;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using Xunit;
@@ -14,17 +14,17 @@ public class ModuleCompilationContextTests
     [Fact]
     public void Merged_function_types_support_string_and_structured_lookup()
     {
-        var qualifiedFunctionName = new QualifiedNameRef(["Test"], "alfa");
+        var qualifiedFunctionName = DeclQualifiedName.Create(["Test"], "alfa");
         var returnType = TypeInference.InferredType.Int();
         IReadOnlyList<TypeInference.InferredType> parameterTypes = [TypeInference.InferredType.String()];
 
         var context =
             new ModuleCompilationContext(
                 allFunctions:
-                new Dictionary<QualifiedNameRef, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)>(),
+                new Dictionary<DeclQualifiedName, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)>(),
                 compiledFunctionsCache: [],
                 pineKernelModuleNames: FrozenSet.Create<string>([]),
-                functionTypes: new Dictionary<QualifiedNameRef, FunctionTypeInfo>
+                functionTypes: new Dictionary<DeclQualifiedName, FunctionTypeInfo>
                 {
                     [qualifiedFunctionName] = new(returnType, parameterTypes)
                 });
@@ -41,25 +41,25 @@ public class ModuleCompilationContextTests
     }
 
     [Fact]
-    public void Qualified_name_ref_keyed_metadata_is_available_via_existing_string_helpers()
+    public void Declaration_name_keyed_metadata_is_available_via_existing_string_helpers()
     {
-        var constructorName = new QualifiedNameRef(["Test"], "TagAlfa");
-        var recordConstructorName = new QualifiedNameRef(["Test"], "RecordAlias");
+        var constructorName = DeclQualifiedName.Create(["Test"], "TagAlfa");
+        var recordConstructorName = DeclQualifiedName.Create(["Test"], "RecordAlias");
 
         var context =
             new ModuleCompilationContext(
                 allFunctions:
-                new Dictionary<QualifiedNameRef, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)>(),
+                new Dictionary<DeclQualifiedName, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)>(),
                 compiledFunctionsCache: [],
                 pineKernelModuleNames: FrozenSet.Create<string>([]),
-                choiceTagTypes: new Dictionary<QualifiedNameRef, FunctionTypeInfo>
+                choiceTagTypes: new Dictionary<DeclQualifiedName, FunctionTypeInfo>
                 {
                     [constructorName] =
                     new(
                         new TypeInference.InferredType.UnknownType(),
                         [TypeInference.InferredType.Int(), TypeInference.InferredType.Bool()])
                 },
-                recordTypeAliasConstructors: new Dictionary<QualifiedNameRef, IReadOnlyList<string>>
+                recordTypeAliasConstructors: new Dictionary<DeclQualifiedName, IReadOnlyList<string>>
                 {
                     [recordConstructorName] = ["fieldA", "fieldB"]
                 });

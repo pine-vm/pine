@@ -1,6 +1,5 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -53,10 +52,10 @@ public static class BuiltinOperatorLowering
         ImmutableDictionary<string, int> ParameterNames,
         ImmutableDictionary<string, TypeInference.InferredType> ParameterTypes,
         ImmutableDictionary<string, TypeInference.InferredType> LocalBindingTypes,
-        IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo> FunctionTypes,
-        IReadOnlyDictionary<QualifiedNameRef, TypeInference.TypeAliasDefinition> AliasTypes,
-        IReadOnlyDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition> ChoiceTypeDefinitions,
-        IReadOnlyDictionary<QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>> ConstructorArgumentTypes,
+        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo> FunctionTypes,
+        IReadOnlyDictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition> AliasTypes,
+        IReadOnlyDictionary<DeclQualifiedName, TypeInference.ChoiceTypeDefinition> ChoiceTypeDefinitions,
+        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<TypeInference.InferredType>> ConstructorArgumentTypes,
         ImmutableDictionary<string, TypeInference.InferredType> FunctionSignatures);
 
     /// <summary>
@@ -130,10 +129,10 @@ public static class BuiltinOperatorLowering
         SyntaxTypes.Declaration declaration,
         Configuration configuration,
         string moduleName,
-        IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo> functionTypes,
-        IReadOnlyDictionary<QualifiedNameRef, TypeInference.TypeAliasDefinition> aliasTypes,
-        IReadOnlyDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
-        IReadOnlyDictionary<QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>> constructorArgumentTypes,
+        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo> functionTypes,
+        IReadOnlyDictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition> aliasTypes,
+        IReadOnlyDictionary<DeclQualifiedName, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
+        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<TypeInference.InferredType>> constructorArgumentTypes,
         ImmutableDictionary<string, TypeInference.InferredType> functionSignatures)
     {
         if (declaration is not SyntaxTypes.Declaration.FunctionDeclaration functionDeclaration)
@@ -312,7 +311,7 @@ public static class BuiltinOperatorLowering
                 caseItem.Pattern is SyntaxTypes.Pattern.NamedPattern namedPattern)
             {
                 var constructorName =
-                    new QualifiedNameRef(
+                    DeclQualifiedName.Create(
                         namedPattern.Name.ModuleName,
                         namedPattern.Name.Name);
 
@@ -646,7 +645,7 @@ public static class BuiltinOperatorLowering
         var qualifiedName =
             identifier.QualifiedName.Namespaces.Count > 0
             ?
-            QualifiedNameHelper.ToQualifiedNameRef(
+            QualifiedNameHelper.ToDeclQualifiedName(
                 identifier.QualifiedName.Namespaces,
                 identifier.QualifiedName.DeclName)
             :
@@ -656,10 +655,10 @@ public static class BuiltinOperatorLowering
         return
             context.ChoiceTypeDefinitions.Any(
                 choiceType =>
-                choiceType.Key.ModuleName.SequenceEqual(qualifiedName.ModuleName) &&
+                choiceType.Key.Namespaces.SequenceEqual(qualifiedName.Namespaces) &&
                 choiceType.Value.Constructors.Any(
                     constructor =>
-                    constructor.TagName == qualifiedName.Name &&
+                    constructor.TagName == qualifiedName.DeclName &&
                     constructor.ArgumentTypes.Count is 0));
     }
 
@@ -674,7 +673,7 @@ public static class BuiltinOperatorLowering
     private static bool TypeSupportsPrimitiveEquality(
         TypeInference.InferredType type,
         RewriteContext context,
-        Dictionary<QualifiedNameRef, TypeInference.InferredType.ChoiceType> visiting)
+        Dictionary<DeclQualifiedName, TypeInference.InferredType.ChoiceType> visiting)
     {
         switch (type)
         {
@@ -705,7 +704,7 @@ public static class BuiltinOperatorLowering
             case TypeInference.InferredType.ChoiceType choiceType:
                 {
                     var qualifiedName =
-                        QualifiedNameHelper.ToQualifiedNameRef(choiceType.ModuleName, choiceType.TypeName);
+                        QualifiedNameHelper.ToDeclQualifiedName(choiceType.ModuleName, choiceType.TypeName);
 
                     // First expand aliases — the ChoiceType might actually be an alias for a concrete type.
                     if (context.AliasTypes.ContainsKey(qualifiedName))
@@ -1064,7 +1063,7 @@ public static class BuiltinOperatorLowering
         IReadOnlyList<SyntaxTypes.Pattern> arguments,
         ImmutableDictionary<string, TypeInference.InferredType> inferredParameterTypes,
         TypeInference.InferredType? expectedType,
-        IReadOnlyDictionary<QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>> constructorArgumentTypes)
+        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<TypeInference.InferredType>> constructorArgumentTypes)
     {
         if (expectedType is not TypeInference.InferredType.FunctionType)
         {
@@ -1513,10 +1512,10 @@ public static class BuiltinOperatorLowering
         };
     }
 
-    private static ImmutableDictionary<QualifiedNameRef, FunctionTypeInfo> BuildFunctionTypes(
+    private static ImmutableDictionary<DeclQualifiedName, FunctionTypeInfo> BuildFunctionTypes(
         ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
     {
-        var result = new Dictionary<QualifiedNameRef, FunctionTypeInfo>();
+        var result = new Dictionary<DeclQualifiedName, FunctionTypeInfo>();
 
         foreach (var (key, decl) in declarations)
         {
@@ -1524,7 +1523,7 @@ public static class BuiltinOperatorLowering
             {
                 var functionName = declaration.Function.Declaration.Name;
 
-                result[QualifiedNameHelper.ToQualifiedNameRef(key.Namespaces, functionName)] =
+                result[QualifiedNameHelper.ToDeclQualifiedName(key.Namespaces, functionName)] =
                     new FunctionTypeInfo(
                         TypeInference.GetFunctionReturnType(declaration),
                         TypeInference.GetFunctionParameterTypes(declaration));
@@ -1552,16 +1551,16 @@ public static class BuiltinOperatorLowering
         return result.ToImmutableDictionary();
     }
 
-    private static ImmutableDictionary<QualifiedNameRef, TypeInference.TypeAliasDefinition> BuildAliasTypes(
+    private static ImmutableDictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition> BuildAliasTypes(
         ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
     {
-        var result = new Dictionary<QualifiedNameRef, TypeInference.TypeAliasDefinition>();
+        var result = new Dictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition>();
 
         foreach (var (key, decl) in declarations)
         {
             if (decl is SyntaxTypes.Declaration.AliasDeclaration declaration)
             {
-                result[QualifiedNameHelper.ToQualifiedNameRef(key.Namespaces, declaration.TypeAlias.Name)] =
+                result[QualifiedNameHelper.ToDeclQualifiedName(key.Namespaces, declaration.TypeAlias.Name)] =
                     new TypeInference.TypeAliasDefinition(
                         declaration.TypeAlias.Generics,
                         TypeInference.TypeAnnotationToInferredType(declaration.TypeAlias.TypeAnnotation));
@@ -1571,21 +1570,21 @@ public static class BuiltinOperatorLowering
         return result.ToImmutableDictionary();
     }
 
-    private static ImmutableDictionary<QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>
+    private static ImmutableDictionary<DeclQualifiedName, IReadOnlyList<TypeInference.InferredType>>
         BuildConstructorArgumentTypes(
-        IReadOnlyDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
-        IReadOnlyDictionary<QualifiedNameRef, TypeInference.TypeAliasDefinition> aliasTypes)
+        IReadOnlyDictionary<DeclQualifiedName, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
+        IReadOnlyDictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition> aliasTypes)
     {
         var result =
-            ImmutableDictionary.CreateBuilder<QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>();
+            ImmutableDictionary.CreateBuilder<DeclQualifiedName, IReadOnlyList<TypeInference.InferredType>>();
 
         foreach (var (choiceTypeName, definition) in choiceTypeDefinitions)
         {
             foreach (var constructor in definition.Constructors)
             {
                 result[
-                    QualifiedNameHelper.ToQualifiedNameRef(
-                        choiceTypeName.ModuleName,
+                    QualifiedNameHelper.ToDeclQualifiedName(
+                        choiceTypeName.Namespaces,
                         constructor.TagName)] =
                     [
                     .. constructor.ArgumentTypes.Select(
@@ -1667,7 +1666,7 @@ public static class BuiltinOperatorLowering
         var qualifiedName =
             functionOrValue.QualifiedName.Namespaces.Count > 0
             ?
-            QualifiedNameHelper.ToQualifiedNameRef(
+            QualifiedNameHelper.ToDeclQualifiedName(
                 functionOrValue.QualifiedName.Namespaces,
                 functionOrValue.QualifiedName.DeclName)
             :
@@ -1679,8 +1678,7 @@ public static class BuiltinOperatorLowering
 
         if (!context.FunctionTypes.TryGetValue(qualifiedName, out var functionTypeInfo))
         {
-            var qualifiedNameString =
-                QualifiedNameHelper.ToQualifiedNameString(qualifiedName.ModuleName, qualifiedName.Name);
+            var qualifiedNameString = qualifiedName.FullName;
 
             if (!context.FunctionSignatures.TryGetValue(qualifiedNameString, out var functionSignatureType))
             {
@@ -1769,7 +1767,7 @@ public static class BuiltinOperatorLowering
 
     private static TypeInference.InferredType? ExpandAliasType(
         TypeInference.InferredType? inferredType,
-        IReadOnlyDictionary<QualifiedNameRef, TypeInference.TypeAliasDefinition> aliasTypes)
+        IReadOnlyDictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition> aliasTypes)
     {
         return
             inferredType is null
@@ -1824,7 +1822,7 @@ public static class BuiltinOperatorLowering
 
     private static ImmutableDictionary<string, TypeInference.InferredType> ExpandAliasTypes(
         ImmutableDictionary<string, TypeInference.InferredType> inferredTypes,
-        IReadOnlyDictionary<QualifiedNameRef, TypeInference.TypeAliasDefinition> aliasTypes) =>
+        IReadOnlyDictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition> aliasTypes) =>
         inferredTypes.ToImmutableDictionary(
             entry => entry.Key,
             entry => ExpandAliasType(entry.Value, aliasTypes) ?? entry.Value);

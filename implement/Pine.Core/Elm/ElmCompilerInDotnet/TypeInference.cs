@@ -5,7 +5,6 @@ using System.Collections.Immutable;
 using System.Linq;
 
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
-using QualifiedNameRef = Pine.Core.Elm.ElmSyntax.SyntaxModel.QualifiedNameRef;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -43,17 +42,17 @@ public enum TypeVariableConstraint
 /// </summary>
 public static class TypeInference
 {
-    private static QualifiedNameRef QualifiedNameToRef(SyntaxTypes.QualifiedNameRef qualifiedNameRef) =>
-        new(qualifiedNameRef.ModuleName, qualifiedNameRef.Name);
+    private static DeclQualifiedName DeclQualifiedNameFromSyntax(SyntaxTypes.QualifiedNameRef qualifiedNameRef) =>
+        DeclQualifiedName.Create(qualifiedNameRef.ModuleName, qualifiedNameRef.Name);
 
-    private static QualifiedNameRef ResolveQualifiedNameRef(
+    private static DeclQualifiedName ResolveDeclQualifiedName(
         IReadOnlyList<string> moduleName,
         string name,
         string? currentModuleName)
     {
         if (moduleName.Count > 0)
         {
-            return QualifiedNameHelper.ToQualifiedNameRef(moduleName, name);
+            return QualifiedNameHelper.ToDeclQualifiedName(moduleName, name);
         }
 
         if (currentModuleName is not null)
@@ -61,7 +60,7 @@ public static class TypeInference
             return QualifiedNameHelper.FromQualifiedNameString(currentModuleName + "." + name);
         }
 
-        return QualifiedNameHelper.ToQualifiedNameRef([], name);
+        return QualifiedNameHelper.ToDeclQualifiedName([], name);
     }
 
     /// <summary>
@@ -1465,7 +1464,7 @@ public static class TypeInference
         IReadOnlyDictionary<string, InferredType> parameterTypes,
         IReadOnlyDictionary<string, InferredType>? localBindingTypes,
         string? currentModuleName,
-        IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo>? functionTypes)
+        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? functionTypes)
     {
         // Integer literal - in Elm, this has type "number" (polymorphic), not forced to Int
         if (expression is SyntaxTypes.Expression.IntegerLiteral)
@@ -1549,7 +1548,7 @@ public static class TypeInference
             functionTypes is not null)
         {
             var qualifiedFuncName =
-                ResolveQualifiedNameRef(
+                ResolveDeclQualifiedName(
                     funcOrValueRef.QualifiedName.Namespaces,
                     funcOrValueRef.QualifiedName.DeclName,
                     currentModuleName);
@@ -1664,7 +1663,7 @@ public static class TypeInference
                 }
 
                 var qualifiedName =
-                    ResolveQualifiedNameRef(
+                    ResolveDeclQualifiedName(
                         funcRef.QualifiedName.Namespaces,
                         funcRef.QualifiedName.DeclName,
                         currentModuleName);
@@ -2027,7 +2026,7 @@ public static class TypeInference
         IReadOnlyDictionary<string, InferredType> parameterTypes,
         IReadOnlyDictionary<string, InferredType>? localBindingTypes,
         string? currentModuleName,
-        IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo>? functionTypes)
+        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? functionTypes)
     {
         var extendedLocalBindings =
             localBindingTypes?.ToImmutableDictionary() ?? [];
@@ -2127,7 +2126,7 @@ public static class TypeInference
         IReadOnlyDictionary<string, InferredType> parameterTypes,
         IReadOnlyDictionary<string, InferredType>? localBindingTypes,
         string? currentModuleName,
-        IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo>? functionTypes)
+        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? functionTypes)
     {
         // Check if operator has explicit type constraints
         if (s_operatorConstraints.TryGetValue(operatorApp.Operator, out var constraints))
@@ -2253,7 +2252,7 @@ public static class TypeInference
     /// <returns>A new dictionary containing all constraints (existing plus newly discovered).</returns>
     public static ImmutableDictionary<string, InferredType> ExtractTypeConstraintsFromTagApplications(
         SyntaxTypes.Expression expression,
-        IReadOnlyDictionary<QualifiedNameRef, IReadOnlyList<InferredType>>? constructorArgumentTypes,
+        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<InferredType>>? constructorArgumentTypes,
         ImmutableDictionary<string, InferredType> existingConstraints)
     {
         if (constructorArgumentTypes is null)
@@ -2268,7 +2267,7 @@ public static class TypeInference
 
     private static ImmutableDictionary<string, InferredType> ExtractTypeConstraintsFromTagApplicationsInternal(
         SyntaxTypes.Expression expression,
-        IReadOnlyDictionary<QualifiedNameRef, IReadOnlyList<InferredType>> constructorArgumentTypes,
+        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<InferredType>> constructorArgumentTypes,
         ImmutableDictionary<string, InferredType> constraints)
     {
         switch (expression)
@@ -2284,7 +2283,7 @@ public static class TypeInference
                 {
                     // This is a tag constructor application
                     if (constructorArgumentTypes.TryGetValue(
-                        QualifiedNameHelper.ToQualifiedNameRef(
+                        QualifiedNameHelper.ToDeclQualifiedName(
                             tagFuncRef.QualifiedName.Namespaces,
                             tagFuncRef.QualifiedName.DeclName),
                         out var argTypes))
@@ -2423,7 +2422,7 @@ public static class TypeInference
     /// <returns>A new dictionary containing all constraints (existing plus newly discovered).</returns>
     public static ImmutableDictionary<string, InferredType> ExtractTypeConstraintsFromFunctionApplications(
         SyntaxTypes.Expression expression,
-        IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo>? functionTypes,
+        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? functionTypes,
         string currentModuleName,
         ImmutableDictionary<string, InferredType> existingConstraints)
     {
@@ -2440,7 +2439,7 @@ public static class TypeInference
 
     private static ImmutableDictionary<string, InferredType> ExtractTypeConstraintsFromFunctionApplicationsInternal(
         SyntaxTypes.Expression expression,
-        IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo> functionTypes,
+        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo> functionTypes,
         string currentModuleName,
         ImmutableDictionary<string, InferredType> constraints)
     {
@@ -2454,7 +2453,7 @@ public static class TypeInference
                     !ElmValueEncoding.StringIsValidTagName(funcRef.QualifiedName.DeclName))
                 {
                     var qualifiedFuncName =
-                        ResolveQualifiedNameRef(
+                        ResolveDeclQualifiedName(
                             funcRef.QualifiedName.Namespaces,
                             funcRef.QualifiedName.DeclName,
                             currentModuleName);
@@ -2831,7 +2830,7 @@ public static class TypeInference
     /// <returns>A new dictionary containing all bindings (existing plus newly discovered).</returns>
     public static ImmutableDictionary<string, InferredType> ExtractPatternBindingTypesWithConstructors(
         SyntaxTypes.Pattern pattern,
-        IReadOnlyDictionary<QualifiedNameRef, IReadOnlyList<InferredType>>? constructorArgumentTypes,
+        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<InferredType>>? constructorArgumentTypes,
         ImmutableDictionary<string, InferredType> existingBindings)
     {
         if (constructorArgumentTypes is null)
@@ -2842,7 +2841,7 @@ public static class TypeInference
 
     private static ImmutableDictionary<string, InferredType> ExtractPatternBindingTypesWithConstructorsInternal(
         SyntaxTypes.Pattern pattern,
-        IReadOnlyDictionary<QualifiedNameRef, IReadOnlyList<InferredType>> constructorArgumentTypes,
+        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<InferredType>> constructorArgumentTypes,
         ImmutableDictionary<string, InferredType> bindings)
     {
         switch (pattern)
@@ -2850,7 +2849,7 @@ public static class TypeInference
             case SyntaxTypes.Pattern.NamedPattern namedPattern:
 
                 // NamedPattern - look up constructor argument types
-                if (constructorArgumentTypes.TryGetValue(QualifiedNameToRef(namedPattern.Name), out var argTypes) &&
+                if (constructorArgumentTypes.TryGetValue(DeclQualifiedNameFromSyntax(namedPattern.Name), out var argTypes) &&
                     argTypes.Count == namedPattern.Arguments.Count)
                 {
                     for (var i = 0; i < namedPattern.Arguments.Count; i++)
@@ -2946,7 +2945,7 @@ public static class TypeInference
         SyntaxTypes.Pattern pattern,
         InferredType inferredType,
         ImmutableDictionary<string, InferredType> existingBindings,
-        IReadOnlyDictionary<QualifiedNameRef, IReadOnlyList<InferredType>>? constructorArgumentTypes)
+        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<InferredType>>? constructorArgumentTypes)
     {
         return
             ExtractPatternBindingTypesFromInferredInternal(
@@ -2973,7 +2972,7 @@ public static class TypeInference
         SyntaxTypes.Pattern pattern,
         InferredType inferredType,
         ImmutableDictionary<string, InferredType> existingBindings,
-        IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo>? choiceTagTypes)
+        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? choiceTagTypes)
     {
         return
             ExtractPatternBindingTypesFromInferredInternal(
@@ -2999,7 +2998,7 @@ public static class TypeInference
         SyntaxTypes.Pattern pattern,
         InferredType inferredType,
         ImmutableDictionary<string, InferredType> bindings,
-        Func<QualifiedNameRef, InferredType, IReadOnlyList<InferredType>?>? resolveConstructorArgumentTypes)
+        Func<DeclQualifiedName, InferredType, IReadOnlyList<InferredType>?>? resolveConstructorArgumentTypes)
     {
         switch (pattern)
         {
@@ -3055,7 +3054,7 @@ public static class TypeInference
 
                 // NamedPattern - look up constructor argument types
                 if (resolveConstructorArgumentTypes?.Invoke(
-                    QualifiedNameToRef(namedPattern.Name),
+                    DeclQualifiedNameFromSyntax(namedPattern.Name),
                     inferredType) is { } argTypes &&
                     argTypes.Count == namedPattern.Arguments.Count)
                 {
@@ -3175,7 +3174,7 @@ public static class TypeInference
     public static ImmutableDictionary<string, InferredType> BuildFunctionSignaturesMap(
         SyntaxTypes.File file,
         string moduleName,
-        IReadOnlyDictionary<QualifiedNameRef, TypeAliasDefinition>? aliasDefinitions = null)
+        IReadOnlyDictionary<DeclQualifiedName, TypeAliasDefinition>? aliasDefinitions = null)
     {
         var builder = ImmutableDictionary.CreateBuilder<string, InferredType>();
 
@@ -3241,7 +3240,7 @@ public static class TypeInference
 
                 InferredType resultType =
                     new InferredType.ChoiceType(
-                        ModuleName: qualifiedTypeName.ModuleName,
+                        ModuleName: qualifiedTypeName.Namespaces,
                         TypeName: typeName,
                         TypeArguments: typeArguments);
 
@@ -3438,11 +3437,11 @@ public static class TypeInference
     /// <summary>
     /// Builds the type alias definitions declared in a module.
     /// </summary>
-    public static ImmutableDictionary<QualifiedNameRef, TypeAliasDefinition> BuildTypeAliasDefinitions(
+    public static ImmutableDictionary<DeclQualifiedName, TypeAliasDefinition> BuildTypeAliasDefinitions(
         SyntaxTypes.File file,
         string moduleName)
     {
-        var definitions = ImmutableDictionary.CreateBuilder<QualifiedNameRef, TypeAliasDefinition>();
+        var definitions = ImmutableDictionary.CreateBuilder<DeclQualifiedName, TypeAliasDefinition>();
 
         foreach (var aliasDeclaration in file.Declarations.OfType<SyntaxTypes.Declaration.AliasDeclaration>())
         {
@@ -3460,15 +3459,15 @@ public static class TypeInference
     /// </summary>
     public static InferredType ExpandTypeAliases(
         InferredType inferredType,
-        IReadOnlyDictionary<QualifiedNameRef, TypeAliasDefinition> aliasDefinitions) =>
-        ExpandTypeAliases(inferredType, aliasDefinitions, ImmutableHashSet<QualifiedNameRef>.Empty);
+        IReadOnlyDictionary<DeclQualifiedName, TypeAliasDefinition> aliasDefinitions) =>
+        ExpandTypeAliases(inferredType, aliasDefinitions, ImmutableHashSet<DeclQualifiedName>.Empty);
 
     /// <summary>
     /// Expands type aliases while resolving unqualified alias references against the current module.
     /// </summary>
     public static InferredType ExpandTypeAliases(
         InferredType inferredType,
-        IReadOnlyDictionary<QualifiedNameRef, TypeAliasDefinition> aliasDefinitions,
+        IReadOnlyDictionary<DeclQualifiedName, TypeAliasDefinition> aliasDefinitions,
         IReadOnlyList<string> currentModuleName) =>
         ExpandTypeAliases(
             QualifyLocalTypeAliases(inferredType, aliasDefinitions, currentModuleName),
@@ -3476,7 +3475,7 @@ public static class TypeInference
 
     private static InferredType QualifyLocalTypeAliases(
         InferredType inferredType,
-        IReadOnlyDictionary<QualifiedNameRef, TypeAliasDefinition> aliasDefinitions,
+        IReadOnlyDictionary<DeclQualifiedName, TypeAliasDefinition> aliasDefinitions,
         IReadOnlyList<string> currentModuleName)
     {
         switch (inferredType)
@@ -3493,7 +3492,7 @@ public static class TypeInference
                     .ToList();
 
                 var localQualifiedName =
-                    QualifiedNameHelper.ToQualifiedNameRef(
+                    QualifiedNameHelper.ToDeclQualifiedName(
                         currentModuleName,
                         choiceType.TypeName);
 
@@ -3589,8 +3588,8 @@ public static class TypeInference
 
     private static InferredType ExpandTypeAliases(
         InferredType inferredType,
-        IReadOnlyDictionary<QualifiedNameRef, TypeAliasDefinition> aliasDefinitions,
-        ImmutableHashSet<QualifiedNameRef> aliasesBeingExpanded)
+        IReadOnlyDictionary<DeclQualifiedName, TypeAliasDefinition> aliasDefinitions,
+        ImmutableHashSet<DeclQualifiedName> aliasesBeingExpanded)
     {
         switch (inferredType)
         {
@@ -3608,7 +3607,7 @@ public static class TypeInference
                 }
 
                 var qualifiedName =
-                    QualifiedNameHelper.ToQualifiedNameRef(choiceType.ModuleName, choiceType.TypeName);
+                    QualifiedNameHelper.ToDeclQualifiedName(choiceType.ModuleName, choiceType.TypeName);
 
                 if (!aliasDefinitions.TryGetValue(qualifiedName, out var aliasDefinition) ||
                     aliasDefinition.TypeParameters.Count != expandedTypeArguments.Count ||
@@ -4440,10 +4439,10 @@ public static class TypeInference
     /// <see cref="ChoiceTypeDefinition"/>, which lists every constructor and the
     /// inferred types of its arguments.
     /// </summary>
-    public static ImmutableDictionary<QualifiedNameRef, ChoiceTypeDefinition> BuildChoiceTypeDefinitions(
+    public static ImmutableDictionary<DeclQualifiedName, ChoiceTypeDefinition> BuildChoiceTypeDefinitions(
         ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
     {
-        var result = new Dictionary<QualifiedNameRef, ChoiceTypeDefinition>();
+        var result = new Dictionary<DeclQualifiedName, ChoiceTypeDefinition>();
 
         foreach (var (key, decl) in declarations)
         {
@@ -4468,7 +4467,7 @@ public static class TypeInference
                     })
                 .ToList();
 
-            result[QualifiedNameHelper.ToQualifiedNameRef(key.Namespaces, typeStruct.Name)] =
+            result[QualifiedNameHelper.ToDeclQualifiedName(key.Namespaces, typeStruct.Name)] =
                 new ChoiceTypeDefinition(
                     constructors,
                     typeStruct.Generics);

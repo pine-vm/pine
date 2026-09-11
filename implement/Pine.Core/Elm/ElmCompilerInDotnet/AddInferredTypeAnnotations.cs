@@ -1,3 +1,4 @@
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using Pine.Core.Files;
@@ -148,7 +149,7 @@ public class AddInferredTypeAnnotations
         var canonicalizedFilesByModuleName = new Dictionary<string, AbstractSyntaxTypes.File>(StringComparer.Ordinal);
 
         var allAliasDefinitions =
-            ImmutableDictionary<QualifiedNameRef, TypeInference.TypeAliasDefinition>.Empty;
+            ImmutableDictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition>.Empty;
 
         foreach (var (moduleName, (canonicalizedFile, _errors, _shadowings)) in canonicalizedModules)
         {

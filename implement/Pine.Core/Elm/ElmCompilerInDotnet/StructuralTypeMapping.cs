@@ -1,4 +1,4 @@
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using Pine.Core.CodeAnalysis;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 
@@ -32,7 +32,7 @@ public static class StructuralTypeMapping
     /// </returns>
     public static StructuralType? MapToStructuralType(
         TypeInference.InferredType inferredType,
-        IReadOnlyDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions)
+        IReadOnlyDictionary<DeclQualifiedName, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions)
     {
         return
             MapToStructuralType(
@@ -44,8 +44,8 @@ public static class StructuralTypeMapping
 
     private static StructuralType? MapToStructuralType(
         TypeInference.InferredType inferredType,
-        IReadOnlyDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
-        ImmutableHashSet<QualifiedNameRef> resolving,
+        IReadOnlyDictionary<DeclQualifiedName, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
+        ImmutableHashSet<DeclQualifiedName> resolving,
         Dictionary<string, int> nameToIndex)
     {
         switch (inferredType)
@@ -111,8 +111,8 @@ public static class StructuralTypeMapping
 
     private static StructuralType? MapFunctionType(
         TypeInference.InferredType.FunctionType func,
-        IReadOnlyDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
-        ImmutableHashSet<QualifiedNameRef> resolving,
+        IReadOnlyDictionary<DeclQualifiedName, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
+        ImmutableHashSet<DeclQualifiedName> resolving,
         Dictionary<string, int> nameToIndex)
     {
         var argType = MapToStructuralType(func.ArgumentType, choiceTypeDefinitions, resolving, nameToIndex);
@@ -126,8 +126,8 @@ public static class StructuralTypeMapping
 
     private static StructuralType? MapListType(
         TypeInference.InferredType.ListType list,
-        IReadOnlyDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
-        ImmutableHashSet<QualifiedNameRef> resolving,
+        IReadOnlyDictionary<DeclQualifiedName, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
+        ImmutableHashSet<DeclQualifiedName> resolving,
         Dictionary<string, int> nameToIndex)
     {
         var elementType = MapToStructuralType(list.ElementType, choiceTypeDefinitions, resolving, nameToIndex);
@@ -140,8 +140,8 @@ public static class StructuralTypeMapping
 
     private static StructuralType? MapTupleType(
         TypeInference.InferredType.TupleType tuple,
-        IReadOnlyDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
-        ImmutableHashSet<QualifiedNameRef> resolving,
+        IReadOnlyDictionary<DeclQualifiedName, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
+        ImmutableHashSet<DeclQualifiedName> resolving,
         Dictionary<string, int> nameToIndex)
     {
         var builder = ImmutableList.CreateBuilder<StructuralType>();
@@ -161,8 +161,8 @@ public static class StructuralTypeMapping
 
     private static StructuralType? MapRecordType(
         TypeInference.InferredType.RecordType record,
-        IReadOnlyDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
-        ImmutableHashSet<QualifiedNameRef> resolving,
+        IReadOnlyDictionary<DeclQualifiedName, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
+        ImmutableHashSet<DeclQualifiedName> resolving,
         Dictionary<string, int> nameToIndex)
     {
         var builder = ImmutableDictionary.CreateBuilder<string, StructuralType>();
@@ -183,12 +183,12 @@ public static class StructuralTypeMapping
 
     private static StructuralType? MapChoiceType(
         TypeInference.InferredType.ChoiceType choice,
-        IReadOnlyDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
-        ImmutableHashSet<QualifiedNameRef> resolving,
+        IReadOnlyDictionary<DeclQualifiedName, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
+        ImmutableHashSet<DeclQualifiedName> resolving,
         Dictionary<string, int> nameToIndex)
     {
         var qualifiedName =
-            QualifiedNameHelper.ToQualifiedNameRef(choice.ModuleName, choice.TypeName);
+            QualifiedNameHelper.ToDeclQualifiedName(choice.ModuleName, choice.TypeName);
 
         if (!choiceTypeDefinitions.TryGetValue(qualifiedName, out var definition))
             return null;
@@ -251,8 +251,8 @@ public static class StructuralTypeMapping
     private static IReadOnlyDictionary<int, StructuralType>? BuildTypeArgumentSubstitutions(
         TypeInference.InferredType.ChoiceType choice,
         TypeInference.ChoiceTypeDefinition definition,
-        IReadOnlyDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
-        ImmutableHashSet<QualifiedNameRef> resolving,
+        IReadOnlyDictionary<DeclQualifiedName, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
+        ImmutableHashSet<DeclQualifiedName> resolving,
         Dictionary<string, int> nameToIndex)
     {
         if (choice.TypeArguments.Count is 0)

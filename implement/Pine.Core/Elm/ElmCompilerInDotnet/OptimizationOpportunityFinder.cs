@@ -246,24 +246,24 @@ public enum RecordOperationProvenance
 public static class OptimizationOpportunityFinder
 {
     private sealed record ExpressionTypeContext(
-        ElmSyntax.SyntaxModel.QualifiedNameRef CurrentFunctionName,
+        DeclQualifiedName CurrentFunctionName,
         string CurrentModuleName,
         ImmutableDictionary<string, int> ParameterNames,
         ImmutableDictionary<string, TypeInference.InferredType> ParameterTypes,
         ImmutableDictionary<string, TypeInference.InferredType> LocalBindingTypes,
         ImmutableDictionary<string, SyntaxTypes.Expression> LocalBindingExpressions,
-        IReadOnlyDictionary<ElmSyntax.SyntaxModel.QualifiedNameRef, FunctionTypeInfo> FunctionTypes,
+        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo> FunctionTypes,
         IReadOnlyDictionary<
-            ElmSyntax.SyntaxModel.QualifiedNameRef,
+            DeclQualifiedName,
             IReadOnlyList<TypeInference.InferredType>> ConstructorArgumentTypes,
         IReadOnlyDictionary<
-            ElmSyntax.SyntaxModel.QualifiedNameRef,
+            DeclQualifiedName,
             TypeInference.TypeAliasDefinition> AliasTypes,
         ISet<SyntaxTypes.Expression.RecordAccessFunction> ClosedRecordAccessFunctions,
         ImmutableDictionary<string, RecordOperationProvenance> RecordParameterProvenance);
 
     private sealed record WholeProgramTypeInference(
-        ImmutableDictionary<ElmSyntax.SyntaxModel.QualifiedNameRef, FunctionTypeInfo> FunctionTypes,
+        ImmutableDictionary<DeclQualifiedName, FunctionTypeInfo> FunctionTypes,
         ISet<SyntaxTypes.Expression.RecordAccessFunction> ClosedRecordAccessFunctions);
 
     /// <summary>
@@ -370,7 +370,7 @@ public static class OptimizationOpportunityFinder
                         TypeInference.ExpandTypeAliases(
                             entry.Value,
                             aliasTypes,
-                            qualifiedName.ModuleName);
+                            qualifiedName.Namespaces);
                 });
 
         var wholeProgramTypeInference =
@@ -582,13 +582,13 @@ public static class OptimizationOpportunityFinder
         return resultBuilder.ToImmutable();
     }
 
-    private static ImmutableDictionary<ElmSyntax.SyntaxModel.QualifiedNameRef, TypeInference.TypeAliasDefinition>
+    private static ImmutableDictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition>
         BuildAliasTypes(
         IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
     {
         var result =
             ImmutableDictionary.CreateBuilder<
-                ElmSyntax.SyntaxModel.QualifiedNameRef,
+                DeclQualifiedName,
                 TypeInference.TypeAliasDefinition>();
 
         foreach (var (qualifiedName, declaration) in declarations)
@@ -596,7 +596,7 @@ public static class OptimizationOpportunityFinder
             if (declaration is SyntaxTypes.Declaration.AliasDeclaration aliasDeclaration)
             {
                 result[
-                    QualifiedNameHelper.ToQualifiedNameRef(
+                    QualifiedNameHelper.ToDeclQualifiedName(
                         qualifiedName.Namespaces,
                         aliasDeclaration.TypeAlias.Name)] =
                     new TypeInference.TypeAliasDefinition(
@@ -614,7 +614,7 @@ public static class OptimizationOpportunityFinder
         IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
         IReadOnlyDictionary<string, TypeInference.InferredType> functionSignatures,
         IReadOnlyDictionary<
-            ElmSyntax.SyntaxModel.QualifiedNameRef,
+            DeclQualifiedName,
             TypeInference.TypeAliasDefinition> aliasTypes)
     {
         var closedRecordAccessFunctions =
@@ -623,7 +623,7 @@ public static class OptimizationOpportunityFinder
 
         var functionTypes =
             ImmutableDictionary.CreateBuilder<
-                ElmSyntax.SyntaxModel.QualifiedNameRef,
+                DeclQualifiedName,
                 FunctionTypeInfo>();
 
         var declarationsByName =
@@ -651,7 +651,7 @@ public static class OptimizationOpportunityFinder
                 TypeInference.InferFunctionDeclarationType(
                     declaration.Function.Declaration.Expression,
                     declaration.Function.Declaration.Arguments,
-                    string.Join(".", qualifiedName.ModuleName),
+                    string.Join(".", qualifiedName.Namespaces),
                     functionSignatures);
 
             var parameterTypes = new List<TypeInference.InferredType>();
@@ -665,7 +665,7 @@ public static class OptimizationOpportunityFinder
                         TypeInference.ExpandTypeAliases(
                             parameterType,
                             aliasTypes,
-                            qualifiedName.ModuleName));
+                            qualifiedName.Namespaces));
                 }
                 else
                 {
@@ -678,7 +678,7 @@ public static class OptimizationOpportunityFinder
                     TypeInference.ExpandTypeAliases(
                         inferred.returnType,
                         aliasTypes,
-                        qualifiedName.ModuleName),
+                        qualifiedName.Namespaces),
                     parameterTypes);
         }
 
@@ -710,7 +710,7 @@ public static class OptimizationOpportunityFinder
 
             var suggestions =
                 new Dictionary<
-                    (ElmSyntax.SyntaxModel.QualifiedNameRef FunctionName, int ParameterIndex),
+                    (DeclQualifiedName FunctionName, int ParameterIndex),
                     TypeInference.InferredType>();
 
             foreach (var (qualifiedName, declaration) in declarationsByName)
@@ -745,7 +745,7 @@ public static class OptimizationOpportunityFinder
                 var context =
                     new ExpressionTypeContext(
                         CurrentFunctionName: qualifiedName,
-                        CurrentModuleName: string.Join(".", qualifiedName.ModuleName),
+                        CurrentModuleName: string.Join(".", qualifiedName.Namespaces),
                         ParameterNames: parameterNames.ToImmutable(),
                         ParameterTypes: parameterTypes,
                         LocalBindingTypes: [],
@@ -835,15 +835,15 @@ public static class OptimizationOpportunityFinder
     }
 
     private static string QualifiedNameFullName(
-        ElmSyntax.SyntaxModel.QualifiedNameRef qualifiedName) =>
-        string.Join(".", qualifiedName.ModuleName.Append(qualifiedName.Name));
+        DeclQualifiedName qualifiedName) =>
+        qualifiedName.FullName;
 
     private static ImmutableDictionary<
-        ElmSyntax.SyntaxModel.QualifiedNameRef,
+        DeclQualifiedName,
         IReadOnlyList<TypeInference.InferredType>> BuildConstructorArgumentTypes(
-        IReadOnlyDictionary<ElmSyntax.SyntaxModel.QualifiedNameRef, FunctionTypeInfo> functionTypes) =>
+        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo> functionTypes) =>
         functionTypes
-        .Where(entry => ElmValueEncoding.StringIsValidTagName(entry.Key.Name))
+        .Where(entry => ElmValueEncoding.StringIsValidTagName(entry.Key.DeclName))
         .ToImmutableDictionary(
             entry => entry.Key,
             entry => entry.Value.ParameterTypes);
@@ -960,9 +960,9 @@ public static class OptimizationOpportunityFinder
     private static void CollectFunctionTypeSuggestions(
         SyntaxTypes.Expression expression,
         ExpressionTypeContext context,
-        IReadOnlySet<ElmSyntax.SyntaxModel.QualifiedNameRef> inferredFunctionNames,
+        IReadOnlySet<DeclQualifiedName> inferredFunctionNames,
         Dictionary<
-            (ElmSyntax.SyntaxModel.QualifiedNameRef FunctionName, int ParameterIndex),
+            (DeclQualifiedName FunctionName, int ParameterIndex),
             TypeInference.InferredType> suggestions)
     {
         switch (expression)
@@ -1331,9 +1331,9 @@ public static class OptimizationOpportunityFinder
         SyntaxTypes.Expression expression,
         TypeInference.InferredType expectedType,
         ExpressionTypeContext context,
-        IReadOnlySet<ElmSyntax.SyntaxModel.QualifiedNameRef> inferredFunctionNames,
+        IReadOnlySet<DeclQualifiedName> inferredFunctionNames,
         Dictionary<
-            (ElmSyntax.SyntaxModel.QualifiedNameRef FunctionName, int ParameterIndex),
+            (DeclQualifiedName FunctionName, int ParameterIndex),
             TypeInference.InferredType> suggestions)
     {
         if (expression is SyntaxTypes.Expression.Identifier
@@ -1438,13 +1438,13 @@ public static class OptimizationOpportunityFinder
     private static bool TryResolveFunction(
         SyntaxTypes.Expression.Identifier identifier,
         ExpressionTypeContext context,
-        out ElmSyntax.SyntaxModel.QualifiedNameRef qualifiedName,
+        out DeclQualifiedName qualifiedName,
         out FunctionTypeInfo functionType)
     {
         qualifiedName =
             identifier.QualifiedName.Namespaces.Count > 0
             ?
-            QualifiedNameHelper.ToQualifiedNameRef(
+            QualifiedNameHelper.ToDeclQualifiedName(
                 identifier.QualifiedName.Namespaces,
                 identifier.QualifiedName.DeclName)
             :
@@ -1536,12 +1536,12 @@ public static class OptimizationOpportunityFinder
     }
 
     private static void SuggestFunctionParameterType(
-        ElmSyntax.SyntaxModel.QualifiedNameRef functionName,
+        DeclQualifiedName functionName,
         int parameterIndex,
         TypeInference.InferredType suggestedType,
-        IReadOnlySet<ElmSyntax.SyntaxModel.QualifiedNameRef> inferredFunctionNames,
+        IReadOnlySet<DeclQualifiedName> inferredFunctionNames,
         Dictionary<
-            (ElmSyntax.SyntaxModel.QualifiedNameRef FunctionName, int ParameterIndex),
+            (DeclQualifiedName FunctionName, int ParameterIndex),
             TypeInference.InferredType> suggestions)
     {
         if (!inferredFunctionNames.Contains(functionName) ||
@@ -2355,7 +2355,7 @@ public static class OptimizationOpportunityFinder
 
             case SyntaxTypes.Pattern.NamedPattern namedPattern:
                 var constructorName =
-                    QualifiedNameHelper.ToQualifiedNameRef(
+                    QualifiedNameHelper.ToDeclQualifiedName(
                         namedPattern.Name.ModuleName,
                         namedPattern.Name.Name);
 

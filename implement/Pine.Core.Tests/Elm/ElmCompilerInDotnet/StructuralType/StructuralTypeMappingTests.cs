@@ -1,6 +1,6 @@
 using AwesomeAssertions;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using Xunit;
@@ -17,8 +17,8 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.StructuralType;
 /// </summary>
 public class StructuralTypeMappingTests
 {
-    private static readonly IReadOnlyDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition> s_emptyDefinitions =
-        ImmutableDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition>.Empty;
+    private static readonly IReadOnlyDictionary<DeclQualifiedName, TypeInference.ChoiceTypeDefinition> s_emptyDefinitions =
+        ImmutableDictionary<DeclQualifiedName, TypeInference.ChoiceTypeDefinition>.Empty;
 
     // === Primitive types ===
 
@@ -216,10 +216,10 @@ public class StructuralTypeMappingTests
                 []);
 
         var qualifiedName =
-            new QualifiedNameRef(["MyModule"], "Direction");
+            DeclQualifiedName.Create(["MyModule"], "Direction");
 
         var definitions =
-            ImmutableDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition>.Empty
+            ImmutableDictionary<DeclQualifiedName, TypeInference.ChoiceTypeDefinition>.Empty
             .Add(qualifiedName, definition);
 
         var inferred =
@@ -254,10 +254,10 @@ public class StructuralTypeMappingTests
                 ["a"]);
 
         var qualifiedName =
-            new QualifiedNameRef(["Maybe"], "Maybe");
+            DeclQualifiedName.Create(["Maybe"], "Maybe");
 
         var definitions =
-            ImmutableDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition>.Empty
+            ImmutableDictionary<DeclQualifiedName, TypeInference.ChoiceTypeDefinition>.Empty
             .Add(qualifiedName, definition);
 
         var inferred =
@@ -290,10 +290,10 @@ public class StructuralTypeMappingTests
                 ["error", "value"]);
 
         var qualifiedName =
-            new QualifiedNameRef(["Result"], "Result");
+            DeclQualifiedName.Create(["Result"], "Result");
 
         var definitions =
-            ImmutableDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition>.Empty
+            ImmutableDictionary<DeclQualifiedName, TypeInference.ChoiceTypeDefinition>.Empty
             .Add(qualifiedName, definition);
 
         // Result String Int
@@ -328,10 +328,10 @@ public class StructuralTypeMappingTests
                 ["a", "b"]);
 
         var qualifiedName =
-            new QualifiedNameRef(["MyModule"], "Pair");
+            DeclQualifiedName.Create(["MyModule"], "Pair");
 
         var definitions =
-            ImmutableDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition>.Empty
+            ImmutableDictionary<DeclQualifiedName, TypeInference.ChoiceTypeDefinition>.Empty
             .Add(qualifiedName, definition);
 
         // Pair Int String
@@ -386,10 +386,10 @@ public class StructuralTypeMappingTests
                 ["a"]);
 
         var qualifiedName =
-            new QualifiedNameRef(["MyModule"], "Tree");
+            DeclQualifiedName.Create(["MyModule"], "Tree");
 
         var definitions =
-            ImmutableDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition>.Empty
+            ImmutableDictionary<DeclQualifiedName, TypeInference.ChoiceTypeDefinition>.Empty
             .Add(qualifiedName, definition);
 
         // Tree Int
@@ -434,10 +434,10 @@ public class StructuralTypeMappingTests
                 ["a"]);
 
         var qualifiedName =
-            new QualifiedNameRef(["Maybe"], "Maybe");
+            DeclQualifiedName.Create(["Maybe"], "Maybe");
 
         var definitions =
-            ImmutableDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition>.Empty
+            ImmutableDictionary<DeclQualifiedName, TypeInference.ChoiceTypeDefinition>.Empty
             .Add(qualifiedName, definition);
 
         // List (Maybe Int)
@@ -472,10 +472,10 @@ public class StructuralTypeMappingTests
                 ["a"]);
 
         var qualifiedName =
-            new QualifiedNameRef(["Maybe"], "Maybe");
+            DeclQualifiedName.Create(["Maybe"], "Maybe");
 
         var definitions =
-            ImmutableDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition>.Empty
+            ImmutableDictionary<DeclQualifiedName, TypeInference.ChoiceTypeDefinition>.Empty
             .Add(qualifiedName, definition);
 
         // { name : String, value : Maybe Int }
