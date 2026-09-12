@@ -4,6 +4,6 @@ Concat_Generic
 Local_Set (1)
 Push_Literal (Blob [0] (0x))
 Local_Get (1)
-Build_List_With_Prefix (1 , 3)
+Build_List_With_Prefix (1, 3)
   List [0] (0)
 Return

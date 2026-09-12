@@ -1153,7 +1153,7 @@ public record StackInstruction(
             ""
             :
             " (" +
-            string.Join(" , ", rendered.Arguments)
+            string.Join(", ", rendered.Arguments)
             + ")";
 
         var renderAsSubtraction =

@@ -63,7 +63,7 @@ public class StackInstructionTraceRendererTests
 
         rendered.Should().Be(
             """
-             8. depth=1 ip=4 Build_List_With_Prefix (1 , 1)
+             8. depth=1 ip=4 Build_List_With_Prefix (1, 1)
               Blob [28] (0x0000004c00000069000000740000006500000072000000610000006c | UTF32 "Literal")
             12. depth=2 ip=0 Push_Literal (Blob [2] (0x0403 | int 3))
             """);
@@ -104,7 +104,7 @@ public class StackInstructionTraceRendererTests
                 """
                 0: Jump_Const (6, 6)
                 1: Push_Literal (Blob [2] (0x0407 | int 7))
-                2: Jump_If_Equal_Const (Blob [2] (0x0407 | int 7) , 4, 6)
+                2: Jump_If_Equal_Const (Blob [2] (0x0407 | int 7), 4, 6)
                 3: Push_Literal (Blob [2] (0x0401 | int 1))
                 4: Switch_Jump_If_Equal_Const (2)
                   case Blob [2] (0x0401 | int 1): jump (2, 6)
@@ -295,6 +295,6 @@ public class StackInstructionTraceRendererTests
                 ]);
 
         rendered.Should().Be(
-            "depth=1 ip=1 Invoke_StackFrame_Const (increment , 1)");
+            "depth=1 ip=1 Invoke_StackFrame_Const (increment, 1)");
     }
 }
