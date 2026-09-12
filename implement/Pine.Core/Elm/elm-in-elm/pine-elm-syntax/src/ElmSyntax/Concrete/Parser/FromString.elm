@@ -1902,8 +1902,7 @@ commentsExcludingDocumentationAtComment documentationComments comment remainingC
 
 locationBefore : Location -> Location -> Bool
 locationBefore left right =
-    left.row
-        < right.row
+    left.row < right.row
         || (left.row == right.row && left.column < right.column)
 
 
@@ -3080,12 +3079,9 @@ collectTypeApplicationArgsAt indentMin typedName lessApp argumentsRev state stat
             lessApp
     in
     if
-        stateAtArgument.column
-            > indentMin
-            && (stateAtArgument.column
-                    > lessAppInitialRange.start.column
-                    || String.left 1 (String.dropLeft stateAtArgument.offset stateAtArgument.source)
-                    == "{"
+        stateAtArgument.column > indentMin
+            && (stateAtArgument.column > lessAppInitialRange.start.column
+                    || String.left 1 (String.dropLeft stateAtArgument.offset stateAtArgument.source) == "{"
                )
             && canStartTypeAnnotationAt stateAtArgument.source stateAtArgument.offset
     then
@@ -5113,7 +5109,9 @@ parseLetDeclarationAt declarationIndent stateAtToken =
                                                 implementationNameEnd - stateAtImplementationName.offset
 
                                             implementationName =
-                                                String.left (implementationNameEnd - stateAtImplementationName.offset) (String.dropLeft stateAtImplementationName.offset stateAtImplementationName.source)
+                                                String.left
+                                                    (implementationNameEnd - stateAtImplementationName.offset)
+                                                    (String.dropLeft stateAtImplementationName.offset stateAtImplementationName.source)
                                         in
                                         if implementationName /= name then
                                             Err
@@ -5362,8 +5360,7 @@ parseCaseBranchesAt lowerBound branchIndent state branchesRev stateAtToken =
 
         _ ->
             if
-                stateAtToken.column
-                    < lowerBound
+                stateAtToken.column < lowerBound
                     || isClosingAt stateAtToken.source stateAtToken.offset
             then
                 Ok ( branchesRev, state )
@@ -5783,8 +5780,7 @@ parsePatternArgumentsAt :
     -> Result String ( Node Pattern.Pattern, ParserState )
 parsePatternArgumentsAt indentMin name original argumentsRev state stateAtArgument =
     if
-        stateAtArgument.column
-            >= indentMin
+        stateAtArgument.column >= indentMin
             && canStartNamedPatternArgumentAt stateAtArgument.source stateAtArgument.offset
     then
         case parsePatternAtomic indentMin stateAtArgument of
@@ -6461,7 +6457,10 @@ parseRecordPatternFieldsAt state firstField furtherRev stateAtToken =
                                     { start = { row = stateAtToken.row, column = stateAtToken.column }
                                     , end = { row = stateAtToken.row, column = stateAtToken.column + nameLength }
                                     }
-                                    (String.left (nameEnd - stateAtToken.offset) (String.dropLeft stateAtToken.offset stateAtToken.source))
+                                    (String.left
+                                        (nameEnd - stateAtToken.offset)
+                                        (String.dropLeft stateAtToken.offset stateAtToken.source)
+                                    )
                                 )
                             )
                             furtherRev
@@ -6527,7 +6526,10 @@ parseRecordPatternFieldsAfterFieldAt state firstField furtherRev stateAtToken =
                             { start = { row = stateAtField.row, column = stateAtField.column }
                             , end = { row = stateAtField.row, column = stateAtField.column + nameLength }
                             }
-                            (String.left (nameEnd - stateAtField.offset) (String.dropLeft stateAtField.offset stateAtField.source))
+                            (String.left
+                                (nameEnd - stateAtField.offset)
+                                (String.dropLeft stateAtField.offset stateAtField.source)
+                            )
                          )
                             :: furtherRev
                         )
@@ -6660,16 +6662,52 @@ skipTriviaBlockComment source offset row column startRow startColumn depth chunk
             }
 
         MultilineCommentRunEnd_NewlineLF ->
-            skipTriviaBlockComment source (runEndOffset + 1) (row + 1) 1 startRow startColumn depth ("\n" :: chunksAfterRun) commentsRev
+            skipTriviaBlockComment
+                source
+                (runEndOffset + 1)
+                (row + 1)
+                1
+                startRow
+                startColumn
+                depth
+                ("\n" :: chunksAfterRun)
+                commentsRev
 
         MultilineCommentRunEnd_NewlineCRLF ->
-            skipTriviaBlockComment source (runEndOffset + 2) (row + 1) 1 startRow startColumn depth ("\n" :: chunksAfterRun) commentsRev
+            skipTriviaBlockComment
+                source
+                (runEndOffset + 2)
+                (row + 1)
+                1
+                startRow
+                startColumn
+                depth
+                ("\n" :: chunksAfterRun)
+                commentsRev
 
         MultilineCommentRunEnd_NewlineCR ->
-            skipTriviaBlockComment source (runEndOffset + 1) (row + 1) 1 startRow startColumn depth ("\n" :: chunksAfterRun) commentsRev
+            skipTriviaBlockComment
+                source
+                (runEndOffset + 1)
+                (row + 1)
+                1
+                startRow
+                startColumn
+                depth
+                ("\n" :: chunksAfterRun)
+                commentsRev
 
         MultilineCommentRunEnd_StartComment ->
-            skipTriviaBlockComment source (runEndOffset + 2) row (columnAfterRun + 2) startRow startColumn (depth + 1) ("{-" :: chunksAfterRun) commentsRev
+            skipTriviaBlockComment
+                source
+                (runEndOffset + 2)
+                row
+                (columnAfterRun + 2)
+                startRow
+                startColumn
+                (depth + 1)
+                ("{-" :: chunksAfterRun)
+                commentsRev
 
         MultilineCommentRunEnd_EndComment ->
             let
@@ -6694,7 +6732,16 @@ skipTriviaBlockComment source offset row column startRow startColumn depth chunk
                     )
 
             else
-                skipTriviaBlockComment source (runEndOffset + 2) row endColumn startRow startColumn (depth - 1) finalChunksRev commentsRev
+                skipTriviaBlockComment
+                    source
+                    (runEndOffset + 2)
+                    row
+                    endColumn
+                    startRow
+                    startColumn
+                    (depth - 1)
+                    finalChunksRev
+                    commentsRev
 
 
 {-| Position-only variant of `skipTrivia` for lookahead that never needs row or column.
@@ -6712,10 +6759,14 @@ skipTriviaOffset source offset =
     in
     case String.left 2 (String.dropLeft offsetAfterWhitespace source) of
         "--" ->
-            skipTriviaOffset source (lineCommentEnd source (offsetAfterWhitespace + 2))
+            skipTriviaOffset
+                source
+                (lineCommentEnd source (offsetAfterWhitespace + 2))
 
         "{-" ->
-            skipTriviaOffset source (blockCommentEndOffset source (offsetAfterWhitespace + 2) 1)
+            skipTriviaOffset
+                source
+                (blockCommentEndOffset source (offsetAfterWhitespace + 2) 1)
 
         _ ->
             offsetAfterWhitespace
@@ -6781,7 +6832,9 @@ consumeKeywordAt keyword keywordLength stateAtKeyword =
             stateAtKeyword.offset + keywordLength
     in
     if
-        String.left (endOffset - stateAtKeyword.offset) (String.dropLeft stateAtKeyword.offset stateAtKeyword.source)
+        String.left
+            (endOffset - stateAtKeyword.offset)
+            (String.dropLeft stateAtKeyword.offset stateAtKeyword.source)
             == keyword
             && not (isIdentifierChar (String.left 1 (String.dropLeft endOffset stateAtKeyword.source)))
     then
@@ -7474,10 +7527,8 @@ consumeUnicodeEscape termination source startRow startColumn escapeOffset escape
         case scanUnicodeEscapeDigits source (afterPrefixOffset + 1) of
             Just ( digitsEndOffset, codePoint ) ->
                 if
-                    String.left 1 (String.dropLeft digitsEndOffset source)
-                        == "}"
-                        && codePoint
-                        <= 0x0010FFFF
+                    String.left 1 (String.dropLeft digitsEndOffset source) == "}"
+                        && codePoint <= 0x0010FFFF
                         && not (codePoint >= 0xD800 && codePoint <= 0xDFFF)
                 then
                     consumeLiteral termination
@@ -7488,7 +7539,11 @@ consumeUnicodeEscape termination source startRow startColumn escapeOffset escape
                         escapeRow
                         (escapeColumn + ((digitsEndOffset + 1) - escapeOffset))
                         (String.fromChar (Char.fromCode codePoint) :: decodedChunksRev)
-                        (String.left (digitsEndOffset + 1 - escapeOffset) (String.dropLeft escapeOffset source) :: rawChunksRev)
+                        (String.left
+                            (digitsEndOffset + 1 - escapeOffset)
+                            (String.dropLeft escapeOffset source)
+                            :: rawChunksRev
+                        )
 
                 else
                     Err ("Invalid unicode escape at " ++ locationString { row = escapeRow, column = escapeColumn } ++ ".")
@@ -7551,10 +7606,14 @@ snippetAt state =
 
         first ->
             if isIdentifierStart first then
-                String.left (skipToIdentifierEnd state.source (state.offset + 1) - state.offset) (String.dropLeft state.offset state.source)
+                String.left
+                    (skipToIdentifierEnd state.source (state.offset + 1) - state.offset)
+                    (String.dropLeft state.offset state.source)
 
             else if isDigit first then
-                String.left (numberEnd state.source first state.offset - state.offset) (String.dropLeft state.offset state.source)
+                String.left
+                    (numberEnd state.source first state.offset - state.offset)
+                    (String.dropLeft state.offset state.source)
 
             else
                 first
