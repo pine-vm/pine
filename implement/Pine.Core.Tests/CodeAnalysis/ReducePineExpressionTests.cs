@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
+using Pine.Core.Interpreter;
 using Pine.Core.Json;
 using Pine.Core.PineVM;
 using System;
@@ -79,6 +80,49 @@ public class ReducePineExpressionTests
 
         results.Where(r => !r.Passed).Should().BeEmpty(summary);
     }
+
+    [Theory]
+    [MemberData(nameof(IntegerValuesIncludingInvalidEncoding))]
+    public void Cancelling_identical_integer_terms_preserves_validation(PineValue operand)
+    {
+        var subtraction =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.int_add),
+                Expression.ListInst(
+                    [
+                    Expression.EnvironmentInstance,
+                    Expression.BuiltinInst(
+                        nameof(BuiltinFunction.int_mul),
+                        Expression.ListInst(
+                            [
+                            Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(-1)),
+                            Expression.EnvironmentInstance
+                            ]))
+                    ]));
+
+        var reduced =
+            ReducePineExpression.ReduceExpressionBottomUp(subtraction, s_parseCache);
+
+        var interpreter = new DirectInterpreter(s_parseCache, evalCache: null);
+
+        var originalValue = interpreter.EvaluateExpressionDefault(subtraction, operand);
+        var reducedValue = interpreter.EvaluateExpressionDefault(reduced, operand);
+
+        reducedValue.Should().Be(originalValue);
+
+        if (BuiltinFunction.SignedIntegerFromValueRelaxed(operand) is null)
+            reducedValue.Should().Be(PineValue.EmptyList);
+        else
+            reducedValue.Should().Be(IntegerEncoding.EncodeSignedInteger(0));
+    }
+
+    public static TheoryData<PineValue> IntegerValuesIncludingInvalidEncoding =>
+        [
+            IntegerEncoding.EncodeSignedInteger(17),
+            PineValue.Blob([4, 0, 17]),
+            PineValue.EmptyList,
+            PineValue.Blob([1])
+        ];
 
     [Fact]
     public void Conditional_assumption_does_not_prove_unknown_singleton_integer()

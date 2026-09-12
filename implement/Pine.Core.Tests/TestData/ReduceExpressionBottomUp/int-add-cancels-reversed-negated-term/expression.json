@@ -1,0 +1,33 @@
+{
+  "Builtin": [
+    "int_add",
+    {
+      "List": [
+        [
+          {
+            "Builtin": [
+              "int_mul",
+              {
+                "List": [
+                  [
+                    {
+                      "Environment": []
+                    },
+                    {
+                      "Litral": [
+                        -1
+                      ]
+                    }
+                  ]
+                ]
+              }
+            ]
+          },
+          {
+            "Environment": []
+          }
+        ]
+      ]
+    }
+  ]
+}

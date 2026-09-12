@@ -1739,10 +1739,10 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 50
-            BuildListCount: 85
+            InvocationCount: 49
+            BuildListCount: 83
             LoopIterationCount: 0
-            InstructionCount: 1_230
+            InstructionCount: 1_220
             """);
     }
 

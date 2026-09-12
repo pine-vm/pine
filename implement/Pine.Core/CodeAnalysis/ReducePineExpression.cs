@@ -1449,6 +1449,16 @@ public class ReducePineExpression
             changed = true;
         }
 
+        if (functionName is nameof(BuiltinFunction.int_add) &&
+            CombineRepeatedLinearIntegerTerms(reducedItems) is { } combinedItems)
+        {
+            if (combinedItems.Count is 1)
+                return combinedItems[0];
+
+            reducedItems = combinedItems;
+            changed = true;
+        }
+
         if (!changed)
         {
             return null;
@@ -1468,6 +1478,94 @@ public class ReducePineExpression
         }
 
         return reducedExpr;
+    }
+
+    /// <summary>
+    /// Combines structurally equal linear terms while retaining one integer kernel application
+    /// to preserve validation and canonicalization of the shared operand.
+    /// </summary>
+    private static IReadOnlyList<Expression>? CombineRepeatedLinearIntegerTerms(
+        IReadOnlyList<Expression> items)
+    {
+        var groupIndexByBase = new Dictionary<Expression, int>();
+        var groups = new List<(Expression Base, BigInteger Coefficient, int Count, Expression FirstTerm)>();
+        var changed = false;
+
+        for (var i = 0; i < items.Count; i++)
+        {
+            var term = ParseLinearIntegerTerm(items[i]);
+
+            if (groupIndexByBase.TryGetValue(term.Base, out var groupIndex))
+            {
+                var group = groups[groupIndex];
+
+                groups[groupIndex] =
+                    group with
+                    {
+                        Coefficient = group.Coefficient + term.Coefficient,
+                        Count = group.Count + 1
+                    };
+
+                changed = true;
+            }
+            else
+            {
+                groupIndexByBase.Add(term.Base, groups.Count);
+                groups.Add((term.Base, term.Coefficient, Count: 1, FirstTerm: items[i]));
+            }
+        }
+
+        if (!changed)
+            return null;
+
+        var combined = new List<Expression>(capacity: groups.Count);
+
+        foreach (var group in groups)
+        {
+            if (group.Count is 1)
+            {
+                combined.Add(group.FirstTerm);
+                continue;
+            }
+
+            combined.Add(
+                Expression.BuiltinInst(
+                    nameof(BuiltinFunction.int_mul),
+                    Expression.ListInst(
+                        [
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(group.Coefficient)),
+                        group.Base
+                        ])));
+        }
+
+        return combined;
+    }
+
+    private static (Expression Base, BigInteger Coefficient) ParseLinearIntegerTerm(
+        Expression expression)
+    {
+        if (expression is not Expression.Builtin
+            {
+                Function: nameof(BuiltinFunction.int_mul),
+                Input: Expression.List factors
+            })
+        {
+            return (expression, BigInteger.One);
+        }
+
+        var parsedFactors = CollectConstantIntegers(factors.Items);
+
+        if (parsedFactors.variables.Count is not 1)
+            return (expression, BigInteger.One);
+
+        var coefficient = BigInteger.One;
+
+        foreach (var constant in parsedFactors.constants)
+        {
+            coefficient *= constant;
+        }
+
+        return (parsedFactors.variables[0], coefficient);
     }
 
     /// <summary>
