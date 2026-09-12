@@ -386,7 +386,7 @@ public class FunctionApplicationOverheadTests
     /// <summary>
     /// Demonstrates overhead scaling with list length when applying a function
     /// parameter recursively. Mapping <c>increment</c> over a 3-element list
-    /// requires 92 instructions and 9 invocations. Each element adds
+    /// requires 89 instructions and 9 invocations. Each element adds
     /// a generic function application through ParseAndEval.
     /// </summary>
     [Fact]
@@ -857,7 +857,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 12
             BuildListCount: 8
             LoopIterationCount: 0
-            InstructionCount: 93
+            InstructionCount: 91
             """);
     }
 
@@ -902,7 +902,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 64
             BuildListCount: 44
             LoopIterationCount: 0
-            InstructionCount: 524
+            InstructionCount: 514
             """);
     }
 
@@ -935,7 +935,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 12
             BuildListCount: 8
             LoopIterationCount: 0
-            InstructionCount: 92
+            InstructionCount: 89
             """);
     }
 
@@ -976,7 +976,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 64
             BuildListCount: 44
             LoopIterationCount: 0
-            InstructionCount: 524
+            InstructionCount: 504
             """);
     }
 }

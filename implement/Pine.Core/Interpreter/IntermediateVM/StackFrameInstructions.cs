@@ -162,6 +162,7 @@ public record StackFrameInstructions(
 
             if (inst.Kind is
                 StackInstructionKind.Local_Get or
+                StackInstructionKind.Local_Get_Skip_Head_Const or
                 StackInstructionKind.Local_Set or
                 StackInstructionKind.Local_Set_Descending)
             {

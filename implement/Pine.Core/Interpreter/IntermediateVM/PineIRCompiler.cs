@@ -1536,6 +1536,25 @@ public class PineIRCompiler
 
             if (TryParse_IndependentSignedIntegerRelaxed(skip.skipCountExpr, parseCache) is { } skipCountConst)
             {
+                if (afterSource.Instructions.LastOrDefault() is
+                    {
+                        Kind: StackInstructionKind.Local_Get,
+                        LocalIndex: { } localIndex
+                    })
+                {
+                    return
+                        afterSource with
+                        {
+                            Instructions =
+                                afterSource.Instructions
+                                .RemoveAt(afterSource.Instructions.Count - 1)
+                                .Add(
+                                    StackInstruction.Local_Get_Skip_Head_Const(
+                                        localIndex,
+                                        (int)skipCountConst))
+                        };
+                }
+
                 return
                     afterSource
                     .AppendInstruction(

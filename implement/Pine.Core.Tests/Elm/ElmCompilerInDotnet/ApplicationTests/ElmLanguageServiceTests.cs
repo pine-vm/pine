@@ -836,7 +836,7 @@ public class ElmLanguageServiceTests
             InvocationCount: 1_844
             BuildListCount: 4_245
             LoopIterationCount: 1_089
-            InstructionCount: 82_475
+            InstructionCount: 75_926
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
@@ -1251,7 +1251,7 @@ public class ElmLanguageServiceTests
             InvocationCount: 4_154
             BuildListCount: 8_978
             LoopIterationCount: 2_582
-            InstructionCount: 173_145
+            InstructionCount: 160_364
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
@@ -1382,7 +1382,7 @@ public class ElmLanguageServiceTests
             InvocationCount: 5_549
             BuildListCount: 12_282
             LoopIterationCount: 4_178
-            InstructionCount: 257_636
+            InstructionCount: 238_295
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
@@ -1576,7 +1576,7 @@ public class ElmLanguageServiceTests
             InvocationCount: 5_505
             BuildListCount: 11_941
             LoopIterationCount: 4_410
-            InstructionCount: 251_068
+            InstructionCount: 229_965
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(

@@ -1688,6 +1688,27 @@ public class PineVM : ICancellablePineVM
                             continue;
                         }
 
+                    case StackInstructionKind.Local_Get_Skip_Head_Const:
+                        {
+                            var localIndex =
+                                currentInstruction.LocalIndex
+                                ??
+                                throw new Exception("Invalid operation form: Missing local index");
+
+                            var skipCount =
+                                currentInstruction.SkipCount
+                                ??
+                                throw new Exception("Invalid operation form: Missing skip count");
+
+                            var value =
+                                currentFrame.LocalGet(localIndex)
+                                .GetElementAt(skipCount);
+
+                            currentFrame.PushInstructionResult(value);
+
+                            continue;
+                        }
+
                     case StackInstructionKind.Int_Add_Binary:
                         {
                             var right = currentFrame.PopTopmostFromStack();

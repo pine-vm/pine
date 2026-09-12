@@ -4,6 +4,7 @@ using Pine.Core.CommonEncodings;
 using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.Json;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using Xunit;
@@ -12,6 +13,31 @@ namespace Pine.Core.Tests.Interpreter.IntermediateVM;
 
 public class CompileExpressionTests
 {
+    [Fact]
+    public void Compile_head_after_constant_skip_from_local_uses_fused_instruction()
+    {
+        var expression =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.head),
+                Expression.BuiltinInst(
+                    nameof(BuiltinFunction.skip),
+                    Expression.ListInst(
+                        [
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(6)),
+                        Expression.EnvironmentInstance
+                        ])));
+
+        var instructions =
+            ExpressionCompilation.InstructionsFromExpression(
+                expression,
+                rootExprAlternativeForms: ImmutableHashSet<Expression>.Empty,
+                envClass: null,
+                parametersAsLocals: StaticFunctionInterface.Generic,
+                new PineVMParseCache());
+
+        instructions.Should().Equal(
+            StackInstruction.Local_Get_Skip_Head_Const(localIndex: 0, skipCount: 6));
+    }
 
     [Fact]
     public void Compile_stack_frame_instructions_from_files()

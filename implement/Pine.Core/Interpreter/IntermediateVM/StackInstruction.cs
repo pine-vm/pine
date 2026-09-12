@@ -39,6 +39,12 @@ public enum StackInstructionKind
     Local_Get,
 
     /// <summary>
+    /// Load the local at index <see cref="StackInstruction.LocalIndex"/>, get its element at
+    /// <see cref="StackInstruction.SkipCount"/>, and push that element to the stack.
+    /// </summary>
+    Local_Get_Skip_Head_Const,
+
+    /// <summary>
     /// Drop <see cref="StackInstruction.SkipCount"/> values from the top of the stack.
     /// </summary>
     Pop,
@@ -608,6 +614,17 @@ public record StackInstruction(
     /// </summary>
     public static StackInstruction Local_Get(int index) =>
         new(StackInstructionKind.Local_Get, LocalIndex: index);
+
+    /// <summary>
+    /// Creates a <see cref="StackInstructionKind.Local_Get_Skip_Head_Const"/> instruction.
+    /// </summary>
+    public static StackInstruction Local_Get_Skip_Head_Const(
+        int localIndex,
+        int skipCount) =>
+        new(
+            StackInstructionKind.Local_Get_Skip_Head_Const,
+            LocalIndex: localIndex,
+            SkipCount: skipCount);
 
     /// <summary>
     /// Creates a <see cref="StackInstructionKind.Build_List"/> instruction that builds a list
@@ -1372,6 +1389,22 @@ public record StackInstruction(
                     instruction.LocalIndex?.ToString()
                     ?? throw new Exception(
                         "Missing LocalIndex for LocalGet instruction")
+                    ])),
+
+            StackInstructionKind.Local_Get_Skip_Head_Const =>
+            new InstructionDetails(
+                PopCount: 0,
+                PushCount: 1,
+                Display:
+                () => InstructionDisplay.WithoutDetailLines(
+                    [
+                    (instruction.LocalIndex?.ToString()
+                     ?? throw new Exception(
+                         "Missing LocalIndex for LocalGetSkipHeadConst instruction")) +
+                    ", " +
+                    (instruction.SkipCount?.ToString()
+                     ?? throw new Exception(
+                         "Missing SkipCount for LocalGetSkipHeadConst instruction"))
                     ])),
 
             StackInstructionKind.Pop =>
