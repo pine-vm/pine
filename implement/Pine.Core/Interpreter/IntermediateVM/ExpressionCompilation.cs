@@ -292,6 +292,7 @@ public record ExpressionCompilation(
         return
             PineControlFlowGraph
             .FromInstructions(allInstructions)
+            .ForwardConstantBooleanBranches()
             .LowerToStackInstructions();
     }
 

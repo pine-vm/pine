@@ -1,3 +1,4 @@
+using Pine.Core.PineVM;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -317,6 +318,323 @@ public sealed record PineControlFlowGraph(
             }
         }
     }
+
+    /// <summary>
+    /// Forwards edges through blocks that materialize a constant Boolean solely for an
+    /// immediately following Boolean conditional.
+    /// </summary>
+    public PineControlFlowGraph ForwardConstantBooleanBranches()
+    {
+        var graph = this;
+
+        while (graph.TryForwardConstantBooleanBranch() is { } optimized)
+        {
+            graph = optimized;
+        }
+
+        return graph;
+    }
+
+    private PineControlFlowGraph? TryForwardConstantBooleanBranch()
+    {
+        var predecessors = BuildPredecessors();
+
+        foreach (var conditionalBlock in Blocks)
+        {
+            if (conditionalBlock.Operations.Length is not 0 ||
+                conditionalBlock.Terminator is not PineControlFlowTerminator.ConditionalJump conditional ||
+                conditional.Instruction.Literal is not { } comparedLiteral ||
+                comparedLiteral != PineKernelValues.TrueValue &&
+                comparedLiteral != PineKernelValues.FalseValue ||
+                conditionalBlock.Parameters.Length is 0)
+            {
+                continue;
+            }
+
+            var forwardedArguments = conditionalBlock.Parameters[..^1];
+
+            if (!conditional.FallThroughArguments.SequenceEqual(forwardedArguments) ||
+                !conditional.BranchArguments.SequenceEqual(forwardedArguments) ||
+                !predecessors.TryGetValue(conditionalBlock.Id, out var conditionalPredecessors) ||
+                conditionalPredecessors.Count < 2)
+            {
+                continue;
+            }
+
+            var providerTargets = new Dictionary<PineBlockId, PineBlockId>();
+            var valid = true;
+
+            foreach (var providerId in conditionalPredecessors.Distinct())
+            {
+                var provider = Blocks[providerId.Value];
+
+                if (provider.Id == Entry ||
+                    provider.Operations is not
+                    [
+                    {
+                        Instruction.Kind: StackInstructionKind.Push_Literal,
+                        Instruction.Literal: { } booleanLiteral,
+                        Inputs.Length: 0,
+                        Results.Length: 1
+                    } pushBoolean
+                    ] ||
+                    booleanLiteral != PineKernelValues.TrueValue &&
+                    booleanLiteral != PineKernelValues.FalseValue ||
+                    provider.Terminator is not PineControlFlowTerminator.Jump
+                    {
+                        Target: var jumpTarget,
+                        Arguments: var jumpArguments
+                    } ||
+                    jumpTarget != conditionalBlock.Id ||
+                    jumpArguments.Length != provider.Parameters.Length + 1 ||
+                    !jumpArguments[..^1].SequenceEqual(provider.Parameters) ||
+                    jumpArguments[^1] != pushBoolean.Results[0] ||
+                    !predecessors.TryGetValue(provider.Id, out var providerPredecessors) ||
+                    providerPredecessors.Count is 0)
+                {
+                    valid = false;
+                    break;
+                }
+
+                var comparisonMatches = booleanLiteral == comparedLiteral;
+
+                providerTargets.Add(
+                    provider.Id,
+                    comparisonMatches ? conditional.Branch : conditional.FallThrough);
+            }
+
+            if (!valid ||
+                providerTargets.Count != conditionalPredecessors.Distinct().Count() ||
+                providerTargets.Keys.Any(
+                    providerId =>
+                    predecessors[providerId].Any(
+                        predecessorId =>
+                        providerTargets.ContainsKey(predecessorId) ||
+                        predecessorId == conditionalBlock.Id)) ||
+                providerTargets.Values.Any(
+                    target => target == conditionalBlock.Id || providerTargets.ContainsKey(target)))
+            {
+                continue;
+            }
+
+            var removedBlocks =
+                providerTargets.Keys
+                .Append(conditionalBlock.Id)
+                .ToHashSet();
+
+            var rewrittenBlocks =
+                Blocks
+                .Where(block => !removedBlocks.Contains(block.Id))
+                .Select(
+                    block =>
+                    block with
+                    {
+                        Terminator =
+                        RedirectTargets(
+                            block.Terminator,
+                            target =>
+                            providerTargets.TryGetValue(target, out var forwardedTarget)
+                            ?
+                            forwardedTarget
+                            :
+                            target)
+                    })
+                .ToImmutableArray();
+
+            if (TryOrderForFallthrough(rewrittenBlocks) is not { } orderedBlocks ||
+                TryRemapBlockIds(orderedBlocks) is not { } candidate)
+            {
+                continue;
+            }
+
+            try
+            {
+                candidate.Validate();
+            }
+            catch (InvalidOperationException)
+            {
+                continue;
+            }
+
+            return candidate;
+        }
+
+        return null;
+    }
+
+    private ImmutableArray<PineBasicBlock>? TryOrderForFallthrough(
+        ImmutableArray<PineBasicBlock> blocks)
+    {
+        var blockById = blocks.ToDictionary(block => block.Id);
+        var requiredNextByBlock = new Dictionary<PineBlockId, PineBlockId>();
+        var requiredPreviousByBlock = new Dictionary<PineBlockId, PineBlockId>();
+
+        foreach (var block in blocks)
+        {
+            if (RequiredFallthroughTarget(block.Terminator) is not { } requiredNext)
+            {
+                continue;
+            }
+
+            if (!blockById.ContainsKey(requiredNext) ||
+                requiredPreviousByBlock.TryGetValue(requiredNext, out var existingPrevious) &&
+                existingPrevious != block.Id)
+            {
+                return null;
+            }
+
+            requiredNextByBlock.Add(block.Id, requiredNext);
+            requiredPreviousByBlock[requiredNext] = block.Id;
+        }
+
+        if (requiredPreviousByBlock.ContainsKey(Entry))
+        {
+            return null;
+        }
+
+        var heads =
+            blocks
+            .Where(block => !requiredPreviousByBlock.ContainsKey(block.Id))
+            .OrderBy(block => block.Id == Entry ? 0 : 1)
+            .ThenBy(block => block.Id.Value)
+            .ToArray();
+
+        var ordered = ImmutableArray.CreateBuilder<PineBasicBlock>(blocks.Length);
+        var visited = new HashSet<PineBlockId>();
+
+        foreach (var head in heads)
+        {
+            var current = head;
+
+            while (visited.Add(current.Id))
+            {
+                ordered.Add(current);
+
+                if (!requiredNextByBlock.TryGetValue(current.Id, out var next))
+                {
+                    break;
+                }
+
+                current = blockById[next];
+            }
+        }
+
+        return ordered.Count == blocks.Length ? ordered.MoveToImmutable() : null;
+    }
+
+    private Dictionary<PineBlockId, List<PineBlockId>> BuildPredecessors()
+    {
+        var predecessors = new Dictionary<PineBlockId, List<PineBlockId>>();
+
+        foreach (var block in Blocks)
+        {
+            foreach (var (target, _) in Successors(block.Terminator))
+            {
+                if (!predecessors.TryGetValue(target, out var sources))
+                {
+                    sources = [];
+                    predecessors.Add(target, sources);
+                }
+
+                sources.Add(block.Id);
+            }
+        }
+
+        return predecessors;
+    }
+
+    private PineControlFlowGraph? TryRemapBlockIds(ImmutableArray<PineBasicBlock> blocks)
+    {
+        var newIdByOldId =
+            blocks
+            .Select((block, index) => (block.Id, NewId: new PineBlockId(index)))
+            .ToDictionary(item => item.Id, item => item.NewId);
+
+        if (!newIdByOldId.TryGetValue(Entry, out var newEntry))
+        {
+            return null;
+        }
+
+        PineBlockId Remap(PineBlockId oldId) =>
+            newIdByOldId.TryGetValue(oldId, out var newId)
+            ?
+            newId
+            :
+            throw new InvalidOperationException($"Removed block {oldId.Value} is still referenced.");
+
+        return
+            new PineControlFlowGraph(
+                newEntry,
+                blocks
+                .Select(
+                    block =>
+                    block with
+                    {
+                        Id = Remap(block.Id),
+                        Terminator = RedirectTargets(block.Terminator, Remap)
+                    })
+                .ToImmutableArray());
+    }
+
+    private static PineBlockId? RequiredFallthroughTarget(
+        PineControlFlowTerminator terminator) =>
+        terminator switch
+        {
+            PineControlFlowTerminator.Jump { Instruction: null } jump =>
+            jump.Target,
+
+            PineControlFlowTerminator.ConditionalJump conditional =>
+            conditional.FallThrough,
+
+            PineControlFlowTerminator.Switch switchTerminator =>
+            switchTerminator.FallThrough,
+
+            PineControlFlowTerminator.Invoke invoke =>
+            invoke.Continuation,
+
+            _ =>
+            null
+        };
+
+    private static PineControlFlowTerminator RedirectTargets(
+        PineControlFlowTerminator terminator,
+        Func<PineBlockId, PineBlockId> redirect) =>
+        terminator switch
+        {
+            PineControlFlowTerminator.Return returnTerminator =>
+            returnTerminator,
+
+            PineControlFlowTerminator.Jump jump =>
+            jump with { Target = redirect(jump.Target) },
+
+            PineControlFlowTerminator.ConditionalJump conditional =>
+            conditional with
+            {
+                FallThrough = redirect(conditional.FallThrough),
+                Branch = redirect(conditional.Branch)
+            },
+
+            PineControlFlowTerminator.Switch switchTerminator =>
+            switchTerminator with
+            {
+                FallThrough = redirect(switchTerminator.FallThrough),
+                Branches =
+                switchTerminator.Branches.ToImmutableDictionary(
+                    branch => branch.Key,
+                    branch => redirect(branch.Value))
+            },
+
+            PineControlFlowTerminator.Invoke invoke =>
+            invoke with { Continuation = redirect(invoke.Continuation) },
+
+            PineControlFlowTerminator.TailInvoke tailInvoke =>
+            tailInvoke,
+
+            _ =>
+            throw new NotImplementedException(
+                "RedirectTargets does not handle terminator variant: " +
+                terminator.GetType().Name)
+        };
 
     /// <summary>
     /// Assigns physical instruction offsets after the graph has been validated.
