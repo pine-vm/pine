@@ -1224,13 +1224,15 @@ public record StackInstruction(
                 display with
                 {
                     DetailLines =
-                    [.. switchJumpTable
+                    [
+                    .. switchJumpTable
                     .OrderBy(kvp => kvp.Value)
                     .ThenBy(kvp => literalDisplayString(kvp.Key), StringComparer.Ordinal)
                     .Select(
                         kvp =>
                         "case " + literalDisplayString(kvp.Key) +
-                        ": jump (" + kvp.Value + ", " + (currentIndex + kvp.Value) + ")")]
+                        ": jump (" + kvp.Value + ", " + (currentIndex + kvp.Value) + ")")
+                    ]
                 };
         }
 
@@ -1373,10 +1375,10 @@ public record StackInstruction(
                     [
                     instruction.LocalIndex?.ToString()
                     ?? throw new Exception(
-                       "Missing LocalIndex for LocalSetDescending instruction"),
+                        "Missing LocalIndex for LocalSetDescending instruction"),
                     instruction.TakeCount?.ToString()
                     ?? throw new Exception(
-                       "Missing TakeCount for LocalSetDescending instruction")
+                        "Missing TakeCount for LocalSetDescending instruction")
                     ])),
 
             StackInstructionKind.Local_Get =>
@@ -1398,13 +1400,12 @@ public record StackInstruction(
                 Display:
                 () => InstructionDisplay.WithoutDetailLines(
                     [
-                    (instruction.LocalIndex?.ToString()
-                     ?? throw new Exception(
-                         "Missing LocalIndex for LocalGetSkipHeadConst instruction")) +
-                    ", " +
-                    (instruction.SkipCount?.ToString()
-                     ?? throw new Exception(
-                         "Missing SkipCount for LocalGetSkipHeadConst instruction"))
+                    instruction.LocalIndex?.ToString()
+                    ?? throw new Exception(
+                        "Missing LocalIndex for LocalGetSkipHeadConst instruction"),
+                    instruction.SkipCount?.ToString()
+                    ?? throw new Exception(
+                        "Missing SkipCount for LocalGetSkipHeadConst instruction")
                     ])),
 
             StackInstructionKind.Pop =>
@@ -1862,16 +1863,16 @@ public record StackInstruction(
                 PopCount: 2,
                 PushCount: 1,
                 Display: () =>
-                    instruction.IntegerLiteral == BigInteger.MinusOne
-                    ?
-                    InstructionDisplay.NoDetails
-                    :
-                    InstructionDisplay.WithoutDetailLines(
-                        [
-                        instruction.IntegerLiteral?.ToString()
-                        ?? throw new Exception(
-                            "Missing IntegerLiteral for IntMulConstAddBinary instruction")
-                        ])),
+                instruction.IntegerLiteral == BigInteger.MinusOne
+                ?
+                InstructionDisplay.NoDetails
+                :
+                InstructionDisplay.WithoutDetailLines(
+                    [
+                    instruction.IntegerLiteral?.ToString()
+                    ?? throw new Exception(
+                        "Missing IntegerLiteral for IntMulConstAddBinary instruction")
+                    ])),
 
             StackInstructionKind.Int_Mul_Binary =>
             new InstructionDetails(

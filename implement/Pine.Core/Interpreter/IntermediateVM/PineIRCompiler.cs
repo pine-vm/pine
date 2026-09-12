@@ -1546,12 +1546,12 @@ public class PineIRCompiler
                         afterSource with
                         {
                             Instructions =
-                                afterSource.Instructions
-                                .RemoveAt(afterSource.Instructions.Count - 1)
-                                .Add(
-                                    StackInstruction.Local_Get_Skip_Head_Const(
-                                        localIndex,
-                                        (int)skipCountConst))
+                            afterSource.Instructions
+                            .RemoveAt(afterSource.Instructions.Count - 1)
+                            .Add(
+                                StackInstruction.Local_Get_Skip_Head_Const(
+                                    localIndex,
+                                    (int)skipCountConst))
                         };
                 }
 
@@ -2096,7 +2096,7 @@ public class PineIRCompiler
 
                     addOps =
                         addOps.AppendInstruction(
-                        StackInstruction.Int_Mul_Const_Add_Binary(-1));
+                            StackInstruction.Int_Mul_Const_Add_Binary(-1));
                 }
             }
             else
