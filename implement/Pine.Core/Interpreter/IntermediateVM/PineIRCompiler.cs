@@ -1060,18 +1060,25 @@ public class PineIRCompiler
             return CompileNormalEval(evalExpr, context, prior, parseCache);
         }
 
-        // The guard evaluates the target first and the loop branch only projects needed arguments.
-        // Neither reordering nor skipping an environment Eval is safe: it may fail or diverge.
-        if (evalExpr.Environment.EvalCount is not 0)
-        {
-            return CompileNormalEval(evalExpr, context, prior, parseCache);
-        }
+        // Evaluate a potentially failing or diverging environment before the target, once in full.
+        // Eval-free environments retain the allocation-free loop-argument projection path.
+        var beforeEncoded =
+            evalExpr.Environment.EvalCount is 0
+            ?
+            prior
+            :
+            CompileExpressionTransitiveAsLocal(
+                evalExpr.Environment,
+                context with { IsTailPosition = false },
+                prior,
+                parseCache)
+            .nodeResult.AppendInstruction(StackInstruction.Pop);
 
         var (afterEncoded, encodedLocalIndex) =
             CompileExpressionTransitiveAsLocal(
                 evalExpr.Encoded,
                 context with { IsTailPosition = false },
-                prior,
+                beforeEncoded,
                 parseCache);
 
         var genericBranch =
@@ -1127,6 +1134,24 @@ public class PineIRCompiler
             parameterIndex < context.StackFrameParameters.ParamsPaths.Count;
             parameterIndex++)
         {
+            if (nextEnvironment.EvalCount is not 0 &&
+                prior.LocalsSet.TryGetValue(nextEnvironment, out var environmentLocalIndex))
+            {
+                result = result.AppendInstruction(StackInstruction.Local_Get(environmentLocalIndex));
+
+                foreach (var pathIndex in context.StackFrameParameters.ParamsPaths[parameterIndex])
+                {
+                    if (pathIndex is not 0)
+                    {
+                        result = result.AppendInstruction(StackInstruction.Skip_Const(pathIndex));
+                    }
+
+                    result = result.AppendInstruction(StackInstruction.Head_Generic);
+                }
+
+                continue;
+            }
+
             var nextParameter =
                 BuildLoopArgument(
                     context.StackFrameParameters.ParamsPaths[parameterIndex],

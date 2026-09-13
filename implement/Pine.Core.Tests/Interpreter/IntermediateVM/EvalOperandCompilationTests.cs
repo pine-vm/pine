@@ -188,6 +188,72 @@ public class EvalOperandCompilationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void Guarded_loop_materializes_invoking_environment_before_parallel_parameter_updates(
+        bool enableTailRecursionOptimization)
+    {
+        var first =
+            ExpressionBuilder.BuildExpressionForPathInExpression([2, 0], Expression.EnvironmentInstance);
+        var second =
+            ExpressionBuilder.BuildExpressionForPathInExpression([2, 1], Expression.EnvironmentInstance);
+        var count = EnvironmentPath(1);
+        var nextEnvironment =
+            Expression.ListInst(
+                [
+                EnvironmentPath(0),
+                Expression.BuiltinInst(
+                    nameof(BuiltinFunction.int_add),
+                    Expression.ListInst(
+                        [
+                        count,
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(-1)),
+                        ])),
+                Expression.ListInst([second, first]),
+                ]);
+        var expression =
+            Expression.ConditionalInst(
+                condition:
+                Expression.BuiltinInst(
+                    nameof(BuiltinFunction.equal),
+                    Expression.ListInst(
+                        [
+                        count,
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(0)),
+                        ])),
+                falseBranch:
+                new Expression.Eval(
+                    encoded: EnvironmentPath(0),
+                    environment:
+                    new Expression.Eval(
+                        encoded:
+                        Expression.LitralInst(
+                            ExpressionEncoding.EncodeExpressionAsValue(Expression.EnvironmentInstance)),
+                        environment: nextEnvironment)),
+                trueBranch: Expression.ListInst([first, second]));
+        var left = IntegerEncoding.EncodeSignedInteger(11);
+        var right = IntegerEncoding.EncodeSignedInteger(13);
+        var environment =
+            PineValue.List(
+                [
+                ExpressionEncoding.EncodeExpressionAsValue(expression),
+                IntegerEncoding.EncodeSignedInteger(3),
+                PineValue.List([left, right]),
+                ]);
+        var expected = PineValue.List([right, left]);
+
+        new DirectInterpreter(new(), evalCache: null)
+            .EvaluateExpressionDefault(expression, environment).Should().Be(expected);
+
+        var report =
+            Evaluate(expression, environment, enableTailRecursionOptimization)
+            .Extract(error => throw new InvalidOperationException(EvaluationError.RenderDisplayString(error)));
+
+        report.ReturnValue.Evaluate().Should().Be(expected);
+        report.Counters.LoopIterationCount.Should().Be(enableTailRecursionOptimization ? 3 : 0);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void Guarded_eval_does_not_skip_failing_unused_environment_component(
         bool enableTailRecursionOptimization)
     {
