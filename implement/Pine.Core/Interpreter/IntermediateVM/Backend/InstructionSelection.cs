@@ -40,86 +40,86 @@ internal static class InstructionSelection
 
         ImmutableList<SelectedInstruction> Run()
         {
-        var lists = block.Operations.OfType<Operation.MakeList>().ToImmutableDictionary(list => list.Result.Id);
-        var definitions = block.Operations.ToImmutableDictionary(operation => Result(operation).Id);
-        var uses = block.Operations.SelectMany(Operands).Concat(TerminatorOperands(block.Terminator))
-            .GroupBy(value => value).ToImmutableDictionary(group => group.Key, group => group.Count());
-        var comparisons = block.Operations.OfType<Operation.Builtin>().Select(Comparison).OfType<SliceComparison>()
-            .ToImmutableDictionary(comparison => comparison.Skip.Result.Id);
-        var removed = comparisons.Values.SelectMany(comparison =>
-            ImmutableList.Create(comparison.Take.Result.Id, comparison.Equal.Result.Id)).ToImmutableHashSet();
-        var fused = block.Operations.OfType<Operation.Builtin>().Where(builtin =>
-            builtin.Name is "equal" or "int_add" or "int_mul" or "skip" or "take" &&
-            lists.TryGetValue(builtin.Argument, out var list) && list.Items.Count == 2).ToImmutableHashSet();
-        var required = block.Operations.OfType<Operation.Builtin>().Where(builtin => !removed.Contains(builtin.Result.Id))
-            .SelectMany(builtin => comparisons.TryGetValue(builtin.Result.Id, out var comparison)
-                ? ImmutableList.Create(comparison.Source, comparison.Count)
-                : fused.Contains(builtin) ? lists[builtin.Argument].Items : [builtin.Argument])
-            .Concat(TerminatorOperands(block.Terminator)).ToHashSet();
-        var pending = new Queue<PineVirtualValueId>(required);
-        while (pending.TryDequeue(out var id))
-            if (definitions.TryGetValue(id, out var definition) && definition is not Operation.Builtin)
-                foreach (var operand in Operands(definition))
-                    if (required.Add(operand))
-                        pending.Enqueue(operand);
-        return block.Operations.SelectMany(operation =>
-            comparisons.TryGetValue(Result(operation).Id, out var comparison) ? CompareSlice(comparison)
-                : removed.Contains(Result(operation).Id) || operation is not Operation.Builtin && !required.Contains(Result(operation).Id)
-                ? [] : operation is Operation.Builtin builtin && fused.Contains(builtin)
-                ? Binary(builtin, lists[builtin.Argument]) : Select(operation, locals)).ToImmutableList();
+            var lists = block.Operations.OfType<Operation.MakeList>().ToImmutableDictionary(list => list.Result.Id);
+            var definitions = block.Operations.ToImmutableDictionary(operation => Result(operation).Id);
+            var uses = block.Operations.SelectMany(Operands).Concat(TerminatorOperands(block.Terminator))
+                .GroupBy(value => value).ToImmutableDictionary(group => group.Key, group => group.Count());
+            var comparisons = block.Operations.OfType<Operation.Builtin>().Select(Comparison).OfType<SliceComparison>()
+                .ToImmutableDictionary(comparison => comparison.Skip.Result.Id);
+            var removed = comparisons.Values.SelectMany(comparison =>
+                ImmutableList.Create(comparison.Take.Result.Id, comparison.Equal.Result.Id)).ToImmutableHashSet();
+            var fused = block.Operations.OfType<Operation.Builtin>().Where(builtin =>
+                builtin.Name is "equal" or "int_add" or "int_mul" or "skip" or "take" &&
+                lists.TryGetValue(builtin.Argument, out var list) && list.Items.Count == 2).ToImmutableHashSet();
+            var required = block.Operations.OfType<Operation.Builtin>().Where(builtin => !removed.Contains(builtin.Result.Id))
+                .SelectMany(builtin => comparisons.TryGetValue(builtin.Result.Id, out var comparison)
+                    ? ImmutableList.Create(comparison.Source, comparison.Count)
+                    : fused.Contains(builtin) ? lists[builtin.Argument].Items : [builtin.Argument])
+                .Concat(TerminatorOperands(block.Terminator)).ToHashSet();
+            var pending = new Queue<PineVirtualValueId>(required);
+            while (pending.TryDequeue(out var id))
+                if (definitions.TryGetValue(id, out var definition) && definition is not Operation.Builtin)
+                    foreach (var operand in Operands(definition))
+                        if (required.Add(operand))
+                            pending.Enqueue(operand);
+            return block.Operations.SelectMany(operation =>
+                comparisons.TryGetValue(Result(operation).Id, out var comparison) ? CompareSlice(comparison)
+                    : removed.Contains(Result(operation).Id) || operation is not Operation.Builtin && !required.Contains(Result(operation).Id)
+                    ? [] : operation is Operation.Builtin builtin && fused.Contains(builtin)
+                    ? Binary(builtin, lists[builtin.Argument]) : Select(operation, locals)).ToImmutableList();
 
-        ImmutableList<SelectedInstruction> CompareSlice(SliceComparison comparison) =>
-            ImmutableList.Create<SelectedInstruction>(
-                new SelectedInstruction.Load(locals[comparison.Source]),
-                new SelectedInstruction.Load(locals[comparison.Count]),
-                new SelectedInstruction.Builtin(StackInstructionKind.Slice_Skip_Var_Equal_Const, 2, comparison.Literal))
-                .AddRange(Store(locals[comparison.Equal.Result.Id]));
+            ImmutableList<SelectedInstruction> CompareSlice(SliceComparison comparison) =>
+                ImmutableList.Create<SelectedInstruction>(
+                    new SelectedInstruction.Load(locals[comparison.Source]),
+                    new SelectedInstruction.Load(locals[comparison.Count]),
+                    new SelectedInstruction.Builtin(StackInstructionKind.Slice_Skip_Var_Equal_Const, 2, comparison.Literal))
+                    .AddRange(Store(locals[comparison.Equal.Result.Id]));
 
-        SliceComparison? Comparison(Operation.Builtin equal)
-        {
-            if (equal.Name != "equal" || !lists.TryGetValue(equal.Argument, out var equalArgs) || equalArgs.Items.Count != 2 ||
-                uses[equal.Argument] != 1)
-                return null;
-            foreach (var index in new[] { 0, 1 })
+            SliceComparison? Comparison(Operation.Builtin equal)
             {
-                if (!definitions.TryGetValue(equalArgs.Items[index], out var literalOp) || literalOp is not Operation.Literal literal ||
-                    !definitions.TryGetValue(equalArgs.Items[1 - index], out var takeOp) || takeOp is not Operation.Builtin { Name: "take" } take ||
-                    uses[take.Result.Id] != 1 || !lists.TryGetValue(take.Argument, out var takeArgs) || takeArgs.Items.Count != 2 ||
-                    uses[take.Argument] != 1 ||
-                    !definitions.TryGetValue(takeArgs.Items[0], out var countOp) || countOp is not Operation.Literal { Value: LiteralValue.Blob count } ||
-                    !definitions.TryGetValue(takeArgs.Items[1], out var skipOp) || skipOp is not Operation.Builtin { Name: "skip" } skip ||
-                    uses[skip.Result.Id] != 1 || !lists.TryGetValue(skip.Argument, out var skipArgs) || skipArgs.Items.Count != 2)
-                    continue;
-                var length = literal.Value switch
+                if (equal.Name != "equal" || !lists.TryGetValue(equal.Argument, out var equalArgs) || equalArgs.Items.Count != 2 ||
+                    uses[equal.Argument] != 1)
+                    return null;
+                foreach (var index in new[] { 0, 1 })
                 {
-                    LiteralValue.Blob blob => blob.Bytes.Count,
-                    LiteralValue.List list => list.Items.Count,
-                    _ => throw new NotImplementedException("Comparison does not handle literal variant: " + literal.Value.GetType().Name),
-                };
-                if (length > 0 && BuiltinFunction.SignedIntegerFromValueRelaxed(new PineValue.BlobValue(count.Bytes.ToArray())) == length)
-                    return new(skip, take, equal, skipArgs.Items[1], skipArgs.Items[0], literal.Value);
-            }
-            return null;
-        }
-
-        ImmutableList<SelectedInstruction> Binary(Operation.Builtin builtin, Operation.MakeList list)
-        {
-            var computation = builtin.Name is "skip" or "take"
-                ? ImmutableList.Create<SelectedInstruction>(new SelectedInstruction.Builtin(
-                    builtin.Name == "take" ? StackInstructionKind.Take_Generic : StackInstructionKind.Skip_Generic,
-                    0, CountLocal: locals[list.Items[0]], SourceLocal: locals[list.Items[1]]))
-                : ImmutableList.Create<SelectedInstruction>(
-                    new SelectedInstruction.Load(locals[list.Items[0]]),
-                    new SelectedInstruction.Load(locals[list.Items[1]]),
-                    new SelectedInstruction.Builtin(builtin.Name switch
+                    if (!definitions.TryGetValue(equalArgs.Items[index], out var literalOp) || literalOp is not Operation.Literal literal ||
+                        !definitions.TryGetValue(equalArgs.Items[1 - index], out var takeOp) || takeOp is not Operation.Builtin { Name: "take" } take ||
+                        uses[take.Result.Id] != 1 || !lists.TryGetValue(take.Argument, out var takeArgs) || takeArgs.Items.Count != 2 ||
+                        uses[take.Argument] != 1 ||
+                        !definitions.TryGetValue(takeArgs.Items[0], out var countOp) || countOp is not Operation.Literal { Value: LiteralValue.Blob count } ||
+                        !definitions.TryGetValue(takeArgs.Items[1], out var skipOp) || skipOp is not Operation.Builtin { Name: "skip" } skip ||
+                        uses[skip.Result.Id] != 1 || !lists.TryGetValue(skip.Argument, out var skipArgs) || skipArgs.Items.Count != 2)
+                        continue;
+                    var length = literal.Value switch
                     {
-                        "equal" => StackInstructionKind.Equal_Binary,
-                        "int_add" => StackInstructionKind.Int_Add_Binary,
-                        "int_mul" => StackInstructionKind.Int_Mul_Binary,
-                        _ => throw new InvalidOperationException("Binary does not handle builtin: " + builtin.Name),
-                    }, 2));
-            return computation.AddRange(Store(locals[builtin.Result.Id]));
-        }
+                        LiteralValue.Blob blob => blob.Bytes.Count,
+                        LiteralValue.List list => list.Items.Count,
+                        _ => throw new NotImplementedException("Comparison does not handle literal variant: " + literal.Value.GetType().Name),
+                    };
+                    if (length > 0 && BuiltinFunction.SignedIntegerFromValueRelaxed(new PineValue.BlobValue(count.Bytes.ToArray())) == length)
+                        return new(skip, take, equal, skipArgs.Items[1], skipArgs.Items[0], literal.Value);
+                }
+                return null;
+            }
+
+            ImmutableList<SelectedInstruction> Binary(Operation.Builtin builtin, Operation.MakeList list)
+            {
+                var computation = builtin.Name is "skip" or "take"
+                    ? ImmutableList.Create<SelectedInstruction>(new SelectedInstruction.Builtin(
+                        builtin.Name == "take" ? StackInstructionKind.Take_Generic : StackInstructionKind.Skip_Generic,
+                        0, CountLocal: locals[list.Items[0]], SourceLocal: locals[list.Items[1]]))
+                    : ImmutableList.Create<SelectedInstruction>(
+                        new SelectedInstruction.Load(locals[list.Items[0]]),
+                        new SelectedInstruction.Load(locals[list.Items[1]]),
+                        new SelectedInstruction.Builtin(builtin.Name switch
+                        {
+                            "equal" => StackInstructionKind.Equal_Binary,
+                            "int_add" => StackInstructionKind.Int_Add_Binary,
+                            "int_mul" => StackInstructionKind.Int_Mul_Binary,
+                            _ => throw new InvalidOperationException("Binary does not handle builtin: " + builtin.Name),
+                        }, 2));
+                return computation.AddRange(Store(locals[builtin.Result.Id]));
+            }
         }
     }
 

@@ -5,7 +5,6 @@ using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.Interpreter.IntermediateVM.Backend;
 using Pine.Core.Interpreter.IntermediateVM.Frontend;
 using Pine.Core.Interpreter.IntermediateVM.Semantic;
-using Pine.Core.PineVM;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
