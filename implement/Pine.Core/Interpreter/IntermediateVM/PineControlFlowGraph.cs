@@ -565,15 +565,14 @@ public sealed record PineControlFlowGraph(
         return
             new PineControlFlowGraph(
                 newEntry,
-                blocks
+                [.. blocks
                 .Select(
                     block =>
                     block with
                     {
                         Id = Remap(block.Id),
                         Terminator = RedirectTargets(block.Terminator, Remap)
-                    })
-                .ToImmutableArray());
+                    })]);
     }
 
     private static PineBlockId? RequiredFallthroughTarget(

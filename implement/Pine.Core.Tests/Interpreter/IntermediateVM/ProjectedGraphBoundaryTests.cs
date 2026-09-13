@@ -87,7 +87,7 @@ public class ProjectedGraphBoundaryTests
     {
         var parameters = StaticFunctionInterface.FromExpression(expression);
         var graph = ExpressionGraphCompiler.Compile(expression, signature ?? new(
-            parameters.ParamsPaths.Select(path => new FunctionParameter(new(path.ToImmutableList()))).ToImmutableList(),
+            [.. parameters.ParamsPaths.Select(path => new FunctionParameter(new([.. path])))],
             [Semantic.ValueType.PineValue]));
         var validated = ValidatedFunctionGraph.ValidateGraph(graph, ImmutableDictionary<FunctionId, FunctionSignature>.Empty)
             .Extract(errors => throw new InvalidOperationException(string.Join(", ", errors)));

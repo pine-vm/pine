@@ -54,7 +54,7 @@ internal static class InstructionSelection
         };
 
     internal static ImmutableList<SelectedInstruction> Project(EnvironmentPath path) =>
-        path.Indices.Select(index => (SelectedInstruction)new SelectedInstruction.Project(index)).ToImmutableList();
+        [.. path.Indices.Select(index => (SelectedInstruction)new SelectedInstruction.Project(index))];
 
     internal static ImmutableList<SelectedInstruction> Store(int local) =>
         [new SelectedInstruction.Store(local), new SelectedInstruction.Pop()];
@@ -252,8 +252,7 @@ internal static class InstructionSelection
                 list.Items.Select(value => (SelectedInstruction)new SelectedInstruction.Load(locals[value]))
                 .ToImmutableList().Add(new SelectedInstruction.MakeList(list.Items.Count)),
             Operation.Project project =>
-                ImmutableList.Create<SelectedInstruction>(new SelectedInstruction.Load(locals[project.Source]))
-                .AddRange(Project(project.Path)),
+                [new SelectedInstruction.Load(locals[project.Source]), .. Project(project.Path)],
             Operation.Builtin builtin =>
                 [new SelectedInstruction.Load(locals[builtin.Argument]),
                 new SelectedInstruction.Builtin(StraightLineCompiler.SelectBuiltin(builtin.Name))],

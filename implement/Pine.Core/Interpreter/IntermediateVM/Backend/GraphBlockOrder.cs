@@ -33,8 +33,8 @@ internal static class GraphBlockOrder
                     if (!visited.Contains(successor))
                         pending.Push((successor, false));
             }
-            return completed.AsEnumerable().Reverse()
-                .Concat(graph.Blocks.Keys.Where(id => !visited.Contains(id)).OrderBy(id => id.Value)).ToImmutableList();
+            return [.. completed.AsEnumerable().Reverse()
+, .. graph.Blocks.Keys.Where(id => !visited.Contains(id)).OrderBy(id => id.Value)];
         }
     }
 

@@ -181,15 +181,15 @@ public class StraightLineBackendTests
         void Check()
         {
             ImmutableList<EnvironmentPath> paths = [new([2]), new([]), new([0, 1]), new([2]), new([0]), new([9]), new([1, 0])];
-            var signature = new FunctionSignature(paths.Select(path => new FunctionParameter(path)).ToImmutableList(), [ValueType.PineValue]);
+            var signature = new FunctionSignature([.. paths.Select(path => new FunctionParameter(path))], [ValueType.PineValue]);
             var parameters = paths.Select((_, i) => new ValueDefinition(new(999 - i * 33))).ToImmutableList();
             var graph = Graph(
-                [new Operation.MakeList(new(new(7)), parameters.Select(p => p.Id).ToImmutableList())],
+                [new Operation.MakeList(new(new(7)), [.. parameters.Select(p => p.Id)])],
                 new Terminator.Return([new(7)]), signature, parameters);
             var environment = new LiteralValue.List(
                 [new LiteralValue.List([Integer(2), Integer(3)]), new LiteralValue.Blob([4]), Integer(5)]);
             var compiled = Compile(graph);
-            var expected = PineValue.List(paths.Select(path => DirectProjection(environment, path)).ToArray());
+            var expected = PineValue.List([.. paths.Select(path => DirectProjection(environment, path))]);
 
             Execute(compiled, environment).Should().Be(expected);
             compiled.Storage.Take(parameters.Count).Select(binding => binding.Value).Should().Equal(parameters.Select(p => p.Id));
@@ -270,8 +270,8 @@ public class StraightLineBackendTests
             Decline(unreachable).Should().Be(StraightLineDiagnosticCode.MultipleBlocks);
 
             foreach (var count in ImmutableList.Create(0, 2))
-                Decline(Graph([], new Terminator.Return(Enumerable.Repeat(new PineVirtualValueId(901), count).ToImmutableList()),
-                    new(FunctionSignature.Canonical.Parameters, Enumerable.Repeat(ValueType.PineValue, count).ToImmutableList())))
+                Decline(Graph([], new Terminator.Return([.. Enumerable.Repeat(new PineVirtualValueId(901), count)]),
+                    new(FunctionSignature.Canonical.Parameters, [.. Enumerable.Repeat(ValueType.PineValue, count)])))
                     .Should().Be(StraightLineDiagnosticCode.UnsupportedResultArity);
         }
     }

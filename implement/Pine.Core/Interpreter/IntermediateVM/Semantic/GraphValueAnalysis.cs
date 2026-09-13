@@ -99,7 +99,7 @@ public static class GraphValueAnalysis
                             var result = operation switch
                             {
                                 Operation.Literal literal => (literal.Result.Id, (GraphValueFact)new GraphValueFact.Exact(literal.Value)),
-                                Operation.MakeList list => (list.Result.Id, MakeList(list.Items.Select(id => Get(next, id)).ToImmutableList())),
+                                Operation.MakeList list => (list.Result.Id, MakeList([.. list.Items.Select(id => Get(next, id))])),
                                 Operation.Project project => (project.Result.Id, Project(Get(next, project.Source), project.Path)),
                                 Operation.Builtin builtin => (builtin.Result.Id, Builtin(builtin.Name, Get(next, builtin.Argument))),
                                 _ => throw new NotImplementedException("Analyze does not handle operation variant: " + operation.GetType().Name),
@@ -273,7 +273,7 @@ public static class GraphValueAnalysis
                 {
                     Spend(list.Items.Count);
                     return list.Items.Count > options.MaxListItems ? null :
-                        list.Items.Select(item => (GraphValueFact)new GraphValueFact.Exact(item)).ToImmutableList();
+                        [.. list.Items.Select(item => (GraphValueFact)new GraphValueFact.Exact(item))];
                 }
             }
 
@@ -380,7 +380,7 @@ public static class GraphValueAnalysis
                 var a = Items(left);
                 var b = Items(right);
                 return a is not null && b is not null && a.Count == b.Count
-                    ? MakeList(a.Zip(b).Select(pair => Meet(pair.First, pair.Second, depth + 1)).ToImmutableList(), depth)
+                    ? MakeList([.. a.Zip(b).Select(pair => Meet(pair.First, pair.Second, depth + 1))], depth)
                     : GraphValueFact.Any;
             }
 
@@ -401,7 +401,7 @@ public static class GraphValueAnalysis
                 {
                     case "head":
                         if (argument is GraphValueFact.Exact { Value: LiteralValue.Blob blob })
-                            return new GraphValueFact.Exact(new LiteralValue.Blob(blob.Bytes.Take(1).ToImmutableList()));
+                            return new GraphValueFact.Exact(new LiteralValue.Blob([.. blob.Bytes.Take(1)]));
                         var headItems = Items(argument);
                         return headItems is null ? GraphValueFact.Any : headItems.Count == 0 ? Empty() : headItems[0];
                     case "skip":
@@ -416,10 +416,10 @@ public static class GraphValueAnalysis
                         if (skipItems[1] is GraphValueFact.Exact { Value: LiteralValue.Blob skippedBlob })
                         {
                             Spend(skippedBlob.Bytes.Count);
-                            return new GraphValueFact.Exact(new LiteralValue.Blob(skippedBlob.Bytes.Skip((int)count).ToImmutableList()));
+                            return new GraphValueFact.Exact(new LiteralValue.Blob([.. skippedBlob.Bytes.Skip((int)count)]));
                         }
                         var sourceItems = Items(skipItems[1]);
-                        return sourceItems is null ? GraphValueFact.Any : MakeList(sourceItems.Skip((int)count).ToImmutableList());
+                        return sourceItems is null ? GraphValueFact.Any : MakeList([.. sourceItems.Skip((int)count)]);
                     case "concat":
                         return Concat(argument);
                     case "int_add":
@@ -437,7 +437,7 @@ public static class GraphValueAnalysis
                         var bytes = BigInteger.Abs(sum).ToByteArray(isUnsigned: true, isBigEndian: true);
                         Spend(bytes.Length);
                         return new GraphValueFact.Exact(new LiteralValue.Blob(
-                            ImmutableList.Create((byte)(sum.Sign < 0 ? 2 : 4)).AddRange(bytes)));
+                            [(byte)(sum.Sign < 0 ? 2 : 4), .. bytes]));
                     case "equal":
                         if (argument is GraphValueFact.Exact { Value: LiteralValue.Blob equalBlob })
                         {

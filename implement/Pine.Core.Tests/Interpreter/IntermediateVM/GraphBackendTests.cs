@@ -23,18 +23,18 @@ public class GraphBackendTests
     private static PineVirtualValueId V(int id) => new(id);
     private static ValueDefinition D(int id) => new(V(id));
     private static Edge E(int target, params ImmutableArray<int> arguments) =>
-        new(new(target), arguments.Select(V).ToImmutableList());
+        new(new(target), [.. arguments.Select(V)]);
     private static Terminator Return(int value) => new Terminator.Return([V(value)]);
     private static Operation Lit(int id, LiteralValue value) => new Operation.Literal(D(id), value);
     private static BasicBlock Block(
         int id, ImmutableList<int> parameters, ImmutableList<Operation> operations, Terminator terminator) =>
-        new(new(id), parameters.Select(D).ToImmutableList(), operations, terminator);
+        new(new(id), [.. parameters.Select(D)], operations, terminator);
     private static FunctionGraph Graph(
         int entry, ImmutableList<BasicBlock> blocks, FunctionSignature? signature = null) =>
         new(new(-719), signature ?? FunctionSignature.Canonical, new(entry),
             blocks.ToImmutableDictionary(block => block.Id));
     private static FunctionSignature Projected(int count) =>
-        new(Enumerable.Range(0, count).Select(index => new FunctionParameter(new([index]))).ToImmutableList(),
+        new([.. Enumerable.Range(0, count).Select(index => new FunctionParameter(new([index])))],
             [ValueType.PineValue]);
     private static ValidatedFunctionGraph Validate(FunctionGraph graph) =>
         ValidatedFunctionGraph.ValidateGraph(graph, ImmutableDictionary<FunctionId, FunctionSignature>.Empty)
@@ -215,9 +215,9 @@ public class GraphBackendTests
             var graph = Graph(18,
                 [
                     Block(18, [1],
-                        Enumerable.Range(0, literals.Count + 1).Select(index => Lit(index + 20, Integer((byte)index))).ToImmutableList(),
-                        new Terminator.Switch(V(1), literals.Select((literal, index) =>
-                            new SwitchCase(literal, E(-100, index + 20))).ToImmutableList(), E(-100, literals.Count + 20))),
+                        [.. Enumerable.Range(0, literals.Count + 1).Select(index => Lit(index + 20, Integer((byte)index)))],
+                        new Terminator.Switch(V(1), [.. literals.Select((literal, index) =>
+                            new SwitchCase(literal, E(-100, index + 20)))], E(-100, literals.Count + 20))),
                     Block(-100, [2], [], Return(2)),
                 ]);
             foreach (var order in Orders(graph))
@@ -404,7 +404,7 @@ public class GraphBackendTests
             var graph = Graph(8,
                 [Block(8, [1], [], terminator), Block(80, [2], [], Return(2))]);
             foreach (var candidate in ImmutableList.Create(graph,
-                Graph(80, graph.Blocks.Values.ToImmutableList())))
+                Graph(80, [.. graph.Blocks.Values])))
                 GraphCompiler.Compile(Validate(candidate))
                     .Should().BeOfType<Result<GraphBackendDiagnostic, GraphFunction>.Ok>();
         }
@@ -416,8 +416,8 @@ public class GraphBackendTests
     public void Noncanonical_result_counts_are_declined(int count)
     {
         var graph = Graph(1,
-            [Block(1, [1], [], new Terminator.Return(Enumerable.Repeat(V(1), count).ToImmutableList()))],
-            new(FunctionSignature.Canonical.Parameters, Enumerable.Repeat(ValueType.PineValue, count).ToImmutableList()));
+            [Block(1, [1], [], new Terminator.Return([.. Enumerable.Repeat(V(1), count)]))],
+            new(FunctionSignature.Canonical.Parameters, [.. Enumerable.Repeat(ValueType.PineValue, count)]));
         GraphCompiler.Compile(Validate(graph)).Should().BeOfType<Result<GraphBackendDiagnostic, GraphFunction>.Err>()
             .Which.Value.Code.Should().Be(GraphBackendDiagnosticCode.UnsupportedResultArity);
     }
@@ -485,7 +485,7 @@ public class GraphBackendTests
     private static ImmutableList<ImmutableList<PineBlockId>> Orders(FunctionGraph graph)
     {
         var ids = graph.Blocks.Keys.OrderBy(id => id.Value).ToImmutableList();
-        return [ids, ids.Reverse().ToImmutableList(), ids.Skip(1).Concat(ids.Take(1)).ToImmutableList()];
+        return [ids, [.. ids.Reverse()], [.. ids.Skip(1), .. ids.Take(1)]];
     }
 
     private sealed record Execution(

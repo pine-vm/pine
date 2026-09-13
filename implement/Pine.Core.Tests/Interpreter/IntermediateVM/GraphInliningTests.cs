@@ -18,18 +18,18 @@ public class GraphInliningTests
     private static PineVirtualValueId V(int id) => new(id);
     private static ValueDefinition D(int id) => new(V(id));
     private static LiteralValue I(int value) => Own(IntegerEncoding.EncodeSignedInteger(value));
-    private static LiteralValue L(params ImmutableArray<LiteralValue> values) => new LiteralValue.List(values.ToImmutableList());
+    private static LiteralValue L(params ImmutableArray<LiteralValue> values) => new LiteralValue.List([.. values]);
     private static Operation Lit(int id, LiteralValue value) => new Operation.Literal(D(id), value);
-    private static Terminator Ret(params ImmutableArray<int> values) => new Terminator.Return(values.Select(V).ToImmutableList());
-    private static Edge E(int target, params ImmutableArray<int> args) => new(new(target), args.Select(V).ToImmutableList());
+    private static Terminator Ret(params ImmutableArray<int> values) => new Terminator.Return([.. values.Select(V)]);
+    private static Edge E(int target, params ImmutableArray<int> args) => new(new(target), [.. args.Select(V)]);
     private static ContinuationBinding C(int value) => new ContinuationBinding.CallerValue(V(value));
     private static ContinuationBinding R(int slot = 0) => new ContinuationBinding.ReturnedResult(slot);
     private static BasicBlock B(int id, ImmutableList<int> parameters, ImmutableList<Operation> operations, Terminator terminator) =>
-        new(new(id), parameters.Select(D).ToImmutableList(), operations, terminator);
+        new(new(id), [.. parameters.Select(D)], operations, terminator);
     private static FunctionGraph G(int id, int entry, ImmutableList<BasicBlock> blocks, FunctionSignature? signature = null) =>
         new(new(id), signature ?? FunctionSignature.Canonical, new(entry), blocks.ToImmutableDictionary(block => block.Id));
     private static Call K(int site, int function, FunctionSignature signature, params ImmutableArray<int> args) =>
-        new(new(site), new CallTarget.Known(new(function)), signature, args.Select(V).ToImmutableList());
+        new(new(site), new CallTarget.Known(new(function)), signature, [.. args.Select(V)]);
     private static Call Dynamic(int site, int target, int argument) =>
         new(new(site), new CallTarget.Dynamic(V(target)), FunctionSignature.Canonical, [V(argument)]);
     private static FunctionSignature Triple { get; } =
@@ -38,7 +38,7 @@ public class GraphInliningTests
     private static LiteralValue Own(PineValue value) => value switch
     {
         PineValue.BlobValue blob => new LiteralValue.Blob(blob.Bytes.ToArray().ToImmutableList()),
-        PineValue.ListValue list => new LiteralValue.List(list.Items.ToArray().Select(Own).ToImmutableList()),
+        PineValue.ListValue list => new LiteralValue.List([.. list.Items.ToArray().Select(Own)]),
         _ => throw new NotImplementedException("Own does not handle value variant: " + value.GetType().Name),
     };
     private static ValidatedFunctionGraph Validate(FunctionGraph graph,
@@ -249,8 +249,7 @@ public class GraphInliningTests
             [
                 B(10, [10], [new Operation.Builtin(D(11), "head", V(10))],
                     new Terminator.Switch(V(11),
-                        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
-                            .Select(character => new SwitchCase(I(character), E(20, 10))).ToImmutableList(),
+                        [.. "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_".Select(character => new SwitchCase(I(character), E(20, 10)))],
                         E(30, 10))),
                 B(20, [20], [Lit(21, I(1)), new Operation.MakeList(D(22), [V(21), V(20)]),
                     new Operation.Builtin(D(23), "skip", V(22))], new Terminator.Jump(E(10, 23))),
@@ -275,8 +274,8 @@ public class GraphInliningTests
         var second = Inline(first, Validate(scanner), 2);
         var third = Inline(second, Validate(scanner), 3);
         Calls(third.Graph).Should().BeEmpty();
-        var input = new LiteralValue.List(text.Select(character => I(character)).ToImmutableList());
-        var suffix = new LiteralValue.List(remaining.Select(character => I(character)).ToImmutableList());
+        var input = new LiteralValue.List([.. text.Select(character => I(character))]);
+        var suffix = new LiteralValue.List([.. remaining.Select(character => I(character))]);
         Compare(caller, first.Graph, [wrapper, scanner], input, L(input, suffix), 1);
         Compare(caller, second.Graph, [wrapper, scanner], input, L(input, suffix), 2);
         Compare(caller, third.Graph, [wrapper, scanner], input, L(input, suffix), 3);
@@ -508,7 +507,7 @@ public class GraphInliningTests
     }
 
     private static ImmutableList<Call> Calls(FunctionGraph graph) =>
-        graph.Blocks.Values.SelectMany(block => block.Terminator switch
+        [.. graph.Blocks.Values.SelectMany(block => block.Terminator switch
         {
             Terminator.Return => ImmutableList<Call>.Empty,
             Terminator.Jump => [],
@@ -517,7 +516,7 @@ public class GraphInliningTests
             Terminator.Invoke invoke => [invoke.Call],
             Terminator.TailInvoke tail => [tail.Call],
             _ => throw new NotImplementedException("Calls does not handle terminator variant: " + block.Terminator.GetType().Name),
-        }).ToImmutableList();
+        })];
 
     private static void Compare(FunctionGraph before, FunctionGraph after, ImmutableList<FunctionGraph> dependencies,
         LiteralValue input, LiteralValue expected, int removedInvocations)
@@ -539,7 +538,7 @@ public class GraphInliningTests
         var signatures = graphs.ToImmutableDictionary(graph => graph.Id, graph => graph.Signature);
         var program = new GraphProgram(graphs.Select(graph =>
             GraphCompiler.Compile(Validate(graph, signatures),
-                (reverse ? graph.Blocks.Keys.OrderByDescending(id => id.Value) : graph.Blocks.Keys.OrderBy(id => id.Value)).ToImmutableList())
+                [.. (reverse ? graph.Blocks.Keys.OrderByDescending(id => id.Value) : graph.Blocks.Keys.OrderBy(id => id.Value))])
             .Extract(error => throw new Exception(error.ToString()))).ToImmutableDictionary(function => function.Id));
         var expression = Expression.LitralInst(PineValue.EmptyList);
         ExpressionCompilation CompileExpression(Expression requested)

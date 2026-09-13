@@ -24,7 +24,7 @@ public class GraphCallBackendTests
     private static Operation Lit(int id, LiteralValue value) => new Operation.Literal(D(id), value);
     private static Terminator Ret(int id) => new Terminator.Return([V(id)]);
     private static BasicBlock B(int id, ImmutableList<int> parameters, ImmutableList<Operation> operations, Terminator terminator) =>
-        new(new(id), parameters.Select(D).ToImmutableList(), operations, terminator);
+        new(new(id), [.. parameters.Select(D)], operations, terminator);
     private static FunctionGraph G(int id, int entry, ImmutableList<BasicBlock> blocks, FunctionSignature? signature = null) =>
         new(new(id), signature ?? FunctionSignature.Canonical, new(entry), blocks.ToImmutableDictionary(block => block.Id));
     private static ContinuationBinding C(int id) => new ContinuationBinding.CallerValue(V(id));
@@ -33,21 +33,21 @@ public class GraphCallBackendTests
         value switch
         {
             PineValue.BlobValue blob => new LiteralValue.Blob(blob.Bytes.ToArray().ToImmutableList()),
-            PineValue.ListValue list => new LiteralValue.List(list.Items.ToArray().Select(Own).ToImmutableList()),
+            PineValue.ListValue list => new LiteralValue.List([.. list.Items.ToArray().Select(Own)]),
             _ => throw new NotImplementedException("Own does not handle value variant: " + value.GetType().Name),
         };
     private static LiteralValue IdentityEncoding => Own(ExpressionEncoding.EncodeExpressionAsValue(Expression.EnvironmentInstance));
     private static Call Dynamic(int site, int encoded, int environment) =>
         new(new(site), new CallTarget.Dynamic(V(encoded)), FunctionSignature.Canonical, [V(environment)]);
     private static Call Known(int site, int function, FunctionSignature signature, params int[] args) =>
-        new(new(site), new CallTarget.Known(new(function)), signature, args.Select(V).ToImmutableList());
+        new(new(site), new CallTarget.Known(new(function)), signature, [.. args.Select(V)]);
     private static GraphProgram Compile(ImmutableList<FunctionGraph> graphs, bool reverse = false)
     {
         var signatures = graphs.ToImmutableDictionary(graph => graph.Id, graph => graph.Signature);
         return new(graphs.Select(graph =>
             GraphCompiler.Compile(
                 ValidatedFunctionGraph.ValidateGraph(graph, signatures).Extract(errors => throw new Exception(string.Join(", ", errors))),
-                (reverse ? graph.Blocks.Keys.OrderByDescending(id => id.Value) : graph.Blocks.Keys.OrderBy(id => id.Value)).ToImmutableList())
+                [.. (reverse ? graph.Blocks.Keys.OrderByDescending(id => id.Value) : graph.Blocks.Keys.OrderBy(id => id.Value))])
             .Extract(error => throw new Exception(error.ToString()))).ToImmutableDictionary(function => function.Id));
     }
 

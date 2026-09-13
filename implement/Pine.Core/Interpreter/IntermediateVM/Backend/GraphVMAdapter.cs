@@ -138,14 +138,14 @@ public static class GraphVMAdapter
                 }
             }
             return new(projectedArguments || function.LegacyParameterLocals
-                ? StaticFunctionInterface.FromPathsInOrder(function.Signature.Parameters.Select(parameter => parameter.Path.Indices).ToImmutableList())
+                ? StaticFunctionInterface.FromPathsInOrder([.. function.Signature.Parameters.Select(parameter => parameter.Path.Indices)])
                 : StaticFunctionInterface.FromPathsSorted([[]]), instructions.ToArray(),
                 function.Resources.LocalsCount, function.Resources.MaxStackUsage)
             {
                 GraphProgram = program,
                 GraphFunctionId = projectedArguments ? function.Id : null,
                 GraphParameterLocals = projectedArguments
-                    ? function.Layout[0].Instructions.OfType<SelectedInstruction.Store>().Select(store => store.Local).ToImmutableList()
+                    ? [.. function.Layout[0].Instructions.OfType<SelectedInstruction.Store>().Select(store => store.Local)]
                     : null,
             };
 

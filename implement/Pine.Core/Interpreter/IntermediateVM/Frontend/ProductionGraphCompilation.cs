@@ -48,7 +48,7 @@ internal static class ProductionGraphCompilation
         if (!ExpressionGraphOptimizer.MeasureBody(OwnedExpression.Capture(specializedBody), 512, 64).Fits)
             return null;
         var signature = new FunctionSignature(
-            parameters.ParamsPaths.Select(path => new FunctionParameter(new(path.ToImmutableList()))).ToImmutableList(),
+            [.. parameters.ParamsPaths.Select(path => new FunctionParameter(new([.. path])))],
             [Semantic.ValueType.PineValue]);
         var compiled = ValidatedFunctionGraph.ValidateGraph(
             ExpressionGraphCompiler.Compile(specializedBody, signature),

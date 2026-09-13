@@ -18,7 +18,7 @@ public static class GraphCompiler
     {
         var graph = validated.Graph;
         var orderedBlocks = graph.Blocks.Values.OrderBy(block => block.Id.Value).ToImmutableList();
-        var order = blockOrder ?? (compact ? GraphBlockOrder.ReversePostorder(graph) : orderedBlocks.Select(block => block.Id).ToImmutableList());
+        var order = blockOrder ?? (compact ? GraphBlockOrder.ReversePostorder(graph) : [.. orderedBlocks.Select(block => block.Id)]);
 
         if (graph.Signature.Results.Count != 1)
             return Decline(GraphBackendDiagnosticCode.UnsupportedResultArity, graph.Entry);
@@ -30,15 +30,15 @@ public static class GraphCompiler
             return Decline(GraphBackendDiagnosticCode.UnsupportedCall, unsupported.Id);
 
         var firstLocal = legacyParameterLocals ? Math.Max(1, graph.Signature.Parameters.Count) : 1;
-        var allocatedStorage = compact ? GraphLocalAllocation.Allocate(graph, firstLocal) : orderedBlocks.SelectMany(block =>
+        var allocatedStorage = compact ? GraphLocalAllocation.Allocate(graph, firstLocal) : [.. orderedBlocks.SelectMany(block =>
             block.Parameters.Concat(block.Operations.Select(InstructionSelection.Result)))
-            .Select((definition, index) => new StorageBinding(definition.Id, checked(index + firstLocal))).ToImmutableList();
+            .Select((definition, index) => new StorageBinding(definition.Id, checked(index + firstLocal)))];
         var allocatedLocals = allocatedStorage.ToImmutableDictionary(binding => binding.Value, binding => binding.Local);
         var entryLocals = graph.Blocks[graph.Entry].Parameters.Select((parameter, index) => (Local: allocatedLocals[parameter.Id], Index: index))
             .ToImmutableDictionary(pair => pair.Local, pair => pair.Index);
         var storage = legacyParameterLocals
-            ? allocatedStorage.Select(binding => entryLocals.TryGetValue(binding.Local, out var inputLocal)
-                ? binding with { Local = inputLocal } : binding).ToImmutableList()
+            ? [.. allocatedStorage.Select(binding => entryLocals.TryGetValue(binding.Local, out var inputLocal)
+                ? binding with { Local = inputLocal } : binding)]
             : allocatedStorage;
         var resultLocal = checked(storage.Select(binding => binding.Local).DefaultIfEmpty(firstLocal - 1).Max() + 1);
         var hasInvoke = orderedBlocks.Any(block => block.Terminator is Terminator.Invoke);
@@ -46,7 +46,7 @@ public static class GraphCompiler
         var blocks = orderedBlocks.Select(block => new SelectedBlock(
             block.Id,
             fuseScalarBuiltins ? InstructionSelection.SelectBlock(block, locals, compact) :
-                block.Operations.SelectMany(operation => InstructionSelection.Select(operation, locals)).ToImmutableList(),
+                [.. block.Operations.SelectMany(operation => InstructionSelection.Select(operation, locals))],
             SelectTerminator(block.Terminator, block))).ToImmutableList();
         var prologue = legacyParameterLocals ? [] : graph.Blocks[graph.Entry].Parameters.SelectMany((parameter, index) =>
             ImmutableList.Create<SelectedInstruction>(new SelectedInstruction.Load(0))
@@ -76,9 +76,9 @@ public static class GraphCompiler
             Result<GraphBackendDiagnostic, GraphFunction>.err(new(code, graph.Id, block));
 
         EdgeCopyPlan SelectEdge(Edge edge) =>
-            new(edge.Target, edge.Arguments.Select((argument, index) =>
+            new(edge.Target, [.. edge.Arguments.Select((argument, index) =>
                 new LocalCopy(locals[argument], locals[graph.Blocks[edge.Target].Parameters[index].Id]))
-                .Where(copy => !compact || copy.Source != copy.Destination).ToImmutableList());
+                .Where(copy => !compact || copy.Source != copy.Destination)]);
 
         SelectedTerminator SelectTerminator(Terminator terminator, BasicBlock block) =>
             terminator switch
@@ -89,21 +89,21 @@ public static class GraphCompiler
                     locals[branch.TestedValue], [new(branch.Literal, SelectEdge(branch.IfEqual))], SelectEdge(branch.IfNotEqual)),
                 Terminator.Switch selection when compact && fuseScalarBuiltins && InstructionSelection.SelectSliceSwitch(block) is { } slice =>
                     new SelectedTerminator.Match(locals[slice.Count],
-                        selection.Cases.Select(@case => new SelectedCase(@case.Value, SelectEdge(@case.Edge))).ToImmutableList(),
+                        [.. selection.Cases.Select(@case => new SelectedCase(@case.Value, SelectEdge(@case.Edge)))],
                         SelectEdge(selection.Default), locals[slice.Source]),
                 Terminator.Switch selection => new SelectedTerminator.Match(
                     locals[selection.Selector],
-                    selection.Cases.Select(@case => new SelectedCase(@case.Value, SelectEdge(@case.Edge))).ToImmutableList(),
+                    [.. selection.Cases.Select(@case => new SelectedCase(@case.Value, SelectEdge(@case.Edge)))],
                     SelectEdge(selection.Default)),
                 Terminator.Invoke invoke => new SelectedTerminator.Invoke(SelectCall(invoke.Call), resultLocal,
-                    new(invoke.Continuation.Target, invoke.Continuation.Bindings.Select((binding, index) =>
+                    new(invoke.Continuation.Target, [.. invoke.Continuation.Bindings.Select((binding, index) =>
                         new LocalCopy(binding switch
                         {
                             ContinuationBinding.CallerValue caller => locals[caller.Value],
                             ContinuationBinding.ReturnedResult => resultLocal,
                             _ => throw new NotImplementedException(
                                 "SelectTerminator does not handle binding variant: " + binding.GetType().Name),
-                        }, locals[graph.Blocks[invoke.Continuation.Target].Parameters[index].Id])).ToImmutableList())),
+                        }, locals[graph.Blocks[invoke.Continuation.Target].Parameters[index].Id]))])),
                 Terminator.TailInvoke invoke => new SelectedTerminator.TailInvoke(SelectCall(invoke.Call)),
                 _ => throw new NotImplementedException(
                     "SelectTerminator does not handle terminator variant: " + terminator.GetType().Name),
@@ -115,7 +115,7 @@ public static class GraphCompiler
                 CallTarget.Dynamic dynamic => new SelectedCallTarget.Dynamic(locals[dynamic.EncodedExpression]),
                 CallTarget.Known known => new SelectedCallTarget.Known(known.Function),
                 _ => throw new NotImplementedException("SelectCall does not handle target variant: " + call.Target.GetType().Name),
-            }, call.Signature, call.Arguments.Select(argument => locals[argument]).ToImmutableList());
+            }, call.Signature, [.. call.Arguments.Select(argument => locals[argument])]);
     }
 
     private static int CallStack(SelectedCall call) =>

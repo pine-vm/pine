@@ -12,18 +12,18 @@ namespace Pine.Core.Tests.Interpreter.IntermediateVM;
 
 public class GraphValueAnalysisTests
 {
-    private static LiteralValue Blob(params ImmutableArray<byte> bytes) => new LiteralValue.Blob(bytes.ToImmutableList());
+    private static LiteralValue Blob(params ImmutableArray<byte> bytes) => new LiteralValue.Blob([.. bytes]);
     private static LiteralValue Integer(int value) => OwnedExpression.CaptureValue(IntegerEncoding.EncodeSignedInteger(value));
     private static Operation Literal(int id, LiteralValue value) => new Operation.Literal(new(new(id)), value);
     private static Operation List(int id, params ImmutableArray<int> items) =>
-        new Operation.MakeList(new(new(id)), items.Select(item => new PineVirtualValueId(item)).ToImmutableList());
+        new Operation.MakeList(new(new(id)), [.. items.Select(item => new PineVirtualValueId(item))]);
     private static Operation Project(int id, int source, params ImmutableArray<int> path) =>
-        new Operation.Project(new(new(id)), new(source), new(path.ToImmutableList()));
+        new Operation.Project(new(new(id)), new(source), new([.. path]));
     private static Operation Builtin(int id, string name, int argument) => new Operation.Builtin(new(new(id)), name, new(argument));
     private static BasicBlock Block(int id, ImmutableList<int> parameters, ImmutableList<Operation> operations, Terminator terminator) =>
-        new(new(id), parameters.Select(parameter => new ValueDefinition(new(parameter))).ToImmutableList(), operations, terminator);
+        new(new(id), [.. parameters.Select(parameter => new ValueDefinition(new(parameter)))], operations, terminator);
     private static Edge Edge(int block, params ImmutableArray<int> arguments) =>
-        new(new(block), arguments.Select(argument => new PineVirtualValueId(argument)).ToImmutableList());
+        new(new(block), [.. arguments.Select(argument => new PineVirtualValueId(argument))]);
     private static Terminator Return(int value) => new Terminator.Return([new(value)]);
     private static ValidatedFunctionGraph Graph(params ImmutableArray<BasicBlock> blocks) =>
         ValidatedFunctionGraph.ValidateGraph(new(new(0), FunctionSignature.Canonical, blocks[0].Id,
@@ -210,8 +210,8 @@ public class GraphValueAnalysisTests
     {
         var graph = Graph(
             Block(0, [0],
-                [Literal(1, new LiteralValue.Blob(Enumerable.Repeat((byte)7, 1000).ToImmutableList())),
-                    Literal(2, new LiteralValue.Blob(Enumerable.Repeat((byte)7, 1000).ToImmutableList()))],
+                [Literal(1, new LiteralValue.Blob([.. Enumerable.Repeat((byte)7, 1000)])),
+                    Literal(2, new LiteralValue.Blob([.. Enumerable.Repeat((byte)7, 1000)]))],
                 new Terminator.Branch(new(0), Blob(4), Edge(1, 1), Edge(1, 2))),
             Block(1, [10], [], Return(10)));
         var before = GraphRendering.Render(graph.Graph);

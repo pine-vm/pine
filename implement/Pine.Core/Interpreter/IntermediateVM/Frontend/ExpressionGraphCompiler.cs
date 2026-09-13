@@ -49,7 +49,7 @@ public static class ExpressionGraphCompiler
         var (entryState, entry) = GraphBuildState.Empty.AllocateBlock();
         var (parameterState, parameters) = AllocateParameters(entryState, signature.Parameters.Count);
         var initial = parameterState.OpenBlock(entry, parameters);
-        var completed = CompileTail(root, new(initial, parameters.Select(parameter => parameter.Id).ToImmutableList(), signature));
+        var completed = CompileTail(root, new(initial, [.. parameters.Select(parameter => parameter.Id)], signature));
         return new(id, signature, entry, completed.CompletedBlocks);
     }
 
@@ -177,8 +177,8 @@ public static class ExpressionGraphCompiler
     private static Cursor CompileList(OwnedExpression.List list, Cursor cursor)
     {
         var items = list.Items.Aggregate(cursor, (state, item) => CompileNode(item, state));
-        var defined = Define(items, result => new Operation.MakeList(result, items.Live.Skip(cursor.Live.Count).ToImmutableList()));
-        return defined with { Live = defined.Live.Take(cursor.Live.Count).Append(defined.Live[^1]).ToImmutableList() };
+        var defined = Define(items, result => new Operation.MakeList(result, [.. items.Live.Skip(cursor.Live.Count)]));
+        return defined with { Live = [.. defined.Live.Take(cursor.Live.Count), defined.Live[^1]] };
     }
 
     private static (GraphBuildState State, ImmutableList<ValueDefinition> Parameters) AllocateParameters(
@@ -194,7 +194,7 @@ public static class ExpressionGraphCompiler
     private static Cursor Open(GraphBuildState state, PineBlockId block, int liveCount, FunctionSignature signature)
     {
         var (allocated, parameters) = AllocateParameters(state, liveCount);
-        return new(allocated.OpenBlock(block, parameters), parameters.Select(parameter => parameter.Id).ToImmutableList(), signature);
+        return new(allocated.OpenBlock(block, parameters), [.. parameters.Select(parameter => parameter.Id)], signature);
     }
 
     private static (GraphBuildState State, PineBlockId True, PineBlockId False, ImmutableList<PineVirtualValueId> Live)
@@ -285,7 +285,7 @@ public static class ExpressionGraphCompiler
             var (joinState, join) = defaultState.AllocateBlock();
             var live = tested.Live.RemoveAt(tested.Live.Count - 1);
             state = joinState.CompleteBlock(new Terminator.Switch(tested.Live[^1],
-                selection.Cases.Select((@case, index) => new SwitchCase(@case.Literal, new(targets[index], live))).ToImmutableList(),
+                [.. selection.Cases.Select((@case, index) => new SwitchCase(@case.Literal, new(targets[index], live)))],
                 new(defaultBlock, live)));
             foreach (var (body, target) in selection.Cases.Select((@case, index) => (@case.Body, targets[index]))
                 .Append((selection.Default, defaultBlock)))

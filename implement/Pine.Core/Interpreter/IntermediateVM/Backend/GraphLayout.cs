@@ -41,7 +41,7 @@ internal static class GraphLayout
                 },
                 LayoutTransfer.Match match => match with
                 {
-                    Cases = match.Cases.Select(@case => (@case.Literal, Resolve(fragment.Label, @case.Target))).ToImmutableList(),
+                    Cases = [.. match.Cases.Select(@case => (@case.Literal, Resolve(fragment.Label, @case.Target)))],
                     Default = Resolve(fragment.Label, match.Default),
                 },
                 LayoutTransfer.Invoke invoke => invoke with { Success = Resolve(fragment.Label, invoke.Success) },
@@ -51,7 +51,7 @@ internal static class GraphLayout
         var threadedByLabel = threaded.ToImmutableDictionary(fragment => fragment.Label);
         var predecessors = threaded.SelectMany(fragment => GraphLayoutLiveness.Successors(fragment.Transfer))
             .GroupBy(label => label).ToImmutableDictionary(group => group.Key, group => group.Count());
-        return threaded.Select(Fuse).ToImmutableList();
+        return [.. threaded.Select(Fuse)];
 
         LayoutFragment Fuse(LayoutFragment fragment)
         {
@@ -106,9 +106,12 @@ internal static class GraphLayout
         ImmutableList<SelectedBlock> blocks, ImmutableList<PineBlockId> order, bool compact = false)
     {
         var byId = blocks.ToImmutableDictionary(block => block.Id);
-        return ImmutableList.Create(new LayoutFragment(
-            new(LayoutLabelKind.Prologue, entry), prologue, new LayoutTransfer.Jump(new(LayoutLabelKind.Block, entry))))
-            .AddRange(order.SelectMany(id => ScheduleBlock(byId[id], compact)));
+        return
+        [
+            new LayoutFragment(
+                new(LayoutLabelKind.Prologue, entry), prologue, new LayoutTransfer.Jump(new(LayoutLabelKind.Block, entry))),
+            .. order.SelectMany(id => ScheduleBlock(byId[id], compact)),
+        ];
     }
 
     private static ImmutableList<LayoutFragment> ScheduleBlock(SelectedBlock block, bool compact)
@@ -129,20 +132,24 @@ internal static class GraphLayout
             SelectedTerminator.TailInvoke invoke =>
                 [new(label, block.Instructions, new LayoutTransfer.TailInvoke(invoke.Call))],
             SelectedTerminator.Match match when compact && match.Cases.Count > 1 =>
-                ImmutableList.Create(new LayoutFragment(label, block.Instructions,
-                    new LayoutTransfer.Match(match.Local,
-                        match.Cases.Select((@case, index) => (@case.Literal, EdgeLabel(index))).ToImmutableList(),
-                        EdgeLabel(match.Cases.Count), match.SliceSourceLocal)))
-                .AddRange(match.Cases.Select((@case, index) => Stub(@case.Edge, index)))
-                .Add(Stub(match.Default, match.Cases.Count)),
+                [
+                    new LayoutFragment(label, block.Instructions,
+                                new LayoutTransfer.Match(match.Local,
+                                    [.. match.Cases.Select((@case, index) => (@case.Literal, EdgeLabel(index)))],
+                                    EdgeLabel(match.Cases.Count), match.SliceSourceLocal)),
+                    .. match.Cases.Select((@case, index) => Stub(@case.Edge, index)),
+                    Stub(match.Default, match.Cases.Count),
+                ],
             SelectedTerminator.Match match =>
-                ImmutableList.Create(new LayoutFragment(label, block.Instructions,
-                    new LayoutTransfer.Jump(match.Cases.Count == 0 ? EdgeLabel(0) : TestLabel(0))))
-                .AddRange(match.Cases.Select((@case, index) => new LayoutFragment(
-                    TestLabel(index), [], new LayoutTransfer.Branch(match.Local, @case.Literal, EdgeLabel(index),
-                        index + 1 < match.Cases.Count ? TestLabel(index + 1) : EdgeLabel(match.Cases.Count)))))
-                .AddRange(match.Cases.Select((@case, index) => Stub(@case.Edge, index)))
-                .Add(Stub(match.Default, match.Cases.Count)),
+                [
+                    new LayoutFragment(label, block.Instructions,
+                                new LayoutTransfer.Jump(match.Cases.Count == 0 ? EdgeLabel(0) : TestLabel(0))),
+                    .. match.Cases.Select((@case, index) => new LayoutFragment(
+                                TestLabel(index), [], new LayoutTransfer.Branch(match.Local, @case.Literal, EdgeLabel(index),
+                                    index + 1 < match.Cases.Count ? TestLabel(index + 1) : EdgeLabel(match.Cases.Count)))),
+                    .. match.Cases.Select((@case, index) => Stub(@case.Edge, index)),
+                    Stub(match.Default, match.Cases.Count),
+                ],
             _ => throw new NotImplementedException(
                 "ScheduleBlock does not handle selected terminator variant: " + block.Terminator.GetType().Name),
         };

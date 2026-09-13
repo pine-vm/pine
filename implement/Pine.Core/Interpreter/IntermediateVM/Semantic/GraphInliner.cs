@@ -137,7 +137,7 @@ public static class GraphInliner
                     rewritten.Add(blocks[block.Id], new(
                         blocks[block.Id],
                         block.Parameters.Select(value => values[value.Id]).ToImmutableList().AddRange(captures[block.Id]),
-                        block.Operations.Select(CloneOperation).ToImmutableList(),
+                        [.. block.Operations.Select(CloneOperation)],
                         CloneTerminator(block.Terminator, localCaptures)));
                 }
                 rewritten[source.Id] = source with
@@ -168,7 +168,7 @@ public static class GraphInliner
                 }
                 PineVirtualValueId Value(PineVirtualValueId value) => values[value].Id;
                 ImmutableList<PineVirtualValueId> Values(ImmutableList<PineVirtualValueId> operands) =>
-                    operands.Select(Value).ToImmutableList();
+                    [.. operands.Select(Value)];
                 Operation CloneOperation(Operation operation) => operation switch
                 {
                     Operation.Literal literal => new Operation.Literal(values[literal.Result.Id], literal.Value),
@@ -204,7 +204,7 @@ public static class GraphInliner
                                 CloneEdge(branch.IfEqual), CloneEdge(branch.IfNotEqual));
                         case Terminator.Switch selection:
                             return new Terminator.Switch(Value(selection.Selector),
-                                selection.Cases.Select(item => new SwitchCase(item.Value, CloneEdge(item.Edge))).ToImmutableList(),
+                                [.. selection.Cases.Select(item => new SwitchCase(item.Value, CloneEdge(item.Edge)))],
                                 CloneEdge(selection.Default));
                         case Terminator.Invoke inner:
                             return new Terminator.Invoke(CloneCall(inner.Call), new(blocks[inner.Continuation.Target],
@@ -221,7 +221,7 @@ public static class GraphInliner
                             var returned = tail.Call.Signature.Results.Select(type => new ValueDefinition(new(AllocateValue()), type)).ToImmutableList();
                             var preserved = localCaptures.Select(_ => new ValueDefinition(new(AllocateValue()))).ToImmutableList();
                             rewritten.Add(returnBlock, new(returnBlock, returned.AddRange(preserved), [],
-                                ReturnToCaller(returned.Select(value => value.Id).ToImmutableList(), preserved.Select(value => value.Id).ToImmutableList())));
+                                ReturnToCaller([.. returned.Select(value => value.Id)], [.. preserved.Select(value => value.Id)])));
                             return new Terminator.Invoke(CloneCall(tail.Call), new(returnBlock,
                                 returned.Select((_, index) => (ContinuationBinding)new ContinuationBinding.ReturnedResult(index)).ToImmutableList()
                                     .AddRange(localCaptures.Select(value => new ContinuationBinding.CallerValue(value)))));

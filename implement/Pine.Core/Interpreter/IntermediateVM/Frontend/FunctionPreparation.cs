@@ -89,8 +89,7 @@ public static class FunctionPreparation
                     options.PathMaxLowExclusive, options.PathMaxHighInclusive,
                     options.DisableGenericApplicationChainConsolidation);
             var signature = new FunctionSignature(
-                StaticFunctionInterface.FromExpression(root).ParamsPaths
-                    .Select(path => new FunctionParameter(new(path.ToImmutableList()))).ToImmutableList(),
+                [.. StaticFunctionInterface.FromExpression(root).ParamsPaths.Select(path => new FunctionParameter(new([.. path])))],
                 [Semantic.ValueType.PineValue]);
             var result = new PreparedFunction(request, OwnedExpression.Capture(reduced), signature);
             return (result, memo with

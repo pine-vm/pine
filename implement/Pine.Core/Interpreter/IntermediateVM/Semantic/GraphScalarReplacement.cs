@@ -66,7 +66,7 @@ public static class GraphScalarReplacement
             {
                 return terminator switch
                 {
-                    Terminator.Return ret => ret with { Values = ret.Values.Select(value).ToImmutableList() },
+                    Terminator.Return ret => ret with { Values = [.. ret.Values.Select(value)] },
                     Terminator.Jump jump => new Terminator.Jump(MapEdge(jump.Edge)),
                     Terminator.Branch branch => branch with
                     {
@@ -77,7 +77,7 @@ public static class GraphScalarReplacement
                     Terminator.Switch selection => selection with
                     {
                         Selector = value(selection.Selector),
-                        Cases = selection.Cases.Select(item => item with { Edge = MapEdge(item.Edge) }).ToImmutableList(),
+                        Cases = [.. selection.Cases.Select(item => item with { Edge = MapEdge(item.Edge) })],
                         Default = MapEdge(selection.Default),
                     },
                     Terminator.Invoke invoke => invoke with
@@ -89,10 +89,10 @@ public static class GraphScalarReplacement
                     _ => throw new NotImplementedException("MapTerminator does not handle terminator variant: " + terminator.GetType().Name),
                 };
 
-                Edge MapEdge(Edge original) => edge(original with { Arguments = original.Arguments.Select(value).ToImmutableList() });
+                Edge MapEdge(Edge original) => edge(original with { Arguments = [.. original.Arguments.Select(value)] });
                 Call MapCall(Call call) => call with
                 {
-                    Arguments = call.Arguments.Select(value).ToImmutableList(),
+                    Arguments = [.. call.Arguments.Select(value)],
                     Target = call.Target switch
                     {
                         CallTarget.Dynamic target => target with { EncodedExpression = value(target.EncodedExpression) },
@@ -104,12 +104,12 @@ public static class GraphScalarReplacement
                 {
                     var mapped = original with
                     {
-                        Bindings = original.Bindings.Select(binding => binding switch
+                        Bindings = [.. original.Bindings.Select(binding => binding switch
                         {
                             ContinuationBinding.CallerValue caller => (ContinuationBinding)(caller with { Value = value(caller.Value) }),
                             ContinuationBinding.ReturnedResult returned => returned,
                             _ => throw new NotImplementedException("MapContinuation does not handle binding variant: " + binding.GetType().Name),
-                        }).ToImmutableList(),
+                        })],
                     };
                     return continuation is null ? mapped : continuation(mapped);
                 }
@@ -230,9 +230,9 @@ public static class GraphScalarReplacement
                                 remapped[id] = new(checked((int)nextId++));
                         }
                         PineVirtualValueId Final(PineVirtualValueId id) => remapped.GetValueOrDefault(Resolve(id), Resolve(id));
-                        operations = operations.Select(operation => operation is Operation.Literal literal && remapped.TryGetValue(literal.Result.Id, out var id)
+                        operations = [.. operations.Select(operation => operation is Operation.Literal literal && remapped.TryGetValue(literal.Result.Id, out var id)
                             ? new Operation.Literal(new(id), literal.Value)
-                            : MapOperation(operation, Final)).ToImmutableList();
+                            : MapOperation(operation, Final))];
                         var terminator = MapTerminator(block.Terminator, Final, edge => edge);
                         var localConstants = operations.OfType<Operation.Literal>().ToImmutableDictionary(literal => literal.Result.Id, literal => literal.Value);
                         if (terminator is Terminator.Branch branch && localConstants.TryGetValue(branch.TestedValue, out var tested))
@@ -345,7 +345,7 @@ public static class GraphScalarReplacement
                     }
                     return NewGraph(graph, graph.Blocks.Values.ToImmutableDictionary(block => block.Id, block => block with
                     {
-                        Operations = block.Operations.Select(operation => MapOperation(operation, Alias)).ToImmutableList(),
+                        Operations = [.. block.Operations.Select(operation => MapOperation(operation, Alias))],
                         Terminator = MapTerminator(block.Terminator, Alias, edge => edge),
                     }));
 
@@ -496,13 +496,13 @@ public static class GraphScalarReplacement
                             .Where(pair => block.Id == graph.Entry || live.Contains(pair.parameter.Id)).Select(pair => pair.index).ToImmutableList());
                     return NewGraph(graph, blocks.ToImmutableDictionary(block => block.Id, block => block with
                     {
-                        Parameters = kept[block.Id].Select(index => block.Parameters[index]).ToImmutableList(),
-                        Operations = block.Operations.Where(operation => operation is Operation.Builtin || live.Contains(Result(operation))).ToImmutableList(),
+                        Parameters = [.. kept[block.Id].Select(index => block.Parameters[index])],
+                        Operations = [.. block.Operations.Where(operation => operation is Operation.Builtin || live.Contains(Result(operation)))],
                         Terminator = MapTerminator(block.Terminator, id => id,
-                            edge => edge with { Arguments = kept[edge.Target].Select(index => edge.Arguments[index]).ToImmutableList() },
+                            edge => edge with { Arguments = [.. kept[edge.Target].Select(index => edge.Arguments[index])] },
                             continuation => continuation with
                             {
-                                Bindings = kept[continuation.Target].Select(index => continuation.Bindings[index]).ToImmutableList(),
+                                Bindings = [.. kept[continuation.Target].Select(index => continuation.Bindings[index])],
                             }),
                     }));
                 }
@@ -551,7 +551,7 @@ public static class GraphScalarReplacement
     private static Operation MapOperation(Operation operation, Func<PineVirtualValueId, PineVirtualValueId> value) => operation switch
     {
         Operation.Literal literal => literal,
-        Operation.MakeList list => list with { Items = list.Items.Select(value).ToImmutableList() },
+        Operation.MakeList list => list with { Items = [.. list.Items.Select(value)] },
         Operation.Project project => project with { Source = value(project.Source) },
         Operation.Builtin builtin => builtin with { Argument = value(builtin.Argument) },
         _ => throw new NotImplementedException("MapOperation does not handle operation variant: " + operation.GetType().Name),

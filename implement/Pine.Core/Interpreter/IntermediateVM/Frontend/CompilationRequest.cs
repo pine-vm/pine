@@ -24,9 +24,9 @@ public sealed record SpecializationFacts(ImmutableList<SpecializationFact> Items
 {
     /// <summary>Snapshots the legacy environment class.</summary>
     public static SpecializationFacts Capture(PineValueClass constraint) =>
-        new(constraint.ParsedItems.OrderBy(item => item.Key, IntPathComparer.Instance)
+        new([.. constraint.ParsedItems.OrderBy(item => item.Key, IntPathComparer.Instance)
             .Select(item => new SpecializationFact(
-                new(item.Key.ToImmutableList()), OwnedExpression.CaptureValue(item.Value))).ToImmutableList());
+                new([.. item.Key]), OwnedExpression.CaptureValue(item.Value)))]);
 
     /// <summary>Creates detached inputs for legacy stateless analyses.</summary>
     public PineValueClass ToValueClass() =>

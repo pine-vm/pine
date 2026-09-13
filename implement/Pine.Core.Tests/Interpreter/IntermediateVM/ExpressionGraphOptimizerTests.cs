@@ -35,14 +35,14 @@ public class ExpressionGraphOptimizerTests
     private static GraphOptimizationResult Compile(Expression expression, GraphOptimizerOptions? options = null, CompilerMemo? memo = null) =>
         ExpressionGraphOptimizer.Compile(Request(expression), LiteralPolicy(options ?? new()), memo ?? CompilerMemo.Empty)
             .Extract(errors => throw new Exception(string.Join(", ", errors)));
-    private static ImmutableList<Call> Calls(FunctionGraph graph) => graph.Blocks.Values
+    private static ImmutableList<Call> Calls(FunctionGraph graph) => [.. graph.Blocks.Values
         .OrderBy(block => block.Id.Value).SelectMany(block => block.Terminator switch
         {
             Terminator.Return or Terminator.Jump or Terminator.Branch or Terminator.Switch => ImmutableList<Call>.Empty,
             Terminator.Invoke invoke => [invoke.Call],
             Terminator.TailInvoke tail => [tail.Call],
             _ => throw new NotImplementedException("Calls does not handle terminator variant: " + block.Terminator.GetType().Name),
-        }).ToImmutableList();
+        })];
     private static EvaluationReport Run(Expression expression, PineValue input, GraphOptimizerOptions? options) =>
         ExpressionGraphVM.Create(optimizerOptions: options is null ? null : LiteralPolicy(options))
             .EvaluateExpressionOnCustomStack(expression, input, new(100, 10_000, 100))

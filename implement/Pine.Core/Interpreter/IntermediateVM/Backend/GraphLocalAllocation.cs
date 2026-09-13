@@ -24,7 +24,7 @@ internal static class GraphLocalAllocation
                 .Select(definition => definition.Id).ToImmutableList();
             if (blocks.Sum(block =>
                 (long)(block.Parameters.Count + block.Operations.Count) * (block.Parameters.Count + block.Operations.Count)) > 1_000_000)
-                return definitions.Select((id, index) => new StorageBinding(id, checked(firstLocal + index))).ToImmutableList();
+                return [.. definitions.Select((id, index) => new StorageBinding(id, checked(firstLocal + index)))];
             var parents = definitions.ToDictionary(id => id, id => id);
             var conflicts = definitions.ToDictionary(id => id, _ => new HashSet<PineVirtualValueId>());
             foreach (var block in blocks)
@@ -49,7 +49,7 @@ internal static class GraphLocalAllocation
                     color = checked(color + 1);
                 colors.Add(group, color);
             }
-            return definitions.Select(id => new StorageBinding(id, colors[Find(id)])).ToImmutableList();
+            return [.. definitions.Select(id => new StorageBinding(id, colors[Find(id)]))];
 
             PineVirtualValueId Find(PineVirtualValueId id)
             {
@@ -85,7 +85,7 @@ internal static class GraphLocalAllocation
             }
 
             ImmutableList<(PineVirtualValueId, PineVirtualValueId)> EdgeCopies(Edge edge) =>
-                edge.Arguments.Select((argument, index) => (argument, graph.Blocks[edge.Target].Parameters[index].Id)).ToImmutableList();
+                [.. edge.Arguments.Select((argument, index) => (argument, graph.Blocks[edge.Target].Parameters[index].Id))];
 
             ImmutableList<(PineVirtualValueId, PineVirtualValueId)> Copies(Terminator terminator) =>
                 terminator switch
@@ -95,13 +95,13 @@ internal static class GraphLocalAllocation
                     Terminator.Branch branch => EdgeCopies(branch.IfEqual).AddRange(EdgeCopies(branch.IfNotEqual)),
                     Terminator.Switch selection => selection.Cases.SelectMany(@case => EdgeCopies(@case.Edge)).ToImmutableList()
                         .AddRange(EdgeCopies(selection.Default)),
-                    Terminator.Invoke invoke => invoke.Continuation.Bindings.SelectMany((binding, index) => binding switch
+                    Terminator.Invoke invoke => [.. invoke.Continuation.Bindings.SelectMany((binding, index) => binding switch
                     {
                         ContinuationBinding.CallerValue caller => ImmutableList.Create(
                             (caller.Value, graph.Blocks[invoke.Continuation.Target].Parameters[index].Id)),
                         ContinuationBinding.ReturnedResult => [],
                         _ => throw new NotImplementedException("Copies does not handle binding variant: " + binding.GetType().Name),
-                    }).ToImmutableList(),
+                    })],
                     _ => throw new NotImplementedException("Copies does not handle terminator variant: " + terminator.GetType().Name),
                 };
         }

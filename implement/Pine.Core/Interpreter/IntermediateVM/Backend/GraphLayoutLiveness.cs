@@ -81,7 +81,7 @@ internal static class GraphLayoutLiveness
                     }
                 }
             }
-            return fragments.Select(Remove).ToImmutableList();
+            return [.. fragments.Select(Remove)];
 
             ImmutableHashSet<int> LiveOut(LayoutFragment fragment) =>
                 Successors(fragment.Transfer).SelectMany(successor => incoming[successor]).ToImmutableHashSet()

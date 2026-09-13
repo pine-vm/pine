@@ -47,7 +47,7 @@ public abstract record OwnedExpression
         expression switch
         {
             Expression.Litral literal => new Literal(CaptureValue(literal.Value)),
-            Expression.List list => new List(list.Items.Select(Capture).ToImmutableList()),
+            Expression.List list => new List([.. list.Items.Select(Capture)]),
             Expression.Builtin builtin => new Builtin(builtin.Function, Capture(builtin.Input)),
             Expression.Conditional conditional => new Conditional(
                 Capture(conditional.Condition), Capture(conditional.FalseBranch), Capture(conditional.TrueBranch)),
@@ -79,7 +79,7 @@ public abstract record OwnedExpression
         value switch
         {
             PineValue.BlobValue blob => new LiteralValue.Blob(blob.Bytes.ToArray().ToImmutableList()),
-            PineValue.ListValue list => new LiteralValue.List(list.Items.ToArray().Select(CaptureValue).ToImmutableList()),
+            PineValue.ListValue list => new LiteralValue.List([.. list.Items.ToArray().Select(CaptureValue)]),
             _ => throw new NotImplementedException("Unknown value variant: " + value.GetType().Name),
         };
 
