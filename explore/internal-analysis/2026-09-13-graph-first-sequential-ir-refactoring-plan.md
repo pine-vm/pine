@@ -16,6 +16,7 @@ Completion requires:
 - Graph-to-graph inlining of an already-looping callee into a non-tail call site, including inside another loop, demonstrated by executable tests.
 - Immutable compiler models and explicit state-in/state-out transformations, portable to Elm.
 - Preserved language results, error behavior, specialization safety, and runtime safety checks; separately measured optimization outcomes.
+- No significant regressions in performance as recorded in the performance counter snapshots in various tests. Increased loop count is acceptable as a replacement for invocations.
 
 This is a plan, not an implementation or a claim that tests have passed. The companion findings document records current robustness issues and the increments that should address them:
 
