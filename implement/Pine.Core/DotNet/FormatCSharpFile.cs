@@ -137,6 +137,13 @@ public static class FormatCSharpFile
     private static bool IsComment(SyntaxTrivia t) =>
         t.IsKind(SyntaxKind.SingleLineCommentTrivia) || t.IsKind(SyntaxKind.MultiLineCommentTrivia);
 
+    /// <summary>Returns true if the trivia text ends with a line break.</summary>
+    private static bool EndsWithLineBreak(SyntaxTrivia trivia)
+    {
+        var text = trivia.ToFullString();
+        return text.EndsWith('\n') || text.EndsWith('\r');
+    }
+
     /// <summary>Returns true if the trivia is a preprocessor directive.</summary>
     private static bool IsDirectiveTrivia(SyntaxTrivia t) =>
         t.GetStructure() is DirectiveTriviaSyntax;
@@ -557,9 +564,22 @@ public static class FormatCSharpFile
 
         for (var k = 0; k < preserved.Count; k++)
         {
-            var gap = Math.Max(1, gaps[k]);
+            var lineBreaksToEmit =
+                k is 0
+                ?
+                Math.Max(1, gaps[k])
+                :
+                !preserved[k - 1].HasStructure
+                ?
+                Math.Max(0, Math.Max(1, gaps[k]) - 1)
+                :
+                EndsWithLineBreak(preserved[k - 1])
+                ?
+                gaps[k]
+                :
+                Math.Max(1, gaps[k]);
 
-            for (var j = 0; j < gap; j++)
+            for (var j = 0; j < lineBreaksToEmit; j++)
                 r.Add(s_lineFeed);
 
             var t = preserved[k];
@@ -580,11 +600,24 @@ public static class FormatCSharpFile
                 r.Add(s_lineFeed);
         }
 
-        // Trailing gap: comment emission already added 1 line break after the
-        // last comment, so subtract one from the desired gap.
-        var finalGap = Math.Max(1, trailingGap);
+        // Account for the line break emitted by unstructured trivia or by the
+        // final-directive handling below.
+        var finalGap =
+            IsDirectiveTrivia(preserved[^1])
+            ?
+            Math.Max(0, Math.Max(1, trailingGap) - 1)
+            :
+            !preserved[^1].HasStructure
+            ?
+            Math.Max(0, Math.Max(1, trailingGap) - 1)
+            :
+            EndsWithLineBreak(preserved[^1])
+            ?
+            trailingGap
+            :
+            Math.Max(1, trailingGap);
 
-        for (var j = 0; j < finalGap - 1; j++)
+        for (var j = 0; j < finalGap; j++)
             r.Add(s_lineFeed);
 
         if (IsDirectiveTrivia(preserved[^1]))
@@ -2018,6 +2051,13 @@ public static class FormatCSharpFile
     private static TryStatementSyntax FormatTryStatement(TryStatementSyntax node, FormatContext ctx)
     {
         var block = FormatBlock(node.Block, ctx);
+
+        block =
+            block.WithCloseBraceToken(
+                block.CloseBraceToken.WithTrailingTrivia(
+                    EnsureSpaceBeforeComments(
+                        StripWhitespace(node.Block.CloseBraceToken.TrailingTrivia))));
+
         var catches = node.Catches.Select(c => FormatCatchClause(c, ctx)).ToList();
         var r = node.WithBlock(block).WithCatches(SyntaxFactory.List(catches));
 
@@ -2030,43 +2070,80 @@ public static class FormatCSharpFile
     /// <summary>Formats a catch clause with keyword placement and block formatting.</summary>
     private static CatchClauseSyntax FormatCatchClause(CatchClauseSyntax node, FormatContext ctx)
     {
-        var fmtBlock = FormatBlock(node.Block, ctx);
+        var isBareCatch = node.Declaration is null && node.Filter is null;
+        var isSingleLineBlock = IsSingleLineBlock(node.Block);
+        var formattedBlock = FormatBlock(node.Block, ctx);
 
-        // When there is no declaration (bare `catch { ... }`), the previous token
-        // before the open brace is the `catch` keyword itself — whose trailing
-        // trivia gets stripped to default. FormatOpenBrace then relies on
-        // GetPreviousToken() from the original tree, which can oscillate.
-        // EnsureBraceNewline patches this by ensuring a newline exists.
-        // Skip for single-line empty blocks which stay on the same line.
-        var isSingleLineEmpty = node.Declaration is null && IsSingleLineBlock(node.Block);
+        formattedBlock =
+            formattedBlock.WithCloseBraceToken(
+                formattedBlock.CloseBraceToken.WithTrailingTrivia(
+                    EnsureSpaceBeforeComments(
+                        StripWhitespace(node.Block.CloseBraceToken.TrailingTrivia))));
 
         var block =
-            (node.Declaration is null && !isSingleLineEmpty)
+            isBareCatch && isSingleLineBlock
             ?
-            EnsureBraceNewline(fmtBlock, ctx.IndentLevel)
+            formattedBlock.WithOpenBraceToken(formattedBlock.OpenBraceToken.WithLeadingTrivia())
             :
-            fmtBlock;
-
-        var catchTrailingTrivia =
-            node.Declaration is null && IsSingleLineBlock(node.Block)
+            isBareCatch
             ?
+            EnsureBraceNewline(formattedBlock, ctx.IndentLevel)
+            :
+            formattedBlock;
+
+        var catchKeywordComments =
+            EnsureSpaceBeforeComments(
+                StripWhitespace(node.CatchKeyword.TrailingTrivia));
+
+        var trailingTrivia =
+            isBareCatch && isSingleLineBlock
+            ?
+            catchKeywordComments
+            .Add(s_lineFeed)
+            .Add(Indent(ctx.IndentLevel))
+            :
+            isBareCatch
+            ?
+            catchKeywordComments
+            :
+            node.Declaration is null && node.Filter is not null
+            ?
+            catchKeywordComments.Count > 0
+            ?
+            node.CatchKeyword.TrailingTrivia
+            :
             new SyntaxTriviaList(s_space)
+            :
+            catchKeywordComments.Count > 0
+            ?
+            node.CatchKeyword.TrailingTrivia
             :
             default;
 
         var kw =
             node.CatchKeyword
-            .WithLeadingTrivia(s_lineFeed, Indent(ctx.IndentLevel))
-            .WithTrailingTrivia(catchTrailingTrivia);
+            .WithLeadingTrivia(
+                EnsureLeadingBreaks(
+                    node.CatchKeyword.LeadingTrivia,
+                    minBreaks: 1,
+                    ctx.IndentLevel))
+            .WithTrailingTrivia(trailingTrivia);
 
         var r = node.WithCatchKeyword(kw).WithBlock(block);
 
         if (node.Declaration is not null)
         {
+            var openParenLeadingTrivia =
+                catchKeywordComments.Count > 0
+                ?
+                node.Declaration.OpenParenToken.LeadingTrivia
+                :
+                new SyntaxTriviaList(s_space);
+
             r =
                 r.WithDeclaration(
                     node.Declaration.WithOpenParenToken(
-                        node.Declaration.OpenParenToken.WithLeadingTrivia(s_space)));
+                        node.Declaration.OpenParenToken.WithLeadingTrivia(openParenLeadingTrivia)));
         }
 
         return r;
@@ -2076,7 +2153,16 @@ public static class FormatCSharpFile
     private static FinallyClauseSyntax FormatFinallyClause(FinallyClauseSyntax node, FormatContext ctx)
     {
         var block = EnsureBraceNewline(FormatBlock(node.Block, ctx), ctx.IndentLevel);
-        var kw = node.FinallyKeyword.WithLeadingTrivia(s_lineFeed, Indent(ctx.IndentLevel)).WithTrailingTrivia();
+
+        var kw =
+            node.FinallyKeyword
+            .WithLeadingTrivia(
+                EnsureLeadingBreaks(
+                    node.FinallyKeyword.LeadingTrivia,
+                    minBreaks: 1,
+                    ctx.IndentLevel))
+            .WithTrailingTrivia();
+
         return node.WithFinallyKeyword(kw).WithBlock(block);
     }
 
@@ -3033,34 +3119,38 @@ public static class FormatCSharpFile
         for (var i = 0; i < node.Expressions.Count; i++)
         {
             var origLeading = node.Expressions[i].GetLeadingTrivia();
-            var minBreaks = 1;
 
             var sameLineAsPrevious =
                 sourceMultiLine &&
                 i > 0 &&
                 LineOf(node.Expressions[i].GetFirstToken()) == EndLineOf(node.Expressions[i - 1]);
 
-            // Preserve existing blank lines from original source
-            if (i > 0)
-            {
-                var origBreaks = CountLineBreaks(origLeading);
-
-                if (i - 1 < origInitSeps.Count)
-                    origBreaks += CountLineBreaks(origInitSeps[i - 1].TrailingTrivia);
-
-                if (origBreaks >= 2)
-                    minBreaks = 2;
-            }
-
             var e = (ExpressionSyntax)FormatNode(node.Expressions[i], ci);
 
-            e =
-                e.WithLeadingTrivia(
-                    sameLineAsPrevious
+            if (sameLineAsPrevious)
+            {
+                e = e.WithLeadingTrivia(s_space);
+            }
+            else
+            {
+                var sepTrailingBreaksForGap =
+                    i is 0
                     ?
-                    new SyntaxTriviaList(s_space)
+                    CountLineBreaks(node.OpenBraceToken.TrailingTrivia)
                     :
-                    EnsureLeadingBreaks(origLeading, minBreaks, ci));
+                    i - 1 < origInitSeps.Count
+                    ?
+                    CountLineBreaks(origInitSeps[i - 1].TrailingTrivia)
+                    :
+                    0;
+
+                e =
+                    e.WithLeadingTrivia(
+                        RebuildLeadingTriviaPreservingBlanks(
+                            origLeading,
+                            sepTrailingBreaksForGap,
+                            ci));
+            }
 
             e =
                 e.WithTrailingTrivia(
@@ -3091,6 +3181,13 @@ public static class FormatCSharpFile
 
         var closeLeadingTrivia = node.CloseBraceToken.LeadingTrivia;
 
+        var trailingSeparatorBreaks =
+            (origSeps.Count >= node.Expressions.Count)
+            ?
+            CountLineBreaks(origSeps[node.Expressions.Count - 1].TrailingTrivia)
+            :
+            CountLineBreaks(node.Expressions[^1].GetTrailingTrivia());
+
         var close =
             closeLeadingTrivia.Any(t => !IsWhitespace(t) && !IsLineBreak(t))
             ?
@@ -3099,7 +3196,11 @@ public static class FormatCSharpFile
             .WithTrailingTrivia()
             :
             node.CloseBraceToken
-            .WithLeadingTrivia(EnsureLeadingBreaks(closeLeadingTrivia, 1, ctx.IndentLevel))
+            .WithLeadingTrivia(
+                RebuildLeadingTriviaPreservingBlanks(
+                    closeLeadingTrivia,
+                    trailingSeparatorBreaks,
+                    ctx.IndentLevel))
             .WithTrailingTrivia();
 
         return

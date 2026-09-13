@@ -5528,6 +5528,54 @@ public class FormatCompleteTests
         AssertModuleTextFormatsToItself(input);
     }
 
+    [Fact]
+    public void Roundtrip_comment_between_module_level_signature_and_declaration()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl : Int -> Int -> Int -> List Int
+            -- a comment
+            decl a b c =
+                []
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Normalize_indent_in_record_expression_field()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                { alfa = "example"
+                , beta = [ "example"
+                         ]
+                }
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                { alfa = "example"
+                , beta =
+                    [ "example"
+                    ]
+                }
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
     [Fact(Skip = "Fix formatter egde cases before enabling regression tests")]
     public async System.Threading.Tasks.Task Stable_configurations_from_remote_repositories()
     {
