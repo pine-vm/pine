@@ -3275,6 +3275,16 @@ public class Avh4Format
 
                 // Return to base indent level for the implementation
                 currentContext = typeAnnotResult.Context.ReturnToIndent(context).NextRowToIndent();
+
+                var commentsBeforeImplementation =
+                    commentQueries.GetBetweenRows(
+                        signature.Value.TypeAnnotation.Range.End.Row,
+                        funcDecl.Function.Declaration.Value.Name.Range.Start.Row);
+
+                currentContext =
+                    currentContext
+                    .FormatAndAddComments(commentsBeforeImplementation)
+                    .NextRowToIndentIfCurrentColumnGreaterThanIndent();
             }
 
             var impl = funcDecl.Function.Declaration.Value;
@@ -5014,8 +5024,10 @@ public class Avh4Format
                             var fieldStartLoc = ctx.CurrentLocation();
                             var afterFieldName = ctx.Advance(field.FieldName.Value.Length);
 
-                            // Check if field value is on a new line (multiline value) in the original source
-                            var fieldValueOnNewLine = field.ValueExpr.Range.Start.Row > field.FieldName.Range.Start.Row;
+                            // Check if field value is on a new line or has a multiline syntax layout in the original source
+                            var fieldValueOnNewLine =
+                                field.ValueExpr.Range.Start.Row > field.FieldName.Range.Start.Row ||
+                                HasSyntaxLineBreak(field.ValueExpr.Value, field.ValueExpr.Range);
 
                             FormattingResult<Node<ExpressionSyntax>> valueResult;
                             Location equalsLoc;
