@@ -20,6 +20,7 @@ public class ExpressionGraphOptimizerTests
     private static Expression Value(PineValue value) => new Expression.Litral(value);
     private static Expression List(params ImmutableArray<Expression> items) => new Expression.List(items.ToArray());
     private static Expression Builtin(string name, Expression input) => new Expression.Builtin(name, input);
+    private static Expression At(Expression source, int index) => Builtin("head", Builtin("skip", List(Lit(index), source)));
     private static Expression Call(Expression body, Expression environment) =>
         new Expression.Eval(Value(ExpressionEncoding.EncodeExpressionAsValue(body)), environment);
     private static Expression Conditional(Expression condition, Expression whenFalse, Expression whenTrue) =>
@@ -41,6 +42,136 @@ public class ExpressionGraphOptimizerTests
         ExpressionGraphVM.Create(optimizerOptions: options)
             .EvaluateExpressionOnCustomStack(expression, input, new(100, 10_000, 100))
             .Extract(error => throw new Exception(error.ToString()));
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void GraphValue_function_table_crosses_wrapper_edges_captures_and_nested_inlining(int variant)
+    {
+        var leaf = List(Env, Lit(91));
+        var table = Value(PineValue.List([ExpressionEncoding.EncodeExpressionAsValue(leaf)]));
+        var wrapper = new Expression.Eval(At(At(Env, 0), 0), At(Env, 1));
+        var environment = variant switch
+        {
+            0 => List(table, Env),
+            1 => Conditional(Env, List(table, Env), List(table, Env)),
+            2 => List(table, Call(Env, Env)),
+            _ => throw new NotImplementedException("GraphValue_function_table_crosses_wrapper_edges_captures_and_nested_inlining: " + variant),
+        };
+        var expression = List(Env, Call(Call(wrapper, Env), environment), Env);
+        var cold = Compile(expression);
+        var warm = Compile(expression, memo: cold.Memo);
+        cold.Stats.InlinedCalls.Should().Be(variant == 2 ? 4 : 3);
+        Calls(cold.Graph.Graph).Should().BeEmpty();
+        cold.Stats.AnalysisPasses.Should().BeGreaterThan(0);
+        warm.Stats.Should().Be(cold.Stats);
+        warm.Graph.Graph.Should().Be(cold.Graph.Graph);
+        foreach (var input in ImmutableList.Create(PineKernelValues.TrueValue, PineKernelValues.FalseValue, PineValue.Blob([7])))
+        {
+            var before = Run(expression, input, null);
+            var after = Run(expression, input, new());
+            after.ReturnValue.Evaluate().Should().Be(new DirectInterpreter(new(), null).EvaluateExpressionDefault(expression, input));
+            after.InvocationCount.Should().Be(before.InvocationCount - cold.Stats.InlinedCalls);
+            after.BuildListCount.Should().Be(before.BuildListCount);
+        }
+    }
+
+    [Fact]
+    public void GraphValue_reanalysis_after_inlining_exposes_a_returned_function_target()
+    {
+        var encoded = Value(ExpressionEncoding.EncodeExpressionAsValue(List(Env, Lit(9))));
+        var expression = new Expression.Eval(Call(encoded, Env), Env);
+        var result = Compile(expression);
+        result.Stats.InlinedCalls.Should().Be(2);
+        Calls(result.Graph.Graph).Should().BeEmpty();
+        Run(expression, PineValue.EmptyList, new()).ReturnValue.Evaluate()
+            .Should().Be(Run(expression, PineValue.EmptyList, null).ReturnValue.Evaluate());
+    }
+
+    [Fact]
+    public void GraphValue_revisits_an_earlier_unknown_site_after_its_defining_call_is_inlined()
+    {
+        var encoded = Value(ExpressionEncoding.EncodeExpressionAsValue(List(Env, Lit(9))));
+        var entry = new BasicBlock(new(10), [new(new(0))],
+            [new Operation.Literal(new(new(1)), OwnedExpression.CaptureValue(ExpressionEncoding.EncodeExpressionAsValue(encoded)))],
+            new Terminator.Invoke(new(new(0), new CallTarget.Dynamic(new(1)), FunctionSignature.Canonical, [new(0)]),
+                new(new(0), [new ContinuationBinding.ReturnedResult(0), new ContinuationBinding.CallerValue(new(0))])));
+        var continuation = new BasicBlock(new(0), [new(new(10)), new(new(11))], [],
+            new Terminator.TailInvoke(new(new(1), new CallTarget.Dynamic(new(10)), FunctionSignature.Canonical, [new(11)])));
+        var graph = ValidatedFunctionGraph.ValidateGraph(
+            new(new(0), FunctionSignature.Canonical, entry.Id,
+                ImmutableDictionary<PineBlockId, BasicBlock>.Empty.Add(entry.Id, entry).Add(continuation.Id, continuation)),
+            ImmutableDictionary<FunctionId, FunctionSignature>.Empty).Extract(errors => throw new Exception(string.Join(", ", errors)));
+        var result = ExpressionGraphOptimizer.Optimize(graph, new(), CompilerMemo.Empty);
+        result.Stats.InlinedCalls.Should().Be(2);
+        result.Stats.Candidates.Should().Be(3);
+        result.Stats.AnalysisPasses.Should().Be(2);
+        result.Stats.Declines.Single().Code.Should().Be(GraphOptimizationDeclineCode.UnknownTarget);
+        Calls(result.Graph.Graph).Should().BeEmpty();
+        var firstPass = ExpressionGraphOptimizer.Optimize(graph, new(MaxCandidates: 1), CompilerMemo.Empty);
+        var budget = firstPass.Stats.AnalysisWorkUnits + 1;
+        var bounded = ExpressionGraphOptimizer.Optimize(graph, new(MaxAnalysisWorkUnits: budget), CompilerMemo.Empty);
+        bounded.Stats.AnalysisPasses.Should().Be(2);
+        bounded.Stats.AnalysisWorkUnits.Should().Be(budget);
+        bounded.Stats.InlinedCalls.Should().Be(1);
+        bounded.Stats.BudgetLimitReached.Should().BeTrue();
+        Calls(bounded.Graph.Graph).Single().Target.Should().BeOfType<CallTarget.Dynamic>();
+    }
+
+    [Fact]
+    public void GraphValue_analysis_budget_is_cumulative_and_fallback_preserves_dynamic_calls()
+    {
+        var leaf = List(Env, Lit(91));
+        var wrapper = new Expression.Eval(At(At(Env, 0), 0), At(Env, 1));
+        var table = Value(PineValue.List([ExpressionEncoding.EncodeExpressionAsValue(leaf)]));
+        var expression = Call(wrapper, List(table, Env));
+        var tiny = new GraphOptimizerOptions(MaxAnalysisWorkUnits: 1);
+        var result = Compile(expression, tiny);
+        result.Stats.InlinedCalls.Should().Be(1);
+        result.Stats.AnalysisWorkUnits.Should().Be(1);
+        result.Stats.BudgetLimitReached.Should().BeTrue();
+        Calls(result.Graph.Graph).Should().ContainSingle();
+        result.Graph.KnownFunctionSignatures.Should().Equal(
+            Compile(expression, new(MaxCandidates: 1)).Graph.KnownFunctionSignatures);
+        Compile(expression, tiny, result.Memo).Stats.Should().Be(result.Stats);
+        var input = PineValue.Blob([7]);
+        Run(expression, input, tiny).ReturnValue.Evaluate()
+            .Should().Be(Run(expression, input, null).ReturnValue.Evaluate());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void GraphValue_known_target_projection_does_not_remove_a_failing_unknown_list_item(bool selected)
+    {
+        var failing = Builtin("bit_shift_left", List(Lit(-8), Value(PineValue.Blob([1]))));
+        var target = At(List(failing, Value(ExpressionEncoding.EncodeExpressionAsValue(Lit(99)))), 1);
+        var expression = Conditional(Env, Lit(8), new Expression.Eval(target, Env));
+        Compile(expression).Stats.InlinedCalls.Should().Be(1);
+        foreach (var options in ImmutableList.Create(new GraphOptimizerOptions(Enabled: false), new GraphOptimizerOptions()))
+        {
+            if (selected)
+            {
+                Action run = () => Run(expression, PineKernelValues.TrueValue, options);
+                run.Should().Throw<InvalidIntermediateCodeException>();
+            }
+            else
+                Run(expression, PineKernelValues.FalseValue, options).ReturnValue.Evaluate()
+                    .Should().Be(IntegerEncoding.EncodeSignedInteger(8));
+        }
+    }
+
+    [Fact]
+    public void GraphValue_malformed_projected_encoding_remains_dynamic_without_a_temporary_signature()
+    {
+        var target = At(List(Env, Value(PineValue.Blob([255]))), 1);
+        var result = Compile(new Expression.Eval(target, Env));
+        result.Stats.InlinedCalls.Should().Be(0);
+        result.Stats.Declines.Single().Code.Should().Be(GraphOptimizationDeclineCode.InvalidEncoding);
+        result.Graph.KnownFunctionSignatures.Should().BeEmpty();
+        Calls(result.Graph.Graph).Single().Target.Should().BeOfType<CallTarget.Dynamic>();
+    }
 
     [Theory]
     [InlineData(0)]

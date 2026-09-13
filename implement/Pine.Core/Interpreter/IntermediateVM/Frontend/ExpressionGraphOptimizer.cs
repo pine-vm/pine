@@ -19,12 +19,15 @@ public sealed record GraphOptimizerOptions(
     long MaxExpansionUnits = 20_000,
     long MaxWorkUnits = 65_536,
     int MaxBodyNodes = 256,
-    int MaxDepth = 64);
+    int MaxDepth = 64,
+    long MaxAnalysisWorkUnits = 100_000,
+    int MaxAnalysisDepth = 32,
+    int MaxAnalysisListItems = 256);
 
 /// <summary>A conservative reason to retain the original dynamic call.</summary>
 public enum GraphOptimizationDeclineCode
 {
-    /// <summary>No block-local exact literal defines the dynamic target.</summary>
+    /// <summary>No exact literal or sound graph value fact defines the dynamic target.</summary>
     UnknownTarget,
     /// <summary>A cumulative limit prevents further speculative work.</summary>
     BudgetExhausted,
@@ -50,7 +53,9 @@ public sealed record GraphOptimizationDecline(
 public sealed record GraphOptimizationStats(
     int Candidates, int InlinedCalls, int SelfTailCalls, long WorkUnits, long GraphGrowthUnits,
     ImmutableList<GraphOptimizationDecline> Declines,
-    bool BudgetLimitReached = false)
+    bool BudgetLimitReached = false,
+    long AnalysisWorkUnits = 0,
+    int AnalysisPasses = 0)
 {
     /// <summary>No optimization work.</summary>
     public static GraphOptimizationStats Empty { get; } = new(0, 0, 0, 0, 0, []);
@@ -60,18 +65,21 @@ public sealed record GraphOptimizationStats(
         other is not null && Candidates == other.Candidates && InlinedCalls == other.InlinedCalls &&
         SelfTailCalls == other.SelfTailCalls && WorkUnits == other.WorkUnits &&
         GraphGrowthUnits == other.GraphGrowthUnits && BudgetLimitReached == other.BudgetLimitReached &&
+        AnalysisWorkUnits == other.AnalysisWorkUnits && AnalysisPasses == other.AnalysisPasses &&
         Declines.SequenceEqual(other.Declines);
 
     /// <inheritdoc/>
     public override int GetHashCode() =>
-        HashCode.Combine(Candidates, InlinedCalls, SelfTailCalls, WorkUnits, GraphGrowthUnits, ModelEquality.SequenceHash(Declines), BudgetLimitReached);
+        HashCode.Combine(
+            HashCode.Combine(Candidates, InlinedCalls, SelfTailCalls, WorkUnits, GraphGrowthUnits, ModelEquality.SequenceHash(Declines), BudgetLimitReached),
+            AnalysisWorkUnits, AnalysisPasses);
 }
 
 /// <summary>The validated output and explicit persistent compiler memo; optimized graphs are not memoized.</summary>
 public sealed record GraphOptimizationResult(ValidatedFunctionGraph Graph, CompilerMemo Memo, GraphOptimizationStats Stats);
 
 /// <summary>
-/// Bounded expression-graph integration, not environment-carried identity inference.
+/// Bounded expression-graph integration using only structurally proven, owned target values.
 /// Every speculative body uses reduction-disabled preparation, never legacy expression inlining.
 /// </summary>
 public static class ExpressionGraphOptimizer
@@ -86,7 +94,7 @@ public static class ExpressionGraphOptimizer
     }
 
     /// <summary>
-    /// Discovers only block-local literal operands, in block-ID order, revisiting introduced calls.
+    /// Discovers exact operands in block-ID order, revisiting introduced calls and newly exposed facts.
     /// A persistent visited set and strictly cumulative candidate/work/growth limits bound expansion.
     /// Disabled policy returns the exact input evidence and memo without inspecting the graph.
     /// </summary>
@@ -106,6 +114,8 @@ public static class ExpressionGraphOptimizer
             var currentMemo = memo;
             var stats = GraphOptimizationStats.Empty with { SelfTailCalls = loops.Item2 };
             var visited = ImmutableHashSet<CallSiteId>.Empty;
+            var unknownVisited = ImmutableHashSet<CallSiteId>.Empty;
+            GraphValueAnalysisResult? analysis = null;
             if (!options.InlineLiteralCalls)
                 return new(current, currentMemo, stats);
 
@@ -124,20 +134,25 @@ public static class ExpressionGraphOptimizer
                 stats = stats with { Candidates = stats.Candidates + 1 };
                 var literal = block.Operations.Select(LiteralOf).FirstOrDefault(operation =>
                     operation?.Result.Id == ((CallTarget.Dynamic)call.Target).EncodedExpression);
-                if (literal is null)
+                // Keep the original literal fast path and its work counts. Run analysis at most
+                // once for each graph version, only when an extended target actually needs it.
+                var target = literal?.Value ?? ResolveFact(((CallTarget.Dynamic)call.Target).EncodedExpression);
+                if (target is null)
                 {
-                    Decline(GraphOptimizationDeclineCode.UnknownTarget);
+                    unknownVisited = unknownVisited.Add(call.Site);
+                    Decline(analysis?.BudgetExhausted is true
+                        ? GraphOptimizationDeclineCode.BudgetExhausted : GraphOptimizationDeclineCode.UnknownTarget);
                     continue;
                 }
 
-                var encoding = MeasureLiteral(literal.Value, options.MaxWorkUnits - stats.WorkUnits, options.MaxDepth);
+                var encoding = MeasureLiteral(target, options.MaxWorkUnits - stats.WorkUnits, options.MaxDepth);
                 stats = stats with { WorkUnits = stats.WorkUnits + encoding.Units };
                 if (!encoding.Fits)
                 {
                     Decline(GraphOptimizationDeclineCode.EncodingLimit);
                     continue;
                 }
-                var parsed = FunctionPreparation.ParseExpression(literal.Value, currentMemo);
+                var parsed = FunctionPreparation.ParseExpression(target, currentMemo);
                 currentMemo = parsed.Memo;
                 if (parsed.Result.Expression is not { } body)
                 {
@@ -208,13 +223,38 @@ public static class ExpressionGraphOptimizer
                     Decline(GraphOptimizationDeclineCode.BudgetExhausted);
                     continue;
                 }
-                // Removed site IDs can be reused by the inliner. Only live refusals remain visited.
-                visited = visited.Remove(call.Site);
+                // Inlining exposes caller environments and successful return operands. Reconsider
+                // unknown refusals, including sites visited before their defining call was inlined.
+                visited = visited.Remove(call.Site).Except(unknownVisited);
+                unknownVisited = [];
+                analysis = null;
                 current = success;
                 stats = stats with { InlinedCalls = stats.InlinedCalls + 1, GraphGrowthUnits = stats.GraphGrowthUnits + growth };
 
                 void Decline(GraphOptimizationDeclineCode reason, GraphInliningDeclineCode? inlineReason = null) =>
                     stats = stats with { Declines = stats.Declines.Add(new(call.Site, reason, inlineReason)) };
+            }
+
+            LiteralValue? ResolveFact(PineVirtualValueId value)
+            {
+                if (analysis is null)
+                {
+                    analysis = GraphValueAnalysis.Analyze(current, new(
+                        Math.Max(0, options.MaxAnalysisWorkUnits - stats.AnalysisWorkUnits),
+                        options.MaxAnalysisDepth, options.MaxAnalysisListItems));
+                    stats = stats with
+                    {
+                        AnalysisWorkUnits = stats.AnalysisWorkUnits + analysis.WorkUnits,
+                        AnalysisPasses = stats.AnalysisPasses + 1,
+                        BudgetLimitReached = stats.BudgetLimitReached || analysis.BudgetExhausted,
+                    };
+                }
+                return analysis.ValueOf(value) switch
+                {
+                    GraphValueFact.Exact exact => exact.Value,
+                    GraphValueFact.Unknown or GraphValueFact.List => null,
+                    _ => throw new NotImplementedException("ResolveFact does not handle fact variant: " + analysis.ValueOf(value).GetType().Name),
+                };
             }
         }
     }
