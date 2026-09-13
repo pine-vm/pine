@@ -105,6 +105,16 @@ public static class ExpressionGraphCompiler
     private static Cursor CompileListOnlyHeadSkip(
         OwnedExpression.Builtin builtin, OwnedExpression count, OwnedExpression source, Cursor cursor)
     {
+        if (count is OwnedExpression.Literal literal &&
+            BuiltinFunction.SignedIntegerFromValueRelaxed(OwnedExpression.ToValue(literal.Value)) is { } index)
+        {
+            var directSource = CompileNode(source, cursor);
+            var projected = Define(directSource, result => index > int.MaxValue
+                ? new Operation.Literal(result, new LiteralValue.List([]))
+                : new Operation.Project(result, directSource.Live[^1], new([index < 0 ? 0 : (int)index])));
+            return projected with { Live = projected.Live.RemoveAt(cursor.Live.Count) };
+        }
+
         // DirectInterpreter gives this syntactic form list-only semantics. Its unsuccessful
         // integer probe falls back to generic evaluation, evaluating the count a second time.
         var counted = CompileNode(count, cursor);

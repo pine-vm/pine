@@ -13,7 +13,7 @@ public static class GraphCompiler
     /// lives only in the prologue, so backedges to entry bind parameters without reloading input.
     /// </summary>
     public static Result<GraphBackendDiagnostic, GraphFunction> Compile(
-        ValidatedFunctionGraph validated, ImmutableList<PineBlockId>? blockOrder = null)
+        ValidatedFunctionGraph validated, ImmutableList<PineBlockId>? blockOrder = null, bool fuseScalarBuiltins = false)
     {
         var graph = validated.Graph;
         var orderedBlocks = graph.Blocks.Values.OrderBy(block => block.Id.Value).ToImmutableList();
@@ -36,7 +36,8 @@ public static class GraphCompiler
         var locals = storage.ToImmutableDictionary(binding => binding.Value, binding => binding.Local);
         var blocks = orderedBlocks.Select(block => new SelectedBlock(
             block.Id,
-            block.Operations.SelectMany(operation => InstructionSelection.Select(operation, locals)).ToImmutableList(),
+            fuseScalarBuiltins ? InstructionSelection.SelectBlock(block, locals) :
+                block.Operations.SelectMany(operation => InstructionSelection.Select(operation, locals)).ToImmutableList(),
             SelectTerminator(block.Terminator))).ToImmutableList();
         var prologue = graph.Blocks[graph.Entry].Parameters.SelectMany((parameter, index) =>
             ImmutableList.Create<SelectedInstruction>(new SelectedInstruction.Load(0))

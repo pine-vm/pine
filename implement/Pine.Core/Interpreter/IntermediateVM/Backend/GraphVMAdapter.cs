@@ -28,13 +28,13 @@ public static class GraphVMAdapter
             foreach (var fragment in layout)
             {
                 offsets.Add(fragment.Label, position);
-                position = checked(position + fragment.Instructions.Count + TransferSize(fragment.Transfer));
+                position = checked(position + fragment.Instructions.Sum(StraightLineVMAdapter.InstructionCount) + TransferSize(fragment.Transfer));
             }
 
             var instructions = ImmutableList.CreateBuilder<StackInstruction>();
             foreach (var fragment in layout)
             {
-                instructions.AddRange(fragment.Instructions.Select(StraightLineVMAdapter.ToInstruction));
+                instructions.AddRange(fragment.Instructions.SelectMany(StraightLineVMAdapter.ToInstructions));
                 switch (fragment.Transfer)
                 {
                     case LayoutTransfer.Return ret:

@@ -109,6 +109,20 @@ Added immutable value facts through lists, projections, safe builtin transfers a
 
 Validation: scoped formatting; the established regression gate reports **545 passed, one existing skip**. Log: `/home/runner/work/super-duper-disco/super-duper-disco/implement/Pine.Core.Tests/artifacts/test-logs/Pine.Core.Tests/2026-09-13T16-11-58_filtered.log`. The subsequent full-counter/no-extra-list assertion passed the targeted Alfa test (`2026-09-13T16-13-25_filtered.log` in the same directory). Independent reviews found no significant issues in either checkpoint; secret scans passed. Automated review remains unavailable and CodeQL skipped the oversized database; no completed automated security analysis is claimed.
 
+## 2026-09-13 — Complete Alfa graph optimization
+
+Implemented the remaining graph-path scenario: recognize recursive expression calls as graph loops **before** inlining, then eliminate canonical argument-list materialization inside the composed graph. The graph-disabled baseline remains available; lowering uses only existing VM instruction kinds/interfaces.
+
+- Guarded root reentry must refer to the unspecialized body actually represented by the loop. Matching an encoded original expression does not justify reentering a body prepared under environment assumptions that the new arguments may violate.
+- Literal-count syntactic head/skip can avoid the generic-probe fallback graph entirely while retaining list-only projection semantics and source evaluation. This removes much of the analysis and allocation overhead observed in the previous Alfa checkpoint.
+- Existing scalar slice opcodes are not drop-in replacements for generic slicing on all Pine integers: their `int` casts differ for oversized/negative counts. Allocation-free selection must preserve these boundaries using existing operations, not silently change error behavior.
+- Demand-driven projected block parameters carry scalar arguments across loop edges and invocation continuations. Opaque values retain their materialization; dead-code removal preserves potentially failing builtins and their evaluated operands. This enables the same looping inlinee in tail, captured non-tail, consecutive-loop and nested-loop contexts.
+- Production cutover still includes projected-parameter adaptation, specialization ordering and policy compatibility. Do not hide a legacy path behind a new entrypoint or add an Alfa-specific production dispatch shortcut.
+
+Actual Alfa and its captured usage site now execute all 13 cases with **zero invocations and zero list builds**, using unknown runtime source/offset arguments. Default graph optimization options succeed; the inspected artifacts contain no invocation terminators or list-building instructions. Two long inputs, including a 4,097-character identifier and a nonzero-offset case, still use one frame and no invocations/list builds; restricted runs report existing loop-quota exhaustion. Aggregate instructions are **4,929 tail / 5,766 captured**, below the corresponding graph-disabled baselines but still above the earlier optimized production baseline. This is the complete frame/argument-allocation optimization in the opt-in graph path, **not production cutover**.
+
+Validation: scoped formatting; **565 passed, one existing skip** in the established gate. Log: `/home/runner/work/super-duper-disco/super-duper-disco/implement/Pine.Core.Tests/artifacts/test-logs/Pine.Core.Tests/2026-09-13T17-05-40_filtered.log`. Covers scalar slicing failures/bounds, exact source identity, opaque fallbacks, simultaneous loop parameters, consecutive/nested looping inlinees, captured continuations and long Alfa inputs. Independent reviews confirmed source-provenance and ID-exhaustion fixes and found no remaining semantic/backend issues; final purity cleanup and automated validation pending.
+
 ## Deferred improvement ideas
 
 These are hypotheses for measurement after production cutover, not exemptions from required correctness, safety or performance gates. Instruction/VM/interface redesign additionally waits for Example Alfa's optimizations in production. Retain the conservative backend as a comparison baseline.

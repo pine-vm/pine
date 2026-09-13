@@ -446,10 +446,36 @@ public class ExpressionGraphFrontendTests
             .ReturnValue.Evaluate().Should().Be(PineValue.EmptyList);
         ExpressionGraphCompiler.Compile(generic).Blocks.Values.SelectMany(block => block.Operations)
             .OfType<Operation.Project>().Should().BeEmpty();
+        ExpressionGraphCompiler.Compile(syntactic).Blocks.Values.SelectMany(block => block.Operations)
+            .OfType<Operation.Project>().Should().ContainSingle();
         var expected = new DirectInterpreter(new(), null).EvaluateExpressionDefault(generic, genericInput);
         expected.Should().Be(PineValue.Blob([29]));
         Execute(generic, genericInput).Result.Extract(error => throw new Exception(error.ToString()))
             .ReturnValue.Evaluate().Should().Be(expected);
+    }
+
+    [Fact]
+    public void Literal_head_skip_preserves_integer_probe_boundaries()
+    {
+        foreach (var count in new[]
+        {
+            IntegerEncoding.EncodeSignedInteger(-3), IntegerEncoding.EncodeSignedInteger(0),
+            IntegerEncoding.EncodeSignedInteger(1), IntegerEncoding.EncodeSignedInteger(int.MaxValue),
+            IntegerEncoding.EncodeSignedInteger((long)int.MaxValue + 1),
+            IntegerEncoding.EncodeSignedInteger((long)int.MinValue - 1),
+            PineValue.Blob([4, 0, 1]), PineValue.EmptyList, PineValue.Blob([255, 1]),
+        })
+            foreach (var source in new[]
+            {
+                PineValue.Blob([17, 29, 31]), PineValue.EmptyBlob,
+                PineValue.List([IntegerEncoding.EncodeSignedInteger(7), IntegerEncoding.EncodeSignedInteger(11)]),
+            })
+            {
+                var expression = Builtin("head", Builtin("skip", List(Value(count), Env)));
+                var expected = new DirectInterpreter(new(), null).EvaluateExpressionDefault(expression, source);
+                Execute(expression, source).Result.Extract(error => throw new Exception(error.ToString()))
+                    .ReturnValue.Evaluate().Should().Be(expected);
+            }
     }
 
     [Fact]

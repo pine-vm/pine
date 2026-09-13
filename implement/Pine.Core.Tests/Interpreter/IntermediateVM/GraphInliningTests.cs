@@ -163,7 +163,7 @@ public class GraphInliningTests
         enabled.Stats.Candidates.Should().Be(0);
         enabled.Memo.Should().BeSameAs(CompilerMemo.Empty);
         enabled.Stats.BudgetLimitReached.Should().BeFalse();
-        foreach (var options in ImmutableList.Create(new GraphOptimizerOptions(SelfTailLoops: false),
+        foreach (var options in ImmutableList.Create(new GraphOptimizerOptions(SelfTailLoops: false, ScalarReplacement: false),
             new(Enabled: false), new(MaxCandidates: 0), new(MaxExpansionUnits: 0)))
             ExpressionGraphOptimizer.Optimize(input, options, CompilerMemo.Empty).Graph.Should().BeSameAs(input);
     }

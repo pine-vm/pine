@@ -14,6 +14,8 @@ public static class ExpressionGraphVM
     /// graph-first pipeline is opt-in; callers may explicitly select the legacy preparation policy.
     /// Graph optimization also defaults off; pass optimizerOptions to opt in. Runtime caches and
     /// interop frames belong to the VM, not to the pure compiler memo.
+    /// The enabled policy includes guarded source-identity loops, scalar replacement across
+    /// continuations and backedges, and selection of existing allocation-free kernel instructions.
     /// </summary>
     public static PineVM Create(
         PreparationOptions? preparationOptions = null,
@@ -37,7 +39,7 @@ public static class ExpressionGraphVM
         var optimized = ExpressionGraphOptimizer.Compile(
             CompilationRequest.Capture(expression, options), optimizerOptions, CompilerMemo.Empty)
             .Extract(errors => throw new InvalidOperationException(string.Join(", ", errors)));
-        var function = GraphCompiler.Compile(optimized.Graph)
+        var function = GraphCompiler.Compile(optimized.Graph, fuseScalarBuiltins: optimizerOptions.Enabled && optimizerOptions.ScalarReplacement)
             .Extract(error => throw new InvalidOperationException(error.ToString()));
         return new(GraphVMAdapter.ToStackFrame(function), []);
     }

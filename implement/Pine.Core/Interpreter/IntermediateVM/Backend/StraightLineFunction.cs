@@ -22,8 +22,17 @@ public abstract record SelectedInstruction
     public sealed record MakeList(int Count) : SelectedInstruction;
     /// <summary>Projects one nonnegative list index.</summary>
     public sealed record Project(int Index) : SelectedInstruction;
-    /// <summary>A generic unary Pine builtin; only the backend's whitelist can be adapted.</summary>
-    public sealed record Builtin(StackInstructionKind Kind) : SelectedInstruction;
+    /// <summary>
+    /// An existing Pine kernel with explicit stack effect. A constant supplies an existing opcode's
+    /// literal operand; scalar locals permit guarded lowering of generic slicing semantics without
+    /// constructing a canonical argument list. These are compiler-owned operands, not VM fields.
+    /// </summary>
+    public sealed record Builtin(
+        StackInstructionKind Kind,
+        int OperandCount = 1,
+        LiteralValue? Constant = null,
+        int? CountLocal = null,
+        int? SourceLocal = null) : SelectedInstruction;
     /// <summary>Returns the stack top.</summary>
     public sealed record Return : SelectedInstruction;
 }

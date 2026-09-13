@@ -1,3 +1,4 @@
+using Pine.Core.CommonEncodings;
 using Pine.Core.Interpreter.IntermediateVM.Semantic;
 using System;
 using System.Collections.Generic;
@@ -7,9 +8,11 @@ using System.Linq;
 namespace Pine.Core.Interpreter.IntermediateVM.Frontend;
 
 /// <summary>
-/// Opt-in graph policy. Bounds apply cumulatively per Optimize invocation, including speculative
+/// Opt-in graph policy. Inlining and analysis bounds apply cumulatively per Optimize invocation, including speculative
 /// work on refused candidates. Work units count encoded nodes/bytes and owned AST nodes.
 /// Depth and per-body limits bound recursive parsing and frontend construction before either runs.
+/// Scalar and guard limits are separate per-pass/body bounds; the cumulative candidate limit also
+/// bounds how many such passes can run. They do not consume the inliner's expansion allowance.
 /// </summary>
 public sealed record GraphOptimizerOptions(
     bool Enabled = true,
@@ -22,7 +25,13 @@ public sealed record GraphOptimizerOptions(
     int MaxDepth = 64,
     long MaxAnalysisWorkUnits = 100_000,
     int MaxAnalysisDepth = 32,
-    int MaxAnalysisListItems = 256);
+    int MaxAnalysisListItems = 256,
+    bool ScalarReplacement = true,
+    bool GuardDynamicSelfTailCalls = true,
+    long MaxScalarWorkUnits = 200_000,
+    long MaxScalarExpansionUnits = 20_000,
+    long MaxGuardWorkUnits = 65_536,
+    long MaxGuardExpansionUnits = 20_000);
 
 /// <summary>A conservative reason to retain the original dynamic call.</summary>
 public enum GraphOptimizationDeclineCode
@@ -90,7 +99,21 @@ public static class ExpressionGraphOptimizer
     {
         var prepared = FunctionPreparation.PrepareFunction(request, memo);
         var compiled = ExpressionGraphCompiler.CompileExpressionToGraph(prepared.Function, prepared.Memo);
-        return compiled.Graph.Map(graph => Optimize(graph, options, compiled.Memo));
+        return compiled.Graph.Map(graph =>
+        {
+            var guarded = options.Enabled && options.SelfTailLoops && options.GuardDynamicSelfTailCalls &&
+                options.MaxGuardWorkUnits > 0 && options.MaxGuardExpansionUnits > 0 &&
+                options.MaxCandidates > 0 && options.MaxWorkUnits > 0 && options.MaxExpansionUnits > 0 &&
+                options.MaxBodyNodes > 0 && options.MaxDepth > 0 &&
+                prepared.Function.Request.Specialization is null &&
+                prepared.Function.Body == prepared.Function.Source
+                ? ExpressionSelfTailLoops.Compile(prepared.Function,
+                    OwnedExpression.CaptureValue(ExpressionEncoding.EncodeExpressionAsValue(prepared.Function.Source.ToExpression())),
+                    options.MaxGuardWorkUnits, options.MaxGuardExpansionUnits, options.MaxDepth)
+                : (graph, 0);
+            var optimized = Optimize(guarded.Item1, options, compiled.Memo);
+            return optimized with { Stats = optimized.Stats with { SelfTailCalls = optimized.Stats.SelfTailCalls + guarded.Item2 } };
+        });
     }
 
     /// <summary>
@@ -110,7 +133,9 @@ public static class ExpressionGraphOptimizer
                 return new(input, memo, GraphOptimizationStats.Empty with { BudgetLimitReached = true });
             // Equivalent immutable fold: (graph, memo, visited sites, stats) -> next state.
             var loops = options.SelfTailLoops ? GraphSelfTailLoops.Rewrite(input) : (input, 0);
-            var current = loops.Item1;
+            var current = options.ScalarReplacement
+                ? GraphScalarReplacement.Rewrite(loops.Item1, maxWorkUnits: options.MaxScalarWorkUnits,
+                    maxExpansionUnits: options.MaxScalarExpansionUnits) : loops.Item1;
             var currentMemo = memo;
             var stats = GraphOptimizationStats.Empty with { SelfTailCalls = loops.Item2 };
             var visited = ImmutableHashSet<CallSiteId>.Empty;
@@ -192,6 +217,11 @@ public static class ExpressionGraphOptimizer
                     Decline(GraphOptimizationDeclineCode.UnsupportedBody);
                     continue;
                 }
+                var calleeLoops = options.SelfTailLoops && options.GuardDynamicSelfTailCalls &&
+                    options.MaxGuardWorkUnits > 0 && options.MaxGuardExpansionUnits > 0
+                    ? ExpressionSelfTailLoops.Compile(preparation.Function, target,
+                        options.MaxGuardWorkUnits, options.MaxGuardExpansionUnits, options.MaxDepth) : (callee, 0);
+                callee = calleeLoops.Item1;
                 var known = call with { Target = new CallTarget.Known(id.Value) };
                 var terminator = block.Terminator switch
                 {
@@ -228,8 +258,15 @@ public static class ExpressionGraphOptimizer
                 visited = visited.Remove(call.Site).Except(unknownVisited);
                 unknownVisited = [];
                 analysis = null;
-                current = success;
-                stats = stats with { InlinedCalls = stats.InlinedCalls + 1, GraphGrowthUnits = stats.GraphGrowthUnits + growth };
+                current = options.ScalarReplacement
+                    ? GraphScalarReplacement.Rewrite(success, maxWorkUnits: options.MaxScalarWorkUnits,
+                        maxExpansionUnits: options.MaxScalarExpansionUnits) : success;
+                stats = stats with
+                {
+                    InlinedCalls = stats.InlinedCalls + 1,
+                    SelfTailCalls = stats.SelfTailCalls + calleeLoops.Item2,
+                    GraphGrowthUnits = stats.GraphGrowthUnits + growth,
+                };
 
                 void Decline(GraphOptimizationDeclineCode reason, GraphInliningDeclineCode? inlineReason = null) =>
                     stats = stats with { Declines = stats.Declines.Add(new(call.Site, reason, inlineReason)) };
@@ -273,7 +310,7 @@ public static class ExpressionGraphOptimizer
         }
     }
 
-    private static (bool Fits, long Units) MeasureLiteral(LiteralValue root, long limit, int depthLimit)
+    internal static (bool Fits, long Units) MeasureLiteral(LiteralValue root, long limit, int depthLimit)
     {
         return Measure();
         (bool, long) Measure()
@@ -372,7 +409,7 @@ public static class ExpressionGraphOptimizer
         _ => throw new NotImplementedException("LiteralOf does not handle operation variant: " + operation.GetType().Name),
     };
 
-    private static long GraphUnits(FunctionGraph graph) => graph.Blocks.Values.Sum(block =>
+    internal static long GraphUnits(FunctionGraph graph) => graph.Blocks.Values.Sum(block =>
         1L + block.Parameters.Count + block.Operations.Sum(operation => operation switch
         {
             Operation.Literal => 2L,

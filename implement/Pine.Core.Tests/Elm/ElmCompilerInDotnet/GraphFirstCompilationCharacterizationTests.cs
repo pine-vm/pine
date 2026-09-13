@@ -4,7 +4,9 @@ using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Interpreter;
 using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.Interpreter.IntermediateVM.Backend;
 using Pine.Core.Interpreter.IntermediateVM.Frontend;
+using Pine.Core.Interpreter.IntermediateVM.Semantic;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
@@ -68,8 +70,10 @@ public class GraphFirstCompilationCharacterizationTests
                     False
         """;
 
-    [Fact]
-    public void GraphValue_actual_Alfa_wrapper_carries_only_the_function_table_not_runtime_arguments()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void GraphValue_actual_Alfa_wrapper_carries_only_the_function_table_not_runtime_arguments(bool capturedUsageSite)
     {
         var parsed = ElmCompilerTestHelper.CompileElmModules([ExampleAlfaModule], disableInlining: true).parsedEnv;
         var functionValue = parsed.Modules.Single(module => module.moduleName is "Test")
@@ -84,9 +88,12 @@ public class GraphFirstCompilationCharacterizationTests
         var environment = function.UsesNestedArgFormat
             ? new Expression.List([table, new Expression.List([source, offset])])
             : new Expression.List([table, source, offset]);
-        var wrapper = new Expression.Eval(
+        var call = new Expression.Eval(
             new Expression.Litral(ExpressionEncoding.EncodeExpressionAsValue(function.InnerFunction)), environment);
-        // The real declaration is larger than the deliberately small default inline-body policy.
+        Expression wrapper = capturedUsageSite
+            ? new Expression.Builtin("int_add", new Expression.List([call, offset]))
+            : call;
+        // Inspect generous diagnostic bounds and independently verify the default policy below.
         var policy = new GraphOptimizerOptions(
             MaxCandidates: 8, MaxExpansionUnits: 100_000, MaxWorkUnits: 1_000_000,
             MaxBodyNodes: 4096, MaxDepth: 128, MaxAnalysisWorkUnits: 1_000_000);
@@ -94,10 +101,21 @@ public class GraphFirstCompilationCharacterizationTests
             CompilationRequest.Capture(wrapper, new(DisableReduction: true)), policy, CompilerMemo.Empty)
             .Extract(errors => throw new InvalidOperationException(string.Join(", ", errors)));
         Console.WriteLine("Actual Alfa closed-table wrapper: " + compiled.Stats);
-        compiled.Stats.InlinedCalls.Should().Be(3);
-        compiled.Stats.SelfTailCalls.Should().Be(0);
-        compiled.Stats.AnalysisWorkUnits.Should().Be(policy.MaxAnalysisWorkUnits);
-        compiled.Stats.BudgetLimitReached.Should().BeTrue();
+        compiled.Stats.BudgetLimitReached.Should().BeFalse();
+        compiled.Stats.InlinedCalls.Should().Be(2);
+        compiled.Graph.Graph.Blocks.Values.Where(block =>
+            block.Terminator is Terminator.Invoke or Terminator.TailInvoke).Should().BeEmpty();
+        var defaults = ExpressionGraphOptimizer.Compile(
+            CompilationRequest.Capture(wrapper, new(DisableReduction: true)), new(), CompilerMemo.Empty)
+            .Extract(errors => throw new InvalidOperationException(string.Join(", ", errors)));
+        defaults.Graph.Graph.Blocks.Values.Where(block =>
+            block.Terminator is Terminator.Invoke or Terminator.TailInvoke).Should().BeEmpty();
+        var artifact = GraphCompiler.Compile(compiled.Graph, fuseScalarBuiltins: true)
+            .Extract(error => throw new InvalidOperationException(error.ToString()));
+        var instructions = GraphVMAdapter.ToStackFrame(artifact).Instructions;
+        instructions.Where(instruction => instruction.Kind is StackInstructionKind.Build_List or StackInstructionKind.Build_List_With_Prefix)
+            .Should().BeEmpty();
+        instructions.Count.Should().BeLessThan(1500);
         var baselineVM = ExpressionGraphVM.Create();
         var optimizedVM = ExpressionGraphVM.Create(optimizerOptions: policy);
         ImmutableArray<(string Source, int Offset, int Expected)> cases =
@@ -115,9 +133,29 @@ public class GraphFirstCompilationCharacterizationTests
             PerformanceCountersFormatting.FormatCounts(baselineCounters));
         Console.WriteLine("Actual Alfa graph optimizer enabled:\n" +
             PerformanceCountersFormatting.FormatCounts(optimizedCounters));
-        reports.Sum(pair => pair.After.BuildListCount).Should().Be(reports.Sum(pair => pair.Before.BuildListCount));
+        reports.Sum(pair => pair.After.BuildListCount).Should().Be(0);
         reports.Sum(pair => pair.Before.InvocationCount).Should().Be(42);
-        reports.Sum(pair => pair.After.InvocationCount).Should().Be(19);
+        reports.Sum(pair => pair.After.InvocationCount).Should().Be(0);
+        optimizedCounters.InstructionCount.Should().BeLessThan(baselineCounters.InstructionCount);
+
+        foreach (var longCase in ImmutableArray.Create(
+            (Source: "a" + new string('0', 4096) + "!", Offset: 0, Expected: 4097),
+            (Source: "!Z" + new string('_', 2048) + "!", Offset: 1, Expected: 2050)))
+        {
+            var longInput = PineValue.List([
+                ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance(longCase.Source)),
+                IntegerEncoding.EncodeSignedInteger(longCase.Offset)]);
+            var longReport = optimizedVM.EvaluateExpressionOnCustomStack(wrapper, longInput, new(0, 100_000, 1))
+                .Extract(error => throw new InvalidOperationException(error.ToString()));
+            longReport.ReturnValue.Evaluate().Should().Be(
+                IntegerEncoding.EncodeSignedInteger(longCase.Expected + (capturedUsageSite ? longCase.Offset : 0)));
+            longReport.InvocationCount.Should().Be(0);
+            longReport.BuildListCount.Should().Be(0);
+            longReport.LoopIterationCount.Should().BeGreaterThan(longCase.Expected - longCase.Offset - 1);
+            optimizedVM.EvaluateExpressionOnCustomStack(wrapper, longInput, new(0, 8, 1))
+                .IsErrOrNull()!.Reason.Should().BeOfType<EvaluationErrorReason.QuotaExhausted>()
+                .Which.QuotaKind.Should().Be(EvaluationQuotaKind.LoopIterationCount);
+        }
 
         static Expression Argument(int index) => new Expression.Builtin("head",
             new Expression.Builtin("skip", new Expression.List([
@@ -128,12 +166,12 @@ public class GraphFirstCompilationCharacterizationTests
             var input = PineValue.List([
                 ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance(testCase.Source)),
                 IntegerEncoding.EncodeSignedInteger(testCase.Offset)]);
-            var expected = IntegerEncoding.EncodeSignedInteger(testCase.Expected);
+            var expected = IntegerEncoding.EncodeSignedInteger(testCase.Expected + (capturedUsageSite ? testCase.Offset : 0));
             new DirectInterpreter(new PineVMParseCache(), evalCache: null)
                 .EvaluateExpressionDefault(wrapper, input).Should().Be(expected);
             var before = baselineVM.EvaluateExpressionOnCustomStack(wrapper, input, new(100_000, 100_000, 1000))
                 .Extract(error => throw new InvalidOperationException(error.ToString()));
-            var after = optimizedVM.EvaluateExpressionOnCustomStack(wrapper, input, new(100_000, 100_000, 1000))
+            var after = optimizedVM.EvaluateExpressionOnCustomStack(wrapper, input, new(0, 100_000, 1))
                 .Extract(error => throw new InvalidOperationException(error.ToString()));
             before.ReturnValue.Evaluate().Should().Be(expected);
             after.ReturnValue.Evaluate().Should().Be(expected);

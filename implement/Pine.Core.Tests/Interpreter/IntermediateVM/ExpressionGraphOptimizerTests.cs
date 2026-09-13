@@ -27,8 +27,13 @@ public class ExpressionGraphOptimizerTests
         new Expression.Conditional(condition, whenFalse, whenTrue);
     private static CompilationRequest Request(Expression expression) =>
         CompilationRequest.Capture(expression, new(DisableReduction: true));
+    // Retain characterization of the original bounded literal/value-analysis policy.
+    private static GraphOptimizerOptions LiteralPolicy(GraphOptimizerOptions options) =>
+        options with { ScalarReplacement = false, GuardDynamicSelfTailCalls = false };
+    private static GraphOptimizationResult Optimize(ValidatedFunctionGraph graph, GraphOptimizerOptions options, CompilerMemo memo) =>
+        ExpressionGraphOptimizer.Optimize(graph, LiteralPolicy(options), memo);
     private static GraphOptimizationResult Compile(Expression expression, GraphOptimizerOptions? options = null, CompilerMemo? memo = null) =>
-        ExpressionGraphOptimizer.Compile(Request(expression), options ?? new(), memo ?? CompilerMemo.Empty)
+        ExpressionGraphOptimizer.Compile(Request(expression), LiteralPolicy(options ?? new()), memo ?? CompilerMemo.Empty)
             .Extract(errors => throw new Exception(string.Join(", ", errors)));
     private static ImmutableList<Call> Calls(FunctionGraph graph) => graph.Blocks.Values
         .OrderBy(block => block.Id.Value).SelectMany(block => block.Terminator switch
@@ -39,7 +44,7 @@ public class ExpressionGraphOptimizerTests
             _ => throw new NotImplementedException("Calls does not handle terminator variant: " + block.Terminator.GetType().Name),
         }).ToImmutableList();
     private static EvaluationReport Run(Expression expression, PineValue input, GraphOptimizerOptions? options) =>
-        ExpressionGraphVM.Create(optimizerOptions: options)
+        ExpressionGraphVM.Create(optimizerOptions: options is null ? null : LiteralPolicy(options))
             .EvaluateExpressionOnCustomStack(expression, input, new(100, 10_000, 100))
             .Extract(error => throw new Exception(error.ToString()));
 
@@ -103,15 +108,15 @@ public class ExpressionGraphOptimizerTests
             new(new(0), FunctionSignature.Canonical, entry.Id,
                 ImmutableDictionary<PineBlockId, BasicBlock>.Empty.Add(entry.Id, entry).Add(continuation.Id, continuation)),
             ImmutableDictionary<FunctionId, FunctionSignature>.Empty).Extract(errors => throw new Exception(string.Join(", ", errors)));
-        var result = ExpressionGraphOptimizer.Optimize(graph, new(), CompilerMemo.Empty);
+        var result = Optimize(graph, new(), CompilerMemo.Empty);
         result.Stats.InlinedCalls.Should().Be(2);
         result.Stats.Candidates.Should().Be(3);
         result.Stats.AnalysisPasses.Should().Be(2);
         result.Stats.Declines.Single().Code.Should().Be(GraphOptimizationDeclineCode.UnknownTarget);
         Calls(result.Graph.Graph).Should().BeEmpty();
-        var firstPass = ExpressionGraphOptimizer.Optimize(graph, new(MaxCandidates: 1), CompilerMemo.Empty);
+        var firstPass = Optimize(graph, new(MaxCandidates: 1), CompilerMemo.Empty);
         var budget = firstPass.Stats.AnalysisWorkUnits + 1;
-        var bounded = ExpressionGraphOptimizer.Optimize(graph, new(MaxAnalysisWorkUnits: budget), CompilerMemo.Empty);
+        var bounded = Optimize(graph, new(MaxAnalysisWorkUnits: budget), CompilerMemo.Empty);
         bounded.Stats.AnalysisPasses.Should().Be(2);
         bounded.Stats.AnalysisWorkUnits.Should().Be(budget);
         bounded.Stats.InlinedCalls.Should().Be(1);
@@ -269,8 +274,8 @@ public class ExpressionGraphOptimizerTests
         var body = Builtin("head", Builtin("skip", List(Value(IntegerEncoding.EncodeSignedInteger(count)), Env)));
         var expression = Conditional(Env, Lit(8), Call(body, Env));
         var baseline = Compile(expression, new(Enabled: false));
-        var cold = ExpressionGraphOptimizer.Optimize(baseline.Graph, new(), baseline.Memo);
-        var warm = ExpressionGraphOptimizer.Optimize(baseline.Graph, new(), cold.Memo);
+        var cold = Optimize(baseline.Graph, new(), baseline.Memo);
+        var warm = Optimize(baseline.Graph, new(), cold.Memo);
         cold.Stats.Declines.Single().Code.Should().Be(GraphOptimizationDeclineCode.UnsupportedBody);
         cold.Stats.InlinedCalls.Should().Be(0);
         cold.Graph.Should().BeSameAs(baseline.Graph);
@@ -303,7 +308,7 @@ public class ExpressionGraphOptimizerTests
         result.Stats.SelfTailCalls.Should().Be(0);
         result.Stats.Declines.Single().Code.Should().Be(GraphOptimizationDeclineCode.UnknownTarget);
         foreach (var options in ImmutableList.Create(new GraphOptimizerOptions(Enabled: false), new GraphOptimizerOptions()))
-            ExpressionGraphVM.Create(optimizerOptions: options).EvaluateExpressionOnCustomStack(
+            ExpressionGraphVM.Create(optimizerOptions: LiteralPolicy(options)).EvaluateExpressionOnCustomStack(
                 expression, ExpressionEncoding.EncodeExpressionAsValue(recursiveBody), new(3, 1000, 10))
                 .IsErrOrNull()!.Reason.Should().BeOfType<EvaluationErrorReason.QuotaExhausted>()
                 .Which.QuotaKind.Should().Be(EvaluationQuotaKind.InvocationCount);
@@ -403,7 +408,7 @@ public class ExpressionGraphOptimizerTests
             new GraphOptimizerOptions(Enabled: false), new(MaxCandidates: 0), new(MaxWorkUnits: 0),
             new(MaxExpansionUnits: 0), new(MaxBodyNodes: 0), new(MaxDepth: 0)))
         {
-            var result = ExpressionGraphOptimizer.Optimize(baseline.Graph, options, baseline.Memo);
+            var result = Optimize(baseline.Graph, options, baseline.Memo);
             result.Graph.Should().BeSameAs(baseline.Graph);
             result.Memo.Should().BeSameAs(baseline.Memo);
             result.Stats.Candidates.Should().Be(0);
@@ -417,7 +422,7 @@ public class ExpressionGraphOptimizerTests
     {
         var expression = List(Call(Env, Env), Call(Env, Env), Call(Env, Env));
         var baseline = Compile(expression, new(Enabled: false));
-        var refused = ExpressionGraphOptimizer.Optimize(baseline.Graph, new(MaxExpansionUnits: 1), baseline.Memo);
+        var refused = Optimize(baseline.Graph, new(MaxExpansionUnits: 1), baseline.Memo);
         refused.Graph.Should().BeSameAs(baseline.Graph);
         refused.Graph.KnownFunctionSignatures.Should().BeEmpty();
         refused.Stats.Declines.Should().HaveCount(3).And.OnlyContain(item =>
@@ -477,13 +482,13 @@ public class ExpressionGraphOptimizerTests
         Calls(baseline.Graph.Graph).Should().HaveCount(2);
         baseline.Memo.Graphs[baseline.Memo.Preparations[Request(expression)]].Should().Be(baseline.Graph.Graph);
         baseline.Memo.Reductions.Should().BeEmpty();
-        ExpressionGraphOptimizer.Optimize(baseline.Graph, new(InlineLiteralCalls: false), baseline.Memo)
+        Optimize(baseline.Graph, new(InlineLiteralCalls: false), baseline.Memo)
             .Graph.Should().BeSameAs(baseline.Graph);
         var reordered = ValidatedFunctionGraph.ValidateGraph(
             new(baseline.Graph.Graph.Id, baseline.Graph.Graph.Signature, baseline.Graph.Graph.Entry,
                 baseline.Graph.Graph.Blocks.Reverse().ToImmutableDictionary()),
             baseline.Graph.KnownFunctionSignatures).Extract(_ => throw new Exception());
-        var replay = ExpressionGraphOptimizer.Optimize(reordered, new(), baseline.Memo);
+        var replay = Optimize(reordered, new(), baseline.Memo);
         replay.Graph.Graph.Should().Be(cold.Graph.Graph);
         replay.Stats.Should().Be(cold.Stats);
         CompilerMemo.Empty.Parses.Should().BeEmpty();
@@ -498,7 +503,7 @@ public class ExpressionGraphOptimizerTests
             ImmutableDictionary<FunctionId, FunctionSignature>.Empty
                 .Add(new(0), FunctionSignature.Canonical).Add(new(1), FunctionSignature.Canonical)
                 .Add(new(int.MinValue), FunctionSignature.Canonical)).Extract(_ => throw new Exception());
-        var result = ExpressionGraphOptimizer.Optimize(input, new(), CompilerMemo.Empty);
+        var result = Optimize(input, new(), CompilerMemo.Empty);
         result.Stats.InlinedCalls.Should().Be(2);
         result.Memo.Graphs.Keys.Select(item => item.Request.Id.Value).Order().Should().Equal(2, 3);
         result.Graph.KnownFunctionSignatures[new(0)].Should().Be(FunctionSignature.Canonical);
