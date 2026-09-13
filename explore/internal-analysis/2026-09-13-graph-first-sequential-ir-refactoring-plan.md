@@ -1,5 +1,69 @@
 # Plan: graph-first compilation from Pine expressions to sequential IR
 
+## Example Alfa
+
+This is one of the example scenarios motivating the general redesign and cleanup:
+
+Goal in this case is to compile declaration chains like the `skipIdentifier` shown below without allocating canonical argument lists or
+entering additional VM frames: Inline `isIdentifierStart` and inline `skipToIdentifierEnd` as a loop.
+
+Motivation: Invocation in the intermediate VM adds overhead, and the current implementation of forwarding arguments like `source` and `offset` is quite expensive causing many heap allocations.
+The inlining of such cases will therefore eliminate a lot of runtime overhead.
+
+```elm
+module Test exposing (..)
+
+
+skipIdentifier source offset =
+    if isIdentifierStart (String.left 1 (String.dropLeft offset source)) then
+        skipToIdentifierEnd source (offset + 1)
+
+    else
+        offset
+
+
+isIdentifierStart character =
+    case character of
+        "_" ->
+            True
+
+        "a" ->
+            True
+
+        "Z" ->
+            True
+
+        _ ->
+            False
+
+
+skipToIdentifierEnd source offset =
+    if isIdentifierChar (String.left 1 (String.dropLeft offset source)) then
+        skipToIdentifierEnd source (offset + 1)
+
+    else
+        offset
+
+
+isIdentifierChar character =
+    case character of
+        "_" ->
+            True
+
+        "0" ->
+            True
+
+        "a" ->
+            True
+
+        "Z" ->
+            True
+
+        _ ->
+            False
+```
+
+
 ## Scope and completion criteria
 
 Replace the instruction-first intermediate-VM compiler with this one-way pipeline:
