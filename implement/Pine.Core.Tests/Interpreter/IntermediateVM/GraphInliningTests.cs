@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.Interpreter.IntermediateVM.Backend;
+using Pine.Core.Interpreter.IntermediateVM.Frontend;
 using Pine.Core.Interpreter.IntermediateVM.Semantic;
 using System;
 using System.Collections.Immutable;
@@ -76,6 +77,96 @@ public class GraphInliningTests
                 new Terminator.Invoke(K(1, 2, Triple, 5, 7, 8), new(new(2), [C(4), R(), C(6)]))),
             B(2, [9, 10, 11], [new Operation.MakeList(D(12), [V(9), V(10), V(11)])], Ret(12)),
         ]);
+
+    private static FunctionGraph RecursiveLoop(int id = 2)
+    {
+        var loop = Loop();
+        var body = loop.Blocks[new(200)];
+        return new(new(id), loop.Signature, loop.Entry, loop.Blocks.SetItem(body.Id, body with
+        {
+            Terminator = new Terminator.TailInvoke(K(0, id, loop.Signature, 2005, 2002, 2001)),
+        }));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(5)]
+    public void Semantic_self_tail_pass_preserves_entry_parameter_swaps_operations_and_reduces_invocations(int count)
+    {
+        var recursive = RecursiveLoop(1);
+        var converted = GraphSelfTailLoops.Rewrite(Validate(recursive));
+        converted.RewrittenCalls.Should().Be(1);
+        converted.Graph.Graph.Blocks[new(200)].Operations.Should().BeSameAs(recursive.Blocks[new(200)].Operations);
+        converted.Graph.Graph.Entry.Should().Be(recursive.Entry);
+        converted.Graph.Graph.Blocks[new(200)].Terminator.Should().Be(new Terminator.Jump(E(100, 2005, 2002, 2001)));
+        GraphSelfTailLoops.Rewrite(converted.Graph).Graph.Should().BeSameAs(converted.Graph);
+        // Triple projects [2], [0], [1]; resetting the canonical prologue would lose these bindings.
+        Compare(recursive, converted.Graph.Graph, [], L(I(10), I(20), I(count)),
+           count % 2 == 0 ? L(I(10), I(20)) : L(I(20), I(10)), count);
+        Run([converted.Graph.Graph], L(I(10), I(20), I(count)), new(2, 1000, 10))
+           .IsOkOrNull().Should().NotBeNull();
+        if (count > 0)
+            Run([converted.Graph.Graph], L(I(10), I(20), I(count))).IsOkOrNull()!
+                .LoopIterationCount.Should().BeGreaterThan(0);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(3)]
+    public void Semantic_callee_to_loop_then_inline_preserves_caller_state_and_list_counts(int count)
+    {
+        var recursive = RecursiveLoop();
+        var loop = GraphSelfTailLoops.Rewrite(Validate(recursive)).Graph;
+        var first = Inline(Validate(Twice(), ImmutableDictionary<FunctionId, FunctionSignature>.Empty.Add(loop.Graph.Id, loop.Graph.Signature)), loop);
+        var second = Inline(first, loop, 1);
+        Compare(Twice(), second.Graph, [recursive], I(count),
+           L(count % 2 == 0 ? L(I(10), I(20)) : L(I(20), I(10)),
+               count % 2 == 0 ? L(I(30), I(40)) : L(I(40), I(30)), I(count)), 2 + 2 * count);
+        Calls(second.Graph).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Semantic_self_tail_pass_ignores_dynamic_nonroot_and_nontail_calls()
+    {
+        var graph = G(1, 0,
+           [
+               B(0, [1], [], new Terminator.Invoke(K(0, 1, FunctionSignature.Canonical, 1), new(new(1), [R()]))),
+               B(1, [2], [], new Terminator.TailInvoke(K(1, 2, FunctionSignature.Canonical, 2))),
+               B(2, [3], [Lit(4, IdentityEncoding)], new Terminator.TailInvoke(Dynamic(2, 4, 3))),
+           ]);
+        var input = Validate(graph, ImmutableDictionary<FunctionId, FunctionSignature>.Empty.Add(new(2), FunctionSignature.Canonical));
+        var result = GraphSelfTailLoops.Rewrite(input);
+        result.Graph.Should().BeSameAs(input);
+        result.RewrittenCalls.Should().Be(0);
+    }
+
+    [Fact]
+    public void Semantic_root_self_tail_cycle_retains_existing_finite_quota_checks()
+    {
+        var recursive = G(1, 0, [B(0, [1], [], new Terminator.TailInvoke(K(0, 1, FunctionSignature.Canonical, 1)))]);
+        var converted = GraphSelfTailLoops.Rewrite(Validate(recursive)).Graph.Graph;
+        Run([recursive], I(1), new(3, 1000, 10)).IsErrOrNull()!.Reason
+           .Should().BeOfType<EvaluationErrorReason.QuotaExhausted>().Which.QuotaKind.Should().Be(EvaluationQuotaKind.InvocationCount);
+        foreach (var reverse in ImmutableList.Create(false, true))
+            Run([converted], I(1), new(100, 3, 10), reverse).IsErrOrNull()!.Reason
+                .Should().BeOfType<EvaluationErrorReason.QuotaExhausted>().Which.QuotaKind.Should().Be(EvaluationQuotaKind.LoopIterationCount);
+    }
+
+    [Fact]
+    public void Semantic_self_tail_pipeline_policy_is_explicit_and_zero_budget_disables_all_work()
+    {
+        var input = Validate(RecursiveLoop(1));
+        var enabled = ExpressionGraphOptimizer.Optimize(input, new(InlineLiteralCalls: false), CompilerMemo.Empty);
+        enabled.Stats.SelfTailCalls.Should().Be(1);
+        enabled.Stats.Candidates.Should().Be(0);
+        enabled.Memo.Should().BeSameAs(CompilerMemo.Empty);
+        enabled.Stats.BudgetLimitReached.Should().BeFalse();
+        foreach (var options in ImmutableList.Create(new GraphOptimizerOptions(SelfTailLoops: false),
+            new(Enabled: false), new(MaxCandidates: 0), new(MaxExpansionUnits: 0)))
+            ExpressionGraphOptimizer.Optimize(input, options, CompilerMemo.Empty).Graph.Should().BeSameAs(input);
+    }
 
     [Theory]
     [InlineData(0, false)]

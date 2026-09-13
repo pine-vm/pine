@@ -12,11 +12,13 @@ public static class ExpressionGraphVM
     /// <summary>
     /// Creates a VM using canonical graph calls. Preparation rewrites default off while the
     /// graph-first pipeline is opt-in; callers may explicitly select the legacy preparation policy.
-    /// Runtime caches and interop frames belong to the VM, not to the pure compiler memo.
+    /// Graph optimization also defaults off; pass optimizerOptions to opt in. Runtime caches and
+    /// interop frames belong to the VM, not to the pure compiler memo.
     /// </summary>
     public static PineVM Create(
         PreparationOptions? preparationOptions = null,
-        PineVM.EvaluationConfig? evaluationConfig = null)
+        PineVM.EvaluationConfig? evaluationConfig = null,
+        GraphOptimizerOptions? optimizerOptions = null)
     {
         var options = preparationOptions ?? new(DisableReduction: true);
         return PineVM.CreateCustom(
@@ -26,16 +28,16 @@ public static class ExpressionGraphVM
             precompiledLeaves: null, reportEnterPrecompiledLeaf: null, reportExitPrecompiledLeaf: null,
             optimizationParametersSerial: null, cacheFileStore: null,
             disableDirectContinueForSimpleEval: true, disableDirectEvalForSimpleTemplate: true,
-            compileExpression: expression => Compile(expression, options));
+            compileExpression: expression => Compile(expression, options, optimizerOptions ?? new(Enabled: false)));
     }
 
-    private static ExpressionCompilation Compile(Expression expression, PreparationOptions options)
+    private static ExpressionCompilation Compile(
+        Expression expression, PreparationOptions options, GraphOptimizerOptions optimizerOptions)
     {
-        var preparation = FunctionPreparation.PrepareFunction(
-            CompilationRequest.Capture(expression, options), CompilerMemo.Empty);
-        var graph = ExpressionGraphCompiler.CompileExpressionToGraph(preparation.Function, preparation.Memo)
-            .Graph.Extract(errors => throw new InvalidOperationException(string.Join(", ", errors)));
-        var function = GraphCompiler.Compile(graph)
+        var optimized = ExpressionGraphOptimizer.Compile(
+            CompilationRequest.Capture(expression, options), optimizerOptions, CompilerMemo.Empty)
+            .Extract(errors => throw new InvalidOperationException(string.Join(", ", errors)));
+        var function = GraphCompiler.Compile(optimized.Graph)
             .Extract(error => throw new InvalidOperationException(error.ToString()));
         return new(GraphVMAdapter.ToStackFrame(function), []);
     }
