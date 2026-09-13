@@ -39,7 +39,7 @@ public sealed record GraphBuildState
 
     /// <summary>Completed block shapes, not validated blocks.</summary>
     public ImmutableDictionary<PineBlockId, BasicBlock> CompletedBlocks { get; private init; } =
-        ImmutableDictionary<PineBlockId, BasicBlock>.Empty;
+        [];
 
     /// <summary>The optional open, unterminated block.</summary>
     public BlockFragment? Fragment { get; private init; }

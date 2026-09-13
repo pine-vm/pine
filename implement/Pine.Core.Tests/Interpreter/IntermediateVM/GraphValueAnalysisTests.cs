@@ -27,7 +27,7 @@ public class GraphValueAnalysisTests
     private static Terminator Return(int value) => new Terminator.Return([new(value)]);
     private static ValidatedFunctionGraph Graph(params ImmutableArray<BasicBlock> blocks) =>
         ValidatedFunctionGraph.ValidateGraph(new(new(0), FunctionSignature.Canonical, blocks[0].Id,
-            blocks.ToImmutableDictionary(block => block.Id)), ImmutableDictionary<FunctionId, FunctionSignature>.Empty)
+            blocks.ToImmutableDictionary(block => block.Id)), [])
             .Extract(errors => throw new Exception(string.Join(", ", errors)));
     private static GraphValueAnalysisResult Analyze(ValidatedFunctionGraph graph, GraphValueAnalysisOptions? options = null) =>
         GraphValueAnalysis.Analyze(graph, options ?? new());

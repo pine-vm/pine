@@ -132,7 +132,7 @@ public class ExpressionGraphFrontendTests
             FunctionPreparation.PrepareFunction(request, cold.Memo).Should().Be(cold);
             FunctionPreparation.PrepareFunction(request, cold.Memo with
             {
-                Preparations = ImmutableDictionary<CompilationRequest, PreparedFunction>.Empty,
+                Preparations = [],
             }).Should().Be(cold);
         }
     }
@@ -158,7 +158,7 @@ public class ExpressionGraphFrontendTests
             cold.Memo.Reductions.Should().NotBeEmpty();
             cold.Function.Body.Should().NotBe(request.Root);
             var replay = FunctionPreparation.PrepareFunction(request,
-                cold.Memo with { Preparations = ImmutableDictionary<CompilationRequest, PreparedFunction>.Empty });
+                cold.Memo with { Preparations = [] });
             replay.Should().Be(cold);
             replay.Memo.GetHashCode().Should().Be(cold.Memo.GetHashCode());
 
@@ -228,7 +228,7 @@ public class ExpressionGraphFrontendTests
                 FunctionPreparation.ParseExpression(ownedEncoding, cold.Memo).Result.Should().Be(expected);
                 FunctionPreparation.PrepareFunction(request, cold.Memo with
                 {
-                    Preparations = ImmutableDictionary<CompilationRequest, PreparedFunction>.Empty,
+                    Preparations = [],
                 }).Function.Should().Be(cold.Function);
             }
         }
@@ -613,7 +613,7 @@ public class ExpressionGraphFrontendTests
         var prepared = FunctionPreparation.PrepareFunction(CompilationRequest.Capture(expression), CompilerMemo.Empty);
         prepared.Function.Body.Should().NotBe(prepared.Function.Source);
         var graph = ExpressionGraphCompiler.CompileExpressionToGraph(prepared.Function);
-        ValidatedFunctionGraph.ValidateGraph(graph, ImmutableDictionary<FunctionId, FunctionSignature>.Empty)
+        ValidatedFunctionGraph.ValidateGraph(graph, [])
             .IsErrOrNull().Should().BeNull();
         var input = PineValue.List([IntegerEncoding.EncodeSignedInteger(7), IntegerEncoding.EncodeSignedInteger(11)]);
         Execute(prepared.Function.Body.ToExpression(), input).Result.Extract(error => throw new Exception(error.ToString()))
@@ -652,7 +652,7 @@ public class ExpressionGraphFrontendTests
                 compiled.Add(OwnedExpression.Capture(requested));
                 var graph = ExpressionGraphCompiler.Compile(requested);
                 var validated = ValidatedFunctionGraph.ValidateGraph(graph,
-                    ImmutableDictionary<FunctionId, FunctionSignature>.Empty)
+                    [])
                     .Extract(errors => throw new Exception(string.Join(", ", errors)));
                 var function = GraphCompiler.Compile(validated).Extract(error => throw new Exception(error.ToString()));
                 return new(GraphVMAdapter.ToStackFrame(function), []);

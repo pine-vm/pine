@@ -153,7 +153,7 @@ public static class GraphValueAnalysis
             }
             catch (WorkLimitException)
             {
-                return new(ImmutableDictionary<PineVirtualValueId, GraphValueFact>.Empty, work, true);
+                return new([], work, true);
             }
 
             void Spend(long count = 1)

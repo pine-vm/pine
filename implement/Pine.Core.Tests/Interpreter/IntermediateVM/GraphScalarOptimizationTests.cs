@@ -277,7 +277,7 @@ public class GraphScalarOptimizationTests
                 new Terminator.TailInvoke(new(new(-2), new CallTarget.Dynamic(new(ids.Value)), FunctionSignature.Canonical, [new(ids.Value)])));
             var input = ValidatedFunctionGraph.ValidateGraph(
                 new(new(-7), FunctionSignature.Canonical, block.Id, ImmutableDictionary<PineBlockId, BasicBlock>.Empty.Add(block.Id, block)),
-                ImmutableDictionary<FunctionId, FunctionSignature>.Empty).Extract(errors => throw new Exception(string.Join(", ", errors)));
+                []).Extract(errors => throw new Exception(string.Join(", ", errors)));
             GraphScalarReplacement.Rewrite(input).Should().BeSameAs(input);
         }
         foreach (var id in new[] { int.MinValue, -7, int.MaxValue })
@@ -321,7 +321,7 @@ public class GraphScalarOptimizationTests
                 new Terminator.TailInvoke(new(new(0), new CallTarget.Dynamic(new(ids.Value)), FunctionSignature.Canonical, [new(ids.Value)])));
             var input = ValidatedFunctionGraph.ValidateGraph(
                 new(new(7), FunctionSignature.Canonical, block.Id, ImmutableDictionary<PineBlockId, BasicBlock>.Empty.Add(block.Id, block)),
-                ImmutableDictionary<FunctionId, FunctionSignature>.Empty).Extract(errors => throw new Exception(string.Join(", ", errors)));
+                []).Extract(errors => throw new Exception(string.Join(", ", errors)));
             var rewritten = ((ValidatedFunctionGraph Graph, int RewrittenCalls))rewrite.Invoke(null,
                 [input, prepared, encoding, 65_536L, 20_000L, 64])!;
             rewritten.RewrittenCalls.Should().Be(ids.Fits ? 1 : 0);

@@ -30,7 +30,7 @@ public class CompileExpressionTests
         var instructions =
             ExpressionCompilation.InstructionsFromExpression(
                 expression,
-                rootExprAlternativeForms: ImmutableHashSet<Expression>.Empty,
+                rootExprAlternativeForms: [],
                 envClass: null,
                 parametersAsLocals: StaticFunctionInterface.Generic,
                 new PineVMParseCache());

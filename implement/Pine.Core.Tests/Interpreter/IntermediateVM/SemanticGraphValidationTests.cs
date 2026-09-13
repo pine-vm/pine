@@ -13,7 +13,7 @@ namespace Pine.Core.Tests.Interpreter.IntermediateVM;
 public class SemanticGraphValidationTests
 {
     private static ImmutableDictionary<FunctionId, FunctionSignature> Signatures =>
-        ImmutableDictionary<FunctionId, FunctionSignature>.Empty;
+        [];
 
     private static LiteralValue Empty => new LiteralValue.List([]);
 

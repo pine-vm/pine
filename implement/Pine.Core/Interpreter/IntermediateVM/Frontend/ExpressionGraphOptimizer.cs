@@ -367,7 +367,7 @@ public static class ExpressionGraphOptimizer
                 ++units;
                 var children = item.Expression switch
                 {
-                    OwnedExpression.Literal or OwnedExpression.Environment => ImmutableList<OwnedExpression>.Empty,
+                    OwnedExpression.Literal or OwnedExpression.Environment => [],
                     OwnedExpression.List list => list.Items,
                     // The frontend's list-only head/skip form builds a generic fallback and a
                     // specialized arm. Charge duplicated subtrees before constructing that graph.

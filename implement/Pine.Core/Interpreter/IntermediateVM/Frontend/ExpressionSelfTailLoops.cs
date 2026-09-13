@@ -18,7 +18,7 @@ public static class ExpressionSelfTailLoops
     {
         var graph = ValidatedFunctionGraph.ValidateGraph(
             ExpressionGraphCompiler.CompileExpressionToGraph(prepared),
-            ImmutableDictionary<FunctionId, FunctionSignature>.Empty)
+            [])
             .Extract(errors => throw new InvalidOperationException(string.Join(", ", errors)));
         return Rewrite(graph, prepared, sourceEncoding, maxWorkUnits, maxExpansionUnits, maxDepth);
     }

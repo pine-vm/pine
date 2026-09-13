@@ -88,19 +88,19 @@ public sealed record CompilerMemo
 {
     /// <summary>Successful and unsuccessful encoded expression parses.</summary>
     public ImmutableDictionary<LiteralValue, ParseMemoEntry> Parses { get; init; } =
-        ImmutableDictionary<LiteralValue, ParseMemoEntry>.Empty;
+        [];
 
     /// <summary>Reductions keyed by the complete reduction configuration.</summary>
     public ImmutableDictionary<ReductionMemoKey, OwnedExpression> Reductions { get; init; } =
-        ImmutableDictionary<ReductionMemoKey, OwnedExpression>.Empty;
+        [];
 
     /// <summary>Preparations keyed by complete requests.</summary>
     public ImmutableDictionary<CompilationRequest, PreparedFunction> Preparations { get; init; } =
-        ImmutableDictionary<CompilationRequest, PreparedFunction>.Empty;
+        [];
 
     /// <summary>Directly constructed semantic graphs.</summary>
     public ImmutableDictionary<PreparedFunction, FunctionGraph> Graphs { get; init; } =
-        ImmutableDictionary<PreparedFunction, FunctionGraph>.Empty;
+        [];
 
     /// <summary>An empty persistent memo.</summary>
     public static CompilerMemo Empty { get; } = new();

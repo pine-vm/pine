@@ -30,7 +30,7 @@ public class StraightLineBackendTests
                 new(new(800), parameters ?? [new(new(901))], operations, terminator)));
 
     private static ValidatedFunctionGraph Validate(FunctionGraph graph) =>
-        ValidatedFunctionGraph.ValidateGraph(graph, ImmutableDictionary<FunctionId, FunctionSignature>.Empty)
+        ValidatedFunctionGraph.ValidateGraph(graph, [])
         .Extract(errors => throw new InvalidOperationException(string.Join(", ", errors)));
 
     private static StraightLineFunction Compile(FunctionGraph graph) =>

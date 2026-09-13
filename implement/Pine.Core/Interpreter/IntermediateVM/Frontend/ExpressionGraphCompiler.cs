@@ -40,7 +40,7 @@ public static class ExpressionGraphCompiler
             : CompileExpressionToGraph(prepared);
 
         return (
-            ValidatedFunctionGraph.ValidateGraph(graph, ImmutableDictionary<FunctionId, FunctionSignature>.Empty),
+            ValidatedFunctionGraph.ValidateGraph(graph, []),
             memo with { Graphs = memo.Graphs.SetItem(prepared, graph) });
     }
 

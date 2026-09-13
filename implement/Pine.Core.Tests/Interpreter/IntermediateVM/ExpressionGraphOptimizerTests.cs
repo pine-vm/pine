@@ -107,7 +107,7 @@ public class ExpressionGraphOptimizerTests
         var graph = ValidatedFunctionGraph.ValidateGraph(
             new(new(0), FunctionSignature.Canonical, entry.Id,
                 ImmutableDictionary<PineBlockId, BasicBlock>.Empty.Add(entry.Id, entry).Add(continuation.Id, continuation)),
-            ImmutableDictionary<FunctionId, FunctionSignature>.Empty).Extract(errors => throw new Exception(string.Join(", ", errors)));
+            []).Extract(errors => throw new Exception(string.Join(", ", errors)));
         var result = Optimize(graph, new(), CompilerMemo.Empty);
         result.Stats.InlinedCalls.Should().Be(2);
         result.Stats.Candidates.Should().Be(3);

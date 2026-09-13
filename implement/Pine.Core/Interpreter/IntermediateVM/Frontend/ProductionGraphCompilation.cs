@@ -52,7 +52,7 @@ internal static class ProductionGraphCompilation
             [Semantic.ValueType.PineValue]);
         var compiled = ValidatedFunctionGraph.ValidateGraph(
             ExpressionGraphCompiler.Compile(specializedBody, signature),
-            ImmutableDictionary<FunctionId, FunctionSignature>.Empty);
+            []);
         if (compiled.IsOkOrNull() is not { } graph)
             return null;
         var optimized = ExpressionGraphOptimizer.Optimize(graph,

@@ -43,7 +43,7 @@ public class GraphInliningTests
     };
     private static ValidatedFunctionGraph Validate(FunctionGraph graph,
         ImmutableDictionary<FunctionId, FunctionSignature>? signatures = null) =>
-        ValidatedFunctionGraph.ValidateGraph(graph, signatures ?? ImmutableDictionary<FunctionId, FunctionSignature>.Empty)
+        ValidatedFunctionGraph.ValidateGraph(graph, signatures ?? [])
             .Extract(errors => throw new Exception(string.Join(", ", errors)));
     private static ValidatedFunctionGraph Inline(FunctionGraph caller, FunctionGraph callee, int site = 0) =>
         Inline(Validate(caller, ImmutableDictionary<FunctionId, FunctionSignature>.Empty.Add(callee.Id, callee.Signature)),

@@ -30,7 +30,7 @@ internal static class GraphLayoutLiveness
                         killed = true;
                         break;
                     }
-                    if (Before(instruction, ImmutableHashSet<int>.Empty).Contains(local))
+                    if (Before(instruction, []).Contains(local))
                         return false;
                 }
                 if (killed)

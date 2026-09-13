@@ -89,7 +89,7 @@ public class ProjectedGraphBoundaryTests
         var graph = ExpressionGraphCompiler.Compile(expression, signature ?? new(
             [.. parameters.ParamsPaths.Select(path => new FunctionParameter(new([.. path])))],
             [Semantic.ValueType.PineValue]));
-        var validated = ValidatedFunctionGraph.ValidateGraph(graph, ImmutableDictionary<FunctionId, FunctionSignature>.Empty)
+        var validated = ValidatedFunctionGraph.ValidateGraph(graph, [])
             .Extract(errors => throw new InvalidOperationException(string.Join(", ", errors)));
         var artifact = GraphCompiler.Compile(validated, fuseScalarBuiltins: true, legacyParameterLocals: true, compact: true)
             .Extract(error => throw new InvalidOperationException(error.ToString()));

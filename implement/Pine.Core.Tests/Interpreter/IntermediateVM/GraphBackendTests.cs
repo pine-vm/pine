@@ -37,7 +37,7 @@ public class GraphBackendTests
         new([.. Enumerable.Range(0, count).Select(index => new FunctionParameter(new([index])))],
             [ValueType.PineValue]);
     private static ValidatedFunctionGraph Validate(FunctionGraph graph) =>
-        ValidatedFunctionGraph.ValidateGraph(graph, ImmutableDictionary<FunctionId, FunctionSignature>.Empty)
+        ValidatedFunctionGraph.ValidateGraph(graph, [])
         .Extract(errors => throw new InvalidOperationException(string.Join(", ", errors)));
     private static GraphFunction Compile(FunctionGraph graph, ImmutableList<PineBlockId>? order = null) =>
         GraphCompiler.Compile(Validate(graph), order).Extract(error => throw new InvalidOperationException(error.ToString()));
@@ -476,7 +476,7 @@ public class GraphBackendTests
                     Block(1, [1], [], new Terminator.Jump(E(2))),
                     Block(2, [2], [new Operation.MakeList(D(3), [V(1)])], Return(3)),
                 ]);
-            var errors = ValidatedFunctionGraph.ValidateGraph(graph, ImmutableDictionary<FunctionId, FunctionSignature>.Empty)
+            var errors = ValidatedFunctionGraph.ValidateGraph(graph, [])
                 .Should().BeOfType<Result<ImmutableList<GraphDiagnostic>, ValidatedFunctionGraph>.Err>().Which.Value;
             errors.Select(error => error.Code).Should().Equal(GraphDiagnosticCode.ArityMismatch, GraphDiagnosticCode.UndefinedValue);
         }
