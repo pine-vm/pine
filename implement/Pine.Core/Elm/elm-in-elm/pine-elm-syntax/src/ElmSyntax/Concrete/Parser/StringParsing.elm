@@ -14,6 +14,15 @@ once.
 -}
 
 
+skipIdentifier : String -> Int -> Int
+skipIdentifier source offset =
+    if isIdentifierStart (String.left 1 (String.dropLeft offset source)) then
+        skipToIdentifierEnd source (offset + 1)
+
+    else
+        offset
+
+
 
 -- CHARACTER CLASSES
 
