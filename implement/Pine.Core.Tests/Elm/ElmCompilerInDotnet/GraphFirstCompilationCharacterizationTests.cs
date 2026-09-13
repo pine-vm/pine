@@ -196,7 +196,7 @@ public class GraphFirstCompilationCharacterizationTests
                 .Which.QuotaKind.Should().Be(EvaluationQuotaKind.LoopIterationCount);
         }
 
-        var mismatch = DeclarationEnvironment(PineValue.List([.. function.EnvFunctions, PineValue.EmptyList]), PineValue.List([
+        var mismatch = DeclarationEnvironment(PineValue.List([.. function.EnvFunctions.Span, PineValue.EmptyList]), PineValue.List([
             ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("a000!")), IntegerEncoding.EncodeSignedInteger(0)]));
         var declarationCompilation = ExpressionCompilation.CompileExpression(
             function.InnerFunction, [tableConstraint], new(), false, true, (_, _) => false);
