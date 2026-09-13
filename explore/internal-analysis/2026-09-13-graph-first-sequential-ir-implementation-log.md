@@ -26,4 +26,6 @@ Validation from `/home/runner/work/super-duper-disco/super-duper-disco/implement
 
 Validation: scoped `dotnet format`; **24/24** model tests passed. The same regression command recorded above now reports **171 passed, one existing skip**, with unchanged snapshots. Logs: `/home/runner/work/super-duper-disco/super-duper-disco/implement/Pine.Core.Tests/artifacts/test-logs/semantic-model-{focused,regression}.log`.
 
+Secret scan and independent review passed. Automated review remained unavailable; CodeQL skipped the oversized database.
+
 Next: increment 3, graph validation of definitions, every operand/edge, call signatures and return-slot scope.
