@@ -27,6 +27,13 @@ internal static class GraphLayout
             SelectedTerminator.Jump jump =>
                 [new(label, block.Instructions, new LayoutTransfer.Jump(EdgeLabel(0))),
                 Stub(jump.Edge, 0)],
+            SelectedTerminator.Invoke invoke =>
+                [new(label, block.Instructions, new LayoutTransfer.Invoke(invoke.Call, new(LayoutLabelKind.Return, block.Id))),
+                new(new(LayoutLabelKind.Return, block.Id), InstructionSelection.Store(invoke.ResultLocal),
+                    new LayoutTransfer.Jump(EdgeLabel(0))),
+                Stub(invoke.Continuation, 0)],
+            SelectedTerminator.TailInvoke invoke =>
+                [new(label, block.Instructions, new LayoutTransfer.TailInvoke(invoke.Call))],
             SelectedTerminator.Match match =>
                 ImmutableList.Create(new LayoutFragment(label, block.Instructions,
                     new LayoutTransfer.Jump(match.Cases.Count == 0 ? EdgeLabel(0) : TestLabel(0))))

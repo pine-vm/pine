@@ -483,6 +483,8 @@ public enum StackInstructionKind
     /// non-list sources and out-of-range indices produce an empty list.
     /// </summary>
     List_Project_Const,
+    /// <summary>Invokes an immutable graph program entry by ID with explicit projected arguments.</summary>
+    Invoke_GraphFunction,
 }
 
 /// <summary>
@@ -561,6 +563,8 @@ public record StackInstruction(
     DirectInvocation? OptimizedInvocation = null,
     ImmutableDictionary<PineValue, int>? SwitchJumpTable = null)
 {
+    /// <summary>Immutable ID-based invocation metadata, used only by the graph backend.</summary>
+    public Backend.GraphInvocation? GraphInvocation { get; init; }
     /// <summary>
     /// The linked target stack-frame instructions, delegated from <see cref="OptimizedInvocation"/>.
     /// </summary>
@@ -1823,6 +1827,13 @@ public record StackInstruction(
                         ?? throw new Exception(
                             "Missing Literal for EvalConst instruction"))
                     ])),
+
+            StackInstructionKind.Invoke_GraphFunction =>
+            new InstructionDetails(
+                PopCount: instruction.GraphInvocation?.ArgumentCount ??
+                    throw new InvalidOperationException("Missing graph invocation metadata."),
+                PushCount: 1,
+                Display: InstructionDetails.DisplayNoDetails),
 
             StackInstructionKind.Invoke_StackFrame_Const =>
             new InstructionDetails(

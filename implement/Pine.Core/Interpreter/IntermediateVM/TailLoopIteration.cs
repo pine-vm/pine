@@ -54,6 +54,7 @@ public enum TailLoopIterationKind
 /// <see cref="TailLoopIterationKind.BackwardJump"/> this is the running frame;
 /// for <see cref="TailLoopIterationKind.TailCallReplace"/> this is the new
 /// (replacing) frame, which represents the next iteration of the tail loop.
+/// Null for graph-only frames, whose identity is available through GraphFunctionId.
 /// </param>
 /// <param name="FrameInput">
 /// The live input (live environment) of the iterating frame at this iteration.
@@ -64,5 +65,9 @@ public readonly record struct TailLoopIteration(
     long IterationIndex,
     int StackFrameDepth,
     TailLoopIterationKind Kind,
-    Expression FrameExpression,
-    StackFrameInput FrameInput);
+    Expression? FrameExpression,
+    StackFrameInput FrameInput)
+{
+    /// <summary>Identity of a graph-only frame when no source expression is available.</summary>
+    public Semantic.FunctionId? GraphFunctionId { get; init; }
+}

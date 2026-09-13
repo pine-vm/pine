@@ -25,6 +25,26 @@ public sealed record EdgeCopyPlan(PineBlockId Target, ImmutableList<LocalCopy> C
 /// <summary>An ordered exact literal test and its independently owned edge.</summary>
 public sealed record SelectedCase(LiteralValue Literal, EdgeCopyPlan Edge);
 
+/// <summary>An immutable selected call target.</summary>
+public abstract record SelectedCallTarget
+{
+    private SelectedCallTarget() { }
+    /// <summary>A local containing the encoded expression.</summary>
+    public sealed record Dynamic(int Local) : SelectedCallTarget;
+    /// <summary>An identity resolved through the immutable program table.</summary>
+    public sealed record Known(FunctionId Function) : SelectedCallTarget;
+}
+
+/// <summary>Already evaluated arguments, in declared signature order.</summary>
+public sealed record SelectedCall(SelectedCallTarget Target, FunctionSignature Signature, ImmutableList<int> Arguments)
+{
+    /// <inheritdoc/>
+    public bool Equals(SelectedCall? other) =>
+        other is not null && Target == other.Target && Signature == other.Signature && Arguments.SequenceEqual(other.Arguments);
+    /// <inheritdoc/>
+    public override int GetHashCode() => HashCode.Combine(Target, Signature, ModelEquality.SequenceHash(Arguments));
+}
+
 /// <summary>Physical-local operands with explicit successors, before layout.</summary>
 public abstract record SelectedTerminator
 {
@@ -33,6 +53,10 @@ public abstract record SelectedTerminator
     public sealed record Return(int Local) : SelectedTerminator;
     /// <summary>One simultaneous assignment and successor.</summary>
     public sealed record Jump(EdgeCopyPlan Edge) : SelectedTerminator;
+    /// <summary>A successful return first stores the result, then binds the continuation simultaneously.</summary>
+    public sealed record Invoke(SelectedCall Call, int ResultLocal, EdgeCopyPlan Continuation) : SelectedTerminator;
+    /// <summary>A genuine tail call, independent of physical block order.</summary>
+    public sealed record TailInvoke(SelectedCall Call) : SelectedTerminator;
     /// <summary>Ordered exact tests; a branch is a one-case match.</summary>
     public sealed record Match(
         int Local, ImmutableList<SelectedCase> Cases, EdgeCopyPlan Default) : SelectedTerminator
@@ -67,12 +91,14 @@ public enum LayoutLabelKind
     Edge,
     /// <summary>An ordered switch test.</summary>
     Test,
+    /// <summary>A call-specific successful-return stub.</summary>
+    Return,
 }
 
 /// <summary>A symbolic location; no numeric instruction address is assigned during selection.</summary>
 public readonly record struct LayoutLabel(LayoutLabelKind Kind, PineBlockId Block, int Index = 0);
 
-/// <summary>Explicit transfers between known fragments. Every outgoing stack is empty.</summary>
+/// <summary>Explicit transfers between known fragments. Only invoke success carries a stack result.</summary>
 public abstract record LayoutTransfer
 {
     private LayoutTransfer() { }
@@ -82,9 +108,13 @@ public abstract record LayoutTransfer
     public sealed record Jump(LayoutLabel Target) : LayoutTransfer;
     /// <summary>Load and consume a tested local, with two explicit targets.</summary>
     public sealed record Branch(int Local, LiteralValue Literal, LayoutLabel Equal, LayoutLabel NotEqual) : LayoutTransfer;
+    /// <summary>Invokes a call and transfers the successful result to its return stub.</summary>
+    public sealed record Invoke(SelectedCall Call, LayoutLabel Success) : LayoutTransfer;
+    /// <summary>Returns the callee's result directly.</summary>
+    public sealed record TailInvoke(SelectedCall Call) : LayoutTransfer;
 }
 
-/// <summary>A known empty-stack fragment and its explicit transfer.</summary>
+/// <summary>A known fragment and its explicit transfer. Return stubs enter with one successful call result.</summary>
 public sealed record LayoutFragment(
     LayoutLabel Label, ImmutableList<SelectedInstruction> Instructions, LayoutTransfer Transfer)
 {
@@ -139,7 +169,7 @@ public enum GraphBackendDiagnosticCode
 {
     /// <summary>The VM boundary returns exactly one value.</summary>
     UnsupportedResultArity,
-    /// <summary>Calls and their ABI/linking are deferred to increment 5b.</summary>
+    /// <summary>The call contract cannot be implemented by the canonical single-result VM ABI.</summary>
     UnsupportedCall,
     /// <summary>Layout must list every block exactly once.</summary>
     InvalidBlockOrder,

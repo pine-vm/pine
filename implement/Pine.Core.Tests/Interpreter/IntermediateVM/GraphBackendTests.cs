@@ -353,7 +353,7 @@ public class GraphBackendTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void Dynamic_and_known_calls_are_gracefully_declined_including_unreachable_calls(bool known, bool tail)
+    public void Dynamic_and_known_calls_are_selected_including_unreachable_calls(bool known, bool tail)
     {
         Check();
         void Check()
@@ -368,8 +368,7 @@ public class GraphBackendTests
             foreach (var candidate in ImmutableList.Create(graph,
                 Graph(80, graph.Blocks.Values.ToImmutableList())))
                 GraphCompiler.Compile(Validate(candidate))
-                    .Should().BeOfType<Result<GraphBackendDiagnostic, GraphFunction>.Err>()
-                    .Which.Value.Should().Be(new GraphBackendDiagnostic(GraphBackendDiagnosticCode.UnsupportedCall, graph.Id, new(8)));
+                    .Should().BeOfType<Result<GraphBackendDiagnostic, GraphFunction>.Ok>();
         }
     }
 
@@ -497,6 +496,8 @@ public class GraphBackendTests
                     LayoutTransfer.Return => 2,
                     LayoutTransfer.Jump => 1,
                     LayoutTransfer.Branch => 3,
+                    LayoutTransfer.Invoke => throw new InvalidOperationException("This helper tests call-free graphs."),
+                    LayoutTransfer.TailInvoke => throw new InvalidOperationException("This helper tests call-free graphs."),
                     _ => throw new NotImplementedException(
                         "AssertDiscipline does not handle transfer variant: " + fragment.Transfer.GetType().Name),
                 });

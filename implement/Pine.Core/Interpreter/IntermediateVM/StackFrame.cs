@@ -8,10 +8,11 @@ namespace Pine.Core.Interpreter.IntermediateVM;
 /// Represents an active stack frame in the Pine intermediate VM.
 /// Each frame holds the compiled instructions, input arguments, an evaluation stack for operand passing,
 /// local variable storage, and profiling counters.
+/// Graph-only frames have no source Expression; their instructions retain the explicit GraphFunctionId.
 /// </summary>
 public record StackFrame(
     PineValue? ExpressionValue,
-    Expression Expression,
+    Expression? Expression,
     StackFrameInstructions Instructions,
     StackFrameInput InputValues,
     Memory<PineValueInProcess?> StackValues,

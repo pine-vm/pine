@@ -19,6 +19,15 @@ public record StackFrameInstructions
     /// <summary>Optional environment constraint associated with this instruction variant.</summary>
     public PineValueClass? TrackEnvConstraint { get; init; }
 
+    /// <summary>Opt-in immutable graph program used by ID-based calls.</summary>
+    public Backend.GraphProgram? GraphProgram { get; init; }
+
+    /// <summary>Identity of an explicitly invoked graph-only frame; not a canonical expression identity.</summary>
+    public Semantic.FunctionId? GraphFunctionId { get; init; }
+
+    /// <summary>Direct graph entry bindings, indexed by the declared argument order.</summary>
+    public System.Collections.Immutable.ImmutableList<int>? GraphParameterLocals { get; init; }
+
     /// <summary>Legacy entry point: derives metadata by analyzing sequential instructions.</summary>
     public StackFrameInstructions(
         StaticFunctionInterface Parameters,
@@ -239,6 +248,12 @@ public record StackFrameInstructions
         if (!other.Parameters.Equals(Parameters))
             return false;
 
+        if (GraphProgram != other.GraphProgram || GraphFunctionId != other.GraphFunctionId ||
+            (GraphParameterLocals is null
+                ? other.GraphParameterLocals is not null
+                : other.GraphParameterLocals is null || !GraphParameterLocals.SequenceEqual(other.GraphParameterLocals)))
+            return false;
+
         return
             Instructions.Count == notNull.Instructions.Count &&
             Instructions.SequenceEqual(notNull.Instructions);
@@ -250,6 +265,14 @@ public record StackFrameInstructions
         var hashCode = new HashCode();
 
         hashCode.Add(Parameters);
+
+        if (GraphProgram is not null)
+            hashCode.Add(GraphProgram);
+        if (GraphFunctionId is not null)
+            hashCode.Add(GraphFunctionId);
+        if (GraphParameterLocals is not null)
+            foreach (var local in GraphParameterLocals)
+                hashCode.Add(local);
 
         foreach (var item in Instructions)
         {

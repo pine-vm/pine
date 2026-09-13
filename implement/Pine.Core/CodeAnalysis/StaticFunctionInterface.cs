@@ -61,6 +61,11 @@ public record StaticFunctionInterface
             new StaticFunctionInterface([.. paramsPaths.Order(IntPathComparer.Instance)]);
     }
 
+    /// <summary>Owns paths while preserving an explicitly declared graph-call parameter order.</summary>
+    public static StaticFunctionInterface FromPathsInOrder(
+        System.Collections.Immutable.ImmutableList<System.Collections.Immutable.ImmutableList<int>> paramsPaths) =>
+        new(paramsPaths);
+
     /// <summary>
     /// Builds a <see cref="StaticFunctionInterface"/> based on the parameters referenced within the supplied expression.
     /// </summary>

@@ -47,14 +47,14 @@ internal static class InstructionSelection
                 "Compute does not handle operation variant: " + operation.GetType().Name),
         };
 
-    internal static int MaximumStack(ImmutableList<SelectedInstruction> instructions)
+    internal static int MaximumStack(ImmutableList<SelectedInstruction> instructions, int entryDepth = 0)
     {
         return Fold();
 
         int Fold()
         {
-            var depth = 0;
-            var maximum = 0;
+            var depth = entryDepth;
+            var maximum = entryDepth;
             foreach (var instruction in instructions)
             {
                 var (read, produced) = instruction switch

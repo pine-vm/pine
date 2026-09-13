@@ -59,7 +59,15 @@ Added immutable selected blocks, per-edge copy plans, symbolic layout and final 
 
 Validation: scoped `dotnet format`; **41 graph-backend tests passed**, and the established regression gate reports **361 passed, one existing skip**. Subsequent immutable-test-helper and direct-error assertions passed targeted checks. Logs: `/home/runner/work/super-duper-disco/super-duper-disco/implement/Pine.Core.Tests/artifacts/test-logs/increment5a-{gate,immutable-helpers,direct-error}.log`. Secret scan and independent review passed. Automated review remains unavailable; CodeQL skipped the oversized database, so no completed automated security analysis is claimed.
 
-Next: increment 5b, calls and explicit successful-return continuations.
+## 2026-09-13 — Calls, preparation and expression frontend (in progress)
+
+Current scope extends through increment 7: complete successful-return transfers, immutable preparation and direct expression-to-graph compilation, including graph-first compilation of dynamically discovered callees. Production cutover and graph optimization passes remain later gates.
+
+- Preparation is more than invoking an existing reducer: its parse/reduction caches and recursive inlining policy must move inside an explicit immutable-memo boundary. The migration retains a separate baseline implementation until cutover; parity tests must detect policy drift.
+- Parsing memo entries must preserve encoding-format boundaries. Recursively applying legacy-format fallback to children of a newer encoding can accept malformed mixed-format trees and make preparation depend on memo warm-up order.
+- A graph ID is not evidence of an equivalent encoded expression. Known graph calls must not consume or publish expression-cache entries under an arbitrary supplied source encoding; they remain uncached and report explicit graph identity, with absent expression provenance. Canonical dynamic calls retain normal expression caching.
+- Copying arrays before calling legacy factories does not guarantee detached ownership: global literal/AST interning can return caller-backed objects. Exposed owned-to-legacy conversions must bypass interning, and preparation must re-own interop results before publication.
+- **Oracle discrepancy:** direct interpretation treats syntactic `head(skip([count, source]))` as list-only after a successful integer probe, but generic data-list composition supports blobs. A failed probe evaluates the count again through the generic fallback. The frontend preserves that distinction and evaluation order rather than silently substituting list projections for arbitrary builtins.
 
 ## Deferred improvement ideas
 
@@ -71,4 +79,7 @@ These are hypotheses for measurement after production cutover, not exemptions fr
 | Would profile-weighted block scheduling and selective edge-stub sharing outperform deterministic layout? | Compare dispatch count, code size and compile cost; preserve distinct edge arguments and layout-independent safepoint coverage. Do not infer semantic loop counts from the chosen layout. |
 | What case-count/literal-shape threshold favors indexed switches over ordered equality tests? | Compare dispatches, equality/hash cost and artifact size across skewed and uniform inputs; preserve exact literal matching, default behavior and one-time selector evaluation. Required switch-selection parity still belongs before cutover. |
 | Can an owned immutable literal arena reduce repeated VM-adapter copies without restoring global interning aliases? | Measure publication allocations, retained memory and repeated compilation cost; require aliasing tests and immutable publication before sharing any backing storage. |
+| Would format-qualified child-parse memoization reduce repeated subtree work? | Compare parse allocations and depth on shared encodings; preserve whole-root legacy fallback and prove identical cold/warm results for malformed mixed-format trees. |
+| Should syntactic list-only head/skip use a dedicated semantic operation? | Compare its conservative generic-operation expansion with direct selection; preserve integer-probe failure, operand reevaluation and blob behavior until the language/interpreter discrepancy is resolved explicitly. |
+| Should known-function frame adaptation be memoized within a program publication rather than repeated per call? | Compare invocation allocations and adapter cost; key by immutable program/function identity and ABI, keep recursive references ID-based, and never share mutable legacy instruction links. |
 | When does a projected entry ABI outperform the canonical-environment prologue, especially after inlining? | Compare projection instructions, argument allocations and frame costs for generic versus specialized calls; preserve positional/duplicate paths, specialization guards and canonical fallback. Complete required invocation-overhead optimizations first. |

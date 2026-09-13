@@ -9,7 +9,7 @@ namespace Pine.Core.Interpreter.IntermediateVM;
 /// Captures the expression, inputs, and instruction pointer of the stack frame where intermediate-VM execution failed.
 /// </summary>
 public record ExecutionErrorReport(
-    Expression FrameExpression,
+    Expression? FrameExpression,
     StackFrameInput InputValues,
     StackFrameInstructions Instructions,
     int FrameInstructionPointer);
@@ -27,17 +27,14 @@ public static class ExecutionErrorReportExtensions
         this ExecutionErrorReport errorReport,
         ConcurrentPineValueHashCache mutableCacheValueHash)
     {
-        var expressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(errorReport.FrameExpression);
-
-        var exprHash =
-            mutableCacheValueHash.GetHash(expressionValue);
-
-        var exprHashBase16 = Convert.ToHexStringLower(exprHash.Span);
+        var frameDescription = errorReport.FrameExpression is { } expression
+            ? "expression: " + Convert.ToHexStringLower(
+                mutableCacheValueHash.GetHash(ExpressionEncoding.EncodeExpressionAsValue(expression)).Span)[..8]
+            : "graph function: " + errorReport.Instructions.GraphFunctionId?.Value;
 
         yield return
             "Instruction " + errorReport.FrameInstructionPointer +
-            " in expression: " + exprHashBase16[..8] + " for environment " +
+            " in " + frameDescription + " for environment " +
             errorReport.InputValues.ToString();
 
         var specializationText =

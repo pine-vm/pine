@@ -264,7 +264,9 @@ public sealed class InvocationCountReportBuilder
     /// </summary>
     public void Add(in EnteredStackFrame enteredStackFrame)
     {
-        var expression = enteredStackFrame.FrameExpression;
+        // Graph-only IDs are deliberately not attributed to a canonical source expression.
+        if (enteredStackFrame.FrameExpression is not { } expression)
+            return;
 
         if (_counts.TryGetValue(expression, out var existing))
         {

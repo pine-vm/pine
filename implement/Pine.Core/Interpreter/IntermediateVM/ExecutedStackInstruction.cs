@@ -17,7 +17,7 @@ public delegate void ReportExecutedStackInstruction(
 /// <param name="InstructionPointer">Instruction pointer within the current stack frame.</param>
 /// <param name="EvaluationStackDepth">Depth of the current frame's evaluation stack before executing the instruction.</param>
 /// <param name="Instruction">The instruction being executed.</param>
-/// <param name="FrameExpression">The expression associated with the current stack frame.</param>
+/// <param name="FrameExpression">The source expression, or null for a graph-only frame.</param>
 /// <param name="LoadFrameInput">A function to load the input arguments for the entered frame.</param>
 public readonly record struct ExecutedStackInstruction(
     long InstructionIndex,
@@ -25,8 +25,12 @@ public readonly record struct ExecutedStackInstruction(
     int InstructionPointer,
     int EvaluationStackDepth,
     StackInstruction Instruction,
-    Expression FrameExpression,
-    System.Func<StackFrameInput> LoadFrameInput);
+    Expression? FrameExpression,
+    System.Func<StackFrameInput> LoadFrameInput)
+{
+    /// <summary>Graph-only function identity, independent of expression identities.</summary>
+    public Semantic.FunctionId? GraphFunctionId { get; init; }
+}
 
 /// <summary>
 /// Delegate for observing each time a new stack frame is pushed by <see cref="PineVM"/>.
@@ -43,11 +47,11 @@ public delegate void ReportEnteredStackFrame(
 /// <param name="FrameIndex">Zero-based index of this frame push in the overall evaluation (i.e., how many frames have been pushed so far, minus one).</param>
 /// <param name="StackFrameDepth">Number of active stack frames after pushing this frame.</param>
 /// <param name="Instructions">The compiled instructions for the entered frame.</param>
-/// <param name="FrameExpression">The expression associated with the entered frame.</param>
+/// <param name="FrameExpression">The source expression, or null for a graph-only frame identified by Instructions.GraphFunctionId.</param>
 /// <param name="LoadFrameInput">A function to load the input arguments for the entered frame.</param>
 public readonly record struct EnteredStackFrame(
     long FrameIndex,
     int StackFrameDepth,
     StackFrameInstructions Instructions,
-    Expression FrameExpression,
+    Expression? FrameExpression,
     System.Func<StackFrameInput> LoadFrameInput);

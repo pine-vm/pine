@@ -13,22 +13,26 @@ public static class GraphVMAdapter
     /// nonempty stub (at least a jump), so even an empty self-cycle has a negative, nonzero backjump.
     /// Legacy quotas/cancellation remain active; loop counts still depend on layout until increment 9.
     /// </summary>
-    public static StackFrameInstructions ToStackFrame(GraphFunction function)
+    public static StackFrameInstructions ToStackFrame(
+        GraphFunction function, GraphProgram? program = null, bool projectedArguments = false)
     {
+        var layout = projectedArguments
+            ? function.Layout.SetItem(0, function.Layout[0] with { Instructions = [] })
+            : function.Layout;
         return Emit();
 
         StackFrameInstructions Emit()
         {
             var offsets = ImmutableDictionary.CreateBuilder<LayoutLabel, int>();
             var position = 0;
-            foreach (var fragment in function.Layout)
+            foreach (var fragment in layout)
             {
                 offsets.Add(fragment.Label, position);
                 position = checked(position + fragment.Instructions.Count + TransferSize(fragment.Transfer));
             }
 
             var instructions = ImmutableList.CreateBuilder<StackInstruction>();
-            foreach (var fragment in function.Layout)
+            foreach (var fragment in layout)
             {
                 instructions.AddRange(fragment.Instructions.Select(StraightLineVMAdapter.ToInstruction));
                 switch (fragment.Transfer)
@@ -48,13 +52,53 @@ public static class GraphVMAdapter
                             StraightLineVMAdapter.ToPineValue(branch.Literal)));
                         Jump(branch.NotEqual);
                         break;
+                    case LayoutTransfer.Invoke invoke:
+                        Call(invoke.Call, false);
+                        Jump(invoke.Success);
+                        break;
+                    case LayoutTransfer.TailInvoke invoke:
+                        Call(invoke.Call, true);
+                        instructions.Add(StackInstruction.Return);
+                        break;
                     default:
                         throw new NotImplementedException(
                             "ToStackFrame does not handle layout transfer variant: " + fragment.Transfer.GetType().Name);
                 }
             }
-            return new(StaticFunctionInterface.FromPathsSorted([[]]), instructions.ToArray(),
-                function.Resources.LocalsCount, function.Resources.MaxStackUsage);
+            return new(projectedArguments
+                ? StaticFunctionInterface.FromPathsInOrder(function.Signature.Parameters.Select(parameter => parameter.Path.Indices).ToImmutableList())
+                : StaticFunctionInterface.FromPathsSorted([[]]), instructions.ToArray(),
+                function.Resources.LocalsCount, function.Resources.MaxStackUsage)
+            {
+                GraphProgram = program,
+                GraphFunctionId = projectedArguments ? function.Id : null,
+                GraphParameterLocals = projectedArguments
+                    ? function.Layout[0].Instructions.OfType<SelectedInstruction.Store>().Select(store => store.Local).ToImmutableList()
+                    : null,
+            };
+
+            void Call(SelectedCall call, bool tail)
+            {
+                instructions.AddRange(call.Arguments.Select(StackInstruction.Local_Get));
+                switch (call.Target)
+                {
+                    case SelectedCallTarget.Dynamic dynamic:
+                        instructions.Add(StackInstruction.Local_Get(dynamic.Local));
+                        instructions.Add(StackInstruction.Eval_Binary);
+                        break;
+                    case SelectedCallTarget.Known known:
+                        if (program is null || !program.Functions.ContainsKey(known.Function) ||
+                            program.Functions[known.Function].Signature != call.Signature)
+                            throw new ArgumentException("Known call requires a program containing its declared target.");
+                        instructions.Add(new(StackInstructionKind.Invoke_GraphFunction)
+                        {
+                            GraphInvocation = new(known.Function, call.Arguments.Count, tail),
+                        });
+                        break;
+                    default:
+                        throw new NotImplementedException("ToStackFrame does not handle call target variant: " + call.Target.GetType().Name);
+                }
+            }
 
             void Jump(LayoutLabel target)
             {
@@ -72,7 +116,17 @@ public static class GraphVMAdapter
             LayoutTransfer.Return => 2,
             LayoutTransfer.Jump => 1,
             LayoutTransfer.Branch => 3,
+            LayoutTransfer.Invoke invoke => CallSize(invoke.Call) + 1,
+            LayoutTransfer.TailInvoke invoke => CallSize(invoke.Call) + 1,
             _ => throw new NotImplementedException(
                 "TransferSize does not handle layout transfer variant: " + transfer.GetType().Name),
         };
+
+    private static int CallSize(SelectedCall call) =>
+        call.Arguments.Count + (call.Target switch
+        {
+            SelectedCallTarget.Dynamic => 2,
+            SelectedCallTarget.Known => 1,
+            _ => throw new NotImplementedException("CallSize does not handle target variant: " + call.Target.GetType().Name),
+        });
 }

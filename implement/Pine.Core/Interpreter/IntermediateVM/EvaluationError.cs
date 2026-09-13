@@ -61,9 +61,10 @@ public abstract record EvaluationErrorReason
 /// <summary>
 /// A cheap snapshot of a live evaluation frame. Values and instructions are retained
 /// by reference so callers can perform deeper analysis only when needed.
+/// Expression is null for graph-only frames; Instructions.GraphFunctionId identifies those frames.
 /// </summary>
 public sealed record EvaluationStackTraceFrame(
-    Expression Expression,
+    Expression? Expression,
     StackFrameInput? Input,
     StackFrameInstructions? Instructions,
     int InstructionPointer);
@@ -118,11 +119,18 @@ public sealed record EvaluationError(
 
             foreach (var frame in error.StackTrace)
             {
-                var expressionValue = ExpressionEncoding.EncodeExpressionAsValue(frame.Expression);
-                var expressionHash = PineValueHashTree.ComputeHash(expressionValue);
-
                 text.Append("  ");
-                text.Append(Convert.ToHexStringLower(expressionHash.Span)[..8]);
+                if (frame.Expression is { } expression)
+                {
+                    var expressionValue = ExpressionEncoding.EncodeExpressionAsValue(expression);
+                    var expressionHash = PineValueHashTree.ComputeHash(expressionValue);
+                    text.Append(Convert.ToHexStringLower(expressionHash.Span)[..8]);
+                }
+                else
+                {
+                    text.Append("graph function ");
+                    text.Append(frame.Instructions?.GraphFunctionId?.Value);
+                }
                 text.Append(" at instruction ");
                 text.Append(CommandLineInterface.FormatIntegerForDisplay(frame.InstructionPointer));
                 text.AppendLine();

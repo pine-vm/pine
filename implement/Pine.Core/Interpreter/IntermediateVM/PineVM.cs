@@ -75,8 +75,13 @@ public class PineVM : ICancellablePineVM
 
     private readonly bool _disableDirectEvalForSimpleTemplate;
 
+    private readonly Func<Expression, ExpressionCompilation>? _compileExpression;
+
     /// <summary>
     /// Creates a PineVM with caller-supplied caches, precompiled leaves, optimization settings, and diagnostic callbacks.
+    /// The optional compileExpression boundary selects an alternative compiler for every cache miss,
+    /// including dynamic callees; it never falls back to the default compiler or instruction overrides.
+    /// Alternative compilers use an isolated VM-owned compilation cache, not external cache delegates.
     /// </summary>
     public static PineVM CreateCustom(
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache,
@@ -107,13 +112,17 @@ public class PineVM : ICancellablePineVM
         TryGetExpressionCompilation? tryGetExpressionCompilation = null,
         GetOrAddExpressionCompilation? getOrAddExpressionCompilation = null,
         PineVMExpressionEncodingCache? expressionEncodingCache = null,
-        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null)
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null,
+        Func<Expression, ExpressionCompilation>? compileExpression = null)
     {
         if ((tryGetExpressionCompilation is null) != (getOrAddExpressionCompilation is null))
         {
             throw new ArgumentException(
                 "Configure both expression-compilation cache delegates or neither.");
         }
+
+        if (compileExpression is not null && tryGetExpressionCompilation is not null)
+            throw new ArgumentException("An alternative compiler requires an isolated VM-owned compilation cache.");
 
         if (tryGetExpressionCompilation is null)
         {
@@ -157,7 +166,8 @@ public class PineVM : ICancellablePineVM
                 new PineVMExpressionEncodingCache(),
                 reducedExpressionCache:
                 reducedExpressionCache ??
-                new Dictionary<(Expression, ReductionConfig), Expression>());
+                new Dictionary<(Expression, ReductionConfig), Expression>(),
+                compileExpression: compileExpression);
 
     }
 
@@ -190,7 +200,8 @@ public class PineVM : ICancellablePineVM
         ReportTailLoopIteration? reportTailLoopIteration = null,
         ReportExpressionCompiled? reportExpressionCompiled = null,
         IInvocationCacheAccess? invocationCache = null,
-        InvocationCacheConfiguration? invocationCacheConfiguration = null)
+        InvocationCacheConfiguration? invocationCacheConfiguration = null,
+        Func<Expression, ExpressionCompilation>? compileExpression = null)
     {
         if (evalCache is not null && invocationCache is not null)
         {
@@ -268,6 +279,7 @@ public class PineVM : ICancellablePineVM
 
         _disableDirectContinueForSimpleEval = disableDirectContinueForSimpleEval;
         _disableDirectEvalForSimpleTemplate = disableDirectEvalForSimpleTemplate;
+        _compileExpression = compileExpression;
     }
 
     /// <inheritdoc/>
@@ -314,7 +326,7 @@ public class PineVM : ICancellablePineVM
 
     static StackFrame BuildStackFrame(
         PineValue? expressionValue,
-        Expression expression,
+        Expression? expression,
         StackFrameInstructions instructions,
         StackFrameInput stackFrameInput,
         StackFrameProfilingBaseline profilingBaseline)
@@ -324,7 +336,7 @@ public class PineVM : ICancellablePineVM
 
         for (var i = 0; i < stackFrameInput.Arguments.Count; ++i)
         {
-            localsValues[i] = stackFrameInput.Arguments[i];
+            localsValues[instructions.GraphParameterLocals?[i] ?? i] = stackFrameInput.Arguments[i];
         }
 
         return
@@ -371,6 +383,16 @@ public class PineVM : ICancellablePineVM
 
     private ExpressionCompilationCacheEntry ExpressionEntryLessCache(Expression rootExpression)
     {
+        if (_compileExpression is { } compileExpression)
+        {
+            var encoded = EncodeExpressionAsValue(rootExpression);
+            var (hash, _) = PineValueHashFlat.ComputeHashForValue(encoded);
+            return new(
+                Compilation: compileExpression(rootExpression),
+                ExpressionHashBase16: Convert.ToHexStringLower(hash.Span),
+                OptimizationConfig: null);
+        }
+
         if (_expressionCompilationOverrides?.TryGetValue(rootExpression, out var overrideCompilation) is true)
         {
             var overrideExprValue = EncodeExpressionAsValue(rootExpression);
@@ -611,7 +633,8 @@ public class PineVM : ICancellablePineVM
             loopIterationCount++;
             frame.LoopIterationCount++;
 
-            FireTailLoopIteration(TailLoopIterationKind.BackwardJump, frame.Expression, frame.InputValues);
+            FireTailLoopIteration(TailLoopIterationKind.BackwardJump, frame.Expression, frame.InputValues,
+                frame.Instructions?.GraphFunctionId);
 
             return EnforceLoopIterationCountLimit();
         }
@@ -635,8 +658,9 @@ public class PineVM : ICancellablePineVM
 
         void FireTailLoopIteration(
             TailLoopIterationKind kind,
-            Expression frameExpression,
-            StackFrameInput frameInput)
+            Expression? frameExpression,
+            StackFrameInput frameInput,
+            Semantic.FunctionId? graphFunctionId = null)
         {
             if (_reportTailLoopIteration is not { } reportTailLoopIteration)
             {
@@ -649,7 +673,10 @@ public class PineVM : ICancellablePineVM
                     StackFrameDepth: stack.Count,
                     Kind: kind,
                     FrameExpression: frameExpression,
-                    FrameInput: frameInput);
+                    FrameInput: frameInput)
+                {
+                    GraphFunctionId = graphFunctionId,
+                };
 
             tailLoopIterationCount++;
 
@@ -874,7 +901,7 @@ public class PineVM : ICancellablePineVM
 
         EvaluationError? BuildAndPushStackFrame(
             PineValue? expressionValue,
-            Expression expression,
+            Expression? expression,
             StackFrameInstructions instructions,
             StackFrameInput stackFrameInput,
             bool replaceCurrentFrame)
@@ -924,7 +951,8 @@ public class PineVM : ICancellablePineVM
                 FireTailLoopIteration(
                     TailLoopIterationKind.TailCallReplace,
                     newFrame.Expression,
-                    newFrame.InputValues);
+                    newFrame.InputValues,
+                    newFrame.Instructions?.GraphFunctionId);
             }
 
             if (config.StackDepthLimit is { } stackDepthLimit && stack.Count > stackDepthLimit)
@@ -994,7 +1022,7 @@ public class PineVM : ICancellablePineVM
                 _reportFunctionApplication?.Invoke(
                     new EvaluationReport(
                         ExpressionValue: currentFrameExprValue,
-                        currentFrame.Expression,
+                        currentFrame.Expression ?? throw new InvalidOperationException("An expression cache identity requires a source expression."),
                         currentFrame.InputValues,
                         Counters: new PerformanceCounters(
                             InstructionCount: frameTotalInstructionCount,
@@ -1036,14 +1064,7 @@ public class PineVM : ICancellablePineVM
         {
             var frameCount = Math.Min(frameCountMax, stack.Count - 1);
 
-            var stackTrace = new Expression[frameCount];
-
-            for (var i = 0; i < frameCount; i++)
-            {
-                stackTrace[i] = stack.ElementAt(i + 1).Expression;
-            }
-
-            return stackTrace;
+            return stack.Skip(1).Take(frameCount).Select(frame => frame.Expression).OfType<Expression>().ToArray();
         }
 
         IReadOnlyList<EvaluationStackTraceFrame> CompileEvaluationErrorStackTrace(int frameCountMax)
@@ -1159,7 +1180,10 @@ public class PineVM : ICancellablePineVM
                             EvaluationStackDepth: currentFrame.StackPointer,
                             Instruction: currentInstruction,
                             FrameExpression: currentFrame.Expression,
-                            LoadFrameInput: () => currentFrame.InputValues);
+                            LoadFrameInput: () => currentFrame.InputValues)
+                        {
+                            GraphFunctionId = currentFrame.Instructions.GraphFunctionId,
+                        };
 
                     reportExecutedStackInstruction(in executedStackInstruction);
                 }
@@ -2193,6 +2217,34 @@ public class PineVM : ICancellablePineVM
                                 }
                             }
 
+                            continue;
+                        }
+
+                    case StackInstructionKind.Invoke_GraphFunction:
+                        {
+                            if (IncrementInvocationCountAndEnforceLimits() is { } limitError)
+                                return limitError;
+
+                            var invocation = currentInstruction.GraphInvocation ??
+                                throw new InvalidOperationException("Missing graph invocation metadata.");
+                            var program = currentFrame.Instructions.GraphProgram ??
+                                throw new InvalidOperationException("Missing immutable graph program.");
+                            var target = program.Functions[invocation.Function];
+                            var targetInstructions = Backend.GraphVMAdapter.ToStackFrame(target, program, projectedArguments: true);
+                            var arguments = new PineValueInProcess[invocation.ArgumentCount];
+                            for (var index = arguments.Length - 1; index >= 0; --index)
+                                arguments[index] = currentFrame.PopTopmostFromStack();
+
+                            var input = StackFrameInput.FromArguments(targetInstructions.Parameters, arguments);
+                            // Graph IDs do not establish canonical expression/specialization provenance.
+                            // Keep these calls outside the expression cache until that proof exists.
+                            if (BuildAndPushStackFrame(
+                                expressionValue: null,
+                                expression: null,
+                                instructions: targetInstructions,
+                                stackFrameInput: input,
+                                replaceCurrentFrame: invocation.IsTail) is { } error)
+                                return error;
                             continue;
                         }
 
