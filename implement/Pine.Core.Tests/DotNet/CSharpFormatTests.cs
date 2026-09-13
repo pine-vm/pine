@@ -5598,7 +5598,7 @@ public class CSharpFormatTests
     }
 
     [Fact]
-    public void Preserves_space_between_catch_keyword_and_block()
+    public void Formats_empty_catch_block_brace_on_new_line()
     {
         var input =
             """"
@@ -5609,6 +5609,54 @@ public class CSharpFormatTests
                         ZipArchive.EntriesFromZipArchive(blobContent));
             }
             catch { }
+            """";
+
+        var expected =
+            """"
+            try
+            {
+                fromZipArchive =
+                    FileTree.FromSetOfFilesWithCommonFilePath(
+                        ZipArchive.EntriesFromZipArchive(blobContent));
+            }
+            catch
+            { }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_filter_after_catch_keyword()
+    {
+        var input =
+            """"
+            try { } // Important.
+            catch /* Reason. */ when (condition) { }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_comments_after_catch_keywords()
+    {
+        var input =
+            """"
+            try
+            {
+                Use();
+            }
+            catch /* Reason. */ (Exception)
+            {
+            }
+
+            try
+            {
+                Use();
+            }
+            catch /* Reason. */
+            { }
             """";
 
         AssertFormattedSyntax(input, input, scriptMode: true);
@@ -6882,5 +6930,143 @@ public class CSharpFormatTests
             """";
 
         AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_empty_catch_block_on_single_line()
+    {
+        var input =
+            """"
+            try
+            {
+                var fromCache = File.ReadAllBytes(cacheFilePath);
+
+                if (blobHasExpectedSHA256(fromCache))
+                    return (fromCache, cacheFilePath);
+            }
+            catch
+            { }
+
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_comments_between_try_catch_finally()
+    {
+        var input =
+            """"
+            try
+            {
+                Directory.Delete(path: containerDirectory, recursive: true);
+            }
+            // Avoid crash
+            /*
+             * Another comment
+             * */
+            catch (UnauthorizedAccessException)
+            {
+            }
+            // Comment gamma
+            /*
+             * Comment delta
+             * */
+            // Comment epsilon
+            finally
+            {
+            }
+
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_empty_lines_in_collection_initializer_including_comments()
+    {
+        var input =
+            """"
+            class Test
+            {
+                private static readonly IReadOnlyDictionary<DeclQualifiedName, bool> s_bundledDeclarationsSupportStatus =
+                    /*
+                     * Supported status for a subset of declarations in the bundled Elm compiler/LS.
+                     * True means the declaration is currently supported by static program parsing.
+                     * */
+                    new Dictionary<DeclQualifiedName, bool>
+                    {
+                        { DeclQualifiedName.Create(["Basics"], "eq"), true },
+
+                        // { DeclQualifiedName.Create(["Basics"], "neq"), true },
+
+                        { DeclQualifiedName.Create(["Basics"], "add"), true },
+                        { DeclQualifiedName.Create(["Basics"], "sub"), true },
+                        { DeclQualifiedName.Create(["Basics"], "mul"), true },
+
+                        { DeclQualifiedName.Create(["Basics"], "idiv"), true },
+
+                        // { DeclQualifiedName.Create(["Basics"], "pow"), true },
+
+                        { DeclQualifiedName.Create(["Basics"], "and"), true },
+
+                        { DeclQualifiedName.Create(["Basics"], "or"), true },
+
+                        /*
+                         * 
+                        { DeclQualifiedName.Create(["Basics"], "identity"), true },
+                        { DeclQualifiedName.Create(["Basics"], "always"), true },
+                        { DeclQualifiedName.Create(["Basics"], "not"), true },
+                        */
+
+                        { DeclQualifiedName.Create(["Basics"], "compare"), true },
+
+                        { DeclQualifiedName.Create(["String"], "toLower"), false }, // Using higher-order function 'map' internally
+                        { DeclQualifiedName.Create(["String"], "toUpper"), false },
+
+                    }
+                    .ToFrozenDictionary();
+            }
+
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: false);
+    }
+
+    [Fact]
+    public void Preserve_adjacent_structured_and_single_line_comments_in_initializer()
+    {
+        var input =
+            """"
+            var values =
+                new int[]
+                {
+                    /** First value. */
+                    /// <summary>
+                    /// First value.
+                    /// </summary>
+                    // Keep adjacent.
+                    1,
+                };
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_blank_lines_at_initializer_boundaries()
+    {
+        var input =
+            """"
+            var values =
+                new int[]
+                {
+
+                    1
+
+                };
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
     }
 }
