@@ -53,6 +53,12 @@ public static class FunctionPreparation
     private static PineValue.ListValue EncodeWithoutMemo(Expression expression) =>
         ExpressionEncoding.EncodeExpressionAsValueWithoutTopLevelCacheLookup(expression, EncodeWithoutMemo);
 
+    private static Expression.Litral MakeLiteral(PineValue value) =>
+        new(OwnedExpression.ToValue(OwnedExpression.CaptureValue(value)));
+
+    private static PineValue EncodeInteger(BigInteger integer) =>
+        new PineValue.BlobValue(IntegerEncoding.EncodeSignedIntegerBlob(integer));
+
     /// <summary>Returns a prepared function and the resulting immutable memo, leaving inputs unchanged.</summary>
     public static (PreparedFunction Function, CompilerMemo Memo) PrepareFunction(
         CompilationRequest request, CompilerMemo memo)
@@ -116,7 +122,9 @@ public static class FunctionPreparation
                     _ => throw new NotImplementedException("Unknown parse result variant."),
                 };
                 parses.Add(key, entry);
-                return parsed;
+                return entry.Expression is { } owned
+                    ? Result<string, Expression>.ok(owned.ToExpression())
+                    : Result<string, Expression>.err(entry.Error!);
             }
 
             ExpressionEncoding2026.ParseExpressionResult ParseExpressionWithoutResultAllocation(PineValue value) =>
@@ -137,9 +145,9 @@ public static class FunctionPreparation
                     {
                         Expression.Environment => environmentReplacement,
                         Expression.Litral => node,
-                        Expression.List list => Expression.ListInst(list.Items.Select(Substitute).ToArray()),
-                        Expression.Builtin builtin => Expression.BuiltinInst(builtin.Function, Substitute(builtin.Input)),
-                        Expression.Conditional conditional => Expression.ConditionalInst(
+                        Expression.List list => new Expression.List(list.Items.Select(Substitute).ToArray()),
+                        Expression.Builtin builtin => new Expression.Builtin(builtin.Function, Substitute(builtin.Input)),
+                        Expression.Conditional conditional => new Expression.Conditional(
                             Substitute(conditional.Condition), Substitute(conditional.FalseBranch), Substitute(conditional.TrueBranch)),
                         Expression.Eval eval => new Expression.Eval(Substitute(eval.Encoded), Substitute(eval.Environment)),
                         Expression.Label label => new Expression.Label(label.LabelValue, Substitute(label.Tagged)),
@@ -202,7 +210,7 @@ public static class FunctionPreparation
                     }
                 }
 
-                return ValueEvalResult.Ok(PineValue.List(itemsValues));
+                return ValueEvalResult.Ok(new PineValue.ListValue(itemsValues));
             }
 
             ValueEvalResult TryEvalEval(
@@ -343,7 +351,7 @@ public static class FunctionPreparation
 
                 if (Analysis.TryParseAsLiteral(expression) is { } literalValue)
                 {
-                    return Expression.LitralInst(literalValue);
+                    return MakeLiteral(literalValue);
                 }
 
                 if (envConstraintId is not null &&
@@ -351,7 +359,7 @@ public static class FunctionPreparation
                 {
                     if (envConstraintId.TryGetValue(parsedAsPath) is { } fromEnvConstraint)
                     {
-                        return Expression.LitralInst(fromEnvConstraint);
+                        return MakeLiteral(fromEnvConstraint);
                     }
                 }
 
@@ -366,7 +374,7 @@ public static class FunctionPreparation
                     {
                         if (TryEvalIndependent(expression).Value is { } okValue)
                         {
-                            return Expression.LitralInst(okValue);
+                            return MakeLiteral(okValue);
                         }
                     }
                     catch (ParseExpressionException)
@@ -382,7 +390,7 @@ public static class FunctionPreparation
                     case Expression.Builtin rootBuiltinExpr:
 
                         Expression.Builtin ContinueWithReducedInput(Expression newInput) =>
-                            Expression.BuiltinInst(
+                            new Expression.Builtin(
                                 function: rootBuiltinExpr.Function,
                                 input: newInput);
 
@@ -434,7 +442,7 @@ public static class FunctionPreparation
                                                 {
                                                     if (listConcreteValues[i] != listConcreteValues[0])
                                                     {
-                                                        return Expression.LitralInst(PineKernelValues.FalseValue);
+                                                        return MakeLiteral(PineKernelValues.FalseValue);
                                                     }
                                                 }
                                             }
@@ -471,7 +479,7 @@ public static class FunctionPreparation
                                                         (prevItemFixedLength.HasValue &&
                                                         itemFixedLength.Value != prevItemFixedLength.Value))
                                                     {
-                                                        return Expression.LitralInst(PineKernelValues.FalseValue);
+                                                        return MakeLiteral(PineKernelValues.FalseValue);
                                                     }
 
                                                     prevItemFixedLength = itemFixedLength;
@@ -601,7 +609,7 @@ public static class FunctionPreparation
                                             {
                                                 if (nonEmptyItems.Count is 0)
                                                 {
-                                                    return Expression.LitralInst(PineValue.EmptyList);
+                                                    return MakeLiteral(PineValue.EmptyList);
                                                 }
 
                                                 if (nonEmptyItems.Count is 1)
@@ -610,7 +618,7 @@ public static class FunctionPreparation
                                                 }
 
                                                 return
-                                                    ContinueWithReducedInput(Expression.ListInst(nonEmptyItems));
+                                                    ContinueWithReducedInput(new Expression.List(nonEmptyItems));
                                             }
                                         }
 
@@ -625,7 +633,7 @@ public static class FunctionPreparation
                                                 {
                                                     for (var i = 0; i < subLiteralList.Items.Length; i++)
                                                     {
-                                                        items.Add(Expression.LitralInst(subLiteralList.Items.Span[i]));
+                                                        items.Add(MakeLiteral(subLiteralList.Items.Span[i]));
                                                     }
 
                                                     continue;
@@ -637,7 +645,7 @@ public static class FunctionPreparation
                                             items.AddRange(subList.Items);
                                         }
 
-                                        return Expression.ListInst(items);
+                                        return new Expression.List(items);
                                     }
 
                                     return AttemptReduceViaEval();
@@ -648,8 +656,8 @@ public static class FunctionPreparation
                                     if (rootBuiltinExpr.Input is Expression.List inputList)
                                     {
                                         return
-                                            Expression.LitralInst(
-                                                IntegerEncoding.EncodeSignedInteger(inputList.Items.Count));
+                                            MakeLiteral(
+                                                EncodeInteger(inputList.Items.Count));
                                     }
 
                                     if (rootBuiltinExpr.Input is Expression.Builtin lengthInputBuiltin)
@@ -687,8 +695,8 @@ public static class FunctionPreparation
                                             if (aggregateLength.HasValue)
                                             {
                                                 return
-                                                    Expression.LitralInst(
-                                                        IntegerEncoding.EncodeSignedInteger(aggregateLength.Value));
+                                                    MakeLiteral(
+                                                        EncodeInteger(aggregateLength.Value));
                                             }
                                         }
                                     }
@@ -780,7 +788,7 @@ public static class FunctionPreparation
                                         IsKnownBooleanExpression(equalArgsList.Items[0]))
                                     {
                                         return
-                                            Expression.ConditionalInst(
+                                            new Expression.Conditional(
                                                 condition: equalArgsList.Items[0],
                                                 trueBranch: conditional.FalseBranch,
                                                 falseBranch: conditional.TrueBranch);
@@ -791,7 +799,7 @@ public static class FunctionPreparation
                                         IsKnownBooleanExpression(equalArgsList.Items[0]))
                                     {
                                         return
-                                            Expression.ConditionalInst(
+                                            new Expression.Conditional(
                                                 condition: equalArgsList.Items[0],
                                                 falseBranch: conditional.FalseBranch,
                                                 trueBranch: conditional.TrueBranch);
@@ -804,7 +812,7 @@ public static class FunctionPreparation
                                         IsKnownBooleanExpression(equalArgsList.Items[1]))
                                     {
                                         return
-                                            Expression.ConditionalInst(
+                                            new Expression.Conditional(
                                                 condition: equalArgsList.Items[1],
                                                 trueBranch: conditional.FalseBranch,
                                                 falseBranch: conditional.TrueBranch);
@@ -814,7 +822,7 @@ public static class FunctionPreparation
                                         IsKnownBooleanExpression(equalArgsList.Items[1]))
                                     {
                                         return
-                                            Expression.ConditionalInst(
+                                            new Expression.Conditional(
                                                 condition: equalArgsList.Items[1],
                                                 falseBranch: conditional.FalseBranch,
                                                 trueBranch: conditional.TrueBranch);
@@ -848,9 +856,9 @@ public static class FunctionPreparation
                     return null;
 
                 return
-                    Expression.BuiltinInst(
+                    new Expression.Builtin(
                         nameof(BuiltinFunction.equal),
-                        Expression.ListInst([left.Value.inner, right.Value.inner]));
+                        new Expression.List([left.Value.inner, right.Value.inner]));
             }
 
             (PineValue? marker, PineValue tag, Expression inner)? TryUnwrapSingleFieldTagFromAllBranches(
@@ -894,7 +902,7 @@ public static class FunctionPreparation
                             return
                                 (items[0],
                                 items[1],
-                                Expression.LitralInst(items[2]));
+                                MakeLiteral(items[2]));
                         }
 
                     case Expression.Litral
@@ -910,7 +918,7 @@ public static class FunctionPreparation
                             if (items[1] is not PineValue.ListValue { Items.Length: 1 } fields)
                                 return null;
 
-                            return (null, items[0], Expression.LitralInst(fields.Items.Span[0]));
+                            return (null, items[0], MakeLiteral(fields.Items.Span[0]));
                         }
 
                     case Expression.Conditional conditional:
@@ -934,7 +942,7 @@ public static class FunctionPreparation
                             return
                                 (trueBranch.Value.marker,
                                 trueBranch.Value.tag,
-                                Expression.ConditionalInst(
+                                new Expression.Conditional(
                                     conditional.Condition,
                                     falseBranch: falseBranch.Value.inner,
                                     trueBranch: trueBranch.Value.inner));
@@ -964,7 +972,7 @@ public static class FunctionPreparation
                                 (unwrapped.Value.marker,
                                 unwrapped.Value.tag,
                                 new Expression.Eval(
-                                    Expression.LitralInst(specializedEncoded),
+                                    MakeLiteral(specializedEncoded),
                                     eval.Environment));
                         }
 
@@ -1212,31 +1220,31 @@ public static class FunctionPreparation
                 if (offset is not 0)
                 {
                     sliceSource =
-                        Expression.BuiltinInst(
+                        new Expression.Builtin(
                             nameof(BuiltinFunction.skip),
-                            Expression.ListInst(
+                            new Expression.List(
                                 [
-                                Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(offset)),
+                                MakeLiteral(EncodeInteger(offset)),
                                     source
                                 ]));
                 }
 
                 var slice =
-                    Expression.BuiltinInst(
+                    new Expression.Builtin(
                         nameof(BuiltinFunction.take),
-                        Expression.ListInst(
+                        new Expression.List(
                             [
-                            Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(expectedValues.Length)),
+                            MakeLiteral(EncodeInteger(expectedValues.Length)),
                                 sliceSource
                             ]));
 
                 return
-                    Expression.BuiltinInst(
+                    new Expression.Builtin(
                         nameof(BuiltinFunction.equal),
-                        Expression.ListInst(
+                        new Expression.List(
                             [
                             slice,
-                                Expression.LitralInst(PineValue.List(expectedValues.ToArray()))
+                                MakeLiteral(new PineValue.ListValue(expectedValues.ToArray()))
                             ]));
             }
 
@@ -1343,7 +1351,7 @@ public static class FunctionPreparation
 
                     reducedItems =
                         [
-                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(foldedConstant)),
+                        MakeLiteral(EncodeInteger(foldedConstant)),
                             .. constants.variables
                         ];
 
@@ -1366,15 +1374,15 @@ public static class FunctionPreparation
                 }
 
                 var reducedExpr =
-                    Expression.BuiltinInst(
+                    new Expression.Builtin(
                         functionName,
-                        Expression.ListInst(reducedItems));
+                        new Expression.List(reducedItems));
 
                 if (!reducedExpr.ReferencesEnvironment)
                 {
                     if (TryEvalIndependent(reducedExpr).Value is { } okValue)
                     {
-                        return Expression.LitralInst(okValue);
+                        return MakeLiteral(okValue);
                     }
                 }
 
@@ -1426,11 +1434,11 @@ public static class FunctionPreparation
                     }
 
                     combined.Add(
-                        Expression.BuiltinInst(
+                        new Expression.Builtin(
                             nameof(BuiltinFunction.int_mul),
-                            Expression.ListInst(
+                            new Expression.List(
                                 [
-                                Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(group.Coefficient)),
+                                MakeLiteral(EncodeInteger(group.Coefficient)),
                                     group.Base
                                 ])));
                 }
@@ -1590,7 +1598,7 @@ public static class FunctionPreparation
                                     return (list, referencesOriginalEnv);
                                 }
 
-                                return (Expression.ListInst(mappedItems), referencesOriginalEnv);
+                                return (new Expression.List(mappedItems), referencesOriginalEnv);
                             }
 
                         case Expression.Eval evalExpr:
@@ -1638,7 +1646,7 @@ public static class FunctionPreparation
                                 }
 
                                 return
-                                    (Expression.BuiltinInst(
+                                    (new Expression.Builtin(
                                         function: kernelApp.Function,
                                         input: argumentTransform.expr),
                                     argumentTransform.referencesOriginalEnv);
@@ -1677,7 +1685,7 @@ public static class FunctionPreparation
                                 }
 
                                 return
-                                    (Expression.ConditionalInst
+                                    (new Expression.Conditional
                                     (
                                         condition: conditionTransform.expr,
                                         falseBranch: falseBranchTransform.expr,
@@ -1827,7 +1835,7 @@ public static class FunctionPreparation
                 return
                     changed
                     ?
-                    Expression.ListInst(newItems)
+                    new Expression.List(newItems)
                     :
                     listExpr;
             }
@@ -1858,12 +1866,12 @@ public static class FunctionPreparation
                         var newItems =
                             new List<Expression>(capacity: constants.variables.Count + 1)
                             {
-                                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(product))
+                                    MakeLiteral(EncodeInteger(product))
                             };
 
                         newItems.AddRange(constants.variables);
 
-                        reducedArg = Expression.ListInst(newItems);
+                        reducedArg = new Expression.List(newItems);
                     }
                 }
 
@@ -1884,19 +1892,19 @@ public static class FunctionPreparation
                         var newItems =
                             new List<Expression>(capacity: constants.variables.Count + 1)
                             {
-                                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(sum))
+                                    MakeLiteral(EncodeInteger(sum))
                             };
 
                         newItems.AddRange(constants.variables);
 
-                        reducedArg = Expression.ListInst(newItems);
+                        reducedArg = new Expression.List(newItems);
                     }
                 }
 
                 if (reducedArg == builtinExpr.Input)
                     return builtinExpr;
 
-                return Expression.BuiltinInst(builtinExpr.Function, reducedArg);
+                return new Expression.Builtin(builtinExpr.Function, reducedArg);
             }
 
             (IReadOnlyList<BigInteger> constants, IReadOnlyList<Expression> variables) CollectConstantIntegers(
@@ -2165,7 +2173,7 @@ public static class FunctionPreparation
                                 decodedItems[i] = decodedItem;
                             }
 
-                            return Expression.ListInst(decodedItems);
+                            return new Expression.List(decodedItems);
                         }
 
                     case "ParseAndEval":
@@ -2216,7 +2224,7 @@ public static class FunctionPreparation
                                 return null;
                             }
 
-                            return Expression.BuiltinInst(functionName, decodedInput);
+                            return new Expression.Builtin(functionName, decodedInput);
                         }
 
                     default:
@@ -2263,7 +2271,7 @@ public static class FunctionPreparation
                                 decodedItems[i - 1] = decodedItem;
                             }
 
-                            return Expression.ListInst(decodedItems);
+                            return new Expression.List(decodedItems);
                         }
 
                     case "Builtin":
@@ -2278,7 +2286,7 @@ public static class FunctionPreparation
                                 return null;
                             }
 
-                            return Expression.BuiltinInst(functionName, decodedInput);
+                            return new Expression.Builtin(functionName, decodedInput);
                         }
 
                     case "Conditional" or "Condition":
@@ -2298,7 +2306,7 @@ public static class FunctionPreparation
                             }
 
                             return
-                                Expression.ConditionalInst(
+                                new Expression.Conditional(
                                     decodedCondition,
                                     decodedFalseBranch,
                                     decodedTrueBranch);
@@ -2380,7 +2388,7 @@ public static class FunctionPreparation
                 }
 
                 return
-                    Expression.ConditionalInst(
+                    new Expression.Conditional(
                         condition: reducedCondition,
                         falseBranch: reducedFalse,
                         trueBranch: reducedTrue);
@@ -2400,7 +2408,7 @@ public static class FunctionPreparation
                             condition,
                             assumedValue) is { } provenValue
                         ?
-                        Expression.LitralInst(
+                        MakeLiteral(
                             provenValue
                             ?
                             PineKernelValues.TrueValue
@@ -2546,11 +2554,11 @@ public static class FunctionPreparation
 
                             var reversed = listExpr.Items.Reverse().ToArray();
 
-                            return Expression.ListInst(reversed);
+                            return new Expression.List(reversed);
                         }
 
                     case Expression.Litral literal:
-                        return Expression.LitralInst(BuiltinFunction.reverse(literal.Value));
+                        return MakeLiteral(BuiltinFunction.reverse(literal.Value));
 
                     case Expression.Builtin innerBuiltinExpr:
                         {
@@ -2568,7 +2576,7 @@ public static class FunctionPreparation
                                 ApplyBuiltinFunctionReverseToAllBranches(cond.TrueBranch) is { } trueOk)
                             {
                                 return
-                                    Expression.ConditionalInst(
+                                    new Expression.Conditional(
                                         cond.Condition,
                                         falseBranch: falseOk,
                                         trueBranch: trueOk);
@@ -2609,13 +2617,13 @@ public static class FunctionPreparation
                                 return list;
 
                             if (countClamped >= list.Items.Count)
-                                return Expression.LitralInst(PineValue.EmptyList);
+                                return MakeLiteral(PineValue.EmptyList);
 
-                            return Expression.ListInst([.. list.Items.Skip(countClamped)]);
+                            return new Expression.List([.. list.Items.Skip(countClamped)]);
                         }
 
                     case Expression.Litral literal:
-                        return Expression.LitralInst(BuiltinFunctionSpecialized.skip(countClamped, literal.Value));
+                        return MakeLiteral(BuiltinFunctionSpecialized.skip(countClamped, literal.Value));
 
                     case Expression.Builtin innerSkip:
                         {
@@ -2638,11 +2646,11 @@ public static class FunctionPreparation
                                 return
                                     ApplyBuiltinFunctionSkipToAllBranches(combinedCount, args.Items[1])
                                     ??
-                                    Expression.BuiltinInst(
+                                    new Expression.Builtin(
                                         nameof(BuiltinFunction.skip),
-                                        Expression.ListInst(
+                                        new Expression.List(
                                             [
-                                            Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(combinedCount)),
+                                            MakeLiteral(EncodeInteger(combinedCount)),
                                                 args.Items[1]
                                             ]));
                             }
@@ -2656,7 +2664,7 @@ public static class FunctionPreparation
                                 ApplyBuiltinFunctionSkipToAllBranches(countClamped, conditional.TrueBranch) is { } trueOk)
                             {
                                 return
-                                    Expression.ConditionalInst(
+                                    new Expression.Conditional(
                                         conditional.Condition,
                                         falseBranch: falseOk,
                                         trueBranch: trueOk);
@@ -2691,16 +2699,16 @@ public static class FunctionPreparation
                     case Expression.List list:
                         {
                             if (countClamped <= 0)
-                                return Expression.LitralInst(PineValue.EmptyList);
+                                return MakeLiteral(PineValue.EmptyList);
 
                             if (countClamped >= list.Items.Count)
                                 return list;
 
-                            return Expression.ListInst([.. list.Items.Take(countClamped)]);
+                            return new Expression.List([.. list.Items.Take(countClamped)]);
                         }
 
                     case Expression.Litral literal:
-                        return Expression.LitralInst(BuiltinFunctionSpecialized.take(countClamped, literal.Value));
+                        return MakeLiteral(BuiltinFunctionSpecialized.take(countClamped, literal.Value));
 
                     case Expression.Builtin innerTake:
 
@@ -2728,7 +2736,7 @@ public static class FunctionPreparation
                                 ApplyBuiltinFunctionTakeToAllBranches(countClamped, conditional.TrueBranch) is { } trueOk)
                             {
                                 return
-                                    Expression.ConditionalInst(
+                                    new Expression.Conditional(
                                         conditional.Condition,
                                         falseBranch: falseOk,
                                         trueBranch: trueOk);
@@ -2766,7 +2774,7 @@ public static class FunctionPreparation
                                 ApplyBuiltinFunctionHeadToAllBranches(cond.TrueBranch) is { } trueOk)
                             {
                                 return
-                                    Expression.ConditionalInst(
+                                    new Expression.Conditional(
                                         condition: cond.Condition,
                                         falseBranch: falseOk,
                                         trueBranch: trueOk);
@@ -2803,7 +2811,7 @@ public static class FunctionPreparation
                                 return list.Items[index];
                             }
 
-                            return Expression.LitralInst(PineValue.EmptyList);
+                            return MakeLiteral(PineValue.EmptyList);
                         }
 
                     case Expression.Litral lit:
@@ -2812,10 +2820,10 @@ public static class FunctionPreparation
                             {
                                 if (index < lv.Items.Length)
                                 {
-                                    return Expression.LitralInst(lv.Items.Span[index]);
+                                    return MakeLiteral(lv.Items.Span[index]);
                                 }
 
-                                return Expression.LitralInst(PineValue.EmptyList);
+                                return MakeLiteral(PineValue.EmptyList);
                             }
                             return null;
                         }
@@ -2828,7 +2836,7 @@ public static class FunctionPreparation
                             if (falseOut is not null && trueOut is not null)
                             {
                                 return
-                                    Expression.ConditionalInst(
+                                    new Expression.Conditional(
                                         condition: cond.Condition,
                                         falseBranch: falseOut,
                                         trueBranch: trueOut);
@@ -3091,7 +3099,7 @@ public static class FunctionPreparation
                         ?
                         list
                         :
-                        Expression.ListInst(inlinedItems);
+                        new Expression.List(inlinedItems);
                 }
 
                 Expression InlineEvalChildren(Expression.Eval eval)
@@ -3131,7 +3139,7 @@ public static class FunctionPreparation
                     if (inputInlined == builtin.Input)
                         return builtin;
 
-                    return Expression.BuiltinInst(builtin.Function, inputInlined);
+                    return new Expression.Builtin(builtin.Function, inputInlined);
                 }
 
                 Expression InlineConditional(Expression.Conditional conditional)
@@ -3166,7 +3174,7 @@ public static class FunctionPreparation
                     }
 
                     return
-                        Expression.ConditionalInst(
+                        new Expression.Conditional(
                             condition: conditionInlined,
                             falseBranch: falseBranchInlined,
                             trueBranch: trueBranchInlined);
@@ -3447,14 +3455,14 @@ public static class FunctionPreparation
 
                             if (Analysis.TryParseAsLiteral(descendant) is { } literal)
                             {
-                                return Expression.LitralInst(literal);
+                                return MakeLiteral(literal);
                             }
 
                             if (Analysis.TryParseExprAsPathInEnv(descendant) is { } pathInEnv)
                             {
                                 if (envConstraintId.TryGetValue(pathInEnv) is { } value)
                                 {
-                                    return Expression.LitralInst(value);
+                                    return MakeLiteral(value);
                                 }
                             }
 

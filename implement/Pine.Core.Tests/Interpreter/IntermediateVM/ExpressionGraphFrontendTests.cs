@@ -114,6 +114,30 @@ public class ExpressionGraphFrontendTests
     }
 
     [Fact]
+    public void Mutating_exported_prepared_literals_does_not_change_cold_or_warm_preparation()
+    {
+        Check();
+        void Check()
+        {
+            var request = CompilationRequest.Capture(
+                Builtin("head", List(Value(new PineValue.BlobValue(new byte[] { 4 })), Env)));
+            var cold = FunctionPreparation.PrepareFunction(request, CompilerMemo.Empty);
+            var exported = (Expression.Litral)cold.Function.Body.ToExpression();
+            var independentlyExported = (Expression.Litral)cold.Function.Body.ToExpression();
+            var bytes = ((PineValue.BlobValue)exported.Value).Bytes;
+            MemoryMarshal.TryGetArray(bytes, out var array).Should().BeTrue();
+            array.Array![array.Offset] = 255;
+            OwnedExpression.Capture(independentlyExported).Should().Be(cold.Function.Body);
+            FunctionPreparation.PrepareFunction(request, CompilerMemo.Empty).Should().Be(cold);
+            FunctionPreparation.PrepareFunction(request, cold.Memo).Should().Be(cold);
+            FunctionPreparation.PrepareFunction(request, cold.Memo with
+            {
+                Preparations = ImmutableDictionary<CompilationRequest, PreparedFunction>.Empty,
+            }).Should().Be(cold);
+        }
+    }
+
+    [Fact]
     public void Parse_and_preparation_memos_are_persistent_structural_and_configuration_specific()
     {
         Check();
@@ -176,9 +200,15 @@ public class ExpressionGraphFrontendTests
             modernMixed[^1] = legacy;
             var legacyMixed = legacy.Items.ToArray();
             legacyMixed[^1] = PineValue.List([modern]);
+            var builtinMixed = ExpressionEncoding2026.EncodeExpressionAsValue(
+                Builtin("head", Value(PineValue.List([IntegerEncoding.EncodeSignedInteger(42)])))).Items.ToArray();
+            builtinMixed[^1] = ExpressionEncoding2024.EncodeExpressionAsValue(
+                Value(PineValue.List([IntegerEncoding.EncodeSignedInteger(42)])));
+            var mixedBuiltinEncoding = PineValue.List(builtinMixed);
+            new PineVMParseCache().ParseExpression(mixedBuiltinEncoding).IsErrOrNull().Should().NotBeNull();
             foreach (var encoding in new PineValue[]
             {
-                modern, legacy, PineValue.List(modernMixed), PineValue.List(legacyMixed),
+                modern, legacy, PineValue.List(modernMixed), PineValue.List(legacyMixed), mixedBuiltinEncoding,
                 PineValue.EmptyList, PineValue.Blob([255, 1]), PineValue.List([PineValue.EmptyBlob]),
             })
             {
@@ -188,8 +218,18 @@ public class ExpressionGraphFrontendTests
                     Result<string, Expression>.Err error => new ParseMemoEntry(null, error.Value),
                     _ => throw new NotImplementedException(),
                 };
-                FunctionPreparation.ParseExpression(OwnedExpression.CaptureValue(encoding), CompilerMemo.Empty)
-                    .Result.Should().Be(expected);
+                var ownedEncoding = OwnedExpression.CaptureValue(encoding);
+                var publiclyParsed = FunctionPreparation.ParseExpression(ownedEncoding, CompilerMemo.Empty);
+                publiclyParsed.Result.Should().Be(expected);
+                var request = CompilationRequest.Capture(new Expression.Eval(Value(encoding), Env));
+                var cold = FunctionPreparation.PrepareFunction(request, CompilerMemo.Empty);
+                var publicSeeded = FunctionPreparation.PrepareFunction(request, publiclyParsed.Memo);
+                publicSeeded.Function.Should().Be(cold.Function);
+                FunctionPreparation.ParseExpression(ownedEncoding, cold.Memo).Result.Should().Be(expected);
+                FunctionPreparation.PrepareFunction(request, cold.Memo with
+                {
+                    Preparations = ImmutableDictionary<CompilationRequest, PreparedFunction>.Empty,
+                }).Function.Should().Be(cold.Function);
             }
         }
     }
