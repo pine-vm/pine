@@ -1060,6 +1060,13 @@ public class PineIRCompiler
             return CompileNormalEval(evalExpr, context, prior, parseCache);
         }
 
+        // The guard evaluates the target first and the loop branch only projects needed arguments.
+        // Neither reordering nor skipping an environment Eval is safe: it may fail or diverge.
+        if (evalExpr.Environment.EvalCount is not 0)
+        {
+            return CompileNormalEval(evalExpr, context, prior, parseCache);
+        }
+
         var (afterEncoded, encodedLocalIndex) =
             CompileExpressionTransitiveAsLocal(
                 evalExpr.Encoded,
@@ -1070,7 +1077,8 @@ public class PineIRCompiler
         var genericBranch =
             CompileExpressionTransitive(
                 evalExpr.Environment,
-                context.AddInstructionOffset(afterEncoded.Instructions.Count + 1),
+                (context with { IsTailPosition = false })
+                .AddInstructionOffset(afterEncoded.Instructions.Count + 1),
                 new NodeCompilationResult([], afterEncoded.LocalsSet),
                 parseCache)
             .AppendInstruction(StackInstruction.Local_Get(encodedLocalIndex))
