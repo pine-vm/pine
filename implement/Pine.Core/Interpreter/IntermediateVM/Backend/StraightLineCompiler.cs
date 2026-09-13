@@ -1,6 +1,7 @@
 using Pine.Core.Interpreter.IntermediateVM.Semantic;
 using System;
 using System.Collections.Immutable;
+using System.Linq;
 
 namespace Pine.Core.Interpreter.IntermediateVM.Backend;
 
@@ -47,86 +48,20 @@ public static class StraightLineCompiler
 
         StraightLineFunction Select(Terminator.Return ret)
         {
-            var storage = ImmutableList.CreateBuilder<StorageBinding>();
-            var locals = ImmutableDictionary.CreateBuilder<PineVirtualValueId, int>();
-            var instructions = ImmutableList.CreateBuilder<SelectedInstruction>();
-            var depth = 0;
-            var maximum = 0;
-
-            void Emit(SelectedInstruction instruction, int consumed, int produced)
-            {
-                if (depth < consumed)
-                    throw new InvalidOperationException("Selection produced stack underflow.");
-
-                depth = checked(depth - consumed + produced);
-                maximum = Math.Max(maximum, depth);
-                instructions.Add(instruction);
-            }
-
-            void Store(ValueDefinition definition)
-            {
-                var local = checked(storage.Count + 1);
-                storage.Add(new(definition.Id, local));
-                locals.Add(definition.Id, local);
-                // Local_Set reads but does not pop.
-                Emit(new SelectedInstruction.Store(local), 1, 1);
-                Emit(new SelectedInstruction.Pop(), 1, 0);
-
-                if (depth != 0)
-                    throw new InvalidOperationException("An operation left values on the stack.");
-            }
-
-            void Load(PineVirtualValueId value) =>
-                Emit(new SelectedInstruction.Load(locals[value]), 0, 1);
-
-            void Project(EnvironmentPath path)
-            {
-                foreach (var index in path.Indices)
-                    Emit(new SelectedInstruction.Project(index), 1, 1);
-            }
-
-            for (var index = 0; index < block.Parameters.Count; ++index)
-            {
-                Emit(new SelectedInstruction.Load(0), 0, 1);
-                Project(graph.Signature.Parameters[index].Path);
-                Store(block.Parameters[index]);
-            }
-
-            foreach (var operation in block.Operations)
-            {
-                switch (operation)
-                {
-                    case Operation.Literal literal:
-                        Emit(new SelectedInstruction.Literal(literal.Value), 0, 1);
-                        Store(literal.Result);
-                        break;
-                    case Operation.MakeList list:
-                        foreach (var item in list.Items)
-                            Load(item);
-                        Emit(new SelectedInstruction.MakeList(list.Items.Count), list.Items.Count, 1);
-                        Store(list.Result);
-                        break;
-                    case Operation.Project project:
-                        Load(project.Source);
-                        Project(project.Path);
-                        Store(project.Result);
-                        break;
-                    case Operation.Builtin builtin:
-                        Load(builtin.Argument);
-                        Emit(new SelectedInstruction.Builtin(SelectBuiltin(builtin.Name)), 1, 1);
-                        Store(builtin.Result);
-                        break;
-                    default:
-                        throw new NotImplementedException(
-                            "Compile does not handle operation variant: " + operation.GetType().Name);
-                }
-            }
-
-            Load(ret.Values[0]);
-            // The VM's Return requires a value, despite legacy details reporting PopCount = 0.
-            Emit(new SelectedInstruction.Return(), 1, 0);
-            return new(graph.Id, graph.Signature, storage.ToImmutable(), instructions.ToImmutable(),
-                new(checked(storage.Count + 1), maximum));
+            var storage = block.Parameters.Concat(block.Operations.Select(InstructionSelection.Result))
+                .Select((definition, index) => new StorageBinding(definition.Id, checked(index + 1)))
+                .ToImmutableList();
+            var locals = storage.ToImmutableDictionary(binding => binding.Value, binding => binding.Local);
+            var instructions = block.Parameters.SelectMany((parameter, index) =>
+                ImmutableList.Create<SelectedInstruction>(new SelectedInstruction.Load(0))
+                .AddRange(InstructionSelection.Project(graph.Signature.Parameters[index].Path))
+                .AddRange(InstructionSelection.Store(locals[parameter.Id])))
+                .Concat(block.Operations.SelectMany(operation => InstructionSelection.Select(operation, locals)))
+                .ToImmutableList()
+                .Add(new SelectedInstruction.Load(locals[ret.Values[0]]))
+                .Add(new SelectedInstruction.Return());
+            return new(graph.Id, graph.Signature, storage, instructions,
+                new(checked(storage.Count + 1), InstructionSelection.MaximumStack(instructions)));
         }
     }
 

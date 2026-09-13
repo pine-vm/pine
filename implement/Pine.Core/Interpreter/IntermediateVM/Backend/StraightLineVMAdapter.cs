@@ -32,7 +32,7 @@ public static class StraightLineVMAdapter
                 "ToPineValue does not handle literal variant: " + value.GetType().Name),
         };
 
-    private static StackInstruction ToInstruction(SelectedInstruction instruction) =>
+    internal static StackInstruction ToInstruction(SelectedInstruction instruction) =>
         instruction switch
         {
             SelectedInstruction.Literal literal => StackInstruction.Push_Literal(ToPineValue(literal.Value)),

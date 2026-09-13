@@ -48,4 +48,27 @@ Validation: scoped `dotnet format`; **116/116** validator cases passed; the regr
 
 Validation: scoped `dotnet format`; **33/33** backend tests passed, including builtin differential inputs, ownership, parameter ordering, stack discipline and metadata bypass. The established regression gate reports **320 passed, one existing skip**. Logs: `/home/runner/work/super-duper-disco/super-duper-disco/implement/Pine.Core.Tests/artifacts/test-logs/Pine.Core.Tests/2026-09-13T11-49-{07,22}_filtered.log`. Secret scan and independent review passed. Automated review remains unavailable; CodeQL skipped the oversized database, so no completed automated security analysis is claimed.
 
-Next: increment 5, parallel edge copies, transfers and layout.
+## 2026-09-13 — Increment 5a: non-call edges and layout
+
+Added immutable selected blocks, per-edge copy plans, symbolic layout and final offset emission; shared operation selection with the straight-line backend. Supports return/jump/branch/switch across arbitrary block IDs, including unreachable blocks and parameterized cycles. Invoke/tail-invoke are explicitly declined until 5b; production compilation remains unchanged.
+
+- Entry initialization must be separate from the semantic entry block: backedges to entry carry new parameters and must not rerun environment projections.
+- Legacy conditional/switch jumps consume their selector; all jumps check cancellation, but only negative offsets count toward loop quotas. Keep explicit nonzero cycles through edge stubs until increment 9 supplies semantic safety metadata; current layout-dependent counts are not the final instrumentation contract.
+- Parallel copies stage all sources before reverse-order stores: **3N instructions / N stack slots / no scratch locals** for N bindings. This preserves swaps, longer cycles, duplicate sources and self-copies; resources include unreachable fragments and transfer staging.
+- **Discovery:** existing `bit_shift_left([-8, blob(01)])` throws `IndexOutOfRangeException` under direct interpretation; the VM wraps it as `InvalidIntermediateCodeException`. Regression coverage preserves reachable unused failures without evaluating unreachable operations. The preexisting primitive/error-classification discrepancy is not repaired by graph lowering.
+
+Validation: scoped `dotnet format`; **41 graph-backend tests passed**, and the established regression gate reports **361 passed, one existing skip**. Subsequent immutable-test-helper and direct-error assertions passed targeted checks. Logs: `/home/runner/work/super-duper-disco/super-duper-disco/implement/Pine.Core.Tests/artifacts/test-logs/increment5a-{gate,immutable-helpers,direct-error}.log`. Secret scan and independent review passed; automated review/security validation pending.
+
+Next: increment 5b, calls and explicit successful-return continuations.
+
+## Deferred improvement ideas
+
+These are hypotheses for measurement after production cutover, not exemptions from the plan's required correctness, safety or performance gates. Retain the conservative backend as a comparison baseline.
+
+| Question / candidate change | Measurement and acceptance gate |
+| --- | --- |
+| Should edge copies choose between stack staging and a scratch-local cycle algorithm based on transfer width and aliasing? | Compare instructions, peak stack, locals and compilation allocations on wide loop headers; retain swap/cycle/duplicate-source equivalence. Basic safe copying and planned coalescing remain pre-cutover requirements. |
+| Would profile-weighted block scheduling and selective edge-stub sharing outperform deterministic layout? | Compare dispatch count, code size and compile cost; preserve distinct edge arguments and layout-independent safepoint coverage. Do not infer semantic loop counts from the chosen layout. |
+| What case-count/literal-shape threshold favors indexed switches over ordered equality tests? | Compare dispatches, equality/hash cost and artifact size across skewed and uniform inputs; preserve exact literal matching, default behavior and one-time selector evaluation. Required switch-selection parity still belongs before cutover. |
+| Can an owned immutable literal arena reduce repeated VM-adapter copies without restoring global interning aliases? | Measure publication allocations, retained memory and repeated compilation cost; require aliasing tests and immutable publication before sharing any backing storage. |
+| When does a projected entry ABI outperform the canonical-environment prologue, especially after inlining? | Compare projection instructions, argument allocations and frame costs for generic versus specialized calls; preserve positional/duplicate paths, specialization guards and canonical fallback. Complete required invocation-overhead optimizations first. |
