@@ -292,9 +292,9 @@ public sealed record FunctionGraph
         Id = id;
         Signature = signature;
         Entry = entry;
-        Blocks = blocks.WithComparers(
+        Blocks = blocks?.WithComparers(
             System.Collections.Generic.EqualityComparer<PineBlockId>.Default,
-            System.Collections.Generic.EqualityComparer<BasicBlock>.Default);
+            System.Collections.Generic.EqualityComparer<BasicBlock>.Default)!;
     }
 
     /// <inheritdoc/>

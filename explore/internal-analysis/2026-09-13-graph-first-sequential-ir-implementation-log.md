@@ -28,4 +28,13 @@ Validation: scoped `dotnet format`; **24/24** model tests passed. The same regre
 
 Secret scan and independent review passed. Automated review remained unavailable; CodeQL skipped the oversized database.
 
-Next: increment 3, graph validation of definitions, every operand/edge, call signatures and return-slot scope.
+## 2026-09-13 — Increment 3: graph validation
+
+- Added pure validation with structured diagnostics for definitions, all operands and transfers, entry/call signatures and invoke return-slot scope. Checks unreachable blocks without imposing layout, reducibility or empty-edge-argument restrictions. Production compilation remains unchanged.
+
+- **Boundary:** validation evidence retains the exact immutable graph and normalized signature table; it is not a record that could certify a different graph through `with`. Recursive calls resolve against the root signature, and any explicit root table entry must agree.
+- Structural validation must not evaluate Pine primitives or parse dynamic encoded targets: even a literal target that will fail at runtime remains a valid operand. It establishes transfer contracts, not termination or evaluation success.
+
+Validation: scoped `dotnet format`; **116/116** validator cases passed; the regression command above reports **287 passed, one existing skip**. Logs: `/home/runner/work/super-duper-disco/super-duper-disco/implement/Pine.Core.Tests/artifacts/test-logs/semantic-validation-{focused,regression,format}.log`. Secret scan passed; review/security validation pending.
+
+Next: increment 4, straight-line storage assignment and lowering from validated hand-built graphs.
