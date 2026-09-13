@@ -2,6 +2,8 @@
 
 Follow the [refactoring plan](/home/runner/work/super-duper-disco/super-duper-disco/explore/internal-analysis/2026-09-13-graph-first-sequential-ir-refactoring-plan.md). Entries record completed increments and design-relevant discoveries; the production pipeline remains instruction-first until the planned cutover.
 
+**Sequencing constraint (2026-09-13):** no further changes to instruction kinds or PineVM before production cutover. Any instruction/VM or cross-frame-interface redesign is deferred until **both** cutover and Example Alfa's optimizations are in production. Prior entries describe historical work, not permission to extend runtime machinery. Prioritize compiler-side graph inlining, including looping callees and eventually `skipIdentifier` at its usage sites; use existing instructions and frame contracts. Plan items requiring runtime redesign are no longer prerequisites for cutover: preserve and validate existing runtime safety behavior instead.
+
 ## 2026-09-13 — Increment 1: characterization
 
 - Added Example Alfa coverage: 13 inputs × four Elm-inlining/VM-tail configurations, comparing the intermediate VM with explicit expected results and `DirectInterpreter`.
@@ -74,13 +76,24 @@ Implemented successful-return transfers, immutable preparation and direct expres
 
 Validation in progress: the established regression gate currently reports **433 passed, one existing skip**, including 1,008 bounded generated differential executions, 80 preparation-policy parity combinations, call/cache isolation, malformed encodings, operand order and ownership tests. CLI consumer build passed with **0 errors, 41 warnings**. Independent runtime review found no remaining issues; final frontend purity review is pending. Automated review is unavailable and CodeQL skipped the oversized database; neither is claimed as a completed clean analysis.
 
+## 2026-09-13 — Graph inlining
+
+Added a bounded, explicit known-call-site rewrite before automatic inline policy: clone loop-containing graphs, carry preserved caller values as block parameters, and wire every successful return to the caller continuation. Deterministic fresh IDs avoid sparse/extreme input IDs; the growth budget includes capture plumbing. Declined rewrites retain the original validation evidence, and successful graphs are revalidated. No instruction-kind, PineVM or frame-interface changes; no claim of production cutover or Example Alfa production gains yet.
+
+- A tail call inside a **non-tail** inlinee is not a tail call of the enclosing caller: convert it to an invoke plus a successful-return continuation. Otherwise the caller's continuation and preserved values disappear.
+- Preserve original callee identities for residual recursive calls and explicitly merge their signature dependencies; after cloning, the callee's root is no longer the enclosing root. Structural signature agreement is not proof that a specialized body is valid at a call site.
+- A hand-built `skipIdentifier`-shaped scanner demonstrates composition: inline its wrapper, then two looping scanner sites into the caller. The three expansions eliminate three invocations without additional list builds, retaining stop characters and caller data under alternate layouts. This is a mechanism regression, not the actual Elm Example Alfa production benchmark; automatic target discovery, loop recognition, policy and cutover still remain.
+
+Validation: scoped `dotnet format`; **33 inlining tests passed** and the established regression gate reports **466 passed, one existing skip**. Covers repeated/nested loops, multiple exits, residual recursion/dynamic calls, tail-call continuations, unchanged inputs, budget refusals and failures. Logs: `/home/runner/work/super-duper-disco/super-duper-disco/implement/Pine.Core.Tests/artifacts/test-logs/graph-inlining-immutable-helpers-{focused,gate,format}.log`. Secret scan passed; independent review's escaping allocator-state finding was fixed with mutation confined to the local rewrite. Automated validation pending.
+
 ## Deferred improvement ideas
 
-These are hypotheses for measurement after production cutover, not exemptions from the plan's required correctness, safety or performance gates. Retain the conservative backend as a comparison baseline.
+These are hypotheses for measurement after production cutover, not exemptions from required correctness, safety or performance gates. Instruction/VM/interface redesign additionally waits for Example Alfa's optimizations in production. Retain the conservative backend as a comparison baseline.
 
 | Question / candidate change | Measurement and acceptance gate |
 | --- | --- |
 | Should edge copies choose between stack staging and a scratch-local cycle algorithm based on transfer width and aliasing? | Compare instructions, peak stack, locals and compilation allocations on wide loop headers; retain swap/cycle/duplicate-source equivalence. Basic safe copying and planned coalescing remain pre-cutover requirements. |
+| How much does pruning inliner capture parameters by reachability/liveness improve conservative capture threading? | Compare edge arity, copy instructions, graph size and compilation cost with all-preserved-values threading; preserve caller values across nested loops, residual calls and every return exit. No runtime or ABI change is needed. |
 | Would profile-weighted block scheduling and selective edge-stub sharing outperform deterministic layout? | Compare dispatch count, code size and compile cost; preserve distinct edge arguments and layout-independent safepoint coverage. Do not infer semantic loop counts from the chosen layout. |
 | What case-count/literal-shape threshold favors indexed switches over ordered equality tests? | Compare dispatches, equality/hash cost and artifact size across skewed and uniform inputs; preserve exact literal matching, default behavior and one-time selector evaluation. Required switch-selection parity still belongs before cutover. |
 | Can an owned immutable literal arena reduce repeated VM-adapter copies without restoring global interning aliases? | Measure publication allocations, retained memory and repeated compilation cost; require aliasing tests and immutable publication before sharing any backing storage. |
