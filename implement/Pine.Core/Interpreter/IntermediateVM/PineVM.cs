@@ -1275,6 +1275,21 @@ public class PineVM : ICancellablePineVM
                             continue;
                         }
 
+                    case StackInstructionKind.List_Project_Const:
+                        {
+                            var index =
+                                currentInstruction.SkipCount
+                                ?? throw new InvalidOperationException("Missing list projection index");
+
+                            var source = currentFrame.PopTopmostFromStack();
+
+                            currentFrame.PushInstructionResult(
+                                source.IsList() && index >= 0
+                                ? source.GetElementAt(index)
+                                : PineValueInProcess.EmptyList);
+                            continue;
+                        }
+
                     case StackInstructionKind.Skip_Head_Const:
                         {
                             var index =
@@ -2522,6 +2537,31 @@ public class PineVM : ICancellablePineVM
 
                             currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
+                            continue;
+                        }
+
+                    case StackInstructionKind.Equal_Generic:
+                    case StackInstructionKind.Bit_And_Generic:
+                    case StackInstructionKind.Bit_Or_Generic:
+                    case StackInstructionKind.Bit_Xor_Generic:
+                    case StackInstructionKind.Bit_Shift_Left_Generic:
+                    case StackInstructionKind.Bit_Shift_Right_Generic:
+                        {
+                            var argument = currentFrame.PopTopmostFromStack().Evaluate();
+
+                            var resultValue =
+                                instructionKind switch
+                                {
+                                    StackInstructionKind.Equal_Generic => BuiltinFunction.equal(argument),
+                                    StackInstructionKind.Bit_And_Generic => BuiltinFunction.bit_and(argument),
+                                    StackInstructionKind.Bit_Or_Generic => BuiltinFunction.bit_or(argument),
+                                    StackInstructionKind.Bit_Xor_Generic => BuiltinFunction.bit_xor(argument),
+                                    StackInstructionKind.Bit_Shift_Left_Generic => BuiltinFunction.bit_shift_left(argument),
+                                    StackInstructionKind.Bit_Shift_Right_Generic => BuiltinFunction.bit_shift_right(argument),
+                                    _ => throw new NotImplementedException("Unexpected generic builtin: " + instructionKind),
+                                };
+
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
                             continue;
                         }
 

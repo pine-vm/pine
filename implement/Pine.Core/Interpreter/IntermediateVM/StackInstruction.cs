@@ -345,7 +345,7 @@ public enum StackInstructionKind
 
     /// <summary>
     /// Bitwise AND all items in the list from the top value on the stack.
-    /// Not yet implemented in the VM; will throw at runtime.
+    /// Uses the generic Pine builtin with one canonical argument value.
     /// </summary>
     Bit_And_Generic,
 
@@ -362,7 +362,7 @@ public enum StackInstructionKind
 
     /// <summary>
     /// Bitwise OR all items in the list from the top value on the stack.
-    /// Not yet implemented in the VM; will throw at runtime.
+    /// Uses the generic Pine builtin with one canonical argument value.
     /// </summary>
     Bit_Or_Generic,
 
@@ -379,7 +379,7 @@ public enum StackInstructionKind
 
     /// <summary>
     /// Bitwise XOR all items in the list from the top value on the stack.
-    /// Not yet implemented in the VM; will throw at runtime.
+    /// Uses the generic Pine builtin with one canonical argument value.
     /// </summary>
     Bit_Xor_Generic,
 
@@ -407,8 +407,8 @@ public enum StackInstructionKind
     Bit_Shift_Left_Const,
 
     /// <summary>
-    /// Shift left all items in the list from the top value on the stack.
-    /// Not yet implemented in the VM; will throw at runtime.
+    /// Pops the canonical [shiftCount, blob] argument, applies the generic Pine left-shift
+    /// builtin, and pushes the result.
     /// </summary>
     Bit_Shift_Left_Generic,
 
@@ -426,8 +426,8 @@ public enum StackInstructionKind
     Bit_Shift_Right_Const,
 
     /// <summary>
-    /// Shift right all items in the list from the top value on the stack.
-    /// Not yet implemented in the VM; will throw at runtime.
+    /// Pops the canonical [shiftCount, blob] argument, applies the generic Pine right-shift
+    /// builtin, and pushes the result.
     /// </summary>
     Bit_Shift_Right_Generic,
 
@@ -477,6 +477,12 @@ public enum StackInstructionKind
     /// using the environment from the top of the stack.
     /// </summary>
     Eval_Const,
+
+    /// <summary>
+    /// Projects a nonnegative list index from the stack top. Unlike generic head/skip,
+    /// non-list sources and out-of-range indices produce an empty list.
+    /// </summary>
+    List_Project_Const,
 }
 
 /// <summary>
@@ -1585,6 +1591,18 @@ public record StackInstruction(
                     ??
                     throw new Exception(
                         "Missing SkipCount for SkipHeadConst instruction")
+                    ])),
+
+            StackInstructionKind.List_Project_Const =>
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                Display: () => InstructionDisplay.WithoutDetailLines(
+                    [
+                    instruction.SkipCount?.ToString()
+                    ??
+                    throw new Exception(
+                        "Missing SkipCount for ListProjectConst instruction")
                     ])),
 
             StackInstructionKind.Head_Generic =>

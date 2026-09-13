@@ -37,4 +37,15 @@ Secret scan and independent review passed. Automated review remained unavailable
 
 Validation: scoped `dotnet format`; **116/116** validator cases passed; the regression command above reports **287 passed, one existing skip**. Logs: `/home/runner/work/super-duper-disco/super-duper-disco/implement/Pine.Core.Tests/artifacts/test-logs/semantic-validation-{focused,regression,format}.log`. Secret scan passed; independent review has no remaining findings after correcting an import placement before the passing runs. Automated review remains unavailable; CodeQL again skipped the oversized database, so no completed automated security analysis is claimed.
 
-Next: increment 4, straight-line storage assignment and lowering from validated hand-built graphs.
+## 2026-09-13 — Increment 4: straight-line backend
+
+- Added immutable selected instructions, deterministic distinct-local assignments and exact stack/local bounds for validated single-block graphs: literals, lists, list projections, all 17 builtins and one-value returns. Unsupported transfers, extra blocks (even unreachable) and other result arities are explicitly declined; production compilation is unchanged.
+
+- **Discovery:** overriding `StackFrameInstructions.MaxStackUsage` in an object initializer still runs its instruction-derived analysis first. Graph-produced resource metadata needs a constructor path that bypasses that analysis, not merely a replacement property value.
+- Semantic signature parameter order is meaningful; the legacy interface sorts paths. The compatibility adapter uses a canonical environment and explicit entry projections, preserving unsorted/duplicate paths. It materializes fresh legacy literal payloads without interning; mutable VM objects never enter the immutable artifact.
+- **Discovery:** six generic builtin opcodes existed without VM handlers (`equal`, bitwise and/or/xor, and both shifts). Generic lowering needs these handlers, not assumptions that existing opcode declarations imply runtime support.
+- List-only graph projection differs from generic `head`/`skip`, which also index blobs. Keep these semantics distinct when lowering and when the future frontend recognizes path expressions.
+
+Validation: scoped `dotnet format`; **33/33** backend tests passed, including builtin differential inputs, ownership, parameter ordering, stack discipline and metadata bypass. The established regression gate reports **320 passed, one existing skip**. Logs: `/home/runner/work/super-duper-disco/super-duper-disco/implement/Pine.Core.Tests/artifacts/test-logs/Pine.Core.Tests/2026-09-13T11-49-{07,22}_filtered.log`. Secret scan and independent review passed; automated review/security validation pending.
+
+Next: increment 5, parallel edge copies, transfers and layout.
