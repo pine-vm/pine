@@ -96,6 +96,15 @@ Connected block-local literal call-target discovery to bounded graph inlining in
 
 Validation: scoped `dotnet format`; **37 focused tests passed**, and the established regression gate reports **503 passed, one existing skip**. Actual expression-originating nested calls reduce invocations without added list builds; tests also cover failures, malformed/unsupported callees, budgets, memo parity and self-tail loops subsequently inlined into callers. Logs: `/home/runner/work/super-duper-disco/super-duper-disco/implement/Pine.Core.Tests/artifacts/test-logs/Pine.Core.Tests/2026-09-13T14-{50-25,50-40}_filtered.log`. Secret scan passed; independent review confirmed the speculative-preparation overflow fix. Automated review remains unavailable and CodeQL skipped the oversized database; no completed automated security analysis is claimed.
 
+## 2026-09-13 — Graph-carried target discovery (in progress)
+
+Next increment: propagate immutable value facts through lists, projections and explicit graph edges, then use proven encoded targets for the existing bounded inliner. Preserve all executable operations; analysis alone must not erase operand failures. Runtime and instruction interfaces remain frozen.
+
+- First checkpoint: added standalone bounded graph-value analysis and **32 passing tests**, including actual frontend head/skip lowering, matching/conflicting joins, invocation captures and unknown return slots. Scoped formatting passed. Log: `/home/runner/work/super-duper-disco/super-duper-disco/implement/Pine.Core.Tests/artifacts/test-logs/Pine.Core.Tests/2026-09-13T16-07-44_filtered.log`. Optimizer integration follows separately.
+- Example Alfa's application helper supplies function-table data in the runtime environment. An honest compiler-only usage-site test instead constructs an invocation with the declaration's closed function table and **runtime** source/offset arguments; it must not silently specialize observed inputs.
+- Partial list facts are necessary: an environment can carry an exact function table alongside unknown arguments. External entry arguments remain unknown even when entry has backedges. Budget exhaustion must never publish unfinished, optimistic loop facts.
+- Analysis starts unknown and includes every feasible predecessor; it deliberately does not discover invariants needing an optimistic identity-backedge seed. This is a conservative limitation, not permission to infer a loop invariant from only its first incoming edge.
+
 ## Deferred improvement ideas
 
 These are hypotheses for measurement after production cutover, not exemptions from required correctness, safety or performance gates. Instruction/VM/interface redesign additionally waits for Example Alfa's optimizations in production. Retain the conservative backend as a comparison baseline.
