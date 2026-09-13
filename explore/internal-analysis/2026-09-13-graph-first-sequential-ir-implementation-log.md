@@ -80,7 +80,12 @@ Commands are run from `/home/runner/work/super-duper-disco/super-duper-disco/imp
 - The existing skip is `FunctionApplicationOverheadTests.List_map_triple_with_function_parameter`: “TODO: Reimplement optimizations in Elm compiler or Pine compilation”. No skip was added by this change.
 - Final broad-suite log: `/home/runner/work/super-duper-disco/super-duper-disco/implement/Pine.Core.Tests/artifacts/test-logs/Pine.Core.Tests/2026-09-13T10-52-24_filtered.log`.
 - The final compiler and operand-test revisions were formatted with `dotnet format`. No full core or integration-suite run is claimed.
-- Secret scanning passed. Final review/security results will be recorded before completing the increment.
+- Secret scanning passed. An independent read-only code-review agent reviewed the final correction and found no significant issues.
+- Automated parallel validation was attempted on the committed revisions. Its configured review model was unavailable. CodeQL initially skipped analysis because the database was too large; the final retry reported no changes since its last run and skipped again. These are validation limitations, not a clean CodeQL analysis result.
+
+### Completion
+
+Increment 1 is complete with a green focused characterization/regression gate, unchanged existing snapshots, and the narrowly required R6 correction. The production compiler still constructs its old CFG from instructions; removing that architecture is deliberately deferred to the later planned cutover, not claimed as completed here.
 
 ### Next increment
 
