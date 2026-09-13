@@ -5,7 +5,7 @@ using System.Linq;
 
 namespace Pine.Core.Interpreter.IntermediateVM.Backend;
 
-/// <summary>Graph lowering with explicit calls and continuations; production selection remains opt-in.</summary>
+/// <summary>Graph lowering with explicit calls and continuations, including bounded production candidates.</summary>
 public static class GraphCompiler
 {
     /// <summary>
@@ -13,11 +13,12 @@ public static class GraphCompiler
     /// lives only in the prologue, so backedges to entry bind parameters without reloading input.
     /// </summary>
     public static Result<GraphBackendDiagnostic, GraphFunction> Compile(
-        ValidatedFunctionGraph validated, ImmutableList<PineBlockId>? blockOrder = null, bool fuseScalarBuiltins = false)
+        ValidatedFunctionGraph validated, ImmutableList<PineBlockId>? blockOrder = null, bool fuseScalarBuiltins = false,
+        bool legacyParameterLocals = false, bool compact = false)
     {
         var graph = validated.Graph;
         var orderedBlocks = graph.Blocks.Values.OrderBy(block => block.Id.Value).ToImmutableList();
-        var order = blockOrder ?? orderedBlocks.Select(block => block.Id).ToImmutableList();
+        var order = blockOrder ?? (compact ? GraphBlockOrder.ReversePostorder(graph) : orderedBlocks.Select(block => block.Id).ToImmutableList());
 
         if (graph.Signature.Results.Count != 1)
             return Decline(GraphBackendDiagnosticCode.UnsupportedResultArity, graph.Entry);
@@ -28,22 +29,31 @@ public static class GraphCompiler
         if (unsupported is not null)
             return Decline(GraphBackendDiagnosticCode.UnsupportedCall, unsupported.Id);
 
-        var storage = orderedBlocks.SelectMany(block =>
+        var firstLocal = legacyParameterLocals ? Math.Max(1, graph.Signature.Parameters.Count) : 1;
+        var allocatedStorage = compact ? GraphLocalAllocation.Allocate(graph, firstLocal) : orderedBlocks.SelectMany(block =>
             block.Parameters.Concat(block.Operations.Select(InstructionSelection.Result)))
-            .Select((definition, index) => new StorageBinding(definition.Id, checked(index + 1))).ToImmutableList();
-        var resultLocal = checked(1 + storage.Count);
+            .Select((definition, index) => new StorageBinding(definition.Id, checked(index + firstLocal))).ToImmutableList();
+        var allocatedLocals = allocatedStorage.ToImmutableDictionary(binding => binding.Value, binding => binding.Local);
+        var entryLocals = graph.Blocks[graph.Entry].Parameters.Select((parameter, index) => (Local: allocatedLocals[parameter.Id], Index: index))
+            .ToImmutableDictionary(pair => pair.Local, pair => pair.Index);
+        var storage = legacyParameterLocals
+            ? allocatedStorage.Select(binding => entryLocals.TryGetValue(binding.Local, out var inputLocal)
+                ? binding with { Local = inputLocal } : binding).ToImmutableList()
+            : allocatedStorage;
+        var resultLocal = checked(storage.Select(binding => binding.Local).DefaultIfEmpty(firstLocal - 1).Max() + 1);
         var hasInvoke = orderedBlocks.Any(block => block.Terminator is Terminator.Invoke);
         var locals = storage.ToImmutableDictionary(binding => binding.Value, binding => binding.Local);
         var blocks = orderedBlocks.Select(block => new SelectedBlock(
             block.Id,
-            fuseScalarBuiltins ? InstructionSelection.SelectBlock(block, locals) :
+            fuseScalarBuiltins ? InstructionSelection.SelectBlock(block, locals, compact) :
                 block.Operations.SelectMany(operation => InstructionSelection.Select(operation, locals)).ToImmutableList(),
-            SelectTerminator(block.Terminator))).ToImmutableList();
-        var prologue = graph.Blocks[graph.Entry].Parameters.SelectMany((parameter, index) =>
+            SelectTerminator(block.Terminator, block))).ToImmutableList();
+        var prologue = legacyParameterLocals ? [] : graph.Blocks[graph.Entry].Parameters.SelectMany((parameter, index) =>
             ImmutableList.Create<SelectedInstruction>(new SelectedInstruction.Load(0))
             .AddRange(InstructionSelection.Project(graph.Signature.Parameters[index].Path))
             .AddRange(InstructionSelection.Store(locals[parameter.Id]))).ToImmutableList();
-        var layout = GraphLayout.Schedule(graph.Entry, prologue, blocks, order);
+        var scheduled = GraphLayout.Schedule(graph.Entry, prologue, blocks, order, compact);
+        var layout = compact ? GraphLayout.Compact(scheduled) : scheduled;
         var maximum = layout.Max(fragment =>
             Math.Max(InstructionSelection.MaximumStack(fragment.Instructions,
                 fragment.Label.Kind == LayoutLabelKind.Return ? 1 : 0),
@@ -52,28 +62,35 @@ public static class GraphCompiler
                     LayoutTransfer.Return => 1,
                     LayoutTransfer.Jump => 0,
                     LayoutTransfer.Branch => 1,
+                    LayoutTransfer.Match match => match.SliceSourceLocal is null ? 1 : 2,
                     LayoutTransfer.Invoke invoke => CallStack(invoke.Call),
                     LayoutTransfer.TailInvoke invoke => CallStack(invoke.Call),
                     _ => throw new NotImplementedException(
                         "Compile does not handle layout transfer variant: " + fragment.Transfer.GetType().Name),
                 }));
         return Result<GraphBackendDiagnostic, GraphFunction>.ok(
-            new(graph.Id, graph.Signature, storage, blocks, layout, new(checked(resultLocal + (hasInvoke ? 1 : 0)), maximum)));
+            new(graph.Id, graph.Signature, storage, blocks, layout,
+                new(checked(resultLocal + (hasInvoke ? 1 : 0)), maximum), legacyParameterLocals) { Compact = compact });
 
         Result<GraphBackendDiagnostic, GraphFunction> Decline(GraphBackendDiagnosticCode code, PineBlockId block) =>
             Result<GraphBackendDiagnostic, GraphFunction>.err(new(code, graph.Id, block));
 
         EdgeCopyPlan SelectEdge(Edge edge) =>
             new(edge.Target, edge.Arguments.Select((argument, index) =>
-                new LocalCopy(locals[argument], locals[graph.Blocks[edge.Target].Parameters[index].Id])).ToImmutableList());
+                new LocalCopy(locals[argument], locals[graph.Blocks[edge.Target].Parameters[index].Id]))
+                .Where(copy => !compact || copy.Source != copy.Destination).ToImmutableList());
 
-        SelectedTerminator SelectTerminator(Terminator terminator) =>
+        SelectedTerminator SelectTerminator(Terminator terminator, BasicBlock block) =>
             terminator switch
             {
                 Terminator.Return ret => new SelectedTerminator.Return(locals[ret.Values[0]]),
                 Terminator.Jump jump => new SelectedTerminator.Jump(SelectEdge(jump.Edge)),
                 Terminator.Branch branch => new SelectedTerminator.Match(
                     locals[branch.TestedValue], [new(branch.Literal, SelectEdge(branch.IfEqual))], SelectEdge(branch.IfNotEqual)),
+                Terminator.Switch selection when compact && fuseScalarBuiltins && InstructionSelection.SelectSliceSwitch(block) is { } slice =>
+                    new SelectedTerminator.Match(locals[slice.Count],
+                        selection.Cases.Select(@case => new SelectedCase(@case.Value, SelectEdge(@case.Edge))).ToImmutableList(),
+                        SelectEdge(selection.Default), locals[slice.Source]),
                 Terminator.Switch selection => new SelectedTerminator.Match(
                     locals[selection.Selector],
                     selection.Cases.Select(@case => new SelectedCase(@case.Value, SelectEdge(@case.Edge))).ToImmutableList(),

@@ -9,6 +9,36 @@ namespace Pine.Core.Interpreter.IntermediateVM.Backend;
 /// <summary>Shared operation selection and stack effects for already-known straight-line fragments.</summary>
 internal static class InstructionSelection
 {
+    internal sealed record SliceSwitch(
+        Operation.Builtin Skip, Operation.Builtin Take, PineVirtualValueId Source, PineVirtualValueId Count);
+
+    internal static SliceSwitch? SelectSliceSwitch(BasicBlock block)
+    {
+        if (block.Terminator is not Terminator.Switch selection || selection.Cases.Count == 0)
+            return null;
+        var definitions = block.Operations.ToImmutableDictionary(operation => Result(operation).Id);
+        var uses = block.Operations.SelectMany(Operands).Concat(TerminatorOperands(block.Terminator))
+            .GroupBy(value => value).ToImmutableDictionary(group => group.Key, group => group.Count());
+        if (!definitions.TryGetValue(selection.Selector, out var selector) || selector is not Operation.Builtin { Name: "take" } take ||
+            uses[take.Result.Id] != 1 ||
+            !definitions.TryGetValue(take.Argument, out var takeInput) || takeInput is not Operation.MakeList { Items.Count: 2 } takeArgs ||
+            uses[take.Argument] != 1 ||
+            !definitions.TryGetValue(takeArgs.Items[0], out var countInput) || countInput is not Operation.Literal count ||
+            !definitions.TryGetValue(takeArgs.Items[1], out var skipInput) || skipInput is not Operation.Builtin { Name: "skip" } skip ||
+            uses[skip.Result.Id] != 1 ||
+            !definitions.TryGetValue(skip.Argument, out var arguments) || arguments is not Operation.MakeList { Items.Count: 2 } skipArgs)
+            return null;
+        var length = BuiltinFunction.SignedIntegerFromValueRelaxed(OwnedValue(count.Value));
+        return length > 0 && selection.Cases.All(@case => @case.Value switch
+        {
+            LiteralValue.Blob blob => blob.Bytes.Count == length,
+            LiteralValue.List list => list.Items.Count == length,
+            _ => throw new NotImplementedException("SelectSliceSwitch does not handle literal variant: " + @case.Value.GetType().Name),
+        }) ? new(skip, take, skipArgs.Items[1], skipArgs.Items[0]) : null;
+
+        static PineValue OwnedValue(LiteralValue value) => StraightLineVMAdapter.ToPineValue(value);
+    }
+
     private sealed record SliceComparison(
         Operation.Builtin Skip, Operation.Builtin Take, Operation.Builtin Equal,
         PineVirtualValueId Source, PineVirtualValueId Count, LiteralValue Literal);
@@ -34,7 +64,7 @@ internal static class InstructionSelection
         Compute(operation, locals).AddRange(Store(locals[Result(operation).Id]));
 
     internal static ImmutableList<SelectedInstruction> SelectBlock(
-        BasicBlock block, ImmutableDictionary<PineVirtualValueId, int> locals)
+        BasicBlock block, ImmutableDictionary<PineVirtualValueId, int> locals, bool compact = false)
     {
         return Run();
 
@@ -46,8 +76,11 @@ internal static class InstructionSelection
                 .GroupBy(value => value).ToImmutableDictionary(group => group.Key, group => group.Count());
             var comparisons = block.Operations.OfType<Operation.Builtin>().Select(Comparison).OfType<SliceComparison>()
                 .ToImmutableDictionary(comparison => comparison.Skip.Result.Id);
+            var sliceSwitch = compact ? SelectSliceSwitch(block) : null;
             var removed = comparisons.Values.SelectMany(comparison =>
                 ImmutableList.Create(comparison.Take.Result.Id, comparison.Equal.Result.Id)).ToImmutableHashSet();
+            if (sliceSwitch is not null)
+                removed = removed.Add(sliceSwitch.Skip.Result.Id).Add(sliceSwitch.Take.Result.Id);
             var fused = block.Operations.OfType<Operation.Builtin>().Where(builtin =>
                 builtin.Name is "equal" or "int_add" or "int_mul" or "skip" or "take" &&
                 lists.TryGetValue(builtin.Argument, out var list) && list.Items.Count == 2).ToImmutableHashSet();
@@ -55,18 +88,19 @@ internal static class InstructionSelection
                 .SelectMany(builtin => comparisons.TryGetValue(builtin.Result.Id, out var comparison)
                     ? ImmutableList.Create(comparison.Source, comparison.Count)
                     : fused.Contains(builtin) ? lists[builtin.Argument].Items : [builtin.Argument])
-                .Concat(TerminatorOperands(block.Terminator)).ToHashSet();
+                .Concat(sliceSwitch is null ? TerminatorOperands(block.Terminator) : [sliceSwitch.Source, sliceSwitch.Count]).ToHashSet();
             var pending = new Queue<PineVirtualValueId>(required);
             while (pending.TryDequeue(out var id))
                 if (definitions.TryGetValue(id, out var definition) && definition is not Operation.Builtin)
                     foreach (var operand in Operands(definition))
                         if (required.Add(operand))
                             pending.Enqueue(operand);
-            return block.Operations.SelectMany(operation =>
+            var selected = block.Operations.SelectMany(operation =>
                 comparisons.TryGetValue(Result(operation).Id, out var comparison) ? CompareSlice(comparison)
                     : removed.Contains(Result(operation).Id) || operation is not Operation.Builtin && !required.Contains(Result(operation).Id)
                     ? [] : operation is Operation.Builtin builtin && fused.Contains(builtin)
                     ? Binary(builtin, lists[builtin.Argument]) : Select(operation, locals)).ToImmutableList();
+            return compact ? CompactSelection(selected, block, locals) : selected;
 
             ImmutableList<SelectedInstruction> CompareSlice(SliceComparison comparison) =>
                 ImmutableList.Create<SelectedInstruction>(
@@ -99,11 +133,27 @@ internal static class InstructionSelection
                     if (length > 0 && BuiltinFunction.SignedIntegerFromValueRelaxed(new PineValue.BlobValue(count.Bytes.ToArray())) == length)
                         return new(skip, take, equal, skipArgs.Items[1], skipArgs.Items[0], literal.Value);
                 }
+
                 return null;
             }
 
             ImmutableList<SelectedInstruction> Binary(Operation.Builtin builtin, Operation.MakeList list)
             {
+                if (compact && builtin.Name is "equal" or "int_add" or "int_mul")
+                {
+                    foreach (var index in new[] { 0, 1 })
+                        if (definitions.TryGetValue(list.Items[index], out var operand) && operand is Operation.Literal literal &&
+                            (builtin.Name == "equal" || BuiltinFunction.SignedIntegerFromValueRelaxed(StraightLineVMAdapter.ToPineValue(literal.Value)) is not null))
+                            return ImmutableList.Create<SelectedInstruction>(
+                                new SelectedInstruction.Load(locals[list.Items[1 - index]]),
+                                new SelectedInstruction.Builtin(builtin.Name switch
+                                {
+                                    "equal" => StackInstructionKind.Equal_Binary_Const,
+                                    "int_add" => StackInstructionKind.Int_Add_Const,
+                                    "int_mul" => StackInstructionKind.Int_Mul_Const,
+                                    _ => throw new InvalidOperationException("Binary does not handle builtin: " + builtin.Name),
+                                }, 1, literal.Value)).AddRange(Store(locals[builtin.Result.Id]));
+                }
                 var computation = builtin.Name is "skip" or "take"
                     ? ImmutableList.Create<SelectedInstruction>(new SelectedInstruction.Builtin(
                         builtin.Name == "take" ? StackInstructionKind.Take_Generic : StackInstructionKind.Skip_Generic,
@@ -120,6 +170,45 @@ internal static class InstructionSelection
                         }, 2));
                 return computation.AddRange(Store(locals[builtin.Result.Id]));
             }
+        }
+    }
+
+    private static ImmutableList<SelectedInstruction> CompactSelection(
+        ImmutableList<SelectedInstruction> selected, BasicBlock block, ImmutableDictionary<PineVirtualValueId, int> locals)
+    {
+        return Run();
+
+        ImmutableList<SelectedInstruction> Run()
+        {
+            var literals = block.Operations.OfType<Operation.Literal>()
+                .ToImmutableDictionary(literal => locals[literal.Result.Id], literal => literal.Value);
+            var retained = TerminatorOperands(block.Terminator).Select(id => locals[id]).ToImmutableHashSet()
+                .Union(selected.OfType<SelectedInstruction.Builtin>().SelectMany(builtin =>
+                    ImmutableList<int?>.Empty.Add(builtin.CountLocal).Add(builtin.SourceLocal)).OfType<int>());
+            if (SelectSliceSwitch(block) is { } slice)
+                retained = retained.Add(locals[slice.Source]).Add(locals[slice.Count]);
+            var output = ImmutableList.CreateBuilder<SelectedInstruction>();
+            for (var index = 0; index < selected.Count; ++index)
+            {
+                if (index + 2 < selected.Count && selected[index] is SelectedInstruction.Literal &&
+                    selected[index + 1] is SelectedInstruction.Store store &&
+                    literals.ContainsKey(store.Local) && !retained.Contains(store.Local) &&
+                    selected[index + 2] is SelectedInstruction.Pop)
+                {
+                    index += 2;
+                    continue;
+                }
+                var instruction = selected[index] is SelectedInstruction.Load load && literals.TryGetValue(load.Local, out var literal)
+                    ? new SelectedInstruction.Literal(literal) : selected[index];
+                if (instruction is SelectedInstruction.Load next && output.Count >= 2 &&
+                    output[^1] is SelectedInstruction.Pop && output[^2] is SelectedInstruction.Store previous && previous.Local == next.Local)
+                {
+                    output.RemoveAt(output.Count - 1);
+                    continue;
+                }
+                output.Add(instruction);
+            }
+            return output.ToImmutable();
         }
     }
 

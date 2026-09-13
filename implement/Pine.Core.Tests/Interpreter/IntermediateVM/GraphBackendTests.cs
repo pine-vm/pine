@@ -42,6 +42,44 @@ public class GraphBackendTests
     private static GraphFunction Compile(FunctionGraph graph, ImmutableList<PineBlockId>? order = null) =>
         GraphCompiler.Compile(Validate(graph), order).Extract(error => throw new InvalidOperationException(error.ToString()));
 
+    [Fact]
+    public void Compact_backend_preserves_nested_loops_and_alternate_layouts_with_fewer_instructions()
+    {
+        var graph = NestedCycles([900, -4, 77, 8000, 6]);
+        var input = new LiteralValue.List([Integer(2), Integer(3), Integer(0)]);
+        foreach (var order in Orders(graph))
+        {
+            var before = Compile(graph, order);
+            var compact = GraphCompiler.Compile(Validate(graph), order, fuseScalarBuiltins: true, compact: true)
+                .Extract(error => throw new InvalidOperationException(error.ToString()));
+            var result = Evaluate(compact, input);
+            Value(result).Should().Be(Value(Evaluate(before, input)));
+            result.Trace.Count.Should().BeLessThan(Evaluate(before, input).Trace.Count);
+            compact.Resources.LocalsCount.Should().BeLessThan(before.Resources.LocalsCount);
+            result.Trace.Should().OnlyContain(instruction => instruction.EvaluationStackDepth <= compact.Resources.MaxStackUsage);
+            result.Trace.Where(instruction => instruction.Instruction.Kind is StackInstructionKind.Return)
+                .Should().OnlyContain(instruction => instruction.EvaluationStackDepth == 1);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Compact_empty_cycles_retain_nonzero_backjumps_and_loop_quotas(bool parameterized)
+    {
+        var graph = parameterized
+            ? Graph(int.MinValue, [Block(int.MinValue, [123], [], new Terminator.Jump(E(int.MinValue, 123)))])
+            : Graph(int.MinValue, [Block(int.MinValue, [], [], new Terminator.Jump(E(int.MinValue)))],
+                new([], [ValueType.PineValue]));
+        var compact = GraphCompiler.Compile(Validate(graph), compact: true)
+            .Extract(error => throw new InvalidOperationException(error.ToString()));
+        var result = Evaluate(compact, Empty, 3);
+        result.Result.IsErrOrNull()!.Reason.Should().BeOfType<EvaluationErrorReason.QuotaExhausted>()
+            .Which.QuotaKind.Should().Be(EvaluationQuotaKind.LoopIterationCount);
+        result.Trace.Where(instruction => instruction.Instruction.Kind is StackInstructionKind.Jump_Const)
+            .Should().OnlyContain(instruction => instruction.Instruction.JumpOffset != 0);
+    }
+
     [Theory]
     [InlineData(1, 0, 2)]
     [InlineData(1, 2, 0)]
@@ -417,10 +455,10 @@ public class GraphBackendTests
     public void Graph_adapter_uses_precomputed_resources_without_analyzing_instructions()
     {
         var constructor = typeof(GraphFunction).GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
-            .Single(candidate => candidate.GetParameters().Length == 6);
+            .Single(candidate => candidate.GetParameters().Length == 7);
         var sentinel = (GraphFunction)constructor.Invoke(
             [new FunctionId(1), FunctionSignature.Canonical, ImmutableList<StorageBinding>.Empty,
-            ImmutableList<SelectedBlock>.Empty, ImmutableList<LayoutFragment>.Empty, new FrameResourceUsage(7, 5)]);
+            ImmutableList<SelectedBlock>.Empty, ImmutableList<LayoutFragment>.Empty, new FrameResourceUsage(7, 5), false]);
         var frame = GraphVMAdapter.ToStackFrame(sentinel);
         frame.Instructions.Should().BeEmpty();
         frame.LocalsCount.Should().Be(7);
@@ -496,6 +534,7 @@ public class GraphBackendTests
                     LayoutTransfer.Return => 2,
                     LayoutTransfer.Jump => 1,
                     LayoutTransfer.Branch => 3,
+                    LayoutTransfer.Match => throw new InvalidOperationException("This helper tests uncompressed layouts."),
                     LayoutTransfer.Invoke => throw new InvalidOperationException("This helper tests call-free graphs."),
                     LayoutTransfer.TailInvoke => throw new InvalidOperationException("This helper tests call-free graphs."),
                     _ => throw new NotImplementedException(

@@ -12,15 +12,23 @@ namespace Pine.Core.Interpreter.IntermediateVM.Frontend;
 /// </summary>
 public static class ExpressionGraphCompiler
 {
-    private sealed record Cursor(GraphBuildState State, ImmutableList<PineVirtualValueId> Live);
+    private sealed record Cursor(
+        GraphBuildState State, ImmutableList<PineVirtualValueId> Live,
+        FunctionSignature Signature);
+    private sealed record EqualityCase(LiteralValue Literal, OwnedExpression Body);
+    private sealed record EqualitySwitch(OwnedExpression Selector, ImmutableList<EqualityCase> Cases, OwnedExpression Default);
 
     /// <summary>Compiles without optional preparation rewrites, preserving the source evaluation order.</summary>
     public static FunctionGraph Compile(Expression expression) =>
-        CompileOwned(OwnedExpression.Capture(expression), new(0));
+        CompileOwned(OwnedExpression.Capture(expression), new(0), FunctionSignature.Canonical);
+
+    /// <summary>Compiles against ordered input projections without reconstructing omitted fields.</summary>
+    public static FunctionGraph Compile(Expression expression, FunctionSignature signature) =>
+        CompileOwned(OwnedExpression.Capture(expression), new(0), signature);
 
     /// <summary>Compiles a prepared body; all graph optimizations remain disabled.</summary>
     public static FunctionGraph CompileExpressionToGraph(PreparedFunction prepared) =>
-        CompileOwned(prepared.Body, prepared.Request.Id);
+        CompileOwned(prepared.Body, prepared.Request.Id, FunctionSignature.Canonical);
 
     /// <summary>Validates the directly constructed graph and returns updated explicit graph memoization.</summary>
     public static (Result<ImmutableList<GraphDiagnostic>, ValidatedFunctionGraph> Graph, CompilerMemo Memo)
@@ -36,13 +44,13 @@ public static class ExpressionGraphCompiler
             memo with { Graphs = memo.Graphs.SetItem(prepared, graph) });
     }
 
-    private static FunctionGraph CompileOwned(OwnedExpression root, FunctionId id)
+    private static FunctionGraph CompileOwned(OwnedExpression root, FunctionId id, FunctionSignature signature)
     {
         var (entryState, entry) = GraphBuildState.Empty.AllocateBlock();
-        var (environmentState, environment) = entryState.AllocateValue();
-        var initial = environmentState.OpenBlock(entry, [new(environment)]);
-        var completed = CompileTail(root, new(initial, [environment]));
-        return new(id, FunctionSignature.Canonical, entry, completed.CompletedBlocks);
+        var (parameterState, parameters) = AllocateParameters(entryState, signature.Parameters.Count);
+        var initial = parameterState.OpenBlock(entry, parameters);
+        var completed = CompileTail(root, new(initial, parameters.Select(parameter => parameter.Id).ToImmutableList(), signature));
+        return new(id, signature, entry, completed.CompletedBlocks);
     }
 
     private static GraphBuildState CompileTail(OwnedExpression expression, Cursor cursor) =>
@@ -53,16 +61,31 @@ public static class ExpressionGraphCompiler
             OwnedExpression.Conditional conditional => TailConditional(conditional, cursor),
             OwnedExpression.Literal or OwnedExpression.List or OwnedExpression.Builtin or OwnedExpression.Environment =>
                 ReturnValue(CompileNode(expression, cursor)),
-            _ => throw new NotImplementedException("Unknown expression variant: " + expression.GetType().Name),
+            _ => throw new NotImplementedException("CompileTail does not handle expression variant: " + expression.GetType().Name),
         };
 
     private static GraphBuildState ReturnValue(Cursor cursor) =>
         cursor.State.CompleteBlock(new Terminator.Return([cursor.Live[^1]]));
 
-    // Live[0] is always the environment. CompileNode appends exactly one result while preserving
+    // The first live values are the ordered input projections. CompileNode appends exactly one result while preserving
     // and, across transfers, rebinding every incoming live value.
-    private static Cursor CompileNode(OwnedExpression expression, Cursor cursor) =>
-        expression switch
+    private static Cursor CompileNode(OwnedExpression expression, Cursor cursor)
+    {
+        if (cursor.Signature != FunctionSignature.Canonical &&
+            CodeAnalysis.CodeAnalysis.TryParseExprAsPathInEnv(expression.ToExpression()) is { } path)
+        {
+            var parameterIndex = cursor.Signature.Parameters.FindIndex(parameter =>
+                path.Count >= parameter.Path.Indices.Count &&
+                path.Take(parameter.Path.Indices.Count).SequenceEqual(parameter.Path.Indices));
+            if (parameterIndex < 0)
+                throw new ArgumentException("CompileNode environment reference is not covered by the declared signature.");
+            var parameter = cursor.Signature.Parameters[parameterIndex];
+            var remaining = path.Skip(parameter.Path.Indices.Count).ToImmutableList();
+            return remaining.Count == 0
+                ? cursor with { Live = cursor.Live.Add(cursor.Live[parameterIndex]) }
+                : Define(cursor, result => new Operation.Project(result, cursor.Live[parameterIndex], new(remaining)));
+        }
+        return expression switch
         {
             OwnedExpression.Literal literal => Define(cursor, result => new Operation.Literal(result, literal.Value)),
             OwnedExpression.Environment => cursor with { Live = cursor.Live.Add(cursor.Live[0]) },
@@ -71,13 +94,14 @@ public static class ExpressionGraphCompiler
             OwnedExpression.Conditional conditional => CompileConditional(conditional, cursor),
             OwnedExpression.Eval eval => CompileCall(eval, cursor),
             OwnedExpression.Label label => CompileNode(label.Tagged, cursor),
-            _ => throw new NotImplementedException("Unknown expression variant: " + expression.GetType().Name),
+            _ => throw new NotImplementedException("CompileNode does not handle expression variant: " + expression.GetType().Name),
         };
+    }
 
     private static Cursor Define(Cursor cursor, Func<ValueDefinition, Operation> operation)
     {
         var (state, value) = cursor.State.AllocateValue();
-        return new(state.AppendOperation(operation(new(value))), cursor.Live.Add(value));
+        return new(state.AppendOperation(operation(new(value))), cursor.Live.Add(value), cursor.Signature);
     }
 
     private static Cursor CompileBuiltin(OwnedExpression.Builtin builtin, Cursor cursor)
@@ -127,11 +151,11 @@ public static class ExpressionGraphCompiler
             normalized.Live[^1], new LiteralValue.List([]),
             new(invalidBlock, counted.Live), new(validBlock, counted.Live)));
 
-        var invalid = Open(branched, invalidBlock, counted.Live.Count);
+        var invalid = Open(branched, invalidBlock, counted.Live.Count, cursor.Signature);
         var fallback = CompileBuiltinGeneric(builtin, invalid with { Live = invalid.Live.RemoveAt(cursor.Live.Count) });
         var afterFallback = fallback.State.CompleteBlock(new Terminator.Jump(new(joinBlock, fallback.Live)));
 
-        var valid = Open(afterFallback, validBlock, counted.Live.Count);
+        var valid = Open(afterFallback, validBlock, counted.Live.Count, cursor.Signature);
         var sourced = CompileNode(source, valid);
         // A nonempty list prefix forces concat to reject blobs. Dropping that prefix gives the
         // original list, or [] for every blob, without type speculation or duplicate evaluation.
@@ -147,7 +171,7 @@ public static class ExpressionGraphCompiler
         var head = Define(skipped, result => new Operation.Builtin(result, "head", skipped.Live[^1]));
         var resultValues = head.Live.Take(cursor.Live.Count).Append(head.Live[^1]).ToImmutableList();
         var afterValid = head.State.CompleteBlock(new Terminator.Jump(new(joinBlock, resultValues)));
-        return Open(afterValid, joinBlock, cursor.Live.Count + 1);
+        return Open(afterValid, joinBlock, cursor.Live.Count + 1, cursor.Signature);
     }
 
     private static Cursor CompileList(OwnedExpression.List list, Cursor cursor)
@@ -167,10 +191,10 @@ public static class ExpressionGraphCompiler
                 return (next, acc.Parameters.Add(new(value)));
             });
 
-    private static Cursor Open(GraphBuildState state, PineBlockId block, int liveCount)
+    private static Cursor Open(GraphBuildState state, PineBlockId block, int liveCount, FunctionSignature signature)
     {
         var (allocated, parameters) = AllocateParameters(state, liveCount);
-        return new(allocated.OpenBlock(block, parameters), parameters.Select(parameter => parameter.Id).ToImmutableList());
+        return new(allocated.OpenBlock(block, parameters), parameters.Select(parameter => parameter.Id).ToImmutableList(), signature);
     }
 
     private static (GraphBuildState State, PineBlockId True, PineBlockId False, ImmutableList<PineVirtualValueId> Live)
@@ -189,20 +213,94 @@ public static class ExpressionGraphCompiler
 
     private static GraphBuildState TailConditional(OwnedExpression.Conditional conditional, Cursor cursor)
     {
+        if (ParseSwitch(conditional) is { } selection)
+            return CompileSwitch(selection, cursor, tail: true).State;
         var branch = Branch(conditional, cursor);
-        var trueState = CompileTail(conditional.TrueBranch, Open(branch.State, branch.True, branch.Live.Count));
-        return CompileTail(conditional.FalseBranch, Open(trueState, branch.False, branch.Live.Count));
+        var trueState = CompileTail(conditional.TrueBranch, Open(branch.State, branch.True, branch.Live.Count, cursor.Signature));
+        return CompileTail(conditional.FalseBranch, Open(trueState, branch.False, branch.Live.Count, cursor.Signature));
     }
 
     private static Cursor CompileConditional(OwnedExpression.Conditional conditional, Cursor cursor)
     {
+        if (ParseSwitch(conditional) is { } selection)
+            return CompileSwitch(selection, cursor, tail: false);
         var branch = Branch(conditional, cursor);
         var (state, join) = branch.State.AllocateBlock();
-        var trueArm = CompileNode(conditional.TrueBranch, Open(state, branch.True, branch.Live.Count));
+        var trueArm = CompileNode(conditional.TrueBranch, Open(state, branch.True, branch.Live.Count, cursor.Signature));
         var afterTrue = trueArm.State.CompleteBlock(new Terminator.Jump(new(join, trueArm.Live)));
-        var falseArm = CompileNode(conditional.FalseBranch, Open(afterTrue, branch.False, branch.Live.Count));
+        var falseArm = CompileNode(conditional.FalseBranch, Open(afterTrue, branch.False, branch.Live.Count, cursor.Signature));
         var afterFalse = falseArm.State.CompleteBlock(new Terminator.Jump(new(join, falseArm.Live)));
-        return Open(afterFalse, join, branch.Live.Count + 1);
+        return Open(afterFalse, join, branch.Live.Count + 1, cursor.Signature);
+    }
+
+    private static EqualitySwitch? ParseSwitch(OwnedExpression.Conditional root)
+    {
+        return Parse();
+
+        EqualitySwitch? Parse()
+        {
+            OwnedExpression current = root;
+            OwnedExpression? selector = null;
+            var cases = ImmutableList<EqualityCase>.Empty;
+            var literals = ImmutableHashSet<LiteralValue>.Empty;
+            while (current is OwnedExpression.Conditional conditional &&
+                conditional.Condition is OwnedExpression.Builtin { Name: "equal", Input: OwnedExpression.List { Items.Count: 2 } arguments })
+            {
+                var literal = arguments.Items[0] as OwnedExpression.Literal ?? arguments.Items[1] as OwnedExpression.Literal;
+                if (literal is null)
+                    break;
+                var compared = arguments.Items[0] == literal ? arguments.Items[1] : arguments.Items[0];
+                if (selector is not null && compared != selector)
+                    break;
+                selector = compared;
+                if (!literals.Contains(literal.Value))
+                {
+                    cases = cases.Add(new(literal.Value, conditional.TrueBranch));
+                    literals = literals.Add(literal.Value);
+                }
+                current = conditional.FalseBranch;
+            }
+            return selector is not null && cases.Count > 1 &&
+                !Expression.EnumerateSelfAndDescendants(selector.ToExpression()).Any(expression => expression is Expression.Eval)
+                ? new(selector, cases, current) : null;
+        }
+    }
+
+    private static Cursor CompileSwitch(EqualitySwitch selection, Cursor cursor, bool tail)
+    {
+        return CompileBranches();
+
+        Cursor CompileBranches()
+        {
+            var tested = CompileNode(selection.Selector, cursor);
+            var state = tested.State;
+            var targets = ImmutableList<PineBlockId>.Empty;
+            foreach (var unused in selection.Cases)
+            {
+                var allocated = state.AllocateBlock();
+                state = allocated.State;
+                targets = targets.Add(allocated.Id);
+            }
+            var (defaultState, defaultBlock) = state.AllocateBlock();
+            var (joinState, join) = defaultState.AllocateBlock();
+            var live = tested.Live.RemoveAt(tested.Live.Count - 1);
+            state = joinState.CompleteBlock(new Terminator.Switch(tested.Live[^1],
+                selection.Cases.Select((@case, index) => new SwitchCase(@case.Literal, new(targets[index], live))).ToImmutableList(),
+                new(defaultBlock, live)));
+            foreach (var (body, target) in selection.Cases.Select((@case, index) => (@case.Body, targets[index]))
+                .Append((selection.Default, defaultBlock)))
+            {
+                var branch = Open(state, target, live.Count, cursor.Signature);
+                if (tail)
+                    state = CompileTail(body, branch);
+                else
+                {
+                    var result = CompileNode(body, branch);
+                    state = result.State.CompleteBlock(new Terminator.Jump(new(join, result.Live)));
+                }
+            }
+            return tail ? new(state, live, cursor.Signature) : Open(state, join, cursor.Live.Count + 1, cursor.Signature);
+        }
     }
 
     private static (Cursor Cursor, Call Call) CallOperands(OwnedExpression.Eval eval, Cursor cursor)
@@ -228,6 +326,6 @@ public static class ExpressionGraphCompiler
             .Select(value => (ContinuationBinding)new ContinuationBinding.CallerValue(value))
             .Append(new ContinuationBinding.ReturnedResult(0)).ToImmutableList();
         var completed = state.CompleteBlock(new Terminator.Invoke(operands.Call, new(continuation, bindings)));
-        return Open(completed, continuation, cursor.Live.Count + 1);
+        return Open(completed, continuation, cursor.Live.Count + 1, cursor.Signature);
     }
 }

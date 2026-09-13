@@ -8,7 +8,7 @@ using System.Linq;
 namespace Pine.Core.Interpreter.IntermediateVM.Frontend;
 
 /// <summary>
-/// Opt-in graph policy. Inlining and analysis bounds apply cumulatively per Optimize invocation, including speculative
+/// Immutable graph policy. Inlining and analysis bounds apply cumulatively per Optimize invocation, including speculative
 /// work on refused candidates. Work units count encoded nodes/bytes and owned AST nodes.
 /// Depth and per-body limits bound recursive parsing and frontend construction before either runs.
 /// Scalar and guard limits are separate per-pass/body bounds; the cumulative candidate limit also
@@ -31,7 +31,8 @@ public sealed record GraphOptimizerOptions(
     long MaxScalarWorkUnits = 200_000,
     long MaxScalarExpansionUnits = 20_000,
     long MaxGuardWorkUnits = 65_536,
-    long MaxGuardExpansionUnits = 20_000);
+    long MaxGuardExpansionUnits = 20_000,
+    ImmutableHashSet<OwnedExpression>? AllowedInlineBodies = null);
 
 /// <summary>A conservative reason to retain the original dynamic call.</summary>
 public enum GraphOptimizationDeclineCode
@@ -52,6 +53,8 @@ public enum GraphOptimizationDeclineCode
     IdSpaceExhausted,
     /// <summary>The temporary known-call graph or inline expansion was refused.</summary>
     InlineRefused,
+    /// <summary>The enclosing preparation policy has not authorized this body.</summary>
+    PolicyExcluded,
 }
 
 /// <summary>A deterministic call-site refusal; no temporary known call escapes.</summary>
@@ -182,6 +185,11 @@ public static class ExpressionGraphOptimizer
                 if (parsed.Result.Expression is not { } body)
                 {
                     Decline(GraphOptimizationDeclineCode.InvalidEncoding);
+                    continue;
+                }
+                if (options.AllowedInlineBodies is { } allowed && !allowed.Contains(body))
+                {
+                    Decline(GraphOptimizationDeclineCode.PolicyExcluded);
                     continue;
                 }
                 var size = MeasureBody(body, Math.Min(options.MaxBodyNodes, options.MaxWorkUnits - stats.WorkUnits), options.MaxDepth);
@@ -344,7 +352,7 @@ public static class ExpressionGraphOptimizer
         }
     }
 
-    private static (bool Fits, long Units) MeasureBody(OwnedExpression root, long limit, int depthLimit)
+    internal static (bool Fits, long Units) MeasureBody(OwnedExpression root, long limit, int depthLimit)
     {
         return Measure();
         (bool, long) Measure()

@@ -59,13 +59,14 @@ public abstract record SelectedTerminator
     public sealed record TailInvoke(SelectedCall Call) : SelectedTerminator;
     /// <summary>Ordered exact tests; a branch is a one-case match.</summary>
     public sealed record Match(
-        int Local, ImmutableList<SelectedCase> Cases, EdgeCopyPlan Default) : SelectedTerminator
+        int Local, ImmutableList<SelectedCase> Cases, EdgeCopyPlan Default, int? SliceSourceLocal = null) : SelectedTerminator
     {
         /// <inheritdoc/>
         public bool Equals(Match? other) =>
-            other is not null && Local == other.Local && Cases.SequenceEqual(other.Cases) && Default == other.Default;
+            other is not null && Local == other.Local && Cases.SequenceEqual(other.Cases) && Default == other.Default &&
+            SliceSourceLocal == other.SliceSourceLocal;
         /// <inheritdoc/>
-        public override int GetHashCode() => HashCode.Combine(Local, ModelEquality.SequenceHash(Cases), Default);
+        public override int GetHashCode() => HashCode.Combine(Local, ModelEquality.SequenceHash(Cases), Default, SliceSourceLocal);
     }
 }
 
@@ -112,6 +113,18 @@ public abstract record LayoutTransfer
     public sealed record Invoke(SelectedCall Call, LayoutLabel Success) : LayoutTransfer;
     /// <summary>Returns the callee's result directly.</summary>
     public sealed record TailInvoke(SelectedCall Call) : LayoutTransfer;
+    /// <summary>Ordered exact matching using an existing VM switch instruction.</summary>
+    public sealed record Match(
+        int Local, ImmutableList<(LiteralValue Literal, LayoutLabel Target)> Cases, LayoutLabel Default,
+        int? SliceSourceLocal = null) : LayoutTransfer
+    {
+        /// <inheritdoc/>
+        public bool Equals(Match? other) =>
+            other is not null && Local == other.Local && Cases.SequenceEqual(other.Cases) &&
+            Default == other.Default && SliceSourceLocal == other.SliceSourceLocal;
+        /// <inheritdoc/>
+        public override int GetHashCode() => HashCode.Combine(Local, ModelEquality.SequenceHash(Cases), Default, SliceSourceLocal);
+    }
 }
 
 /// <summary>A known fragment and its explicit transfer. Return stubs enter with one successful call result.</summary>
@@ -130,20 +143,25 @@ public sealed record GraphFunction
 {
     /// <summary>Function identity.</summary>
     public FunctionId Id { get; }
-    /// <summary>Semantic signature; adaptation still uses the canonical environment and one result.</summary>
+    /// <summary>Ordered input projections and one result.</summary>
     public FunctionSignature Signature { get; }
-    /// <summary>Unique locals in numeric block-ID order, then definition order. Zero is the environment.</summary>
+    /// <summary>Definition bindings in numeric block-ID order, with optional local reuse and direct input bindings.</summary>
     public ImmutableList<StorageBinding> Storage { get; }
     /// <summary>All selected blocks, including unreachable ones, in numeric ID order.</summary>
     public ImmutableList<SelectedBlock> Blocks { get; }
     /// <summary>Scheduled fragments, starting with the separate initialization prologue.</summary>
     public ImmutableList<LayoutFragment> Layout { get; }
-    /// <summary>Exact maximum over all known fragments, including unreachable ones and edge copies.</summary>
+    /// <summary>Graph-proven resource bounds for the selected layout and edge copies.</summary>
     public FrameResourceUsage Resources { get; }
+    /// <summary>The prologue reads ordered legacy parameter locals rather than one canonical environment.</summary>
+    public bool LegacyParameterLocals { get; }
+    /// <summary>Allows fallthrough and terminal stack forwarding during final numeric emission.</summary>
+    public bool Compact { get; init; }
 
     internal GraphFunction(
         FunctionId id, FunctionSignature signature, ImmutableList<StorageBinding> storage,
-        ImmutableList<SelectedBlock> blocks, ImmutableList<LayoutFragment> layout, FrameResourceUsage resources)
+        ImmutableList<SelectedBlock> blocks, ImmutableList<LayoutFragment> layout, FrameResourceUsage resources,
+        bool legacyParameterLocals = false)
     {
         Id = id;
         Signature = signature;
@@ -151,17 +169,19 @@ public sealed record GraphFunction
         Blocks = blocks;
         Layout = layout;
         Resources = resources;
+        LegacyParameterLocals = legacyParameterLocals;
     }
 
     /// <inheritdoc/>
     public bool Equals(GraphFunction? other) =>
         other is not null && Id == other.Id && Signature == other.Signature &&
         Storage.SequenceEqual(other.Storage) && Blocks.SequenceEqual(other.Blocks) &&
-        Layout.SequenceEqual(other.Layout) && Resources == other.Resources;
+        Layout.SequenceEqual(other.Layout) && Resources == other.Resources &&
+        LegacyParameterLocals == other.LegacyParameterLocals && Compact == other.Compact;
     /// <inheritdoc/>
     public override int GetHashCode() =>
         HashCode.Combine(Id, Signature, ModelEquality.SequenceHash(Storage), ModelEquality.SequenceHash(Blocks),
-            ModelEquality.SequenceHash(Layout), Resources);
+            ModelEquality.SequenceHash(Layout), Resources, LegacyParameterLocals, Compact);
 }
 
 /// <summary>Support/layout failures, separate from semantic validation failures.</summary>

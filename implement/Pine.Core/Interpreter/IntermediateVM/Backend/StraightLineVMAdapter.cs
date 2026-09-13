@@ -95,7 +95,10 @@ public static class StraightLineVMAdapter
             SelectedInstruction.Project project =>
                 new StackInstruction(StackInstructionKind.List_Project_Const, SkipCount: project.Index),
             SelectedInstruction.Builtin builtin => new StackInstruction(RequireBuiltin(builtin),
-                Literal: builtin.Constant is { } constant ? ToPineValue(constant) : null),
+                Literal: builtin.Kind is not (StackInstructionKind.Int_Add_Const or StackInstructionKind.Int_Mul_Const) &&
+                    builtin.Constant is { } constant ? ToPineValue(constant) : null,
+                IntegerLiteral: builtin.Kind is StackInstructionKind.Int_Add_Const or StackInstructionKind.Int_Mul_Const
+                    ? BuiltinFunction.SignedIntegerFromValueRelaxed(ToPineValue(builtin.Constant!)) : null),
             SelectedInstruction.Return => new StackInstruction(StackInstructionKind.Return),
             _ => throw new NotImplementedException(
                 "ToInstruction does not handle selected instruction variant: " + instruction.GetType().Name),
@@ -107,6 +110,9 @@ public static class StraightLineVMAdapter
         : (builtin.Kind, builtin.OperandCount, builtin.Constant) switch
         {
             (StackInstructionKind.Slice_Skip_Var_Equal_Const, 2, not null) => builtin.Kind,
+            (StackInstructionKind.Equal_Binary_Const, 1, not null) => builtin.Kind,
+            (StackInstructionKind.Int_Add_Const or StackInstructionKind.Int_Mul_Const, 1, not null)
+                when BuiltinFunction.SignedIntegerFromValueRelaxed(ToPineValue(builtin.Constant)) is not null => builtin.Kind,
             (StackInstructionKind.Equal_Binary or StackInstructionKind.Int_Add_Binary or StackInstructionKind.Int_Mul_Binary, 2, null) => builtin.Kind,
             (StackInstructionKind.Equal_Generic or StackInstructionKind.Length or
             StackInstructionKind.Head_Generic or StackInstructionKind.Skip_Generic or

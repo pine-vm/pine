@@ -1,5 +1,6 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Internal;
+using Pine.Core.Interpreter.IntermediateVM.Frontend;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -93,9 +94,7 @@ public record ExpressionCompilation(
             StaticFunctionInterface.FromExpression(rootExpression);
 
         var generic =
-            new StackFrameInstructions(
-                genericParameters,
-                InstructionsFromExpressionTransitive(
+                CompileVariant(
                     rootExpression,
                     envConstraintId: null,
                     parametersAsLocals: genericParameters,
@@ -106,8 +105,7 @@ public record ExpressionCompilation(
                     reducedExpressionCache: reducedExpressionCache,
                     pathMaxLowExclusive: pathMaxLowExclusive,
                     pathMaxHighInclusive: pathMaxHighInclusive,
-                    disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation),
-                TrackEnvConstraint: null);
+                    disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
 
         var specialized =
             specializations
@@ -120,9 +118,7 @@ public record ExpressionCompilation(
                 ..specialization.ParsedItems
                 .Select(envItem => new EnvConstraintItem(envItem.Key.ToArray(), envItem.Value))
                 ],
-                new StackFrameInstructions(
-                    genericParameters,
-                    InstructionsFromExpressionTransitive(
+                    CompileVariant(
                         rootExpression,
                         envConstraintId: specialization,
                         parametersAsLocals: genericParameters,
@@ -133,8 +129,7 @@ public record ExpressionCompilation(
                         reducedExpressionCache: reducedExpressionCache,
                         pathMaxLowExclusive: pathMaxLowExclusive,
                         pathMaxHighInclusive: pathMaxHighInclusive,
-                        disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation),
-                    TrackEnvConstraint: specialization)))
+                        disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation)))
             .ToImmutableArray();
 
         return
@@ -186,7 +181,33 @@ public record ExpressionCompilation(
         int pathMaxLowExclusive = DefaultPathMaxLowExclusive,
         int pathMaxHighInclusive = DefaultPathMaxHighInclusive,
         bool disableGenericApplicationChainConsolidation = false)
+        => CompileVariant(rootExpression, envConstraintId, parametersAsLocals, parseCache,
+            disableReduction, enableTailRecursionOptimization, skipInlining, reducedExpressionCache,
+            pathMaxLowExclusive, pathMaxHighInclusive, disableGenericApplicationChainConsolidation).Instructions;
+
+    private static StackFrameInstructions CompileVariant(
+        Expression rootExpression,
+        PineValueClass? envConstraintId,
+        StaticFunctionInterface parametersAsLocals,
+        PineVMParseCache parseCache,
+        bool disableReduction,
+        bool enableTailRecursionOptimization,
+        Func<Expression, PineValueClass?, bool> skipInlining,
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache,
+        int pathMaxLowExclusive,
+        int pathMaxHighInclusive,
+        bool disableGenericApplicationChainConsolidation)
     {
+        var policyDecisions = new Dictionary<(Expression, PineValueClass?), bool>();
+
+        bool ObserveInlining(Expression expression, PineValueClass? constraint)
+        {
+            var excluded = skipInlining(expression, constraint);
+            var key = (expression, constraint);
+            policyDecisions[key] = excluded || policyDecisions.GetValueOrDefault(key);
+            return excluded;
+        }
+
         var inlinedStaticInvocations =
             disableReduction
             ?
@@ -199,7 +220,7 @@ public record ExpressionCompilation(
                 maxSubexpressionCount: 4_000,
                 parseCache,
                 disableRecurseAfterInline: false,
-                skipInlining: e => skipInlining(e, null),
+                skipInlining: e => ObserveInlining(e, null),
                 reducedExpressionCache: reducedExpressionCache,
                 pathMaxLowExclusive: pathMaxLowExclusive,
                 pathMaxHighInclusive: pathMaxHighInclusive,
@@ -232,7 +253,7 @@ public record ExpressionCompilation(
                 envConstraintId: envConstraintId,
                 rootExprForms: [rootExpression],
                 disableRecurseAfterInline: false,
-                skipInlining: skipInlining,
+                skipInlining: ObserveInlining,
                 reducedExpressionCache: reducedExpressionCache,
                 pathMaxLowExclusive: pathMaxLowExclusive,
                 pathMaxHighInclusive: pathMaxHighInclusive,
@@ -289,11 +310,34 @@ public record ExpressionCompilation(
             StackInstruction.Return
             ];
 
-        return
+        var legacy =
             PineControlFlowGraph
             .FromInstructions(allInstructions)
             .ForwardConstantBooleanBranches()
             .LowerToStackInstructions();
+
+        if (!disableReduction && enableTailRecursionOptimization &&
+            !disableGenericApplicationChainConsolidation &&
+            pathMaxLowExclusive == DefaultPathMaxLowExclusive && pathMaxHighInclusive == DefaultPathMaxHighInclusive &&
+            ProductionGraphCompilation.FitsBody(rootExpression) &&
+            Expression.EnumerateSelfAndDescendants(rootExpression).Any(expression => expression is Expression.Eval))
+        {
+            // Only replay bodies already authorized during the real preparation traversal.
+            // No speculative call to the caller's predicate enters the pure graph compiler.
+            var authorized = policyDecisions.Where(decision => !decision.Value &&
+                    (decision.Key.Item2 == envConstraintId || decision.Key.Item2 is null) &&
+                    !policyDecisions.GetValueOrDefault((decision.Key.Item1, envConstraintId)) &&
+                    ProductionGraphCompilation.FitsBody(decision.Key.Item1) &&
+                    Expression.EnumerateSelfAndDescendants(decision.Key.Item1).OfType<Expression.Eval>().Take(2).Count() <= 1)
+                .Take(8).Select(decision => OwnedExpression.Capture(decision.Key.Item1)).ToImmutableHashSet();
+            var graphBody = envConstraintId is null ? rootExpression :
+                SubstituteSubexpressionsForEnvironmentConstraint(rootExpression, envConstraintId);
+            var graph = ProductionGraphCompilation.TryCompile(graphBody, parametersAsLocals, authorized);
+            // Bound emitted code growth; this is not an estimate of execution cost.
+            if (graph is not null && graph.Instructions.Count <= legacy.Length * 2)
+                return graph with { TrackEnvConstraint = envConstraintId };
+        }
+        return new(parametersAsLocals, legacy, TrackEnvConstraint: envConstraintId);
     }
 
 

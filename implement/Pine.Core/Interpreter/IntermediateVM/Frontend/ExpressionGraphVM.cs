@@ -4,8 +4,8 @@ using System;
 namespace Pine.Core.Interpreter.IntermediateVM.Frontend;
 
 /// <summary>
-/// Opt-in runtime boundary for the graph frontend. The ordinary VM factory still selects the legacy
-/// compiler. Every dynamically parsed callee uses this same frontend, never instruction-first IR.
+/// Opt-in whole-program graph boundary. The ordinary compiler enables bounded graph candidates
+/// with a legacy fallback; this boundary instead compiles every dynamically parsed callee directly to graphs.
 /// </summary>
 public static class ExpressionGraphVM
 {
@@ -39,7 +39,9 @@ public static class ExpressionGraphVM
         var optimized = ExpressionGraphOptimizer.Compile(
             CompilationRequest.Capture(expression, options), optimizerOptions, CompilerMemo.Empty)
             .Extract(errors => throw new InvalidOperationException(string.Join(", ", errors)));
-        var function = GraphCompiler.Compile(optimized.Graph, fuseScalarBuiltins: optimizerOptions.Enabled && optimizerOptions.ScalarReplacement)
+        var function = GraphCompiler.Compile(optimized.Graph,
+                fuseScalarBuiltins: optimizerOptions.Enabled && optimizerOptions.ScalarReplacement,
+                compact: optimizerOptions.Enabled && optimizerOptions.ScalarReplacement)
             .Extract(error => throw new InvalidOperationException(error.ToString()));
         return new(GraphVMAdapter.ToStackFrame(function), []);
     }

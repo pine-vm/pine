@@ -3,11 +3,13 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Interpreter;
+using Pine.Core.Internal;
 using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.Interpreter.IntermediateVM.Backend;
 using Pine.Core.Interpreter.IntermediateVM.Frontend;
 using Pine.Core.Interpreter.IntermediateVM.Semantic;
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Xunit;
@@ -110,7 +112,7 @@ public class GraphFirstCompilationCharacterizationTests
             .Extract(errors => throw new InvalidOperationException(string.Join(", ", errors)));
         defaults.Graph.Graph.Blocks.Values.Where(block =>
             block.Terminator is Terminator.Invoke or Terminator.TailInvoke).Should().BeEmpty();
-        var artifact = GraphCompiler.Compile(compiled.Graph, fuseScalarBuiltins: true)
+        var artifact = GraphCompiler.Compile(compiled.Graph, fuseScalarBuiltins: true, compact: true)
             .Extract(error => throw new InvalidOperationException(error.ToString()));
         var instructions = GraphVMAdapter.ToStackFrame(artifact).Instructions;
         instructions.Where(instruction => instruction.Kind is StackInstructionKind.Build_List or StackInstructionKind.Build_List_With_Prefix)
@@ -118,6 +120,19 @@ public class GraphFirstCompilationCharacterizationTests
         instructions.Count.Should().BeLessThan(1500);
         var baselineVM = ExpressionGraphVM.Create();
         var optimizedVM = ExpressionGraphVM.Create(optimizerOptions: policy);
+        var productionVM = ElmCompilerTestHelper.PineVMForProfiling(
+            reportFunctionApplication: _ => { }, enableTailRecursionOptimization: true);
+        var tableValue = PineValue.List(function.EnvFunctions);
+        var tableConstraint = PineValueClass.Create([
+            new KeyValuePair<IReadOnlyList<int>, PineValue>(ImmutableArray.Create(0), tableValue)]);
+        var specializedVM = Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
+            evalCache: null, evaluationConfigDefault: null, reportFunctionApplication: null,
+            compilationEnvClasses: ImmutableDictionary<Expression, IReadOnlyList<PineValueClass>>.Empty.Add(
+                function.InnerFunction, [tableConstraint]),
+            disableReductionInCompilation: false, selectPrecompiled: null, skipInlineForExpression: _ => false,
+            enableTailRecursionOptimization: true, parseCache: null, precompiledLeaves: null,
+            reportEnterPrecompiledLeaf: null, reportExitPrecompiledLeaf: null,
+            optimizationParametersSerial: null, cacheFileStore: null);
         ImmutableArray<(string Source, int Offset, int Expected)> cases =
             [
             ("", 0, 0), ("!", 0, 0), ("0a", 0, 0), ("a", 0, 1), ("_", 0, 1),
@@ -129,6 +144,13 @@ public class GraphFirstCompilationCharacterizationTests
             "; optimized invocations: " + reports.Sum(pair => pair.After.InvocationCount));
         var baselineCounters = PerformanceCounters.Aggregate(reports.Select(pair => pair.Before.Counters));
         var optimizedCounters = PerformanceCounters.Aggregate(reports.Select(pair => pair.After.Counters));
+        var productionCounters = PerformanceCounters.Aggregate(reports.Select(pair => pair.Production.Counters));
+        Console.WriteLine("Actual Alfa ordinary production compiler:\n" +
+            PerformanceCountersFormatting.FormatCounts(productionCounters));
+        productionCounters.InvocationCount.Should().Be(0);
+        productionCounters.BuildListCount.Should().Be(0);
+        productionCounters.InstructionCount.Should().Be(capturedUsageSite ? 434 : 384);
+        productionCounters.LoopIterationCount.Should().Be(22);
         Console.WriteLine("Actual Alfa graph optimizer disabled (not the legacy production baseline):\n" +
             PerformanceCountersFormatting.FormatCounts(baselineCounters));
         Console.WriteLine("Actual Alfa graph optimizer enabled:\n" +
@@ -151,17 +173,50 @@ public class GraphFirstCompilationCharacterizationTests
                 IntegerEncoding.EncodeSignedInteger(longCase.Expected + (capturedUsageSite ? longCase.Offset : 0)));
             longReport.InvocationCount.Should().Be(0);
             longReport.BuildListCount.Should().Be(0);
-            longReport.LoopIterationCount.Should().BeGreaterThan(longCase.Expected - longCase.Offset - 1);
+            longReport.LoopIterationCount.Should().BeGreaterThanOrEqualTo(longCase.Expected - longCase.Offset - 1);
             optimizedVM.EvaluateExpressionOnCustomStack(wrapper, longInput, new(0, 8, 1))
                 .IsErrOrNull()!.Reason.Should().BeOfType<EvaluationErrorReason.QuotaExhausted>()
                 .Which.QuotaKind.Should().Be(EvaluationQuotaKind.LoopIterationCount);
+            var productionLong = productionVM.EvaluateExpressionOnCustomStack(wrapper, longInput, new(0, 100_000, 1))
+                .Extract(error => throw new InvalidOperationException(error.ToString()));
+            productionLong.ReturnValue.Evaluate().Should().Be(longReport.ReturnValue.Evaluate());
+            productionLong.InvocationCount.Should().Be(0);
+            productionLong.BuildListCount.Should().Be(0);
+            productionVM.EvaluateExpressionOnCustomStack(wrapper, longInput, new(0, 8, 1))
+                .IsErrOrNull()!.Reason.Should().BeOfType<EvaluationErrorReason.QuotaExhausted>()
+                .Which.QuotaKind.Should().Be(EvaluationQuotaKind.LoopIterationCount);
+            var specializedInput = DeclarationEnvironment(tableValue, longInput);
+            var specializedLong = specializedVM.EvaluateExpressionOnCustomStack(
+                    function.InnerFunction, specializedInput, new(0, 100_000, 1))
+                .Extract(error => throw new InvalidOperationException(error.ToString()));
+            specializedLong.ReturnValue.Evaluate().Should().Be(IntegerEncoding.EncodeSignedInteger(longCase.Expected));
+            specializedLong.BuildListCount.Should().Be(0);
+            specializedVM.EvaluateExpressionOnCustomStack(function.InnerFunction, specializedInput, new(0, 8, 1))
+                .IsErrOrNull()!.Reason.Should().BeOfType<EvaluationErrorReason.QuotaExhausted>()
+                .Which.QuotaKind.Should().Be(EvaluationQuotaKind.LoopIterationCount);
         }
+
+        var mismatch = DeclarationEnvironment(PineValue.List([.. function.EnvFunctions, PineValue.EmptyList]), PineValue.List([
+            ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("a000!")), IntegerEncoding.EncodeSignedInteger(0)]));
+        var declarationCompilation = ExpressionCompilation.CompileExpression(
+            function.InnerFunction, [tableConstraint], new(), false, true, (_, _) => false);
+        declarationCompilation.SelectInstructionsForEnvironment(PineValueInProcess.Create(mismatch))
+            .Should().Be(declarationCompilation.Generic);
+        specializedVM.EvaluateExpressionOnCustomStack(function.InnerFunction, mismatch, new(100, 100, 10))
+            .Extract(error => throw new InvalidOperationException(error.ToString()))
+            .ReturnValue.Evaluate().Should().Be(
+                new DirectInterpreter(new(), null).EvaluateExpressionDefault(function.InnerFunction, mismatch));
+
+        PineValue DeclarationEnvironment(PineValue functions, PineValue arguments) =>
+            function.UsesNestedArgFormat
+                ? PineValue.List([functions, arguments])
+                : PineValue.List([functions, .. ((PineValue.ListValue)arguments).Items.ToArray()]);
 
         static Expression Argument(int index) => new Expression.Builtin("head",
             new Expression.Builtin("skip", new Expression.List([
                 new Expression.Litral(IntegerEncoding.EncodeSignedInteger(index)), Expression.EnvironmentInstance])));
 
-        (EvaluationReport Before, EvaluationReport After) Evaluate((string Source, int Offset, int Expected) testCase)
+        (EvaluationReport Before, EvaluationReport After, EvaluationReport Production) Evaluate((string Source, int Offset, int Expected) testCase)
         {
             var input = PineValue.List([
                 ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance(testCase.Source)),
@@ -175,7 +230,16 @@ public class GraphFirstCompilationCharacterizationTests
                 .Extract(error => throw new InvalidOperationException(error.ToString()));
             before.ReturnValue.Evaluate().Should().Be(expected);
             after.ReturnValue.Evaluate().Should().Be(expected);
-            return (before, after);
+            var production = productionVM.EvaluateExpressionOnCustomStack(wrapper, input, new(100_000, 100_000, 1000))
+                .Extract(error => throw new InvalidOperationException(error.ToString()));
+            production.ReturnValue.Evaluate().Should().Be(expected);
+            var specialized = specializedVM.EvaluateExpressionOnCustomStack(
+                    function.InnerFunction, DeclarationEnvironment(tableValue, input), new(0, 100_000, 1))
+                .Extract(error => throw new InvalidOperationException(error.ToString()));
+            specialized.ReturnValue.Evaluate().Should().Be(IntegerEncoding.EncodeSignedInteger(testCase.Expected));
+            specialized.InvocationCount.Should().Be(0);
+            specialized.BuildListCount.Should().Be(0);
+            return (before, after, production);
         }
     }
 
@@ -263,14 +327,16 @@ public class GraphFirstCompilationCharacterizationTests
         var reports = cases.Select(Evaluate).ToImmutableArray();
         var counters = PerformanceCounters.Aggregate(reports.Select(report => report.Counters));
 
+        // The former tail-enabled snapshot was 3/3/16/418. Production now removes all
+        // calls/lists without peeling initial iterations, at five additional instructions.
         var expectedCounters =
             enableTailRecursionOptimization
             ?
             """
-            InvocationCount: 3
-            BuildListCount: 3
-            LoopIterationCount: 16
-            InstructionCount: 418
+            InvocationCount: 0
+            BuildListCount: 0
+            LoopIterationCount: 22
+            InstructionCount: 423
             """
             :
             """

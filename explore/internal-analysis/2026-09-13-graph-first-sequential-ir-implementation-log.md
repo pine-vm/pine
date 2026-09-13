@@ -123,6 +123,15 @@ Actual Alfa and its captured usage site now execute all 13 cases with **zero inv
 
 Validation: scoped formatting; **565 passed, one existing skip** in the established gate. Log: `/home/runner/work/super-duper-disco/super-duper-disco/implement/Pine.Core.Tests/artifacts/test-logs/Pine.Core.Tests/2026-09-13T17-05-40_filtered.log`. Covers scalar slicing failures/bounds, exact source identity, opaque fallbacks, simultaneous loop parameters, consecutive/nested looping inlinees, captured continuations and long Alfa inputs. Independent reviews confirmed source-provenance and ID-exhaustion fixes and found no remaining semantic/backend issues; final purity cleanup and automated validation pending.
 
+## 2026-09-13 — Production enablement (in progress)
+
+Connect the completed graph optimization to ordinary expression compilation, not only `ExpressionGraphVM`. Preserve explicit compilation policies, environment-specialization selection and the existing runtime ABI; verify gains with production-path counter snapshots.
+
+- Ordinary dynamic invocation constructs frame input from the selected artifact's parameter interface. Direct linked invocation has a separate positional contract; production activation must not assume those two entry paths are interchangeable.
+- The graph backend still has substantial instruction overhead compared with mature legacy selection. Production enablement must be bounded and justified by real invocation/allocation savings, without describing a retained legacy fallback as a complete graph-first cutover.
+- Projected-entry path recognition must not replace a remaining generic `head` with a list-only projection: a projected argument can itself be a blob. Legacy path inference also casts oversized skip counts and retains negative indices; entry adaptation must preserve the frontend's safe integer handling rather than importing these assumptions.
+- Compact emission can remove most conservative graph-backend overhead without runtime changes: coalesce semantic edge copies, remove dead local stores on symbolic layouts, forward stack results and fallthroughs, and select existing slice-switch recipes. A fused selector must retain case/default edge operands; single-case switches need the same selector semantics as multi-case switches.
+
 ## Deferred improvement ideas
 
 These are hypotheses for measurement after production cutover, not exemptions from required correctness, safety or performance gates. Instruction/VM/interface redesign additionally waits for Example Alfa's optimizations in production. Retain the conservative backend as a comparison baseline.
