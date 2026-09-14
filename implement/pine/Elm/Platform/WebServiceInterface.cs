@@ -2397,7 +2397,8 @@ type alias LoadDependencyStruct =
                     "Entry point declaration value expression should not reference the environment");
             }
 
-            var interpreter = new DirectInterpreter(s_parseCache, evalCache: null);
+            var interpreter =
+                DirectInterpreter.WithLocalEvalCache(s_parseCache);
 
             entryPointValue =
                 interpreter.EvaluateExpression(entryPointValueExpr, PineValue.EmptyList)

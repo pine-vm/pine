@@ -103,7 +103,7 @@ public class ReducePineExpressionTests
         var reduced =
             ReducePineExpression.ReduceExpressionBottomUp(subtraction, s_parseCache);
 
-        var interpreter = new DirectInterpreter(s_parseCache, evalCache: null);
+        var interpreter = DirectInterpreter.WithoutEvalCaching(s_parseCache);
 
         var originalValue = interpreter.EvaluateExpressionDefault(subtraction, operand);
         var reducedValue = interpreter.EvaluateExpressionDefault(reduced, operand);

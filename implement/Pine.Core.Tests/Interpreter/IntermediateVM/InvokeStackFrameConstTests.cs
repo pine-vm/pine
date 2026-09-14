@@ -779,7 +779,7 @@ public class InvokeStackFrameConstTests
                 rootEnvironment,
                 ]);
 
-        var directInterpreter = new DirectInterpreter(new PineVMParseCache(), evalCache: null);
+        var directInterpreter = DirectInterpreter.WithoutEvalCaching(new PineVMParseCache());
 
         return
             directInterpreter.EvaluateExpressionDefault(

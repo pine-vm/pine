@@ -377,7 +377,8 @@ public class ElmTimeJsonAdapter
                         " should not reference the environment");
                 }
 
-                var interpreter = new DirectInterpreter(parseCache, evalCache: null);
+                var interpreter =
+                    DirectInterpreter.WithLocalEvalCache(parseCache);
 
                 exposedFunctionsDeclDictValue =
                     interpreter.EvaluateExpression(exposedFunctionsDeclDictValueExpr, PineValue.EmptyList)

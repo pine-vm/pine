@@ -617,13 +617,18 @@ public class ElmCompiler
 
     /// <summary>
     /// Compiles the selected Elm source files into an interactive environment and returns both the encoded environment and the lowering stages used to produce it.
+    /// <para>
+    /// Reuse <c>directInterpreterEvalCache</c> across compilations to expand its scope.
+    /// The caller must synchronize access when sharing it across concurrent compilations.
+    /// </para>
     /// </summary>
     public static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults<DefaultLoweredResults> pipelineStageResults)> CompileInteractiveEnvironment(
         FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
         ElmSyntaxOptimizationConfig? syntaxOptimization = null,
         bool disableGenericApplicationChainConsolidation = false,
-        IReadOnlyList<DeclQualifiedName>? rootDeclarationsAsPlainValues = null)
+        IReadOnlyList<DeclQualifiedName>? rootDeclarationsAsPlainValues = null,
+        IDictionary<Interpreter.DirectInterpreter.EvalCacheEntryKey, PineValue>? directInterpreterEvalCache = null)
     {
         syntaxOptimization ??= SyntaxOptimizationConfigDefault;
 
@@ -643,7 +648,8 @@ public class ElmCompiler
             EmitCompiledEnvironmentFromPipelineResults(
                 pipelineStageResults,
                 disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation,
-                rootDeclarationsAsPlainValues: rootDeclarationsAsPlainValues);
+                rootDeclarationsAsPlainValues: rootDeclarationsAsPlainValues,
+                directInterpreterEvalCache: directInterpreterEvalCache);
     }
 
     /// <summary>
@@ -657,7 +663,8 @@ public class ElmCompiler
         EmitCompiledEnvironmentFromPipelineResults<LoweredT>(
         CompilationPipelineStageResults<LoweredT> pipelineStageResults,
         bool disableGenericApplicationChainConsolidation,
-        IReadOnlyList<DeclQualifiedName>? rootDeclarationsAsPlainValues)
+        IReadOnlyList<DeclQualifiedName>? rootDeclarationsAsPlainValues,
+        IDictionary<Interpreter.DirectInterpreter.EvalCacheEntryKey, PineValue>? directInterpreterEvalCache)
     {
         var modulesForCompilation = pipelineStageResults.ModulesForCompilation;
 
@@ -825,6 +832,9 @@ public class ElmCompiler
 
         var expressionEncodingCache = new PineExpressionEncodingCache();
 
+        directInterpreterEvalCache ??=
+            new Dictionary<Interpreter.DirectInterpreter.EvalCacheEntryKey, PineValue>();
+
         // Second pass: Compile all SCCs in dependency order
         // This ensures all dependencies are compiled before they are needed
         foreach (var scc in sccsInDependencyOrder)
@@ -892,7 +902,9 @@ public class ElmCompiler
             var plainValueParseCache = new PineVMParseCache();
 
             var plainValueInterpreter =
-                new Interpreter.DirectInterpreter(plainValueParseCache, evalCache: null);
+                Interpreter.DirectInterpreter.WithSharedEvalCache(
+                    plainValueParseCache,
+                    directInterpreterEvalCache);
 
             foreach (var qualifiedName in declarationsAsPlainValues)
             {

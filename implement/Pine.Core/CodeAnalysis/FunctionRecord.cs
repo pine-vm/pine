@@ -538,7 +538,9 @@ public record FunctionRecord(
         PineValue encodedWrapper,
         PineVMParseCache parseCache)
     {
-        var interpreter = new DirectInterpreter(parseCache, evalCache: null);
+        var interpreter =
+            DirectInterpreter.WithLocalEvalCache(parseCache);
+
         var probeArguments = new List<PineValue>();
         var visitedValues = new HashSet<PineValue>();
         var currentValue = encodedWrapper;

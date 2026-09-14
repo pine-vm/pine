@@ -59,7 +59,7 @@ public class ReducePineExpressionGenericApplicationTests
 
     private static PineValue Evaluate(Expression expression)
     {
-        var interpreter = new DirectInterpreter(s_parseCache, evalCache: null);
+        var interpreter = DirectInterpreter.WithoutEvalCaching(s_parseCache);
 
         return interpreter.EvaluateExpressionDefault(expression, PineValue.EmptyList);
     }

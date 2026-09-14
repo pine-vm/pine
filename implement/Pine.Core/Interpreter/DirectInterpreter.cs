@@ -15,12 +15,41 @@ namespace Pine.Core.Interpreter;
 /// (<see cref="EvalCacheEntryKey.ExprValue"/>, <see cref="EvalCacheEntryKey.EnvValue"/>) pairs.
 /// </para>
 /// </summary>
-/// <param name="parseCache">Cache for parsing encoded expression values.</param>
-/// <param name="evalCache">Optional cache for memoizing ParseAndEval results. Pass <c>null</c> to disable caching.</param>
-public class DirectInterpreter(
-    PineVMParseCache parseCache,
-    IDictionary<DirectInterpreter.EvalCacheEntryKey, PineValue>? evalCache) : IPineVM
+public class DirectInterpreter : IPineVM
 {
+    private readonly PineVMParseCache _parseCache;
+
+    private readonly IDictionary<EvalCacheEntryKey, PineValue>? _evalCache;
+
+    private DirectInterpreter(
+        PineVMParseCache parseCache,
+        IDictionary<EvalCacheEntryKey, PineValue>? evalCache)
+    {
+        _parseCache = parseCache;
+        _evalCache = evalCache;
+    }
+
+    /// <summary>
+    /// Creates an interpreter with an evaluation cache owned by this interpreter instance.
+    /// </summary>
+    public static DirectInterpreter WithLocalEvalCache(PineVMParseCache parseCache) =>
+        new(parseCache, new Dictionary<EvalCacheEntryKey, PineValue>());
+
+    /// <summary>
+    /// Creates an interpreter that uses the supplied evaluation cache.
+    /// The caller must synchronize access when sharing the cache across concurrent evaluations.
+    /// </summary>
+    public static DirectInterpreter WithSharedEvalCache(
+        PineVMParseCache parseCache,
+        IDictionary<EvalCacheEntryKey, PineValue> evalCache) =>
+        new(parseCache, evalCache);
+
+    /// <summary>
+    /// Creates an interpreter without an evaluation cache.
+    /// </summary>
+    public static DirectInterpreter WithoutEvalCaching(PineVMParseCache parseCache) =>
+        new(parseCache, evalCache: null);
+
     /// <summary>
     /// Key type for the evaluation cache, combining the encoded expression value and the environment value.
     /// </summary>
@@ -131,17 +160,17 @@ public class DirectInterpreter(
                 parseAndEval.Encoded,
                 environment);
 
-        if (evalCache is not null)
+        if (_evalCache is not null)
         {
             var cacheKey = new EvalCacheEntryKey(ExprValue: expressionValue, EnvValue: environmentValue);
 
-            if (evalCache.TryGetValue(cacheKey, out var fromCache))
+            if (_evalCache.TryGetValue(cacheKey, out var fromCache))
             {
                 return fromCache;
             }
         }
 
-        var parseResult = parseCache.ParseExpression(expressionValue);
+        var parseResult = _parseCache.ParseExpression(expressionValue);
 
         if (parseResult is Result<string, Expression>.Err parseErr)
         {
@@ -158,10 +187,19 @@ public class DirectInterpreter(
             throw new NotImplementedException("Unexpected result type: " + parseResult.GetType().FullName);
         }
 
-        return
+        var result =
             EvaluateExpressionDefault(
                 environment: environmentValue,
                 expression: parseOk.Value);
+
+        if (_evalCache is not null)
+        {
+            var cacheKey = new EvalCacheEntryKey(ExprValue: expressionValue, EnvValue: environmentValue);
+
+            _evalCache[cacheKey] = result;
+        }
+
+        return result;
     }
 
     /// <summary>
