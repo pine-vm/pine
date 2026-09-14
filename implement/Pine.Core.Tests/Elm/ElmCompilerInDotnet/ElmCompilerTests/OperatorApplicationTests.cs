@@ -42,6 +42,14 @@ public class OperatorApplicationTests
     }
 
     [Fact]
+    public void LogBase_application_reduces_integral_result()
+    {
+        var result = CompileValueDeclaration("logBase 2 256");
+
+        result.Should().Be(ElmValue.Integer(8));
+    }
+
+    [Fact]
     public void Cons_infix_prepend_to_list()
     {
         var elmModuleText =

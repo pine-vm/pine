@@ -191,6 +191,58 @@ public class CoreBasicsFunctionTests
         resultValue.Should().Be(ElmValue.Integer(System.Numerics.BigInteger.Pow(2, 100)));
     }
 
+    [Theory]
+    [InlineData(2, 256, 8)]
+    [InlineData(10, 100, 2)]
+    [InlineData(10, 1_000, 3)]
+    [InlineData(4, 2, 0.5)]
+    public void LogBase_values(double baseValue, double number, double expected)
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.LogBase_FunctionValue(),
+                [
+                ElmValue.ElmFloat.Convert(baseValue),
+                ElmValue.ElmFloat.Convert(number)
+                ]);
+
+        NumericValueAsDouble(resultValue).Should().BeApproximately(expected, 1e-12);
+    }
+
+    [Theory]
+    [InlineData(2, 256, 8)]
+    [InlineData(10, 100, 2)]
+    public void LogBase_reduces_integral_results_to_integer(
+        long baseValue,
+        long number,
+        long expected)
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.LogBase_FunctionValue(),
+                [
+                ElmValue.Integer(baseValue),
+                ElmValue.Integer(number)
+                ]);
+
+        resultValue.Should().Be(ElmValue.Integer(expected));
+    }
+
+    [Fact]
+    public void LogBase_approximates_irrational_result()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.LogBase_FunctionValue(),
+                [
+                ElmValue.Integer(2),
+                ElmValue.Integer(3)
+                ]);
+
+        NumericValueAsDouble(resultValue)
+            .Should().BeApproximately(System.Math.Log2(3), 1e-12);
+    }
+
     [Fact]
     public void Number_negate_17()
     {
@@ -2407,4 +2459,18 @@ public class CoreBasicsFunctionTests
         PineValue functionValue,
         ElmValue[] arguments) =>
         CoreLibraryTestHelper.ApplyGeneric(functionValue, arguments, s_vm);
+
+    private static double NumericValueAsDouble(ElmValue value) =>
+        value switch
+        {
+            ElmValue.ElmInteger integer =>
+            (double)integer.Value,
+
+            ElmValue.ElmFloat rational =>
+            (double)rational.Numerator / (double)rational.Denominator,
+
+            _ =>
+            throw new System.InvalidOperationException(
+                "Expected numeric value, got " + value.GetType().Name)
+        };
 }

@@ -97,6 +97,11 @@ public class CoreBasics
             return "pow";
         }
 
+        if (functionValue == LogBase_FunctionValue())
+        {
+            return "logBase";
+        }
+
         if (functionValue == Float_div_FunctionValue())
         {
             return "fdiv";
@@ -245,6 +250,16 @@ public class CoreBasics
                 TypeInference.InferredType.Number()
                 ],
                 args => Generic_Pow(args[0], args[1])),
+
+            // logBase : Float -> Float -> Float
+            "logBase" =>
+            new CoreFunctionInfo(
+                [
+                TypeInference.InferredType.Float(),
+                TypeInference.InferredType.Float(),
+                TypeInference.InferredType.Float()
+                ],
+                args => Generic_LogBase(args[0], args[1])),
 
             // (/) : Float -> Float -> Float
             "fdiv" =>
@@ -568,6 +583,9 @@ public class CoreBasics
             "pow" =>
             Pow_FunctionValue(),
 
+            "logBase" =>
+            LogBase_FunctionValue(),
+
             "fdiv" =>
             Float_div_FunctionValue(),
 
@@ -665,7 +683,7 @@ public class CoreBasics
     /// </summary>
     public static IReadOnlyList<string> KnownDeclarationNames { get; } =
         [
-            "add", "sub", "mul", "pow", "fdiv",
+            "add", "sub", "mul", "pow", "logBase", "fdiv",
             "idiv", "modBy", "remainderBy",
             "eq", "neq", "compare",
             "lt", "gt", "le", "ge",
@@ -819,6 +837,28 @@ public class CoreBasics
     public static PineValue Pow_FunctionValue()
     {
         return BinaryFunctionValue(Internal_Generic_Pow);
+    }
+
+    /// <summary>
+    /// logBase : Float -> Float -> Float
+    /// </summary>
+    public static Expression Generic_LogBase(
+        Expression @base,
+        Expression number)
+    {
+        return
+            BinaryApplication(
+                functionValue: LogBase_FunctionValue(),
+                left: @base,
+                right: number);
+    }
+
+    /// <summary>
+    /// logBase : Float -> Float -> Float
+    /// </summary>
+    public static PineValue LogBase_FunctionValue()
+    {
+        return BinaryFunctionValue(Internal_LogBase);
     }
 
     /// <summary>
@@ -2593,6 +2633,231 @@ public class CoreBasics
                     falseBranch: RecursiveCall(oddNextExponent, oddNextAccumulator)));
 
         return ExpressionEncoding.EncodeExpressionAsValue(body);
+    }
+
+    private static Expression Internal_LogBase(
+        Expression @base,
+        Expression number)
+    {
+        var baseIsPositive = Generic_Lt(LiteralInt(0), @base);
+        var numberIsPositive = Generic_Lt(LiteralInt(0), number);
+        var baseIsOne = Generic_Eq(@base, LiteralInt(1));
+
+        var logarithm =
+            Internal_Float_div(
+                BinaryLogarithm(number),
+                BinaryLogarithm(@base));
+
+        var logarithmIsNegative = Generic_Lt(logarithm, LiteralInt(0));
+        var absoluteLogarithm = Generic_Abs(logarithm);
+
+        var nearestAbsoluteInteger =
+            Generic_Floor(
+                Internal_Generic_Add(
+                    absoluteLogarithm,
+                    NormalizeFloatResult(LiteralInt(1), LiteralInt(2))));
+
+        var nearestInteger =
+            Expression.ConditionalInst(
+                condition: logarithmIsNegative,
+                trueBranch: BuiltinMul(LiteralInt(-1), nearestAbsoluteInteger),
+                falseBranch: nearestAbsoluteInteger);
+
+        var distanceFromNearestInteger =
+            Generic_Abs(
+                Internal_Generic_Sub(
+                    logarithm,
+                    nearestInteger));
+
+        var isEffectivelyIntegral =
+            Generic_Lt(
+                distanceFromNearestInteger,
+                NormalizeFloatResult(LiteralInt(1), LiteralInt(1_000_000_000_000L)));
+
+        var validResult =
+            Expression.ConditionalInst(
+                condition: isEffectivelyIntegral,
+                trueBranch: nearestInteger,
+                falseBranch: logarithm);
+
+        var invalidResult =
+            BuildChoice(
+                s_elmFloatTypeTagNameLiteral,
+                [LiteralInt(0), LiteralInt(0)]);
+
+        return
+            Expression.ConditionalInst(
+                condition: baseIsPositive,
+                trueBranch:
+                Expression.ConditionalInst(
+                    condition: numberIsPositive,
+                    trueBranch:
+                    Expression.ConditionalInst(
+                        condition: baseIsOne,
+                        trueBranch: invalidResult,
+                        falseBranch: validResult),
+                    falseBranch: invalidResult),
+                falseBranch: invalidResult);
+    }
+
+    private static Expression BinaryLogarithm(Expression number)
+    {
+        var normalizeBody = BuildLog2NormalizeBody();
+
+        var normalized =
+            new Expression.Eval(
+                encoded: Expression.LitralInst(normalizeBody),
+                environment:
+                Expression.ListInst(
+                    [
+                    Expression.ListInst([Expression.LitralInst(normalizeBody)]),
+                    Expression.ListInst([number, LiteralInt(0)])
+                    ]));
+
+        var mantissa = BuiltinHelpers.ApplyBuiltinHead(normalized);
+
+        var wholePart =
+            BuiltinHelpers.ApplyBuiltinHead(
+                BuiltinHelpers.ApplyBuiltinSkip(1, normalized));
+
+        var fractionalBody = BuildLog2FractionalBody();
+
+        return
+            new Expression.Eval(
+                encoded: Expression.LitralInst(fractionalBody),
+                environment:
+                Expression.ListInst(
+                    [
+                    Expression.ListInst([Expression.LitralInst(fractionalBody)]),
+                    Expression.ListInst(
+                        [
+                        mantissa,
+                        wholePart,
+                        NormalizeFloatResult(LiteralInt(1), LiteralInt(2)),
+                        LiteralInt(48)
+                        ])
+                    ]));
+    }
+
+    private static PineValue BuildLog2NormalizeBody()
+    {
+        // env = [envFunctions, [value, wholePart]]
+        var selfExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0, 0], Expression.EnvironmentInstance);
+
+        var envFunctionsExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance);
+
+        var valueExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([1, 0], Expression.EnvironmentInstance);
+
+        var wholePartExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([1, 1], Expression.EnvironmentInstance);
+
+        Expression RecursiveCall(Expression nextValue, Expression nextWholePart) =>
+            new Expression.Eval(
+                encoded: selfExpr,
+                environment:
+                Expression.ListInst(
+                    [
+                    envFunctionsExpr,
+                    Expression.ListInst([nextValue, nextWholePart])
+                    ]));
+
+        var body =
+            Expression.ConditionalInst(
+                condition: Generic_Lt(valueExpr, LiteralInt(1)),
+                trueBranch:
+                RecursiveCall(
+                    Internal_Generic_Mul(valueExpr, LiteralInt(2)),
+                    Int_sub(wholePartExpr, LiteralInt(1))),
+                falseBranch:
+                Expression.ConditionalInst(
+                    condition: Generic_Ge(valueExpr, LiteralInt(2)),
+                    trueBranch:
+                    RecursiveCall(
+                        Internal_Float_div(valueExpr, LiteralInt(2)),
+                        BuiltinAdd(wholePartExpr, LiteralInt(1))),
+                    falseBranch:
+                    Expression.ListInst([valueExpr, wholePartExpr])));
+
+        return ExpressionEncoding.EncodeExpressionAsValue(body);
+    }
+
+    private static PineValue BuildLog2FractionalBody()
+    {
+        // env = [envFunctions, [mantissa, result, weight, remainingIterations]]
+        var selfExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0, 0], Expression.EnvironmentInstance);
+
+        var envFunctionsExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance);
+
+        var mantissaExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([1, 0], Expression.EnvironmentInstance);
+
+        var resultExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([1, 1], Expression.EnvironmentInstance);
+
+        var weightExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([1, 2], Expression.EnvironmentInstance);
+
+        var remainingExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([1, 3], Expression.EnvironmentInstance);
+
+        var squared = Internal_Generic_Mul(mantissaExpr, mantissaExpr);
+        var bitIsOne = Generic_Ge(squared, LiteralInt(2));
+
+        var nextMantissaUnquantized =
+            Expression.ConditionalInst(
+                condition: bitIsOne,
+                trueBranch: Internal_Float_div(squared, LiteralInt(2)),
+                falseBranch: squared);
+
+        var nextMantissa = QuantizeLogarithmValue(nextMantissaUnquantized);
+
+        var nextResult =
+            Expression.ConditionalInst(
+                condition: bitIsOne,
+                trueBranch: Internal_Generic_Add(resultExpr, weightExpr),
+                falseBranch: resultExpr);
+
+        var recursiveCall =
+            new Expression.Eval(
+                encoded: selfExpr,
+                environment:
+                Expression.ListInst(
+                    [
+                    envFunctionsExpr,
+                    Expression.ListInst(
+                        [
+                        nextMantissa,
+                        nextResult,
+                        Internal_Float_div(weightExpr, LiteralInt(2)),
+                        Int_sub(remainingExpr, LiteralInt(1))
+                        ])
+                    ]));
+
+        var body =
+            Expression.ConditionalInst(
+                condition: Generic_Eq(remainingExpr, LiteralInt(0)),
+                trueBranch: resultExpr,
+                falseBranch: recursiveCall);
+
+        return ExpressionEncoding.EncodeExpressionAsValue(body);
+    }
+
+    private static Expression QuantizeLogarithmValue(Expression value)
+    {
+        const long scale = 281_474_976_710_656;
+
+        return
+            NormalizeFloatResult(
+                Generic_Floor(
+                    Internal_Generic_Mul(
+                        value,
+                        LiteralInt(scale))),
+                LiteralInt(scale));
     }
 
     private static Expression Internal_Float_div(
