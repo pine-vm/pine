@@ -6,6 +6,7 @@ using System.Linq;
 
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
+using ElmSyntaxAbstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using Stil4mElmSyntax7 = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
@@ -322,6 +323,8 @@ public class Canonicalization
         IReadOnlyList<File> modules,
         ImplicitImportConfig implicitImportConfig)
     {
+        modules = modules.Select(AddEffectModuleStubs).ToList();
+
         // Check for duplicate module names
         var moduleNameGroups =
             modules
@@ -433,6 +436,48 @@ public class Canonicalization
         }
 
         return resultDictionary;
+    }
+
+    private static File AddEffectModuleStubs(File module)
+    {
+        if (module.ModuleDefinition.Value is not Module.EffectModule effectModule)
+            return module;
+
+        var stubNames = new List<string>();
+
+        if (effectModule.ModuleData.Command is not null)
+            stubNames.Add("command");
+
+        if (effectModule.ModuleData.Subscription is not null)
+            stubNames.Add("subscription");
+
+        if (stubNames.Count is 0)
+            return module;
+
+        var declarations = module.Declarations.ToList();
+
+        foreach (var stubName in stubNames)
+        {
+            var stubDeclaration =
+                new ElmSyntaxAbstract.Declaration.FunctionDeclaration(
+                    new ElmSyntaxAbstract.FunctionStruct(
+                        Signature: null,
+                        new ElmSyntaxAbstract.FunctionImplementation(
+                            stubName,
+                            [new ElmSyntaxAbstract.Pattern.VarPattern("stubArgument")],
+                            new ElmSyntaxAbstract.Expression.Application(
+                                ElmSyntaxAbstract.Expression.Identifier.Create(
+                                    ["Pine_kernel"],
+                                    "effect_module_" + stubName + "_stub_reached"),
+                                [ElmSyntaxAbstract.Expression.Identifier.Create([], "stubArgument")]))));
+
+            declarations.Add(
+                new SyntaxTypes.Node<SyntaxTypes.Declaration>(
+                    new Range(new SyntaxTypes.Location(0, 0), new SyntaxTypes.Location(0, 0)),
+                    ElmSyntaxAbstract.ConvertToConcrete.ToDeclaration(stubDeclaration)));
+        }
+
+        return module with { Declarations = declarations };
     }
 
     private static ImmutableHashSet<string> BuildLocalDeclarations(File module)

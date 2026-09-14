@@ -1,15 +1,20 @@
 using AwesomeAssertions;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Tests.Elm.ElmCompilerTests;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using Xunit;
+
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 
 public class CanonicalizationErrorReportingTests
 {
     [Fact]
-    public void Effect_module_command_errors_are_reported_separately_with_import_provenance()
+    public void Effect_module_command_stub_compiles_and_crashes_if_invoked()
     {
         var rootModule =
             """
@@ -17,21 +22,23 @@ public class CanonicalizationErrorReportingTests
 
             import Task
 
-            main =
-                Task.perform 1
+            main value =
+                Task.perform value
             """;
 
         var taskModule =
             """
-            effect module Task where { command = MyCmd } exposing (perform, attempt)
+            effect module Task where { command = MyCmd, subscription = MySub } exposing (perform, attempt)
 
             type MyCmd msg = MyCmd
 
+            type MySub msg = MySub
+
             perform value =
-                command MyCmd
+                command value
 
             attempt value =
-                command MyCmd
+                subscription value
             """;
 
         var appCodeTree =
@@ -45,13 +52,41 @@ public class CanonicalizationErrorReportingTests
                 appCodeTree,
                 rootFilePaths);
 
-        var error = result.IsErrOrNull();
+        var compilation = result.Extract(error => throw new Exception(error));
 
-        error.Should().NotBeNull();
-        error.Should().Contain("Elm canonicalization failed with 2 errors.");
-        error.Should().Contain("Cannot resolve reference 'command' at src/Task.elm:6:5-6:12");
-        error.Should().Contain("Cannot resolve reference 'command' at src/Task.elm:9:5-9:12");
-        error.Should().Contain("2. Task (src/Task.elm) — explicit import at 3:1");
+        var effectModuleDeclarationNames =
+            compilation.pipelineStageResults.Canonicalized
+            .Single(module => module.ModuleDefinition.Value is SyntaxTypes.Module.EffectModule)
+            .Declarations
+            .Select(declaration => declaration.Value)
+            .OfType<SyntaxTypes.Declaration.FunctionDeclaration>()
+            .Select(declaration => declaration.Function.Declaration.Value.Name.Value);
+
+        effectModuleDeclarationNames.Should().Contain("command");
+        effectModuleDeclarationNames.Should().Contain("subscription");
+
+        var parsedEnvironment =
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compilation.compiledEnvValue)
+            .Extract(error => throw new Exception(error));
+
+        var commandValue =
+            parsedEnvironment.Modules
+            .Single(module => module.moduleName is "Task")
+            .moduleContent.FunctionDeclarations["command"];
+
+        var commandFunction =
+            FunctionRecord.ParseFunctionRecordTagged(commandValue, new PineVMParseCache())
+            .Extract(error => throw new Exception(error));
+
+        var invokeCommand =
+            ElmCompilerTestHelper.CreateFunctionInvocationDelegate(commandFunction);
+
+        Action invokeStub =
+            () => invokeCommand([PineValue.EmptyList]).evalReport.ReturnValue.Evaluate();
+
+        invokeStub.Should()
+            .Throw<NotImplementedException>()
+            .WithMessage("*effect_module_command_stub_reached*");
     }
 
     [Fact]
