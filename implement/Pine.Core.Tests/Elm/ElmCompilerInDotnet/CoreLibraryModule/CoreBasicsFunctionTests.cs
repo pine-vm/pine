@@ -117,6 +117,80 @@ public class CoreBasicsFunctionTests
         resultValue.Should().Be(ElmValue.ElmFloat.Normalized(-3, 2));
     }
 
+    [Theory]
+    [InlineData(2, 0, 1)]
+    [InlineData(2, 10, 1024)]
+    [InlineData(-2, 2, 4)]
+    [InlineData(-2, 3, -8)]
+    public void Pow_integer_values(long baseValue, long exponent, long expected)
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Pow_FunctionValue(),
+                [
+                ElmValue.Integer(baseValue),
+                ElmValue.Integer(exponent)
+                ]);
+
+        resultValue.Should().Be(ElmValue.Integer(expected));
+    }
+
+    [Fact]
+    public void Pow_rational_base()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Pow_FunctionValue(),
+                [
+                ElmValue.ElmFloat.Normalized(3, 2),
+                ElmValue.Integer(3)
+                ]);
+
+        resultValue.Should().Be(ElmValue.ElmFloat.Normalized(27, 8));
+    }
+
+    [Fact]
+    public void Pow_negative_exponent()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Pow_FunctionValue(),
+                [
+                ElmValue.Integer(2),
+                ElmValue.Integer(-3)
+                ]);
+
+        resultValue.Should().Be(ElmValue.ElmFloat.Normalized(1, 8));
+    }
+
+    [Fact]
+    public void Pow_reduces_integral_rational_result_to_integer()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Pow_FunctionValue(),
+                [
+                ElmValue.ElmFloat.Normalized(1, 2),
+                ElmValue.Integer(-3)
+                ]);
+
+        resultValue.Should().Be(ElmValue.Integer(8));
+    }
+
+    [Fact]
+    public void Pow_supports_large_exponents()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Pow_FunctionValue(),
+                [
+                ElmValue.Integer(2),
+                ElmValue.Integer(100)
+                ]);
+
+        resultValue.Should().Be(ElmValue.Integer(System.Numerics.BigInteger.Pow(2, 100)));
+    }
+
     [Fact]
     public void Number_negate_17()
     {

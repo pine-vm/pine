@@ -92,6 +92,11 @@ public class CoreBasics
             return "mul";
         }
 
+        if (functionValue == Pow_FunctionValue())
+        {
+            return "pow";
+        }
+
         if (functionValue == Float_div_FunctionValue())
         {
             return "fdiv";
@@ -230,6 +235,16 @@ public class CoreBasics
                 TypeInference.InferredType.Number()
                 ],
                 args => Generic_Mul(args[0], args[1])),
+
+            // (^) : number -> number -> number
+            "pow" =>
+            new CoreFunctionInfo(
+                [
+                TypeInference.InferredType.Number(),
+                TypeInference.InferredType.Number(),
+                TypeInference.InferredType.Number()
+                ],
+                args => Generic_Pow(args[0], args[1])),
 
             // (/) : Float -> Float -> Float
             "fdiv" =>
@@ -509,6 +524,7 @@ public class CoreBasics
             "+" => "add",
             "-" => "sub",
             "*" => "mul",
+            "^" => "pow",
             "/" => "fdiv",
             "//" => "idiv",
             "==" => "eq",
@@ -548,6 +564,9 @@ public class CoreBasics
 
             "mul" =>
             Mul_FunctionValue(),
+
+            "pow" =>
+            Pow_FunctionValue(),
 
             "fdiv" =>
             Float_div_FunctionValue(),
@@ -646,7 +665,7 @@ public class CoreBasics
     /// </summary>
     public static IReadOnlyList<string> KnownDeclarationNames { get; } =
         [
-            "add", "sub", "mul", "fdiv",
+            "add", "sub", "mul", "pow", "fdiv",
             "idiv", "modBy", "remainderBy",
             "eq", "neq", "compare",
             "lt", "gt", "le", "ge",
@@ -778,6 +797,28 @@ public class CoreBasics
     public static PineValue Mul_FunctionValue()
     {
         return BinaryFunctionValue(Internal_Generic_Mul);
+    }
+
+    /// <summary>
+    /// (^) : number -> number -> number
+    /// </summary>
+    public static Expression Generic_Pow(
+        Expression @base,
+        Expression exponent)
+    {
+        return
+            BinaryApplication(
+                functionValue: Pow_FunctionValue(),
+                left: @base,
+                right: exponent);
+    }
+
+    /// <summary>
+    /// (^) : number -> number -> number
+    /// </summary>
+    public static PineValue Pow_FunctionValue()
+    {
+        return BinaryFunctionValue(Internal_Generic_Pow);
     }
 
     /// <summary>
@@ -2459,6 +2500,99 @@ public class CoreBasics
                 condition: multiplicandIsFloat,
                 trueBranch: multiplicandFloatBranch,
                 falseBranch: multiplicandNotFloatBranch);
+    }
+
+    private static Expression Internal_Generic_Pow(
+        Expression @base,
+        Expression exponent)
+    {
+        var exponentIsNegative = BuiltinIntIsSortedAsc(exponent, LiteralInt(-1));
+
+        var absoluteExponent =
+            Expression.ConditionalInst(
+                condition: exponentIsNegative,
+                trueBranch: BuiltinMul(LiteralInt(-1), exponent),
+                falseBranch: exponent);
+
+        var positivePower = EvaluatePowHelper(@base, absoluteExponent, LiteralInt(1));
+
+        return
+            Expression.ConditionalInst(
+                condition: exponentIsNegative,
+                trueBranch: Internal_Float_div(LiteralInt(1), positivePower),
+                falseBranch: positivePower);
+    }
+
+    private static Expression EvaluatePowHelper(
+        Expression @base,
+        Expression exponent,
+        Expression accumulator)
+    {
+        var helperEncodedBody = BuildPowHelperEncodedBody();
+
+        return
+            new Expression.Eval(
+                encoded: Expression.LitralInst(helperEncodedBody),
+                environment:
+                Expression.ListInst(
+                    [
+                    Expression.ListInst([Expression.LitralInst(helperEncodedBody)]),
+                    Expression.ListInst([@base, exponent, accumulator])
+                    ]));
+    }
+
+    private static PineValue BuildPowHelperEncodedBody()
+    {
+        // env = [envFunctions, [base, exponent, accumulator]]
+        var selfExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0, 0], Expression.EnvironmentInstance);
+
+        var envFunctionsExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance);
+
+        var baseExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([1, 0], Expression.EnvironmentInstance);
+
+        var exponentExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([1, 1], Expression.EnvironmentInstance);
+
+        var accumulatorExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([1, 2], Expression.EnvironmentInstance);
+
+        var exponentIsZero =
+            BuiltinHelpers.ApplyBuiltinEqualBinary(exponentExpr, LiteralInt(0));
+
+        var exponentIsEven =
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                Internal_Int_remainderBy(LiteralInt(2), exponentExpr),
+                LiteralInt(0));
+
+        var nextBase = Internal_Generic_Mul(baseExpr, baseExpr);
+        var evenNextExponent = Internal_Int_div(exponentExpr, LiteralInt(2));
+        var oddNextExponent = Internal_Int_div(Int_sub(exponentExpr, LiteralInt(1)), LiteralInt(2));
+        var oddNextAccumulator = Internal_Generic_Mul(accumulatorExpr, baseExpr);
+
+        Expression RecursiveCall(Expression nextExponent, Expression nextAccumulator) =>
+            new Expression.Eval(
+                encoded: selfExpr,
+                environment:
+                Expression.ListInst(
+                    [
+                    envFunctionsExpr,
+                    Expression.ListInst([nextBase, nextExponent, nextAccumulator])
+                    ]));
+
+        var body =
+            Expression.ConditionalInst(
+                condition: exponentIsZero,
+                trueBranch: accumulatorExpr,
+                falseBranch:
+                Expression.ConditionalInst(
+                    condition: exponentIsEven,
+                    trueBranch: RecursiveCall(evenNextExponent, accumulatorExpr),
+                    falseBranch: RecursiveCall(oddNextExponent, oddNextAccumulator)));
+
+        return ExpressionEncoding.EncodeExpressionAsValue(body);
     }
 
     private static Expression Internal_Float_div(

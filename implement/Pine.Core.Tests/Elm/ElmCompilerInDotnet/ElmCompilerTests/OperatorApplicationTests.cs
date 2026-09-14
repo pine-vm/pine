@@ -26,6 +26,22 @@ public class OperatorApplicationTests
     }
 
     [Fact]
+    public void Power_infix()
+    {
+        var result = CompileValueDeclaration("3 ^ 4");
+
+        result.Should().Be(ElmValue.Integer(81));
+    }
+
+    [Fact]
+    public void Power_prefix_reduces_integral_result()
+    {
+        var result = CompileValueDeclaration("(^) (1 / 2) (-3)");
+
+        result.Should().Be(ElmValue.Integer(8));
+    }
+
+    [Fact]
     public void Cons_infix_prepend_to_list()
     {
         var elmModuleText =
