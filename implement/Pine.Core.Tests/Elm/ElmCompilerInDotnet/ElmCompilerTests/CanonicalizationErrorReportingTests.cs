@@ -146,4 +146,61 @@ public class CanonicalizationErrorReportingTests
         error.Should().Contain(
             "searched for 'command' while canonicalizing 'Broken' because that module is reachable from root 'Root'");
     }
+
+    [Fact]
+    public void Missing_native_function_reports_declaration_dependency_chain()
+    {
+        var rootModule =
+            """
+            module Root exposing (main)
+
+            import Intermediate
+
+            main =
+                Intermediate.value
+            """;
+
+        var intermediateModule =
+            """
+            module Intermediate exposing (value)
+
+            import Constants
+
+            value =
+                Constants.maxDigitValue
+            """;
+
+        var constantsModule =
+            """
+            module Constants exposing (maxDigitValue)
+
+            maxDigitValue =
+                Basics.sqrt 8
+            """;
+
+        var appCodeTree =
+            TestCase.FileTreeFromElmModulesWithoutPackages(
+                [rootModule, intermediateModule, constantsModule]);
+
+        IReadOnlyList<IReadOnlyList<string>> rootFilePaths =
+            [["src", "Root.elm"]];
+
+        var result =
+            ElmCompiler.CompileInteractiveEnvironment(
+                appCodeTree,
+                rootFilePaths);
+
+        var error = result.IsErrOrNull();
+
+        error.Should().NotBeNull();
+        error.Should().Contain("Failed to compile declaration 'Constants.maxDigitValue'");
+        error.Should().Contain("Reason: Function 'Basics.sqrt' not found in dependency layout");
+        error.Should().Contain("Declaration dependency chain from a compilation root:");
+        error.Should().Contain("1. Root.main (compilation root)");
+        error.Should().Contain("2. Intermediate.value — referenced by Root.main");
+        error.Should().Contain("3. Constants.maxDigitValue — referenced by Intermediate.value");
+
+        error.Should().Contain(
+            "searched for 'Basics.sqrt' while compiling 'Constants.maxDigitValue' because that declaration is reachable from compilation root 'Root.main'");
+    }
 }

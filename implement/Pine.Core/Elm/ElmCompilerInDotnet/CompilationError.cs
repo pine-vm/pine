@@ -43,6 +43,14 @@ public abstract record CompilationError
         ModuleDependencyOrigin? Origin);
 
     /// <summary>
+    /// One declaration in a root-to-failure dependency chain.
+    /// </summary>
+    public sealed record DeclarationDependencyChainItem(
+        string DeclarationName,
+        string? ReferencedBy,
+        bool IsCompilationRoot);
+
+    /// <summary>
     /// A canonicalization error together with the source file and complete chain that
     /// caused the module to participate in this compilation.
     /// </summary>
@@ -99,23 +107,21 @@ public abstract record CompilationError
             builder.Append(diagnostic.ModuleName);
             builder.AppendLine("'.");
 
-            builder.AppendLine("Dependency chain from a compilation root:");
-
-            for (var index = 0; index < diagnostic.DependencyChain.Count; index++)
-            {
-                var item = diagnostic.DependencyChain[index];
-
-                builder.Append("  ");
-                builder.Append(index + 1);
-                builder.Append(". ");
-                builder.Append(item.ModuleName);
-                builder.Append(" (");
-                builder.Append(item.FilePath);
-                builder.Append(')');
-
-                if (item.Origin is { } origin)
+            AppendDependencyChain(
+                builder,
+                "Dependency chain from a compilation root:",
+                diagnostic.DependencyChain,
+                static (chainBuilder, item, _) =>
                 {
-                    builder.Append(
+                    chainBuilder.Append(item.ModuleName);
+                    chainBuilder.Append(" (");
+                    chainBuilder.Append(item.FilePath);
+                    chainBuilder.Append(')');
+
+                    if (item.Origin is not { } origin)
+                        return;
+
+                    chainBuilder.Append(
                         origin.Kind is ModuleDependencyKind.ExplicitImport
                         ?
                         " — explicit import"
@@ -124,27 +130,24 @@ public abstract record CompilationError
 
                     if (origin.Range is { } importRange)
                     {
-                        builder.Append(" at ");
-                        builder.Append(importRange.Start.Row);
-                        builder.Append(':');
-                        builder.Append(importRange.Start.Column);
+                        chainBuilder.Append(" at ");
+                        chainBuilder.Append(importRange.Start.Row);
+                        chainBuilder.Append(':');
+                        chainBuilder.Append(importRange.Start.Column);
                     }
 
                     if (origin.Alias is { } alias)
                     {
-                        builder.Append(" as ");
-                        builder.Append(alias);
+                        chainBuilder.Append(" as ");
+                        chainBuilder.Append(alias);
                     }
 
                     if (origin.Exposing is { } exposing)
                     {
-                        builder.Append(" exposing ");
-                        builder.Append(exposing);
+                        chainBuilder.Append(" exposing ");
+                        chainBuilder.Append(exposing);
                     }
-                }
-
-                builder.AppendLine();
-            }
+                });
 
             if (diagnostic.Error is CanonicalizationError.UnresolvedReference unresolved &&
                 diagnostic.DependencyChain.FirstOrDefault() is { } root)
@@ -159,6 +162,81 @@ public abstract record CompilationError
             }
         }
 
+    }
+
+    /// <summary>
+    /// A declaration compilation error together with the SCC and the chain of
+    /// declaration references that caused it to participate in the compilation.
+    /// </summary>
+    public sealed record DeclarationCompilationDiagnostic(
+        string DeclarationName,
+        IReadOnlyList<string> SccMembers,
+        CompilationError Error,
+        IReadOnlyList<DeclarationDependencyChainItem> DependencyChain)
+        : CompilationError
+    {
+        /// <inheritdoc/>
+        public override string ToString()
+        {
+            var builder = new StringBuilder();
+
+            builder.Append("Failed to compile declaration '");
+            builder.Append(DeclarationName);
+            builder.Append("' in SCC [");
+            builder.Append(string.Join(", ", SccMembers));
+            builder.AppendLine("].");
+            builder.Append("Reason: ");
+            builder.AppendLine(Error.ToString());
+
+            if (DependencyChain.Count is not 0)
+            {
+                AppendDependencyChain(
+                    builder,
+                    "Declaration dependency chain from a compilation root:",
+                    DependencyChain,
+                    static (chainBuilder, item, _) =>
+                    {
+                        chainBuilder.Append(item.DeclarationName);
+
+                        if (item.IsCompilationRoot)
+                        {
+                            chainBuilder.Append(" (compilation root)");
+                        }
+                        else if (item.ReferencedBy is { } referencedBy)
+                        {
+                            chainBuilder.Append(" — referenced by ");
+                            chainBuilder.Append(referencedBy);
+                        }
+                    });
+            }
+
+            if (Error is FunctionNotInDependencyLayout missingFunction &&
+                DependencyChain.FirstOrDefault() is { IsCompilationRoot: true } root)
+            {
+                builder.Append("The compiler searched for '");
+                builder.Append(missingFunction.FunctionName);
+                builder.Append("' while compiling '");
+                builder.Append(DeclarationName);
+                builder.Append("' because that declaration is reachable from compilation root '");
+                builder.Append(root.DeclarationName);
+                builder.Append("'.");
+            }
+
+            return builder.ToString();
+        }
+    }
+
+    /// <summary>
+    /// Identifies the declaration whose body produced an error.
+    /// </summary>
+    public sealed record InDeclaration(
+        string DeclarationName,
+        CompilationError InnerError)
+        : CompilationError
+    {
+        /// <inheritdoc/>
+        public override string ToString() =>
+            $"Failed compiling declaration '{DeclarationName}': {InnerError}";
     }
 
     /// <summary>
@@ -309,4 +387,22 @@ public abstract record CompilationError
     /// Convert the error to a human-readable string.
     /// </summary>
     public abstract override string ToString();
+
+    private static void AppendDependencyChain<T>(
+        StringBuilder builder,
+        string heading,
+        IReadOnlyList<T> items,
+        System.Action<StringBuilder, T, int> appendItem)
+    {
+        builder.AppendLine(heading);
+
+        for (var index = 0; index < items.Count; index++)
+        {
+            builder.Append("  ");
+            builder.Append(index + 1);
+            builder.Append(". ");
+            appendItem(builder, items[index], index);
+            builder.AppendLine();
+        }
+    }
 }

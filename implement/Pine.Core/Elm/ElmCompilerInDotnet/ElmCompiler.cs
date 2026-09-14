@@ -46,7 +46,14 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 public record CompilationPipelineStageResults<LoweredT>(
     IReadOnlyList<SyntaxModelTypes.File> Canonicalized,
     LoweredT Lowered,
-    IReadOnlyList<ElmSyntaxAbstract.File> ModulesForCompilation);
+    IReadOnlyList<ElmSyntaxAbstract.File> ModulesForCompilation)
+{
+    /// <summary>
+    /// Fully qualified declarations selected as compilation roots before dependency filtering.
+    /// </summary>
+    public IReadOnlySet<DeclQualifiedName> RootDeclarationNames { get; init; } =
+        ImmutableHashSet<DeclQualifiedName>.Empty;
+}
 
 /// <summary>
 /// Standard lowering payload produced by the back-compat overload of
@@ -304,7 +311,10 @@ public class ElmCompiler
             new CompilationPipelineStageResults<LoweredT>(
                 Canonicalized: canonicalizedModules,
                 Lowered: loweredValue,
-                ModulesForCompilation: modulesForCompilation);
+                ModulesForCompilation: modulesForCompilation)
+            {
+                RootDeclarationNames = rootDeclarationNames
+            };
     }
 
     /// <summary>
@@ -871,8 +881,12 @@ public class ElmCompiler
                 TypeAliasDefinitions: typeAliasDefinitions);
 
         // Pre-compute dependency layouts and SCCs for all functions BEFORE compilation
+        var directDependencies =
+            AnalyzeDirectFunctionDependencies(allFunctions, initialContext);
+
         var (dependencyLayouts, functionToScc, sccsInDependencyOrder) =
-            ComputeDependencyLayoutsAndSccs(allFunctions, initialContext);
+            ComputeDependencyLayoutsAndSccsFromDirectDependencies(
+                directDependencies);
 
         // Create compilation context with pre-computed layouts and SCCs
         var compilationContext =
@@ -918,6 +932,29 @@ public class ElmCompiler
 
             if (compileSccResult.IsErrOrNull() is { } compileSccErr)
             {
+                if (compileSccErr is CompilationError.InDeclaration inDeclaration)
+                {
+                    var rootDeclarationNames =
+                        pipelineStageResults.RootDeclarationNames
+                        .Concat(TempIncludedRootDeclarations)
+                        .Select(QualifiedNameHelper.ToQualifiedNameString)
+                        .ToHashSet(StringComparer.Ordinal);
+
+                    var dependencyChain =
+                        FindDeclarationDependencyChain(
+                            rootDeclarationNames,
+                            inDeclaration.DeclarationName,
+                            directDependencies);
+
+                    return
+                        new CompilationError.DeclarationCompilationDiagnostic(
+                            inDeclaration.DeclarationName,
+                            scc.Members,
+                            inDeclaration.InnerError,
+                            dependencyChain)
+                        .ToString();
+                }
+
                 return
                     "Failed to compile SCC [" + string.Join(", ", scc.Members) + "]: " + compileSccErr;
             }
@@ -1055,20 +1092,12 @@ public class ElmCompiler
     }
 
     /// <summary>
-    /// Pre-computes the dependency layouts and SCC mappings for all functions.
-    /// For mutually recursive functions (strongly connected components), all functions
-    /// share the same layout ordering as per the implementation guide.
+    /// Finds each declaration's direct dependencies that are available for compilation.
     /// </summary>
     /// <param name="allFunctions">Dictionary of all functions keyed by qualified name.</param>
     /// <param name="context">The module compilation context.</param>
-    /// <returns>
-    /// A tuple containing:
-    /// - Dictionary mapping qualified function names to their dependency layouts
-    /// - Dictionary mapping qualified function names to their SCC
-    /// - List of SCCs in dependency order (dependencies first)
-    /// </returns>
-    public static (IReadOnlyDictionary<string, IReadOnlyList<string>> layouts, IReadOnlyDictionary<string, FunctionScc> functionToScc, IReadOnlyList<FunctionScc> sccsInDependencyOrder)
-        ComputeDependencyLayoutsAndSccs(
+    private static ImmutableDictionary<string, IReadOnlySet<string>>
+        AnalyzeDirectFunctionDependencies(
         IReadOnlyDictionary<DeclQualifiedName, (string moduleName, string functionName, ElmSyntaxAbstract.Declaration.FunctionDeclaration declaration)> allFunctions,
         ModuleCompilationContext context)
     {
@@ -1077,26 +1106,93 @@ public class ElmCompiler
             .Select(QualifiedNameHelper.ToQualifiedNameString)
             .ToHashSet(StringComparer.Ordinal);
 
-        // First pass: compute direct dependencies for each function
-        // Only include dependencies that are in allFunctions (we can't compile external functions)
-        var directDependencies =
+        return
             allFunctions
             .ToImmutableDictionary(
-                kvp => QualifiedNameHelper.ToQualifiedNameString(kvp.Key),
-                kvp =>
+                entry => QualifiedNameHelper.ToQualifiedNameString(entry.Key),
+                entry =>
                 {
-                    var (moduleName, functionName, declaration) = kvp.Value;
-                    var functionBody = declaration.Function.Declaration.Expression;
-                    var dependencies = AnalyzeFunctionDependencies(functionBody, moduleName, context);
-                    // Filter to only include functions that are in allFunctions
-                    IReadOnlySet<string> filtered =
-                        dependencies
-                        .Where(d => allQualifiedFunctionNames.Contains(d))
-                        .ToHashSet();
+                    var (moduleName, _, declaration) = entry.Value;
 
-                    return filtered;
+                    IReadOnlySet<string> dependencies =
+                        AnalyzeFunctionDependencies(
+                            declaration.Function.Declaration.Expression,
+                            moduleName,
+                            context)
+                        .Where(allQualifiedFunctionNames.Contains)
+                        .ToHashSet(StringComparer.Ordinal);
+
+                    return dependencies;
                 });
+    }
 
+    private static IReadOnlyList<CompilationError.DeclarationDependencyChainItem>
+        FindDeclarationDependencyChain(
+        IReadOnlySet<string> rootDeclarations,
+        string targetDeclaration,
+        IReadOnlyDictionary<string, IReadOnlySet<string>> directDependencies)
+    {
+        var pending = new Queue<string>();
+        var predecessor = new Dictionary<string, string?>(StringComparer.Ordinal);
+
+        foreach (var root in rootDeclarations.Order(StringComparer.Ordinal))
+        {
+            if (!directDependencies.ContainsKey(root) || !predecessor.TryAdd(root, null))
+                continue;
+
+            pending.Enqueue(root);
+        }
+
+        while (pending.TryDequeue(out var declaration))
+        {
+            if (declaration == targetDeclaration)
+                break;
+
+            if (!directDependencies.TryGetValue(declaration, out var dependencies))
+                continue;
+
+            foreach (var dependency in dependencies.Order(StringComparer.Ordinal))
+            {
+                if (predecessor.TryAdd(dependency, declaration))
+                    pending.Enqueue(dependency);
+            }
+        }
+
+        if (!predecessor.ContainsKey(targetDeclaration))
+            return [];
+
+        var names = new List<string>();
+
+        for (string? current = targetDeclaration; current is not null; current = predecessor[current])
+            names.Add(current);
+
+        names.Reverse();
+
+        return
+            names
+            .Select(
+                (name, index) =>
+                new CompilationError.DeclarationDependencyChainItem(
+                    name,
+                    ReferencedBy: index is 0 ? null : names[index - 1],
+                    IsCompilationRoot: index is 0))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Pre-computes dependency layouts and SCC mappings.
+    /// </summary>
+    public static (IReadOnlyDictionary<string, IReadOnlyList<string>> layouts, IReadOnlyDictionary<string, FunctionScc> functionToScc, IReadOnlyList<FunctionScc> sccsInDependencyOrder)
+        ComputeDependencyLayoutsAndSccs(
+        IReadOnlyDictionary<DeclQualifiedName, (string moduleName, string functionName, ElmSyntaxAbstract.Declaration.FunctionDeclaration declaration)> allFunctions,
+        ModuleCompilationContext context) =>
+        ComputeDependencyLayoutsAndSccsFromDirectDependencies(
+            AnalyzeDirectFunctionDependencies(allFunctions, context));
+
+    private static (IReadOnlyDictionary<string, IReadOnlyList<string>> layouts, IReadOnlyDictionary<string, FunctionScc> functionToScc, IReadOnlyList<FunctionScc> sccsInDependencyOrder)
+        ComputeDependencyLayoutsAndSccsFromDirectDependencies(
+        ImmutableDictionary<string, IReadOnlySet<string>> directDependencies)
+    {
         // Detect strongly connected components (SCCs) - groups of mutually recursive functions
         // Tarjan's algorithm returns SCCs in topological order (dependencies first)
         var sccsFromTarjan = FindStronglyConnectedComponents([.. directDependencies.Keys], directDependencies);
@@ -1502,7 +1598,7 @@ public class ElmCompiler
 
             if (compileBodyResult.IsErrOrNull() is { } compileErr)
             {
-                return CompilationError.Scoped("Failed compiling declaration '" + memberName + "'", compileErr);
+                return new CompilationError.InDeclaration(memberName, compileErr);
             }
 
             if (compileBodyResult.IsOkOrNull() is not { } compiledBody)
