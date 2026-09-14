@@ -52,12 +52,12 @@ public class DirectInterpreter(
                     environment);
         }
 
-        if (expression is Expression.Builtin kernelApplicationExpression)
+        if (expression is Expression.Builtin builtinExpression)
         {
             return
-                EvaluateKernelApplicationExpression(
+                EvaluateBuiltinExpression(
                     environment,
-                    kernelApplicationExpression);
+                    builtinExpression);
         }
 
         if (expression is Expression.Conditional conditionalExpression)
@@ -177,17 +177,17 @@ public class DirectInterpreter(
     /// <summary>
     /// Evaluates a <see cref="Expression.Builtin"/> expression.
     /// Includes an optimized fast path for the common <c>head(skip(...))</c> pattern used for
-    /// environment path access, falling back to the generic kernel function application.
+    /// environment path access, falling back to the generic builtin function application.
     /// </summary>
-    public PineValue EvaluateKernelApplicationExpression(
+    public PineValue EvaluateBuiltinExpression(
         PineValue environment,
         Expression.Builtin application)
     {
         if (application.Function is nameof(BuiltinFunction.head) &&
-            application.Input is Expression.Builtin innerKernelApplication)
+            application.Input is Expression.Builtin innerBuiltinExpression)
         {
-            if (innerKernelApplication.Function is nameof(BuiltinFunction.skip) &&
-                innerKernelApplication.Input is Expression.List skipListExpr &&
+            if (innerBuiltinExpression.Function is nameof(BuiltinFunction.skip) &&
+                innerBuiltinExpression.Input is Expression.List skipListExpr &&
                 skipListExpr.Items.Count is 2)
             {
                 var skipValue =
@@ -216,14 +216,14 @@ public class DirectInterpreter(
             }
         }
 
-        return EvaluateKernelApplicationExpressionGeneric(environment, application);
+        return EvaluateBuiltinExpressionGeneric(environment, application);
     }
 
     /// <summary>
-    /// Evaluates a <see cref="Expression.Builtin"/> using the generic kernel function dispatch.
-    /// Evaluates the input expression first, then applies the named kernel function.
+    /// Evaluates a <see cref="Expression.Builtin"/> using the generic builtin function dispatch.
+    /// Evaluates the input expression first, then applies the named builtin function.
     /// </summary>
-    public PineValue EvaluateKernelApplicationExpressionGeneric(
+    public PineValue EvaluateBuiltinExpressionGeneric(
         PineValue environment,
         Expression.Builtin application)
     {
