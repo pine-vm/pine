@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.Elm019;
+using System.Collections.Generic;
 using System.Text.Json;
 using Xunit;
 
@@ -106,6 +107,28 @@ public class ElmJsonStructureTests
         indirectDependencies["elm-community/maybe-extra"].Should().Be("5.3.0");
 
         indirectDependencies["rtfeldman/elm-hex"].Should().Be("1.0.0");
+
+        var directTestDependencies =
+            elmJsonParsed.TestDependencies.Direct
+            ??
+            throw new System.Exception("directTestDependencies is null");
+
+        directTestDependencies.Should().ContainSingle()
+            .Which.Should().Be(new KeyValuePair<string, string>("elm-explorations/test", "2.2.0"));
+
+        var indirectTestDependencies =
+            elmJsonParsed.TestDependencies.Indirect
+            ??
+            throw new System.Exception("indirectTestDependencies is null");
+
+        indirectTestDependencies.Should().BeEquivalentTo(
+            new Dictionary<string, string>
+            {
+                ["elm/html"] = "1.0.0",
+                ["elm/random"] = "1.0.0",
+                ["elm/time"] = "1.0.0",
+                ["elm/virtual-dom"] = "1.0.3",
+            });
     }
 
     [Fact]
@@ -218,6 +241,16 @@ public class ElmJsonStructureTests
 
         dependencies["stil4m/structured-writer"].Should().Be("1.0.1 <= v < 2.0.0");
 
+        var testDependencies =
+            elmJsonParsed.TestDependencies.Flat
+            ??
+            throw new System.Exception("testDependencies is null");
+
+        testDependencies.Should().ContainSingle()
+            .Which.Should().Be(
+            new KeyValuePair<string, string>(
+                "elm-explorations/test",
+                "2.0.0 <= v < 3.0.0"));
     }
 
     [Fact]
@@ -299,5 +332,6 @@ public class ElmJsonStructureTests
         elmJsonParsed.ExposedModules[15].Should().Be("Process");
         elmJsonParsed.ExposedModules[16].Should().Be("Task");
 
+        elmJsonParsed.TestDependencies.Flat.Should().BeEmpty();
     }
 }

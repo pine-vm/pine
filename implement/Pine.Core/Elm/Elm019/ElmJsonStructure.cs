@@ -149,6 +149,7 @@ namespace Pine.Core.Elm.Elm019;
 /// <param name="SourceDirectories">List of source directories (application type).</param>
 /// <param name="ElmVersion">Elm version range or exact version required.</param>
 /// <param name="Dependencies">Dependency table supporting direct/indirect or flat forms.</param>
+/// <param name="TestDependencies">Test dependency table supporting direct/indirect or flat forms.</param>
 public record ElmJsonStructure(
     [property: JsonPropertyName("type")]
     string Type,
@@ -169,7 +170,10 @@ public record ElmJsonStructure(
     string ElmVersion,
     [property: JsonPropertyName("dependencies")]
     [property: JsonConverter(typeof(DependenciesConverter))]
-    ElmJsonStructure.DependenciesStruct Dependencies)
+    ElmJsonStructure.DependenciesStruct Dependencies,
+    [property: JsonPropertyName("test-dependencies")]
+    [property: JsonConverter(typeof(DependenciesConverter))]
+    ElmJsonStructure.DependenciesStruct TestDependencies)
 {
     /// <summary>
     /// Enumerates source directories parsed into a relative-directory structure with parent traversal depth.
@@ -390,4 +394,3 @@ public class DependenciesConverter : JsonConverter<ElmJsonStructure.Dependencies
         writer.WriteEndObject();
     }
 }
-
