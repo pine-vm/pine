@@ -54,7 +54,7 @@ public class ElmPackageSource
         // 1) Try to load from each cache directory, in order:
         foreach (var cacheDirectory in localCacheDirectories)
         {
-            // Construct the path for the cached file, for example "agu-z-elm-zip@3.0.1.zip".
+            // Construct the path for the cached file, for example "github.com/agu-z/elm-zip@3.0.1.zip".
             var localZipPath = GetLocalZipPath(cacheDirectory, packageName, versionId);
 
             if (File.Exists(localZipPath))
@@ -87,9 +87,9 @@ public class ElmPackageSource
 
             try
             {
-                Directory.CreateDirectory(firstCache); // Ensure the directory exists.
-
                 var localZipPath = GetLocalZipPath(firstCache, packageName, versionId);
+
+                Directory.CreateDirectory(Path.GetDirectoryName(localZipPath)!);
 
                 await File.WriteAllBytesAsync(localZipPath, zipData);
             }
@@ -205,16 +205,15 @@ public class ElmPackageSource
     }
 
     /// <summary>
-    /// Constructs a local ZIP file path: e.g. "agu-z-elm-zip@3.0.1.zip" in the given cache directory.
-    /// Replaces slashes so the filename is filesystem-safe.
+    /// Constructs a local ZIP file path: e.g. "github.com/agu-z/elm-zip@3.0.1.zip" in the given cache directory.
     /// </summary>
-    private static string GetLocalZipPath(string cacheDirectory, string packageName, string versionId)
+    internal static string GetLocalZipPath(string cacheDirectory, string packageName, string versionId)
     {
-        var safePkgName = packageName.Replace('/', '-');
+        var packagePath =
+            packageName
+            .Trim('/')
+            .Replace('/', Path.DirectorySeparatorChar);
 
-        // Example: "agu-z-elm-zip@3.0.1.zip"
-        var fileName = $"{safePkgName}@{versionId}.zip";
-
-        return Path.Combine(cacheDirectory, fileName);
+        return Path.Combine(cacheDirectory, "github.com", $"{packagePath}@{versionId}.zip");
     }
 }

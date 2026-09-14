@@ -227,10 +227,14 @@ public class ElmAppDependencyResolution
     /// exist, their dependencies are merged. Package content is fetched based on the versions declared in elm.json.
     /// </summary>
     /// <param name="appSourceFiles">Flat dictionary representation of the app source tree.</param>
+    /// <param name="includePackage">Optional filter applied before loading package contents.</param>
+    /// <param name="loadPackage">Optional package loader.</param>
     /// <returns>A map of package name to its files and parsed elm.json.</returns>
     public static IReadOnlyDictionary<string, (FileTree files, ElmJsonStructure elmJson)>
         LoadPackagesForElmApp(
-        IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> appSourceFiles)
+        IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> appSourceFiles,
+        Func<string, bool>? includePackage = null,
+        Func<string, string, IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>? loadPackage = null)
     {
         /*
         * TODO: select elm.json for the given entry point
@@ -272,12 +276,15 @@ public class ElmAppDependencyResolution
 
         var elmJsonAggregateDependencies =
             elmJsonAggregateDependenciesVersions
+            .Where(dependency => includePackage?.Invoke(dependency.Key) is not false)
             .ToImmutableDictionary(
                 keySelector: dependency => dependency.Key,
                 elementSelector:
                 dependency =>
                 {
                     var packageFiles =
+                        loadPackage?.Invoke(dependency.Key, dependency.Value)
+                        ??
                         ElmPackageSource.LoadElmPackageAsync(dependency.Key, dependency.Value).Result;
 
                     return packageFiles;

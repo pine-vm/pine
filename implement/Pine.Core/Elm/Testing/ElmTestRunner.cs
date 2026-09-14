@@ -1,4 +1,5 @@
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Elm.Elm019;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Files;
@@ -118,7 +119,15 @@ public static class ElmTestRunner
             (["elm-test-support", "Test.elm"],
             Encoding.UTF8.GetBytes(TestModuleText)));
 
-        var appCodeTree = FileTree.FromSetOfFilesWithStringPath(appFiles);
+        var appCodeTreeWithoutPackages = FileTree.FromSetOfFilesWithStringPath(appFiles);
+
+        var packages =
+            LoadPackagesForTestCompilation(appCodeTreeWithoutPackages);
+
+        var appCodeTree =
+            AddPackageSources(
+                appCodeTreeWithoutPackages,
+                packages.Select(package => (package.Key, package.Value.files)));
 
         var testModules =
             appFiles
@@ -295,6 +304,41 @@ public static class ElmTestRunner
                 CompilationDuration = compilationStopwatch.Elapsed
             };
     }
+
+
+    internal static FileTree AddPackageSources(
+        FileTree appCodeTree,
+        IEnumerable<(string packageName, FileTree files)> packages)
+    {
+        foreach (var (packageName, packageFiles) in packages)
+        {
+            var packagePath =
+                new[] { "elm-packages" }
+                .Concat(packageName.Split('/'))
+                .ToArray();
+
+            foreach (var packageFile in packageFiles.EnumerateFilesTransitive())
+            {
+                if (packageFile.path.Count < 2 || packageFile.path[0] is not "src")
+                    continue;
+
+                appCodeTree =
+                    appCodeTree.SetNodeAtPathSorted(
+                        [.. packagePath, .. packageFile.path],
+                        FileTree.File(packageFile.fileContent));
+            }
+        }
+
+        return appCodeTree;
+    }
+
+    internal static IReadOnlyDictionary<string, (FileTree files, ElmJsonStructure elmJson)>
+        LoadPackagesForTestCompilation(
+        FileTree appCodeTree,
+        Func<string, string, IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>? loadPackage = null) =>
+        ElmAppDependencyResolution.LoadPackagesForElmApp(
+            FileTreeExtensions.ToFlatDictionaryWithPathComparer(appCodeTree),
+            loadPackage: loadPackage);
 
 
     private static CompletedTest RunTest(

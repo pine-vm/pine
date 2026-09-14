@@ -1,11 +1,13 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.Testing;
+using Pine.Core.Files;
 using Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using Xunit;
 
@@ -77,6 +79,114 @@ public class ElmTestTests
         int expectedWorkerCount)
     {
         ElmTestRunner.DefaultWorkerCount(processorCount).Should().Be(expectedWorkerCount);
+    }
+
+
+    [Fact]
+    public void Package_sources_are_added_under_package_specific_paths()
+    {
+        var appCodeTree =
+            FileTree.FromSetOfFilesWithStringPath(
+                [
+                (new[] { "tests", "Tests.elm" }, (ReadOnlyMemory<byte>)"app"u8.ToArray()),
+                ]);
+
+        var packageFiles =
+            FileTree.FromSetOfFilesWithStringPath(
+                [
+                (new[] { "src", "Result", "Extra.elm" }, (ReadOnlyMemory<byte>)"package"u8.ToArray()),
+                (new[] { "tests", "Main.elm" }, (ReadOnlyMemory<byte>)"package test"u8.ToArray()),
+                ]);
+
+        var combinedTree =
+            ElmTestRunner.AddPackageSources(
+                appCodeTree,
+                [("elm-community/result-extra", packageFiles)]);
+
+        combinedTree.GetNodeAtPath(["tests", "Tests.elm"])
+            .Should().BeOfType<FileTree.FileNode>()
+            .Which.Bytes.Span.ToArray().Should().Equal("app"u8.ToArray());
+
+        combinedTree.GetNodeAtPath(
+            ["elm-packages", "elm-community", "result-extra", "src", "Result", "Extra.elm"])
+            .Should().BeOfType<FileTree.FileNode>()
+            .Which.Bytes.Span.ToArray().Should().Equal("package"u8.ToArray());
+
+        combinedTree.GetNodeAtPath(
+            ["elm-packages", "elm-community", "result-extra", "tests", "Main.elm"])
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void Test_compilation_loads_dependencies()
+    {
+        var appCodeTree =
+            FileTree.FromSetOfFilesWithStringPath(
+                [
+                (
+                    new[] { "elm.json" },
+                    (ReadOnlyMemory<byte>)
+                    """
+                    {
+                        "type": "application",
+                        "source-directories": [ "src" ],
+                        "elm-version": "0.19.1",
+                        "dependencies": {
+                            "direct": {
+                                "first-author/first-package": "1.0.0",
+                                "second-author/second-package": "2.0.0"
+                            },
+                            "indirect": {}
+                        },
+                        "test-dependencies": {
+                            "direct": {},
+                            "indirect": {}
+                        }
+                    }
+                    """u8.ToArray())
+                ]);
+
+        var loadedPackages = new List<(string packageName, string version)>();
+
+        IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> LoadPackage(
+            string packageName,
+            string version)
+        {
+            loadedPackages.Add((packageName, version));
+
+            return
+                new Dictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>(
+                    EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>())
+                {
+                    [["elm.json"]] =
+                        Encoding.UTF8.GetBytes(
+                            $$"""
+                            {
+                                "type": "package",
+                                "name": "{{packageName}}",
+                                "summary": "",
+                                "license": "BSD-3-Clause",
+                                "version": "{{version}}",
+                                "exposed-modules": [],
+                                "elm-version": "0.19.0 <= v < 0.20.0",
+                                "dependencies": {},
+                                "test-dependencies": {}
+                            }
+                            """)
+                };
+        }
+
+        var packages =
+            ElmTestRunner.LoadPackagesForTestCompilation(appCodeTree, LoadPackage);
+
+        loadedPackages.Should().BeEquivalentTo(
+            [
+            ("first-author/first-package", "1.0.0"),
+            ("second-author/second-package", "2.0.0"),
+            ]);
+
+        packages.Keys.Should().BeEquivalentTo(
+            ["first-author/first-package", "second-author/second-package"]);
     }
 
 
