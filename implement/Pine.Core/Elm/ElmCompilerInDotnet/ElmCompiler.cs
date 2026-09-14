@@ -244,7 +244,7 @@ public class ElmCompiler
         var canonicalizationResult = ParseAndCanonicalizeForLowering(appCodeTree, rootFilePaths);
 
         if (canonicalizationResult.IsErrOrNull() is { } canonErr)
-            return canonErr;
+            return canonErr.ToString();
 
         if (canonicalizationResult.IsOkOrNull() is not { } canonicalizationOk)
         {
@@ -313,7 +313,7 @@ public class ElmCompiler
     /// Shared between the back-compat and generic overloads of
     /// <see cref="LowerToElmSyntaxForCompilation"/>.
     /// </summary>
-    private static Result<string, CanonicalizationBoundaryResult>
+    private static Result<CompilationError, CanonicalizationBoundaryResult>
         ParseAndCanonicalizeForLowering(
         FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths)
@@ -338,6 +338,8 @@ public class ElmCompiler
         var filePathToModuleName =
             new Dictionary<IReadOnlyList<string>, string>(
                 EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
+
+        var moduleNameToFilePath = new Dictionary<string, string>();
 
         foreach (var moduleFile in elmModuleFiles)
         {
@@ -364,6 +366,7 @@ public class ElmCompiler
 
             // Record the path→name mapping before any module-level filtering.
             filePathToModuleName[moduleFile.path] = moduleNameFlattened;
+            moduleNameToFilePath[moduleNameFlattened] = string.Join('/', moduleFile.path);
 
             // Natively-implemented modules (e.g. "Basics") are superseded by C# code.
             // Do not parse or compile them from Elm source.
@@ -411,61 +414,101 @@ public class ElmCompiler
             .Select(
                 path =>
                 filePathToModuleName.TryGetValue(path, out var name) ? name : null)
-            .Where(name => name is not null)
+            .OfType<string>()
             .ToHashSet();
 
         // Start the closure with roots that parsed successfully.
         // Roots that failed to parse are silently skipped (they were never needed).
-        var modulesToCompile =
-            new HashSet<string>(rootModuleNames.Where(successfullyParsedModules.ContainsKey));
+        var modulesToCompile = new HashSet<string>();
 
+        var dependencyChains =
+            new Dictionary<string, IReadOnlyList<CompilationError.ModuleDependencyChainItem>>();
+
+        var pendingModules = new Queue<string>();
+
+        foreach (var rootModuleName in
+            rootModuleNames.Where(successfullyParsedModules.ContainsKey).Order())
         {
-            bool changed;
+            modulesToCompile.Add(rootModuleName);
 
-            do
+            dependencyChains[rootModuleName] =
+                [
+                    new(
+                        rootModuleName,
+                        moduleNameToFilePath[rootModuleName],
+                        Origin: null)
+                ];
+
+            pendingModules.Enqueue(rootModuleName);
+        }
+
+        while (pendingModules.TryDequeue(out var moduleName))
+        {
+            if (!successfullyParsedModules.TryGetValue(moduleName, out var parsedModule))
+                continue;
+
+            var explicitDependencies =
+                parsedModule.Imports
+                .Select(
+                    import =>
+                    (ModuleName: string.Join(".", import.Value.ModuleName.Value),
+                    Origin: new CompilationError.ModuleDependencyOrigin(
+                        CompilationError.ModuleDependencyKind.ExplicitImport,
+                        import.Range,
+                        import.Value.ModuleAlias is { } alias
+                        ?
+                        string.Join(".", alias.Alias.Value)
+                        :
+                        null,
+                        RenderExposing(import.Value.ExposingList))));
+
+            var implicitDependencies =
+                ImplicitImportConfig.Default.ModuleImports
+                .OrderBy(imported => string.Join(".", imported.ModuleName))
+                .Select(
+                    imported =>
+                    (ModuleName: string.Join(".", imported.ModuleName),
+                    Origin: new CompilationError.ModuleDependencyOrigin(
+                        CompilationError.ModuleDependencyKind.ImplicitImport,
+                        Range: null,
+                        imported.Alias,
+                        Exposing: null)));
+
+            foreach (var dependency in
+                explicitDependencies.Concat(implicitDependencies)
+                .DistinctBy(item => item.ModuleName))
             {
-                changed = false;
+                var importedName = dependency.ModuleName;
 
-                foreach (var moduleName in modulesToCompile.ToList())
+                if (s_nativelyImplementedModuleNames.Contains(importedName))
+                    continue;
+
+                if (parseFailures.TryGetValue(importedName, out var parseErr))
                 {
-                    if (!successfullyParsedModules.TryGetValue(moduleName, out var parsedModule))
-                        continue;
-
-                    // Collect both explicit imports and implicit imports as dependencies.
-                    var importedNames =
-                        parsedModule.Imports
-                        .Select(import => string.Join(".", import.Value.ModuleName.Value));
-
-                    var implicitModuleNames =
-                        ImplicitImportConfig.Default.ModuleImports
-                        .Select(m => string.Join(".", m.ModuleName));
-
-                    foreach (var importedName in importedNames.Concat(implicitModuleNames).Distinct())
-                    {
-                        if (s_nativelyImplementedModuleNames.Contains(importedName))
-                            continue; // Natively implemented in .NET; not a compilation dep.
-
-                        if (parseFailures.TryGetValue(importedName, out var parseErr))
-                        {
-                            // A module in the dep graph depends on a module that failed to parse.
-
-                            return
-                                "Module '" + importedName +
-                                "' is required by '" + moduleName +
-                                "' but failed to parse: " + parseErr;
-                        }
-
-                        // Unknown modules (not in our file tree) are external packages; skip.
-                        if (successfullyParsedModules.ContainsKey(importedName) &&
-                            !modulesToCompile.Contains(importedName))
-                        {
-                            modulesToCompile.Add(importedName);
-                            changed = true;
-                        }
-                    }
+                    return
+                        new CompilationError.Message(
+                            "Module '" + importedName +
+                            "' is required by '" + moduleName +
+                            "' but failed to parse: " + parseErr);
                 }
+
+                if (!successfullyParsedModules.ContainsKey(importedName) ||
+                    !modulesToCompile.Add(importedName))
+                {
+                    continue;
+                }
+
+                dependencyChains[importedName] =
+                    dependencyChains[moduleName]
+                    .Append(
+                        new CompilationError.ModuleDependencyChainItem(
+                            importedName,
+                            moduleNameToFilePath[importedName],
+                            dependency.Origin))
+                    .ToList();
+
+                pendingModules.Enqueue(importedName);
             }
-            while (changed);
         }
 
         // Step 3: Canonicalize the dependency modules and surface any errors.
@@ -480,7 +523,7 @@ public class ElmCompiler
 
         if (canonicalizationResult.IsErrOrNull() is { } canonErr)
         {
-            return canonErr;
+            return new CompilationError.Message(canonErr);
         }
 
         if (canonicalizationResult.IsOkOrNull() is not { } canonicalizedModulesDict)
@@ -490,21 +533,30 @@ public class ElmCompiler
         }
 
         // Surface canonicalization errors for any module in the dependency set.
-        var moduleErrors = new List<string>();
+        var moduleErrors = new List<CompilationError.CanonicalizationDiagnostic>();
 
         foreach (var (moduleName, (_, errors, _)) in canonicalizedModulesDict)
         {
             if (errors.Count > 0)
             {
                 var moduleNameStr = string.Join(".", moduleName);
-                var errMessages = string.Join("\n", errors.Select(RenderCanonicalizationError));
-                moduleErrors.Add("In module " + moduleNameStr + ":\n" + errMessages);
+                var filePath = moduleNameToFilePath[moduleNameStr];
+                var dependencyChain = dependencyChains[moduleNameStr];
+
+                moduleErrors.AddRange(
+                    errors.Select(
+                        error =>
+                        new CompilationError.CanonicalizationDiagnostic(
+                            moduleNameStr,
+                            filePath,
+                            error,
+                            dependencyChain)));
             }
         }
 
         if (moduleErrors.Count > 0)
         {
-            return string.Join("\n\n", moduleErrors);
+            return new CompilationError.CanonicalizationErrors(moduleErrors);
         }
 
         // All dependency modules canonicalized successfully.
@@ -2149,7 +2201,7 @@ public class ElmCompiler
         error switch
         {
             CanonicalizationError.UnresolvedReference unresolved =>
-            $"Cannot find '{unresolved.Name}'",
+            $"Cannot resolve reference '{unresolved.Name}'",
 
             CanonicalizationError.NamingClash clash =>
             clash.ShadowedRange is { } shadowedRange
@@ -2164,6 +2216,46 @@ public class ElmCompiler
             _ =>
             throw new NotImplementedException(
                 "Unexpected error type: " + error.GetType())
+        };
+
+    private static string? RenderExposing(
+        (SyntaxModelTypes.Location ExposingTokenLocation,
+        SyntaxModelTypes.Node<SyntaxModelTypes.Exposing> ExposingList)? exposing) =>
+        exposing?.ExposingList.Value switch
+        {
+            null =>
+            null,
+
+            SyntaxModelTypes.Exposing.All =>
+            "(..)",
+
+            SyntaxModelTypes.Exposing.Explicit explicitExposing =>
+            "(" +
+            string.Join(
+                ", ",
+                explicitExposing.Nodes.Nodes.Select(
+                    node =>
+                    node.Value switch
+                    {
+                        SyntaxModelTypes.TopLevelExpose.InfixExpose infix =>
+                        "(" + infix.Name + ")",
+
+                        SyntaxModelTypes.TopLevelExpose.FunctionExpose function =>
+                        function.Name,
+
+                        SyntaxModelTypes.TopLevelExpose.TypeOrAliasExpose typeOrAlias =>
+                        typeOrAlias.Name,
+
+                        SyntaxModelTypes.TopLevelExpose.TypeExpose type =>
+                        type.ExposedType.Name + (type.ExposedType.Open is null ? string.Empty : "(..)"),
+
+                        _ =>
+                        node.Value.ToString() ?? node.Value.GetType().Name
+                    })) +
+            ")",
+
+            _ =>
+            exposing.Value.ExposingList.Value.ToString()
         };
 
     /// <summary>

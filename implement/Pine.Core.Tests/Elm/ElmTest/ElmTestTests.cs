@@ -123,27 +123,26 @@ public class ElmTestTests
         var appCodeTree =
             FileTree.FromSetOfFilesWithStringPath(
                 [
-                (
-                    new[] { "elm.json" },
-                    (ReadOnlyMemory<byte>)
-                    """
-                    {
-                        "type": "application",
-                        "source-directories": [ "src" ],
-                        "elm-version": "0.19.1",
-                        "dependencies": {
-                            "direct": {
-                                "first-author/first-package": "1.0.0",
-                                "second-author/second-package": "2.0.0"
-                            },
-                            "indirect": {}
+                (new[] { "elm.json" },
+                (ReadOnlyMemory<byte>)
+                """
+                {
+                    "type": "application",
+                    "source-directories": [ "src" ],
+                    "elm-version": "0.19.1",
+                    "dependencies": {
+                        "direct": {
+                            "first-author/first-package": "1.0.0",
+                            "second-author/second-package": "2.0.0"
                         },
-                        "test-dependencies": {
-                            "direct": {},
-                            "indirect": {}
-                        }
+                        "indirect": {}
+                    },
+                    "test-dependencies": {
+                        "direct": {},
+                        "indirect": {}
                     }
-                    """u8.ToArray())
+                }
+                """u8.ToArray())
                 ]);
 
         var loadedPackages = new List<(string packageName, string version)>();
@@ -159,20 +158,20 @@ public class ElmTestTests
                     EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>())
                 {
                     [["elm.json"]] =
-                        Encoding.UTF8.GetBytes(
-                            $$"""
-                            {
-                                "type": "package",
-                                "name": "{{packageName}}",
-                                "summary": "",
-                                "license": "BSD-3-Clause",
-                                "version": "{{version}}",
-                                "exposed-modules": [],
-                                "elm-version": "0.19.0 <= v < 0.20.0",
-                                "dependencies": {},
-                                "test-dependencies": {}
-                            }
-                            """)
+                    Encoding.UTF8.GetBytes(
+                        $$"""
+                        {
+                            "type": "package",
+                            "name": "{{packageName}}",
+                            "summary": "",
+                            "license": "BSD-3-Clause",
+                            "version": "{{version}}",
+                            "exposed-modules": [],
+                            "elm-version": "0.19.0 <= v < 0.20.0",
+                            "dependencies": {},
+                            "test-dependencies": {}
+                        }
+                        """)
                 };
         }
 

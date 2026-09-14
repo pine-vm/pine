@@ -1,4 +1,8 @@
 using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+
+using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -8,6 +12,164 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// </summary>
 public abstract record CompilationError
 {
+    /// <summary>
+    /// Identifies how one module became a dependency of another module.
+    /// </summary>
+    public enum ModuleDependencyKind
+    {
+        /// <summary>The importing module contains an import declaration.</summary>
+        ExplicitImport,
+
+        /// <summary>The Elm language makes the module available without a declaration.</summary>
+        ImplicitImport,
+    }
+
+    /// <summary>
+    /// Describes the import edge from the preceding module in a dependency chain.
+    /// </summary>
+    public sealed record ModuleDependencyOrigin(
+        ModuleDependencyKind Kind,
+        Range? Range,
+        string? Alias,
+        string? Exposing);
+
+    /// <summary>
+    /// One module in a root-to-error dependency chain. The root has no
+    /// <see cref="Origin"/>; every subsequent item describes the import from its predecessor.
+    /// </summary>
+    public sealed record ModuleDependencyChainItem(
+        string ModuleName,
+        string FilePath,
+        ModuleDependencyOrigin? Origin);
+
+    /// <summary>
+    /// A canonicalization error together with the source file and complete chain that
+    /// caused the module to participate in this compilation.
+    /// </summary>
+    public sealed record CanonicalizationDiagnostic(
+        string ModuleName,
+        string FilePath,
+        CanonicalizationError Error,
+        IReadOnlyList<ModuleDependencyChainItem> DependencyChain);
+
+    /// <summary>
+    /// One or more errors encountered while canonicalizing the reachable Elm modules.
+    /// </summary>
+    public sealed record CanonicalizationErrors(
+        IReadOnlyList<CanonicalizationDiagnostic> Diagnostics)
+        : CompilationError
+    {
+        /// <inheritdoc/>
+        public override string ToString()
+        {
+            var builder = new StringBuilder();
+
+            builder.Append("Elm canonicalization failed with ");
+            builder.Append(Diagnostics.Count);
+            builder.Append(Diagnostics.Count is 1 ? " error." : " errors.");
+
+            foreach (var diagnostic in Diagnostics)
+            {
+                builder.AppendLine();
+                builder.AppendLine();
+                AppendDiagnostic(builder, diagnostic);
+            }
+
+            return builder.ToString();
+        }
+
+        private static void AppendDiagnostic(
+            StringBuilder builder,
+            CanonicalizationDiagnostic diagnostic)
+        {
+            var range = diagnostic.Error.Range;
+
+            builder.Append(ElmCompiler.RenderCanonicalizationError(diagnostic.Error));
+            builder.Append(" at ");
+            builder.Append(diagnostic.FilePath);
+            builder.Append(':');
+            builder.Append(range.Start.Row);
+            builder.Append(':');
+            builder.Append(range.Start.Column);
+            builder.Append('-');
+            builder.Append(range.End.Row);
+            builder.Append(':');
+            builder.Append(range.End.Column);
+            builder.Append(" in module '");
+            builder.Append(diagnostic.ModuleName);
+            builder.AppendLine("'.");
+
+            builder.AppendLine("Dependency chain from a compilation root:");
+
+            for (var index = 0; index < diagnostic.DependencyChain.Count; index++)
+            {
+                var item = diagnostic.DependencyChain[index];
+
+                builder.Append("  ");
+                builder.Append(index + 1);
+                builder.Append(". ");
+                builder.Append(item.ModuleName);
+                builder.Append(" (");
+                builder.Append(item.FilePath);
+                builder.Append(')');
+
+                if (item.Origin is { } origin)
+                {
+                    builder.Append(
+                        origin.Kind is ModuleDependencyKind.ExplicitImport
+                        ?
+                        " — explicit import"
+                        :
+                        " — implicit Elm import");
+
+                    if (origin.Range is { } importRange)
+                    {
+                        builder.Append(" at ");
+                        builder.Append(importRange.Start.Row);
+                        builder.Append(':');
+                        builder.Append(importRange.Start.Column);
+                    }
+
+                    if (origin.Alias is { } alias)
+                    {
+                        builder.Append(" as ");
+                        builder.Append(alias);
+                    }
+
+                    if (origin.Exposing is { } exposing)
+                    {
+                        builder.Append(" exposing ");
+                        builder.Append(exposing);
+                    }
+                }
+
+                builder.AppendLine();
+            }
+
+            if (diagnostic.Error is CanonicalizationError.UnresolvedReference unresolved &&
+                diagnostic.DependencyChain.FirstOrDefault() is { } root)
+            {
+                builder.Append("The compiler searched for '");
+                builder.Append(unresolved.Name);
+                builder.Append("' while canonicalizing '");
+                builder.Append(diagnostic.ModuleName);
+                builder.Append("' because that module is reachable from root '");
+                builder.Append(root.ModuleName);
+                builder.Append("'.");
+            }
+        }
+
+    }
+
+    /// <summary>
+    /// An error represented by an already formatted message.
+    /// </summary>
+    public sealed record Message(string Text) : CompilationError
+    {
+        /// <inheritdoc/>
+        public override string ToString() => Text;
+    }
+
     /// <summary>
     /// Describe the context of an error as a string.
     /// </summary>
