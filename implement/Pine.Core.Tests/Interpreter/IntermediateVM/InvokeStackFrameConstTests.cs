@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CodeGen;
 using Pine.Core.CommonEncodings;
+using Pine.Core.Internal;
 using Pine.Core.Interpreter;
 using Pine.Core.Interpreter.IntermediateVM;
 using System;
@@ -696,15 +697,153 @@ public class InvokeStackFrameConstTests
             .Should().Be(7);
     }
 
+    [Fact]
+    public void Invoke_stack_frame_const_uses_invocation_cache_entry()
+    {
+        var trace = new List<ExecutedStackInstruction>();
+        var rootExpression = Expression.EnvironmentInstance;
+        var targetExpression = EnvironmentPathExpression([0]);
+        var targetExpressionEncoded = ExpressionEncoding.EncodeExpressionAsValue(targetExpression);
+        var argument = IntegerEncoding.EncodeSignedInteger(41);
+        var cachedValue = IntegerEncoding.EncodeSignedInteger(123);
+
+        var targetInstructions =
+            BuildForwardedArgumentsFrame(
+                parameterCount: 1,
+                instructions:
+                [
+                StackInstruction.Local_Get(0),
+                StackInstruction.Int_Add_Const(1),
+                StackInstruction.Return,
+                ]);
+
+        var invocation =
+            StackInstruction.Invoke_StackFrame_Const(
+                targetExpression,
+                targetExpressionEncoded,
+                takeCount: 1);
+
+        invocation.SetLinkedStackFrameInstructions(targetInstructions);
+
+        var rootInstructions =
+            BuildEnvironmentValueFrame(
+                parameterPaths: [[0]],
+                instructions:
+                [
+                StackInstruction.Local_Get(0),
+                invocation,
+                StackInstruction.Return,
+                ]);
+
+        var cacheKey =
+            new EvalCacheEntryKey(
+                targetExpressionEncoded,
+                StackFrameInput.FromArguments(
+                    targetInstructions.Parameters,
+                    [PineValueInProcess.Create(argument)]));
+
+        var invocationCache =
+            new InvocationCache
+            {
+                [cacheKey] = cachedValue
+            };
+
+        var report =
+            EvaluateExpressionWithInjectedCompilation(
+                trace,
+                rootExpression,
+                PineValue.List([argument]),
+                new Dictionary<Expression, ExpressionCompilation>
+                {
+                    [rootExpression] = new(Generic: rootInstructions, Specialized: [])
+                },
+                evalCache: invocationCache);
+
+        report.ReturnValue.Evaluate().Should().Be(cachedValue);
+        trace.Should().NotContain(item => item.FrameExpression == targetExpression);
+    }
+
+    [Fact]
+    public void Invoke_stack_frame_const_creates_invocation_cache_entry()
+    {
+        var trace = new List<ExecutedStackInstruction>();
+        var rootExpression = Expression.EnvironmentInstance;
+        var targetExpression = EnvironmentPathExpression([0]);
+        var targetExpressionEncoded = ExpressionEncoding.EncodeExpressionAsValue(targetExpression);
+        var argument = IntegerEncoding.EncodeSignedInteger(41);
+        var expectedReturnValue = IntegerEncoding.EncodeSignedInteger(42);
+
+        var targetInstructions =
+            BuildForwardedArgumentsFrame(
+                parameterCount: 1,
+                instructions:
+                [
+                StackInstruction.Local_Get(0),
+                StackInstruction.Int_Add_Const(1),
+                StackInstruction.Return,
+                ]);
+
+        var invocation =
+            StackInstruction.Invoke_StackFrame_Const(
+                targetExpression,
+                targetExpressionEncoded,
+                takeCount: 1);
+
+        invocation.SetLinkedStackFrameInstructions(targetInstructions);
+
+        var rootInstructions =
+            BuildEnvironmentValueFrame(
+                parameterPaths: [[0]],
+                instructions:
+                [
+                StackInstruction.Local_Get(0),
+                invocation,
+                StackInstruction.Return,
+                ]);
+
+        var invocationCache = new InvocationCache();
+
+        var report =
+            EvaluateExpressionWithInjectedCompilation(
+                trace,
+                rootExpression,
+                PineValue.List([argument]),
+                new Dictionary<Expression, ExpressionCompilation>
+                {
+                    [rootExpression] = new(Generic: rootInstructions, Specialized: [])
+                },
+                evalCache: invocationCache,
+                invocationCacheConfiguration:
+                new(
+                    frameCostThreshold: 0,
+                    stackFrameCost: 0,
+                    entrySpacingCostThreshold: 0,
+                    evalCost: 0));
+
+        report.ReturnValue.Evaluate().Should().Be(expectedReturnValue);
+
+        var cacheKey =
+            new EvalCacheEntryKey(
+                targetExpressionEncoded,
+                StackFrameInput.FromArguments(
+                    targetInstructions.Parameters,
+                    [PineValueInProcess.Create(argument)]));
+
+        invocationCache.TryGetValue(cacheKey, out var valueFromCache).Should().BeTrue();
+        valueFromCache.Should().Be(expectedReturnValue);
+    }
+
     private static EvaluationReport EvaluateExpressionWithInjectedCompilation(
         List<ExecutedStackInstruction> trace,
         Expression rootExpression,
         PineValue rootEnvironment,
-        IReadOnlyDictionary<Expression, ExpressionCompilation> expressionCompilationOverrides)
+        IReadOnlyDictionary<Expression, ExpressionCompilation> expressionCompilationOverrides,
+        IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
+        InvocationCacheConfiguration? invocationCacheConfiguration = null)
     {
         var vm =
             Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
-                evalCache: null,
+                evalCache: evalCache,
                 evaluationConfigDefault: null,
                 reportFunctionApplication: null,
                 compilationEnvClasses: null,
@@ -721,7 +860,8 @@ public class InvokeStackFrameConstTests
                 reportExecutedStackInstruction:
                 (in executedStackInstruction) =>
                 trace.Add(executedStackInstruction),
-                expressionCompilationOverrides: expressionCompilationOverrides);
+                expressionCompilationOverrides: expressionCompilationOverrides,
+                invocationCacheConfiguration: invocationCacheConfiguration);
 
         return
             vm.EvaluateExpressionOnCustomStack(

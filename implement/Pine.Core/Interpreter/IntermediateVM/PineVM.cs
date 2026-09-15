@@ -843,25 +843,8 @@ public class PineVM : ICancellablePineVM
                             environmentValue: environmentValue,
                             parameters: instructions.Parameters);
 
-                    if (currentFrame.StackValues.Length > 0)
-                    {
-                        if (expressionValue is not null &&
-                            _invocationCache is { } invocationCache &&
-                            invocationCache.MayContainExpression(expressionValue))
-                        {
-                            var cacheKey = new EvalCacheEntryKey(expressionValue, stackFrameInput);
-
-                            if (invocationCache.TryGet(cacheKey, out var fromCache))
-                            {
-                                currentFrame.PushInstructionResult(PineValueInProcess.Create(fromCache));
-
-                                return null;
-                            }
-                        }
-                    }
-
                     return
-                        BuildAndPushStackFrame
+                        InvokeStackFrame
                         (
                             expressionValue: expressionValue,
                             expression: expression,
@@ -870,6 +853,39 @@ public class PineVM : ICancellablePineVM
                             replaceCurrentFrame: replaceCurrentFrame);
                 }
             }
+        }
+
+        EvaluationError? InvokeStackFrame(
+            PineValue? expressionValue,
+            Expression expression,
+            StackFrameInstructions instructions,
+            StackFrameInput stackFrameInput,
+            bool replaceCurrentFrame)
+        {
+            var currentFrame = stack.Peek();
+
+            if (currentFrame.StackValues.Length > 0 &&
+                expressionValue is not null &&
+                _invocationCache is { } invocationCache &&
+                invocationCache.MayContainExpression(expressionValue))
+            {
+                var cacheKey = new EvalCacheEntryKey(expressionValue, stackFrameInput);
+
+                if (invocationCache.TryGet(cacheKey, out var fromCache))
+                {
+                    currentFrame.PushInstructionResult(PineValueInProcess.Create(fromCache));
+
+                    return null;
+                }
+            }
+
+            return
+                BuildAndPushStackFrame(
+                    expressionValue,
+                    expression,
+                    instructions,
+                    stackFrameInput,
+                    replaceCurrentFrame);
         }
 
         EvaluationError? BuildAndPushStackFrame(
@@ -2226,7 +2242,7 @@ public class PineVM : ICancellablePineVM
                                 currentFrame.Instructions.Instructions[currentFrame.InstructionPointer + 1].Kind
                                 is StackInstructionKind.Return;
 
-                            if (BuildAndPushStackFrame(
+                            if (InvokeStackFrame(
                                 expressionValue: currentInstruction.OptimizedInvocation?.ExpressionEncoded,
                                 expression: invocationExpression,
                                 instructions: targetInstructions,
