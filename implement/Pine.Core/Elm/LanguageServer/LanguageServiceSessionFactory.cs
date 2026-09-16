@@ -37,38 +37,6 @@ public class LanguageServiceSessionFactory : ILanguageServiceSessionFactory
     }
 
     /// <summary>
-    /// Creates a factory whose VM instances use worker-local cache access.
-    /// </summary>
-    public LanguageServiceSessionFactory(
-        Func<IInvocationCacheAccess, IPineVM> pineVMFactory,
-        IFileStore? compilationCache = null,
-        Action<string>? logDelegate = null)
-        : this(
-            (Func<IInvocationCacheAccess, PineVMSharedCaches, IPineVM>)
-            ((invocationCache, _) => pineVMFactory(invocationCache)),
-            compilationCache,
-            logDelegate)
-    {
-        ArgumentNullException.ThrowIfNull(pineVMFactory);
-    }
-
-    /// <summary>
-    /// Creates a factory whose VM instances use shared invocation and expression-compilation caches.
-    /// </summary>
-    public LanguageServiceSessionFactory(
-        Func<IInvocationCacheAccess, ConcurrentExpressionCompilationCache, IPineVM> pineVMFactory,
-        IFileStore? compilationCache = null,
-        Action<string>? logDelegate = null)
-        : this(
-            (invocationCache, sharedCaches) =>
-            pineVMFactory(invocationCache, sharedCaches.ExpressionCompilations),
-            compilationCache,
-            logDelegate)
-    {
-        ArgumentNullException.ThrowIfNull(pineVMFactory);
-    }
-
-    /// <summary>
     /// Creates a factory whose VM instances use shared invocation, expression-compilation, and parse caches.
     /// </summary>
     public LanguageServiceSessionFactory(
