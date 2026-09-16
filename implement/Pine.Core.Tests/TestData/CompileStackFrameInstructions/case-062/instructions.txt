@@ -1,0 +1,3 @@
+Local_Get (0)
+Invoke_StackFrame_Const (Environment, 1)
+Return

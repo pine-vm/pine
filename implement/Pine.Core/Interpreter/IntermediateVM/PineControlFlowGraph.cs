@@ -170,6 +170,7 @@ public sealed record PineControlFlowGraph(
 
                 case StackInstructionKind.Eval_Binary:
                 case StackInstructionKind.Eval_Const:
+                case StackInstructionKind.Invoke_StackFrame_Const:
                 case StackInstructionKind.Return:
                     if (instructionIndex + 1 < instructions.Count)
                     {
@@ -800,7 +801,8 @@ public sealed record PineControlFlowGraph(
                     Instruction: last),
 
                 StackInstructionKind.Eval_Binary or
-                StackInstructionKind.Eval_Const =>
+                StackInstructionKind.Eval_Const or
+                StackInstructionKind.Invoke_StackFrame_Const =>
                 new PineControlFlowTerminator.Invoke(
                     Continuation: ResolveBlock(
                         endInstructionIndexExclusive,

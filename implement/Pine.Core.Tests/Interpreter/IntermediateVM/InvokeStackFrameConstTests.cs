@@ -895,6 +895,19 @@ public class InvokeStackFrameConstTests
                 rootEnvironment,
                 new Dictionary<Expression, ExpressionCompilation>
                 {
+                    [rootExpression] =
+                    new(
+                        Generic:
+                        BuildEnvironmentValueFrame(
+                            parameterPaths: [[]],
+                            instructions:
+                            [
+                            StackInstruction.Local_Get(0),
+                            StackInstruction.Eval_Const(
+                                ExpressionEncoding.EncodeExpressionAsValue(targetExpression)),
+                            StackInstruction.Return,
+                            ]),
+                        Specialized: []),
                     [targetExpression] =
                     new ExpressionCompilation(
                         Generic: genericInstructions,

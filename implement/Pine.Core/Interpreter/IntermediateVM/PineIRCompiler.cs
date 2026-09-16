@@ -67,19 +67,25 @@ public class PineIRCompiler
         TailLoopTarget? TailLoop,
         StaticFunctionInterface StackFrameParameters,
         int InstructionOffset,
-        bool IsTailPosition)
+        bool IsTailPosition,
+        bool EnableDirectInvocation,
+        Func<PineValue, bool>? SkipDirectInvocation)
     {
         /// <summary>
         /// Creates the initial compilation context for a function with the given parameters.
         /// </summary>
         public static CompilationContext Init(
-            StaticFunctionInterface stackFrameParameters) =>
+            StaticFunctionInterface stackFrameParameters,
+            bool enableDirectInvocation,
+            Func<PineValue, bool>? skipDirectInvocation) =>
             new(
                 CopyToLocal: [],
                 TailLoop: null,
                 StackFrameParameters: stackFrameParameters,
                 InstructionOffset: 0,
-                IsTailPosition: true);
+                IsTailPosition: true,
+                EnableDirectInvocation: enableDirectInvocation,
+                SkipDirectInvocation: skipDirectInvocation);
 
         /// <summary>
         /// Returns a copy of the context with the instruction offset advanced by the given amount.
@@ -139,7 +145,9 @@ public class PineIRCompiler
         PineValueClass? envClass,
         StaticFunctionInterface parametersAsLocals,
         PineVMParseCache parseCache,
-        bool enableTailRecursionOptimization = false)
+        bool enableTailRecursionOptimization = false,
+        bool enableDirectInvocation = true,
+        Func<PineValue, bool>? skipDirectInvocation = null)
     {
         var prior =
             new NodeCompilationResult(
@@ -159,7 +167,10 @@ public class PineIRCompiler
             CompileExpressionTransitive(
                 rootExpression,
                 context:
-                CompilationContext.Init(parametersAsLocals) with
+                CompilationContext.Init(
+                    parametersAsLocals,
+                    enableDirectInvocation,
+                    skipDirectInvocation) with
                 {
                     TailLoop =
                     enableTailRecursionOptimization
@@ -1023,18 +1034,44 @@ public class PineIRCompiler
         NodeCompilationResult prior,
         PineVMParseCache parseCache)
     {
+        if (evalExpr.Encoded is Expression.Litral literalEncodedExpression)
+        {
+            if (context.EnableDirectInvocation &&
+                !(context.SkipDirectInvocation?.Invoke(literalEncodedExpression.Value) ?? false) &&
+                parseCache.ParseExpression(literalEncodedExpression.Value).IsOkOrNull() is { } targetExpression)
+            {
+                var targetParameters =
+                    StaticFunctionInterface.FromExpression(targetExpression);
+
+                return
+                    CompileInvocationArguments(
+                        targetParameters,
+                        evalExpr.Environment,
+                        context,
+                        prior,
+                        parseCache)
+                    .AppendInstruction(
+                        StackInstruction.Invoke_StackFrame_Const(
+                            targetExpression,
+                            literalEncodedExpression.Value,
+                            targetParameters.ParamsPaths.Count));
+            }
+
+            return
+                prior
+                .ContinueWithExpression(
+                    evalExpr.Environment,
+                    context,
+                    parseCache)
+                .AppendInstruction(
+                    StackInstruction.Eval_Const(literalEncodedExpression.Value));
+        }
+
         var afterEnvironment =
             prior.ContinueWithExpression(
                 evalExpr.Environment,
                 context,
                 parseCache);
-
-        if (evalExpr.Encoded is Expression.Litral literalEncodedExpression)
-        {
-            return
-                afterEnvironment.AppendInstruction(
-                    StackInstruction.Eval_Const(literalEncodedExpression.Value));
-        }
 
         var afterExpr =
             afterEnvironment.ContinueWithExpression(
@@ -1113,24 +1150,13 @@ public class PineIRCompiler
         NodeCompilationResult prior,
         PineVMParseCache parseCache)
     {
-        var result = prior;
-
-        for (var parameterIndex = 0;
-            parameterIndex < context.StackFrameParameters.ParamsPaths.Count;
-            parameterIndex++)
-        {
-            var nextParameter =
-                BuildLoopArgument(
-                    context.StackFrameParameters.ParamsPaths[parameterIndex],
-                    nextEnvironment);
-
-            result =
-                CompileExpressionTransitive(
-                    nextParameter,
-                    context with { IsTailPosition = false },
-                    result,
-                    parseCache);
-        }
+        var result =
+            CompileInvocationArguments(
+                context.StackFrameParameters,
+                nextEnvironment,
+                context,
+                prior,
+                parseCache);
 
         var parameterCount =
             context.StackFrameParameters.ParamsPaths.Count;
@@ -1149,11 +1175,82 @@ public class PineIRCompiler
         return result;
     }
 
-    private static Expression BuildLoopArgument(
-        IReadOnlyList<int> path,
-        Expression nextEnvironment)
+    private static NodeCompilationResult CompileInvocationArguments(
+        StaticFunctionInterface targetParameters,
+        Expression environment,
+        CompilationContext context,
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
     {
-        var current = nextEnvironment;
+        if (targetParameters.ParamsPaths.Any(path => path.Count > 1))
+        {
+            var (afterEnvironment, environmentLocalIndex) =
+                CompileExpressionTransitiveAsLocal(
+                    environment,
+                    context with { IsTailPosition = false },
+                    prior,
+                    parseCache);
+
+            var nestedResult = afterEnvironment.AppendInstruction(StackInstruction.Pop);
+
+            for (var parameterIndex = 0;
+                parameterIndex < targetParameters.ParamsPaths.Count;
+                parameterIndex++)
+            {
+                var path = targetParameters.ParamsPaths[parameterIndex];
+
+                if (path.Count is 0)
+                {
+                    nestedResult =
+                        nestedResult.AppendInstruction(
+                            StackInstruction.Local_Get(environmentLocalIndex));
+                    continue;
+                }
+
+                nestedResult =
+                    nestedResult.AppendInstruction(
+                        StackInstruction.Local_Get_Skip_Head_Const(
+                            environmentLocalIndex,
+                            path[0]));
+
+                for (var pathIndex = 1; pathIndex < path.Count; pathIndex++)
+                {
+                    nestedResult =
+                        nestedResult.AppendInstruction(
+                            StackInstruction.Skip_Head_Const(path[pathIndex]));
+                }
+            }
+
+            return nestedResult;
+        }
+
+        var result = prior;
+
+        for (var parameterIndex = 0;
+            parameterIndex < targetParameters.ParamsPaths.Count;
+            parameterIndex++)
+        {
+            var argument =
+                BuildArgument(
+                    targetParameters.ParamsPaths[parameterIndex],
+                    environment);
+
+            result =
+                CompileExpressionTransitive(
+                    argument,
+                    context with { IsTailPosition = false },
+                    result,
+                    parseCache);
+        }
+
+        return result;
+    }
+
+    private static Expression BuildArgument(
+        IReadOnlyList<int> path,
+        Expression environment)
+    {
+        var current = environment;
 
         for (var pathIndex = 0; pathIndex < path.Count; pathIndex++)
         {

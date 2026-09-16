@@ -65,6 +65,72 @@ public record ExpressionCompilation(
     }
 
     /// <summary>
+    /// Selects the most specific instruction variant whose environment constraints match
+    /// arguments already projected into a stack-frame input.
+    /// </summary>
+    public StackFrameInstructions SelectInstructionsForInput(StackFrameInput input)
+    {
+        for (var specializationIndex = 0; specializationIndex < Specialized.Count; specializationIndex++)
+        {
+            var specialization = Specialized[specializationIndex];
+            var foundMismatch = false;
+
+            for (var constraintIndex = 0; constraintIndex < specialization.constraint.Count; constraintIndex++)
+            {
+                var constraintItem = specialization.constraint[constraintIndex];
+                var parameterIndex = FindParameterIndex(input.Parameters, constraintItem.Path.Span);
+
+                if (parameterIndex is null ||
+                    !input.Arguments[parameterIndex.Value].Evaluate().Equals(constraintItem.Value))
+                {
+                    foundMismatch = true;
+                    break;
+                }
+            }
+
+            if (!foundMismatch)
+            {
+                return specialization.instructions;
+            }
+        }
+
+        return Generic;
+    }
+
+    private static int? FindParameterIndex(
+        StaticFunctionInterface parameters,
+        ReadOnlySpan<int> path)
+    {
+        for (var parameterIndex = 0; parameterIndex < parameters.ParamsPaths.Count; parameterIndex++)
+        {
+            var parameterPath = parameters.ParamsPaths[parameterIndex];
+
+            if (parameterPath.Count != path.Length)
+            {
+                continue;
+            }
+
+            var pathsEqual = true;
+
+            for (var pathIndex = 0; pathIndex < path.Length; pathIndex++)
+            {
+                if (parameterPath[pathIndex] != path[pathIndex])
+                {
+                    pathsEqual = false;
+                    break;
+                }
+            }
+
+            if (pathsEqual)
+            {
+                return parameterIndex;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Compiles an expression into one generic instruction variant and zero or more environment-specialized variants.
     /// </summary>
     /// <param name="rootExpression">The expression to compile.</param>
@@ -87,7 +153,9 @@ public record ExpressionCompilation(
         IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null,
         int pathMaxLowExclusive = DefaultPathMaxLowExclusive,
         int pathMaxHighInclusive = DefaultPathMaxHighInclusive,
-        bool disableGenericApplicationChainConsolidation = false)
+        bool disableGenericApplicationChainConsolidation = false,
+        bool enableDirectInvocation = true,
+        Func<PineValue, bool>? skipDirectInvocation = null)
     {
         var genericParameters =
             StaticFunctionInterface.FromExpression(rootExpression);
@@ -106,7 +174,9 @@ public record ExpressionCompilation(
                     reducedExpressionCache: reducedExpressionCache,
                     pathMaxLowExclusive: pathMaxLowExclusive,
                     pathMaxHighInclusive: pathMaxHighInclusive,
-                    disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation),
+                    disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation,
+                    enableDirectInvocation: enableDirectInvocation,
+                    skipDirectInvocation: skipDirectInvocation),
                 TrackEnvConstraint: null);
 
         var specialized =
@@ -133,7 +203,9 @@ public record ExpressionCompilation(
                         reducedExpressionCache: reducedExpressionCache,
                         pathMaxLowExclusive: pathMaxLowExclusive,
                         pathMaxHighInclusive: pathMaxHighInclusive,
-                        disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation),
+                        disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation,
+                        enableDirectInvocation: enableDirectInvocation,
+                        skipDirectInvocation: skipDirectInvocation),
                     TrackEnvConstraint: specialization)))
             .ToImmutableArray();
 
@@ -185,7 +257,9 @@ public record ExpressionCompilation(
         IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null,
         int pathMaxLowExclusive = DefaultPathMaxLowExclusive,
         int pathMaxHighInclusive = DefaultPathMaxHighInclusive,
-        bool disableGenericApplicationChainConsolidation = false)
+        bool disableGenericApplicationChainConsolidation = false,
+        bool enableDirectInvocation = true,
+        Func<PineValue, bool>? skipDirectInvocation = null)
     {
         var inlinedStaticInvocations =
             disableReduction
@@ -245,7 +319,9 @@ public record ExpressionCompilation(
                 envClass: enableTailRecursionOptimization ? envConstraintId : null,
                 parametersAsLocals: parametersAsLocals,
                 parseCache,
-                enableTailRecursionOptimization)
+                enableTailRecursionOptimization,
+                enableDirectInvocation,
+                skipDirectInvocation)
             .ToArray();
 
         for (var instructionIndex = allInstructionsBeforeReturn.Length - 1; instructionIndex >= 0; instructionIndex--)
@@ -1172,7 +1248,9 @@ public record ExpressionCompilation(
         PineValueClass? envClass,
         StaticFunctionInterface parametersAsLocals,
         PineVMParseCache parseCache,
-        bool enableTailRecursionOptimization = false)
+        bool enableTailRecursionOptimization = false,
+        bool enableDirectInvocation = true,
+        Func<PineValue, bool>? skipDirectInvocation = null)
     {
         return
             PineIRCompiler.CompileExpression(
@@ -1181,7 +1259,9 @@ public record ExpressionCompilation(
                 envClass,
                 parametersAsLocals: parametersAsLocals,
                 parseCache,
-                enableTailRecursionOptimization)
+                enableTailRecursionOptimization,
+                enableDirectInvocation,
+                skipDirectInvocation)
             .Instructions;
     }
 

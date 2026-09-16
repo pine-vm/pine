@@ -98,6 +98,20 @@ public class StackInstructionBatchTests
                 expressionCompilationOverrides:
                 new Dictionary<Expression, ExpressionCompilation>
                 {
+                    [rootExpression] =
+                    new ExpressionCompilation(
+                        Generic:
+                        new StackFrameInstructions(
+                            Parameters: StaticFunctionInterface.Generic,
+                            Instructions:
+                            [
+                            StackInstruction.Local_Get(0),
+                            StackInstruction.Eval_Const(
+                                ExpressionEncoding.EncodeExpressionAsValue(targetExpression)),
+                            StackInstruction.Return,
+                            ],
+                            TrackEnvConstraint: null),
+                        Specialized: []),
                     [targetExpression] =
                     new ExpressionCompilation(
                         Generic: instructions,
@@ -162,6 +176,20 @@ public class StackInstructionBatchTests
                 expressionCompilationOverrides:
                 new Dictionary<Expression, ExpressionCompilation>
                 {
+                    [rootExpression] =
+                    new ExpressionCompilation(
+                        Generic:
+                        new StackFrameInstructions(
+                            Parameters: StaticFunctionInterface.Generic,
+                            Instructions:
+                            [
+                            StackInstruction.Local_Get(0),
+                            StackInstruction.Eval_Const(
+                                ExpressionEncoding.EncodeExpressionAsValue(targetExpression)),
+                            StackInstruction.Return,
+                            ],
+                            TrackEnvConstraint: null),
+                        Specialized: []),
                     [targetExpression] =
                     new ExpressionCompilation(
                         Generic: instructions,

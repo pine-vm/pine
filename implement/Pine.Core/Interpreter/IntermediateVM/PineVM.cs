@@ -415,7 +415,11 @@ public class PineVM : ICancellablePineVM
                 reducedExpressionCache: _reducedExpressionCache,
                 pathMaxLowExclusive: _pathMaxLowExclusive,
                 pathMaxHighInclusive: _pathMaxHighInclusive,
-                disableGenericApplicationChainConsolidation: _disableGenericApplicationChainConsolidation);
+                disableGenericApplicationChainConsolidation: _disableGenericApplicationChainConsolidation,
+                enableDirectInvocation: _selectPrecompiled is null,
+                skipDirectInvocation:
+                expressionValue =>
+                _precompiledLeaves?.ContainsKey(expressionValue) is true);
 
         OptimizationParametersSerial.ExpressionConfig? optimizationConfig = null;
 
@@ -2204,17 +2208,19 @@ public class PineVM : ICancellablePineVM
                                 return limitError;
                             }
 
-                            var targetInstructions =
-                                currentInstruction.LinkedStackFrameInstructions
-                                ??
-                                throw new Exception(
-                                    "Invalid operation form: Missing direct stack-frame invocation target");
-
-                            var invocationExpression =
-                                currentInstruction.OptimizedInvocation?.Expression
+                            var directInvocation =
+                                currentInstruction.OptimizedInvocation
                                 ??
                                 throw new Exception(
                                     "Invalid operation form: Missing direct stack-frame invocation expression");
+
+                            var invocationExpression =
+                                directInvocation.Expression;
+
+                            var targetParameters =
+                                directInvocation.LinkedStackFrameInstructions?.Parameters
+                                ??
+                                StaticFunctionInterface.FromExpression(invocationExpression);
 
                             var forwardedValueCount =
                                 currentInstruction.TakeCount
@@ -2234,7 +2240,7 @@ public class PineVM : ICancellablePineVM
 
                             var directInput =
                                 StackFrameInput.FromArguments(
-                                    targetInstructions.Parameters,
+                                    targetParameters,
                                     forwardedArguments);
 
                             var replaceCurrentFrame =
@@ -2242,8 +2248,15 @@ public class PineVM : ICancellablePineVM
                                 currentFrame.Instructions.Instructions[currentFrame.InstructionPointer + 1].Kind
                                 is StackInstructionKind.Return;
 
+                            var targetInstructions =
+                                directInvocation.LinkedStackFrameInstructions
+                                ??
+                                GetExpressionEntry(invocationExpression)
+                                .Compilation
+                                .SelectInstructionsForInput(directInput);
+
                             if (InvokeStackFrame(
-                                expressionValue: currentInstruction.OptimizedInvocation?.ExpressionEncoded,
+                                expressionValue: directInvocation.ExpressionEncoded,
                                 expression: invocationExpression,
                                 instructions: targetInstructions,
                                 stackFrameInput: directInput,

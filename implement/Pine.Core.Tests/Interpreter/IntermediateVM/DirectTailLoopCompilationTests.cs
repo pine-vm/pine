@@ -100,7 +100,7 @@ public class DirectTailLoopCompilationTests
     }
 
     [Fact]
-    public void Literal_encoded_tail_call_to_different_expression_uses_eval_const_without_loop_guard()
+    public void Literal_encoded_tail_call_to_different_expression_uses_direct_invocation_without_loop_guard()
     {
         var expression =
                 new Expression.Eval(
@@ -121,7 +121,7 @@ public class DirectTailLoopCompilationTests
 
         compilation.Generic.Instructions
                 .Should().ContainSingle(
-                    instruction => instruction.Kind == StackInstructionKind.Eval_Const);
+                    instruction => instruction.Kind == StackInstructionKind.Invoke_StackFrame_Const);
 
         compilation.Generic.Instructions
                 .Should().NotContain(
