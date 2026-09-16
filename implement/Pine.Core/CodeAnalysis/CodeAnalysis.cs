@@ -1695,6 +1695,77 @@ public class CodeAnalysis
     }
 
     /// <summary>
+    /// Counts occurrences of <paramref name="searchedExpression"/> in <paramref name="expression"/> and its descendants.
+    /// </summary>
+    public static int CountOccurrencesInSelfAndDescendants(
+        Expression expression,
+        Expression searchedExpression)
+    {
+        if (ReferenceEquals(expression, searchedExpression))
+            return 1;
+
+        if (expression == searchedExpression)
+            return 1;
+
+        if (expression.SubexpressionCount < searchedExpression.SubexpressionCount ||
+            expression.EvalCount < searchedExpression.EvalCount ||
+            expression.ConditionCount < searchedExpression.ConditionCount ||
+            expression.BuiltinCount < searchedExpression.BuiltinCount ||
+            expression.MaxDepth < searchedExpression.MaxDepth ||
+            (!expression.ReferencesEnvironment && searchedExpression.ReferencesEnvironment))
+        {
+            return 0;
+        }
+
+        switch (expression)
+        {
+            case Expression.Environment:
+            case Expression.Litral:
+                return 0;
+
+            case Expression.List list:
+                {
+                    var count = 0;
+
+                    for (var i = 0; i < list.Items.Count; ++i)
+                    {
+                        count =
+                            checked(
+                                count +
+                                CountOccurrencesInSelfAndDescendants(
+                                    list.Items[i],
+                                    searchedExpression));
+                    }
+
+                    return count;
+                }
+
+            case Expression.Eval eval:
+                return
+                    checked(
+                        CountOccurrencesInSelfAndDescendants(eval.Encoded, searchedExpression) +
+                        CountOccurrencesInSelfAndDescendants(eval.Environment, searchedExpression));
+
+            case Expression.Builtin builtin:
+                return CountOccurrencesInSelfAndDescendants(builtin.Input, searchedExpression);
+
+            case Expression.Conditional conditional:
+                return
+                    checked(
+                        CountOccurrencesInSelfAndDescendants(conditional.Condition, searchedExpression) +
+                        CountOccurrencesInSelfAndDescendants(conditional.FalseBranch, searchedExpression) +
+                        CountOccurrencesInSelfAndDescendants(conditional.TrueBranch, searchedExpression));
+
+            case Expression.Label label:
+                return CountOccurrencesInSelfAndDescendants(label.Tagged, searchedExpression);
+
+            default:
+                throw new NotImplementedException(
+                    "Unknown expression type: " + expression.GetType().FullName);
+        }
+    }
+
+    /// <summary>
     /// Returns a mapping for the given expression if it corresponds to a path from the environment root,
     /// otherwise returns <c>null</c>.
     /// </summary>

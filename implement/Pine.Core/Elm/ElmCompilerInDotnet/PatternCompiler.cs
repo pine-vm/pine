@@ -160,8 +160,9 @@ public class PatternCompiler
         }
 
         var inlinedScrutineeOccurrences =
-            Expression.EnumerateSelfAndDescendants(inlinedExpr)
-            .Count(descendant => ReferenceEquals(descendant, scrutineeExpr));
+            CodeAnalysis.CodeAnalysis.CountOccurrencesInSelfAndDescendants(
+                inlinedExpr,
+                scrutineeExpr);
 
         /*
          * The invocation wrapper only pays off when inlining actually duplicates runtime work.
