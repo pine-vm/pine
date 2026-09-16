@@ -1733,6 +1733,9 @@ public class CodeAnalysis
     public static IReadOnlyList<int>? TryParseExprAsPathInEnv(
         Expression pathExpression)
     {
+        if (!pathExpression.ReferencesEnvironment)
+            return null;
+
         return
             TryParseExprAsPathInExpr(
                 pathExpression,
@@ -1749,6 +1752,16 @@ public class CodeAnalysis
         Expression pathExpression,
         Expression rootExpression)
     {
+        if (pathExpression.ConditionCount > 0)
+        {
+            return null;
+        }
+
+        if (pathExpression.EvalCount > 0)
+        {
+            return null;
+        }
+
         if (pathExpression == rootExpression)
             return [];
 
