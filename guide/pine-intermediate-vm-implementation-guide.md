@@ -54,3 +54,30 @@ input materialization, or display formatting on the evaluation path.
 Consumers that need human-readable output can call
 `EvaluationError.RenderDisplayString`. Rendering performs potentially expensive
 derivations such as expression encoding and hashing only on demand.
+
+## Compilation Units and Specializations
+
+When compiling Pine expressions to sequential representations, the most common specialization targets a subset of `Environment` values. Under such constraints, expressions that depend on `Environment` can be reduced and simplified at compile time.
+
+In common configurations for a minimal number of specializations, the VM uses separate constraints on `Environment` values only to fix the environment components which encode functions in a mutually recursive group to concrete values.
+
+Perhaps the most important use case for constraints on `Environment` values is recognizing recursive and mutually recursive functions.
+
+Recognizing recursive functions as such at compile time is important for thorough optimization. For this reason, the VM compiles each strongly connected group of expressions as a single unit.
+
+> Note: SCC compilation unit not yet implemented in PineVM, remains TODO. Will probably not arrive before CFG implementation cleanup.
+
+## Performance Optimizations
+
+### Optimized Invocation Interfaces
+
+In canonical representations of programs, we package all arguments into a single value and pass it to the `Eval` environment. Since `Environment` is the only kind of reference in the Pine language, the arguments packed in there must also include program code at least when using recursive functions.
+
+An early implementation of the VM stayed close to the canonical representation for inputs to and outputs from `Eval`: One value in and one value out.
+
+Most of the lists used to package eval inputs and outputs are short-lived because they are immediately deconstructed on the other side.
+
+And since every list creation adds significant runtime overhead, avoiding them is an important lever for improving runtime efficiency.
+
+> Note: specialized interface currently only implemented for the input side, output side remains TODO.
+
