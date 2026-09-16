@@ -1054,7 +1054,7 @@ public class PineIRCompiler
                         StackInstruction.Invoke_StackFrame_Const(
                             targetExpression,
                             literalEncodedExpression.Value,
-                            targetParameters.ParamsPaths.Count));
+                            targetParameters));
             }
 
             return

@@ -1,3 +1,4 @@
+using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.PineVM;
 using System;
@@ -491,7 +492,8 @@ public enum StackInstructionKind
 /// </summary>
 public record DirectInvocation(
     Expression Expression,
-    PineValue ExpressionEncoded)
+    PineValue ExpressionEncoded,
+    StaticFunctionInterface InvocationInterface)
 {
     StackFrameInstructions? _linkedStackFrameInstructions;
 
@@ -925,16 +927,16 @@ public record StackInstruction(
 
     /// <summary>
     /// Creates a <see cref="StackInstructionKind.Invoke_StackFrame_Const"/> instruction that invokes
-    /// the given expression as a stack frame, forwarding the given number of arguments from the stack.
+    /// the given expression as a stack frame, forwarding the arguments described by the interface.
     /// The expression is automatically encoded.
     /// </summary>
     public static StackInstruction Invoke_StackFrame_Const(
         Expression expression,
-        int takeCount) =>
+        StaticFunctionInterface invocationInterface) =>
         Invoke_StackFrame_Const(
             expression,
             expressionEncoded: ExpressionEncoding.EncodeExpressionAsValue(expression),
-            takeCount);
+            invocationInterface);
 
     /// <summary>
     /// Creates a <see cref="StackInstructionKind.Invoke_StackFrame_Const"/> instruction that invokes
@@ -944,11 +946,11 @@ public record StackInstruction(
     public static StackInstruction Invoke_StackFrame_Const(
         Expression expression,
         PineValue expressionEncoded,
-        int takeCount) =>
+        StaticFunctionInterface invocationInterface) =>
         new(
             StackInstructionKind.Invoke_StackFrame_Const,
-            TakeCount: takeCount,
-            OptimizedInvocation: new DirectInvocation(expression, expressionEncoded));
+            TakeCount: invocationInterface.ParamsPaths.Count,
+            OptimizedInvocation: new DirectInvocation(expression, expressionEncoded, invocationInterface));
 
     /// <summary>
     /// Links the target stack-frame instructions for this instruction's <see cref="OptimizedInvocation"/>.

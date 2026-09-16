@@ -35,7 +35,7 @@ public class InvokeStackFrameConstTests
         var listLengthInvoke =
             StackInstruction.Invoke_StackFrame_Const(
                 expression: listLengthExpression,
-                takeCount: 1);
+                invocationInterface: ForwardedArgumentsInterface(1));
 
         var listLengthInstructions =
             BuildForwardedArgumentsFrame(
@@ -120,14 +120,14 @@ public class InvokeStackFrameConstTests
         var incrementInvoke =
             StackInstruction.Invoke_StackFrame_Const(
                 expression: incrementExpression,
-                takeCount: 1);
+                invocationInterface: ForwardedArgumentsInterface(1));
 
         incrementInvoke.SetLinkedStackFrameInstructions(incrementInstructions);
 
         var listMapInvoke =
             StackInstruction.Invoke_StackFrame_Const(
                 expression: listMapExpression,
-                takeCount: 2);
+                invocationInterface: ForwardedArgumentsInterface(2));
 
         var listMapInstructions =
             BuildForwardedArgumentsFrame(
@@ -237,7 +237,7 @@ public class InvokeStackFrameConstTests
         var factorialRecursiveInvoke =
             StackInstruction.Invoke_StackFrame_Const(
                 expression: factorialExpression,
-                takeCount: 1);
+                invocationInterface: ForwardedArgumentsInterface(1));
 
         var factorialInstructions =
             BuildForwardedArgumentsFrame(
@@ -262,7 +262,7 @@ public class InvokeStackFrameConstTests
         var factorialEntryInvoke =
             StackInstruction.Invoke_StackFrame_Const(
                 expression: factorialExpression,
-                takeCount: 1);
+                invocationInterface: ForwardedArgumentsInterface(1));
 
         factorialEntryInvoke.SetLinkedStackFrameInstructions(factorialInstructions);
 
@@ -368,7 +368,7 @@ public class InvokeStackFrameConstTests
         var fibonacciRecursiveInvoke =
             StackInstruction.Invoke_StackFrame_Const(
                 expression: fibonacciExpression,
-                takeCount: 1);
+                invocationInterface: ForwardedArgumentsInterface(1));
 
         var fibonacciInstructions =
             BuildForwardedArgumentsFrame(
@@ -395,7 +395,7 @@ public class InvokeStackFrameConstTests
         var fibonacciEntryInvoke =
             StackInstruction.Invoke_StackFrame_Const(
                 expression: fibonacciExpression,
-                takeCount: 1);
+                invocationInterface: ForwardedArgumentsInterface(1));
 
         fibonacciEntryInvoke.SetLinkedStackFrameInstructions(fibonacciInstructions);
 
@@ -459,7 +459,7 @@ public class InvokeStackFrameConstTests
         var incrementInvoke =
             StackInstruction.Invoke_StackFrame_Const(
                 expression: incrementExpression,
-                takeCount: 1);
+                invocationInterface: ForwardedArgumentsInterface(1));
 
         incrementInvoke.SetLinkedStackFrameInstructions(incrementInstructions);
 
@@ -588,7 +588,7 @@ public class InvokeStackFrameConstTests
         var incrementInvoke =
             StackInstruction.Invoke_StackFrame_Const(
                 expression: incrementExpression,
-                takeCount: 1);
+                invocationInterface: ForwardedArgumentsInterface(1));
 
         incrementInvoke.SetLinkedStackFrameInstructions(incrementInstructions);
 
@@ -601,7 +601,7 @@ public class InvokeStackFrameConstTests
         var listMapRecursiveInvoke =
             StackInstruction.Invoke_StackFrame_Const(
                 expression: listMapDispatchExpression,
-                takeCount: 2);
+                invocationInterface: ForwardedArgumentsInterface(2));
 
         var listMapRecursiveInstructions =
             BuildForwardedArgumentsFrame(
@@ -629,7 +629,7 @@ public class InvokeStackFrameConstTests
         var specializedEntryInvoke =
             StackInstruction.Invoke_StackFrame_Const(
                 expression: listMapDispatchExpression,
-                takeCount: 2);
+                invocationInterface: ForwardedArgumentsInterface(2));
 
         specializedEntryInvoke.SetLinkedStackFrameInstructions(listMapRecursiveInstructions);
 
@@ -721,7 +721,7 @@ public class InvokeStackFrameConstTests
             StackInstruction.Invoke_StackFrame_Const(
                 targetExpression,
                 targetExpressionEncoded,
-                takeCount: 1);
+                invocationInterface: ForwardedArgumentsInterface(1));
 
         invocation.SetLinkedStackFrameInstructions(targetInstructions);
 
@@ -787,7 +787,7 @@ public class InvokeStackFrameConstTests
             StackInstruction.Invoke_StackFrame_Const(
                 targetExpression,
                 targetExpressionEncoded,
-                takeCount: 1);
+                invocationInterface: ForwardedArgumentsInterface(1));
 
         invocation.SetLinkedStackFrameInstructions(targetInstructions);
 

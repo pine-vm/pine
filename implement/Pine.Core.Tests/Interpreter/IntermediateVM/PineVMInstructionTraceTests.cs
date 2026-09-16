@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Interpreter.IntermediateVM;
 using System.Collections.Generic;
@@ -167,7 +168,7 @@ public class PineVMInstructionTraceTests
                 StackInstruction.Invoke_StackFrame_Const(
                     Expression.EnvironmentInstance,
                     ExpressionEncoding.EncodeExpressionAsValue(Expression.EnvironmentInstance),
-                    takeCount: 1));
+                    StaticFunctionInterface.Generic));
 
         var nestedFrameTrace =
             trace.First(item => item.FrameExpression.Equals(Expression.EnvironmentInstance));

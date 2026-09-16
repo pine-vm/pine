@@ -2217,10 +2217,11 @@ public class PineVM : ICancellablePineVM
                             var invocationExpression =
                                 directInvocation.Expression;
 
-                            var targetParameters =
-                                directInvocation.LinkedStackFrameInstructions?.Parameters
+                            var invocationInterface =
+                                directInvocation.InvocationInterface
                                 ??
-                                StaticFunctionInterface.FromExpression(invocationExpression);
+                                throw new Exception(
+                                    "Invalid operation form: Missing direct stack-frame invocation interface");
 
                             var forwardedValueCount =
                                 currentInstruction.TakeCount
@@ -2240,7 +2241,7 @@ public class PineVM : ICancellablePineVM
 
                             var directInput =
                                 StackFrameInput.FromArguments(
-                                    targetParameters,
+                                    invocationInterface,
                                     forwardedArguments);
 
                             var replaceCurrentFrame =
