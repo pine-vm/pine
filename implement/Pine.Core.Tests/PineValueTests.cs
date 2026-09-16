@@ -257,6 +257,129 @@ public class PineValueTests
     }
 
     [Fact]
+    public void List_value_equality_shallow_recursive_path_allocates_no_objects()
+    {
+        const int Width = 100;
+        const int Iterations = 100;
+
+        static PineValue.ListValue BuildValue()
+        {
+            var items = new PineValue[Width];
+
+            for (var i = 0; i < items.Length; ++i)
+                items[i] = BuildNestedList(PineValue.ListValue.RecursiveEqualityDepthThreshold - 1, (byte)i);
+
+            return new PineValue.ListValue(items);
+        }
+
+        var valueA = BuildValue();
+        var valueB = BuildValue();
+
+        valueA.MaxDepth.Should().Be(PineValue.ListValue.RecursiveEqualityDepthThreshold);
+        ReferenceEquals(valueA, valueB).Should().BeFalse();
+
+        for (var i = 0; i < 10; ++i)
+            valueA.Equals(valueB).Should().BeTrue();
+
+        var allocatedBefore = System.GC.GetAllocatedBytesForCurrentThread();
+
+        var equal = false;
+
+        for (var i = 0; i < Iterations; ++i)
+            equal = valueA.Equals(valueB);
+
+        var allocatedBytes =
+            System.GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+
+        equal.Should().BeTrue();
+        allocatedBytes.Should().Be(0);
+    }
+
+    [Fact]
+    public void List_value_equality_first_deep_level_recurses_into_shallow_child_without_allocating()
+    {
+        const int Iterations = 100;
+
+        var valueA = BuildNestedList(PineValue.ListValue.RecursiveEqualityDepthThreshold + 1, 1);
+        var valueB = BuildNestedList(PineValue.ListValue.RecursiveEqualityDepthThreshold + 1, 1);
+
+        valueA.MaxDepth.Should().Be(PineValue.ListValue.RecursiveEqualityDepthThreshold + 1);
+
+        for (var i = 0; i < 10; ++i)
+            valueA.Equals(valueB).Should().BeTrue();
+
+        var allocatedBefore = System.GC.GetAllocatedBytesForCurrentThread();
+
+        var equal = false;
+
+        for (var i = 0; i < Iterations; ++i)
+            equal = valueA.Equals(valueB);
+
+        var allocatedBytes =
+            System.GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+
+        equal.Should().BeTrue();
+        allocatedBytes.Should().Be(0);
+    }
+
+    [Fact]
+    public void List_value_equality_deep_path_does_not_grow_stack_for_shallow_siblings()
+    {
+        const int Iterations = 100;
+
+        static PineValue.ListValue BuildValue(int shallowSiblingCount)
+        {
+            var items = new PineValue[shallowSiblingCount + 1];
+
+            for (var i = 0; i < shallowSiblingCount; ++i)
+                items[i] = new PineValue.ListValue(new[] { PineValue.Blob([(byte)i]) });
+
+            items[^1] = BuildNestedList(PineValue.ListValue.RecursiveEqualityDepthThreshold + 1, 1);
+
+            return new PineValue.ListValue(items);
+        }
+
+        var narrowA = BuildValue(shallowSiblingCount: 1);
+        var narrowB = BuildValue(shallowSiblingCount: 1);
+        var wideA = BuildValue(shallowSiblingCount: 100);
+        var wideB = BuildValue(shallowSiblingCount: 100);
+
+        narrowA.MaxDepth.Should().Be(PineValue.ListValue.RecursiveEqualityDepthThreshold + 2);
+        wideA.MaxDepth.Should().Be(PineValue.ListValue.RecursiveEqualityDepthThreshold + 2);
+
+        for (var i = 0; i < 10; ++i)
+        {
+            narrowA.Equals(narrowB).Should().BeTrue();
+            wideA.Equals(wideB).Should().BeTrue();
+        }
+
+        var narrowAllocatedBefore = System.GC.GetAllocatedBytesForCurrentThread();
+
+        var narrowEqual = false;
+
+        for (var i = 0; i < Iterations; ++i)
+            narrowEqual = narrowA.Equals(narrowB);
+
+        var narrowAllocatedBytes =
+            System.GC.GetAllocatedBytesForCurrentThread() - narrowAllocatedBefore;
+
+        var wideAllocatedBefore = System.GC.GetAllocatedBytesForCurrentThread();
+
+        var wideEqual = false;
+
+        for (var i = 0; i < Iterations; ++i)
+            wideEqual = wideA.Equals(wideB);
+
+        var wideAllocatedBytes =
+            System.GC.GetAllocatedBytesForCurrentThread() - wideAllocatedBefore;
+
+        narrowEqual.Should().BeTrue();
+        wideEqual.Should().BeTrue();
+        narrowAllocatedBytes.Should().BeGreaterThan(0);
+        wideAllocatedBytes.Should().Be(narrowAllocatedBytes);
+    }
+
+    [Fact]
     public void List_value_equality_does_not_stack_overflow_on_deeply_nested_values()
     {
         // Comparing two structurally-equal, reference-distinct deeply nested list values previously
@@ -293,5 +416,15 @@ public class PineValueTests
         var different = BuildDeeplyNested(9);
 
         valueA.Equals(different).Should().BeFalse();
+    }
+
+    private static PineValue.ListValue BuildNestedList(int depth, byte innerLeaf)
+    {
+        PineValue nested = PineValue.Blob([innerLeaf]);
+
+        for (var i = 0; i < depth; ++i)
+            nested = new PineValue.ListValue(new[] { nested });
+
+        return (PineValue.ListValue)nested;
     }
 }

@@ -281,6 +281,8 @@ public abstract record PineValue : IEquatable<PineValue>
     /// </summary>
     public record ListValue : PineValue, IEquatable<ListValue>
     {
+        internal const int RecursiveEqualityDepthThreshold = 40;
+
         private readonly int _slimHashCode;
 
         /// <summary>
@@ -383,11 +385,11 @@ public abstract record PineValue : IEquatable<PineValue>
             if (other is null)
                 return false;
 
-            if (!NodeEqualStatic(self, other))
+            if (!AggregatesEqualStatic(self, other))
                 return false;
 
-            // Compare nested lists iteratively via an explicit work stack instead of recursing
-            // once per nesting level, so deeply nested values do not overflow the call stack.
+            if (self.MaxDepth <= RecursiveEqualityDepthThreshold)
+                return EqualRecursive(self, other);
 
             Stack<(ListValue self, ListValue other)>? stack = null;
 
@@ -417,10 +419,18 @@ public abstract record PineValue : IEquatable<PineValue>
 
                     if (selfItem is ListValue selfItemList && otherItem is ListValue otherItemList)
                     {
-                        if (!NodeEqualStatic(selfItemList, otherItemList))
+                        if (!AggregatesEqualStatic(selfItemList, otherItemList))
                             return false;
 
-                        (stack ??= new Stack<(ListValue, ListValue)>()).Push((selfItemList, otherItemList));
+                        if (selfItemList.MaxDepth <= RecursiveEqualityDepthThreshold)
+                        {
+                            if (!EqualRecursive(selfItemList, otherItemList))
+                                return false;
+                        }
+                        else
+                        {
+                            (stack ??= new Stack<(ListValue, ListValue)>()).Push((selfItemList, otherItemList));
+                        }
                     }
                     else
                     {
@@ -436,11 +446,50 @@ public abstract record PineValue : IEquatable<PineValue>
             }
         }
 
+        private static bool EqualRecursive(ListValue self, ListValue other)
+        {
+            var selfSpan = self.Items.Span;
+            var otherSpan = other.Items.Span;
+
+            var length = selfSpan.Length;
+
+            ref var selfItemFirst =
+                ref System.Runtime.InteropServices.MemoryMarshal.GetReference(selfSpan);
+
+            ref var otherItemFirst =
+                ref System.Runtime.InteropServices.MemoryMarshal.GetReference(otherSpan);
+
+            for (var i = 0; i < length; i++)
+            {
+                var selfItem = System.Runtime.CompilerServices.Unsafe.Add(ref selfItemFirst, i);
+                var otherItem = System.Runtime.CompilerServices.Unsafe.Add(ref otherItemFirst, i);
+
+                if (ReferenceEquals(selfItem, otherItem))
+                    continue;
+
+                if (selfItem is ListValue selfItemList && otherItem is ListValue otherItemList)
+                {
+                    if (!AggregatesEqualStatic(selfItemList, otherItemList) ||
+                        !EqualRecursive(selfItemList, otherItemList))
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    if (!selfItem.Equals(otherItem))
+                        return false;
+                }
+            }
+
+            return true;
+        }
+
         /// <summary>
         /// Compares the node-level aggregates and item count of two <see cref="ListValue"/> instances,
-        /// without descending into nested lists. Used as a fast pre-check by the iterative equality comparison.
+        /// without descending into nested lists. Used as a fast pre-check by the equality comparisons.
         /// </summary>
-        private static bool NodeEqualStatic(ListValue self, ListValue other)
+        private static bool AggregatesEqualStatic(ListValue self, ListValue other)
         {
             if (self._slimHashCode != other._slimHashCode ||
                 self.NodesCount != other.NodesCount ||
