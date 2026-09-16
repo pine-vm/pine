@@ -72,9 +72,17 @@ public static class LanguageServerComposition
                 tryGetExpressionCompilation: sharedCaches.ExpressionCompilations.TryGet,
                 getOrAddExpressionCompilation: sharedCaches.ExpressionCompilations.GetOrAdd,
                 expressionEncodingCache: sharedCaches.EncodedExpressions,
-                reducedExpressionCache: sharedCaches.ReducedExpressions),
+                reducedExpressionCache: sharedCaches.ReducedExpressions,
+                invocationCacheConfiguration: s_defaultInvocationCacheConfiguration),
             CreateDefaultCompilationCache(pineAppVersionId),
             logDelegate);
+
+    private static readonly InvocationCacheConfiguration s_defaultInvocationCacheConfiguration =
+        new(
+            frameCostThreshold: 10_000,
+            stackFrameCost: 100,
+            entrySpacingCostThreshold: 10_000,
+            evalCost: 100);
 
     /// <summary>
     /// Directories searched for the Elm packages referenced from <c>elm.json</c> files.

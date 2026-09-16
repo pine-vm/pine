@@ -386,9 +386,9 @@ public sealed record InvocationCacheConfiguration
     /// </summary>
     public static InvocationCacheConfiguration Default { get; } =
         new(
-            frameCostThreshold: 700,
+            frameCostThreshold: 1_000,
             stackFrameCost: 100,
-            entrySpacingCostThreshold: 700,
+            entrySpacingCostThreshold: 1_000,
             evalCost: 100);
 
     /// <summary>

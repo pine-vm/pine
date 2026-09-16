@@ -17,16 +17,16 @@ public class InvocationCacheTests
         var configuration = InvocationCacheConfiguration.Default;
 
         configuration.ShouldOfferEntry(
-            frameInstructionCount: 600,
+            frameInstructionCount: 900,
             frameStackFrameCount: 1,
-            instructionCountSinceLastEntry: 600,
+            instructionCountSinceLastEntry: 900,
             evalCountSinceLastEntry: 1)
             .Should().BeFalse();
 
         configuration.ShouldOfferEntry(
-            frameInstructionCount: 601,
+            frameInstructionCount: 901,
             frameStackFrameCount: 1,
-            instructionCountSinceLastEntry: 601,
+            instructionCountSinceLastEntry: 901,
             evalCountSinceLastEntry: 1)
             .Should().BeTrue();
     }
