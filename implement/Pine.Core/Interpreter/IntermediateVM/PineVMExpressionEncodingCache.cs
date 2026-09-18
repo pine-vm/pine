@@ -43,6 +43,9 @@ public sealed class PineVMExpressionEncodingCache
         Expression expression,
         PineValue encodedExpression)
     {
+        if (_entries.TryGetValue(expression, out _))
+            return;
+
         _entries.TryAdd(
             expression,
             new Lazy<PineValue>(
