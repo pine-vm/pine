@@ -41,12 +41,6 @@ public class PineValueInProcess
     /// </summary>
     private IReadOnlyList<PineValueInProcess>? _list;
 
-    /// <summary>
-    /// Track a tagged value as a tuple of (tag, tagArgs).
-    /// Represents a 2-element list [tag, tagArgs] without forcing evaluation.
-    /// </summary>
-    private (PineValueInProcess tag, IReadOnlyList<PineValueInProcess> tagArgs)? _tagged;
-
     private readonly static IReadOnlyList<PineValueInProcess> s_blobSingle =
         [
         .. Enumerable.Range(0, 256).Select(
@@ -163,26 +157,6 @@ public class PineValueInProcess
             new PineValueInProcess
             {
                 _list = list,
-            };
-    }
-
-    /// <summary>
-    /// Create an in-process representation of a tagged value.
-    /// </summary>
-    /// <param name="tag">The tag value.</param>
-    /// <param name="tagArgs">The list of tag arguments.</param>
-    /// <remarks>
-    /// Represents a 2-element list [tag, tagArgs] without forcing evaluation.
-    /// </remarks>
-    /// <returns>A new <see cref="PineValueInProcess"/> representing the tagged value.</returns>
-    public static PineValueInProcess CreateTagged(
-        PineValueInProcess tag,
-        IReadOnlyList<PineValueInProcess> tagArgs)
-    {
-        return
-            new PineValueInProcess
-            {
-                _tagged = (tag, tagArgs)
             };
     }
 
@@ -346,23 +320,19 @@ public class PineValueInProcess
 
     /// <summary>
     /// Exposes the in-process child items of a value that is represented as a lazily constructed
-    /// list (<see cref="CreateList"/>) or tagged value (<see cref="CreateTagged"/>), without forcing
-    /// evaluation. A tagged value is exposed in its legacy two-element <c>[tag, tagArgs]</c> shape.
+    /// list (<see cref="CreateList"/>), without forcing evaluation.
     /// </summary>
     /// <remarks>
-    /// Returns <c>null</c> for values that are not represented as an unevaluated list/tagged structure
+    /// Returns <c>null</c> for values that are not represented as an unevaluated list structure
     /// (blobs, integers, slice/concat builders, or already-evaluated values). Such values are fully
     /// concrete and therefore cannot embed specialized child instances (for example interpreter
     /// closures) that lack a concrete <see cref="PineValue"/> encoding.
     /// </remarks>
-    /// <returns>The in-process child items, or <c>null</c> when the value is not an unevaluated list/tagged structure.</returns>
+    /// <returns>The in-process child items, or <c>null</c> when the value is not an unevaluated list structure.</returns>
     public IReadOnlyList<PineValueInProcess>? UnevaluatedStructuralItemsOrNull()
     {
         if (_list is not null)
             return _list;
-
-        if (_tagged is { } tagged)
-            return [tagged.tag, CreateList(tagged.tagArgs)];
 
         return null;
     }
@@ -397,27 +367,6 @@ public class PineValueInProcess
         if (_integer is not null)
         {
             _evaluated = IntegerEncoding.EncodeSignedInteger(_integer.Value);
-            return _evaluated;
-        }
-
-        if (_tagged is not null)
-        {
-            var (tag, tagArgs) = _tagged.Value;
-
-            var evaluatedTag = tag.Evaluate();
-
-            var evaluatedArgs =
-                new PineValue[tagArgs.Count];
-
-            for (var i = 0; i < tagArgs.Count; i++)
-            {
-                evaluatedArgs[i] = tagArgs[i].Evaluate();
-            }
-
-            var argumentsValue = PineValue.List(evaluatedArgs);
-
-            _evaluated = PineValue.List([evaluatedTag, argumentsValue]);
-
             return _evaluated;
         }
 
@@ -470,9 +419,6 @@ public class PineValueInProcess
         if (_list is not null)
             return true;
 
-        if (_tagged is not null)
-            return true;
-
         if (_evaluated is not null)
             return _evaluated is PineValue.ListValue;
 
@@ -495,9 +441,6 @@ public class PineValueInProcess
     public bool IsBlob()
     {
         if (_list is not null)
-            return false;
-
-        if (_tagged is not null)
             return false;
 
         if (_evaluated is not null)
@@ -525,9 +468,6 @@ public class PineValueInProcess
     {
         if (_list is not null)
             return _list.Count;
-
-        if (_tagged is not null)
-            return 2;
 
         if (_evaluated is not null)
             return BuiltinFunctionSpecialized.length_as_int(_evaluated);
@@ -571,23 +511,6 @@ public class PineValueInProcess
                 {
                     _sliceBuilder = sliceBuilder.Skip(skipCount),
                 };
-        }
-
-        if (source._tagged is { } tagged)
-        {
-            // Tagged value is always a 2-element list [tag, tagArgs]
-            if (skipCount >= 2)
-            {
-                return EmptyList;
-            }
-
-            if (skipCount is 1)
-            {
-                // Return [tagArgs]
-                return CreateList([CreateList(tagged.tagArgs)]);
-            }
-
-            return source;
         }
 
         if (source._list is { } list)
@@ -644,24 +567,6 @@ public class PineValueInProcess
                 {
                     _sliceBuilder = sliceBuilder.Take(takeCount),
                 };
-        }
-
-        if (source._tagged is { } tagged)
-        {
-            // Tagged value is always a 2-element list [tag, tagArgs]
-            if (takeCount <= 0)
-            {
-                return EmptyList;
-            }
-
-            if (takeCount is 1)
-            {
-                // Return [tag]
-                return CreateList([tagged.tag]);
-            }
-
-            // takeCount >= 2, return the full tagged value
-            return source;
         }
 
         if (source._list is { } list)
@@ -725,11 +630,6 @@ public class PineValueInProcess
         }
 
         if (source._list is { } list && list.Count <= takeCount)
-        {
-            return source;
-        }
-
-        if (source._tagged is not null && 2 <= takeCount)
         {
             return source;
         }
@@ -1156,21 +1056,6 @@ public class PineValueInProcess
             return Create(sliceBuilder.GetElementAt(index));
         }
 
-        if (_tagged is { } tagged)
-        {
-            if (index is 0)
-            {
-                return tagged.tag;
-            }
-
-            if (index is 1)
-            {
-                return CreateList(tagged.tagArgs);
-            }
-
-            return EmptyList;
-        }
-
         if (_list is { } list)
         {
             if (list.Count <= index)
@@ -1237,16 +1122,6 @@ public class PineValueInProcess
         if (a.IsBlob() != b.IsBlob())
         {
             return false;
-        }
-
-        if (a._tagged is { } taggedA && b._tagged is { } taggedB)
-        {
-            if (!AreEqual(taggedA.tag, taggedB.tag))
-            {
-                return false;
-            }
-
-            return AreListItemsEqual(taggedA.tagArgs, taggedB.tagArgs);
         }
 
         if (a._list is { } listA && b._list is { } listB)

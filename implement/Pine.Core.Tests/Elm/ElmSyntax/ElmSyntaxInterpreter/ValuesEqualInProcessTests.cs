@@ -34,9 +34,6 @@ public class ValuesEqualInProcessTests
     private static PineValueInProcess ListOf(params PineValueInProcess[] items) =>
         PineValueInProcess.CreateList(items);
 
-    private static PineValueInProcess TagNameValue(string tagName) =>
-        PineValueInProcess.Create(StringEncoding.ValueFromString(tagName));
-
     private static DeclQualifiedName Name(string declName) =>
         DeclQualifiedName.Create([], declName);
 
@@ -513,32 +510,5 @@ public class ValuesEqualInProcessTests
         var right = ListOf(ListOf(Closure(LambdaSource())), Int(7));
 
         Eq(left, right).Should().BeTrue();
-    }
-
-    [Fact]
-    public void Tagged_values_containing_equal_closures_are_equal()
-    {
-        var left = PineValueInProcess.CreateTagged(TagNameValue("Just"), [Closure(LambdaSource())]);
-        var right = PineValueInProcess.CreateTagged(TagNameValue("Just"), [Closure(LambdaSource())]);
-
-        Eq(left, right).Should().BeTrue();
-    }
-
-    [Fact]
-    public void Tagged_values_containing_different_closures_are_not_equal()
-    {
-        var left = PineValueInProcess.CreateTagged(TagNameValue("Just"), [Closure(LambdaSourceReturning(1))]);
-        var right = PineValueInProcess.CreateTagged(TagNameValue("Just"), [Closure(LambdaSourceReturning(2))]);
-
-        Eq(left, right).Should().BeFalse();
-    }
-
-    [Fact]
-    public void Tagged_values_with_closures_and_different_tag_name_are_not_equal()
-    {
-        var left = PineValueInProcess.CreateTagged(TagNameValue("Just"), [Closure(LambdaSource())]);
-        var right = PineValueInProcess.CreateTagged(TagNameValue("Err"), [Closure(LambdaSource())]);
-
-        Eq(left, right).Should().BeFalse();
     }
 }
