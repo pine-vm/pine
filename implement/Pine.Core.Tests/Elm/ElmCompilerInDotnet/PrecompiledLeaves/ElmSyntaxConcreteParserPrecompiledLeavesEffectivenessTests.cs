@@ -5,6 +5,7 @@ using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
+using Pine.Core.Internal;
 using Pine.Core.Interpreter.IntermediateVM;
 using System;
 using System.Collections.Generic;
@@ -81,7 +82,7 @@ public class ElmSyntaxConcreteParserPrecompiledLeavesEffectivenessTests
 
         var vmWithoutLeaves =
             CreateVM(
-                ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty,
+                ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty,
                 null);
 
         var vmWithLeaves =
@@ -150,7 +151,7 @@ public class ElmSyntaxConcreteParserPrecompiledLeavesEffectivenessTests
 
         var vmWithoutLeaves =
             CreateVM(
-                ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty,
+                ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty,
                 null);
 
         var vmWithLeaves =
@@ -186,7 +187,7 @@ public class ElmSyntaxConcreteParserPrecompiledLeavesEffectivenessTests
     [Fact]
     public void String_scanner_leaves_do_not_allocate_proportional_to_source_length()
     {
-        var enteredLeafEnvironments = new Dictionary<PineValue, PineValue>();
+        var enteredLeafEnvironments = new Dictionary<PineValue, PineValueInProcess>();
 
         var vm =
             CreateVM(
@@ -196,7 +197,7 @@ public class ElmSyntaxConcreteParserPrecompiledLeavesEffectivenessTests
         _ = Apply(vm);
 
         var scanners =
-            new (PineValue leafKey, Func<PineValue, PineValue?> scanner)[]
+            new (PineValue leafKey, PrecompiledLeaf scanner)[]
             {
                 (ElmSyntaxConcreteParserPrecompiledLeaves.SkipInlineWhitespaceLeafKey,
                 ElmSyntaxConcreteParserPrecompiledLeaves.SkipInlineWhitespaceLeafDelegate),
@@ -206,12 +207,16 @@ public class ElmSyntaxConcreteParserPrecompiledLeavesEffectivenessTests
 
         foreach (var (leafKey, scanner) in scanners)
         {
-            var environment = (PineValue.ListValue)enteredLeafEnvironments[leafKey];
+            var environment =
+                (PineValue.ListValue)enteredLeafEnvironments[leafKey].Evaluate();
 
             var shortEnvironment = EnvironmentWithSource(environment, "!");
             var longEnvironment = EnvironmentWithSource(environment, "!" + new string('a', 100_000));
+            var shortEnvironmentInProcess = PineValueInProcess.Create(shortEnvironment);
+            var longEnvironmentInProcess = PineValueInProcess.Create(longEnvironment);
 
-            scanner(shortEnvironment).Should().Be(scanner(longEnvironment));
+            scanner(shortEnvironmentInProcess)?.Evaluate()
+                .Should().Be(scanner(longEnvironmentInProcess)?.Evaluate());
 
             const int invocationCount = 100;
 
@@ -219,7 +224,7 @@ public class ElmSyntaxConcreteParserPrecompiledLeavesEffectivenessTests
 
             for (var invocation = 0; invocation < invocationCount; ++invocation)
             {
-                _ = scanner(shortEnvironment);
+                _ = scanner(shortEnvironmentInProcess);
             }
 
             var shortAllocatedBytes =
@@ -229,7 +234,7 @@ public class ElmSyntaxConcreteParserPrecompiledLeavesEffectivenessTests
 
             for (var invocation = 0; invocation < invocationCount; ++invocation)
             {
-                _ = scanner(longEnvironment);
+                _ = scanner(longEnvironmentInProcess);
             }
 
             var longAllocatedBytes =
@@ -293,8 +298,8 @@ public class ElmSyntaxConcreteParserPrecompiledLeavesEffectivenessTests
     }
 
     private static Core.Interpreter.IntermediateVM.PineVM CreateVM(
-        IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> precompiledLeaves,
-        Action<PineValue, PineValue>? reportEnterPrecompiledLeaf) =>
+        IReadOnlyDictionary<PineValue, PrecompiledLeaf> precompiledLeaves,
+        Action<PineValue, PineValueInProcess>? reportEnterPrecompiledLeaf) =>
         Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
             evalCache: null,
             evaluationConfigDefault: null,

@@ -56,11 +56,11 @@ public class PineVM : ICancellablePineVM
 
     private readonly PineVMExpressionEncodingCache _expressionEncodingCache;
 
-    private readonly IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? _precompiledLeaves;
+    private readonly IReadOnlyDictionary<PineValue, PrecompiledLeaf>? _precompiledLeaves;
 
-    private readonly Action<PineValue, PineValue>? _reportEnterPrecompiledLeaf;
+    private readonly Action<PineValue, PineValueInProcess>? _reportEnterPrecompiledLeaf;
 
-    private readonly Action<PineValue, PineValue, PineValue?>? _reportExitPrecompiledLeaf;
+    private readonly Action<PineValue, PineValueInProcess, PineValueInProcess?>? _reportExitPrecompiledLeaf;
 
     private readonly OptimizationParametersSerial? _optimizationParametersSerial = null;
 
@@ -94,9 +94,9 @@ public class PineVM : ICancellablePineVM
         Func<Expression, bool> skipInlineForExpression,
         bool enableTailRecursionOptimization,
         PineVMParseCache? parseCache,
-        IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? precompiledLeaves,
-        Action<PineValue, PineValue>? reportEnterPrecompiledLeaf,
-        Action<PineValue, PineValue, PineValue?>? reportExitPrecompiledLeaf,
+        IReadOnlyDictionary<PineValue, PrecompiledLeaf>? precompiledLeaves,
+        Action<PineValue, PineValueInProcess>? reportEnterPrecompiledLeaf,
+        Action<PineValue, PineValueInProcess, PineValueInProcess?>? reportExitPrecompiledLeaf,
         OptimizationParametersSerial? optimizationParametersSerial,
         IFileStore? cacheFileStore,
         ReportExecutedStackInstruction? reportExecutedStackInstruction = null,
@@ -177,9 +177,9 @@ public class PineVM : ICancellablePineVM
         Func<Expression, bool> skipInlineForExpression,
         bool enableTailRecursionOptimization,
         PineVMParseCache? parseCache,
-        IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? precompiledLeaves,
-        Action<PineValue, PineValue>? reportEnterPrecompiledLeaf,
-        Action<PineValue, PineValue, PineValue?>? reportExitPrecompiledLeaf,
+        IReadOnlyDictionary<PineValue, PrecompiledLeaf>? precompiledLeaves,
+        Action<PineValue, PineValueInProcess>? reportEnterPrecompiledLeaf,
+        Action<PineValue, PineValueInProcess, PineValueInProcess?>? reportExitPrecompiledLeaf,
         OptimizationParametersSerial? optimizationParametersSerial,
         IFileStore? cacheFileStore,
         ReportExecutedStackInstruction? reportExecutedStackInstruction,
@@ -777,17 +777,18 @@ public class PineVM : ICancellablePineVM
                     {
                         if (_precompiledLeaves.TryGetValue(expressionValue, out var computeLeafDelegate))
                         {
-                            var envValue = environmentValue.Evaluate();
+                            _reportEnterPrecompiledLeaf?.Invoke(expressionValue, environmentValue);
 
-                            _reportEnterPrecompiledLeaf?.Invoke(expressionValue, envValue);
+                            var valueComputedInLeaf = computeLeafDelegate(environmentValue);
 
-                            var valueComputedInLeaf = computeLeafDelegate(envValue);
-
-                            _reportExitPrecompiledLeaf?.Invoke(expressionValue, envValue, valueComputedInLeaf);
+                            _reportExitPrecompiledLeaf?.Invoke(
+                                expressionValue,
+                                environmentValue,
+                                valueComputedInLeaf);
 
                             if (valueComputedInLeaf is { } computedValue)
                             {
-                                currentFrame.PushInstructionResult(PineValueInProcess.Create(computedValue));
+                                currentFrame.PushInstructionResult(computedValue);
 
                                 return null;
                             }

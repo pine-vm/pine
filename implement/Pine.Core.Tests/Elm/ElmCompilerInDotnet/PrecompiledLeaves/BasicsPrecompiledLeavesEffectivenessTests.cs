@@ -121,7 +121,7 @@ public class BasicsPrecompiledLeavesEffectivenessTests
     // ---------- VM construction ----------
 
     private static Core.Interpreter.IntermediateVM.PineVM CreateVM(
-        IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> precompiledLeaves) =>
+        IReadOnlyDictionary<PineValue, PrecompiledLeaf> precompiledLeaves) =>
         Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
             evalCache: null,
             evaluationConfigDefault: null,
@@ -175,7 +175,7 @@ public class BasicsPrecompiledLeavesEffectivenessTests
     /// inside the <c>Pine.Core</c> project, exposed via
     /// <see cref="IntermediateVM.SetupVM.DefaultPrecompiledLeaves"/>.
     /// </summary>
-    private static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> DefaultPrecompiledLeaves =>
+    private static IReadOnlyDictionary<PineValue, PrecompiledLeaf> DefaultPrecompiledLeaves =>
         IntermediateVM.SetupVM.DefaultPrecompiledLeaves;
 
     // ---------- tests ----------
@@ -189,7 +189,7 @@ public class BasicsPrecompiledLeavesEffectivenessTests
 
         foreach (var vm in new[]
         {
-            CreateVM(ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty),
+            CreateVM(ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty),
             CreateVM(DefaultPrecompiledLeaves),
         })
         {
@@ -211,7 +211,7 @@ public class BasicsPrecompiledLeavesEffectivenessTests
         var functionValue = GetTestFunction("isLessThan");
 
         var vmWithoutLeaves =
-            CreateVM(ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty);
+            CreateVM(ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty);
 
         var vmWithLeaves =
             CreateVM(DefaultPrecompiledLeaves);
@@ -295,7 +295,7 @@ public class BasicsPrecompiledLeavesEffectivenessTests
         var functionValue = GetTestFunction("isEqual");
 
         var vmWithoutLeaves =
-            CreateVM(ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty);
+            CreateVM(ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty);
 
         var vmWithLeaves =
             CreateVM(DefaultPrecompiledLeaves);
@@ -370,7 +370,7 @@ public class BasicsPrecompiledLeavesEffectivenessTests
         var functionValue = GetTestFunction("idivide");
 
         var vmWithoutLeaves =
-            CreateVM(ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty);
+            CreateVM(ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty);
 
         var vmWithLeaves =
             CreateVM(DefaultPrecompiledLeaves);
@@ -434,7 +434,7 @@ public class BasicsPrecompiledLeavesEffectivenessTests
         var functionValue = GetTestFunction("gcdOf");
 
         var vmWithoutLeaves =
-            CreateVM(ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty);
+            CreateVM(ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty);
 
         var vmWithLeaves =
             CreateVM(DefaultPrecompiledLeaves);
@@ -503,11 +503,11 @@ public class BasicsPrecompiledLeavesEffectivenessTests
         var functionValue = GetTestFunction("modByOf");
 
         var vmWithoutLeaves =
-            CreateVM(ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty);
+            CreateVM(ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty);
 
         var vmWithOnlyIdivLeaf =
             CreateVM(
-                ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty
+                ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty
                 .Add(CoreBasicsPrecompiledLeaves.IdivLeafKey, CoreBasicsPrecompiledLeaves.IdivLeafDelegate));
 
         var simpleModulus = ElmValue.Integer(2);

@@ -2,6 +2,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Internal;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -71,9 +72,11 @@ public static class KernelJsonDecodePrecompiledLeaves
     /// <summary>
     /// Executes <c>Json.Decode.parseValue</c> directly, or returns <c>null</c> for an unexpected environment.
     /// </summary>
-    public static PineValue? ParseValueLeafDelegate(PineValue environment)
+    public static PineValueInProcess? ParseValueLeafDelegate(PineValueInProcess environment)
     {
-        if (environment.ValueFromPathOrEmptyList([0]) != s_parseValueLeafInfo.Value.envFunctionsValue)
+        if (!PineValueInProcess.AreEqual(
+                environment.GetElementAt(0),
+                s_parseValueLeafInfo.Value.envFunctionsValue))
         {
             return null;
         }
@@ -87,12 +90,12 @@ public static class KernelJsonDecodePrecompiledLeaves
     /// <summary>
     /// Default precompiled-leaves dictionary contributed by the kernel <c>Json.Decode</c> module.
     /// </summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> DefaultLeaves =>
+    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> DefaultLeaves =>
         s_defaultLeaves.Value;
 
-    private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>> s_defaultLeaves =
+    private static readonly Lazy<IReadOnlyDictionary<PineValue, PrecompiledLeaf>> s_defaultLeaves =
         new(
             () =>
-            ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty
+            ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty
             .Add(ParseValueLeafKey, ParseValueLeafDelegate));
 }

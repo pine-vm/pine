@@ -68,7 +68,7 @@ public class JsonDecodePrecompiledLeavesEffectivenessTests
         .moduleContent.FunctionDeclarations["parseJson"];
 
     private static Core.Interpreter.IntermediateVM.PineVM CreateVM(
-        IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> precompiledLeaves) =>
+        IReadOnlyDictionary<PineValue, PrecompiledLeaf> precompiledLeaves) =>
         Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
             evalCache: null,
             evaluationConfigDefault: null,
@@ -132,7 +132,7 @@ public class JsonDecodePrecompiledLeavesEffectivenessTests
         ElmValue expectedComplex)
     {
         var vmWithoutLeaves =
-            CreateVM(ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty);
+            CreateVM(ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty);
 
         var vmWithLeaves = CreateVM(IntermediateVM.SetupVM.DefaultPrecompiledLeaves);
 

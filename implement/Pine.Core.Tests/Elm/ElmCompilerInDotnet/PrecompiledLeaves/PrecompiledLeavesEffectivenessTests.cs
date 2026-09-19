@@ -103,7 +103,7 @@ public class PrecompiledLeavesEffectivenessTests
     /// profiling) and the supplied precompiled-leaves dictionary.
     /// </summary>
     private static Core.Interpreter.IntermediateVM.PineVM CreateVM(
-        IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> precompiledLeaves) =>
+        IReadOnlyDictionary<PineValue, PrecompiledLeaf> precompiledLeaves) =>
         Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
             evalCache: null,
             evaluationConfigDefault: null,
@@ -136,7 +136,7 @@ public class PrecompiledLeavesEffectivenessTests
     /// inside the <c>Pine.Core</c> project, exposed via
     /// <see cref="IntermediateVM.SetupVM.DefaultPrecompiledLeaves"/>.
     /// </summary>
-    private static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> DefaultPrecompiledLeaves =>
+    private static IReadOnlyDictionary<PineValue, PrecompiledLeaf> DefaultPrecompiledLeaves =>
         IntermediateVM.SetupVM.DefaultPrecompiledLeaves;
 
     // ---------- record access / record update leaves ----------
@@ -177,7 +177,7 @@ public class PrecompiledLeavesEffectivenessTests
         var functionValue = GetTestFunction("accessField");
 
         var vmWithoutLeaves =
-            CreateVM(ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty);
+            CreateVM(ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty);
 
         var vmWithLeaves = CreateVM(DefaultPrecompiledLeaves);
 
@@ -270,7 +270,7 @@ public class PrecompiledLeavesEffectivenessTests
         var functionValue = GetTestFunction("updateField");
 
         var vmWithoutLeaves =
-            CreateVM(ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty);
+            CreateVM(ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty);
 
         var vmWithLeaves = CreateVM(DefaultPrecompiledLeaves);
 

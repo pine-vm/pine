@@ -2337,7 +2337,7 @@ public class FunctionValueBuilderTests
                 skipInlineForExpression: _ => false,
                 enableTailRecursionOptimization: false,
                 parseCache: s_parseCache,
-                precompiledLeaves: ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty,
+                precompiledLeaves: ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty,
                 reportEnterPrecompiledLeaf: null,
                 reportExitPrecompiledLeaf: null,
                 optimizationParametersSerial: null,

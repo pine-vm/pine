@@ -2,6 +2,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
+using Pine.Core.Internal;
 using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
@@ -84,37 +85,39 @@ public static class ElmSyntaxAbstractConvertFromConcretePrecompiledLeaves
     /// <summary>
     /// Merges two lists of record setters sorted by field name.
     /// </summary>
-    public static PineValue? MergeRecordSettersLeafDelegate(PineValue environment)
+    public static PineValueInProcess? MergeRecordSettersLeafDelegate(PineValueInProcess environment)
     {
-        if (environment.ValueFromPathOrEmptyList([0]) != s_leafInfo.Value.EnvFunctionsValue ||
-            environment.ValueFromPathOrEmptyList([1]) is not PineValue.ListValue left ||
-            environment.ValueFromPathOrEmptyList([2]) is not PineValue.ListValue right)
+        if (!PineValueInProcess.AreEqual(environment.GetElementAt(0), s_leafInfo.Value.EnvFunctionsValue) ||
+            PineValueInProcess.ValueInProcessFromPathOrNull(environment, [1]) is not { } left ||
+            PineValueInProcess.ValueInProcessFromPathOrNull(environment, [2]) is not { } right ||
+            !left.IsList() ||
+            !right.IsList())
         {
             return null;
         }
 
-        if (left.Items.Length is 0)
+        if (left.GetLength() is 0)
         {
             return right;
         }
 
-        if (right.Items.Length is 0)
+        if (right.GetLength() is 0)
         {
             return left;
         }
 
-        var merged = new PineValue[left.Items.Length + right.Items.Length];
+        var merged = new PineValueInProcess[left.GetLength() + right.GetLength()];
         var leftIndex = 0;
         var rightIndex = 0;
         var mergedIndex = 0;
 
-        while (leftIndex < left.Items.Length && rightIndex < right.Items.Length)
+        while (leftIndex < left.GetLength() && rightIndex < right.GetLength())
         {
-            var leftSetter = left.Items.Span[leftIndex];
-            var rightSetter = right.Items.Span[rightIndex];
+            var leftSetter = left.GetElementAt(leftIndex);
+            var rightSetter = right.GetElementAt(rightIndex);
 
-            if (!TryGetFieldNameBytes(leftSetter, out var leftFieldName) ||
-                !TryGetFieldNameBytes(rightSetter, out var rightFieldName))
+            if (!TryGetFieldNameBytes(leftSetter.Evaluate(), out var leftFieldName) ||
+                !TryGetFieldNameBytes(rightSetter.Evaluate(), out var rightFieldName))
             {
                 return null;
             }
@@ -131,11 +134,17 @@ public static class ElmSyntaxAbstractConvertFromConcretePrecompiledLeaves
             }
         }
 
-        left.Items.Span[leftIndex..].CopyTo(merged.AsSpan(mergedIndex));
-        mergedIndex += left.Items.Length - leftIndex;
-        right.Items.Span[rightIndex..].CopyTo(merged.AsSpan(mergedIndex));
+        while (leftIndex < left.GetLength())
+        {
+            merged[mergedIndex++] = left.GetElementAt(leftIndex++);
+        }
 
-        return PineValue.List(merged);
+        while (rightIndex < right.GetLength())
+        {
+            merged[mergedIndex++] = right.GetElementAt(rightIndex++);
+        }
+
+        return PineValueInProcess.CreateList(merged);
     }
 
     private static bool TryGetFieldNameBytes(PineValue setter, out ReadOnlyMemory<byte> bytes)
@@ -194,12 +203,12 @@ public static class ElmSyntaxAbstractConvertFromConcretePrecompiledLeaves
         StringEncoding.ValueFromString("fieldName");
 
     /// <summary>Gets the default precompiled ConvertFromConcrete leaves by leaf key.</summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> DefaultLeaves =>
+    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> DefaultLeaves =>
         s_defaultLeaves.Value;
 
-    private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>> s_defaultLeaves =
+    private static readonly Lazy<IReadOnlyDictionary<PineValue, PrecompiledLeaf>> s_defaultLeaves =
         new(
             () =>
-            ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty
+            ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty
             .Add(MergeRecordSettersLeafKey, MergeRecordSettersLeafDelegate));
 }

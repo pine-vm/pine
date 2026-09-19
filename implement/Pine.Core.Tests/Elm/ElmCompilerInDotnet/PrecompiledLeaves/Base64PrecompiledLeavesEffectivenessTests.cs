@@ -156,7 +156,7 @@ public class Base64PrecompiledLeavesEffectivenessTests
             ?
             IntermediateVM.SetupVM.DefaultPrecompiledLeaves
             :
-            ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty,
+            ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty,
             reportEnterPrecompiledLeaf: null,
             reportExitPrecompiledLeaf: null,
             optimizationParametersSerial: null,

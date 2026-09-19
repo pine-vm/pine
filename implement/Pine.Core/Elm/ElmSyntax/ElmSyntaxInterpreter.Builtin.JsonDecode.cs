@@ -134,10 +134,9 @@ public partial class ElmSyntaxInterpreter
                 [resultValue, PineValueInProcess.CreateInteger(parsed.Offset)]);
     }
 
-    internal static PineValue? JsonDecodeParseValue(PineValue source, PineValue offset) =>
+    internal static PineValueInProcess? JsonDecodeParseValue(PineValue source, PineValue offset) =>
         ResolveJsonDecodeParseValue(
-            [PineValueInProcess.Create(source), PineValueInProcess.Create(offset)])
-        ?.Evaluate();
+            [PineValueInProcess.Create(source), PineValueInProcess.Create(offset)]);
 
     // ============================================================
     // Byte-level helpers mirroring Pine_kernel.take / skip on blobs.

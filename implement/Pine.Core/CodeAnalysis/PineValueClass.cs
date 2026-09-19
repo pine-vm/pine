@@ -79,10 +79,10 @@ public record PineValueClass
             {
                 var (path, expectedValue) = Constraints.Span[i];
 
-                if (PineValueInProcess.ValueFromPathOrNull(concreteValue, path.Span) is not { } pathValue)
+                if (PineValueInProcess.ValueInProcessFromPathOrNull(concreteValue, path.Span) is not { } pathValue)
                     return false;
 
-                if (!pathValue.Equals(expectedValue))
+                if (!PineValueInProcess.AreEqual(pathValue, expectedValue))
                     return false;
             }
 

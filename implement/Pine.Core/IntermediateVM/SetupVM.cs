@@ -124,8 +124,8 @@ public static class SetupVM
     /// <summary>
     /// Stable names mapped to the C# implementations of all default precompiled leaves.
     /// </summary>
-    public static IReadOnlyDictionary<string, Func<PineValue, PineValue?>> DefaultPrecompiledLeafFunctionsByName { get; } =
-        new Dictionary<string, Func<PineValue, PineValue?>>
+    public static IReadOnlyDictionary<string, PrecompiledLeaf> DefaultPrecompiledLeafFunctionsByName { get; } =
+        new Dictionary<string, PrecompiledLeaf>
         {
             [BasicsCompareName] = CoreBasicsPrecompiledLeaves.CompareLeafDelegate,
             [BasicsEqName] = CoreBasicsPrecompiledLeaves.EqLeafDelegate,
@@ -290,10 +290,10 @@ public static class SetupVM
     /// <summary>
     /// Combines named key values with their named C# implementations.
     /// </summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> BuildDefaultPrecompiledLeaves(
+    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> BuildDefaultPrecompiledLeaves(
         IReadOnlyDictionary<string, PineValue> valuesByName)
     {
-        var leaves = new Dictionary<PineValue, Func<PineValue, PineValue?>>();
+        var leaves = new Dictionary<PineValue, PrecompiledLeaf>();
 
         foreach (var (name, function) in DefaultPrecompiledLeafFunctionsByName)
         {
@@ -311,70 +311,70 @@ public static class SetupVM
     /// <summary>
     /// Gets the native implementations for the precompiled leaf keys from the Basics module.
     /// </summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> BasicsPrecompiledLeaves =>
+    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> BasicsPrecompiledLeaves =>
         s_basicsPrecompiledLeaves.Value;
 
     /// <summary>
     /// Gets the native implementations for the precompiled leaf keys from the Dict module.
     /// </summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> DictPrecompiledLeaves =>
+    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> DictPrecompiledLeaves =>
         s_dictPrecompiledLeaves.Value;
 
     /// <summary>
     /// Gets the native implementations for the precompiled leaf keys from Json.Decode.
     /// </summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> JsonDecodePrecompiledLeaves =>
+    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> JsonDecodePrecompiledLeaves =>
         s_jsonDecodePrecompiledLeaves.Value;
 
     /// <summary>
     /// Gets the native implementations for the precompiled leaf keys from the String module.
     /// </summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> StringPrecompiledLeaves =>
+    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> StringPrecompiledLeaves =>
         s_stringPrecompiledLeaves.Value;
 
     /// <summary>
     /// Gets the native implementations for the precompiled leaf keys used by the Elm language service helpers.
     /// </summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> LanguageServicePrecompiledLeaves =>
+    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> LanguageServicePrecompiledLeaves =>
         s_languageServicePrecompiledLeaves.Value;
 
     /// <summary>
     /// Gets the native implementations for the precompiled leaf keys from the Bytes helpers.
     /// </summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> BytesPrecompiledLeaves =>
+    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> BytesPrecompiledLeaves =>
         s_bytesPrecompiledLeaves.Value;
 
     /// <summary>
     /// Gets the native implementations for the precompiled leaf keys that implement record access and update.
     /// </summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> RecordAccessAndUpdatePrecompiledLeaves =>
+    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> RecordAccessAndUpdatePrecompiledLeaves =>
         s_recordPrecompiledLeaves.Value;
 
     /// <summary>
     /// Gets the native implementations for the precompiled leaf keys used for Base64 conversion.
     /// </summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> Base64ConversionPrecompiledLeaves =>
+    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> Base64ConversionPrecompiledLeaves =>
         s_base64PrecompiledLeaves.Value;
 
     /// <summary>
     /// Gets the native implementations for the precompiled leaf keys from the concrete Elm parser.
     /// </summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> ConcreteParserPrecompiledLeaves =>
+    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> ConcreteParserPrecompiledLeaves =>
         s_concreteParserPrecompiledLeaves.Value;
 
     /// <summary>
     /// Gets the native implementations for the precompiled leaf keys that convert concrete Elm syntax into abstract form.
     /// </summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> ConvertFromConcretePrecompiledLeaves =>
+    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> ConvertFromConcretePrecompiledLeaves =>
         s_convertFromConcretePrecompiledLeaves.Value;
 
     /// <summary>
     /// Gets the combined map of all default precompiled leaf keys to their native implementations.
     /// </summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> DefaultPrecompiledLeaves =>
+    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> DefaultPrecompiledLeaves =>
         s_defaultPrecompiledLeaves.Value;
 
-    private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>> s_defaultPrecompiledLeaves =
+    private static readonly Lazy<IReadOnlyDictionary<PineValue, PrecompiledLeaf>> s_defaultPrecompiledLeaves =
         new(() => BuildDefaultPrecompiledLeaves(s_defaultPrecompiledLeafValues.Value));
 
     private static readonly Lazy<IReadOnlyDictionary<string, PineValue>> s_defaultPrecompiledLeafValues =
@@ -395,10 +395,10 @@ public static class SetupVM
                 }
             });
 
-    private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>> s_basicsPrecompiledLeaves =
+    private static readonly Lazy<IReadOnlyDictionary<PineValue, PrecompiledLeaf>> s_basicsPrecompiledLeaves =
         new(() => BuildPrecompiledLeavesForNames(BasicsCompareName, BasicsEqName, BasicsIdivName, BasicsGcdName));
 
-    private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>> s_dictPrecompiledLeaves =
+    private static readonly Lazy<IReadOnlyDictionary<PineValue, PrecompiledLeaf>> s_dictPrecompiledLeaves =
         new(
             () =>
             BuildPrecompiledLeavesForNames(
@@ -409,10 +409,10 @@ public static class SetupVM
                 DictValuesName,
                 DictInsertName));
 
-    private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>> s_jsonDecodePrecompiledLeaves =
+    private static readonly Lazy<IReadOnlyDictionary<PineValue, PrecompiledLeaf>> s_jsonDecodePrecompiledLeaves =
         new(() => BuildPrecompiledLeavesForNames(JsonDecodeParseValueName));
 
-    private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>> s_stringPrecompiledLeaves =
+    private static readonly Lazy<IReadOnlyDictionary<PineValue, PrecompiledLeaf>> s_stringPrecompiledLeaves =
         new(
             () =>
             BuildPrecompiledLeavesForNames(
@@ -425,7 +425,7 @@ public static class SetupVM
                 StringTrimLeftCountBytesTrimmedName,
                 StringTrimRightCountBytesRemainingName));
 
-    private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>>
+    private static readonly Lazy<IReadOnlyDictionary<PineValue, PrecompiledLeaf>>
         s_languageServicePrecompiledLeaves =
         new(
             () =>
@@ -434,20 +434,20 @@ public static class SetupVM
                 LanguageServiceDropWhileEmptyName,
                 LanguageServiceSliceRangeFromTextLinesName));
 
-    private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>> s_bytesPrecompiledLeaves =
+    private static readonly Lazy<IReadOnlyDictionary<PineValue, PrecompiledLeaf>> s_bytesPrecompiledLeaves =
         new(
             () =>
             BuildPrecompiledLeavesForNames(
                 BytesDecodeBlobAsCharsRecName,
                 BytesEncodeCharsAsBlobHelpName));
 
-    private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>> s_recordPrecompiledLeaves =
+    private static readonly Lazy<IReadOnlyDictionary<PineValue, PrecompiledLeaf>> s_recordPrecompiledLeaves =
         new(() => BuildPrecompiledLeavesForNames(RecordAccessName, RecordUpdateName));
 
-    private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>> s_base64PrecompiledLeaves =
+    private static readonly Lazy<IReadOnlyDictionary<PineValue, PrecompiledLeaf>> s_base64PrecompiledLeaves =
         new(() => BuildPrecompiledLeavesForNames(Base64EncodeToBytesName, Base64DecodeFromBytesName));
 
-    private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>>
+    private static readonly Lazy<IReadOnlyDictionary<PineValue, PrecompiledLeaf>>
         s_concreteParserPrecompiledLeaves =
         new(
             () =>
@@ -464,17 +464,17 @@ public static class SetupVM
                 ConcreteParserFindLiteralRunEndName,
                 ConcreteParserSkipOperatorCharsName));
 
-    private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>>
+    private static readonly Lazy<IReadOnlyDictionary<PineValue, PrecompiledLeaf>>
         s_convertFromConcretePrecompiledLeaves =
         new(
             () =>
             BuildPrecompiledLeavesForNames(
                 AbstractConvertFromConcreteMergeRecordSettersName));
 
-    private static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> BuildPrecompiledLeavesForNames(
+    private static IReadOnlyDictionary<PineValue, PrecompiledLeaf> BuildPrecompiledLeavesForNames(
         params string[] names)
     {
-        var leaves = new Dictionary<PineValue, Func<PineValue, PineValue?>>();
+        var leaves = new Dictionary<PineValue, PrecompiledLeaf>();
         var valuesByName = s_defaultPrecompiledLeafValues.Value;
 
         foreach (var name in names)

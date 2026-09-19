@@ -189,11 +189,11 @@ public class PineValueInProcess
             new PineValueInProcess
             {
                 _partialApplication =
-                    new PartialApplicationState(
-                        callable,
-                        arguments,
-                        materialize,
-                        reportMaterialization)
+                new PartialApplicationState(
+                    callable,
+                    arguments,
+                    materialize,
+                    reportMaterialization)
             };
     }
 
@@ -1461,6 +1461,17 @@ public class PineValueInProcess
     /// <returns>The materialized value at the given path or <c>null</c> if any step is missing.</returns>
     public static PineValue? ValueFromPathOrNull(
         PineValueInProcess root,
+        ReadOnlySpan<int> path) =>
+        ValueInProcessFromPathOrNull(root, path)?.Evaluate();
+
+    /// <summary>
+    /// Resolve a descendant value by following a sequence of indices while preserving deferred evaluation.
+    /// </summary>
+    /// <param name="root">The value serving as the traversal root.</param>
+    /// <param name="path">The zero-based index path to traverse.</param>
+    /// <returns>An in-process value at the given path, or <c>null</c> if any step is missing.</returns>
+    public static PineValueInProcess? ValueInProcessFromPathOrNull(
+        PineValueInProcess root,
         ReadOnlySpan<int> path)
     {
         var current = root;
@@ -1469,21 +1480,23 @@ public class PineValueInProcess
         {
             if (current._evaluated is { } currentMaterialized)
             {
-                return
+                var concreteValue =
                     PineValueExtension.ValueFromPathOrNull(
                         currentMaterialized,
                         path[i..]);
+
+                return concreteValue is null ? null : Create(concreteValue);
             }
 
-            current = current.GetElementAt(path[i]);
-
-            if (current is null)
+            if (!current.IsList())
             {
                 return null;
             }
+
+            current = current.GetElementAt(path[i]);
         }
 
-        return current.Evaluate();
+        return current;
     }
 
     /// <summary>

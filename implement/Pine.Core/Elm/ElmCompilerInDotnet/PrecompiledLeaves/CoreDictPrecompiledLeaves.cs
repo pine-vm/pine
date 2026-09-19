@@ -1,6 +1,7 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.ElmInElm;
+using Pine.Core.Internal;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -137,9 +138,9 @@ public static class CoreDictPrecompiledLeaves
     /// does not match the expected shape (i.e. <c>env[0]</c> is not
     /// <see cref="DictGetEnvFunctionsValue"/>).
     /// </summary>
-    public static PineValue? DictGetLeafDelegate(PineValue environment)
+    public static PineValueInProcess? DictGetLeafDelegate(PineValueInProcess environment)
     {
-        if (environment.ValueFromPathOrEmptyList([0]) != DictGetEnvFunctionsValue)
+        if (!PineValueInProcess.AreEqual(environment.GetElementAt(0), DictGetEnvFunctionsValue))
         {
             return null;
         }
@@ -147,23 +148,23 @@ public static class CoreDictPrecompiledLeaves
         var targetKey = environment.ValueFromPathOrEmptyList([1]);
         var dict = environment.ValueFromPathOrEmptyList([2]);
 
-        return DictGetImpl(targetKey, dict);
+        return DictGetImplInProcess(targetKey, dict);
     }
 
     /// <summary>
     /// Executes <c>Dict.toList</c> directly, or returns <c>null</c> for an unexpected environment.
     /// </summary>
-    public static PineValue? DictToListLeafDelegate(PineValue environment) =>
+    public static PineValueInProcess? DictToListLeafDelegate(PineValueInProcess environment) =>
         GetUnaryArgument(environment, "toList") is { } dict
         ?
-        DictToList(dict)
+        DictToListInProcess(dict, DictListItem.Pair)
         :
         null;
 
     /// <summary>
     /// Executes <c>Dict.size</c> directly, or returns <c>null</c> for an unexpected environment.
     /// </summary>
-    public static PineValue? DictSizeLeafDelegate(PineValue environment)
+    public static PineValueInProcess? DictSizeLeafDelegate(PineValueInProcess environment)
     {
         var dict = GetUnaryArgument(environment, "size");
 
@@ -172,68 +173,74 @@ public static class CoreDictPrecompiledLeaves
             ?
             null
             :
-            ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(DictSizeImpl(dict)));
+            PineValueInProcess.CreateInteger(DictSizeImpl(dict));
     }
 
     /// <summary>
     /// Executes <c>Dict.keys</c> directly, or returns <c>null</c> for an unexpected environment.
     /// </summary>
-    public static PineValue? DictKeysLeafDelegate(PineValue environment) =>
+    public static PineValueInProcess? DictKeysLeafDelegate(PineValueInProcess environment) =>
         GetUnaryArgument(environment, "keys") is { } dict
         ?
-        DictToListImpl(dict, DictListItem.Key)
+        DictToListInProcess(dict, DictListItem.Key)
         :
         null;
 
     /// <summary>
     /// Executes <c>Dict.values</c> directly, or returns <c>null</c> for an unexpected environment.
     /// </summary>
-    public static PineValue? DictValuesLeafDelegate(PineValue environment) =>
+    public static PineValueInProcess? DictValuesLeafDelegate(PineValueInProcess environment) =>
         GetUnaryArgument(environment, "values") is { } dict
         ?
-        DictToListImpl(dict, DictListItem.Value)
+        DictToListInProcess(dict, DictListItem.Value)
         :
         null;
 
     /// <summary>
     /// Executes <c>Dict.insert</c> directly, or returns <c>null</c> for an unexpected environment.
     /// </summary>
-    public static PineValue? DictInsertLeafDelegate(PineValue environment)
+    public static PineValueInProcess? DictInsertLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, "insert"))
         {
             return null;
         }
 
+        var key = PineValueInProcess.ValueInProcessFromPathOrNull(environment, [1]);
+        var value = PineValueInProcess.ValueInProcessFromPathOrNull(environment, [2]);
+        var dict = PineValueInProcess.ValueInProcessFromPathOrNull(environment, [3]);
+
         return
-            DictInsertImpl(
-                environment.ValueFromPathOrEmptyList([1]),
-                environment.ValueFromPathOrEmptyList([2]),
-                environment.ValueFromPathOrEmptyList([3]));
+            key is null || value is null || dict is null
+            ?
+            null
+            :
+            DictInsertImpl(key, value, dict);
     }
 
-    private static PineValue? GetUnaryArgument(PineValue environment, string functionName) =>
+    private static PineValue? GetUnaryArgument(PineValueInProcess environment, string functionName) =>
         EnvironmentMatches(environment, functionName)
         ?
         environment.ValueFromPathOrEmptyList([1])
         :
         null;
 
-    private static bool EnvironmentMatches(PineValue environment, string functionName) =>
-        environment.ValueFromPathOrEmptyList([0]) ==
-        s_dictLeafInfos.Value[functionName].envFunctionsValue;
+    private static bool EnvironmentMatches(PineValueInProcess environment, string functionName) =>
+        PineValueInProcess.AreEqual(
+            environment.GetElementAt(0),
+            s_dictLeafInfos.Value[functionName].envFunctionsValue);
 
     /// <summary>
     /// Default precompiled-leaves dictionary contributed by the kernel <c>Dict</c> module.
     /// Suitable for merging into the dictionary consumed by the intermediate VM.
     /// </summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> DefaultLeaves =>
+    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> DefaultLeaves =>
         s_defaultLeaves.Value;
 
-    private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>> s_defaultLeaves =
+    private static readonly Lazy<IReadOnlyDictionary<PineValue, PrecompiledLeaf>> s_defaultLeaves =
         new(
             () =>
-            ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty
+            ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty
             .Add(DictGetLeafKey, DictGetLeafDelegate)
             .Add(DictToListLeafKey, DictToListLeafDelegate)
             .Add(DictSizeLeafKey, DictSizeLeafDelegate)
@@ -263,13 +270,18 @@ public static class CoreDictPrecompiledLeaves
     /// </summary>
     internal static PineValue DictGetImpl(PineValue targetKey, PineValue dict)
     {
+        return DictGetImplInProcess(targetKey, dict).Evaluate();
+    }
+
+    private static PineValueInProcess DictGetImplInProcess(PineValue targetKey, PineValue dict)
+    {
         while (true)
         {
             var dictTag = dict.ValueFromPathOrEmptyList([1]);
 
             if (dictTag == ElmValue.ElmDictEmptyTagNameAsValue)
             {
-                return s_tag_Nothing_Value;
+                return PineValueInProcess.Create(s_tag_Nothing_Value);
             }
 
             if (dictTag != ElmValue.ElmDictNotEmptyTagNameAsValue)
@@ -296,7 +308,10 @@ public static class CoreDictPrecompiledLeaves
                 continue;
             }
 
-            return ElmValueEncoding.TagAsPineValue("Just", [value]);
+            return
+                ElmValueInProcess.CreateChoice(
+                    PineValueInProcess.Create(s_tag_Just_Name_Value),
+                    [PineValueInProcess.Create(value)]);
         }
     }
 
@@ -314,6 +329,13 @@ public static class CoreDictPrecompiledLeaves
         PineValue Left,
         PineValue Right);
 
+    private readonly record struct DictNodeInProcess(
+        PineValueInProcess Color,
+        PineValueInProcess Key,
+        PineValueInProcess Value,
+        PineValueInProcess Left,
+        PineValueInProcess Right);
+
     private static readonly PineValue s_emptyDict =
         ElmValueEncoding.ElmValueAsPineValue(
             ElmValue.TagInstance(ElmValue.ElmDictEmptyTagName, []));
@@ -324,15 +346,27 @@ public static class CoreDictPrecompiledLeaves
     private static readonly PineValue s_black =
         ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("Black", []));
 
+    private static readonly PineValueInProcess s_emptyDictInProcess =
+        PineValueInProcess.Create(s_emptyDict);
+
+    private static readonly PineValueInProcess s_redInProcess =
+        PineValueInProcess.Create(s_red);
+
+    private static readonly PineValueInProcess s_blackInProcess =
+        PineValueInProcess.Create(s_black);
+
+    private static readonly PineValueInProcess s_dictNotEmptyTagNameInProcess =
+        PineValueInProcess.Create(ElmValue.ElmDictNotEmptyTagNameAsValue);
+
     /// <summary>
     /// Executes <c>Dict.toList</c> directly.
     /// </summary>
     public static PineValue DictToList(PineValue dict) =>
-        DictToListImpl(dict, DictListItem.Pair);
+        DictToListInProcess(dict, DictListItem.Pair).Evaluate();
 
-    private static PineValue DictToListImpl(PineValue dict, DictListItem item)
+    private static PineValueInProcess DictToListInProcess(PineValue dict, DictListItem item)
     {
-        var result = new List<PineValue>();
+        var result = new List<PineValueInProcess>();
         var pending = new Stack<(PineValue dict, bool emit)>();
         pending.Push((dict, false));
 
@@ -352,9 +386,12 @@ public static class CoreDictPrecompiledLeaves
                 result.Add(
                     item switch
                     {
-                        DictListItem.Pair => PineValue.List([node.Key, node.Value]),
-                        DictListItem.Key => node.Key,
-                        DictListItem.Value => node.Value,
+                        DictListItem.Pair =>
+                        PineValueInProcess.CreateList(
+                            [PineValueInProcess.Create(node.Key), PineValueInProcess.Create(node.Value)]),
+
+                        DictListItem.Key => PineValueInProcess.Create(node.Key),
+                        DictListItem.Value => PineValueInProcess.Create(node.Value),
 
                         _ =>
                         throw new NotImplementedException(
@@ -369,7 +406,7 @@ public static class CoreDictPrecompiledLeaves
             pending.Push((node.Left, false));
         }
 
-        return PineValue.List([.. result]);
+        return PineValueInProcess.CreateList(result);
     }
 
     private static long DictSizeImpl(PineValue dict)
@@ -396,33 +433,43 @@ public static class CoreDictPrecompiledLeaves
         return count;
     }
 
-    private static PineValue DictInsertImpl(PineValue key, PineValue value, PineValue dict)
+    private static PineValueInProcess DictInsertImpl(
+        PineValueInProcess key,
+        PineValueInProcess value,
+        PineValueInProcess dict)
     {
         var inserted = DictInsertHelp(key, value, dict);
-        var root = ParseNode(inserted);
+        var root = ParseNodeInProcess(inserted);
 
         return
-            root.Color == s_red
+            PineValueInProcess.AreEqual(root.Color, s_red)
             ?
-            Node(s_black, root.Key, root.Value, root.Left, root.Right)
+            NodeInProcess(s_blackInProcess, root.Key, root.Value, root.Left, root.Right)
             :
             inserted;
     }
 
-    private static PineValue DictInsertHelp(PineValue key, PineValue value, PineValue dict)
+    private static PineValueInProcess DictInsertHelp(
+        PineValueInProcess key,
+        PineValueInProcess value,
+        PineValueInProcess dict)
     {
-        if (IsEmpty(dict))
+        if (IsEmptyInProcess(dict))
         {
-            return Node(s_red, key, value, s_emptyDict, s_emptyDict);
+            return NodeInProcess(s_redInProcess, key, value, s_emptyDictInProcess, s_emptyDictInProcess);
         }
 
-        var node = ParseNode(dict);
-        var comparison = CoreBasicsPrecompiledLeaves.BasicsCompare(key, node.Key);
+        var node = ParseNodeInProcess(dict);
+
+        var comparison =
+            CoreBasicsPrecompiledLeaves.BasicsCompare(
+                key.Evaluate(),
+                node.Key.Evaluate());
 
         if (comparison == s_tag_LT_Value)
         {
             return
-                Balance(
+                BalanceInProcess(
                     node.Color,
                     node.Key,
                     node.Value,
@@ -433,7 +480,7 @@ public static class CoreDictPrecompiledLeaves
         if (comparison == s_tag_GT_Value)
         {
             return
-                Balance(
+                BalanceInProcess(
                     node.Color,
                     node.Key,
                     node.Value,
@@ -441,69 +488,112 @@ public static class CoreDictPrecompiledLeaves
                     DictInsertHelp(key, value, node.Right));
         }
 
-        return Node(node.Color, node.Key, value, node.Left, node.Right);
+        return NodeInProcess(node.Color, node.Key, value, node.Left, node.Right);
     }
 
-    private static PineValue Balance(
-        PineValue color,
-        PineValue key,
-        PineValue value,
-        PineValue left,
-        PineValue right)
+    private static PineValueInProcess BalanceInProcess(
+        PineValueInProcess color,
+        PineValueInProcess key,
+        PineValueInProcess value,
+        PineValueInProcess left,
+        PineValueInProcess right)
     {
-        if (TryParseRedNode(right, out var redRight))
+        if (TryParseRedNodeInProcess(right, out var redRight))
         {
-            if (TryParseRedNode(left, out var redLeft))
+            if (TryParseRedNodeInProcess(left, out var redLeft))
             {
                 return
-                    Node(
-                        s_red,
+                    NodeInProcess(
+                        s_redInProcess,
                         key,
                         value,
-                        Node(s_black, redLeft.Key, redLeft.Value, redLeft.Left, redLeft.Right),
-                        Node(s_black, redRight.Key, redRight.Value, redRight.Left, redRight.Right));
+                        NodeInProcess(
+                            s_blackInProcess,
+                            redLeft.Key,
+                            redLeft.Value,
+                            redLeft.Left,
+                            redLeft.Right),
+                        NodeInProcess(
+                            s_blackInProcess,
+                            redRight.Key,
+                            redRight.Value,
+                            redRight.Left,
+                            redRight.Right));
             }
 
             return
-                Node(
+                NodeInProcess(
                     color,
                     redRight.Key,
                     redRight.Value,
-                    Node(s_red, key, value, left, redRight.Left),
+                    NodeInProcess(s_redInProcess, key, value, left, redRight.Left),
                     redRight.Right);
         }
 
-        if (TryParseRedNode(left, out var leftRed) &&
-            TryParseRedNode(leftRed.Left, out var leftLeftRed))
+        if (TryParseRedNodeInProcess(left, out var leftRed) &&
+            TryParseRedNodeInProcess(leftRed.Left, out var leftLeftRed))
         {
             return
-                Node(
-                    s_red,
+                NodeInProcess(
+                    s_redInProcess,
                     leftRed.Key,
                     leftRed.Value,
-                    Node(
-                        s_black,
+                    NodeInProcess(
+                        s_blackInProcess,
                         leftLeftRed.Key,
                         leftLeftRed.Value,
                         leftLeftRed.Left,
                         leftLeftRed.Right),
-                    Node(s_black, key, value, leftRed.Right, right));
+                    NodeInProcess(s_blackInProcess, key, value, leftRed.Right, right));
         }
 
-        return Node(color, key, value, left, right);
+        return NodeInProcess(color, key, value, left, right);
     }
 
-    private static bool TryParseRedNode(PineValue dict, out DictNode node)
+    private static bool TryParseRedNodeInProcess(
+        PineValueInProcess dict,
+        out DictNodeInProcess node)
     {
-        if (IsEmpty(dict))
+        if (IsEmptyInProcess(dict))
         {
             node = default;
             return false;
         }
 
-        node = ParseNode(dict);
-        return node.Color == s_red;
+        node = ParseNodeInProcess(dict);
+        return PineValueInProcess.AreEqual(node.Color, s_red);
     }
+
+    private static bool IsEmptyInProcess(PineValueInProcess dict) =>
+        PineValueInProcess.AreEqual(dict.GetElementAt(1), ElmValue.ElmDictEmptyTagNameAsValue);
+
+    private static DictNodeInProcess ParseNodeInProcess(PineValueInProcess dict)
+    {
+        if (!PineValueInProcess.AreEqual(
+                dict.GetElementAt(1),
+                ElmValue.ElmDictNotEmptyTagNameAsValue))
+        {
+            throw new ParseExpressionException("Unexpected dict tag");
+        }
+
+        return
+            new DictNodeInProcess(
+                dict.GetElementAt(2),
+                dict.GetElementAt(3),
+                dict.GetElementAt(4),
+                dict.GetElementAt(5),
+                dict.GetElementAt(6));
+    }
+
+    private static PineValueInProcess NodeInProcess(
+        PineValueInProcess color,
+        PineValueInProcess key,
+        PineValueInProcess value,
+        PineValueInProcess left,
+        PineValueInProcess right) =>
+        ElmValueInProcess.CreateChoice(
+            s_dictNotEmptyTagNameInProcess,
+            [color, key, value, left, right]);
 
     private static bool IsEmpty(PineValue dict) =>
         dict.ValueFromPathOrEmptyList([1]) == ElmValue.ElmDictEmptyTagNameAsValue;
@@ -524,13 +614,4 @@ public static class CoreDictPrecompiledLeaves
                 dict.ValueFromPathOrEmptyList([6]));
     }
 
-    private static PineValue Node(
-        PineValue color,
-        PineValue key,
-        PineValue value,
-        PineValue left,
-        PineValue right) =>
-        ElmValueEncoding.TagAsPineValue(
-            ElmValue.ElmDictNotEmptyTagName,
-            [color, key, value, left, right]);
 }

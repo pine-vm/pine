@@ -1,3 +1,4 @@
+using Pine.Core.Internal;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -48,29 +49,27 @@ public static class CoreRecordPrecompiledLeaves
     /// record layout <c>[tag, name0, value0, name1, value1, ...]</c>.
     /// </para>
     /// </summary>
-    public static PineValue? RecordAccessLeafDelegate(PineValue environment)
+    public static PineValueInProcess? RecordAccessLeafDelegate(PineValueInProcess environment)
     {
-        if (environment is not PineValue.ListValue envList || envList.Items.Length < 2)
+        if (!environment.IsList() || environment.GetLength() < 2)
         {
             return null;
         }
 
-        var record = envList.Items.Span[0];
-        var fieldName = envList.Items.Span[1];
+        var record = environment.GetElementAt(0);
+        var fieldName = environment.GetElementAt(1);
 
-        if (record is not PineValue.ListValue recordList)
+        if (!record.IsList())
         {
             return null;
         }
-
-        var items = recordList.Items.Span;
 
         // Flat layout: [tag, name0, value0, name1, value1, ...]; field pairs start at offset 1.
-        for (var i = 1; i + 1 < items.Length; i += 2)
+        for (var i = 1; i + 1 < record.GetLength(); i += 2)
         {
-            if (items[i] == fieldName)
+            if (PineValueInProcess.AreEqual(record.GetElementAt(i), fieldName))
             {
-                return items[i + 1];
+                return record.GetElementAt(i + 1);
             }
         }
 
@@ -90,56 +89,55 @@ public static class CoreRecordPrecompiledLeaves
     /// sorted alphabetically by field name (the same precondition the runtime function relies on).
     /// </para>
     /// </summary>
-    public static PineValue? RecordUpdateLeafDelegate(PineValue environment)
+    public static PineValueInProcess? RecordUpdateLeafDelegate(PineValueInProcess environment)
     {
-        if (environment is not PineValue.ListValue envList || envList.Items.Length < 2)
+        if (!environment.IsList() || environment.GetLength() < 2)
         {
             return null;
         }
 
-        var record = envList.Items.Span[0];
-        var updates = envList.Items.Span[1];
+        var record = environment.GetElementAt(0);
+        var updates = environment.GetElementAt(1);
 
-        if (record is not PineValue.ListValue recordList)
+        if (!record.IsList())
         {
             return null;
         }
 
-        if (updates is not PineValue.ListValue updatesList)
+        if (!updates.IsList())
         {
             return null;
         }
 
-        var recordItems = recordList.Items;
+        var recordLength = record.GetLength();
 
-        if (recordItems.Length < 1)
+        if (recordLength < 1)
         {
             return null;
         }
 
-        var resultItems = new PineValue[recordItems.Length];
+        var resultItems = new PineValueInProcess[recordLength];
 
         // Tag stays in place at offset 0.
-        resultItems[0] = recordItems.Span[0];
-
-        var updatesItems = updatesList.Items;
+        resultItems[0] = record.GetElementAt(0);
 
         var updatesIndex = 0;
 
         // Single-pass merge of the (sorted) field stream and the (sorted) updates.
-        for (var i = 1; i + 1 < recordItems.Length; i += 2)
+        for (var i = 1; i + 1 < recordLength; i += 2)
         {
-            var fieldName = recordItems.Span[i];
-            var fieldValue = recordItems.Span[i + 1];
+            var fieldName = record.GetElementAt(i);
+            var fieldValue = record.GetElementAt(i + 1);
 
             resultItems[i] = fieldName;
 
-            if (updatesIndex < updatesItems.Length &&
-                updatesItems.Span[updatesIndex] is PineValue.ListValue updatePair &&
-                updatePair.Items.Length >= 2 &&
-                updatePair.Items.Span[0] == fieldName)
+            if (updatesIndex < updates.GetLength() &&
+                updates.GetElementAt(updatesIndex) is { } updatePair &&
+                updatePair.IsList() &&
+                updatePair.GetLength() >= 2 &&
+                PineValueInProcess.AreEqual(updatePair.GetElementAt(0), fieldName))
             {
-                resultItems[i + 1] = updatePair.Items.Span[1];
+                resultItems[i + 1] = updatePair.GetElementAt(1);
                 updatesIndex++;
             }
             else
@@ -148,20 +146,20 @@ public static class CoreRecordPrecompiledLeaves
             }
         }
 
-        return PineValue.List(resultItems);
+        return PineValueInProcess.CreateList(resultItems);
     }
 
     /// <summary>
     /// Default precompiled-leaves dictionary contributed by the runtime record functions.
     /// Suitable for merging into the dictionary consumed by the intermediate VM.
     /// </summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> DefaultLeaves =>
+    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> DefaultLeaves =>
         s_defaultLeaves.Value;
 
-    private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>> s_defaultLeaves =
+    private static readonly Lazy<IReadOnlyDictionary<PineValue, PrecompiledLeaf>> s_defaultLeaves =
         new(
             () =>
-            ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty
+            ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty
             .Add(RecordAccessLeafKey, RecordAccessLeafDelegate)
             .Add(RecordUpdateLeafKey, RecordUpdateLeafDelegate));
 }

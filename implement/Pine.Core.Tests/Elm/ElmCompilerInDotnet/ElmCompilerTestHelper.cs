@@ -366,7 +366,7 @@ public class ElmCompilerTestHelper
                 skipInlineForExpression: _ => false,
                 enableTailRecursionOptimization: enableTailRecursionOptimization,
                 parseCache: null,
-                precompiledLeaves: ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty,
+                precompiledLeaves: ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty,
                 reportEnterPrecompiledLeaf: null,
                 reportExitPrecompiledLeaf: null,
                 optimizationParametersSerial: null,

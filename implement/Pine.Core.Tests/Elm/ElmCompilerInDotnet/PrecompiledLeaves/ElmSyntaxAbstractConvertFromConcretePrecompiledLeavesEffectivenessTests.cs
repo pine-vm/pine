@@ -5,6 +5,7 @@ using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
+using Pine.Core.Internal;
 using Pine.Core.Interpreter.IntermediateVM;
 using System;
 using System.Collections.Generic;
@@ -48,7 +49,7 @@ public class ElmSyntaxAbstractConvertFromConcretePrecompiledLeavesEffectivenessT
 
         var vmWithoutLeaves =
             CreateVM(
-                ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty,
+                ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty,
                 null);
 
         var vmWithLeaves =
@@ -106,8 +107,8 @@ public class ElmSyntaxAbstractConvertFromConcretePrecompiledLeavesEffectivenessT
     }
 
     private static Core.Interpreter.IntermediateVM.PineVM CreateVM(
-        IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> precompiledLeaves,
-        Action<PineValue, PineValue>? reportEnterPrecompiledLeaf) =>
+        IReadOnlyDictionary<PineValue, PrecompiledLeaf> precompiledLeaves,
+        Action<PineValue, PineValueInProcess>? reportEnterPrecompiledLeaf) =>
         Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
             evalCache: null,
             evaluationConfigDefault: null,

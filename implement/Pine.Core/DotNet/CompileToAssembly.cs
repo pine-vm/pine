@@ -1,5 +1,6 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Pine.Core.Internal;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -11,7 +12,10 @@ using System.Reflection;
 namespace Pine.Core.DotNet;
 
 using CompiledDictionary =
-    IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>;
+    IReadOnlyDictionary<PineValue, PrecompiledLeaf>;
+
+using LegacyCompiledDictionary =
+    IReadOnlyDictionary<PineValue, Func<PineValue, PineValue>>;
 
 /// <summary>
 /// Bundles emitted assembly bytes together with a factory for the compiled expression dispatch dictionary they expose.
@@ -182,21 +186,51 @@ public class CompileToAssembly
 
         CompiledDictionary BuildDictionary()
         {
-            return
-                (CompiledDictionary?)
-                builderMethod!.Invoke(null, [])!
+            var dictionary =
+                builderMethod!.Invoke(null, [])
                 ?? throw new InvalidOperationException(
                     "The dictionary builder method " + containerType.FullName + "." + builderMethod.Name +
                     " returned null.");
+
+            if (dictionary is CompiledDictionary currentDictionary)
+                return currentDictionary;
+
+            if (dictionary is LegacyCompiledDictionary legacyDictionary)
+                return AdaptLegacyCompiledDictionary(legacyDictionary);
+
+            throw new InvalidOperationException(
+                "The dictionary builder method " + containerType.FullName + "." + builderMethod.Name +
+                " returned an unsupported type: " + dictionary.GetType().FullName);
         }
 
         return Result<string, Func<CompiledDictionary>>.ok(BuildDictionary);
     }
 
+    private static CompiledDictionary AdaptLegacyCompiledDictionary(
+        LegacyCompiledDictionary legacyDictionary) =>
+        legacyDictionary.ToDictionary(
+            entry => entry.Key,
+            entry =>
+            (PrecompiledLeaf)
+            (environment =>
+            {
+                var legacyResult = entry.Value(environment.Evaluate());
+
+                return
+                    legacyResult is null
+                    ?
+                    null
+                    :
+                    PineValueInProcess.Create(legacyResult);
+            }));
+
     private static MethodInfo? SearchTypeForDispatcherDictionary(Type containerType)
     {
         var targetDictionaryType =
             typeof(CompiledDictionary);
+
+        var legacyDictionaryType =
+            typeof(LegacyCompiledDictionary);
 
         bool DictionaryPredicate(MethodInfo method)
         {
@@ -206,7 +240,8 @@ public class CompileToAssembly
             if (!method.IsPublic)
                 return false;
 
-            if (!method.ReturnType.IsAssignableTo(targetDictionaryType))
+            if (!method.ReturnType.IsAssignableTo(targetDictionaryType) &&
+                !method.ReturnType.IsAssignableTo(legacyDictionaryType))
                 return false;
 
             return true;

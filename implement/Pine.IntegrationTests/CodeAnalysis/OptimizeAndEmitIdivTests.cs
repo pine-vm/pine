@@ -3,6 +3,7 @@ using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.DotNet;
+using Pine.Core.Internal;
 using System.Collections.Generic;
 using System.Linq;
 using Xunit;
@@ -386,37 +387,36 @@ public class OptimizeAndEmitIdivTests
             """"
             public static class Dispatcher
             {
-                public static IReadOnlyDictionary<PineValue, System.Func<PineValue, PineValue>> dispatcherDictionary =
-                    BuildDispatcherDictionary();
+                public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> dispatcherDictionary = BuildDispatcherDictionary();
 
-                public static IReadOnlyDictionary<PineValue, System.Func<PineValue, PineValue>> BuildDispatcherDictionary()
+                public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> BuildDispatcherDictionary()
                 {
-                    var dict = new Dictionary<PineValue, System.Func<PineValue, PineValue>>();
+                    var dict = new Dictionary<PineValue, PrecompiledLeaf>();
                     dict[CommonReusedValues.List_5b8b136b] = Dispatch_5b8b136b;
                     dict[CommonReusedValues.List_9e788d05] = Dispatch_9e788d05;
                     return dict;
                 }
 
-                public static PineValue? Dispatch_5b8b136b(PineValue environment)
+                public static PineValueInProcess? Dispatch_5b8b136b(PineValueInProcess environment)
                 {
                     if (true)
                     {
                         var arg_1 = PineValueExtension.ValueFromPathOrEmptyList(environment, [1]);
                         var arg_2 = PineValueExtension.ValueFromPathOrEmptyList(environment, [2]);
-                        return Test.idiv(arg_1, arg_2);
+                        return PineValueInProcess.Create(Test.idiv(arg_1, arg_2));
                     }
 
                     return null;
                 }
 
-                public static PineValue? Dispatch_9e788d05(PineValue environment)
+                public static PineValueInProcess? Dispatch_9e788d05(PineValueInProcess environment)
                 {
                     if (PineValueExtension.ValueFromPathOrEmptyList(environment, [0, 0]) == CommonReusedValues.List_9e788d05)
                     {
                         var arg_1 = PineValueExtension.ValueFromPathOrEmptyList(environment, [1]);
                         var arg_2 = PineValueExtension.ValueFromPathOrEmptyList(environment, [2]);
                         var arg_3 = PineValueExtension.ValueFromPathOrEmptyList(environment, [3]);
-                        return Test.idivHelper(arg_1, arg_2, arg_3);
+                        return PineValueInProcess.Create(Test.idivHelper(arg_1, arg_2, arg_3));
                     }
 
                     return null;
@@ -700,10 +700,10 @@ public class OptimizeAndEmitIdivTests
 
         dictEntry.Should().NotBeNull();
 
-        var resultValue = dictEntry(callEnvValue);
+        var resultValue = dictEntry(PineValueInProcess.Create(callEnvValue));
 
         resultValue.Should().NotBeNull();
 
-        resultValue.Should().Be(IntegerEncoding.EncodeSignedInteger(33));
+        resultValue!.Evaluate().Should().Be(IntegerEncoding.EncodeSignedInteger(33));
     }
 }

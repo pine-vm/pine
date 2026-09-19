@@ -31,7 +31,7 @@ namespace Pine.IntegrationTests;
 /// </summary>
 public class PrecompiledLeavesRegressionTests
 {
-    private static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> BundledLeaves()
+    private static IReadOnlyDictionary<PineValue, PrecompiledLeaf> BundledLeaves()
     {
         var bundled =
             Core.Bundle.BundledPineToDotnet.LoadBundledTask.Result;

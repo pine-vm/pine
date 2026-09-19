@@ -2,6 +2,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
+using Pine.Core.Internal;
 using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
@@ -155,13 +156,13 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     }
 
     /// <summary>Skips inline whitespace from the current string offset.</summary>
-    public static PineValue? SkipInlineWhitespaceLeafDelegate(PineValue environment) =>
+    public static PineValueInProcess? SkipInlineWhitespaceLeafDelegate(PineValueInProcess environment) =>
         ScanStringOffset(environment, "skipInlineWhitespace", codePoint => codePoint is ' ' or '\t');
 
     /// <summary>
     /// Advances the parser state over whitespace while keeping the source location.
     /// </summary>
-    public static PineValue? SkipWhitespaceAtLeafDelegate(PineValue environment)
+    public static PineValueInProcess? SkipWhitespaceAtLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, StringParsingModuleName, "skipWhitespaceAt") ||
             !TryGetStringBytes(environment.ValueFromPathOrEmptyList([1]), out var source) ||
@@ -175,16 +176,16 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
         var scanned = ScanWhitespace(source, offset, row, column);
 
         return
-            PineValue.List(
+            PineValueInProcess.CreateList(
                 [
-                IntegerValue(scanned.Offset),
-                IntegerValue(scanned.Row),
-                IntegerValue(scanned.Column),
+                PineValueInProcess.CreateInteger(scanned.Offset),
+                PineValueInProcess.CreateInteger(scanned.Row),
+                PineValueInProcess.CreateInteger(scanned.Column),
                 ]);
     }
 
     /// <summary>Scans from the current offset to an identifier's end.</summary>
-    public static PineValue? SkipToIdentifierEndLeafDelegate(PineValue environment) =>
+    public static PineValueInProcess? SkipToIdentifierEndLeafDelegate(PineValueInProcess environment) =>
         ScanStringOffset(
             environment,
             "skipToIdentifierEnd",
@@ -195,18 +196,18 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
             codePoint is >= 'A' and <= 'Z');
 
     /// <summary>Scans from the current offset to an ASCII decimal number's end.</summary>
-    public static PineValue? SkipToAsciiDecimalDigitEndLeafDelegate(PineValue environment) =>
+    public static PineValueInProcess? SkipToAsciiDecimalDigitEndLeafDelegate(PineValueInProcess environment) =>
         ScanStringOffset(
             environment,
             "skipToAsciiDecimalDigitEnd",
             codePoint => codePoint is >= '0' and <= '9');
 
     /// <summary>Scans from the current offset to an ASCII hexadecimal number's end.</summary>
-    public static PineValue? SkipToAsciiHexDigitEndLeafDelegate(PineValue environment) =>
+    public static PineValueInProcess? SkipToAsciiHexDigitEndLeafDelegate(PineValueInProcess environment) =>
         ScanStringOffset(environment, "skipToAsciiHexDigitEnd", IsAsciiHexDigit);
 
     /// <summary>Scans a decimal number's fractional and exponent suffixes in one operation.</summary>
-    public static PineValue? NumberEndDecimalLeafDelegate(PineValue environment)
+    public static PineValueInProcess? NumberEndDecimalLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, StringParsingModuleName, "numberEndDecimal") ||
             !TryGetStringBytes(environment.ValueFromPathOrEmptyList([1]), out var source) ||
@@ -254,11 +255,11 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
             }
         }
 
-        return IntegerValue(offset);
+        return PineValueInProcess.CreateInteger(offset);
     }
 
     /// <summary>Tests a numeric literal for a decimal or exponent marker without allocating slices.</summary>
-    public static PineValue? IsFloatLiteralAtLeafDelegate(PineValue environment)
+    public static PineValueInProcess? IsFloatLiteralAtLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, StringParsingModuleName, "isFloatLiteralAt") ||
             !TryGetStringBytes(environment.ValueFromPathOrEmptyList([1]), out var source) ||
@@ -288,7 +289,7 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     }
 
     /// <summary>Accumulates hexadecimal digits without creating a slice for every digit.</summary>
-    public static PineValue? Convert0OrMoreHexadecimalValueLeafDelegate(PineValue environment)
+    public static PineValueInProcess? Convert0OrMoreHexadecimalValueLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(
                 environment,
@@ -314,11 +315,11 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
             offset++;
         }
 
-        return Just(IntegerValue(value));
+        return Just(PineValueInProcess.CreateInteger(value));
     }
 
     /// <summary>Skips operator characters from the current string offset.</summary>
-    public static PineValue? SkipOperatorCharsLeafDelegate(PineValue environment)
+    public static PineValueInProcess? SkipOperatorCharsLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, StringParsingModuleName, "skipOperatorChars") ||
             !TryGetStringBytes(environment.ValueFromPathOrEmptyList([1]), out var source) ||
@@ -337,11 +338,11 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
             offset++;
         }
 
-        return IntegerValue(offset);
+        return PineValueInProcess.CreateInteger(offset);
     }
 
     /// <summary>Scans and decodes Unicode escape digits.</summary>
-    public static PineValue? ScanUnicodeEscapeDigitsLeafDelegate(PineValue environment)
+    public static PineValueInProcess? ScanUnicodeEscapeDigitsLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, StringParsingModuleName, "scanUnicodeEscapeDigits") ||
             !TryGetStringBytes(environment.ValueFromPathOrEmptyList([1]), out var source) ||
@@ -368,11 +369,14 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
             offset++;
         }
 
-        return Just(PineValue.List([IntegerValue(offset), IntegerValue(value)]));
+        return
+            Just(
+                PineValueInProcess.CreateList(
+                    [PineValueInProcess.CreateInteger(offset), PineValueInProcess.CreateInteger(value)]));
     }
 
     /// <summary>Finds the boundary ending a literal run.</summary>
-    public static PineValue? FindLiteralRunEndLeafDelegate(PineValue environment)
+    public static PineValueInProcess? FindLiteralRunEndLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, StringParsingModuleName, "findLiteralRunEnd") ||
             !TryParseLiteralTermination(
@@ -431,8 +435,8 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
         return LiteralRunResult(offset, "LiteralRunUnterminated");
     }
 
-    private static PineValue? ScanStringOffset(
-        PineValue environment,
+    private static PineValueInProcess? ScanStringOffset(
+        PineValueInProcess environment,
         string functionName,
         Func<uint, bool> continuePredicate)
     {
@@ -451,7 +455,7 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
             offset++;
         }
 
-        return IntegerValue(offset);
+        return PineValueInProcess.CreateInteger(offset);
     }
 
     private static TriviaScan ScanWhitespace(
@@ -596,45 +600,51 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     private static bool IsOperatorChar(uint codePoint) =>
         codePoint is '+' or '-' or '/' or '*' or '=' or '.' or '$' or '<' or '>' or ':' or '&' or '|' or '^' or '?' or '%' or '#' or '!';
 
-    private static PineValue LiteralRunResult(BigInteger offset, string boundaryTag) =>
-        PineValue.List([IntegerValue(offset), Tag(boundaryTag)]);
-
-    private static PineValue IntegerValue(BigInteger value) =>
-        ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(value));
+    private static PineValueInProcess LiteralRunResult(BigInteger offset, string boundaryTag) =>
+        PineValueInProcess.CreateList(
+            [PineValueInProcess.CreateInteger(offset), TagInProcess(boundaryTag)]);
 
     private static PineValue Tag(string name) =>
         ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance(name, []));
 
-    private static PineValue Just(PineValue value) =>
-        ElmValueEncoding.TagAsPineValue("Just", [value]);
+    private static PineValueInProcess TagInProcess(string name) =>
+        ElmValueInProcess.CreateChoice(
+            PineValueInProcess.Create(StringEncoding.ValueFromString(name)),
+            []);
+
+    private static PineValueInProcess Just(PineValueInProcess value) =>
+        ElmValueInProcess.CreateChoice(
+            PineValueInProcess.Create(StringEncoding.ValueFromString("Just")),
+            [value]);
 
     private static PineValue LeafKey(string moduleName, string functionName) =>
         s_leafInfos.Value[(moduleName, functionName)].LeafKey;
 
-    private static bool EnvironmentMatches(PineValue environment, string moduleName, string functionName) =>
-        environment.ValueFromPathOrEmptyList([0]) ==
-        s_leafInfos.Value[(moduleName, functionName)].EnvFunctionsValue;
+    private static bool EnvironmentMatches(PineValueInProcess environment, string moduleName, string functionName) =>
+        PineValueInProcess.AreEqual(
+            environment.GetElementAt(0),
+            s_leafInfos.Value[(moduleName, functionName)].EnvFunctionsValue);
 
-    private static readonly PineValue s_false = Tag("False");
+    private static readonly PineValueInProcess s_false = TagInProcess("False");
 
-    private static readonly PineValue s_nothing = Tag("Nothing");
+    private static readonly PineValueInProcess s_nothing = TagInProcess("Nothing");
 
     private static readonly PineValue s_singleQuoteTermination = Tag("SingleQuoteTermination");
 
-    private static readonly PineValue s_true = Tag("True");
+    private static readonly PineValueInProcess s_true = TagInProcess("True");
 
     private static readonly PineValue s_doubleQuoteTermination = Tag("DoubleQuoteTermination");
 
     private static readonly PineValue s_tripleQuoteTermination = Tag("TripleQuoteTermination");
 
     /// <summary>Gets the default precompiled parser leaves by leaf key.</summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> DefaultLeaves =>
+    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> DefaultLeaves =>
         s_defaultLeaves.Value;
 
-    private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>> s_defaultLeaves =
+    private static readonly Lazy<IReadOnlyDictionary<PineValue, PrecompiledLeaf>> s_defaultLeaves =
         new(
             () =>
-            ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty
+            ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty
             .Add(SkipInlineWhitespaceLeafKey, SkipInlineWhitespaceLeafDelegate)
             .Add(SkipWhitespaceAtLeafKey, SkipWhitespaceAtLeafDelegate)
             .Add(SkipToIdentifierEndLeafKey, SkipToIdentifierEndLeafDelegate)

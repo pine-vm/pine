@@ -1,6 +1,7 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.ElmInElm;
+using Pine.Core.Internal;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -131,36 +132,47 @@ public static class CoreStringPrecompiledLeaves
     /// <summary>
     /// Executes <c>String.toListRecursive</c> directly, or returns <c>null</c> for an unexpected environment.
     /// </summary>
-    public static PineValue? ToListRecursiveLeafDelegate(PineValue environment)
+    public static PineValueInProcess? ToListRecursiveLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, "toListRecursive") ||
             !TryParseIndex(environment.ValueFromPathOrEmptyList([1]), out var offset) ||
-            environment.ValueFromPathOrEmptyList([2]) is not PineValue.ListValue collected ||
+            PineValueInProcess.ValueInProcessFromPathOrNull(environment, [2]) is not { } collected ||
+            !collected.IsList() ||
             environment.ValueFromPathOrEmptyList([3]) is not PineValue.BlobValue chars)
         {
             return null;
         }
 
-        var result = new List<PineValue>(collected.Items.ToArray());
+        var result =
+            new List<PineValueInProcess>(
+                collected.GetLength() +
+                Math.Max(0, (chars.Bytes.Length - offset + 3) / 4));
+
+        for (var index = 0; index < collected.GetLength(); ++index)
+        {
+            result.Add(collected.GetElementAt(index));
+        }
 
         for (var index = offset; index < chars.Bytes.Length; index += 4)
         {
             result.Add(
-                PineValue.Blob(
-                    chars.Bytes.Slice(index, Math.Min(4, chars.Bytes.Length - index))));
+                PineValueInProcess.Create(
+                    PineValue.Blob(
+                        chars.Bytes.Slice(index, Math.Min(4, chars.Bytes.Length - index)))));
         }
 
-        return PineValue.List([.. result]);
+        return PineValueInProcess.CreateList(result);
     }
 
     /// <summary>
     /// Executes <c>String.splitHelperOnBlob</c> directly, or returns <c>null</c> for an unexpected environment.
     /// </summary>
-    public static PineValue? SplitHelperOnBlobLeafDelegate(PineValue environment)
+    public static PineValueInProcess? SplitHelperOnBlobLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, "splitHelperOnBlob") ||
             !TryParseIndex(environment.ValueFromPathOrEmptyList([1]), out var offset) ||
-            environment.ValueFromPathOrEmptyList([2]) is not PineValue.ListValue collected ||
+            PineValueInProcess.ValueInProcessFromPathOrNull(environment, [2]) is not { } collected ||
+            !collected.IsList() ||
             !TryParseIndex(environment.ValueFromPathOrEmptyList([3]), out var lastStart) ||
             environment.ValueFromPathOrEmptyList([4]) is not PineValue.BlobValue separator ||
             environment.ValueFromPathOrEmptyList([5]) is not PineValue.BlobValue chars ||
@@ -172,7 +184,12 @@ public static class CoreStringPrecompiledLeaves
             return null;
         }
 
-        var result = new List<PineValue>(collected.Items.ToArray());
+        var result = new List<PineValueInProcess>(collected.GetLength());
+
+        for (var index = 0; index < collected.GetLength(); ++index)
+        {
+            result.Add(collected.GetElementAt(index));
+        }
 
         while (separator.Bytes.Length <= chars.Bytes.Length - offset)
         {
@@ -180,7 +197,7 @@ public static class CoreStringPrecompiledLeaves
 
             if (slice.Span.SequenceEqual(separator.Bytes.Span))
             {
-                result.Add(StringValue(chars.Bytes.Slice(lastStart, offset - lastStart)));
+                result.Add(StringValueInProcess(chars.Bytes.Slice(lastStart, offset - lastStart)));
                 offset += separator.Bytes.Length;
                 lastStart = offset;
             }
@@ -190,19 +207,20 @@ public static class CoreStringPrecompiledLeaves
             }
         }
 
-        result.Add(StringValue(chars.Bytes[lastStart..]));
+        result.Add(StringValueInProcess(chars.Bytes[lastStart..]));
 
-        return PineValue.List([.. result]);
+        return PineValueInProcess.CreateList(result);
     }
 
     /// <summary>
     /// Executes <c>String.linesHelper</c> directly, or returns <c>null</c> for an unexpected environment.
     /// </summary>
-    public static PineValue? LinesHelperLeafDelegate(PineValue environment)
+    public static PineValueInProcess? LinesHelperLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, "linesHelper") ||
             !TryParseIndex(environment.ValueFromPathOrEmptyList([1]), out var currentLineStart) ||
-            environment.ValueFromPathOrEmptyList([2]) is not PineValue.ListValue currentLines ||
+            PineValueInProcess.ValueInProcessFromPathOrNull(environment, [2]) is not { } currentLines ||
+            !currentLines.IsList() ||
             !TryParseIndex(environment.ValueFromPathOrEmptyList([3]), out var offset) ||
             environment.ValueFromPathOrEmptyList([4]) is not PineValue.BlobValue chars ||
             currentLineStart > offset ||
@@ -212,7 +230,12 @@ public static class CoreStringPrecompiledLeaves
             return null;
         }
 
-        var result = new List<PineValue>(currentLines.Items.ToArray());
+        var result = new List<PineValueInProcess>(currentLines.GetLength());
+
+        for (var index = 0; index < currentLines.GetLength(); ++index)
+        {
+            result.Add(currentLines.GetElementAt(index));
+        }
 
         while (offset < chars.Bytes.Length)
         {
@@ -224,7 +247,7 @@ public static class CoreStringPrecompiledLeaves
                     8 <= chars.Bytes.Length - offset &&
                     System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(chars.Bytes.Span[(offset + 4)..]) is 0x0a)
                 {
-                    result.Add(StringValue(chars.Bytes.Slice(currentLineStart, offset - currentLineStart)));
+                    result.Add(StringValueInProcess(chars.Bytes.Slice(currentLineStart, offset - currentLineStart)));
                     offset += 8;
                     currentLineStart = offset;
                     continue;
@@ -232,7 +255,7 @@ public static class CoreStringPrecompiledLeaves
 
                 if (nextChar is 0x0a or 0x0d)
                 {
-                    result.Add(StringValue(chars.Bytes.Slice(currentLineStart, offset - currentLineStart)));
+                    result.Add(StringValueInProcess(chars.Bytes.Slice(currentLineStart, offset - currentLineStart)));
                     offset += 4;
                     currentLineStart = offset;
                     continue;
@@ -242,15 +265,15 @@ public static class CoreStringPrecompiledLeaves
             offset += 4;
         }
 
-        result.Add(StringValue(chars.Bytes[currentLineStart..]));
+        result.Add(StringValueInProcess(chars.Bytes[currentLineStart..]));
 
-        return PineValue.List([.. result]);
+        return PineValueInProcess.CreateList(result);
     }
 
     /// <summary>
     /// Executes <c>String.toFloat</c> directly, or returns <c>null</c> for an unexpected environment.
     /// </summary>
-    public static PineValue? ToFloatLeafDelegate(PineValue environment)
+    public static PineValueInProcess? ToFloatLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, "toFloat") ||
             !TryGetStringChars(environment.ValueFromPathOrEmptyList([1]), out var chars))
@@ -280,17 +303,17 @@ public static class CoreStringPrecompiledLeaves
             numerator = -numerator;
         }
 
-        return
+        var floatValue =
             ElmValueEncoding.ElmValueAsPineValue(
-                ElmValue.TagInstance(
-                    "Just",
-                    [ElmValue.ElmFloat.NotNormalized(numerator, denominator.Value)]));
+                ElmValue.ElmFloat.NotNormalized(numerator, denominator.Value));
+
+        return Just(PineValueInProcess.Create(floatValue));
     }
 
     /// <summary>
     /// Executes <c>String.toInt</c> directly, or returns <c>null</c> for an unexpected environment.
     /// </summary>
-    public static PineValue? ToIntLeafDelegate(PineValue environment)
+    public static PineValueInProcess? ToIntLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, "toInt") ||
             !TryGetStringChars(environment.ValueFromPathOrEmptyList([1]), out var chars))
@@ -303,15 +326,13 @@ public static class CoreStringPrecompiledLeaves
             return s_nothing;
         }
 
-        return
-            ElmValueEncoding.ElmValueAsPineValue(
-                ElmValue.TagInstance("Just", [ElmValue.Integer(integer)]));
+        return Just(PineValueInProcess.CreateInteger(integer));
     }
 
     /// <summary>
     /// Executes <c>String.fromInt</c> directly, or returns <c>null</c> for an unexpected environment.
     /// </summary>
-    public static PineValue? FromIntLeafDelegate(PineValue environment)
+    public static PineValueInProcess? FromIntLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, "fromInt") ||
             IntegerEncoding.ParseSignedIntegerRelaxed(
@@ -322,7 +343,7 @@ public static class CoreStringPrecompiledLeaves
         }
 
         return
-            StringValue(
+            StringValueInProcess(
                 StringEncoding.BlobValueFromString(
                     integer.ToString(System.Globalization.CultureInfo.InvariantCulture))
                 .Bytes);
@@ -332,7 +353,7 @@ public static class CoreStringPrecompiledLeaves
     /// Executes <c>String.trimLeftCountBytesTrimmed</c> directly, or returns <c>null</c>
     /// for an unexpected environment.
     /// </summary>
-    public static PineValue? TrimLeftCountBytesTrimmedLeafDelegate(PineValue environment)
+    public static PineValueInProcess? TrimLeftCountBytesTrimmedLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, "trimLeftCountBytesTrimmed") ||
             !TryParseIndex(environment.ValueFromPathOrEmptyList([1]), out var offset) ||
@@ -350,14 +371,14 @@ public static class CoreStringPrecompiledLeaves
             offset += 4;
         }
 
-        return IntegerEncoding.EncodeSignedInteger(offset);
+        return PineValueInProcess.CreateInteger(offset);
     }
 
     /// <summary>
     /// Executes <c>String.trimRightCountBytesRemaining</c> directly, or returns <c>null</c>
     /// for an unexpected environment.
     /// </summary>
-    public static PineValue? TrimRightCountBytesRemainingLeafDelegate(PineValue environment)
+    public static PineValueInProcess? TrimRightCountBytesRemainingLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, "trimRightCountBytesRemaining") ||
             !TryParseIndex(environment.ValueFromPathOrEmptyList([1]), out var remainingLength) ||
@@ -375,7 +396,7 @@ public static class CoreStringPrecompiledLeaves
             remainingLength -= 4;
         }
 
-        return IntegerEncoding.EncodeSignedInteger(remainingLength);
+        return PineValueInProcess.CreateInteger(remainingLength);
     }
 
     private static bool IsCharRemovedOnTrim(ReadOnlySpan<byte> charBytes)
@@ -596,12 +617,18 @@ public static class CoreStringPrecompiledLeaves
         return false;
     }
 
-    private static readonly PineValue s_nothing =
-        ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("Nothing", []));
+    private static readonly PineValueInProcess s_nothing =
+        ElmValueInProcess.CreateChoice(
+            PineValueInProcess.Create(StringEncoding.ValueFromString("Nothing")),
+            []);
 
-    private static bool EnvironmentMatches(PineValue environment, string functionName) =>
-        environment.ValueFromPathOrEmptyList([0]) ==
-        s_leafInfos.Value[functionName].envFunctionsValue;
+    private static readonly PineValueInProcess s_justTagName =
+        PineValueInProcess.Create(StringEncoding.ValueFromString("Just"));
+
+    private static bool EnvironmentMatches(PineValueInProcess environment, string functionName) =>
+        PineValueInProcess.AreEqual(
+            environment.GetElementAt(0),
+            s_leafInfos.Value[functionName].envFunctionsValue);
 
     private static bool TryParseIndex(PineValue value, out int index)
     {
@@ -622,16 +649,24 @@ public static class CoreStringPrecompiledLeaves
             ElmValue.ElmStringTypeTagName,
             [PineValue.Blob(chars)]);
 
+    private static PineValueInProcess StringValueInProcess(ReadOnlyMemory<byte> chars) =>
+        ElmValueInProcess.CreateChoice(
+            PineValueInProcess.Create(ElmValue.ElmStringTypeTagNameAsValue),
+            [PineValueInProcess.Create(PineValue.Blob(chars))]);
+
+    private static PineValueInProcess Just(PineValueInProcess value) =>
+        ElmValueInProcess.CreateChoice(s_justTagName, [value]);
+
     /// <summary>
     /// Default precompiled-leaves dictionary contributed by the kernel <c>String</c> module.
     /// </summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> DefaultLeaves =>
+    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> DefaultLeaves =>
         s_defaultLeaves.Value;
 
-    private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>> s_defaultLeaves =
+    private static readonly Lazy<IReadOnlyDictionary<PineValue, PrecompiledLeaf>> s_defaultLeaves =
         new(
             () =>
-            ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty
+            ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty
             .Add(ToListRecursiveLeafKey, ToListRecursiveLeafDelegate)
             .Add(SplitHelperOnBlobLeafKey, SplitHelperOnBlobLeafDelegate)
             .Add(LinesHelperLeafKey, LinesHelperLeafDelegate)

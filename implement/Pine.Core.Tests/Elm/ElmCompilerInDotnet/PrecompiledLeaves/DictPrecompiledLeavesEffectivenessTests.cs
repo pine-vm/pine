@@ -100,7 +100,7 @@ public class DictPrecompiledLeavesEffectivenessTests
         .moduleContent.FunctionDeclarations[name];
 
     private static Core.Interpreter.IntermediateVM.PineVM CreateVM(
-        IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> precompiledLeaves) =>
+        IReadOnlyDictionary<PineValue, PrecompiledLeaf> precompiledLeaves) =>
         Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
             evalCache: null,
             evaluationConfigDefault: null,
@@ -180,7 +180,7 @@ public class DictPrecompiledLeavesEffectivenessTests
     public void Dict_get_leaf_short_circuits_recursion_in_get()
     {
         var vmWithoutLeaves =
-            CreateVM(ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty);
+            CreateVM(ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty);
 
         var vmWithLeaves = CreateVM(IntermediateVM.SetupVM.DefaultPrecompiledLeaves);
         var dict = BuildIntIntDict(IntPairs(31), vmWithoutLeaves);
@@ -220,7 +220,7 @@ public class DictPrecompiledLeavesEffectivenessTests
     public void Dict_list_conversion_leaf_short_circuits_recursion(string functionName)
     {
         var vmWithoutLeaves =
-            CreateVM(ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty);
+            CreateVM(ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty);
 
         var vmWithLeaves = CreateVM(IntermediateVM.SetupVM.DefaultPrecompiledLeaves);
         var simpleDict = BuildIntIntDict(IntPairs(1), vmWithoutLeaves);
@@ -239,7 +239,7 @@ public class DictPrecompiledLeavesEffectivenessTests
     public void Dict_size_leaf_short_circuits_recursion()
     {
         var vmWithoutLeaves =
-            CreateVM(ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty);
+            CreateVM(ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty);
 
         var vmWithLeaves = CreateVM(IntermediateVM.SetupVM.DefaultPrecompiledLeaves);
         var simpleDict = BuildIntIntDict(IntPairs(1), vmWithoutLeaves);
@@ -258,7 +258,7 @@ public class DictPrecompiledLeavesEffectivenessTests
     public void Dict_insert_leaf_short_circuits_recursion()
     {
         var vmWithoutLeaves =
-            CreateVM(ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty);
+            CreateVM(ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty);
 
         var vmWithLeaves = CreateVM(IntermediateVM.SetupVM.DefaultPrecompiledLeaves);
         var simpleDict = BuildIntIntDict([], vmWithoutLeaves);

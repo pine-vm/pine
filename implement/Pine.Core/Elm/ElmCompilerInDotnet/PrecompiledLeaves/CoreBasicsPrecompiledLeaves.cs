@@ -47,7 +47,7 @@ public static class CoreBasicsPrecompiledLeaves
     /// directly in .NET and returns the resulting <c>Order</c> tag, or <c>null</c> if the
     /// environment does not match the expected shape.
     /// </summary>
-    public static PineValue? CompareLeafDelegate(PineValue environment)
+    public static PineValueInProcess? CompareLeafDelegate(PineValueInProcess environment)
     {
         if (!CompareLeafEnvClass.SatisfiedByValue(environment))
         {
@@ -57,7 +57,7 @@ public static class CoreBasicsPrecompiledLeaves
         var argA = environment.ValueFromPathOrEmptyList([1]);
         var argB = environment.ValueFromPathOrEmptyList([2]);
 
-        return BasicsCompare(argA, argB);
+        return PineValueInProcess.Create(BasicsCompare(argA, argB));
     }
 
     /// <summary>
@@ -86,7 +86,7 @@ public static class CoreBasicsPrecompiledLeaves
     /// comparison directly in .NET and returns the resulting <c>Bool</c> tag, or <c>null</c> if
     /// the environment does not match the expected shape.
     /// </summary>
-    public static PineValue? EqLeafDelegate(PineValue environment)
+    public static PineValueInProcess? EqLeafDelegate(PineValueInProcess environment)
     {
         if (!EqLeafEnvClass.SatisfiedByValue(environment))
         {
@@ -96,7 +96,7 @@ public static class CoreBasicsPrecompiledLeaves
         var argA = environment.ValueFromPathOrEmptyList([1, 0]);
         var argB = environment.ValueFromPathOrEmptyList([1, 1]);
 
-        return BasicsEq(argA, argB);
+        return PineValueInProcess.Create(BasicsEq(argA, argB));
     }
 
     /// <summary>
@@ -128,7 +128,7 @@ public static class CoreBasicsPrecompiledLeaves
     /// construction), or returns <c>null</c> if the environment does not match the expected
     /// shape.
     /// </summary>
-    public static PineValue? IdivLeafDelegate(PineValue environment)
+    public static PineValueInProcess? IdivLeafDelegate(PineValueInProcess environment)
     {
         if (!IdivLeafEnvClass.SatisfiedByValue(environment))
         {
@@ -151,7 +151,7 @@ public static class CoreBasicsPrecompiledLeaves
             return null;
         }
 
-        return IntegerEncoding.EncodeSignedInteger(quotient + (dividend / divisor));
+        return PineValueInProcess.CreateInteger(quotient + (dividend / divisor));
     }
 
     /// <summary>
@@ -179,7 +179,7 @@ public static class CoreBasicsPrecompiledLeaves
     /// directly in .NET, or returns <c>null</c> if the environment does not match the expected
     /// shape.
     /// </summary>
-    public static PineValue? GcdLeafDelegate(PineValue environment)
+    public static PineValueInProcess? GcdLeafDelegate(PineValueInProcess environment)
     {
         if (!GcdLeafEnvClass.SatisfiedByValue(environment))
         {
@@ -200,7 +200,7 @@ public static class CoreBasicsPrecompiledLeaves
             (a, b) = (b, ElmModBy(b, a));
         }
 
-        return IntegerEncoding.EncodeSignedInteger(a);
+        return PineValueInProcess.CreateInteger(a);
     }
 
     /// <summary>
@@ -226,8 +226,8 @@ public static class CoreBasicsPrecompiledLeaves
     /// Default precompiled-leaves dictionary contributed by <see cref="CoreBasics"/>.
     /// Suitable for merging into the dictionary consumed by the intermediate VM.
     /// </summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> DefaultLeaves { get; } =
-        ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty
+    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> DefaultLeaves { get; } =
+        ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty
         .Add(CompareLeafKey, CompareLeafDelegate)
         .Add(EqLeafKey, EqLeafDelegate)
         .Add(IdivLeafKey, IdivLeafDelegate)

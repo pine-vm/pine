@@ -2,6 +2,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
+using Pine.Core.Internal;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -117,7 +118,7 @@ public static class LanguageServicePrecompiledLeaves
     /// Executes <c>LanguageService.removeWrappingFromMultilineComment</c> directly,
     /// or returns <c>null</c> for an unexpected environment.
     /// </summary>
-    public static PineValue? RemoveWrappingFromMultilineCommentLeafDelegate(PineValue environment)
+    public static PineValueInProcess? RemoveWrappingFromMultilineCommentLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, "removeWrappingFromMultilineComment") ||
             environment.ValueFromPathOrEmptyList([1]) is not PineValue.ListValue stringValue ||
@@ -155,50 +156,47 @@ public static class LanguageServicePrecompiledLeaves
 
         var unwrappedChars = chars.Bytes.Slice(start, end - start);
 
-        return
-            ElmValueEncoding.TagAsPineValue(
-                ElmValue.ElmStringTypeTagName,
-                [PineValue.Blob(unwrappedChars)]);
+        return StringValueInProcess(unwrappedChars);
     }
 
     /// <summary>
     /// Executes <c>LanguageService.dropWhileEmpty</c> directly,
     /// or returns <c>null</c> for an unexpected environment.
     /// </summary>
-    public static PineValue? DropWhileEmptyLeafDelegate(PineValue environment)
+    public static PineValueInProcess? DropWhileEmptyLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, "dropWhileEmpty") ||
-            environment.ValueFromPathOrEmptyList([1]) is not PineValue.ListValue lines)
+            PineValueInProcess.ValueInProcessFromPathOrNull(environment, [1]) is not { } lines ||
+            lines.Evaluate() is not PineValue.ListValue linesValue)
         {
             return null;
         }
 
-        var lineItems = lines.Items;
-
-        for (var index = 0; index < lineItems.Length; ++index)
+        for (var index = 0; index < linesValue.Items.Length; ++index)
         {
-            if (!TryGetStringChars(lineItems.Span[index], out var chars))
+            if (!TryGetStringChars(linesValue.Items.Span[index], out var chars))
             {
                 return null;
             }
 
             if (chars.Length is not 0)
             {
-                return index is 0 ? lines : PineValue.List(lineItems[index..]);
+                return index is 0 ? lines : PineValueInProcess.Skip(index, lines);
             }
         }
 
-        return PineValue.EmptyList;
+        return PineValueInProcess.EmptyList;
     }
 
     /// <summary>
     /// Executes <c>LanguageService.sliceRangeFromTextLines</c> directly,
     /// or returns <c>null</c> for an unexpected environment.
     /// </summary>
-    public static PineValue? SliceRangeFromTextLinesLeafDelegate(PineValue environment)
+    public static PineValueInProcess? SliceRangeFromTextLinesLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, "sliceRangeFromTextLines") ||
-            environment.ValueFromPathOrEmptyList([1]) is not PineValue.ListValue textLines ||
+            PineValueInProcess.ValueInProcessFromPathOrNull(environment, [1]) is not { } textLines ||
+            !textLines.IsList() ||
             !TryParseRange(
                 environment.ValueFromPathOrEmptyList([2]),
                 out var startRow,
@@ -217,27 +215,27 @@ public static class LanguageServicePrecompiledLeaves
 
         if (rangeRowCount is 0)
         {
-            if (startRowIndex >= textLines.Items.Length)
+            if (startRowIndex >= textLines.GetLength())
             {
-                return PineValue.EmptyList;
+                return PineValueInProcess.EmptyList;
             }
 
             return
                 TrySliceString(
-                    textLines.Items.Span[startRowIndex],
+                    textLines.GetElementAt(startRowIndex).Evaluate(),
                     startColumnIndex,
                     endColumnIndex,
                     out var sliced)
                 ?
-                PineValue.List([sliced])
+                PineValueInProcess.CreateList([PineValueInProcess.Create(sliced)])
                 :
                 null;
         }
 
         var firstLine =
-            startRowIndex < textLines.Items.Length
+            startRowIndex < textLines.GetLength()
             ?
-            textLines.Items.Span[startRowIndex]
+            textLines.GetElementAt(startRowIndex).Evaluate()
             :
             s_emptyString;
 
@@ -249,9 +247,9 @@ public static class LanguageServicePrecompiledLeaves
         var endRowIndex = endRow - 1;
 
         var lastLine =
-            endRowIndex < textLines.Items.Length
+            endRowIndex < textLines.GetLength()
             ?
-            textLines.Items.Span[endRowIndex]
+            textLines.GetElementAt(endRowIndex).Evaluate()
             :
             s_emptyString;
 
@@ -263,20 +261,19 @@ public static class LanguageServicePrecompiledLeaves
         var middleLineCount =
             Math.Min(
                 rangeRowCount - 1,
-                Math.Max(0, textLines.Items.Length - startRowIndex - 1));
+                Math.Max(0, textLines.GetLength() - startRowIndex - 1));
 
-        var result = new PineValue[middleLineCount + 2];
-        result[0] = firstLine;
+        var result = new PineValueInProcess[middleLineCount + 2];
+        result[0] = PineValueInProcess.Create(firstLine);
 
-        if (middleLineCount is not 0)
+        for (var index = 0; index < middleLineCount; ++index)
         {
-            textLines.Items.Span.Slice(startRowIndex + 1, middleLineCount)
-                .CopyTo(result.AsSpan(1));
+            result[index + 1] = textLines.GetElementAt(startRowIndex + 1 + index);
         }
 
-        result[^1] = lastLine;
+        result[^1] = PineValueInProcess.Create(lastLine);
 
-        return PineValue.List(result);
+        return PineValueInProcess.CreateList(result);
     }
 
     private static (int Start, int End) TrimOffsets(
@@ -313,9 +310,10 @@ public static class LanguageServicePrecompiledLeaves
         offset <= chars.Length - 4 &&
         System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(chars[offset..]) == expected;
 
-    private static bool EnvironmentMatches(PineValue environment, string functionName) =>
-        environment.ValueFromPathOrEmptyList([0]) ==
-        s_leafInfos.Value[functionName].envFunctionsValue;
+    private static bool EnvironmentMatches(PineValueInProcess environment, string functionName) =>
+        PineValueInProcess.AreEqual(
+            environment.GetElementAt(0),
+            s_leafInfos.Value[functionName].envFunctionsValue);
 
     private static readonly PineValue s_rangeTagName =
         StringEncoding.ValueFromString("Range");
@@ -480,4 +478,9 @@ public static class LanguageServicePrecompiledLeaves
         ElmValueEncoding.TagAsPineValue(
             ElmValue.ElmStringTypeTagName,
             [PineValue.Blob(chars)]);
+
+    private static PineValueInProcess StringValueInProcess(ReadOnlyMemory<byte> chars) =>
+        ElmValueInProcess.CreateChoice(
+            PineValueInProcess.Create(ElmValue.ElmStringTypeTagNameAsValue),
+            [PineValueInProcess.Create(PineValue.Blob(chars))]);
 }

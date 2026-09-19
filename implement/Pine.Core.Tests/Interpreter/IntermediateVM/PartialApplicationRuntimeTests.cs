@@ -435,7 +435,7 @@ public class PartialApplicationRuntimeTests
                 enableTailRecursionOptimization: false,
                 parseCache: null,
                 precompiledLeaves:
-                ImmutableDictionary<PineValue, System.Func<PineValue, PineValue?>>.Empty,
+                ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty,
                 reportEnterPrecompiledLeaf: null,
                 reportExitPrecompiledLeaf: null,
                 optimizationParametersSerial: null,

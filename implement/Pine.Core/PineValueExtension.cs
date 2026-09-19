@@ -1,3 +1,4 @@
+using Pine.Core.Internal;
 using System;
 using System.Collections.Generic;
 
@@ -8,6 +9,14 @@ namespace Pine.Core;
 /// </summary>
 public static class PineValueExtension
 {
+    /// <summary>
+    /// Navigates an in-process Pine value and materializes only the selected descendant.
+    /// </summary>
+    public static PineValue ValueFromPathOrEmptyList(
+        this PineValueInProcess environment,
+        ReadOnlySpan<int> path) =>
+        PineValueInProcess.ValueFromPathOrNull(environment, path) ?? PineValue.EmptyList;
+
     /// <summary>
     /// Navigates a nested <see cref="PineValue"/> list structure by following the given sequence of indices.
     /// </summary>

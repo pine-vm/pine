@@ -1,5 +1,6 @@
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Internal;
 using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.IO;
 using Pine.Core.PineVM;
@@ -14,7 +15,7 @@ public static class SetupVM
     private static readonly IFileStore s_cacheFileStoreDefault =
         new FileStoreFromSystemIOFile(Path.Combine(Filesystem.CacheDirectory, "eval"));
 
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? PrecompiledLeavesDefault;
+    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf>? PrecompiledLeavesDefault;
 
     /// <summary>
     /// Aggregate of the precompiled-leaf dictionaries available to this VM:
@@ -29,17 +30,17 @@ public static class SetupVM
     /// every precompiled leaf available in the project rather than only the
     /// per-area leaves.
     /// </summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> DefaultPrecompiledLeaves =>
+    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> DefaultPrecompiledLeaves =>
         BuildAggregatePrecompiledLeaves();
 
-    private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>?> s_embeddedBundledLeaves =
+    private static readonly Lazy<IReadOnlyDictionary<PineValue, PrecompiledLeaf>?> s_embeddedBundledLeaves =
         new(() => Core.Bundle.BundledPineToDotnet.LoadBundledTask.Result?.BuildDictionary());
 
-    private static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? s_aggregateCacheValue;
+    private static IReadOnlyDictionary<PineValue, PrecompiledLeaf>? s_aggregateCacheValue;
 
-    private static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? s_aggregateCacheBundleSource;
+    private static IReadOnlyDictionary<PineValue, PrecompiledLeaf>? s_aggregateCacheBundleSource;
 
-    private static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> BuildAggregatePrecompiledLeaves()
+    private static IReadOnlyDictionary<PineValue, PrecompiledLeaf> BuildAggregatePrecompiledLeaves()
     {
         var coreLeaves = Core.IntermediateVM.SetupVM.DefaultPrecompiledLeaves;
 
@@ -56,7 +57,7 @@ public static class SetupVM
             !ReferenceEquals(s_aggregateCacheBundleSource, bundledLeaves))
         {
             var merged =
-                new Dictionary<PineValue, Func<PineValue, PineValue?>>(
+                new Dictionary<PineValue, PrecompiledLeaf>(
                     bundledLeaves.Count + coreLeaves.Count);
 
             foreach (var entry in bundledLeaves)
@@ -85,9 +86,9 @@ public static class SetupVM
         bool disableReductionInCompilation = false,
         bool enableTailRecursionOptimization = true,
         PineVMParseCache? parseCache = null,
-        IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? precompiledLeaves = null,
-        Action<PineValue, PineValue>? reportEnterPrecompiledLeaf = null,
-        Action<PineValue, PineValue, PineValue?>? reportExitPrecompiledLeaf = null,
+        IReadOnlyDictionary<PineValue, PrecompiledLeaf>? precompiledLeaves = null,
+        Action<PineValue, PineValueInProcess>? reportEnterPrecompiledLeaf = null,
+        Action<PineValue, PineValueInProcess, PineValueInProcess?>? reportExitPrecompiledLeaf = null,
         OptimizationParametersSerial? optimizationParametersSerial = null,
         IFileStore? cacheFileStore = null,
         IInvocationCacheAccess? invocationCache = null,

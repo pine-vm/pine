@@ -408,14 +408,14 @@ public record StaticProgramCSharp(
 
         var environmentParamType =
             CompileTypeSyntax.TypeSyntaxFromType(
-                typeof(PineValue),
+                typeof(Internal.PineValueInProcess),
                 context: declarationSyntaxContext);
 
         var environmentParam =
             SyntaxFactory.Parameter(SyntaxFactory.Identifier(environmentParamName))
             .WithType(environmentParamType);
 
-        // var dict = new System.Collections.Generic.Dictionary<PineValue, System.Func<PineValue, PineValue?>>();
+        // var dict = new System.Collections.Generic.Dictionary<PineValue, PrecompiledLeaf>();
         var dictDeclaration =
             SyntaxFactory.LocalDeclarationStatement(
                 SyntaxFactory.VariableDeclaration(
@@ -427,7 +427,7 @@ public record StaticProgramCSharp(
                             SyntaxFactory.EqualsValueClause(
                                 SyntaxFactory.ObjectCreationExpression(
                                     CompileTypeSyntax.TypeSyntaxFromType(
-                                        typeof(Dictionary<PineValue, Func<PineValue, PineValue?>>),
+                                        typeof(Dictionary<PineValue, PrecompiledLeaf>),
                                         context: declarationSyntaxContext))
                                 .WithArgumentList(SyntaxFactory.ArgumentList()))))));
 
@@ -554,7 +554,19 @@ public record StaticProgramCSharp(
                                     SyntaxFactory.Argument(
                                         SyntaxFactory.IdentifierName(arg))))));
 
-                var returnStatement = SyntaxFactory.ReturnStatement(invocation);
+                var returnStatement =
+                    SyntaxFactory.ReturnStatement(
+                        SyntaxFactory.InvocationExpression(
+                            SyntaxFactory.MemberAccessExpression(
+                                SyntaxKind.SimpleMemberAccessExpression,
+                                CompileTypeSyntax.TypeSyntaxFromType(
+                                    typeof(Internal.PineValueInProcess),
+                                    declarationSyntaxContext),
+                                SyntaxFactory.IdentifierName(nameof(Internal.PineValueInProcess.Create))))
+                        .WithArgumentList(
+                            SyntaxFactory.ArgumentList(
+                                SyntaxFactory.SingletonSeparatedList(
+                                    SyntaxFactory.Argument(invocation)))));
 
                 insideIfStatements.Add(returnStatement);
 
@@ -572,7 +584,9 @@ public record StaticProgramCSharp(
             var methodDecl =
                 SyntaxFactory.MethodDeclaration(
                     returnType: SyntaxFactory.NullableType(
-                        CompileTypeSyntax.TypeSyntaxFromType(typeof(PineValue), declarationSyntaxContext)),
+                        CompileTypeSyntax.TypeSyntaxFromType(
+                            typeof(Internal.PineValueInProcess),
+                            declarationSyntaxContext)),
                     identifier: SyntaxFactory.Identifier(methodName))
                 .WithModifiers(
                     SyntaxFactory.TokenList(
@@ -607,7 +621,7 @@ public record StaticProgramCSharp(
         var buildDispatcherMethod =
             SyntaxFactory.MethodDeclaration(
                 returnType: CompileTypeSyntax.TypeSyntaxFromType(
-                    typeof(IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>),
+                    typeof(IReadOnlyDictionary<PineValue, PrecompiledLeaf>),
                     context: declarationSyntaxContext),
                 identifier: SyntaxFactory.Identifier("BuildDispatcherDictionary"))
             .WithModifiers(
@@ -620,7 +634,7 @@ public record StaticProgramCSharp(
             SyntaxFactory.FieldDeclaration(
                 SyntaxFactory.VariableDeclaration(
                     CompileTypeSyntax.TypeSyntaxFromType(
-                        typeof(IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>),
+                        typeof(IReadOnlyDictionary<PineValue, PrecompiledLeaf>),
                         context: declarationSyntaxContext))
                 .WithVariables(
                     SyntaxFactory.SingletonSeparatedList(

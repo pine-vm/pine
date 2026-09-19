@@ -5,6 +5,7 @@ using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
+using Pine.Core.Internal;
 using Pine.Core.Interpreter.IntermediateVM;
 using System;
 using System.Collections.Generic;
@@ -144,12 +145,14 @@ public class LanguageServicePrecompiledLeavesEffectivenessTests
     [Fact]
     public void LanguageService_leaves_do_not_allocate_proportional_to_skipped_prefixes()
     {
-        var enteredLeafEnvironments = new Dictionary<PineValue, PineValue>();
+        var enteredLeafEnvironments = new Dictionary<PineValue, PineValueInProcess>();
+        var exitedLeafResults = new Dictionary<PineValue, PineValueInProcess?>();
 
         var vm =
             CreateVM(
                 IntermediateVM.SetupVM.DefaultPrecompiledLeaves,
-                (leaf, environment) => enteredLeafEnvironments.TryAdd(leaf, environment));
+                (leaf, environment) => enteredLeafEnvironments.TryAdd(leaf, environment),
+                (leaf, _, result) => exitedLeafResults.TryAdd(leaf, result));
 
         _ =
             Apply(
@@ -164,8 +167,13 @@ public class LanguageServicePrecompiledLeavesEffectivenessTests
                 vm);
 
         var dropEnvironment =
-            (PineValue.ListValue)enteredLeafEnvironments[
-                LanguageServicePrecompiledLeaves.DropWhileEmptyLeafKey];
+            (PineValue.ListValue)
+            enteredLeafEnvironments[
+                LanguageServicePrecompiledLeaves.DropWhileEmptyLeafKey]
+            .Evaluate();
+
+        exitedLeafResults[LanguageServicePrecompiledLeaves.DropWhileEmptyLeafKey]
+            .Should().NotBeNull();
 
         AssertAllocationDoesNotGrowWithPrefix(
             LanguageServicePrecompiledLeaves.DropWhileEmptyLeafDelegate,
@@ -176,8 +184,10 @@ public class LanguageServicePrecompiledLeavesEffectivenessTests
                 StringList([.. Enumerable.Repeat("", 10_000), "line"])));
 
         var sliceEnvironment =
-            (PineValue.ListValue)enteredLeafEnvironments[
-                LanguageServicePrecompiledLeaves.SliceRangeFromTextLinesLeafKey];
+            (PineValue.ListValue)
+            enteredLeafEnvironments[
+                LanguageServicePrecompiledLeaves.SliceRangeFromTextLinesLeafKey]
+            .Evaluate();
 
         AssertAllocationDoesNotGrowWithPrefix(
             LanguageServicePrecompiledLeaves.SliceRangeFromTextLinesLeafDelegate,
@@ -247,8 +257,9 @@ public class LanguageServicePrecompiledLeavesEffectivenessTests
         .moduleContent.FunctionDeclarations[name];
 
     private static Core.Interpreter.IntermediateVM.PineVM CreateVM(
-        IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> precompiledLeaves,
-        Action<PineValue, PineValue>? reportEnterPrecompiledLeaf = null) =>
+        IReadOnlyDictionary<PineValue, PrecompiledLeaf> precompiledLeaves,
+        Action<PineValue, PineValueInProcess>? reportEnterPrecompiledLeaf = null,
+        Action<PineValue, PineValueInProcess, PineValueInProcess?>? reportExitPrecompiledLeaf = null) =>
         Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
             evalCache: null,
             evaluationConfigDefault: null,
@@ -261,7 +272,7 @@ public class LanguageServicePrecompiledLeavesEffectivenessTests
             parseCache: null,
             precompiledLeaves: precompiledLeaves,
             reportEnterPrecompiledLeaf,
-            reportExitPrecompiledLeaf: null,
+            reportExitPrecompiledLeaf,
             optimizationParametersSerial: null,
             cacheFileStore: null);
 
@@ -297,7 +308,7 @@ public class LanguageServicePrecompiledLeavesEffectivenessTests
         var function = GetTestFunction(functionName);
 
         var vmWithoutLeaves =
-            CreateVM(ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty);
+            CreateVM(ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty);
 
         var vmWithLeaves = CreateVM(IntermediateVM.SetupVM.DefaultPrecompiledLeaves);
 
@@ -338,7 +349,7 @@ public class LanguageServicePrecompiledLeavesEffectivenessTests
         var function = GetTestFunction(functionName);
 
         var vmWithoutLeaves =
-            CreateVM(ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty);
+            CreateVM(ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty);
 
         var vmWithLeaves = CreateVM(IntermediateVM.SetupVM.DefaultPrecompiledLeaves);
 
@@ -398,11 +409,15 @@ public class LanguageServicePrecompiledLeavesEffectivenessTests
     }
 
     private static void AssertAllocationDoesNotGrowWithPrefix(
-        Func<PineValue, PineValue?> leaf,
+        PrecompiledLeaf leaf,
         PineValue shortEnvironment,
         PineValue longEnvironment)
     {
-        leaf(shortEnvironment).Should().Be(leaf(longEnvironment));
+        var shortEnvironmentInProcess = PineValueInProcess.Create(shortEnvironment);
+        var longEnvironmentInProcess = PineValueInProcess.Create(longEnvironment);
+
+        leaf(shortEnvironmentInProcess)?.Evaluate()
+            .Should().Be(leaf(longEnvironmentInProcess)?.Evaluate());
 
         const int invocationCount = 100;
         const int measurementAttemptCount = 3;
@@ -416,7 +431,7 @@ public class LanguageServicePrecompiledLeavesEffectivenessTests
 
             for (var invocation = 0; invocation < invocationCount; ++invocation)
             {
-                _ = leaf(shortEnvironment);
+                _ = leaf(shortEnvironmentInProcess);
             }
 
             shortAllocatedBytes =
@@ -426,7 +441,7 @@ public class LanguageServicePrecompiledLeavesEffectivenessTests
 
             for (var invocation = 0; invocation < invocationCount; ++invocation)
             {
-                _ = leaf(longEnvironment);
+                _ = leaf(longEnvironmentInProcess);
             }
 
             longAllocatedBytes =

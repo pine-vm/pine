@@ -1,6 +1,7 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.ElmInElm;
+using Pine.Core.Internal;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -45,16 +46,16 @@ public static class Base64PrecompiledLeaves
     /// (<c>Base64.Encode.toBytes</c> and <c>Base64.Decode.fromBytes</c>). Suitable for
     /// merging into the dictionary consumed by the intermediate VM.
     /// </summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> DefaultLeaves =>
+    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> DefaultLeaves =>
         s_defaultLeaves.Value;
 
-    private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>> s_defaultLeaves =
+    private static readonly Lazy<IReadOnlyDictionary<PineValue, PrecompiledLeaf>> s_defaultLeaves =
         new(BuildDefaultLeaves);
 
-    private static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> BuildDefaultLeaves()
+    private static IReadOnlyDictionary<PineValue, PrecompiledLeaf> BuildDefaultLeaves()
     {
         return
-            ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty
+            ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty
             .Add(EncodeToBytesLeafKey, EncodeToBytesLeafDelegate)
             .Add(DecodeFromBytesLeafKey, DecodeFromBytesLeafDelegate);
     }
@@ -156,14 +157,16 @@ public static class Base64PrecompiledLeaves
 
     // ---------- leaf delegates ----------
 
-    private static readonly PineValue s_tagNothingValue =
-        ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("Nothing", []));
+    private static readonly PineValueInProcess s_tagNothingValue =
+        ElmValueInProcess.CreateChoice(
+            PineValueInProcess.Create(StringEncoding.ValueFromString("Nothing")),
+            []);
 
-    private static readonly PineValue s_tagJustNameValue =
-        StringEncoding.ValueFromString("Just");
+    private static readonly PineValueInProcess s_tagJustNameValue =
+        PineValueInProcess.Create(StringEncoding.ValueFromString("Just"));
 
-    private static PineValue JustValue(PineValue inner) =>
-        ElmValueEncoding.TagAsPineValue("Just", [inner]);
+    private static PineValueInProcess JustValue(PineValueInProcess inner) =>
+        ElmValueInProcess.CreateChoice(s_tagJustNameValue, [inner]);
 
     /// <summary>
     /// Short-circuit .NET implementation of <c>Base64.Encode.toBytes</c>
@@ -172,11 +175,11 @@ public static class Base64PrecompiledLeaves
     /// <c>Nothing</c> for an invalid base64 string), without interpreting the
     /// recursive chunking loop.
     /// </summary>
-    public static PineValue? EncodeToBytesLeafDelegate(PineValue environment)
+    public static PineValueInProcess? EncodeToBytesLeafDelegate(PineValueInProcess environment)
     {
         var envFunctionsValue = s_leafInfos.Value["encode"].envFunctionsValue;
 
-        if (environment.ValueFromPathOrEmptyList([0]) != envFunctionsValue)
+        if (!PineValueInProcess.AreEqual(environment.GetElementAt(0), envFunctionsValue))
         {
             return null;
         }
@@ -206,9 +209,12 @@ public static class Base64PrecompiledLeaves
         }
 
         var bytesValue =
-            ElmValueEncoding.TagAsPineValue(
-                ElmValue.ElmBytesTypeTagName,
-                [PineValue.Blob(dotnetBytesBuffer.AsMemory(start: 0, length: bytesWritten))]);
+            ElmValueInProcess.CreateChoice(
+                PineValueInProcess.Create(ElmValue.ElmBytesTypeTagNameAsValue),
+                [
+                PineValueInProcess.Create(
+                    PineValue.Blob(dotnetBytesBuffer.AsMemory(start: 0, length: bytesWritten)))
+                ]);
 
         return JustValue(bytesValue);
     }
@@ -219,11 +225,11 @@ public static class Base64PrecompiledLeaves
     /// base64 string, returning the corresponding <c>Maybe String</c> value,
     /// without interpreting the recursive decoding loop.
     /// </summary>
-    public static PineValue? DecodeFromBytesLeafDelegate(PineValue environment)
+    public static PineValueInProcess? DecodeFromBytesLeafDelegate(PineValueInProcess environment)
     {
         var envFunctionsValue = s_leafInfos.Value["decode"].envFunctionsValue;
 
-        if (environment.ValueFromPathOrEmptyList([0]) != envFunctionsValue)
+        if (!PineValueInProcess.AreEqual(environment.GetElementAt(0), envFunctionsValue))
         {
             return null;
         }
@@ -242,6 +248,14 @@ public static class Base64PrecompiledLeaves
 
         var dotnetString = Convert.ToBase64String(bytesBlob.Bytes.Span);
 
-        return JustValue(ElmValueEncoding.StringAsPineValue(dotnetString));
+        var stringValue =
+            ElmValueInProcess.CreateChoice(
+                PineValueInProcess.Create(ElmValue.ElmStringTypeTagNameAsValue),
+                [
+                PineValueInProcess.Create(
+                    StringEncoding.BlobValueFromString(dotnetString))
+                ]);
+
+        return JustValue(stringValue);
     }
 }

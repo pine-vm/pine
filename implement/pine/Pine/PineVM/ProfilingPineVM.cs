@@ -93,7 +93,7 @@ public class ProfilingPineVM
         var analysisVM =
             SetupVM.Create(
                 evalCache: analysisEvalCache,
-                precompiledLeaves: ImmutableDictionary<PineValue, System.Func<PineValue, PineValue?>>.Empty);
+                precompiledLeaves: ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty);
 
         PineVM =
             SetupVM.Create(

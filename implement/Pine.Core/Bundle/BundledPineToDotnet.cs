@@ -9,7 +9,7 @@ using System.Reflection;
 namespace Pine.Core.Bundle;
 
 using CompiledDictionary =
-    IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>;
+    IReadOnlyDictionary<PineValue, PrecompiledLeaf>;
 
 using FileTree =
     IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>;
@@ -408,5 +408,4 @@ public record BundledPineToDotnet(
             " bytes) at " + absoluteArchivePath);
     }
 }
-
 

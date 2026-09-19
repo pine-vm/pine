@@ -1,6 +1,7 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.ElmInElm;
+using Pine.Core.Internal;
 using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
@@ -34,13 +35,13 @@ public static class KernelBytesPrecompiledLeaves
     /// <summary>
     /// Default precompiled-leaves dictionary contributed by the kernel <c>Bytes</c> modules.
     /// </summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> DefaultLeaves =>
+    public static IReadOnlyDictionary<PineValue, PrecompiledLeaf> DefaultLeaves =>
         s_defaultLeaves.Value;
 
-    private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>> s_defaultLeaves =
+    private static readonly Lazy<IReadOnlyDictionary<PineValue, PrecompiledLeaf>> s_defaultLeaves =
         new(
             () =>
-            ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty
+            ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty
             .Add(
                 DecodeBlobAsCharsRecLeafKey,
                 DecodeBlobAsCharsRecLeafDelegate)
@@ -110,14 +111,17 @@ public static class KernelBytesPrecompiledLeaves
     /// <summary>
     /// Executes the precompiled Bytes.Encode.encodeCharsAsBlobHelp leaf by UTF-8 encoding the remaining Elm string characters into the accumulated blob.
     /// </summary>
-    public static PineValue? EncodeCharsAsBlobHelpLeafDelegate(PineValue environment)
+    public static PineValueInProcess? EncodeCharsAsBlobHelpLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, "encodeCharsAsBlobHelp"))
         {
             return null;
         }
 
-        var acc = environment.ValueFromPathOrEmptyList([1]);
+        var acc =
+            PineValueInProcess.ValueInProcessFromPathOrNull(environment, [1])
+            ?? PineValueInProcess.EmptyList;
+
         var offsetValue = environment.ValueFromPathOrEmptyList([2]);
         var charsValue = environment.ValueFromPathOrEmptyList([3]);
 
@@ -143,13 +147,13 @@ public static class KernelBytesPrecompiledLeaves
         }
 
         if (offset > int.MaxValue ||
-            acc is not PineValue.BlobValue && acc != PineValue.EmptyList)
+            !acc.IsBlob() && !PineValueInProcess.AreEqual(acc, PineValue.EmptyList))
         {
             return null;
         }
 
         var accBytes =
-            acc is PineValue.BlobValue accBlob
+            acc.Evaluate() is PineValue.BlobValue accBlob
             ?
             accBlob.Bytes
             :
@@ -189,20 +193,21 @@ public static class KernelBytesPrecompiledLeaves
             }
         }
 
-        return PineValue.Blob(output.ToArray());
+        return PineValueInProcess.Create(PineValue.Blob(output.ToArray()));
     }
 
     /// <summary>
     /// Executes the precompiled Bytes.Decode.decodeBlobAsCharsRec leaf by decoding UTF-8 bytes from the given offset and appending them to the existing character accumulator.
     /// </summary>
-    public static PineValue? DecodeBlobAsCharsRecLeafDelegate(PineValue environment)
+    public static PineValueInProcess? DecodeBlobAsCharsRecLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, "decodeBlobAsCharsRec") ||
             IntegerEncoding.ParseSignedIntegerRelaxed(
                 environment.ValueFromPathOrEmptyList([1]))
             .IsOkOrNullable() is not { } offset ||
             offset < 0 ||
-            environment.ValueFromPathOrEmptyList([3]) is not PineValue.ListValue initialChars)
+            PineValueInProcess.ValueInProcessFromPathOrNull(environment, [3]) is not { } initialChars ||
+            !initialChars.IsList())
         {
             return null;
         }
@@ -226,7 +231,7 @@ public static class KernelBytesPrecompiledLeaves
 
         if (offset > int.MaxValue)
         {
-            return StringValueFromReversedChars(initialChars.Items.Span, []);
+            return StringValueFromReversedChars(initialChars, []);
         }
 
         var decodedChars = new List<int>();
@@ -279,19 +284,20 @@ public static class KernelBytesPrecompiledLeaves
             sourceOffset += consumed;
         }
 
-        return StringValueFromReversedChars(initialChars.Items.Span, decodedChars);
+        return StringValueFromReversedChars(initialChars, decodedChars);
     }
 
-    private static PineValue? StringValueFromReversedChars(
-        ReadOnlySpan<PineValue> initialChars,
+    private static PineValueInProcess? StringValueFromReversedChars(
+        PineValueInProcess initialChars,
         IReadOnlyList<int> decodedChars)
     {
-        var charsBytes = new byte[(initialChars.Length + decodedChars.Count) * 4];
+        var charsBytes = new byte[(initialChars.GetLength() + decodedChars.Count) * 4];
         var destinationIndex = 0;
 
-        for (var index = initialChars.Length - 1; index >= 0; --index)
+        for (var index = initialChars.GetLength() - 1; index >= 0; --index)
         {
-            if (IntegerEncoding.ParseUnsignedInteger(initialChars[index]).IsOkOrNullable() is not { } code ||
+            if (IntegerEncoding.ParseUnsignedInteger(initialChars.GetElementAt(index).Evaluate())
+                .IsOkOrNullable() is not { } code ||
                 code > int.MaxValue)
             {
                 return null;
@@ -314,15 +320,16 @@ public static class KernelBytesPrecompiledLeaves
         }
 
         return
-            ElmValueEncoding.TagAsPineValue(
-                ElmValue.ElmStringTypeTagName,
-                [PineValue.Blob(charsBytes)]);
+            ElmValueInProcess.CreateChoice(
+                PineValueInProcess.Create(ElmValue.ElmStringTypeTagNameAsValue),
+                [PineValueInProcess.Create(PineValue.Blob(charsBytes))]);
     }
 
     private static byte ByteAtOrZero(ReadOnlySpan<byte> bytes, int index) =>
         index < bytes.Length ? bytes[index] : (byte)0;
 
-    private static bool EnvironmentMatches(PineValue environment, string functionName) =>
-        environment.ValueFromPathOrEmptyList([0]) ==
-        s_leafInfos.Value[functionName].envFunctionsValue;
+    private static bool EnvironmentMatches(PineValueInProcess environment, string functionName) =>
+        PineValueInProcess.AreEqual(
+            environment.GetElementAt(0),
+            s_leafInfos.Value[functionName].envFunctionsValue);
 }

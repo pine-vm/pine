@@ -78,7 +78,7 @@ public class KernelBytesPrecompiledLeavesEffectivenessTests
         .moduleContent.FunctionDeclarations[name];
 
     private static Core.Interpreter.IntermediateVM.PineVM CreateVM(
-        IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> precompiledLeaves) =>
+        IReadOnlyDictionary<PineValue, PrecompiledLeaf> precompiledLeaves) =>
         Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
             evalCache: null,
             evaluationConfigDefault: null,
@@ -135,7 +135,7 @@ public class KernelBytesPrecompiledLeavesEffectivenessTests
         var function = GetTestFunction(functionName);
 
         var vmWithoutLeaves =
-            CreateVM(ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty);
+            CreateVM(ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty);
 
         var vmWithLeaves = CreateVM(KernelBytesPrecompiledLeaves.DefaultLeaves);
 
