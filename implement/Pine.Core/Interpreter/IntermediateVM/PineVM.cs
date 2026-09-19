@@ -2412,6 +2412,138 @@ public class PineVM : ICancellablePineVM
                             }
                         }
 
+                    case StackInstructionKind.Eval_Multi:
+                        {
+                            var argumentCount =
+                                currentInstruction.TakeCount
+                                ??
+                                throw new Exception(
+                                    "Invalid operation form: Missing argument count for Eval_Multi");
+
+                            var functionValue = currentFrame.PopTopmostFromStack();
+                            var arguments = new PineValueInProcess[argumentCount];
+
+                            for (var i = 0; i < argumentCount; ++i)
+                            {
+                                arguments[i] = currentFrame.PopTopmostFromStack();
+                            }
+
+                            if (TryResolveCurriedFunction(
+                                functionValue,
+                                out var plan,
+                                out var existingArguments))
+                            {
+                                var remainingArity =
+                                    plan!.ParameterCount -
+                                    plan.InitialArguments.Length -
+                                    existingArguments.Count;
+
+                                var argumentsForSaturation =
+                                    Math.Min(remainingArity, arguments.Length);
+
+                                for (var i = 0; i < argumentsForSaturation; ++i)
+                                {
+                                    ++evalCount;
+
+                                    if (IncrementInvocationCountAndEnforceLimits() is { } limitError)
+                                    {
+                                        return limitError;
+                                    }
+                                }
+
+                                var combinedArguments =
+                                    CombineArguments(
+                                        existingArguments,
+                                        arguments,
+                                        argumentsForSaturation);
+
+                                if (arguments.Length < remainingArity)
+                                {
+                                    currentFrame.PushInstructionResult(
+                                        CreatePartialApplication(plan, combinedArguments));
+
+                                    continue;
+                                }
+
+                                if (arguments.Length == remainingArity)
+                                {
+                                    var exactFollowingInstruction =
+                                        currentFrame.Instructions.Instructions[
+                                            currentFrame.InstructionPointer + 1];
+
+                                    if (InvokeSaturated(
+                                        plan,
+                                        combinedArguments,
+                                        replaceCurrentFrame:
+                                        exactFollowingInstruction.Kind is StackInstructionKind.Return) is { } error)
+                                    {
+                                        return error;
+                                    }
+
+                                    continue;
+                                }
+
+                                ++directSaturatedApplicationCount;
+
+                                var extraArguments =
+                                    new PineValueInProcess[arguments.Length - remainingArity];
+
+                                Array.Copy(
+                                    arguments,
+                                    remainingArity,
+                                    extraArguments,
+                                    0,
+                                    extraArguments.Length);
+
+                                var initialStep =
+                                    new ApplyStepwise.StepResult.Continue(
+                                        Expression: plan.Body,
+                                        EnvironmentValue: plan.BuildBodyEnvironment(combinedArguments),
+                                        Callback:
+                                        result =>
+                                        BuildGenericApplySteps(
+                                            result,
+                                            extraArguments,
+                                            argumentIndex: 0),
+                                        CountInvocation: false,
+                                        ExpressionValue: plan.EncodedBody);
+
+                                var followingInstruction =
+                                    currentFrame.Instructions.Instructions[
+                                        currentFrame.InstructionPointer + 1];
+
+                                if (PushApplicationContinuation(
+                                    initialStep,
+                                    replaceCurrentFrame:
+                                    followingInstruction.Kind is StackInstructionKind.Return) is { } continuationError)
+                                {
+                                    return continuationError;
+                                }
+
+                                continue;
+                            }
+
+                            var genericInitialStep =
+                                BuildGenericApplySteps(
+                                    functionValue,
+                                    arguments,
+                                    argumentIndex: 0);
+
+                            var genericFollowingInstruction =
+                                currentFrame.Instructions.Instructions[
+                                    currentFrame.InstructionPointer + 1];
+
+                            if (PushApplicationContinuation(
+                                genericInitialStep,
+                                replaceCurrentFrame:
+                                genericFollowingInstruction.Kind is StackInstructionKind.Return) is { } genericError)
+                            {
+                                return genericError;
+                            }
+
+                            continue;
+                        }
+
                     case StackInstructionKind.Eval_Const:
                         {
                             ++evalCount;

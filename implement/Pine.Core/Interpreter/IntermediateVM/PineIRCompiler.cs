@@ -1052,6 +1052,50 @@ public class PineIRCompiler
         NodeCompilationResult prior,
         PineVMParseCache parseCache)
     {
+        if (CodeAnalysis.CodeAnalysis.ParseGenericFunctionApplication(evalExpr)
+            is { } genericApplication &&
+            genericApplication.arguments.Count > 1 &&
+            CanFuseGenericApplication(genericApplication.functionExpr, parseCache))
+        {
+            var childContext = context with { IsTailPosition = false };
+            var afterArguments = prior;
+
+            for (var i = genericApplication.arguments.Count - 1; i >= 0; --i)
+            {
+                afterArguments =
+                    afterArguments.ContinueWithExpression(
+                        genericApplication.arguments[i],
+                        childContext,
+                        parseCache);
+            }
+
+            var afterFunction =
+                afterArguments.ContinueWithExpression(
+                    genericApplication.functionExpr,
+                    childContext,
+                    parseCache);
+
+            return
+                afterFunction.AppendInstruction(
+                    StackInstruction.Eval_Multi(genericApplication.arguments.Count));
+        }
+
+        static bool CanFuseGenericApplication(
+            Expression functionExpression,
+            PineVMParseCache parseCache)
+        {
+            if (functionExpression is not Expression.Litral functionLiteral)
+                return true;
+
+            return
+                CurriedFunctionPlan.TryParseFunctionRecord(
+                    functionLiteral.Value,
+                    parseCache)
+                is { } functionRecord &&
+                functionRecord.ParameterCount >
+                functionRecord.ArgumentsAlreadyCollected.Length;
+        }
+
         if (evalExpr.Encoded is Expression.Litral literalEncodedExpression)
         {
             if (context.EnableDirectInvocation &&

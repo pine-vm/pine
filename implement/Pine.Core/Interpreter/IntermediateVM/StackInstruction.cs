@@ -293,10 +293,18 @@ public enum StackInstructionKind
     Return,
 
     /// <summary>
-    /// Tries to parse the top value from the stack as a Pine expression and evaluates it using
+    /// Tries to parse the top value from the stack as an expression and evaluates it using
     /// the second value on the stack as the environment.
     /// </summary>
     Eval_Binary,
+
+    /// <summary>
+    /// Repeated variant of <see cref="Eval_Binary"/>,
+    /// taking the expression value from the top of the stack.
+    /// <see cref="StackInstruction.TakeCount"/> contains the `Eval` count.
+    /// Behaves the same as <see cref="Eval_Binary"/> when <see cref="StackInstruction.TakeCount"/> is `1`.
+    /// </summary>
+    Eval_Multi,
 
     /// <summary>
     /// Invokes a specific stack-frame representation using values forwarded directly from the stack.
@@ -930,6 +938,12 @@ public record StackInstruction(
     /// </summary>
     public static readonly StackInstruction Eval_Binary =
         new(StackInstructionKind.Eval_Binary);
+
+    /// <summary>
+    /// Creates a fused multi-eval instruction.
+    /// </summary>
+    public static StackInstruction Eval_Multi(int count) =>
+        new(StackInstructionKind.Eval_Multi, TakeCount: count);
 
     /// <summary>
     /// Creates a <see cref="StackInstructionKind.Eval_Const"/> instruction that evaluates
@@ -1823,6 +1837,18 @@ public record StackInstruction(
                 PopCount: 2,
                 PushCount: 1,
                 Display: InstructionDetails.DisplayNoDetails),
+
+            StackInstructionKind.Eval_Multi =>
+            new InstructionDetails(
+                PopCount:
+                (instruction.TakeCount ??
+                throw new Exception("Missing TakeCount for Eval_Multi instruction")) + 1,
+                PushCount: 1,
+                Display: () => InstructionDisplay.WithoutDetailLines(
+                    [
+                    instruction.TakeCount?.ToString()
+                    ?? throw new Exception("Missing TakeCount for Eval_Multi instruction")
+                    ])),
 
             StackInstructionKind.Eval_Const =>
             new InstructionDetails(

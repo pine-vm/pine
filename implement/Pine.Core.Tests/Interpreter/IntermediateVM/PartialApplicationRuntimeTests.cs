@@ -54,7 +54,7 @@ public class PartialApplicationRuntimeTests
 
         report.ReturnValue.PartialApplicationOrNull.Should().BeNull();
         report.Counters.CurriedFunctionPlanParseCount.Should().Be(1);
-        report.Counters.PartialApplicationAllocationCount.Should().Be(2);
+        report.Counters.PartialApplicationAllocationCount.Should().Be(0);
         report.Counters.DirectSaturatedApplicationCount.Should().Be(1);
         report.Counters.PartialApplicationMaterializationCount.Should().Be(0);
         report.ReturnValue.Evaluate().Should().Be(expected);
@@ -77,7 +77,7 @@ public class PartialApplicationRuntimeTests
 
         report.ReturnValue.PartialApplicationOrNull.Should().NotBeNull();
         report.ReturnValue.EvaluatedOrNull.Should().BeNull();
-        report.Counters.PartialApplicationAllocationCount.Should().Be(3);
+        report.Counters.PartialApplicationAllocationCount.Should().Be(1);
         report.Counters.DirectSaturatedApplicationCount.Should().Be(0);
         report.Counters.PartialApplicationMaterializationCount.Should().Be(0);
         report.ReturnValue.Evaluate().Should().Be(expected);
@@ -120,6 +120,57 @@ public class PartialApplicationRuntimeTests
         report.ReturnValue.Evaluate().Should().Be(EvaluateWithDirectInterpreter(expression));
         report.Counters.PartialApplicationAllocationCount.Should().Be(1);
         report.Counters.PartialApplicationMaterializationCount.Should().Be(1);
+        report.Counters.DirectSaturatedApplicationCount.Should().Be(0);
+    }
+
+    [Fact]
+    public void Nested_eval_expression_executes_fused_eval_var_instruction()
+    {
+        var expression =
+            Apply(
+                BuildFunctionValue(parameterCount: 3),
+                IntegerEncoding.EncodeSignedInteger(11),
+                IntegerEncoding.EncodeSignedInteger(13),
+                IntegerEncoding.EncodeSignedInteger(17));
+
+        var executedInstructions = new List<StackInstructionKind>();
+        var report = EvaluateWithPineVm(expression, executedInstructions);
+
+        report.ReturnValue.Evaluate().Should().Be(EvaluateWithDirectInterpreter(expression));
+        executedInstructions.Should().Contain(StackInstructionKind.Eval_Multi);
+        report.Counters.PartialApplicationAllocationCount.Should().Be(0);
+        report.Counters.DirectSaturatedApplicationCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void Fused_application_falls_back_for_noncanonical_function_value()
+    {
+        var identityFunction =
+            ExpressionEncoding.EncodeExpressionAsValue(
+                Expression.EnvironmentInstance);
+
+        var constantFunction =
+            ExpressionEncoding.EncodeExpressionAsValue(
+                Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(41)));
+
+        var expression =
+            Apply(
+                Expression.EnvironmentInstance,
+                constantFunction,
+                IntegerEncoding.EncodeSignedInteger(43));
+
+        var executedInstructions = new List<StackInstructionKind>();
+
+        var report =
+            EvaluateWithPineVm(
+                expression,
+                executedInstructions,
+                environment: identityFunction);
+
+        report.ReturnValue.Evaluate()
+            .Should().Be(EvaluateWithDirectInterpreter(expression, identityFunction));
+
+        executedInstructions.Should().Contain(StackInstructionKind.Eval_Multi);
         report.Counters.DirectSaturatedApplicationCount.Should().Be(0);
     }
 
@@ -183,7 +234,7 @@ public class PartialApplicationRuntimeTests
 
         report.ReturnValue.Evaluate().Should().Be(EvaluateWithDirectInterpreter(expression));
         report.Counters.PartialApplicationAllocationCount.Should().Be(0);
-        report.Counters.DirectSaturatedApplicationCount.Should().Be(2);
+        report.Counters.DirectSaturatedApplicationCount.Should().Be(1);
     }
 
     [Fact]

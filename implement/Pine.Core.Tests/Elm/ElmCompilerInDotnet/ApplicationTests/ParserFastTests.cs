@@ -623,7 +623,7 @@ public class ParserFastTests
             InvocationCount: 11
             BuildListCount: 7
             LoopIterationCount: 0
-            InstructionCount: 210
+            InstructionCount: 209
             """);
     }
 

@@ -353,7 +353,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 6
             BuildListCount: 4
             LoopIterationCount: 0
-            InstructionCount: 26
+            InstructionCount: 25
             """);
     }
 

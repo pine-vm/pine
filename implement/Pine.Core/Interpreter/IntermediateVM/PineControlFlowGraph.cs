@@ -164,6 +164,7 @@ public sealed record PineControlFlowGraph(
                     break;
 
                 case StackInstructionKind.Eval_Binary:
+                case StackInstructionKind.Eval_Multi:
                 case StackInstructionKind.Eval_Const:
                 case StackInstructionKind.Invoke_StackFrame_Const:
                 case StackInstructionKind.Return:
@@ -854,6 +855,7 @@ public sealed record PineControlFlowGraph(
                     Instruction: last),
 
                 StackInstructionKind.Eval_Binary or
+                StackInstructionKind.Eval_Multi or
                 StackInstructionKind.Eval_Const or
                 StackInstructionKind.Invoke_StackFrame_Const =>
                 new PineControlFlowTerminator.Invoke(
