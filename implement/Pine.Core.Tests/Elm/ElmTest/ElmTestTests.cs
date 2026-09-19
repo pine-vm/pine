@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Pine.Core.Elm;
 using Pine.Core.Elm.Testing;
 using Pine.Core.Files;
 using Pine.Core.Tests.Elm.ElmCompilerInDotnet;
@@ -190,7 +191,7 @@ public class ElmTestTests
 
 
     [Fact]
-    public void Requested_workers_share_caches_and_use_separate_vms()
+    public void Each_test_uses_a_separate_vm_and_shared_caches()
     {
         var testCasesDirectory =
             TestResultSummary.FindTestDataDirectory(
@@ -210,7 +211,7 @@ public class ElmTestTests
         var testRun =
             ElmTestRunner.CompileAndRunTests(
                 appDirectory,
-                workers: 3,
+                workers: 1,
                 pineVmFactory:
                 (_, caches) =>
                 {
@@ -228,6 +229,38 @@ public class ElmTestTests
         factoryCalls.Should().Be(3);
         sharedCaches.Distinct(ReferenceEqualityComparer.Instance).Should().HaveCount(1);
         workersObservedDiscovery.Should().OnlyContain(observed => observed);
+    }
+
+    [Fact]
+    public void Evaluation_failure_fails_only_the_individual_test()
+    {
+        var testCasesDirectory =
+            TestResultSummary.FindTestDataDirectory(
+                Path.Combine("Elm", "CommandElmTest"));
+
+        var appDirectory =
+            Path.Combine(
+                testCasesDirectory,
+                "single-suite-three-equal-all-pass",
+                "input-app");
+
+        var testRun =
+            ElmTestRunner.CompileAndRunTests(
+                appDirectory,
+                new FirstEvaluationFailsPineVm());
+
+        var completed =
+            testRun.Should().BeOfType<ElmTestRun.Completed>().Subject;
+
+        completed.Tests.Should().HaveCount(3);
+        completed.Tests.Count(test => test.Kind is CompletedTestKind.Failed).Should().Be(1);
+        completed.Tests.Count(test => test.Kind is CompletedTestKind.Passed).Should().Be(2);
+
+        completed.Tests
+            .Single(test => test.Kind is CompletedTestKind.Failed)
+            .Failure.Should().Be(
+                new MessageFailure(
+                    "Failed evaluating test: Invocation count limit exceeded: 10_000_000"));
     }
 
 
@@ -313,5 +346,21 @@ public class ElmTestTests
             .Where(line => !line.StartsWith("Duration:", StringComparison.Ordinal));
 
         return string.Join('\n', lines).Trim();
+    }
+
+
+    private sealed class FirstEvaluationFailsPineVm : Pine.Core.PineVM.IPineVM
+    {
+        private int evaluationCount;
+
+        public Result<string, PineValue> EvaluateExpression(
+            Expression expression,
+            PineValue environment)
+        {
+            if (Interlocked.Increment(ref evaluationCount) is 1)
+                return "Invocation count limit exceeded: 10_000_000";
+
+            return ElmValueEncoding.TagAsPineValue("Pass", []);
+        }
     }
 }

@@ -58,7 +58,7 @@ public static class ElmTestRunner
 
 
     /// <summary>
-    /// Compiles and runs the tests in an Elm project using isolated workers with shared caches.
+    /// Compiles and runs the tests in an Elm project using a separate VM for each test and shared compilation caches.
     /// </summary>
     public static ElmTestRun CompileAndRunTests(
         string appDirectory,
@@ -300,18 +300,18 @@ public static class ElmTestRunner
                             var invocationCache =
                                 new BufferedInvocationCacheAccess(sharedInvocationCache);
 
-                            var workerPineVm =
-                                pineVmFactory(invocationCache, sharedPineVMCaches);
-
                             try
                             {
                                 while (Interlocked.Increment(ref nextTestIndex) is var testIndex &&
                                     testIndex < discoveredTests.Count)
                                 {
+                                    var testPineVm =
+                                        pineVmFactory(invocationCache, sharedPineVMCaches);
+
                                     completedTestsByIndex[testIndex] =
                                         RunTest(
                                             discoveredTests[testIndex],
-                                            workerPineVm,
+                                            testPineVm,
                                             sharedPineVMCaches.ParsedExpressions);
 
                                     invocationCache.MergeIntoShared();
@@ -406,9 +406,27 @@ public static class ElmTestRunner
             FunctionRecord.ParseFunctionRecordTagged(discoveredTest.Thunk, parseCache)
             .Extract(error => throw new InvalidOperationException("Failed parsing test thunk: " + error));
 
-        var expectationValue =
-            ElmInteractiveEnvironment.ApplyFunction(pineVm, functionRecord, [PineValue.EmptyList])
-            .Extract(error => throw new InvalidOperationException("Failed evaluating test thunk: " + error));
+        var expectationResult =
+            ElmInteractiveEnvironment.ApplyFunction(
+                pineVm,
+                functionRecord,
+                [PineValue.EmptyList]);
+
+        if (expectationResult.IsErrOrNull() is { } evaluationError)
+        {
+            return
+                new CompletedTest(
+                    discoveredTest.Path,
+                    CompletedTestKind.Failed,
+                    new MessageFailure(
+                        message: "Failed evaluating test: " + evaluationError));
+        }
+
+        if (expectationResult.IsOkOrNull() is not { } expectationValue)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + expectationResult.GetType().FullName);
+        }
 
         var (expectationTag, expectationArguments) = ParseTaggedValue(expectationValue);
 

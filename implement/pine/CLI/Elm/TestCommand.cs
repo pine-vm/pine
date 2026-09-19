@@ -6,10 +6,19 @@ using System.CommandLine;
 using System.IO;
 using System.Linq;
 
+using IntermediatePineVM = Pine.Core.Interpreter.IntermediateVM.PineVM;
+
 namespace Pine.CLI.Elm;
 
 public static class TestCommand
 {
+    // Keep these defaults at the Elm test entry point so future CLI options can override them.
+    private static readonly IntermediatePineVM.EvaluationConfig s_testEvaluationConfigDefault =
+        new(
+            InvocationCountLimit: 10_000_000,
+            LoopIterationCountLimit: 10_000_000,
+            StackDepthLimit: 100_000);
+
     public static Command Create()
     {
         var command =
@@ -126,6 +135,7 @@ public static class TestCommand
                 pineVmFactory:
                 (invocationCache, sharedCaches) =>
                 IntermediateVM.SetupVM.Create(
+                    evaluationConfigDefault: s_testEvaluationConfigDefault,
                     invocationCache: invocationCache,
                     parseCache: sharedCaches.ParsedExpressions,
                     tryGetExpressionCompilation: sharedCaches.ExpressionCompilations.TryGet,
