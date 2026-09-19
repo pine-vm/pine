@@ -3,6 +3,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.Json;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
@@ -102,6 +103,24 @@ public class CompileExpressionTests
                 ]));
     }
 
+    [Fact]
+    public void Slice_switch_rejects_duplicate_literals()
+    {
+        var literal = PineValue.Blob([4, 5]);
+
+        var action =
+            () =>
+            StackInstruction.Switch_Jump_If_Slice_Skip_Var_Equal_Const(
+                [
+                new SliceSwitchCase(literal, 1),
+                new SliceSwitchCase(literal, 2)
+                ]);
+
+        action.Should()
+            .Throw<ArgumentException>()
+            .WithMessage("*distinct*");
+    }
+
     private static void AssertSwitchOverSliceCompilation(
         PineValue firstLiteral,
         PineValue secondLiteral)
@@ -181,7 +200,28 @@ public class CompileExpressionTests
                 instruction.Kind is
                 StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const);
 
-        switchInstruction.SwitchJumpTable.Should().HaveCount(2);
+        switchInstruction.SwitchJumpTable.Should().BeNull();
+        switchInstruction.SliceSwitchCases.Should().HaveCount(2);
+
+        switchInstruction.SliceSwitchCases
+            .Select(switchCase => switchCase.Literal)
+            .Should().Equal(firstLiteral, secondLiteral);
+
+        var loweredSwitchInstruction =
+            PineControlFlowGraph
+            .FromInstructions(compiled.Generic.Instructions)
+            .LowerToStackInstructions()
+            .Single(
+                instruction =>
+                instruction.Kind is
+                StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const);
+
+        loweredSwitchInstruction.SliceSwitchCases
+            .Select(switchCase => switchCase.Literal)
+            .Should().Equal(firstLiteral, secondLiteral);
+
+        loweredSwitchInstruction.SliceSwitchCases.Should().Equal(
+            switchInstruction.SliceSwitchCases);
 
         var instructionDetails = StackInstruction.GetDetails(switchInstruction);
 

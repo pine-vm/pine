@@ -142,14 +142,9 @@ public sealed record PineControlFlowGraph(
 
                 case StackInstructionKind.Switch_Jump_If_Equal_Const:
                 case StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const:
-                    var switchJumpTable =
-                        instruction.SwitchJumpTable
-                        ??
-                        throw new InvalidOperationException(
-                            $"Switch without jump table at instruction {instructionIndex}.");
-
-                    foreach (var jumpOffset in switchJumpTable.Values)
+                    foreach (var switchCase in StackInstruction.EnumerateSwitchCases(instruction))
                     {
+                        var jumpOffset = switchCase.Value;
                         var switchTargetIndex = instructionIndex + jumpOffset;
 
                         if (switchTargetIndex < 0 || switchTargetIndex >= instructions.Count)
@@ -293,6 +288,45 @@ public sealed record PineControlFlowGraph(
                         throw new InvalidOperationException(
                             $"Virtual value {result.Value} is defined more than once.");
                     }
+                }
+            }
+
+            if (block.Terminator is PineControlFlowTerminator.Switch
+                {
+                    Instruction.Kind:
+                    StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const
+                } sliceSwitch)
+            {
+                var caseLiterals = new HashSet<PineValue>();
+                var switchCases = sliceSwitch.Instruction.SliceSwitchCases;
+
+                if (switchCases.IsDefault)
+                {
+                    throw new InvalidOperationException(
+                        $"Slice switch in block {block.Id.Value} has no cases.");
+                }
+
+                for (var i = 0; i < switchCases.Length; ++i)
+                {
+                    var literal = switchCases[i].Literal;
+
+                    if (!caseLiterals.Add(literal))
+                    {
+                        throw new InvalidOperationException(
+                            $"Slice switch in block {block.Id.Value} contains duplicate case literals.");
+                    }
+
+                    if (!sliceSwitch.Branches.ContainsKey(literal))
+                    {
+                        throw new InvalidOperationException(
+                            $"Slice switch in block {block.Id.Value} has no branch for a case literal.");
+                    }
+                }
+
+                if (caseLiterals.Count != sliceSwitch.Branches.Count)
+                {
+                    throw new InvalidOperationException(
+                        $"Slice switch in block {block.Id.Value} has branches without corresponding cases.");
                 }
             }
 
@@ -694,15 +728,36 @@ public sealed record PineControlFlowGraph(
                     break;
 
                 case PineControlFlowTerminator.Switch switchTerminator:
-                    result.Add(
-                        switchTerminator.Instruction with
-                        {
-                            SwitchJumpTable =
-                            switchTerminator.Branches
-                            .ToImmutableDictionary(
-                                branch => branch.Key,
-                                branch => firstInstructionIndexByBlock[branch.Value] - result.Count)
-                        });
+                    if (switchTerminator.Instruction.Kind is
+                        StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const)
+                    {
+                        result.Add(
+                            switchTerminator.Instruction with
+                            {
+                                SliceSwitchCases =
+                                [
+                                .. switchTerminator.Instruction.SliceSwitchCases.Select(
+                                    switchCase =>
+                                    new SliceSwitchCase(
+                                        switchCase.Literal,
+                                        firstInstructionIndexByBlock[
+                                            switchTerminator.Branches[switchCase.Literal]] -
+                                        result.Count))
+                                ]
+                            });
+                    }
+                    else
+                    {
+                        result.Add(
+                            switchTerminator.Instruction with
+                            {
+                                SwitchJumpTable =
+                                switchTerminator.Branches
+                                .ToImmutableDictionary(
+                                    branch => branch.Key,
+                                    branch => firstInstructionIndexByBlock[branch.Value] - result.Count)
+                            });
+                    }
 
                     break;
 
@@ -788,9 +843,7 @@ public sealed record PineControlFlowGraph(
                         endInstructionIndexExclusive,
                         blockFromInstructionIndex),
                     Branches:
-                    (last.SwitchJumpTable ??
-                    throw new InvalidOperationException(
-                        $"Switch at {endInstructionIndexExclusive - 1} has no jump table."))
+                    StackInstruction.EnumerateSwitchCases(last)
                     .ToImmutableDictionary(
                         branch => branch.Key,
                         branch =>

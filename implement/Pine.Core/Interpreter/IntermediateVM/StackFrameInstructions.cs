@@ -71,13 +71,9 @@ public record StackFrameInstructions(
 
                     yield return instructionIndex + 1;
 
-                    foreach (var jumpOffset in
-                        (inst.SwitchJumpTable ??
-                        throw new InvalidOperationException(
-                            $"Switch without jump table at {instructionIndex}."))
-                        .Values)
+                    foreach (var switchCase in StackInstruction.EnumerateSwitchCases(inst))
                     {
-                        yield return instructionIndex + jumpOffset;
+                        yield return instructionIndex + switchCase.Value;
                     }
 
                     break;

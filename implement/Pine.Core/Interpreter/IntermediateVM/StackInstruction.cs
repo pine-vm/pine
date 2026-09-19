@@ -462,7 +462,7 @@ public enum StackInstructionKind
     /// <summary>
     /// Pops the skip count (top) and source value (second) from the stack and jumps by the
     /// offset for the case whose literal equals the source slice beginning at the skip count.
-    /// Depends on the property <see cref="StackInstruction.SwitchJumpTable"/>.
+    /// Depends on the property <see cref="StackInstruction.SliceSwitchCases"/>.
     /// </summary>
     Switch_Jump_If_Slice_Skip_Var_Equal_Const,
 
@@ -514,6 +514,14 @@ public record DirectInvocation(
 }
 
 /// <summary>
+/// One ordered case in a slice-switch instruction.
+/// Literals in a single instruction must be distinct.
+/// </summary>
+public readonly record struct SliceSwitchCase(
+    PineValue Literal,
+    int JumpOffset);
+
+/// <summary>
 /// Represents a single instruction for the Pine stack-based virtual machine. 
 /// Depending on the <see cref="Kind"/>, this instruction may consume zero or more values 
 /// from the evaluation stack, optionally produce a new value to push onto the stack, 
@@ -545,6 +553,10 @@ public record DirectInvocation(
 /// <param name="SwitchJumpTable">
 /// Table of jump offsets for equality, see <see cref="StackInstructionKind.Switch_Jump_If_Equal_Const"/>
 /// </param>
+/// <param name="SliceSwitchCases">
+/// Ordered cases for predicate-based slice matching, see
+/// <see cref="StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const"/>.
+/// </param>
 public record StackInstruction(
     StackInstructionKind Kind,
     PineValue? Literal = null,
@@ -555,7 +567,8 @@ public record StackInstruction(
     int? JumpOffset = null,
     int? ShiftCount = null,
     DirectInvocation? OptimizedInvocation = null,
-    ImmutableDictionary<PineValue, int>? SwitchJumpTable = null)
+    ImmutableDictionary<PineValue, int>? SwitchJumpTable = null,
+    ImmutableArray<SliceSwitchCase> SliceSwitchCases = default)
 {
     /// <summary>
     /// The linked target stack-frame instructions, delegated from <see cref="OptimizedInvocation"/>.
@@ -1116,10 +1129,29 @@ public record StackInstruction(
     /// instruction using the given cases and relative jump offsets.
     /// </summary>
     public static StackInstruction Switch_Jump_If_Slice_Skip_Var_Equal_Const(
-        ImmutableDictionary<PineValue, int> jumpTable) =>
-        new(
-            StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const,
-            SwitchJumpTable: jumpTable);
+        ImmutableArray<SliceSwitchCase> cases)
+    {
+        if (cases.IsDefault)
+            throw new ArgumentException("Slice switch cases must be initialized.", nameof(cases));
+
+        var literals = new HashSet<PineValue>();
+        var casesSpan = cases.AsSpan();
+
+        for (var i = 0; i < casesSpan.Length; ++i)
+        {
+            if (!literals.Add(casesSpan[i].Literal))
+            {
+                throw new ArgumentException(
+                    "Slice switch case literals must be distinct.",
+                    nameof(cases));
+            }
+        }
+
+        return
+            new(
+                StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const,
+                SliceSwitchCases: cases);
+    }
 
 
     /// <inheritdoc/>
@@ -1218,16 +1250,12 @@ public record StackInstruction(
             StackInstructionKind.Switch_Jump_If_Equal_Const or
             StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const)
         {
-            var switchJumpTable =
-                instruction.SwitchJumpTable
-                ?? throw new Exception("Missing SwitchTable for switch jump instruction");
-
             return
                 display with
                 {
                     DetailLines =
                     [
-                    .. switchJumpTable
+                    .. EnumerateSwitchCases(instruction)
                     .OrderBy(kvp => kvp.Value)
                     .ThenBy(kvp => literalDisplayString(kvp.Key), StringComparer.Ordinal)
                     .Select(
@@ -2082,17 +2110,13 @@ public record StackInstruction(
         StackInstruction instruction,
         Func<PineValue, string> literalDisplayString)
     {
-        var switchJumpTable =
-            instruction.SwitchJumpTable
-            ?? throw new Exception("Missing SwitchTable for Switch_Equal instruction");
-
-        var detailLines = new string[switchJumpTable.Count];
-
         var entriesOrdered =
-            switchJumpTable
+            EnumerateSwitchCases(instruction)
             .OrderBy(kvp => kvp.Value)
             .ThenBy(kvp => literalDisplayString(kvp.Key), StringComparer.Ordinal)
             .ToArray();
+
+        var detailLines = new string[entriesOrdered.Length];
 
         for (var i = 0; i < entriesOrdered.Length; i++)
         {
@@ -2105,8 +2129,36 @@ public record StackInstruction(
         return
             new InstructionDisplay(
                 Arguments:
-                [switchJumpTable.Count.ToString()],
+                [entriesOrdered.Length.ToString()],
                 DetailLines:
                 detailLines);
+    }
+
+    internal static IEnumerable<KeyValuePair<PineValue, int>> EnumerateSwitchCases(
+        StackInstruction instruction)
+    {
+        if (instruction.Kind is StackInstructionKind.Switch_Jump_If_Equal_Const)
+        {
+            return
+                instruction.SwitchJumpTable
+                ?? throw new Exception("Missing SwitchJumpTable for exact switch instruction");
+        }
+
+        if (instruction.Kind is StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const)
+        {
+            if (instruction.SliceSwitchCases.IsDefault)
+                throw new Exception("Missing SliceSwitchCases for slice switch instruction");
+
+            return
+                instruction.SliceSwitchCases.Select(
+                    switchCase =>
+                    new KeyValuePair<PineValue, int>(
+                        switchCase.Literal,
+                        switchCase.JumpOffset));
+        }
+
+        throw new ArgumentException(
+            "Instruction is not a switch instruction.",
+            nameof(instruction));
     }
 }

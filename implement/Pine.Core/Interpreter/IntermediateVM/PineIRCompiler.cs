@@ -814,7 +814,6 @@ public class PineIRCompiler
             }
         }
 
-        var jumpTableBuilder = ImmutableDictionary.CreateBuilder<PineValue, int>();
         var caseOffset = 1 + defaultBranchInstructions.Count + 1;
         var caseOffsets = new int[caseInstructions.Length];
 
@@ -829,22 +828,41 @@ public class PineIRCompiler
             }
         }
 
-        for (var caseIndex = 0; caseIndex < cases.Count; caseIndex++)
-        {
-            jumpTableBuilder.Add(
-                cases[caseIndex].Literal,
-                caseOffsets[caseBranchIndexes[caseIndex]]);
-        }
+        StackInstruction switchInstruction;
 
-        var switchInstruction =
-            sliceSkipVar is null
-            ?
-            new StackInstruction(
-                StackInstructionKind.Switch_Jump_If_Equal_Const,
-                SwitchJumpTable: jumpTableBuilder.ToImmutable())
-            :
-            StackInstruction.Switch_Jump_If_Slice_Skip_Var_Equal_Const(
-                jumpTableBuilder.ToImmutable());
+        if (sliceSkipVar is null)
+        {
+            var jumpTableBuilder = ImmutableDictionary.CreateBuilder<PineValue, int>();
+
+            for (var caseIndex = 0; caseIndex < cases.Count; caseIndex++)
+            {
+                jumpTableBuilder.Add(
+                    cases[caseIndex].Literal,
+                    caseOffsets[caseBranchIndexes[caseIndex]]);
+            }
+
+            switchInstruction =
+                new StackInstruction(
+                    StackInstructionKind.Switch_Jump_If_Equal_Const,
+                    SwitchJumpTable: jumpTableBuilder.ToImmutable());
+        }
+        else
+        {
+            var sliceCasesBuilder =
+                ImmutableArray.CreateBuilder<SliceSwitchCase>(cases.Count);
+
+            for (var caseIndex = 0; caseIndex < cases.Count; caseIndex++)
+            {
+                sliceCasesBuilder.Add(
+                    new SliceSwitchCase(
+                        cases[caseIndex].Literal,
+                        caseOffsets[caseBranchIndexes[caseIndex]]));
+            }
+
+            switchInstruction =
+                StackInstruction.Switch_Jump_If_Slice_Skip_Var_Equal_Const(
+                    sliceCasesBuilder.MoveToImmutable());
+        }
 
         var branchInstructions =
             new List<StackInstruction>
@@ -1204,6 +1222,7 @@ public class PineIRCompiler
                     nestedResult =
                         nestedResult.AppendInstruction(
                             StackInstruction.Local_Get(environmentLocalIndex));
+
                     continue;
                 }
 

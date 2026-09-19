@@ -2352,34 +2352,52 @@ public class PineVM : ICancellablePineVM
                             var skipCountValue = currentFrame.PopTopmostFromStack();
                             var slicedValue = currentFrame.PopTopmostFromStack();
 
-                            var jumpTable =
-                                currentInstruction.SwitchJumpTable
-                                ??
-                                throw new Exception("Invalid operation form: Missing switch jump table");
+                            var switchCasesArray = currentInstruction.SliceSwitchCases;
 
-                            int? jumpOffset = null;
-
-                            var skipCount = skipCountValue.AsInteger();
-
-                            foreach (var switchCase in jumpTable)
+                            if (switchCasesArray.IsDefault)
                             {
-                                var matches =
-                                    skipCount is { } skipCountInteger
-                                    ?
-                                    slicedValue.SliceSkipVarEqualConst(
-                                        skipCount: skipCountInteger < 0 ? 0 : (int)skipCountInteger,
-                                        literal: switchCase.Key)
-                                    :
-                                    switchCase.Key == PineValue.EmptyList;
+                                throw new Exception(
+                                    "Invalid operation form: Missing slice switch cases");
+                            }
 
-                                if (matches)
+                            var switchCases = switchCasesArray.AsSpan();
+                            var skipCount = skipCountValue.AsInteger();
+                            var matchedJumpOffset = 0;
+                            var foundMatch = false;
+
+                            if (skipCount is { } skipCountInteger)
+                            {
+                                var skipCountInt =
+                                    skipCountInteger < 0 ? 0 : (int)skipCountInteger;
+
+                                for (var caseIndex = 0; caseIndex < switchCases.Length; ++caseIndex)
                                 {
-                                    jumpOffset = switchCase.Value;
-                                    break;
+                                    var switchCase = switchCases[caseIndex];
+
+                                    if (slicedValue.SliceSkipVarEqualConst(
+                                        skipCount: skipCountInt,
+                                        literal: switchCase.Literal))
+                                    {
+                                        matchedJumpOffset = switchCase.JumpOffset;
+                                        foundMatch = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                for (var caseIndex = 0; caseIndex < switchCases.Length; ++caseIndex)
+                                {
+                                    if (switchCases[caseIndex].Literal == PineValue.EmptyList)
+                                    {
+                                        matchedJumpOffset = switchCases[caseIndex].JumpOffset;
+                                        foundMatch = true;
+                                        break;
+                                    }
                                 }
                             }
 
-                            if (jumpOffset is { } matchedJumpOffset)
+                            if (foundMatch)
                             {
                                 currentFrame.InstructionPointer += matchedJumpOffset;
 

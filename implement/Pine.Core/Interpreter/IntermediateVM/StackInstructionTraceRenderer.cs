@@ -303,7 +303,9 @@ public static class StackInstructionTraceRenderer
 
                     StackInstructionKind.Switch_Jump_If_Equal_Const or
                     StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const =>
-                    instruction.SwitchJumpTable?.Values ?? [],
+                    StackInstruction
+                    .EnumerateSwitchCases(instruction)
+                    .Select(switchCase => switchCase.Value),
 
                     _ =>
                     []
