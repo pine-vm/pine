@@ -406,9 +406,36 @@ public class PineValueInProcess
             return _evaluated;
         }
 
-        if (_integer is not null)
+        if (_integer is { } integer)
         {
-            _evaluated = IntegerEncoding.EncodeSignedInteger(_integer.Value);
+            if (integer < int.MaxValue && integer > int.MinValue)
+            {
+                if (s_integersPositive is { } positiveCache && s_integersNegative is { } negativeCache)
+                {
+                    var int32 = (int)integer;
+
+                    if (int32 >= 0 && int32 < positiveCache.Count)
+                    {
+                        var reused = positiveCache[int32];
+                        _evaluated = reused.Evaluate();
+                        return _evaluated;
+                    }
+
+                    if (int32 < 0)
+                    {
+                        var index = -int32 - 1;
+
+                        if (index < negativeCache.Count)
+                        {
+                            var reused = negativeCache[index];
+                            _evaluated = reused.Evaluate();
+                            return _evaluated;
+                        }
+                    }
+                }
+            }
+
+            _evaluated = IntegerEncoding.EncodeSignedInteger(integer);
             return _evaluated;
         }
 
