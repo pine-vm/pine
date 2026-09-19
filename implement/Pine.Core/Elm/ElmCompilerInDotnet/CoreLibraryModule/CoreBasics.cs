@@ -419,6 +419,12 @@ public class CoreBasics
                 [TypeInference.InferredType.Number(), TypeInference.InferredType.Int()],
                 args => Generic_Floor(args[0])),
 
+            // ceiling : Float -> Int
+            "ceiling" =>
+            new CoreFunctionInfo(
+                [TypeInference.InferredType.Number(), TypeInference.InferredType.Int()],
+                args => Generic_Ceiling(args[0])),
+
             // clamp : number -> number -> number -> number
             "clamp" =>
             new CoreFunctionInfo(
@@ -631,6 +637,9 @@ public class CoreBasics
             "floor" =>
             Floor_FunctionValue(),
 
+            "ceiling" =>
+            Ceiling_FunctionValue(),
+
             "clamp" =>
             Clamp_FunctionValue(),
 
@@ -689,7 +698,7 @@ public class CoreBasics
             "lt", "gt", "le", "ge",
             "not", "negate",
             "abs", "clamp",
-            "floor",
+            "floor", "ceiling",
             "min", "max",
             "identity",
             "always",
@@ -2331,6 +2340,63 @@ public class CoreBasics
             Expression.ConditionalInst(
                 condition: isFloatCondition,
                 trueBranch: floorFloat,
+                falseBranch: n);
+
+        return
+            ExpressionEncoding.EncodeExpressionAsValue(asExpr);
+    }
+
+    /// <summary>
+    /// ceiling : Float -> Int
+    /// <para>
+    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#ceiling"/>
+    /// </para>
+    /// </summary>
+    public static Expression Generic_Ceiling(
+        Expression arg)
+    {
+        return
+            UnaryApplication(
+                functionValue: Ceiling_FunctionValue(),
+                arg: arg);
+    }
+
+    /// <summary>
+    /// ceiling : Float -> Int
+    /// <para>
+    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#ceiling"/>
+    /// </para>
+    /// </summary>
+    public static PineValue Ceiling_FunctionValue()
+    {
+        var n = Expression.EnvironmentInstance;
+
+        var isFloatCondition =
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                ChoiceTagName(n),
+                s_elmFloatTypeTagNameLiteral);
+
+        var numerator = ChoiceArgument(n, 0);
+        var denominator = ChoiceArgument(n, 1);
+        var quotient = Internal_Int_div(numerator, denominator);
+
+        var quotientIsBelowValue =
+            BuiltinIntIsSortedAsc(
+                BuiltinAdd(
+                    BuiltinMul(quotient, denominator),
+                    LiteralInt(1)),
+                numerator);
+
+        var ceilingFloat =
+            Expression.ConditionalInst(
+                condition: quotientIsBelowValue,
+                trueBranch: BuiltinAdd(quotient, LiteralInt(1)),
+                falseBranch: quotient);
+
+        var asExpr =
+            Expression.ConditionalInst(
+                condition: isFloatCondition,
+                trueBranch: ceilingFloat,
                 falseBranch: n);
 
         return

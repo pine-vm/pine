@@ -1865,6 +1865,63 @@ public class CoreBasicsFunctionTests
         resultValue.Should().Be(ElmValue.Integer(17));
     }
 
+    // ========== Tests for ceiling ==========
+
+    [Fact]
+    public void Ceiling_positive_float()
+    {
+        var resultValue =
+            ApplyUnary(
+                CoreBasics.Ceiling_FunctionValue(),
+                ElmValue.ElmFloat.Convert(3.7));
+
+        resultValue.Should().Be(ElmValue.Integer(4));
+    }
+
+    [Fact]
+    public void Ceiling_negative_float()
+    {
+        var resultValue =
+            ApplyUnary(
+                CoreBasics.Ceiling_FunctionValue(),
+                ElmValue.ElmFloat.Convert(-3.7));
+
+        resultValue.Should().Be(ElmValue.Integer(-3));
+    }
+
+    [Fact]
+    public void Ceiling_integer_valued_float()
+    {
+        var resultValue =
+            ApplyUnary(
+                CoreBasics.Ceiling_FunctionValue(),
+                ElmValue.ElmFloat.Convert(4.0));
+
+        resultValue.Should().Be(ElmValue.Integer(4));
+    }
+
+    [Fact]
+    public void Ceiling_zero_float()
+    {
+        var resultValue =
+            ApplyUnary(
+                CoreBasics.Ceiling_FunctionValue(),
+                ElmValue.ElmFloat.Convert(0.0));
+
+        resultValue.Should().Be(ElmValue.Integer(0));
+    }
+
+    [Fact]
+    public void Ceiling_int_passthrough()
+    {
+        var resultValue =
+            ApplyUnary(
+                CoreBasics.Ceiling_FunctionValue(),
+                ElmValue.Integer(17));
+
+        resultValue.Should().Be(ElmValue.Integer(17));
+    }
+
     // ========== Tests for clamp ==========
 
     [Fact]
