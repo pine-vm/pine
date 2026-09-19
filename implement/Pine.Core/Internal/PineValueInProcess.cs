@@ -41,6 +41,18 @@ public class PineValueInProcess
     /// </summary>
     private IReadOnlyList<PineValueInProcess>? _list;
 
+    private PartialApplicationState? _partialApplication;
+
+    /// <summary>
+    /// Runtime representation of a partially applied function whose canonical Pine value is
+    /// constructed only when an operation requires the concrete representation.
+    /// </summary>
+    internal sealed record PartialApplicationState(
+        object Callable,
+        IReadOnlyList<PineValueInProcess> Arguments,
+        Func<IReadOnlyList<PineValueInProcess>, PineValue> Materialize,
+        Action? ReportMaterialization);
+
     private readonly static IReadOnlyList<PineValueInProcess> s_blobSingle =
         [
         .. Enumerable.Range(0, 256).Select(
@@ -159,6 +171,36 @@ public class PineValueInProcess
                 _list = list,
             };
     }
+
+    /// <summary>
+    /// Creates a transparent in-process representation of a partially applied function.
+    /// </summary>
+    internal static PineValueInProcess CreatePartialApplication(
+        object callable,
+        IReadOnlyList<PineValueInProcess> arguments,
+        Func<IReadOnlyList<PineValueInProcess>, PineValue> materialize,
+        Action? reportMaterialization = null)
+    {
+        ArgumentNullException.ThrowIfNull(callable);
+        ArgumentNullException.ThrowIfNull(arguments);
+        ArgumentNullException.ThrowIfNull(materialize);
+
+        return
+            new PineValueInProcess
+            {
+                _partialApplication =
+                    new PartialApplicationState(
+                        callable,
+                        arguments,
+                        materialize,
+                        reportMaterialization)
+            };
+    }
+
+    /// <summary>
+    /// Returns the partial-application state without forcing canonical value materialization.
+    /// </summary>
+    internal PartialApplicationState? PartialApplicationOrNull => _partialApplication;
 
     /// <summary>
     /// Create an in-process representation from an integer without immediately encoding it as a blob.
@@ -370,6 +412,15 @@ public class PineValueInProcess
             return _evaluated;
         }
 
+        if (_partialApplication is { } partialApplication)
+        {
+            _evaluated = partialApplication.Materialize(partialApplication.Arguments);
+            _partialApplication = null;
+            partialApplication.ReportMaterialization?.Invoke();
+
+            return _evaluated;
+        }
+
         if (_list is not null)
         {
             var evaluatedItems =
@@ -419,6 +470,9 @@ public class PineValueInProcess
         if (_list is not null)
             return true;
 
+        if (_partialApplication is not null)
+            return Evaluate() is PineValue.ListValue;
+
         if (_evaluated is not null)
             return _evaluated is PineValue.ListValue;
 
@@ -442,6 +496,9 @@ public class PineValueInProcess
     {
         if (_list is not null)
             return false;
+
+        if (_partialApplication is not null)
+            return Evaluate() is PineValue.BlobValue;
 
         if (_evaluated is not null)
             return _evaluated is PineValue.BlobValue;
@@ -468,6 +525,9 @@ public class PineValueInProcess
     {
         if (_list is not null)
             return _list.Count;
+
+        if (_partialApplication is not null)
+            return BuiltinFunctionSpecialized.length_as_int(Evaluate());
 
         if (_evaluated is not null)
             return BuiltinFunctionSpecialized.length_as_int(_evaluated);

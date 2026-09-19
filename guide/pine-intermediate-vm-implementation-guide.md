@@ -81,3 +81,14 @@ And since every list creation adds significant runtime overhead, avoiding them i
 
 > Note: specialized interface currently only implemented for the input side, output side remains TODO.
 
+### Currying Representations and Value Arity
+
+Frontend compilers for languages offering currying often emit nested `Eval` expressions to represent general function application with multiple arguments.
+
+With these currying representations, an `Eval` before the final `Eval` yields a value that itself encodes an expression, but is relatively short-lived and specific: Since it embeds earlier applied arguments as literals inside that expression, compiling that further would often not amortize. Therefore, the VM already specializes for direct evaluation of such templates.
+
+Direct evaluation of template-forming expressions already skips the overhead of compiling to a sequential representation.
+
+In addition, the VM also uses a specialized representation to accumulate consecutive `Eval`s while deferring evaluation.
+
+A value is said to have an arity of zero if it does not encode an expression.

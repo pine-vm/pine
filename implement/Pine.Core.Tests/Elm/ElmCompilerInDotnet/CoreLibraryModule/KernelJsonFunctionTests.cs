@@ -1417,10 +1417,10 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 112
-            BuildListCount: 138
+            InvocationCount: 84
+            BuildListCount: 87
             LoopIterationCount: 0
-            InstructionCount: 1_659
+            InstructionCount: 1_464
             """);
     }
 
@@ -1439,10 +1439,10 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 53
-            BuildListCount: 63
+            InvocationCount: 46
+            BuildListCount: 56
             LoopIterationCount: 0
-            InstructionCount: 960
+            InstructionCount: 926
             """);
     }
 
@@ -1496,10 +1496,10 @@ public class KernelJsonFunctionTests
 
         formattedCounts.Should().Be(
             """
-            InvocationCount: 71
-            BuildListCount: 86
+            InvocationCount: 57
+            BuildListCount: 67
             LoopIterationCount: 0
-            InstructionCount: 1_162
+            InstructionCount: 1_081
             """);
     }
 
@@ -1519,10 +1519,10 @@ public class KernelJsonFunctionTests
 
         formattedCounts.Should().Be(
             """
-            InvocationCount: 141
-            BuildListCount: 191
+            InvocationCount: 110
+            BuildListCount: 150
             LoopIterationCount: 0
-            InstructionCount: 2_259
+            InstructionCount: 2_081
             """);
     }
 
@@ -1542,10 +1542,10 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 52
-            BuildListCount: 65
+            InvocationCount: 49
+            BuildListCount: 62
             LoopIterationCount: 0
-            InstructionCount: 1_053
+            InstructionCount: 1_039
             """);
     }
 
@@ -1563,10 +1563,10 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 52
-            BuildListCount: 65
+            InvocationCount: 49
+            BuildListCount: 62
             LoopIterationCount: 0
-            InstructionCount: 1_053
+            InstructionCount: 1_039
             """);
     }
 
@@ -1626,10 +1626,10 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 57
-            BuildListCount: 76
+            InvocationCount: 50
+            BuildListCount: 69
             LoopIterationCount: 0
-            InstructionCount: 1_058
+            InstructionCount: 1_027
             """);
     }
 
@@ -1646,10 +1646,10 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 53
-            BuildListCount: 66
+            InvocationCount: 48
+            BuildListCount: 61
             LoopIterationCount: 0
-            InstructionCount: 990
+            InstructionCount: 969
             """);
     }
 
@@ -1694,10 +1694,10 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 38
-            BuildListCount: 64
+            InvocationCount: 32
+            BuildListCount: 58
             LoopIterationCount: 0
-            InstructionCount: 811
+            InstructionCount: 785
             """);
     }
 
@@ -1739,10 +1739,10 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 49
-            BuildListCount: 63
+            InvocationCount: 47
+            BuildListCount: 61
             LoopIterationCount: 0
-            InstructionCount: 1_230
+            InstructionCount: 1_220
             """);
     }
 

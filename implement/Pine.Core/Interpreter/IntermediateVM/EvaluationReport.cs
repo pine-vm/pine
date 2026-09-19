@@ -9,11 +9,19 @@ namespace Pine.Core.Interpreter.IntermediateVM;
 /// <param name="BuildListCount">The total number of executed <c>Build_List</c> and <c>Build_List_With_Prefix</c> instructions.</param>
 /// <param name="LoopIterationCount">The total number of loop iterations reported by the active stack frames.</param>
 /// <param name="InstructionCount">The total number of VM instructions executed.</param>
+/// <param name="CurriedFunctionPlanParseCount">The number of concrete values inspected to build a curried-function plan.</param>
+/// <param name="PartialApplicationAllocationCount">The number of in-process partial-application values allocated.</param>
+/// <param name="DirectSaturatedApplicationCount">The number of saturated applications entered without an intermediate function value.</param>
+/// <param name="PartialApplicationMaterializationCount">The number of partial applications forced to their canonical Pine value.</param>
 public readonly record struct PerformanceCounters(
     long InvocationCount,
     long BuildListCount,
     long LoopIterationCount,
-    long InstructionCount)
+    long InstructionCount,
+    long CurriedFunctionPlanParseCount = 0,
+    long PartialApplicationAllocationCount = 0,
+    long DirectSaturatedApplicationCount = 0,
+    long PartialApplicationMaterializationCount = 0)
 {
     /// <summary>
     /// Returns the element-wise sum of two <see cref="PerformanceCounters"/> instances.
@@ -23,7 +31,15 @@ public readonly record struct PerformanceCounters(
             InvocationCount: a.InvocationCount + b.InvocationCount,
             BuildListCount: a.BuildListCount + b.BuildListCount,
             LoopIterationCount: a.LoopIterationCount + b.LoopIterationCount,
-            InstructionCount: a.InstructionCount + b.InstructionCount);
+            InstructionCount: a.InstructionCount + b.InstructionCount,
+            CurriedFunctionPlanParseCount:
+            a.CurriedFunctionPlanParseCount + b.CurriedFunctionPlanParseCount,
+            PartialApplicationAllocationCount:
+            a.PartialApplicationAllocationCount + b.PartialApplicationAllocationCount,
+            DirectSaturatedApplicationCount:
+            a.DirectSaturatedApplicationCount + b.DirectSaturatedApplicationCount,
+            PartialApplicationMaterializationCount:
+            a.PartialApplicationMaterializationCount + b.PartialApplicationMaterializationCount);
 
     /// <summary>
     /// Sums all <see cref="PerformanceCounters"/> in the given sequence.
@@ -35,6 +51,10 @@ public readonly record struct PerformanceCounters(
         long totalBuildLists = 0;
         long totalLoopIterations = 0;
         long totalInstructions = 0;
+        long totalCurriedFunctionPlanParses = 0;
+        long totalPartialApplicationAllocations = 0;
+        long totalDirectSaturatedApplications = 0;
+        long totalPartialApplicationMaterializations = 0;
 
         foreach (var c in counters)
         {
@@ -42,6 +62,10 @@ public readonly record struct PerformanceCounters(
             totalBuildLists += c.BuildListCount;
             totalLoopIterations += c.LoopIterationCount;
             totalInstructions += c.InstructionCount;
+            totalCurriedFunctionPlanParses += c.CurriedFunctionPlanParseCount;
+            totalPartialApplicationAllocations += c.PartialApplicationAllocationCount;
+            totalDirectSaturatedApplications += c.DirectSaturatedApplicationCount;
+            totalPartialApplicationMaterializations += c.PartialApplicationMaterializationCount;
         }
 
         return
@@ -49,7 +73,11 @@ public readonly record struct PerformanceCounters(
                 InvocationCount: totalInvocations,
                 BuildListCount: totalBuildLists,
                 LoopIterationCount: totalLoopIterations,
-                InstructionCount: totalInstructions);
+                InstructionCount: totalInstructions,
+                CurriedFunctionPlanParseCount: totalCurriedFunctionPlanParses,
+                PartialApplicationAllocationCount: totalPartialApplicationAllocations,
+                DirectSaturatedApplicationCount: totalDirectSaturatedApplications,
+                PartialApplicationMaterializationCount: totalPartialApplicationMaterializations);
     }
 }
 
@@ -89,4 +117,24 @@ public record EvaluationReport(
     /// The total number of loop iterations.
     /// </summary>
     public long LoopIterationCount => Counters.LoopIterationCount;
+
+    /// <summary>
+    /// The number of concrete values inspected to build a curried-function plan.
+    /// </summary>
+    public long CurriedFunctionPlanParseCount => Counters.CurriedFunctionPlanParseCount;
+
+    /// <summary>
+    /// The number of in-process partial-application values allocated.
+    /// </summary>
+    public long PartialApplicationAllocationCount => Counters.PartialApplicationAllocationCount;
+
+    /// <summary>
+    /// The number of saturated applications entered without an intermediate function value.
+    /// </summary>
+    public long DirectSaturatedApplicationCount => Counters.DirectSaturatedApplicationCount;
+
+    /// <summary>
+    /// The number of partial applications forced to their canonical Pine value.
+    /// </summary>
+    public long PartialApplicationMaterializationCount => Counters.PartialApplicationMaterializationCount;
 }

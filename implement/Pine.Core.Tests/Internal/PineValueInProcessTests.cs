@@ -79,6 +79,81 @@ public class PineValueInProcessTests
     }
 
     [Fact]
+    public void Partial_application_materializes_canonical_value_once()
+    {
+        var expected =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.List([PineValue.Blob([2]), PineValue.Blob([3])])
+                ]);
+
+        var materializationCount = 0;
+
+        var partialApplication =
+            PineValueInProcess.CreatePartialApplication(
+                callable: new object(),
+                arguments:
+                [
+                PineValueInProcess.Create(PineValue.Blob([2])),
+                PineValueInProcess.Create(PineValue.Blob([3]))
+                ],
+                materialize:
+                arguments =>
+                {
+                    arguments.Select(argument => argument.Evaluate()).Should().Equal(
+                        PineValue.Blob([2]),
+                        PineValue.Blob([3]));
+
+                    return expected;
+                },
+                reportMaterialization: () => materializationCount++);
+
+        partialApplication.EvaluatedOrNull.Should().BeNull();
+        partialApplication.PartialApplicationOrNull.Should().NotBeNull();
+
+        partialApplication.Evaluate().Should().BeSameAs(expected);
+        partialApplication.Evaluate().Should().BeSameAs(expected);
+
+        materializationCount.Should().Be(1);
+        partialApplication.PartialApplicationOrNull.Should().BeNull();
+    }
+
+    [Fact]
+    public void Partial_application_structural_operations_match_canonical_value()
+    {
+        var expected =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.List([PineValue.Blob([2]), PineValue.Blob([3])])
+                ]);
+
+        PineValueInProcess CreatePartial() =>
+            PineValueInProcess.CreatePartialApplication(
+                callable: new object(),
+                arguments: [],
+                materialize: _ => expected);
+
+        CreatePartial().IsList().Should().BeTrue();
+        CreatePartial().IsBlob().Should().BeFalse();
+        CreatePartial().GetLength().Should().Be(2);
+        CreatePartial().GetElementAt(0).Evaluate().Should().Be(PineValue.Blob([1]));
+        PineValueInProcess.ValueFromPathOrNull(
+            CreatePartial(),
+            (IReadOnlyList<int>)new[] { 1, 1 })!
+            .Evaluate()
+            .Should().Be(PineValue.Blob([3]));
+
+        PineValueInProcess.AreEqual(
+            CreatePartial(),
+            PineValueInProcess.Create(expected))
+            .Should().BeTrue();
+
+        PineValueInProcess.AreEqual(CreatePartial(), expected).Should().BeTrue();
+    }
+
+    [Fact]
     public void AsInteger_parses_integer_from_blob()
     {
         var integerValue = IntegerEncoding.EncodeSignedInteger(42);

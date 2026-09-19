@@ -186,7 +186,11 @@ public record struct StackFrameProfilingBaseline(
     long BeginInvocationCount,
     long BeginEvalCount,
     long BeginStackFrameCount,
-    long BeginBuildListCount);
+    long BeginBuildListCount,
+    long BeginCurriedFunctionPlanParseCount = 0,
+    long BeginPartialApplicationAllocationCount = 0,
+    long BeginDirectSaturatedApplicationCount = 0,
+    long BeginPartialApplicationMaterializationCount = 0);
 
 
 /*
@@ -217,6 +221,14 @@ public record ApplyStepwise
     }
 
     /// <summary>
+    /// Initializes a new <see cref="ApplyStepwise"/> with an encoded-expression continuation step.
+    /// </summary>
+    public ApplyStepwise(StepResult.ContinueEval start)
+    {
+        CurrentStep = start;
+    }
+
+    /// <summary>
     /// Feeds the return value from a child stack frame into the current continuation callback,
     /// advancing to the next step.
     /// </summary>
@@ -225,6 +237,10 @@ public record ApplyStepwise
         if (CurrentStep is StepResult.Continue cont)
         {
             CurrentStep = cont.Callback(frameReturnValue);
+        }
+        else if (CurrentStep is StepResult.ContinueEval continueEval)
+        {
+            CurrentStep = continueEval.Callback(frameReturnValue);
         }
         else
         {
@@ -244,7 +260,19 @@ public record ApplyStepwise
         public sealed record Continue(
             Expression Expression,
             PineValueInProcess EnvironmentValue,
-            Func<PineValueInProcess, StepResult> Callback)
+            Func<PineValueInProcess, StepResult> Callback,
+            bool CountInvocation = true,
+            PineValue? ExpressionValue = null)
+            : StepResult;
+
+        /// <summary>
+        /// Indicates that the computation needs to parse and evaluate an encoded expression value.
+        /// </summary>
+        public sealed record ContinueEval(
+            PineValueInProcess ExpressionValue,
+            PineValueInProcess EnvironmentValue,
+            Func<PineValueInProcess, StepResult> Callback,
+            bool CountInvocation = true)
             : StepResult;
 
         /// <summary>

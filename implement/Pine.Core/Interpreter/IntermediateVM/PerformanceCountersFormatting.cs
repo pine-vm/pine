@@ -26,6 +26,20 @@ public static class PerformanceCountersFormatting
             "\n",
             EnumerateCountLines(counters));
 
+    /// <summary>
+    /// Formats both the stable general counters and the detailed optimization counters.
+    /// </summary>
+    public static string FormatAllCounts(PerformanceCounters counters) =>
+        FormatCounts(counters) +
+        "\nCurriedFunctionPlanParseCount: " +
+        CommandLineInterface.FormatIntegerForDisplay(counters.CurriedFunctionPlanParseCount) +
+        "\nPartialApplicationAllocationCount: " +
+        CommandLineInterface.FormatIntegerForDisplay(counters.PartialApplicationAllocationCount) +
+        "\nDirectSaturatedApplicationCount: " +
+        CommandLineInterface.FormatIntegerForDisplay(counters.DirectSaturatedApplicationCount) +
+        "\nPartialApplicationMaterializationCount: " +
+        CommandLineInterface.FormatIntegerForDisplay(counters.PartialApplicationMaterializationCount);
+
     private static IEnumerable<string> EnumerateCountLines(PerformanceCounters counters)
     {
         yield return "InvocationCount: " + CommandLineInterface.FormatIntegerForDisplay(counters.InvocationCount);
