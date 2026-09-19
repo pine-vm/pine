@@ -1,0 +1,7 @@
+Running 2 tests.
+
+
+TEST RUN PASSED
+
+Passed:   2
+Failed:   0

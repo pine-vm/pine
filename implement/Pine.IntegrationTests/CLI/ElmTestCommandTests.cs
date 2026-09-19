@@ -389,7 +389,7 @@ public class ElmTestCommandTests
                     colorMode: FormatCommandColorMode.Never);
 
             execute.Should().Throw<InvalidOperationException>()
-                .WithMessage("Failed parsing Elm test module header:*");
+                .WithMessage("Failed parsing Elm test module:*");
         }
         finally
         {

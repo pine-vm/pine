@@ -18,6 +18,7 @@ using System.Threading.Tasks;
 
 using IPineVM = Pine.Core.PineVM.IPineVM;
 using IntermediatePineVM = Pine.Core.Interpreter.IntermediateVM.PineVM;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 namespace Pine.Core.Elm.Testing;
 
@@ -139,19 +140,40 @@ public static class ElmTestRunner
             .Select(
                 file =>
                 {
-                    var moduleHeader =
-                        ElmSyntaxParser.ParseModuleHeader(
+                    var parsedModule =
+                        ElmSyntaxParser.ParseModuleText(
                             Encoding.UTF8.GetString(file.content.Span))
                         .Extract(
                             error =>
                             throw new InvalidOperationException(
-                                "Failed parsing Elm test module header: " + error));
+                                "Failed parsing Elm test module: " + error));
+
+                    var moduleName =
+                        SyntaxTypes.Module.GetModuleName(parsedModule.ModuleDefinition.Value).Value;
+
+                    var exposedZeroParameterDeclarations =
+                        parsedModule.Declarations
+                        .Select(declaration => declaration.Value)
+                        .OfType<SyntaxTypes.Declaration.FunctionDeclaration>()
+                        .Where(
+                            declaration =>
+                            declaration.Function.Declaration.Value.Arguments.Count is 0)
+                        .Select(
+                            declaration =>
+                            declaration.Function.Declaration.Value.Name.Value)
+                        .Where(
+                            declarationName =>
+                            IsDeclarationExposed(
+                                parsedModule.ModuleDefinition.Value,
+                                declarationName))
+                        .ToImmutableArray();
 
                     return
                         (file.path,
                         filePathText: string.Join('/', file.path),
-                        moduleName: moduleHeader.ModuleName,
-                        moduleNameText: string.Join('.', moduleHeader.ModuleName));
+                        moduleName,
+                        moduleNameText: string.Join('.', moduleName),
+                        exposedZeroParameterDeclarations);
                 })
             .OrderBy(testModule => testModule.moduleNameText, StringComparer.Ordinal)
             .ToImmutableArray();
@@ -159,16 +181,20 @@ public static class ElmTestRunner
         if (testModules.Length is 0)
             return new ElmTestRun.NoTestModules(appDirectory);
 
-        var suiteDeclarationNames =
+        var testDeclarationNames =
             testModules
-            .Select(testModule => DeclQualifiedName.Create(testModule.moduleName, "suite"))
+            .SelectMany(
+                testModule =>
+                testModule.exposedZeroParameterDeclarations.Select(
+                    declarationName =>
+                    DeclQualifiedName.Create(testModule.moduleName, declarationName)))
             .ToImmutableArray();
 
         var (compiledEnvironment, _) =
             ElmCompiler.CompileInteractiveEnvironment(
                 appCodeTree,
                 rootFilePaths: [.. testModules.Select(testModule => testModule.path)],
-                rootDeclarationsAsPlainValues: suiteDeclarationNames)
+                rootDeclarationsAsPlainValues: testDeclarationNames)
             .Extract(error => throw new InvalidOperationException("Failed compiling Elm tests: " + error));
 
         var parsedEnvironment =
@@ -189,17 +215,26 @@ public static class ElmTestRunner
                     "Did not find compiled Elm module '" + testModule.moduleNameText + "'");
             }
 
-            if (!compiledTestModule.moduleContent.FunctionDeclarations.TryGetValue("suite", out var suiteValue))
+            foreach (var declarationName in testModule.exposedZeroParameterDeclarations)
             {
-                throw new InvalidOperationException(
-                    "Did not find declaration '" + testModule.moduleNameText + ".suite'");
-            }
+                if (!compiledTestModule.moduleContent.FunctionDeclarations.TryGetValue(
+                    declarationName,
+                    out var declarationValue))
+                {
+                    throw new InvalidOperationException(
+                        "Did not find declaration '" +
+                        testModule.moduleNameText + "." + declarationName + "'");
+                }
 
-            DiscoverTests(
-                suiteValue,
-                filePath: testModule.filePathText,
-                descriptionPath: [],
-                discoveredTests);
+                if (!IsTestValue(declarationValue))
+                    continue;
+
+                DiscoverTests(
+                    declarationValue,
+                    filePath: testModule.filePathText,
+                    descriptionPath: [],
+                    discoveredTests);
+            }
         }
 
         if (filter is { } filterText)
@@ -416,6 +451,58 @@ public static class ElmTestRunner
 
         throw new InvalidOperationException(
             "Unsupported expectation tag: " + expectationTag);
+    }
+
+    private static bool IsDeclarationExposed(
+        SyntaxTypes.Module module,
+        string declarationName)
+    {
+        var exposing =
+            module switch
+            {
+                SyntaxTypes.Module.NormalModule normalModule =>
+                normalModule.ModuleData.ExposingList.Value,
+
+                SyntaxTypes.Module.PortModule portModule =>
+                portModule.ModuleData.ExposingList.Value,
+
+                SyntaxTypes.Module.EffectModule effectModule =>
+                effectModule.ModuleData.ExposingList.Value,
+
+                _ =>
+                throw new NotImplementedException(
+                    nameof(IsDeclarationExposed) +
+                    " does not handle module variant: " + module.GetType().Name)
+            };
+
+        return
+            exposing switch
+            {
+                SyntaxTypes.Exposing.All =>
+                true,
+
+                SyntaxTypes.Exposing.Explicit explicitExposing =>
+                explicitExposing.Nodes.Nodes.Any(
+                    exposed =>
+                    exposed.Value is SyntaxTypes.TopLevelExpose.FunctionExpose functionExpose &&
+                    functionExpose.Name == declarationName),
+
+                _ =>
+                throw new NotImplementedException(
+                    nameof(IsDeclarationExposed) +
+                    " does not handle exposing variant: " + exposing.GetType().Name)
+            };
+    }
+
+
+    private static bool IsTestValue(PineValue value)
+    {
+        var parseResult = ElmValueEncoding.ParseAsTag(value);
+
+        if (parseResult.IsOkOrNullable() is not { } tagged)
+            return false;
+
+        return tagged.tagName is "Describe" or "TestCase" or "TodoCase";
     }
 
 
