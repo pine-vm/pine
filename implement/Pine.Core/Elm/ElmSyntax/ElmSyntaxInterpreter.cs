@@ -4485,7 +4485,16 @@ public partial class ElmSyntaxInterpreter
     public static System.Func<Application, ApplicationResolution> BuildResolvers(
         IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> declarations)
     {
-        return BuildResolvers(declarations, s_builtinFunctionResolvers);
+        var declarationSnapshot =
+            declarations as ImmutableDictionary<DeclQualifiedName, PreparedDeclaration>
+            ?? declarations.ToImmutableDictionary();
+
+        return
+            BuildResolvers(
+                declarationSnapshot,
+                ExtendBuiltinFunctionResolversWithAliases(
+                    declarationSnapshot,
+                    s_builtinFunctionResolvers));
     }
 
     /// <summary>

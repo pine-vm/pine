@@ -1,5 +1,7 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.ElmInElm;
+using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Internal;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -58,6 +60,7 @@ public class BytesAndBase64BuiltinTests
         }
 
         // The Base64 modules are not kernel modules; they live in the compiler source container.
+        moduleTexts.Add(InterpreterTestHelper.LoadCompilerSourceModule("src", "Base64.elm"));
         moduleTexts.Add(InterpreterTestHelper.LoadCompilerSourceModule("src", "Base64", "Encode.elm"));
         moduleTexts.Add(InterpreterTestHelper.LoadCompilerSourceModule("src", "Base64", "Decode.elm"));
 
@@ -378,6 +381,46 @@ public class BytesAndBase64BuiltinTests
     [InlineData("Just \"\"", new int[] { })]
     public void Base64DecodeFromBytes_produces_expected_string(string expected, int[] bytes) =>
         AssertEvaluatesEqual("Base64.Decode.fromBytes (" + BytesOf(bytes) + ")", expected);
+
+    [Theory]
+    [InlineData("Base64.toBytes \"TWFu\"", "Base64.Encode")]
+    [InlineData(
+        "Base64.fromBytes (Bytes.Encode.encode (Bytes.Encode.sequence [ Bytes.Encode.unsignedInt8 77, Bytes.Encode.unsignedInt8 97, Bytes.Encode.unsignedInt8 110 ]))",
+        "Base64.Decode")]
+    public void Base64_facade_conversion_uses_builtin(string expression, string implementationModule)
+    {
+        static (Result<ElmInterpretationError, PineValueInProcess> Result, List<string> Applications)
+            EvaluateWithTrace(string expression, ElmInterpreter.Prepared prepared, bool enableDefaultBuiltins)
+        {
+            var directApplications = new List<string>();
+
+            var (result, _) =
+                ElmInterpreter.ParseAndInterpretWithCounters(
+                    expression,
+                    prepared,
+                    onApplication:
+                    entry =>
+                    {
+                        if (entry is ApplicationLogEntry.Direct direct)
+                        {
+                            directApplications.Add(direct.Application.FunctionName.FullName);
+                        }
+                    },
+                    enableDefaultBuiltins: enableDefaultBuiltins);
+
+            return (result, directApplications);
+        }
+
+        var withBuiltin = EvaluateWithTrace(expression, s_prepared.Value, enableDefaultBuiltins: true);
+        var withoutBuiltin = EvaluateWithTrace(expression, s_prepared.Value, enableDefaultBuiltins: false);
+
+        var withBuiltinValue = withBuiltin.Result.Extract(err => throw new Exception(err.ToString()));
+        var withoutBuiltinValue = withoutBuiltin.Result.Extract(err => throw new Exception(err.ToString()));
+
+        PineValueInProcess.AreEqual(withBuiltinValue, withoutBuiltinValue).Should().BeTrue();
+        withBuiltin.Applications.Should().NotContain(name => name.StartsWith(implementationModule + "."));
+        withoutBuiltin.Applications.Should().Contain(name => name.StartsWith(implementationModule + "."));
+    }
 
     // ============================================================
     // Round trips between the base64 encode/decode builtins

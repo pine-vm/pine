@@ -167,7 +167,11 @@ public partial class ElmSyntaxInterpreter
 
         if (enableDefaultBuiltins)
         {
-            resolvers.Add(ApplicationResolver(s_builtinFunctionResolvers));
+            resolvers.Add(
+                ApplicationResolver(
+                    ExtendBuiltinFunctionResolversWithAliases(
+                        prepared.Declarations,
+                        s_builtinFunctionResolvers)));
         }
 
         var resolverIndex = GetDeclarationResolverIndex(prepared.Declarations);

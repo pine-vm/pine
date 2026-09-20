@@ -194,6 +194,65 @@ public partial class ElmSyntaxInterpreter
         return builder.ToImmutable();
     }
 
+    private static ImmutableDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>
+        ExtendBuiltinFunctionResolversWithAliases(
+        IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> declarations,
+        IReadOnlyDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>> functionResolvers)
+    {
+        var builder = functionResolvers.ToImmutableDictionary().ToBuilder();
+        var addedAlias = true;
+
+        while (addedAlias)
+        {
+            addedAlias = false;
+
+            foreach (var declaration in declarations)
+            {
+                if (builder.ContainsKey(declaration.Key) ||
+                    BuiltinAliasTarget(declaration.Value) is not { } target ||
+                    !builder.TryGetValue(target, out var resolver))
+                {
+                    continue;
+                }
+
+                builder.Add(declaration.Key, resolver);
+                addedAlias = true;
+            }
+        }
+
+        return builder.ToImmutable();
+    }
+
+    private static DeclQualifiedName? BuiltinAliasTarget(PreparedDeclaration declaration)
+    {
+        if (declaration is not PreparedDeclaration.FunctionDeclaration functionDeclaration ||
+            functionDeclaration.Function.Declaration.Arguments.Count is not 0)
+        {
+            return null;
+        }
+
+        return
+            functionDeclaration.Function.Declaration.Expression switch
+            {
+                PreparedExpression.Identifier identifier =>
+                identifier.QualifiedName,
+
+                PreparedExpression.ValueLiteral
+                {
+                    Value:
+                    ElmClosureInProcess
+                    {
+                        ArgumentsAlreadyCollected.Count: 0,
+                        Source: ElmClosureInProcess.SourceRef.Declared declared,
+                    },
+                } =>
+                declared.Name,
+
+                _ =>
+                null,
+            };
+    }
+
     /// <summary>
     /// Builtin implementation of <c>Basics.compare</c> directly on the interpreter's in-process
     /// value model, preserving cached integer and list representations where possible.
