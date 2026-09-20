@@ -67,9 +67,9 @@ public class InterpreterParseDemoModulesTests
     /// through the interpreter. It previously failed with a "Case expression did not match any
     /// arm" error caused by the infinite-recursion detector false-positiving on deeply nested
     /// <c>ParserFast</c> combinator closures (distinct closures sharing one lambda AST node),
-    /// whose error was then silently swallowed by the local-binding call fast path. See
-    /// <see cref="ElmSyntaxInterpreter"/> (<c>CheckForInfiniteRecursion</c> now compares the
-    /// captured environment; the fast path now propagates the call error).
+    /// whose error was then silently swallowed by the local-binding call fast path. The incomplete
+    /// cycle detector has since been replaced by deterministic evaluation quotas, and the fast
+    /// path propagates evaluation errors.
     /// </summary>
     [Fact]
     public void Demo_generated_json_converters_module_parses_through_interpreter()

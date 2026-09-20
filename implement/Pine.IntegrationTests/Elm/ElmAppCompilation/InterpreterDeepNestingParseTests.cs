@@ -14,8 +14,9 @@ namespace Pine.IntegrationTests.Elm.ElmAppCompilation;
 /// fail parsing through <see cref="ElmSyntaxInterpreter"/> with "Case expression did not match any
 /// arm". The root cause was the interpreter's infinite-recursion detector false-positiving on the
 /// many <c>ParserFast</c> combinator closures that share a single lambda AST node while capturing
-/// different free variables; the resulting error was then silently swallowed by the local-binding
-/// call fast path, surfacing later as the confusing case-mismatch.
+/// different free variables. That incomplete detector has since been replaced by deterministic
+/// evaluation quotas; the resulting error was also previously swallowed by the local-binding call
+/// fast path, surfacing later as the confusing case-mismatch.
 /// <para>
 /// These deterministic generators (deeply nested applications and parentheses) reproduced the bug
 /// at modest nesting depths and are retained as regression coverage: every one must now parse

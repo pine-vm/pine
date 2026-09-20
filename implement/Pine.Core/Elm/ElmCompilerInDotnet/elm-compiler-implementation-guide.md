@@ -678,7 +678,13 @@ The Elm syntax interpreter offers:
 
 + Computing the values resulting from running a program, consistent with the semantics of the execution path for productive use.
 + Reporting applications of named functions or constructors to support inspection of runtime traces.
-+ Detecting and reporting cases of infinite recursion with stack traces showing declaration names.
++ Deterministically bounding evaluation with configurable instruction-count and continuation-depth quotas, returning structured exhaustion details and named Elm call stacks.
+
+`ElmSyntaxInterpreter.EvaluationConfig.Default` permits up to 1,000,000,000 trampoline
+instructions and 1,000,000 live continuations. Callers can provide tighter limits or use
+`EvaluationConfig.Unbounded` for trusted workloads that are bounded externally. Quota exhaustion
+returns `ElmInterpretationError` with structured quota kind, limit, and observed-count details;
+it does not claim that the evaluated program is non-terminating.
 
 #### Using the Interpreter to Diagnose Optimizer Defects
 

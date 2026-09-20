@@ -13,10 +13,10 @@ namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 
 /// <summary>
 /// Focused regression tests for <see cref="ElmInterpreter.ValuesEqualInProcess"/>, the structural
-/// equality used by the infinite-recursion detector and the call-stack frames. The function compares
-/// <see cref="PineValueInProcess"/> instances directly — including the interpreter's opaque variants
-/// (closures, boxed values, partially-applied constructors and record-access chains) — without
-/// projecting either operand to an <see cref="ElmValue"/>.
+/// equality used throughout interpreter value operations. The function compares
+/// <see cref="PineValueInProcess"/> instances directly — including the interpreter's opaque
+/// variants (closures, boxed values, partially-applied constructors and record-access chains) —
+/// without projecting either operand to an <see cref="ElmValue"/>.
 /// </summary>
 public class ValuesEqualInProcessTests
 {

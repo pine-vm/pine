@@ -89,8 +89,6 @@ public sealed class FunctionStepCountingInvocationLogger : IInvocationLogger
 
     private long _pineBuiltinInvocationCount;
 
-    private int _userCallDepth;
-
     /// <summary>
     /// Per-function count of direct (name-based) applications observed so far.
     /// </summary>
@@ -154,5 +152,5 @@ public sealed class FunctionStepCountingInvocationLogger : IInvocationLogger
         _pineBuiltinInvocationCount++;
 
     /// <inheritdoc/>
-    public int IncrementUserCallDepth() => ++_userCallDepth;
+    public int IncrementUserCallDepth() => 0;
 }

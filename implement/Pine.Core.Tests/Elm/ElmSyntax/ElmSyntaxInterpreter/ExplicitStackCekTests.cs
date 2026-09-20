@@ -20,7 +20,8 @@ public class ExplicitStackCekTests
     /// <summary>
     /// Self-recursive (tail-call) function iterated many more times than the .NET
     /// thread stack could accommodate under plain C# recursion. Relies on the
-    /// trampoline's tail-call replacement to run in O(1) explicit-stack space.
+    /// trampoline to avoid consuming the CLR call stack. The interpreter's continuation-depth
+    /// quota bounds the explicit stack separately.
     /// </summary>
     [Fact]
     public void Deep_tail_recursion_does_not_overflow_stack()

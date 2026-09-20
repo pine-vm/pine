@@ -72,8 +72,8 @@ public partial class ElmSyntaxInterpreter
         {
             /// <summary>
             /// A reference to a user-defined function declaration. <see cref="Name"/> is the
-            /// fully-qualified name used for stack-trace rendering and the infinite-recursion
-            /// detector; <see cref="Implementation"/> carries the parameter patterns and body.
+            /// fully-qualified name used for stack-trace rendering; <see cref="Implementation"/>
+            /// carries the parameter patterns and body.
             /// </summary>
             public sealed record Declared(
                 DeclQualifiedName Name,
@@ -81,8 +81,8 @@ public partial class ElmSyntaxInterpreter
                 : SourceRef;
 
             /// <summary>
-            /// An anonymous lambda expression. Stack traces and the infinite-recursion detector
-            /// use a fixed synthetic name (the abstract syntax model carries no source location).
+            /// An anonymous lambda expression. Stack traces use a fixed synthetic name because
+            /// the abstract syntax model carries no source location.
             /// </summary>
             public sealed record Lambda(
                 PreparedExpression.LambdaExpression LambdaExpression)

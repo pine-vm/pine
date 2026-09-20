@@ -109,6 +109,7 @@ public partial class ElmSyntaxInterpreter
                             new DeclarationResolverCandidate.Function(
                                 declarationName,
                                 functionDeclaration.Function.Declaration));
+
                         break;
 
                     case PreparedDeclaration.AliasDeclaration aliasDeclaration:

@@ -66,6 +66,19 @@ public partial class ElmSyntaxInterpreter
     public static Result<ElmInterpretationError, ElmValue> ParseAndInterpretAsElmValue(
         string rootExpressionText,
         IReadOnlyList<string> moduleSourceTexts)
+        =>
+        ParseAndInterpretAsElmValue(
+            rootExpressionText,
+            moduleSourceTexts,
+            EvaluationConfig.Default);
+
+    /// <summary>
+    /// Parses modules and interprets an expression with explicit evaluation quotas.
+    /// </summary>
+    public static Result<ElmInterpretationError, ElmValue> ParseAndInterpretAsElmValue(
+        string rootExpressionText,
+        IReadOnlyList<string> moduleSourceTexts,
+        EvaluationConfig evaluationConfig)
     {
         var prepareModulesResult = PrepareModules(moduleSourceTexts);
 
@@ -80,7 +93,7 @@ public partial class ElmSyntaxInterpreter
                 "Unexpected result type from PrepareModules: " + prepareModulesResult.GetType().FullName);
         }
 
-        return InterpretAsElmValue(rootExpressionText, preprocessed);
+        return InterpretAsElmValue(rootExpressionText, preprocessed, evaluationConfig);
     }
 
     /// <summary>
@@ -113,6 +126,25 @@ public partial class ElmSyntaxInterpreter
         ParseAndInterpretWithCounters(
         string rootExpressionText,
         Prepared prepared,
+        System.Action<ApplicationLogEntry>? onApplication = null,
+        bool enableDefaultBuiltins = true)
+        =>
+        ParseAndInterpretWithCounters(
+            rootExpressionText,
+            prepared,
+            EvaluationConfig.Default,
+            onApplication,
+            enableDefaultBuiltins);
+
+    /// <summary>
+    /// Parses and interprets an expression against a prepared program with counters and explicit
+    /// evaluation quotas.
+    /// </summary>
+    public static (Result<ElmInterpretationError, PineValueInProcess> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
+        ParseAndInterpretWithCounters(
+        string rootExpressionText,
+        Prepared prepared,
+        EvaluationConfig evaluationConfig,
         System.Action<ApplicationLogEntry>? onApplication = null,
         bool enableDefaultBuiltins = true)
     {
@@ -158,7 +190,8 @@ public partial class ElmSyntaxInterpreter
                 initialApplication: null,
                 resolveApplication: combined,
                 infixOperators: BuildInfixOperatorMap(prepared.Declarations),
-                invocationLogger: invocationCounter);
+                invocationLogger: invocationCounter,
+                evaluationConfig: evaluationConfig);
 
         return (result, invocationCounter.ToReadOnly());
     }
@@ -317,6 +350,17 @@ public partial class ElmSyntaxInterpreter
         DeclQualifiedName functionName,
         IReadOnlyList<PineValueInProcess> arguments,
         Prepared prepared)
+        =>
+        Interpret(functionName, arguments, prepared, EvaluationConfig.Default);
+
+    /// <summary>
+    /// Invokes a function in a prepared program with explicit evaluation quotas.
+    /// </summary>
+    public static Result<ElmInterpretationError, PineValueInProcess> Interpret(
+        DeclQualifiedName functionName,
+        IReadOnlyList<PineValueInProcess> arguments,
+        Prepared prepared,
+        EvaluationConfig evaluationConfig)
     {
         var resolver = BuildResolvers(prepared.Declarations);
 
@@ -325,7 +369,8 @@ public partial class ElmSyntaxInterpreter
                 functionName,
                 arguments,
                 resolver,
-                BuildInfixOperatorMap(prepared.Declarations));
+                BuildInfixOperatorMap(prepared.Declarations),
+                evaluationConfig);
     }
 
     private static CanonicalizationResult<SyntaxModel.Expression> CanonicalizeExpression(

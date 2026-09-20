@@ -12,8 +12,7 @@ namespace Pine.Core.Elm.ElmSyntax;
 /// <summary>
 /// One frame of an Elm call stack: the function declaration that was active and the values
 /// it was called with. Used inside <see cref="ElmInterpretationError"/> to describe where a
-/// runtime error was raised and, when the interpreter detects infinite recursion, to describe
-/// the detected cycle.
+/// runtime error was raised.
 /// </summary>
 public sealed record ElmCallStackFrame(
     DeclQualifiedName FunctionName,
@@ -138,12 +137,18 @@ public sealed record ElmCallStackFrame(
 /// Returned on the error branch of every <see cref="ElmSyntaxInterpreter.InterpretAsElmValue(SyntaxModel.Expression, IReadOnlyDictionary{DeclQualifiedName, SyntaxModel.Declaration})"/>
 /// overload. Carries the Elm call stack (<see cref="CallStack"/>) that was active at the moment
 /// of failure, innermost first. Built-ins such as <c>Debug.todo</c> surface errors of this kind,
-/// as do pattern-match failures, tag-arity mismatches, and detected infinite-recursion cycles.
+/// as do pattern-match failures, tag-arity mismatches, and exhausted evaluation quotas.
 /// </summary>
 public sealed record ElmInterpretationError(
     string Message,
     IReadOnlyList<ElmCallStackFrame> CallStack)
 {
+    /// <summary>
+    /// Structured quota-exhaustion details, or <c>null</c> when evaluation failed for another
+    /// reason.
+    /// </summary>
+    public ElmSyntaxInterpreter.EvaluationQuotaExceeded? QuotaExceeded { get; init; }
+
     /// <inheritdoc/>
     public bool Equals(ElmInterpretationError? other)
     {
@@ -151,6 +156,9 @@ public sealed record ElmInterpretationError(
             return false;
 
         if (Message != other.Message)
+            return false;
+
+        if (QuotaExceeded != other.QuotaExceeded)
             return false;
 
         if (CallStack.Count != other.CallStack.Count)
@@ -170,6 +178,7 @@ public sealed record ElmInterpretationError(
     {
         var hash = new System.HashCode();
         hash.Add(Message);
+        hash.Add(QuotaExceeded);
 
         foreach (var frame in CallStack)
         {
@@ -238,6 +247,62 @@ internal sealed class ElmInterpretationException(
 /// </summary>
 public partial class ElmSyntaxInterpreter
 {
+    /// <summary>
+    /// Identifies a configured interpreter evaluation quota.
+    /// </summary>
+    public enum EvaluationQuotaKind
+    {
+        /// <summary>
+        /// The number of iterations of the interpreter trampoline.
+        /// </summary>
+        InstructionCount,
+
+        /// <summary>
+        /// The number of live continuation frames.
+        /// </summary>
+        ContinuationDepth,
+    }
+
+    /// <summary>
+    /// Structured details about an exhausted evaluation quota.
+    /// </summary>
+    public sealed record EvaluationQuotaExceeded(
+        EvaluationQuotaKind QuotaKind,
+        long Limit,
+        long Observed);
+
+    /// <summary>
+    /// Configures deterministic limits for one interpreter evaluation.
+    /// </summary>
+    /// <param name="InstructionCountLimit">
+    /// Maximum number of trampoline iterations allowed before evaluation returns an error.
+    /// <c>null</c> disables this limit.
+    /// </param>
+    /// <param name="ContinuationDepthLimit">
+    /// Maximum number of live continuation frames allowed before evaluation returns an error.
+    /// <c>null</c> disables this limit.
+    /// </param>
+    public sealed record EvaluationConfig(
+        long? InstructionCountLimit,
+        int? ContinuationDepthLimit)
+    {
+        /// <summary>
+        /// Bounded defaults used by interpreter entry points without an explicit configuration.
+        /// </summary>
+        public static EvaluationConfig Default { get; } =
+            new(
+                InstructionCountLimit: 1_000_000_000,
+                ContinuationDepthLimit: 1_000_000);
+
+        /// <summary>
+        /// A configuration that disables both quotas.
+        /// </summary>
+        public static EvaluationConfig Unbounded { get; } =
+            new(
+                InstructionCountLimit: null,
+                ContinuationDepthLimit: null);
+    }
+
     /// <summary>
     /// Represents a fully-evaluated application whose function part and all arguments have been
     /// reduced to <see cref="ElmValue"/> instances.
@@ -343,6 +408,17 @@ public partial class ElmSyntaxInterpreter
     public static Result<ElmInterpretationError, ElmValue> InterpretAsElmValue(
         string rootExpressionText,
         Prepared prepared)
+        =>
+        InterpretAsElmValue(rootExpressionText, prepared, EvaluationConfig.Default);
+
+    /// <summary>
+    /// Interprets <paramref name="rootExpressionText"/> against a prepared program with explicit
+    /// evaluation quotas.
+    /// </summary>
+    public static Result<ElmInterpretationError, ElmValue> InterpretAsElmValue(
+        string rootExpressionText,
+        Prepared prepared,
+        EvaluationConfig evaluationConfig)
     {
         var parseResult =
             ParseAndCanonicalizeExpressionWithDefaultImports(rootExpressionText);
@@ -361,7 +437,11 @@ public partial class ElmSyntaxInterpreter
         var combined = BuildResolvers(prepared.Declarations);
 
         var valueInProcess =
-            Interpret(rootExpression, combined, BuildInfixOperatorMap(prepared.Declarations));
+            Interpret(
+                rootExpression,
+                combined,
+                BuildInfixOperatorMap(prepared.Declarations),
+                evaluationConfig);
 
         return valueInProcess.Map(ToElm);
     }
@@ -379,11 +459,25 @@ public partial class ElmSyntaxInterpreter
     public static Result<ElmInterpretationError, ElmValue> InterpretAsElmValue(
         SyntaxModel.Expression rootExpression,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
+        =>
+        InterpretAsElmValue(rootExpression, declarations, EvaluationConfig.Default);
+
+    /// <summary>
+    /// Interprets <paramref name="rootExpression"/> with explicit evaluation quotas.
+    /// </summary>
+    public static Result<ElmInterpretationError, ElmValue> InterpretAsElmValue(
+        SyntaxModel.Expression rootExpression,
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations,
+        EvaluationConfig evaluationConfig)
     {
         var combined = BuildResolvers(declarations);
 
         var valueInProcess =
-            Interpret(rootExpression, combined, BuildInfixOperatorMap(declarations));
+            Interpret(
+                rootExpression,
+                combined,
+                BuildInfixOperatorMap(declarations),
+                evaluationConfig);
 
         return valueInProcess.Map(ToElm);
     }
@@ -401,10 +495,25 @@ public partial class ElmSyntaxInterpreter
     public static Result<ElmInterpretationError, PineValueInProcess> Interpret(
         SyntaxModel.Expression rootExpression,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
+        =>
+        Interpret(rootExpression, declarations, EvaluationConfig.Default);
+
+    /// <summary>
+    /// Interprets <paramref name="rootExpression"/> with explicit evaluation quotas.
+    /// </summary>
+    public static Result<ElmInterpretationError, PineValueInProcess> Interpret(
+        SyntaxModel.Expression rootExpression,
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations,
+        EvaluationConfig evaluationConfig)
     {
         var combined = BuildResolvers(declarations);
 
-        return Interpret(rootExpression, combined, BuildInfixOperatorMap(declarations));
+        return
+            Interpret(
+                rootExpression,
+                combined,
+                BuildInfixOperatorMap(declarations),
+                evaluationConfig);
     }
 
     /// <summary>
@@ -434,6 +543,22 @@ public partial class ElmSyntaxInterpreter
         SyntaxModel.Expression rootExpression,
         System.Func<Application, ApplicationResolution> resolveApplication,
         IReadOnlyDictionary<string, DeclQualifiedName>? infixOperators)
+        =>
+        Interpret(
+            rootExpression,
+            resolveApplication,
+            infixOperators,
+            EvaluationConfig.Default);
+
+    /// <summary>
+    /// Interprets <paramref name="rootExpression"/> with a caller-supplied resolver and explicit
+    /// evaluation quotas.
+    /// </summary>
+    public static Result<ElmInterpretationError, PineValueInProcess> Interpret(
+        SyntaxModel.Expression rootExpression,
+        System.Func<Application, ApplicationResolution> resolveApplication,
+        IReadOnlyDictionary<string, DeclQualifiedName>? infixOperators,
+        EvaluationConfig evaluationConfig)
     {
         var context =
             new ApplicationContext(
@@ -447,7 +572,8 @@ public partial class ElmSyntaxInterpreter
                 initialEnv: context,
                 initialApplication: null,
                 resolveApplication: resolveApplication,
-                infixOperators: infixOperators);
+                infixOperators: infixOperators,
+                evaluationConfig: evaluationConfig);
     }
 
     /// <summary>
@@ -465,6 +591,21 @@ public partial class ElmSyntaxInterpreter
         DeclQualifiedName functionName,
         IReadOnlyList<ElmValue> arguments,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
+        =>
+        InterpretAsElmValue(
+            functionName,
+            arguments,
+            declarations,
+            EvaluationConfig.Default);
+
+    /// <summary>
+    /// Invokes a declared function with Elm-value arguments and explicit evaluation quotas.
+    /// </summary>
+    public static Result<ElmInterpretationError, ElmValue> InterpretAsElmValue(
+        DeclQualifiedName functionName,
+        IReadOnlyList<ElmValue> arguments,
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations,
+        EvaluationConfig evaluationConfig)
     {
         var combined = BuildResolvers(declarations);
 
@@ -473,7 +614,12 @@ public partial class ElmSyntaxInterpreter
             .ToImmutableList();
 
         var valueInProcessResult =
-            Interpret(functionName, argumentsInProcess, combined, BuildInfixOperatorMap(declarations));
+            Interpret(
+                functionName,
+                argumentsInProcess,
+                combined,
+                BuildInfixOperatorMap(declarations),
+                evaluationConfig);
 
         return valueInProcessResult.Map(ToElm);
     }
@@ -493,10 +639,27 @@ public partial class ElmSyntaxInterpreter
         DeclQualifiedName functionName,
         IReadOnlyList<PineValueInProcess> arguments,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
+        =>
+        Interpret(functionName, arguments, declarations, EvaluationConfig.Default);
+
+    /// <summary>
+    /// Invokes a declared function with explicit evaluation quotas.
+    /// </summary>
+    public static Result<ElmInterpretationError, PineValueInProcess> Interpret(
+        DeclQualifiedName functionName,
+        IReadOnlyList<PineValueInProcess> arguments,
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations,
+        EvaluationConfig evaluationConfig)
     {
         var combined = BuildResolvers(declarations);
 
-        return Interpret(functionName, arguments, combined, BuildInfixOperatorMap(declarations));
+        return
+            Interpret(
+                functionName,
+                arguments,
+                combined,
+                BuildInfixOperatorMap(declarations),
+                evaluationConfig);
     }
 
     /// <summary>
@@ -525,6 +688,23 @@ public partial class ElmSyntaxInterpreter
         IReadOnlyList<PineValueInProcess> arguments,
         System.Func<Application, ApplicationResolution> resolveApplication,
         IReadOnlyDictionary<string, DeclQualifiedName>? infixOperators)
+        =>
+        Interpret(
+            functionName,
+            arguments,
+            resolveApplication,
+            infixOperators,
+            EvaluationConfig.Default);
+
+    /// <summary>
+    /// Invokes a function through a caller-supplied resolver with explicit evaluation quotas.
+    /// </summary>
+    public static Result<ElmInterpretationError, PineValueInProcess> Interpret(
+        DeclQualifiedName functionName,
+        IReadOnlyList<PineValueInProcess> arguments,
+        System.Func<Application, ApplicationResolution> resolveApplication,
+        IReadOnlyDictionary<string, DeclQualifiedName>? infixOperators,
+        EvaluationConfig evaluationConfig)
     {
         var rootContext =
             new ApplicationContext(
@@ -543,7 +723,8 @@ public partial class ElmSyntaxInterpreter
                 initialEnv: rootContext,
                 initialApplication: application,
                 resolveApplication: resolveApplication,
-                infixOperators: infixOperators);
+                infixOperators: infixOperators,
+                evaluationConfig: evaluationConfig);
     }
 
     /// <summary>
@@ -560,6 +741,19 @@ public partial class ElmSyntaxInterpreter
     public static Result<ElmInterpretationError, ElmValue> ParseAndInterpretAsElmValue(
         string rootExpressionText,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
+        =>
+        ParseAndInterpretAsElmValue(
+            rootExpressionText,
+            declarations,
+            EvaluationConfig.Default);
+
+    /// <summary>
+    /// Parses and interprets an expression with explicit evaluation quotas.
+    /// </summary>
+    public static Result<ElmInterpretationError, ElmValue> ParseAndInterpretAsElmValue(
+        string rootExpressionText,
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations,
+        EvaluationConfig evaluationConfig)
     {
         var parseResult = ParseRootExpression(rootExpressionText);
 
@@ -574,7 +768,7 @@ public partial class ElmSyntaxInterpreter
                 "Unexpected parse result type: " + parseResult.GetType().FullName);
         }
 
-        return InterpretAsElmValue(rootExpression, declarations);
+        return InterpretAsElmValue(rootExpression, declarations, evaluationConfig);
     }
 
     /// <summary>
@@ -591,6 +785,19 @@ public partial class ElmSyntaxInterpreter
     public static Result<ElmInterpretationError, PineValueInProcess> ParseAndInterpret(
         string rootExpressionText,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
+        =>
+        ParseAndInterpret(
+            rootExpressionText,
+            declarations,
+            EvaluationConfig.Default);
+
+    /// <summary>
+    /// Parses and interprets an expression with explicit evaluation quotas.
+    /// </summary>
+    public static Result<ElmInterpretationError, PineValueInProcess> ParseAndInterpret(
+        string rootExpressionText,
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations,
+        EvaluationConfig evaluationConfig)
     {
         var parseResult = ParseRootExpression(rootExpressionText);
 
@@ -605,7 +812,7 @@ public partial class ElmSyntaxInterpreter
                 "Unexpected parse result type: " + parseResult.GetType().FullName);
         }
 
-        return Interpret(rootExpression, declarations);
+        return Interpret(rootExpression, declarations, evaluationConfig);
     }
 
     /// <summary>
@@ -660,6 +867,20 @@ public partial class ElmSyntaxInterpreter
         ParseAndInterpretWithCounters(
         string rootExpressionText,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
+        =>
+        ParseAndInterpretWithCounters(
+            rootExpressionText,
+            declarations,
+            EvaluationConfig.Default);
+
+    /// <summary>
+    /// Parses and interprets an expression with counters and explicit evaluation quotas.
+    /// </summary>
+    public static (Result<ElmInterpretationError, PineValueInProcess> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
+        ParseAndInterpretWithCounters(
+        string rootExpressionText,
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations,
+        EvaluationConfig evaluationConfig)
     {
         var parseResult = ParseRootExpression(rootExpressionText);
 
@@ -696,7 +917,8 @@ public partial class ElmSyntaxInterpreter
                 initialApplication: null,
                 resolveApplication: combined,
                 infixOperators: BuildInfixOperatorMap(declarations),
-                invocationLogger: invocationCounter);
+                invocationLogger: invocationCounter,
+                evaluationConfig: evaluationConfig);
 
         return (result, invocationCounter.ToReadOnly());
     }
@@ -722,6 +944,23 @@ public partial class ElmSyntaxInterpreter
         string rootExpressionText,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations,
         System.Action<ApplicationLogEntry> onApplication)
+        =>
+        ParseAndInterpretWithCounters(
+            rootExpressionText,
+            declarations,
+            onApplication,
+            EvaluationConfig.Default);
+
+    /// <summary>
+    /// Parses and interprets an expression with counters, application logging, and explicit
+    /// evaluation quotas.
+    /// </summary>
+    public static (Result<ElmInterpretationError, PineValueInProcess> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
+        ParseAndInterpretWithCounters(
+        string rootExpressionText,
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations,
+        System.Action<ApplicationLogEntry> onApplication,
+        EvaluationConfig evaluationConfig)
     {
         var parseResult = ParseRootExpression(rootExpressionText);
 
@@ -758,7 +997,8 @@ public partial class ElmSyntaxInterpreter
                 initialApplication: null,
                 resolveApplication: combined,
                 infixOperators: BuildInfixOperatorMap(declarations),
-                invocationLogger: invocationCounter);
+                invocationLogger: invocationCounter,
+                evaluationConfig: evaluationConfig);
 
         return (result, invocationCounter.ToReadOnly());
     }
@@ -816,9 +1056,9 @@ public partial class ElmSyntaxInterpreter
     // Each entry of the Kont ADT corresponds to one "hole" in the pre-refactor
     // EvaluateExpression switch. Entering a user-defined function body pushes
     // a Kont.CallFrame so the trace can be captured at any point of evaluation.
-    // When a call is in tail position (the current top of the continuation
-    // stack is itself a CallFrame), we pop that old frame before pushing the
-    // new one so tail-recursive Elm functions run in O(1) explicit-stack space.
+    // Evaluation quotas bound the number of loop iterations and live
+    // continuations so non-terminating programs return an Elm-level error
+    // instead of exhausting process resources.
     // ------------------------------------------------------------------------
 
     private abstract record Kont
@@ -931,41 +1171,13 @@ public partial class ElmSyntaxInterpreter
 
         /// <summary>
         /// Marker frame indicating that a call to a user-defined Elm function is
-        /// currently in progress. Contributes one entry to the Elm call stack but
-        /// performs no computation on return (the returned value simply bubbles up).
-        /// <see cref="Arguments"/> holds the values the function was called with — used
-        /// both to render runtime-error stack traces as Elm-style function applications
-        /// and to detect infinite recursion (a repeated
-        /// <c>(SourceIdentity, CapturedEnv, Arguments)</c> triple on the kont stack).
-        /// <para>
-        /// <see cref="SourceIdentity"/> is an opaque, reference-comparable handle on the
-        /// AST node the call originated from — a <see cref="SyntaxModel.FunctionImplementation"/>
-        /// for top-level / let-bound declarations and a <see cref="SyntaxModel.LambdaStruct"/>
-        /// for anonymous lambdas. The infinite-recursion detector compares frames by
-        /// <see cref="SourceIdentity"/> (using <see cref="object.ReferenceEquals"/>), not by
-        /// <see cref="FunctionName"/>: two anonymous lambdas constructed at the same source
-        /// position (e.g. <c>ParserFast</c> combinator chains where every lambda's synthetic
-        /// name collapses to <c>&lt;lambda@1:1&gt;</c>) are then correctly treated as
-        /// distinct frames as long as they are distinct AST nodes.
-        /// </para>
-        /// <para>
-        /// <see cref="CapturedBindings"/> and <see cref="CapturedTopLevel"/> capture the
-        /// closure environment the body evaluates under. They are part of the recursion
-        /// identity because a single lambda AST node is shared by every closure built from
-        /// it: two combinator closures (for example distinct <c>ParserFast.map2</c>
-        /// applications) share the same <see cref="SourceIdentity"/> but capture different
-        /// free variables. Ignoring the captured environment made deeply nested parses
-        /// spuriously trip the detector once two such closures were invoked with equal
-        /// arguments. A genuine self-recursive call re-enters the same body under an equal
-        /// captured environment and is still detected.
-        /// </para>
+        /// currently in progress. Contributes one entry to the Elm call stack but performs no
+        /// computation on return (the returned value simply bubbles up). <see cref="Arguments"/>
+        /// holds the values the function was called with for runtime-error diagnostics.
         /// </summary>
         public sealed record CallFrame(
             DeclQualifiedName FunctionName,
-            object SourceIdentity,
-            IReadOnlyList<PineValueInProcess> Arguments,
-            LocalBindingEnvironment CapturedBindings,
-            DeclQualifiedName CapturedTopLevel) : Kont;
+            IReadOnlyList<PineValueInProcess> Arguments) : Kont;
 
 
         /// <summary>
@@ -1024,10 +1236,13 @@ public partial class ElmSyntaxInterpreter
         Application? initialApplication,
         System.Func<Application, ApplicationResolution> resolveApplication,
         IReadOnlyDictionary<string, DeclQualifiedName>? infixOperators,
-        IInvocationLogger? invocationLogger = null)
+        IInvocationLogger? invocationLogger = null,
+        EvaluationConfig? evaluationConfig = null)
     {
         var kstack = new Stack<Kont>();
         invocationLogger ??= t_ambientInvocationLogger.Value ?? new InvocationCounter();
+        evaluationConfig ??= EvaluationConfig.Default;
+        long instructionCount = 0;
 
         // Either: (currentExpr, currentEnv) is the next thing to evaluate ("Eval" mode),
         // or currentValue holds the value about to be returned to the top kont ("Return" mode).
@@ -1092,6 +1307,29 @@ public partial class ElmSyntaxInterpreter
         while (true)
         {
             invocationLogger.OnInstructionLoop();
+            instructionCount++;
+
+            if (evaluationConfig.InstructionCountLimit is { } instructionCountLimit &&
+                instructionCount > instructionCountLimit)
+            {
+                return
+                    MakeQuotaExhaustedError(
+                        EvaluationQuotaKind.InstructionCount,
+                        instructionCountLimit,
+                        instructionCount,
+                        kstack);
+            }
+
+            if (evaluationConfig.ContinuationDepthLimit is { } continuationDepthLimit &&
+                kstack.Count > continuationDepthLimit)
+            {
+                return
+                    MakeQuotaExhaustedError(
+                        EvaluationQuotaKind.ContinuationDepth,
+                        continuationDepthLimit,
+                        kstack.Count,
+                        kstack);
+            }
 
             if (currentExpr is not null)
             {
@@ -1689,7 +1927,7 @@ public partial class ElmSyntaxInterpreter
                                 else
                                 {
                                     // The call produced a runtime error (for example an
-                                    // infinite-recursion report). Propagate it instead of
+                                    // quota-exhaustion report). Propagate it instead of
                                     // silently dropping it: swallowing it here would leave
                                     // the just-pushed CallFrame on the stack with a stale
                                     // currentValue, so the frame would pop returning the
@@ -2187,20 +2425,9 @@ public partial class ElmSyntaxInterpreter
     }
 
     /// <summary>
-    /// Periodic infinite-recursion detection interval: the interpreter scans the kont stack
-    /// for a duplicated <c>(FunctionName, Arguments)</c> pair once every this many user-defined
-    /// function invocations. A pure language like Elm cannot escape such a repeated pair, so
-    /// it is reported as infinite recursion. The interval trades detection latency against
-    /// scan cost; 1000 keeps per-call overhead negligible while catching real cycles well
-    /// before they exhaust available memory.
-    /// </summary>
-    private const int InfiniteRecursionCheckInterval = 1000;
-
-    /// <summary>
     /// Default <see cref="IInvocationLogger"/> implementation. Threaded through
     /// <see cref="ApplyResolvedCall"/> and <see cref="ApplyFunctionOrValue"/> so all function-body entries can
-    /// be counted against a single origin and the <see cref="InfiniteRecursionCheckInterval"/> check can fire.
-    /// Also accumulates the high-level performance counters surfaced via
+    /// be counted against a single origin. Also accumulates the high-level performance counters surfaced via
     /// <see cref="ElmSyntaxInterpreterPerformanceCounters"/>, optionally forwarding each
     /// <see cref="ApplicationLogEntry"/> event to a caller-supplied delegate so callers
     /// can build a richer trace without re-implementing the counting logic.
@@ -2219,12 +2446,6 @@ public partial class ElmSyntaxInterpreter
             : this(onApplication: null)
         {
         }
-
-        /// <summary>
-        /// Number of user-defined function bodies entered. Used by the periodic
-        /// infinite-recursion check.
-        /// </summary>
-        public int _count;
 
         /// <summary>Iterations of the trampoline <c>while(true)</c> loop.</summary>
         public long _instructionLoopCount;
@@ -2277,7 +2498,7 @@ public partial class ElmSyntaxInterpreter
         public void OnPineBuiltinInvocation(Application application) =>
             _pineBuiltinInvocationCount++;
 
-        public int IncrementUserCallDepth() => ++_count;
+        public int IncrementUserCallDepth() => 0;
     }
 
     private static Result<ElmInterpretationError, ApplyCallOutcome> ApplyFunctionOrValue(
@@ -2429,25 +2650,12 @@ public partial class ElmSyntaxInterpreter
                     }
 
                     // Every call — including self-recursion — pushes a fresh CallFrame onto
-                    // the kont stack. This lets the infinite-recursion detector later see a
-                    // cycle as a literal repeated (SourceIdentity, Arguments) pair in the
-                    // stack, matching the wording of the spec. The trade-off is that purely
-                    // tail-recursive Elm functions use explicit-stack memory proportional to
-                    // their depth rather than O(1); for the test-only interpreter in this
-                    // assembly that is an acceptable cost.
+                    // the kont stack so runtime errors retain an Elm-level call stack.
+                    // ContinuationDepthLimit bounds this retained state.
                     kstack.Push(
                         new Kont.CallFrame(
                             application.FunctionName,
-                            functionImpl,
-                            saturatingArgs,
-                            LocalBindingEnvironment.Empty,
-                            bodyTopLevel));
-
-                    if (invocationLogger.IncrementUserCallDepth() % InfiniteRecursionCheckInterval is 0)
-                    {
-                        if (CheckForInfiniteRecursion(kstack) is { } error)
-                            return error;
-                    }
+                            saturatingArgs));
 
                     return
                         new ApplyCallOutcome.ContinueEvaluating(
@@ -2693,7 +2901,6 @@ public partial class ElmSyntaxInterpreter
         IReadOnlyList<ElmSyntaxAbstract.Pattern> parameterPatterns;
         PreparedExpression bodyExpression;
         DeclQualifiedName callFrameName;
-        object callFrameSourceIdentity;
 
         switch (closure.Source)
         {
@@ -2701,14 +2908,12 @@ public partial class ElmSyntaxInterpreter
                 parameterPatterns = declared.Implementation.Arguments;
                 bodyExpression = declared.Implementation.Expression;
                 callFrameName = declared.Name;
-                callFrameSourceIdentity = declared.Implementation;
                 break;
 
             case ElmClosureInProcess.SourceRef.Lambda lambdaSource:
                 parameterPatterns = lambdaSource.LambdaExpression.Arguments;
                 bodyExpression = lambdaSource.LambdaExpression.Expression;
                 callFrameName = SyntheticLambdaName(lambdaSource.LambdaExpression, closure.CapturedTopLevel);
-                callFrameSourceIdentity = lambdaSource.LambdaExpression;
                 break;
 
             default:
@@ -2754,16 +2959,7 @@ public partial class ElmSyntaxInterpreter
         kstack.Push(
             new Kont.CallFrame(
                 callFrameName,
-                callFrameSourceIdentity,
-                saturatingArgs,
-                closure.CapturedBindings,
-                closure.CapturedTopLevel));
-
-        if (invocationLogger.IncrementUserCallDepth() % InfiniteRecursionCheckInterval is 0)
-        {
-            if (CheckForInfiniteRecursion(kstack) is { } error)
-                return error;
-        }
+                saturatingArgs));
 
         return
             new ApplyCallOutcome.ContinueEvaluating(
@@ -2777,8 +2973,6 @@ public partial class ElmSyntaxInterpreter
     /// <c>&lt;lambda&gt;</c> qualified by <paramref name="containingDeclaration"/> — the top-level
     /// declaration the lambda was reached from — so that stack traces make clear which declaration
     /// the anonymous function originated in (e.g. <c>LanguageService.listDeclarationsInDeclaration.&lt;lambda&gt;</c>).
-    /// The infinite-recursion detector relies on reference identity of the lambda AST node rather
-    /// than this name, so the synthetic name does not cause false positives.
     /// </summary>
     private static DeclQualifiedName SyntheticLambdaName(
         PreparedExpression.LambdaExpression lambda,
@@ -2787,126 +2981,6 @@ public partial class ElmSyntaxInterpreter
         _ = lambda;
 
         return containingDeclaration.ContainedDeclName("<lambda>");
-    }
-
-    /// <summary>
-    /// Walks the kont stack looking for two <see cref="Kont.CallFrame"/> entries with the same
-    /// <see cref="Kont.CallFrame.SourceIdentity"/> (compared by reference), an equal captured
-    /// environment (<see cref="Kont.CallFrame.CapturedTopLevel"/> and
-    /// <see cref="Kont.CallFrame.CapturedBindings"/>), and structurally equal
-    /// <see cref="Kont.CallFrame.Arguments"/>. If such a pair is found, infinite
-    /// recursion is raised as an <see cref="ElmInterpretationException"/> whose
-    /// <see cref="ElmInterpretationError.CallStack"/> is the stack truncated to the first
-    /// cycle: the innermost (just-pushed) frame at index 0, followed by the frames between
-    /// it and the older duplicate, followed by the older duplicate itself.
-    /// <para>
-    /// Comparing by reference identity of the source AST node — not by the rendered
-    /// <see cref="Kont.CallFrame.FunctionName"/> — avoids false positives when two distinct
-    /// anonymous lambdas happen to share a synthetic name (e.g. <c>ParserFast</c> combinator
-    /// chains where every lambda's <c>BackslashLocation</c> collapses to row 1, column 1
-    /// because the generated source has no line information).
-    /// </para>
-    /// <para>
-    /// The captured environment is compared as well because a single lambda AST node backs
-    /// every closure built from it: distinct combinator closures (for example separate
-    /// <c>ParserFast.map2</c> applications) share one <see cref="Kont.CallFrame.SourceIdentity"/>
-    /// yet capture different free variables. Comparing only <c>(SourceIdentity, Arguments)</c>
-    /// made deeply nested parses spuriously trip the detector once two such closures were
-    /// invoked with equal argument values. A genuine self-recursive call re-enters the same
-    /// body under an equal captured environment and is still detected.
-    /// </para>
-    /// </summary>
-    private static ElmInterpretationError? CheckForInfiniteRecursion(Stack<Kont> kstack)
-    {
-        Kont.CallFrame? topCallFrame = null;
-
-        foreach (var frame in kstack)
-        {
-            if (frame is Kont.CallFrame callFrame)
-            {
-                topCallFrame = callFrame;
-                break;
-            }
-        }
-
-        if (topCallFrame is null)
-            return null;
-
-        var truncatedStack = new List<ElmCallStackFrame>();
-        var seenTop = false;
-
-        foreach (var frame in kstack)
-        {
-            if (frame is not Kont.CallFrame callFrame)
-                continue;
-
-            truncatedStack.Add(
-                new ElmCallStackFrame(callFrame.FunctionName, callFrame.Arguments));
-
-            if (!seenTop)
-            {
-                seenTop = true;
-                continue;
-            }
-
-            if (ReferenceEquals(callFrame.SourceIdentity, topCallFrame.SourceIdentity) &&
-                callFrame.CapturedTopLevel.Equals(topCallFrame.CapturedTopLevel) &&
-                CapturedBindingsEqual(callFrame.CapturedBindings, topCallFrame.CapturedBindings) &&
-                ArgumentListsEqual(callFrame.Arguments, topCallFrame.Arguments))
-            {
-                return
-                    new ElmInterpretationError(
-                        "Infinite recursion detected: the call stack contains a repeated (function, arguments) pair.",
-                        truncatedStack);
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Structural equality of two captured-binding environments: same set of names, each
-    /// bound to a <see cref="ValuesEqualInProcess(PineValueInProcess, PineValueInProcess)"/>-equal value. Part of the recursion
-    /// identity so that two distinct closures built from the same lambda AST node but
-    /// capturing different free variables (for example separate <c>ParserFast</c> combinator
-    /// applications) are not mistaken for a single self-recursive call.
-    /// </summary>
-    private static bool CapturedBindingsEqual(
-        LocalBindingEnvironment left,
-        LocalBindingEnvironment right)
-    {
-        if (ReferenceEquals(left, right))
-            return true;
-
-        if (left.Count != right.Count)
-            return false;
-
-        foreach (var (name, leftValue) in left)
-        {
-            if (!right.TryGetValue(name, out var rightValue))
-                return false;
-
-            if (!ValuesEqualInProcess(leftValue, rightValue))
-                return false;
-        }
-
-        return true;
-    }
-
-    private static bool ArgumentListsEqual(
-        IReadOnlyList<PineValueInProcess> left,
-        IReadOnlyList<PineValueInProcess> right)
-    {
-        if (left.Count != right.Count)
-            return false;
-
-        for (var i = 0; i < left.Count; i++)
-        {
-            if (!ValuesEqualInProcess(left[i], right[i]))
-                return false;
-        }
-
-        return true;
     }
 
     /// <summary>
@@ -3061,7 +3135,7 @@ public partial class ElmSyntaxInterpreter
             var bindingName = functionImpl.Name;
 
             // Synthesise a DeclQualifiedName for the closure so over-application,
-            // stack traces, and the infinite-recursion detector all surface a useful
+            // stack traces and quota-exhaustion diagnostics surface a useful
             // identifier. The name is namespaced under the surrounding top-level
             // declaration so two let-bound functions of the same simple name from
             // different surrounding functions don't accidentally compare equal.
@@ -3630,6 +3704,8 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     private static IReadOnlyList<ElmCallStackFrame> SnapshotCallStack(Stack<Kont> kstack)
     {
+        const int maxFrames = 100;
+
         var trace = new List<ElmCallStackFrame>();
 
         foreach (var frame in kstack)
@@ -3637,6 +3713,9 @@ public partial class ElmSyntaxInterpreter
             if (frame is Kont.CallFrame callFrame)
             {
                 trace.Add(new ElmCallStackFrame(callFrame.FunctionName, callFrame.Arguments));
+
+                if (trace.Count >= maxFrames)
+                    break;
             }
         }
 
@@ -3654,6 +3733,42 @@ public partial class ElmSyntaxInterpreter
         Stack<Kont> kstack)
     {
         return new ElmInterpretationError(message, SnapshotCallStack(kstack));
+    }
+
+    private static ElmInterpretationError MakeQuotaExhaustedError(
+        EvaluationQuotaKind quotaKind,
+        long limit,
+        long observed,
+        Stack<Kont> kstack)
+    {
+        var quotaDescription =
+            quotaKind switch
+            {
+                EvaluationQuotaKind.InstructionCount =>
+                "Instruction count",
+
+                EvaluationQuotaKind.ContinuationDepth =>
+                "Continuation depth",
+
+                _ =>
+                throw new System.NotImplementedException(
+                    nameof(MakeQuotaExhaustedError) +
+                    " does not handle evaluation quota kind: " +
+                    quotaKind),
+            };
+
+        return
+            new ElmInterpretationError(
+                quotaDescription + " limit exceeded: " +
+                CommandLineInterface.FormatIntegerForDisplay(limit),
+                SnapshotCallStack(kstack))
+            {
+                QuotaExceeded =
+                new EvaluationQuotaExceeded(
+                    quotaKind,
+                    limit,
+                    observed)
+            };
     }
 
 

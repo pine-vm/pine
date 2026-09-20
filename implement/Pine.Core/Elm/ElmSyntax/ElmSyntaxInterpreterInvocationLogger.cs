@@ -82,10 +82,8 @@ public interface IInvocationLogger
     void OnPineBuiltinInvocation(ElmSyntaxInterpreter.Application application);
 
     /// <summary>
-    /// Called when the interpreter is about to enter a user-defined function body
-    /// (either via name dispatch or via application of a closure). Returns the new
-    /// recursion-depth counter value, used by the interpreter's periodic
-    /// infinite-recursion detector.
+    /// Retained for source compatibility with existing logger implementations. The interpreter
+    /// no longer invokes this method because evaluation termination is enforced by quotas.
     /// </summary>
     int IncrementUserCallDepth();
 }
@@ -108,8 +106,6 @@ public sealed class RecordingInvocationLogger : IInvocationLogger
     private long _functionValueApplicationCount;
 
     private long _pineBuiltinInvocationCount;
-
-    private int _userCallDepth;
 
     /// <summary>
     /// The captured log of function applications, in the order in which the interpreter
@@ -151,5 +147,5 @@ public sealed class RecordingInvocationLogger : IInvocationLogger
         _pineBuiltinInvocationCount++;
 
     /// <inheritdoc/>
-    public int IncrementUserCallDepth() => ++_userCallDepth;
+    public int IncrementUserCallDepth() => 0;
 }

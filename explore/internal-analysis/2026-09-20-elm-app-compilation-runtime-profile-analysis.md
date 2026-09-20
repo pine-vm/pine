@@ -183,7 +183,7 @@ The aggregate `Dictionary.Resize` frame is 41.21% of represented CPU, but that i
 bound. Most of it is nested under `Thread.<PollGC>g__PollGCWorker`, so a dedicated allocation and
 GC trace is required before converting this percentage into an expected speedup.
 
-### Best immediate opportunity: make recursion checks allocation-free
+### Implemented: quota-based termination
 
 `CheckForInfiniteRecursion` increased from 83.8 ms (0.77%) in the first slice to 2,588.0 ms
 (24.27% wall, 30.43% of represented CPU) in the follow-up slice. The change may partly reflect
@@ -205,23 +205,38 @@ The visible breakdown is:
 | `UNMANAGED_CODE_TIME` | 382.2 ms | 3.58% |
 | Structural argument equality | 3.9 ms | 0.04% |
 
-The first, low-risk fix is to scan without constructing the diagnostic call stack. Only after a
-duplicate is found should a second pass allocate the truncated `ElmCallStackFrame` list. That
-should remove the 6.01% list-growth bucket and some associated GC pressure on all successful
-checks.
+The incomplete cycle detector has now been removed rather than optimized. The interpreter uses
+the same policy adopted by the intermediate Pine VM: deterministic quotas stop evaluation
+without claiming that the program is necessarily non-terminating.
 
-The structural follow-up is to avoid full-stack scans:
+`ElmSyntaxInterpreter.EvaluationConfig` provides:
 
-- pass the just-pushed top call frame directly instead of first searching for it;
-- maintain an active-call index by `SourceIdentity`, so only frames for the same function/lambda
-  are candidates;
-- update that index when call frames are pushed and popped;
-- combine this with tail-call frame replacement so recursive compiler loops do not accumulate
-  unbounded continuation depth.
+- `InstructionCountLimit`, checked on every trampoline iteration;
+- `ContinuationDepthLimit`, checked against the live explicit continuation stack;
+- `Default`, configured for 1,000,000,000 instructions and 1,000,000 continuations;
+- `Unbounded`, with both nullable limits disabled.
 
-Eliminating the complete recursion-check bucket has a theoretical ceiling of about 1.44x based
-on represented CPU. A realistic initial target is lower, but the two-pass diagnostic construction
-is unusually well isolated and should be implemented before broader trampoline refactoring.
+The high default instruction limit is intentional. The profiled compilation workload exceeds
+both 10 million and 100 million trampoline iterations during valid execution; one billion passed
+the complete Release snapshot workload. Hosts can supply tighter limits through the configurable
+expression, parsed-expression, prepared-program, and direct-function entry points.
+
+Quota exhaustion returns `ElmInterpretationError` with a structured `QuotaExceeded` value
+containing the quota kind, configured limit, and observed count. Diagnostic call stacks are
+captured only on error and capped at 100 frames. Closed-expression reduction now uses the same
+quota machinery with its existing 100,000-instruction preparation budget.
+
+Automated tests verify that:
+
+- changing-state recursion, which the old repeated-state detector could not classify, exhausts
+  the instruction budget at exactly `limit + 1`;
+- deep recursion exhausts the continuation-depth budget;
+- a finite computation completes under both quotas;
+- the existing 100,000-step deep-tail-recursion scenario remains valid under the calibrated
+  defaults.
+
+Removing the full-stack scan and its eager diagnostic list removes the complete
+`CheckForInfiniteRecursion` hot path rather than merely reducing its allocation.
 
 ### Remaining builtin and value work
 
@@ -401,13 +416,13 @@ Relevant code:
 ### 4. Tail calls retain continuation frames
 
 Every user-defined call pushes a new `Kont.CallFrame`, including self-recursive tail calls.
-The source explicitly notes that tail recursion therefore uses memory proportional to call depth.
-Every 1,000 user calls, `CheckForInfiniteRecursion` scans the continuation stack.
+At the time of the baseline capture, every 1,000 user calls caused
+`CheckForInfiniteRecursion` to scan the continuation stack.
 
-The visible recursion-check cost is only 0.75%, so this is not a first-order CPU target in the
-current profile. However, tail-frame retention likely contributes to allocation and cache
-pressure hidden inside the 16.72% direct `ApplyResolvedCall` bucket. It also limits scalability
-for larger compiler inputs.
+That scan was only 0.75% in the first capture but reached 30.43% of represented CPU in the
+follow-up capture. It has since been removed in favor of instruction-count and
+continuation-depth quotas. Tail-frame retention still contributes to allocation and limits
+scalability for larger compiler inputs.
 
 Relevant code:
 
@@ -629,14 +644,12 @@ run.
 ### Priority 5: Tail-call frame replacement
 
 Detect when a call is in tail position and replace the current call frame instead of pushing a
-new one. Preserve enough logical call information for errors and recursion detection, possibly
-using a compact cycle detector separate from the evaluation continuation stack.
+new one. Preserve enough logical call information for runtime-error diagnostics.
 
-The first profile made this look like primarily a scalability improvement, with only 0.75%
-directly measured in recursion checking. The follow-up profile changes the priority:
-`CheckForInfiniteRecursion` reaches 24.27% of the wall slice and 30.43% of represented CPU.
-Allocation-free diagnostic construction should now be treated as an immediate fix, followed by
-an active-call index and tail-call frame replacement.
+Quota-based termination now bounds retained continuation state and removes recursion-scanning
+overhead. Tail-call replacement remains useful for reducing ordinary allocation and allowing
+legitimate deep recursion to run under smaller continuation limits, but it is no longer needed
+to support cycle classification.
 
 ### Priority 6: Parallelize independent snapshot cases only for batch throughput
 

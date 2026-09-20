@@ -41,7 +41,11 @@ public partial class ElmSyntaxInterpreter
                         initialApplication: null,
                         resolveApplication: resolveApplication,
                         infixOperators: infixOperators,
-                        invocationLogger: new BoundedPreparationInvocationLogger(MaxInstructionCount));
+                        invocationLogger: new InvocationCounter(),
+                        evaluationConfig:
+                        new EvaluationConfig(
+                            InstructionCountLimit: MaxInstructionCount,
+                            ContinuationDepthLimit: EvaluationConfig.Default.ContinuationDepthLimit));
 
                 if (result.IsOkOrNull() is { } value &&
                     TryMaterializeLiteral(
@@ -52,9 +56,6 @@ public partial class ElmSyntaxInterpreter
                 {
                     return PrepareValueLiteral(literalValue);
                 }
-            }
-            catch (PreparationReductionLimitException)
-            {
             }
             catch (System.Exception)
             {
@@ -153,35 +154,4 @@ public partial class ElmSyntaxInterpreter
         }
     }
 
-    private sealed class BoundedPreparationInvocationLogger(int maxInstructionCount) : IInvocationLogger
-    {
-        private int instructionCount;
-
-        private int userCallDepth;
-
-        public void OnInstructionLoop()
-        {
-            if (++instructionCount > maxInstructionCount)
-                throw new PreparationReductionLimitException();
-        }
-
-        public void OnDirectFunctionApplication(Application application)
-        {
-        }
-
-        public void OnFunctionValueApplication(
-            PineValueInProcess functionValue,
-            IReadOnlyList<PineValueInProcess> newArguments)
-        {
-        }
-
-        public void OnPineBuiltinInvocation(Application application)
-        {
-        }
-
-        public int IncrementUserCallDepth() =>
-            ++userCallDepth;
-    }
-
-    private sealed class PreparationReductionLimitException : System.Exception;
 }
