@@ -36,6 +36,8 @@ public class PineValueInProcess
 
     private bool _integerIsStrict;
 
+    private int? _length;
+
     /// <summary>
     /// Track a list without involving the general <see cref="PineValue.ListValue"/> system.
     /// </summary>
@@ -90,7 +92,13 @@ public class PineValueInProcess
     /// <summary>
     /// The value of the empty list, <see cref="PineValue.EmptyList"/>.
     /// </summary>
-    public static readonly PineValueInProcess EmptyList = Create(PineValue.EmptyList);
+    public static readonly PineValueInProcess EmptyList =
+        new()
+        {
+            _evaluated = PineValue.EmptyList,
+            _list = [],
+            _length = 0,
+        };
 
     /// <summary>
     /// The value of the empty blob, <see cref="PineValue.EmptyBlob"/>.
@@ -151,6 +159,69 @@ public class PineValueInProcess
     }
 
     /// <summary>
+    /// Create an in-process representation for a compiled literal, eagerly retaining all
+    /// directly derivable representations alongside the evaluated value.
+    /// </summary>
+    public static PineValueInProcess CreateFullyRepresented(PineValue evaluated)
+    {
+        if (evaluated is PineValue.ListValue listValue)
+        {
+            if (listValue.Items.Length is 0)
+            {
+                return EmptyList;
+            }
+
+            var items = new PineValueInProcess[listValue.Items.Length];
+            var sourceItems = listValue.Items.Span;
+
+            for (var i = 0; i < sourceItems.Length; ++i)
+            {
+                items[i] = CreateFullyRepresented(sourceItems[i]);
+            }
+
+            return
+                new PineValueInProcess
+                {
+                    _evaluated = evaluated,
+                    _list = items,
+                    _length = items.Length,
+                };
+        }
+
+        if (BuiltinFunction.SignedIntegerFromValueRelaxed(evaluated) is { } integer)
+        {
+            var integerValue = CreateInteger(integer);
+
+            if (integerValue.Evaluate() == evaluated)
+            {
+                integerValue._length =
+                    ((PineValue.BlobValue)evaluated).Bytes.Length;
+
+                return integerValue;
+            }
+
+            return
+                new PineValueInProcess
+                {
+                    _evaluated = evaluated,
+                    _integer = integer,
+                    _length = ((PineValue.BlobValue)evaluated).Bytes.Length,
+                };
+        }
+
+        var value = Create(evaluated);
+
+        value._length =
+            evaluated is PineValue.BlobValue blobValue
+            ?
+            blobValue.Bytes.Length
+            :
+            ((PineValue.ListValue)evaluated).Items.Length;
+
+        return value;
+    }
+
+    /// <summary>
     /// Create an in-process representation from a list of values without immediately constructing a <see cref="PineValue.ListValue"/> instance.
     /// </summary>
     /// <param name="list">The list items.</param>
@@ -169,6 +240,7 @@ public class PineValueInProcess
             new PineValueInProcess
             {
                 _list = list,
+                _length = list.Count,
             };
     }
 
@@ -361,23 +433,36 @@ public class PineValueInProcess
     public PineValue? EvaluatedOrNull => _evaluated;
 
     /// <summary>
-    /// Exposes the in-process child items of a value that is represented as a lazily constructed
-    /// list (<see cref="CreateList"/>), without forcing evaluation.
+    /// Exposes the directly available in-process child items of a list without forcing evaluation.
     /// </summary>
     /// <remarks>
-    /// Returns <c>null</c> for values that are not represented as an unevaluated list structure
-    /// (blobs, integers, slice/concat builders, or already-evaluated values). Such values are fully
-    /// concrete and therefore cannot embed specialized child instances (for example interpreter
-    /// closures) that lack a concrete <see cref="PineValue"/> encoding.
+    /// Returns <c>null</c> for values without a direct list representation (blobs, integers,
+    /// slice/concat builders, or values created only from an evaluated representation).
     /// </remarks>
-    /// <returns>The in-process child items, or <c>null</c> when the value is not an unevaluated list structure.</returns>
-    public IReadOnlyList<PineValueInProcess>? UnevaluatedStructuralItemsOrNull()
+    /// <returns>The in-process child items, or <c>null</c> when no direct list representation is available.</returns>
+    public IReadOnlyList<PineValueInProcess>? ListItemsOrNull()
     {
         if (_list is not null)
             return _list;
 
         return null;
     }
+
+    /// <summary>
+    /// Exposes unevaluated in-process child items without forcing evaluation.
+    /// </summary>
+    public IReadOnlyList<PineValueInProcess>? UnevaluatedStructuralItemsOrNull() =>
+        ListItemsOrNull();
+
+    /// <summary>
+    /// Gets the cached integer representation without attempting a conversion.
+    /// </summary>
+    public BigInteger? IntegerOrNull => _integer;
+
+    /// <summary>
+    /// Gets the cached sequence length without attempting to derive it.
+    /// </summary>
+    public int? LengthOrNull => _length;
 
     /// <summary>
     /// Materializes this instance into a concrete <see cref="PineValue"/>.
@@ -550,28 +635,31 @@ public class PineValueInProcess
     /// <exception cref="NotImplementedException"></exception>
     public int GetLength()
     {
+        if (_length is { } cachedLength)
+            return cachedLength;
+
         if (_list is not null)
-            return _list.Count;
+            return (_length = _list.Count).Value;
 
         if (_partialApplication is not null)
-            return BuiltinFunctionSpecialized.length_as_int(Evaluate());
+            return (_length = BuiltinFunctionSpecialized.length_as_int(Evaluate())).Value;
 
         if (_evaluated is not null)
-            return BuiltinFunctionSpecialized.length_as_int(_evaluated);
+            return (_length = BuiltinFunctionSpecialized.length_as_int(_evaluated)).Value;
 
         if (_integer.HasValue)
         {
             var asEncoded = IntegerEncoding.EncodeSignedInteger(_integer.Value);
 
-            return BuiltinFunctionSpecialized.length_as_int(asEncoded);
+            return (_length = BuiltinFunctionSpecialized.length_as_int(asEncoded)).Value;
         }
 
         if (_sliceBuilder is not null)
-            return _sliceBuilder.GetLength();
+            return (_length = _sliceBuilder.GetLength()).Value;
 
         if (_concatBuilder is not null)
         {
-            return _concatBuilder.PredictLength();
+            return (_length = _concatBuilder.PredictLength()).Value;
         }
 
         throw new NotImplementedException(

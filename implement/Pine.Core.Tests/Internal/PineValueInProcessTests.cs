@@ -35,6 +35,27 @@ public class PineValueInProcessTests
     }
 
     [Fact]
+    public void CreateFullyRepresented_retains_evaluated_list_and_derived_representations()
+    {
+        var integer = IntegerEncoding.EncodeSignedInteger(42);
+        var value = PineValue.List([integer, PineValue.Blob([1, 2, 3])]);
+
+        var inProcess = PineValueInProcess.CreateFullyRepresented(value);
+
+        inProcess.EvaluatedOrNull.Should().BeSameAs(value);
+        inProcess.LengthOrNull.Should().Be(2);
+
+        var items = inProcess.ListItemsOrNull();
+
+        items.Should().NotBeNull();
+        items![0].EvaluatedOrNull.Should().BeSameAs(integer);
+        items[0].IntegerOrNull.Should().Be(new BigInteger(42));
+        items[0].LengthOrNull.Should().Be(2);
+        items[1].EvaluatedOrNull.Should().BeSameAs(value.Items.Span[1]);
+        items[1].LengthOrNull.Should().Be(3);
+    }
+
+    [Fact]
     public void CreateList_initializes_without_immediate_evaluation()
     {
         var items =
@@ -139,6 +160,7 @@ public class PineValueInProcessTests
         CreatePartial().IsBlob().Should().BeFalse();
         CreatePartial().GetLength().Should().Be(2);
         CreatePartial().GetElementAt(0).Evaluate().Should().Be(PineValue.Blob([1]));
+
         PineValueInProcess.ValueFromPathOrNull(
             CreatePartial(),
             (IReadOnlyList<int>)new[] { 1, 1 })!
@@ -279,9 +301,12 @@ public class PineValueInProcessTests
         var blobValue = PineValue.Blob([1, 2, 3, 4, 5]);
         var inProcess = PineValueInProcess.Create(blobValue);
 
+        inProcess.LengthOrNull.Should().BeNull();
+
         var length = inProcess.GetLength();
 
         length.Should().Be(5);
+        inProcess.LengthOrNull.Should().Be(5);
         VerifyConsistencyOfDerivedProperties(inProcess);
     }
 

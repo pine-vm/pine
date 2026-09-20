@@ -1,3 +1,4 @@
+using Pine.Core.Internal;
 using Pine.Core.PineVM;
 using System;
 using System.Collections.Generic;
@@ -380,8 +381,8 @@ public sealed record PineControlFlowGraph(
             if (conditionalBlock.Operations.Length is not 0 ||
                 conditionalBlock.Terminator is not PineControlFlowTerminator.ConditionalJump conditional ||
                 conditional.Instruction.Literal is not { } comparedLiteral ||
-                comparedLiteral != PineKernelValues.TrueValue &&
-                comparedLiteral != PineKernelValues.FalseValue ||
+                !PineValueInProcess.AreEqual(comparedLiteral, PineKernelValues.TrueValue) &&
+                !PineValueInProcess.AreEqual(comparedLiteral, PineKernelValues.FalseValue) ||
                 conditionalBlock.Parameters.Length is 0)
             {
                 continue;
@@ -414,8 +415,8 @@ public sealed record PineControlFlowGraph(
                         Results.Length: 1
                     } pushBoolean
                     ] ||
-                    booleanLiteral != PineKernelValues.TrueValue &&
-                    booleanLiteral != PineKernelValues.FalseValue ||
+                    !PineValueInProcess.AreEqual(booleanLiteral, PineKernelValues.TrueValue) &&
+                    !PineValueInProcess.AreEqual(booleanLiteral, PineKernelValues.FalseValue) ||
                     provider.Terminator is not PineControlFlowTerminator.Jump
                     {
                         Target: var jumpTarget,
@@ -432,7 +433,8 @@ public sealed record PineControlFlowGraph(
                     break;
                 }
 
-                var comparisonMatches = booleanLiteral == comparedLiteral;
+                var comparisonMatches =
+                    PineValueInProcess.AreEqual(booleanLiteral, comparedLiteral);
 
                 providerTargets.Add(
                     provider.Id,
@@ -720,11 +722,14 @@ public sealed record PineControlFlowGraph(
 
                 case PineControlFlowTerminator.ConditionalJump conditional:
                     result.Add(
-                        StackInstruction.Jump_If_Equal(
-                            firstInstructionIndexByBlock[conditional.Branch] - result.Count,
+                        new StackInstruction(
+                            StackInstructionKind.Jump_If_Equal_Const,
+                            Literal:
                             conditional.Instruction.Literal ??
                             throw new InvalidOperationException(
-                                $"Conditional block {block.Id.Value} has no comparison literal.")));
+                                $"Conditional block {block.Id.Value} has no comparison literal."),
+                            JumpOffset:
+                            firstInstructionIndexByBlock[conditional.Branch] - result.Count));
 
                     break;
 

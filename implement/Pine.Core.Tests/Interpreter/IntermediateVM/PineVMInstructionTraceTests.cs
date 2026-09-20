@@ -4,6 +4,7 @@ using Pine.Core.CommonEncodings;
 using Pine.Core.Interpreter.IntermediateVM;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using Xunit;
 
 namespace Pine.Core.Tests.Interpreter.IntermediateVM;
@@ -63,6 +64,16 @@ public class PineVMInstructionTraceTests
                     IntegerEncoding.EncodeSignedInteger(4)
                     ]),
                 0));
+
+        var literalItems =
+            trace[0].Instruction.Literal
+            ?.ListItemsOrNull();
+
+        literalItems.Should().NotBeNull();
+        literalItems!
+            .Select(item => item.IntegerOrNull)
+            .Should()
+            .Equal(new BigInteger(3), new BigInteger(4));
 
         trace[^1].Instruction.Kind.Should().Be(StackInstructionKind.Return);
     }

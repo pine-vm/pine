@@ -1463,10 +1463,9 @@ public class PineVM : ICancellablePineVM
                     case StackInstructionKind.Push_Literal:
                         {
                             currentFrame.PushInstructionResult(
-                                PineValueInProcess.Create(
-                                    currentInstruction.Literal
-                                    ??
-                                    throw new Exception("Invalid operation form: Missing literal value")));
+                                currentInstruction.Literal
+                                ??
+                                throw new Exception("Invalid operation form: Missing literal value"));
 
                             continue;
                         }
@@ -1737,27 +1736,23 @@ public class PineVM : ICancellablePineVM
 
                     case StackInstructionKind.Build_List_With_Prefix:
                         {
-                            var prefixValue =
+                            var prefixItems =
                                 currentInstruction.Literal
+                                ?.ListItemsOrNull()
                                 ??
-                                throw new Exception("Invalid operation form: Missing literal prefix value");
-
-                            if (prefixValue is not PineValue.ListValue prefixList)
-                            {
-                                throw new Exception("Invalid operation form: Literal prefix value is not a list");
-                            }
+                                throw new Exception(
+                                    "Invalid operation form: Literal prefix has no direct list representation");
 
                             var itemsCount =
                                 currentInstruction.TakeCount
                                 ??
                                 throw new Exception("Invalid operation form: Missing take count");
 
-                            var prefixItems = prefixList.Items.Span;
-                            var items = new PineValueInProcess[prefixItems.Length + itemsCount];
+                            var items = new PineValueInProcess[prefixItems.Count + itemsCount];
 
-                            for (var i = 0; i < prefixItems.Length; ++i)
+                            for (var i = 0; i < prefixItems.Count; ++i)
                             {
-                                items[i] = PineValueInProcess.Create(prefixItems[i]);
+                                items[i] = prefixItems[i];
                             }
 
                             for (var i = 0; i < itemsCount; ++i)
@@ -2554,7 +2549,7 @@ public class PineVM : ICancellablePineVM
                                 return limitError;
                             }
 
-                            var expressionValue =
+                            var expressionValueInProcess =
                                 currentInstruction.Literal
                                 ??
                                 throw new Exception("Invalid operation form: Missing literal");
@@ -2568,7 +2563,7 @@ public class PineVM : ICancellablePineVM
                                 followingInstruction.Kind is StackInstructionKind.Return;
 
                             if (TryApplyCurriedFunction(
-                                PineValueInProcess.Create(expressionValue),
+                                expressionValueInProcess,
                                 environmentValue,
                                 replaceCurrentFrame,
                                 out var applied) is { } applicationError)
@@ -2580,6 +2575,8 @@ public class PineVM : ICancellablePineVM
                             {
                                 continue;
                             }
+
+                            var expressionValue = expressionValueInProcess.Evaluate();
 
                             var parseResult = ParseExpression(expressionValue);
 
@@ -2874,7 +2871,7 @@ public class PineVM : ICancellablePineVM
                             var left = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var resultValue =
-                                BuiltinFunctionSpecialized.bit_and(left, right);
+                                BuiltinFunctionSpecialized.bit_and(left, right.Evaluate());
 
                             currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
@@ -2904,7 +2901,7 @@ public class PineVM : ICancellablePineVM
                             var left = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var resultValue =
-                                BuiltinFunctionSpecialized.bit_or(left, right);
+                                BuiltinFunctionSpecialized.bit_or(left, right.Evaluate());
 
                             currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
@@ -3155,12 +3152,14 @@ public class PineVM : ICancellablePineVM
                                 resultValue =
                                     slicedValue.SliceSkipVarEqualConst(
                                         skipCount: skipCountInt,
-                                        literal: literalValue);
+                                        literal: literalValue.Evaluate());
                             }
                             else
                             {
                                 resultValue =
-                                    literalValue == PineValue.EmptyList;
+                                    PineValueInProcess.AreEqual(
+                                        literalValue,
+                                        PineValueInProcess.EmptyList);
                             }
 
                             currentFrame.PushInstructionResult(
