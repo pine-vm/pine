@@ -297,6 +297,25 @@ public class DictBuiltinTests
     }
 
     [Fact]
+    public void Get_compares_integer_keys_without_materializing_them()
+    {
+        var targetKey = PineValueInProcess.CreateInteger(20_001);
+        var nodeKey = PineValueInProcess.CreateInteger(20_002);
+        var dict =
+            Node(
+                s_colorBlack,
+                nodeKey,
+                Closure(),
+                s_emptyDict,
+                s_emptyDict);
+
+        IsNothing(Get(targetKey, dict)).Should().BeTrue();
+
+        targetKey.EvaluatedOrNull.Should().BeNull();
+        nodeKey.EvaluatedOrNull.Should().BeNull();
+    }
+
+    [Fact]
     public void Get_descends_past_closure_valued_nodes_to_reach_a_concrete_value()
     {
         var dict =

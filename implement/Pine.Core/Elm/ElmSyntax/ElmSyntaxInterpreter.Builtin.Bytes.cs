@@ -372,7 +372,7 @@ public partial class ElmSyntaxInterpreter
             return null;
         }
 
-        if (IntegerEncoding.ParseSignedIntegerRelaxed(arguments[0].Evaluate()).IsOkOrNullable() is not { } offsetBig)
+        if (AsPlainInteger(arguments[0]) is not { } offsetBig)
         {
             throw new System.InvalidOperationException(
                 "Bytes.Decode.decodeBlobAsCharsRec: expected an integer offset.");

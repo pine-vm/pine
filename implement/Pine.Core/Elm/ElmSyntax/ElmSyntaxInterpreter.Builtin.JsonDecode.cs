@@ -113,7 +113,7 @@ public partial class ElmSyntaxInterpreter
             return null;
         }
 
-        if (IntegerEncoding.ParseSignedIntegerRelaxed(arguments[1].Evaluate()).IsOkOrNullable() is not { } offsetBig ||
+        if (AsPlainInteger(arguments[1]) is not { } offsetBig ||
             offsetBig < int.MinValue || offsetBig > int.MaxValue)
         {
             // The offset is not a plain (in-range) integer: defer.

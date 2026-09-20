@@ -1,5 +1,10 @@
 using AwesomeAssertions;
+using Pine.Core.Elm;
+using Pine.Core.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
+using Pine.Core.Internal;
 using System;
+using System.Collections.Generic;
+using System.Numerics;
 using Xunit;
 
 using ElmInterpreter = Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter;
@@ -35,6 +40,7 @@ public class BasicsEqualityAndArithmeticBuiltinTests
                 "Maybe.elm",
                 "Char.elm",
                 "Dict.elm",
+                "Set.elm",
                 "String.elm"));
 
     private static PineValue Evaluate(string expression) =>
@@ -42,6 +48,101 @@ public class BasicsEqualityAndArithmeticBuiltinTests
 
     private static void AssertEvaluatesEqual(string expression, string expectedExpression) =>
         Evaluate(expression).Should().Be(Evaluate(expectedExpression));
+
+    [Fact]
+    public void Compare_and_equality_short_circuit_identical_unevaluated_values()
+    {
+        var value =
+            PineValueInProcess.CreateList(
+                [PineValueInProcess.CreateInteger(20_001)]);
+
+        var compare = CoreBasicsPrecompiledLeaves.BasicsCompare(value, value);
+        var equal = CoreBasicsPrecompiledLeaves.BasicsEqual(value, value);
+
+        compare.Evaluate().Should().Be(
+            ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("EQ", [])));
+
+        equal.Should().BeTrue();
+        value.EvaluatedOrNull.Should().BeNull();
+        value.GetElementAt(0).EvaluatedOrNull.Should().BeNull();
+    }
+
+    [Fact]
+    public void Compare_and_equality_recurse_through_direct_list_items_without_materializing()
+    {
+        var leftItem = PineValueInProcess.CreateInteger(20_001);
+        var rightItem = PineValueInProcess.CreateInteger(20_002);
+        var left = PineValueInProcess.CreateList([leftItem]);
+        var right = PineValueInProcess.CreateList([rightItem]);
+
+        var compare = CoreBasicsPrecompiledLeaves.BasicsCompare(left, right);
+        var equal = CoreBasicsPrecompiledLeaves.BasicsEqual(left, right);
+
+        compare.Evaluate().Should().Be(
+            ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("LT", [])));
+
+        equal.Should().BeFalse();
+        left.EvaluatedOrNull.Should().BeNull();
+        right.EvaluatedOrNull.Should().BeNull();
+        leftItem.EvaluatedOrNull.Should().BeNull();
+        rightItem.EvaluatedOrNull.Should().BeNull();
+    }
+
+    [Fact]
+    public void Basics_resolvers_preserve_cached_integer_operands()
+    {
+        var left = PineValueInProcess.CreateInteger(20_001);
+        var right = PineValueInProcess.CreateInteger(20_002);
+
+        ElmInterpreter.ResolveBasicsCompare([left, right])!
+            .Evaluate()
+            .Should()
+            .Be(ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("LT", [])));
+
+        ElmInterpreter.ResolveBasicsEq([left, right])
+            .Should()
+            .BeSameAs(PineValueInProcess.KernelFalseValue);
+
+        ElmInterpreter.ResolveBasicsNeq([left, right])
+            .Should()
+            .BeSameAs(PineValueInProcess.KernelTrueValue);
+
+        left.EvaluatedOrNull.Should().BeNull();
+        right.EvaluatedOrNull.Should().BeNull();
+    }
+
+    [Theory]
+    [MemberData(nameof(IntegerBuiltinFastPathCases))]
+    public void Integer_builtins_reuse_cached_representations_without_materializing_operands(
+        Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?> resolver,
+        BigInteger leftInteger,
+        BigInteger rightInteger,
+        BigInteger expected)
+    {
+        var left = PineValueInProcess.CreateInteger(leftInteger);
+        var right = PineValueInProcess.CreateInteger(rightInteger);
+
+        var result = resolver([left, right]);
+
+        result.Should().NotBeNull();
+        result!.IntegerOrNull.Should().Be(expected);
+        left.EvaluatedOrNull.Should().BeNull();
+        right.EvaluatedOrNull.Should().BeNull();
+    }
+
+    public static TheoryData<
+        Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>,
+        BigInteger,
+        BigInteger,
+        BigInteger> IntegerBuiltinFastPathCases =>
+        new()
+        {
+            { ElmInterpreter.ResolveBasicsIdiv, 20_002, 10_001, 2 },
+            { ElmInterpreter.ResolveBasicsMul, 10_001, 10_002, 100_030_002 },
+            { ElmInterpreter.ResolveBasicsAdd, 10_001, 10_002, 20_003 },
+            { ElmInterpreter.ResolveBasicsSub, 20_003, 10_002, 10_001 },
+            { ElmInterpreter.ResolveBasicsModBy, 10_001, 20_003, 1 },
+        };
 
     // ============================================================
     // eq / == on primitives and structural values
@@ -162,6 +263,18 @@ public class BasicsEqualityAndArithmeticBuiltinTests
             "Basics.eq (" + DictA + ") (" + DictB + ")",
             "False");
     }
+
+    [Fact]
+    public void Eq_on_sets_is_independent_of_insertion_order() =>
+        AssertEvaluatesEqual(
+            "Basics.eq (Set.fromList [ 1, 2, 3 ]) (Set.fromList [ 3, 1, 2 ])",
+            "True");
+
+    [Fact]
+    public void Eq_on_sets_with_different_members_returns_False() =>
+        AssertEvaluatesEqual(
+            "Basics.eq (Set.fromList [ 1, 2, 3 ]) (Set.fromList [ 1, 2, 4 ])",
+            "False");
 
     // ============================================================
     // idiv ( // ) — integer division truncating toward zero

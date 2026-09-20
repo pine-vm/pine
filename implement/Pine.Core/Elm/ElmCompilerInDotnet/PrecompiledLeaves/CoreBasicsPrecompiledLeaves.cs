@@ -1,5 +1,4 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 using Pine.Core.Internal;
 using Pine.Core.PineVM;
@@ -54,10 +53,10 @@ public static class CoreBasicsPrecompiledLeaves
             return null;
         }
 
-        var argA = environment.ValueFromPathOrEmptyList([1]);
-        var argB = environment.ValueFromPathOrEmptyList([2]);
+        var argA = environment.ValueInProcessFromPathOrEmptyList([1]);
+        var argB = environment.ValueInProcessFromPathOrEmptyList([2]);
 
-        return PineValueInProcess.Create(BasicsCompare(argA, argB));
+        return BasicsCompare(argA, argB);
     }
 
     /// <summary>
@@ -93,10 +92,10 @@ public static class CoreBasicsPrecompiledLeaves
             return null;
         }
 
-        var argA = environment.ValueFromPathOrEmptyList([1, 0]);
-        var argB = environment.ValueFromPathOrEmptyList([1, 1]);
+        var argA = environment.ValueInProcessFromPathOrEmptyList([1, 0]);
+        var argB = environment.ValueInProcessFromPathOrEmptyList([1, 1]);
 
-        return PineValueInProcess.Create(BasicsEq(argA, argB));
+        return BasicsEq(argA, argB);
     }
 
     /// <summary>
@@ -135,13 +134,16 @@ public static class CoreBasicsPrecompiledLeaves
             return null;
         }
 
-        var dividendValue = environment.ValueFromPathOrEmptyList([1, 0]);
-        var divisorValue = environment.ValueFromPathOrEmptyList([1, 1]);
-        var quotientValue = environment.ValueFromPathOrEmptyList([1, 2]);
+        var dividendValue = environment.ValueInProcessFromPathOrEmptyList([1, 0]);
+        var divisorValue = environment.ValueInProcessFromPathOrEmptyList([1, 1]);
+        var quotientValue = environment.ValueInProcessFromPathOrEmptyList([1, 2]);
 
-        if (IntegerEncoding.ParseSignedIntegerRelaxed(dividendValue).IsOkOrNullable() is not { } dividend ||
-            IntegerEncoding.ParseSignedIntegerRelaxed(divisorValue).IsOkOrNullable() is not { } divisor ||
-            IntegerEncoding.ParseSignedIntegerRelaxed(quotientValue).IsOkOrNullable() is not { } quotient)
+        if (!dividendValue.IsBlob() ||
+            !divisorValue.IsBlob() ||
+            !quotientValue.IsBlob() ||
+            dividendValue.AsInteger() is not { } dividend ||
+            divisorValue.AsInteger() is not { } divisor ||
+            quotientValue.AsInteger() is not { } quotient)
         {
             return null;
         }
@@ -186,11 +188,13 @@ public static class CoreBasicsPrecompiledLeaves
             return null;
         }
 
-        var argA = environment.ValueFromPathOrEmptyList([1, 0]);
-        var argB = environment.ValueFromPathOrEmptyList([1, 1]);
+        var argA = environment.ValueInProcessFromPathOrEmptyList([1, 0]);
+        var argB = environment.ValueInProcessFromPathOrEmptyList([1, 1]);
 
-        if (IntegerEncoding.ParseSignedIntegerRelaxed(argA).IsOkOrNullable() is not { } a ||
-            IntegerEncoding.ParseSignedIntegerRelaxed(argB).IsOkOrNullable() is not { } b)
+        if (!argA.IsBlob() ||
+            !argB.IsBlob() ||
+            argA.AsInteger() is not { } a ||
+            argB.AsInteger() is not { } b)
         {
             return null;
         }
@@ -237,385 +241,414 @@ public static class CoreBasicsPrecompiledLeaves
     // The logic below mirrors the legacy Pine.PineVM.Precompiled.BasicsCompare entry point,
     // restated here to avoid a project dependency from Pine.Core onto the pine project.
 
-    private static readonly PineValue s_tag_EQ_Value =
-        ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("EQ", []));
+    private static readonly PineValueInProcess s_tag_EQ =
+        PineValueInProcess.CreateFullyRepresented(
+            ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("EQ", [])));
 
-    private static readonly PineValue s_tag_LT_Value =
-        ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("LT", []));
+    private static readonly PineValueInProcess s_tag_LT =
+        PineValueInProcess.CreateFullyRepresented(
+            ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("LT", [])));
 
-    private static readonly PineValue s_tag_GT_Value =
-        ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("GT", []));
+    private static readonly PineValueInProcess s_tag_GT =
+        PineValueInProcess.CreateFullyRepresented(
+            ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("GT", [])));
 
-    internal static PineValue BasicsCompare(PineValue a, PineValue b)
+    internal static PineValueInProcess BasicsCompare(
+        PineValueInProcess a,
+        PineValueInProcess b)
     {
-        if (a == b)
+        if (PineValueInProcess.AreEqual(a, b))
         {
-            return s_tag_EQ_Value;
+            return s_tag_EQ;
         }
 
-        var aTag = a.ValueFromPathOrEmptyList([1]);
-        var bTag = b.ValueFromPathOrEmptyList([1]);
+        if (a.IntegerOrNull is { } cachedA && b.IntegerOrNull is { } cachedB)
+        {
+            return CompareIntegers(cachedA, cachedB);
+        }
 
-        if (aTag == ElmValue.ElmStringTypeTagNameAsValue && bTag == ElmValue.ElmStringTypeTagNameAsValue)
+        var aTag = a.ValueInProcessFromPathOrEmptyList([1]);
+        var bTag = b.ValueInProcessFromPathOrEmptyList([1]);
+
+        var aIsString =
+            PineValueInProcess.AreEqual(aTag, ElmValue.ElmStringTypeTagNameAsValue);
+
+        var bIsString =
+            PineValueInProcess.AreEqual(bTag, ElmValue.ElmStringTypeTagNameAsValue);
+
+        if (aIsString && bIsString)
         {
             return
                 CompareStrings(
-                    a.ValueFromPathOrEmptyList([2]),
-                    b.ValueFromPathOrEmptyList([2]));
+                    a.ValueInProcessFromPathOrEmptyList([2]),
+                    b.ValueInProcessFromPathOrEmptyList([2]));
         }
 
-        if (aTag == ElmValue.ElmFloatTypeTagNameAsValue && bTag == ElmValue.ElmFloatTypeTagNameAsValue)
+        var aIsFloat =
+            PineValueInProcess.AreEqual(aTag, ElmValue.ElmFloatTypeTagNameAsValue);
+
+        var bIsFloat =
+            PineValueInProcess.AreEqual(bTag, ElmValue.ElmFloatTypeTagNameAsValue);
+
+        if (aIsFloat && bIsFloat)
         {
-            var numA = a.ValueFromPathOrEmptyList([2]);
-            var denomA = a.ValueFromPathOrEmptyList([3]);
-            var numB = b.ValueFromPathOrEmptyList([2]);
-            var denomB = b.ValueFromPathOrEmptyList([3]);
+            var leftProduct =
+                MultiplyIntegers(
+                    a.ValueInProcessFromPathOrEmptyList([2]),
+                    b.ValueInProcessFromPathOrEmptyList([3]));
 
-            var leftProduct = BuiltinFunctionSpecialized.int_mul(numA, denomB);
-            var rightProduct = BuiltinFunctionSpecialized.int_mul(numB, denomA);
+            var rightProduct =
+                MultiplyIntegers(
+                    b.ValueInProcessFromPathOrEmptyList([2]),
+                    a.ValueInProcessFromPathOrEmptyList([3]));
 
-            if (leftProduct == rightProduct)
-            {
-                return s_tag_EQ_Value;
-            }
-
-            if (BuiltinFunction.int_is_sorted_asc(PineValue.List([leftProduct, rightProduct])) ==
-                PineKernelValues.TrueValue)
-            {
-                return s_tag_LT_Value;
-            }
-
-            return s_tag_GT_Value;
+            return CompareNonListValues(leftProduct, rightProduct);
         }
 
-        if (aTag == ElmValue.ElmFloatTypeTagNameAsValue)
+        if (aIsFloat)
         {
-            var numA = a.ValueFromPathOrEmptyList([2]);
-            var denomA = a.ValueFromPathOrEmptyList([3]);
+            var rightProduct =
+                MultiplyIntegers(
+                    a.ValueInProcessFromPathOrEmptyList([3]),
+                    b);
 
-            var rightProduct = BuiltinFunctionSpecialized.int_mul(denomA, b);
-
-            if (numA == rightProduct)
-            {
-                return s_tag_EQ_Value;
-            }
-
-            if (BuiltinFunction.int_is_sorted_asc(PineValue.List([numA, rightProduct])) == PineKernelValues.TrueValue)
-            {
-                return s_tag_LT_Value;
-            }
-
-            return s_tag_GT_Value;
+            return
+                CompareNonListValues(
+                    a.ValueInProcessFromPathOrEmptyList([2]),
+                    rightProduct);
         }
 
-        if (bTag == ElmValue.ElmFloatTypeTagNameAsValue)
+        if (bIsFloat)
         {
-            var numB = b.ValueFromPathOrEmptyList([2]);
-            var denomB = b.ValueFromPathOrEmptyList([3]);
+            var leftProduct =
+                MultiplyIntegers(
+                    a,
+                    b.ValueInProcessFromPathOrEmptyList([3]));
 
-            var leftProduct = BuiltinFunctionSpecialized.int_mul(a, denomB);
-
-            if (leftProduct == numB)
-            {
-                return s_tag_EQ_Value;
-            }
-
-            if (BuiltinFunction.int_is_sorted_asc(PineValue.List([leftProduct, numB])) == PineKernelValues.TrueValue)
-            {
-                return s_tag_LT_Value;
-            }
-
-            return s_tag_GT_Value;
+            return
+                CompareNonListValues(
+                    leftProduct,
+                    b.ValueInProcessFromPathOrEmptyList([2]));
         }
 
-        if (a is PineValue.ListValue)
+        if (a.IsList())
         {
             return CompareLists(a, b);
         }
 
-        if (BuiltinFunction.int_is_sorted_asc(PineValue.List([a, b])) == PineKernelValues.TrueValue)
-        {
-            return s_tag_LT_Value;
-        }
-
-        return s_tag_GT_Value;
+        return CompareNonListValues(a, b);
     }
 
-    private static PineValue CompareLists(PineValue a, PineValue b)
+    private static PineValueInProcess CompareLists(
+        PineValueInProcess a,
+        PineValueInProcess b)
     {
-        if (a == PineValue.EmptyList)
-        {
-            if (b == PineValue.EmptyList)
-            {
-                return s_tag_EQ_Value;
-            }
+        var lengthA = a.GetLength();
 
-            return s_tag_LT_Value;
+        if (lengthA is 0)
+        {
+            return b.IsList() && b.GetLength() is 0 ? s_tag_EQ : s_tag_LT;
         }
 
-        if (a is PineValue.ListValue listA && 0 < listA.Items.Length)
+        if (!b.IsList())
         {
-            if (b == PineValue.EmptyList)
-            {
-                return s_tag_GT_Value;
-            }
-
-            if (b is PineValue.ListValue listB && 0 < listB.Items.Length)
-            {
-                var commonLength =
-                    listA.Items.Length < listB.Items.Length
-                    ?
-                    listA.Items.Length
-                    :
-                    listB.Items.Length;
-
-                for (var i = 0; i < commonLength; ++i)
-                {
-                    var itemA = listA.Items.Span[i];
-                    var itemB = listB.Items.Span[i];
-
-                    var itemOrder = BasicsCompare(itemA, itemB);
-
-                    if (itemOrder != s_tag_EQ_Value)
-                    {
-                        return itemOrder;
-                    }
-                }
-
-                if (listA.Items.Length < listB.Items.Length)
-                {
-                    return s_tag_LT_Value;
-                }
-
-                if (listA.Items.Length > listB.Items.Length)
-                {
-                    return s_tag_GT_Value;
-                }
-
-                return s_tag_EQ_Value;
-            }
-
             throw new ParseExpressionException("Error in case-of block: No matching branch.");
         }
 
-        throw new ParseExpressionException("Error in case-of block: No matching branch.");
+        var lengthB = b.GetLength();
+
+        if (lengthB is 0)
+        {
+            return s_tag_GT;
+        }
+
+        var commonLength = Math.Min(lengthA, lengthB);
+
+        for (var i = 0; i < commonLength; ++i)
+        {
+            var itemOrder = BasicsCompare(a.GetElementAt(i), b.GetElementAt(i));
+
+            if (!ReferenceEquals(itemOrder, s_tag_EQ))
+            {
+                return itemOrder;
+            }
+        }
+
+        return
+            lengthA < lengthB
+            ?
+            s_tag_LT
+            :
+            lengthA > lengthB
+            ?
+            s_tag_GT
+            :
+            s_tag_EQ;
     }
 
-    private static PineValue CompareStrings(PineValue stringA, PineValue stringB)
+    private static PineValueInProcess CompareStrings(
+        PineValueInProcess stringA,
+        PineValueInProcess stringB)
     {
-        if (stringA is PineValue.BlobValue blobA && stringB is PineValue.BlobValue blobB)
+        if (PineValueInProcess.AreEqual(stringA, stringB))
         {
-            var commonLength =
-                blobA.Bytes.Length < blobB.Bytes.Length
-                ?
-                blobA.Bytes.Length
-                :
-                blobB.Bytes.Length;
+            return s_tag_EQ;
+        }
 
-            var commonLenghtChars = commonLength / 4;
+        if (stringA.Evaluate() is PineValue.BlobValue blobA &&
+            stringB.Evaluate() is PineValue.BlobValue blobB)
+        {
+            var commonLength = Math.Min(blobA.Bytes.Length, blobB.Bytes.Length);
+            var commonLengthChars = commonLength / 4;
 
-            for (var i = 0; i < commonLenghtChars; ++i)
+            for (var i = 0; i < commonLengthChars; ++i)
             {
                 var offset = i * 4;
 
                 var charA = BinaryPrimitives.ReadInt32BigEndian(blobA.Bytes.Span[offset..]);
                 var charB = BinaryPrimitives.ReadInt32BigEndian(blobB.Bytes.Span[offset..]);
 
-                if (charA == charB)
+                if (charA != charB)
                 {
-                    continue;
+                    return charA < charB ? s_tag_LT : s_tag_GT;
                 }
-
-                return charA < charB ? s_tag_LT_Value : s_tag_GT_Value;
             }
 
             return
                 blobA.Bytes.Length < blobB.Bytes.Length
                 ?
-                s_tag_LT_Value
+                s_tag_LT
                 :
                 blobA.Bytes.Length > blobB.Bytes.Length
                 ?
-                s_tag_GT_Value
+                s_tag_GT
                 :
-                s_tag_EQ_Value;
+                s_tag_EQ;
+        }
+
+        return CompareNonListValues(stringA, stringB);
+    }
+
+    private static PineValueInProcess CompareNonListValues(
+        PineValueInProcess a,
+        PineValueInProcess b)
+    {
+        if (PineValueInProcess.AreEqual(a, b))
+        {
+            return s_tag_EQ;
+        }
+
+        if (a.IsBlob() &&
+            b.IsBlob() &&
+            a.AsInteger() is { } integerA &&
+            b.AsInteger() is { } integerB)
+        {
+            return CompareIntegers(integerA, integerB);
         }
 
         return
-            stringA == stringB
+            BuiltinFunction.int_is_sorted_asc(
+                PineValue.List([a.Evaluate(), b.Evaluate()])) ==
+            PineKernelValues.TrueValue
             ?
-            s_tag_EQ_Value
+            s_tag_LT
             :
-            BuiltinFunction.int_is_sorted_asc(PineValue.List([stringA, stringB])) == PineKernelValues.TrueValue
-            ?
-            s_tag_LT_Value
-            :
-            s_tag_GT_Value;
+            s_tag_GT;
+    }
+
+    private static PineValueInProcess CompareIntegers(
+        System.Numerics.BigInteger a,
+        System.Numerics.BigInteger b) =>
+        a < b ? s_tag_LT : a > b ? s_tag_GT : s_tag_EQ;
+
+    private static PineValueInProcess MultiplyIntegers(
+        PineValueInProcess a,
+        PineValueInProcess b)
+    {
+        if (a.IsBlob() &&
+            b.IsBlob() &&
+            a.AsInteger() is { } integerA &&
+            b.AsInteger() is { } integerB)
+        {
+            return PineValueInProcess.CreateInteger(integerA * integerB);
+        }
+
+        return
+            PineValueInProcess.Create(
+                BuiltinFunctionSpecialized.int_mul(a.Evaluate(), b.Evaluate()));
     }
 
     // ========== .NET implementations of Basics.eq (deep structural equality) ==========
-    // The logic below mirrors the legacy Pine.PineVM.Precompiled.BasicsEq entry point and the
-    // recursive eqDeep expression built by CoreBasics.BuildEqEncodedBody, restated here to avoid
-    // a project dependency from Pine.Core onto the pine project.
 
-    private static readonly PineValue s_integerZeroValue =
-        IntegerEncoding.EncodeSignedInteger(0);
+    internal static PineValueInProcess BasicsEq(
+        PineValueInProcess a,
+        PineValueInProcess b) =>
+        PineValueInProcess.CreateBool(BasicsEqual(a, b));
 
-    internal static PineValue BasicsEq(PineValue a, PineValue b) =>
-        BasicsEqRecursive(a, b) ? PineKernelValues.TrueValue : PineKernelValues.FalseValue;
-
-    private static bool BasicsEqRecursive(PineValue a, PineValue b)
+    internal static bool BasicsEqual(
+        PineValueInProcess a,
+        PineValueInProcess b)
     {
-        if (a == b)
+        if (PineValueInProcess.AreEqual(a, b))
         {
             return true;
         }
 
-        var aTag = a.ValueFromPathOrEmptyList([1]);
-        var bTag = b.ValueFromPathOrEmptyList([1]);
+        var aTag = a.ValueInProcessFromPathOrEmptyList([1]);
+        var bTag = b.ValueInProcessFromPathOrEmptyList([1]);
 
-        var aIsFloat = aTag == ElmValue.ElmFloatTypeTagNameAsValue;
-        var bIsFloat = bTag == ElmValue.ElmFloatTypeTagNameAsValue;
+        var aIsFloat =
+            PineValueInProcess.AreEqual(aTag, ElmValue.ElmFloatTypeTagNameAsValue);
+
+        var bIsFloat =
+            PineValueInProcess.AreEqual(bTag, ElmValue.ElmFloatTypeTagNameAsValue);
 
         if (aIsFloat)
         {
-            var numA = a.ValueFromPathOrEmptyList([2]);
-            var denomA = a.ValueFromPathOrEmptyList([3]);
+            var numA = a.ValueInProcessFromPathOrEmptyList([2]);
+            var denomA = a.ValueInProcessFromPathOrEmptyList([3]);
 
             if (bIsFloat)
             {
-                var numB = b.ValueFromPathOrEmptyList([2]);
-                var denomB = b.ValueFromPathOrEmptyList([3]);
+                var numB = b.ValueInProcessFromPathOrEmptyList([2]);
+                var denomB = b.ValueInProcessFromPathOrEmptyList([3]);
 
                 return
-                    BuiltinFunctionSpecialized.int_mul(numA, denomB) ==
-                    BuiltinFunctionSpecialized.int_mul(numB, denomA);
+                    PineValueInProcess.AreEqual(
+                        MultiplyIntegers(numA, denomB),
+                        MultiplyIntegers(numB, denomA));
             }
 
             return
-                denomA != s_integerZeroValue &&
-                numA ==
-                BuiltinFunctionSpecialized.int_mul(denomA, b);
+                !PineValueInProcess.AreEqual(denomA, PineValueInProcess.CreateInteger(0)) &&
+                PineValueInProcess.AreEqual(numA, MultiplyIntegers(denomA, b));
         }
 
         if (bIsFloat)
         {
-            var numB = b.ValueFromPathOrEmptyList([2]);
-            var denomB = b.ValueFromPathOrEmptyList([3]);
+            var numB = b.ValueInProcessFromPathOrEmptyList([2]);
+            var denomB = b.ValueInProcessFromPathOrEmptyList([3]);
 
             return
-                denomB != s_integerZeroValue &&
-                BuiltinFunctionSpecialized.int_mul(a, denomB) ==
-                numB;
+                !PineValueInProcess.AreEqual(denomB, PineValueInProcess.CreateInteger(0)) &&
+                PineValueInProcess.AreEqual(MultiplyIntegers(a, denomB), numB);
         }
 
-        if (a is PineValue.BlobValue)
+        if (a.IsBlob() || !b.IsList())
         {
             return false;
         }
 
-        var aLength = a is PineValue.ListValue listAForLength ? listAForLength.Items.Length : 0;
-        var bLength = b is PineValue.ListValue listBForLength ? listBForLength.Items.Length : 0;
+        var lengthA = a.GetLength();
 
-        if (aLength != bLength)
+        if (lengthA != b.GetLength())
         {
             return false;
         }
 
-        if (aTag == ElmValue.ElmStringTypeTagNameAsValue)
+        if (PineValueInProcess.AreEqual(aTag, ElmValue.ElmStringTypeTagNameAsValue))
         {
             return false;
         }
 
-        if (aTag == ElmValue.ElmDictNotEmptyTagNameAsValue)
+        if (PineValueInProcess.AreEqual(aTag, ElmValue.ElmDictNotEmptyTagNameAsValue))
         {
-            var dictAList = DictToListRecursive(a);
-            var dictBList = DictToListRecursive(b);
-
-            return PineValue.List(dictAList) == PineValue.List(dictBList);
+            return
+                ListsEqualRecursive(
+                    DictToListRecursive(a),
+                    DictToListRecursive(b));
         }
 
-        if (aTag == ElmValue.ElmSetTypeTagNameAsValue)
+        if (PineValueInProcess.AreEqual(aTag, ElmValue.ElmSetTypeTagNameAsValue))
         {
-            var dictA = a.ValueFromPathOrEmptyList([2]);
-            var dictB = b.ValueFromPathOrEmptyList([2]);
-
-            var dictAKeys = DictKeysRecursive(dictA);
-            var dictBKeys = DictKeysRecursive(dictB);
-
-            return PineValue.List(dictAKeys) == PineValue.List(dictBKeys);
+            return
+                ListsEqualRecursive(
+                    DictKeysRecursive(a.ValueInProcessFromPathOrEmptyList([2])),
+                    DictKeysRecursive(b.ValueInProcessFromPathOrEmptyList([2])));
         }
 
-        if (a is PineValue.ListValue listA && b is PineValue.ListValue listB)
+        for (var i = 0; i < lengthA; ++i)
         {
-            return ListsEqualRecursive(listA.Items, listB.Items);
+            if (!BasicsEqual(a.GetElementAt(i), b.GetElementAt(i)))
+            {
+                return false;
+            }
         }
 
-        return false;
+        return true;
     }
 
-    private static ReadOnlyMemory<PineValue> DictToListRecursive(PineValue dict)
+    private static IReadOnlyList<PineValueInProcess> DictToListRecursive(
+        PineValueInProcess dict)
     {
-        var tag = dict.ValueFromPathOrEmptyList([1]);
+        var pairs = new List<PineValueInProcess>();
 
-        if (tag != ElmValue.ElmDictNotEmptyTagNameAsValue)
-        {
-            return ReadOnlyMemory<PineValue>.Empty;
-        }
+        CollectDictPairs(dict, pairs);
 
-        var key = dict.ValueFromPathOrEmptyList([3]);
-        var value = dict.ValueFromPathOrEmptyList([4]);
-        var left = dict.ValueFromPathOrEmptyList([5]);
-        var right = dict.ValueFromPathOrEmptyList([6]);
-
-        var fromLeft = DictToListRecursive(left);
-        var fromRight = DictToListRecursive(right);
-
-        var result = new PineValue[fromLeft.Length + fromRight.Length + 1];
-
-        fromLeft.Span.CopyTo(result);
-
-        result[fromLeft.Length] = PineValue.List([key, value]);
-
-        fromRight.Span.CopyTo(result.AsSpan(fromLeft.Length + 1));
-
-        return result;
+        return pairs;
     }
 
-    private static ReadOnlyMemory<PineValue> DictKeysRecursive(PineValue dict)
+    private static void CollectDictPairs(
+        PineValueInProcess dict,
+        List<PineValueInProcess> pairs)
     {
-        var tag = dict.ValueFromPathOrEmptyList([1]);
-
-        if (tag != ElmValue.ElmDictNotEmptyTagNameAsValue)
+        if (!PineValueInProcess.AreEqual(
+                dict.ValueInProcessFromPathOrEmptyList([1]),
+                ElmValue.ElmDictNotEmptyTagNameAsValue))
         {
-            return ReadOnlyMemory<PineValue>.Empty;
+            return;
         }
 
-        var key = dict.ValueFromPathOrEmptyList([3]);
-        var left = dict.ValueFromPathOrEmptyList([5]);
-        var right = dict.ValueFromPathOrEmptyList([6]);
+        CollectDictPairs(dict.ValueInProcessFromPathOrEmptyList([5]), pairs);
 
-        var fromLeft = DictKeysRecursive(left);
-        var fromRight = DictKeysRecursive(right);
+        pairs.Add(
+            PineValueInProcess.CreateList(
+                [
+                dict.ValueInProcessFromPathOrEmptyList([3]),
+                dict.ValueInProcessFromPathOrEmptyList([4])
+                ]));
 
-        var result = new PineValue[fromLeft.Length + fromRight.Length + 1];
+        CollectDictPairs(dict.ValueInProcessFromPathOrEmptyList([6]), pairs);
+    }
 
-        fromLeft.Span.CopyTo(result);
+    private static IReadOnlyList<PineValueInProcess> DictKeysRecursive(
+        PineValueInProcess dict)
+    {
+        var keys = new List<PineValueInProcess>();
 
-        result[fromLeft.Length] = key;
+        CollectDictKeys(dict, keys);
 
-        fromRight.Span.CopyTo(result.AsSpan(fromLeft.Length + 1));
+        return keys;
+    }
 
-        return result;
+    private static void CollectDictKeys(
+        PineValueInProcess dict,
+        List<PineValueInProcess> keys)
+    {
+        if (!PineValueInProcess.AreEqual(
+                dict.ValueInProcessFromPathOrEmptyList([1]),
+                ElmValue.ElmDictNotEmptyTagNameAsValue))
+        {
+            return;
+        }
+
+        CollectDictKeys(dict.ValueInProcessFromPathOrEmptyList([5]), keys);
+        keys.Add(dict.ValueInProcessFromPathOrEmptyList([3]));
+        CollectDictKeys(dict.ValueInProcessFromPathOrEmptyList([6]), keys);
     }
 
     private static bool ListsEqualRecursive(
-        ReadOnlyMemory<PineValue> listA,
-        ReadOnlyMemory<PineValue> listB)
+        IReadOnlyList<PineValueInProcess> listA,
+        IReadOnlyList<PineValueInProcess> listB)
     {
-        for (var i = 0; i < listA.Length; ++i)
+        if (listA.Count != listB.Count)
         {
-            if (!BasicsEqRecursive(listA.Span[i], listB.Span[i]))
+            return false;
+        }
+
+        for (var i = 0; i < listA.Count; ++i)
+        {
+            if (!BasicsEqual(listA[i], listB[i]))
             {
                 return false;
             }

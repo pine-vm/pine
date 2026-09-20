@@ -1598,6 +1598,19 @@ public class PineValueInProcess
 
         for (var i = 0; i < path.Length; i++)
         {
+            if (current._list is { } directItems)
+            {
+                var index = path[i] < 0 ? 0 : path[i];
+
+                if (directItems.Count <= index)
+                {
+                    return null;
+                }
+
+                current = directItems[index];
+                continue;
+            }
+
             if (current._evaluated is { } currentMaterialized)
             {
                 var concreteValue =
@@ -1633,6 +1646,19 @@ public class PineValueInProcess
 
         for (var i = 0; i < path.Count; i++)
         {
+            if (current._list is { } directItems)
+            {
+                var index = path[i] < 0 ? 0 : path[i];
+
+                if (directItems.Count <= index)
+                {
+                    return null;
+                }
+
+                current = directItems[index];
+                continue;
+            }
+
             if (current._evaluated is { } currentMaterialized)
             {
                 var concreteValue =

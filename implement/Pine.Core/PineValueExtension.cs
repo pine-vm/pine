@@ -18,6 +18,15 @@ public static class PineValueExtension
         PineValueInProcess.ValueFromPathOrNull(environment, path) ?? PineValue.EmptyList;
 
     /// <summary>
+    /// Navigates an in-process Pine value while preserving direct runtime representations.
+    /// </summary>
+    public static PineValueInProcess ValueInProcessFromPathOrEmptyList(
+        this PineValueInProcess environment,
+        ReadOnlySpan<int> path) =>
+        PineValueInProcess.ValueInProcessFromPathOrNull(environment, path) ??
+        PineValueInProcess.EmptyList;
+
+    /// <summary>
     /// Navigates a nested <see cref="PineValue"/> list structure by following the given sequence of indices.
     /// </summary>
     /// <param name="environment">The root <see cref="PineValue"/> to start navigation from.</param>

@@ -145,8 +145,8 @@ public static class CoreDictPrecompiledLeaves
             return null;
         }
 
-        var targetKey = environment.ValueFromPathOrEmptyList([1]);
-        var dict = environment.ValueFromPathOrEmptyList([2]);
+        var targetKey = environment.ValueInProcessFromPathOrEmptyList([1]);
+        var dict = environment.ValueInProcessFromPathOrEmptyList([2]);
 
         return DictGetImplInProcess(targetKey, dict);
     }
@@ -262,47 +262,38 @@ public static class CoreDictPrecompiledLeaves
     private static readonly PineValue s_tag_GT_Value =
         ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("GT", []));
 
-    /// <summary>
-    /// .NET implementation of <c>Dict.get</c>. Iterates over the red-black tree of the
-    /// Elm <c>Dict</c> while reusing
-    /// <see cref="CoreBasicsPrecompiledLeaves.BasicsCompare"/> for the comparison of the
-    /// requested key against the branch keys.
-    /// </summary>
-    internal static PineValue DictGetImpl(PineValue targetKey, PineValue dict)
-    {
-        return DictGetImplInProcess(targetKey, dict).Evaluate();
-    }
-
-    private static PineValueInProcess DictGetImplInProcess(PineValue targetKey, PineValue dict)
+    private static PineValueInProcess DictGetImplInProcess(
+        PineValueInProcess targetKey,
+        PineValueInProcess dict)
     {
         while (true)
         {
-            var dictTag = dict.ValueFromPathOrEmptyList([1]);
+            var dictTag = dict.GetElementAt(1);
 
-            if (dictTag == ElmValue.ElmDictEmptyTagNameAsValue)
+            if (PineValueInProcess.AreEqual(dictTag, ElmValue.ElmDictEmptyTagNameAsValue))
             {
                 return PineValueInProcess.Create(s_tag_Nothing_Value);
             }
 
-            if (dictTag != ElmValue.ElmDictNotEmptyTagNameAsValue)
+            if (!PineValueInProcess.AreEqual(dictTag, ElmValue.ElmDictNotEmptyTagNameAsValue))
             {
                 throw new ParseExpressionException("Unexpected dict tag");
             }
 
-            var key = dict.ValueFromPathOrEmptyList([3]);
-            var value = dict.ValueFromPathOrEmptyList([4]);
-            var left = dict.ValueFromPathOrEmptyList([5]);
-            var right = dict.ValueFromPathOrEmptyList([6]);
+            var key = dict.GetElementAt(3);
+            var value = dict.GetElementAt(4);
+            var left = dict.GetElementAt(5);
+            var right = dict.GetElementAt(6);
 
             var comparison = CoreBasicsPrecompiledLeaves.BasicsCompare(targetKey, key);
 
-            if (comparison == s_tag_LT_Value)
+            if (PineValueInProcess.AreEqual(comparison, s_tag_LT_Value))
             {
                 dict = left;
                 continue;
             }
 
-            if (comparison == s_tag_GT_Value)
+            if (PineValueInProcess.AreEqual(comparison, s_tag_GT_Value))
             {
                 dict = right;
                 continue;
@@ -311,7 +302,7 @@ public static class CoreDictPrecompiledLeaves
             return
                 ElmValueInProcess.CreateChoice(
                     PineValueInProcess.Create(s_tag_Just_Name_Value),
-                    [PineValueInProcess.Create(value)]);
+                    [value]);
         }
     }
 
@@ -462,11 +453,9 @@ public static class CoreDictPrecompiledLeaves
         var node = ParseNodeInProcess(dict);
 
         var comparison =
-            CoreBasicsPrecompiledLeaves.BasicsCompare(
-                key.Evaluate(),
-                node.Key.Evaluate());
+            CoreBasicsPrecompiledLeaves.BasicsCompare(key, node.Key);
 
-        if (comparison == s_tag_LT_Value)
+        if (PineValueInProcess.AreEqual(comparison, s_tag_LT_Value))
         {
             return
                 BalanceInProcess(
@@ -477,7 +466,7 @@ public static class CoreDictPrecompiledLeaves
                     node.Right);
         }
 
-        if (comparison == s_tag_GT_Value)
+        if (PineValueInProcess.AreEqual(comparison, s_tag_GT_Value))
         {
             return
                 BalanceInProcess(

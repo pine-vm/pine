@@ -58,6 +58,22 @@ public class PineValueInProcessTests
     }
 
     [Fact]
+    public void ValueInProcessFromPathOrNull_prefers_direct_list_representation()
+    {
+        var descendant = PineValueInProcess.CreateInteger(20_001);
+        var nested = PineValueInProcess.CreateList([descendant]);
+        var root = PineValueInProcess.CreateList([nested]);
+
+        var resolved =
+            PineValueInProcess.ValueInProcessFromPathOrNull(root, [0, 0]);
+
+        resolved.Should().BeSameAs(descendant);
+        root.EvaluatedOrNull.Should().BeNull();
+        nested.EvaluatedOrNull.Should().BeNull();
+        descendant.EvaluatedOrNull.Should().BeNull();
+    }
+
+    [Fact]
     public void CreateList_initializes_without_immediate_evaluation()
     {
         var items =

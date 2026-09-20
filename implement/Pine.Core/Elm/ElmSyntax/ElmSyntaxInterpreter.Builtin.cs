@@ -23,9 +23,6 @@ namespace Pine.Core.Elm.ElmSyntax;
 /// </summary>
 public partial class ElmSyntaxInterpreter
 {
-    private static readonly PineValue s_integerZeroValue =
-        IntegerEncoding.EncodeSignedInteger(0);
-
     private static readonly ImmutableDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>> s_builtinFunctionResolvers =
         BuildBuiltinFunctionResolvers();
 
@@ -198,18 +195,14 @@ public partial class ElmSyntaxInterpreter
     }
 
     /// <summary>
-    /// Builtin implementation of <c>Basics.compare</c> directly on the interpreter's value
-    /// model. The two operands are converted to <see cref="PineValue"/> and compared by
-    /// <see cref="CoreBasicsPrecompiledLeaves.BasicsCompare(PineValue, PineValue)"/>, which
-    /// mirrors Elm's <c>compare</c> semantics (numbers, chars, strings, lists, and tuples,
-    /// including structurally nested values). Converting to <see cref="PineValue"/> keeps the
-    /// implementation simple and reuses the already-validated comparison logic.
+    /// Builtin implementation of <c>Basics.compare</c> directly on the interpreter's in-process
+    /// value model, preserving cached integer and list representations where possible.
     /// <para>
     /// As in Elm, comparing values that contain functions is not supported and surfaces as a
     /// runtime exception (raised while evaluating the operands or by the comparison itself).
     /// </para>
     /// </summary>
-    private static PineValueInProcess? ResolveBasicsCompare(IReadOnlyList<PineValueInProcess> arguments)
+    internal static PineValueInProcess? ResolveBasicsCompare(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 2)
         {
@@ -217,10 +210,7 @@ public partial class ElmSyntaxInterpreter
             return null;
         }
 
-        var left = arguments[0].Evaluate();
-        var right = arguments[1].Evaluate();
-
-        return PineValueInProcess.Create(CoreBasicsPrecompiledLeaves.BasicsCompare(left, right));
+        return CoreBasicsPrecompiledLeaves.BasicsCompare(arguments[0], arguments[1]);
     }
 
     /// <summary>
@@ -239,7 +229,7 @@ public partial class ElmSyntaxInterpreter
     /// exception (raised while evaluating the operands).
     /// </para>
     /// </summary>
-    private static PineValueInProcess? ResolveBasicsEq(IReadOnlyList<PineValueInProcess> arguments)
+    internal static PineValueInProcess? ResolveBasicsEq(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 2)
         {
@@ -249,14 +239,14 @@ public partial class ElmSyntaxInterpreter
 
         return
             PineValueInProcess.CreateBool(
-                ElmValuesEqual(arguments[0].Evaluate(), arguments[1].Evaluate()));
+                CoreBasicsPrecompiledLeaves.BasicsEqual(arguments[0], arguments[1]));
     }
 
     /// <summary>
     /// Builtin implementation of <c>Basics.neq</c> (the <c>/=</c> operator): the negation of
     /// <see cref="ResolveBasicsEq"/>.
     /// </summary>
-    private static PineValueInProcess? ResolveBasicsNeq(IReadOnlyList<PineValueInProcess> arguments)
+    internal static PineValueInProcess? ResolveBasicsNeq(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 2)
         {
@@ -266,90 +256,7 @@ public partial class ElmSyntaxInterpreter
 
         return
             PineValueInProcess.CreateBool(
-                !ElmValuesEqual(arguments[0].Evaluate(), arguments[1].Evaluate()));
-    }
-
-    /// <summary>
-    /// Structural Elm equality on <see cref="PineValue"/>, faithfully mirroring <c>eq</c> from
-    /// <c>elm-kernel-modules/Basics.elm</c>: plain structural equality first, then float
-    /// numerator/denominator comparison, and finally a length-guarded recursive comparison that
-    /// normalizes <c>Dict</c> (<c>RBNode_elm_builtin</c>) and <c>Set</c> (<c>Set_elm_builtin</c>)
-    /// values to insertion-order-independent lists before comparing them.
-    /// </summary>
-    private static bool ElmValuesEqual(PineValue a, PineValue b)
-    {
-        if (a == b)
-        {
-            return true;
-        }
-
-        if (IsElmFloat(a, out var numA, out var denomA))
-        {
-            return
-                denomA != s_integerZeroValue &&
-                numA == BuiltinFunctionSpecialized.int_mul(denomA, b);
-        }
-
-        if (IsElmFloat(b, out var numB, out var denomB))
-        {
-            return
-                denomB != s_integerZeroValue &&
-                BuiltinFunctionSpecialized.int_mul(a, denomB) == numB;
-        }
-
-        // isPineBlob a: blobs that were not already equal can never be equal here.
-        if (a is not PineValue.ListValue listA)
-        {
-            return false;
-        }
-
-        if (b is not PineValue.ListValue listB || listA.Items.Length != listB.Items.Length)
-        {
-            return false;
-        }
-
-        if (listA.Items.Length is 0)
-        {
-            // Two empty lists would have been caught by the structural equality above.
-            return true;
-        }
-
-        var tagA =
-            listA.Items.Length >= 2 &&
-            listA.Items.Span[0] == ElmValue.ElmChoiceTypeTagNameAsValue
-            ?
-            listA.Items.Span[1]
-            :
-            null;
-
-        if (tagA == ElmValue.ElmStringTypeTagNameAsValue)
-        {
-            // Two distinct strings are never equal (equal strings are caught above).
-            return false;
-        }
-
-        if (tagA == ElmValue.ElmDictNotEmptyTagNameAsValue)
-        {
-            return DictToListPine(a) == DictToListPine(b);
-        }
-
-        if (tagA == ElmValue.ElmSetTypeTagNameAsValue)
-        {
-            return
-                DictKeysPine(a.ValueFromPathOrEmptyList([2])) ==
-                DictKeysPine(b.ValueFromPathOrEmptyList([2]));
-        }
-
-        // Default: element-wise recursive comparison (lists, tuples, records, custom tags).
-        for (var i = 0; i < listA.Items.Length; ++i)
-        {
-            if (!ElmValuesEqual(listA.Items.Span[i], listB.Items.Span[i]))
-            {
-                return false;
-            }
-        }
-
-        return true;
+                !CoreBasicsPrecompiledLeaves.BasicsEqual(arguments[0], arguments[1]));
     }
 
     /// <summary>
@@ -378,72 +285,16 @@ public partial class ElmSyntaxInterpreter
         return true;
     }
 
-    /// <summary>
-    /// In-order traversal of a <c>Dict</c> red-black tree, collecting <c>(key, value)</c> pairs in
-    /// ascending key order — the normalization used by <c>eq</c> so that dicts built from different
-    /// insertion orders compare equal.
-    /// </summary>
-    private static PineValue DictToListPine(PineValue dict)
-    {
-        var pairs = new List<PineValue>();
-
-        CollectDictPairsPine(dict, pairs);
-
-        return PineValue.List([.. pairs]);
-    }
-
-    private static void CollectDictPairsPine(
-        PineValue dict,
-        List<PineValue> accumulator)
-    {
-        if (dict is not PineValue.ListValue { Items: { Length: 7 } items } ||
-            items.Span[0] != ElmValue.ElmChoiceTypeTagNameAsValue ||
-            items.Span[1] != ElmValue.ElmDictNotEmptyTagNameAsValue)
-        {
-            // RBEmpty_elm_builtin (or any non-node) contributes nothing.
-            return;
-        }
-
-        CollectDictPairsPine(items.Span[5], accumulator);
-        accumulator.Add(PineValue.List([items.Span[3], items.Span[4]]));
-        CollectDictPairsPine(items.Span[6], accumulator);
-    }
-
-    /// <summary>
-    /// In-order traversal of a <c>Dict</c> red-black tree, collecting keys in ascending order — the
-    /// normalization used by <c>eq</c> for <c>Set</c> values.
-    /// </summary>
-    private static PineValue DictKeysPine(PineValue dict)
-    {
-        var keys = new List<PineValue>();
-
-        CollectDictKeysPine(dict, keys);
-
-        return PineValue.List([.. keys]);
-    }
-
-    private static void CollectDictKeysPine(
-        PineValue dict,
-        List<PineValue> accumulator)
-    {
-        if (dict is not PineValue.ListValue { Items: { Length: 7 } items } ||
-            items.Span[0] != ElmValue.ElmChoiceTypeTagNameAsValue ||
-            items.Span[1] != ElmValue.ElmDictNotEmptyTagNameAsValue)
-        {
-            return;
-        }
-
-        CollectDictKeysPine(items.Span[5], accumulator);
-        accumulator.Add(items.Span[3]);
-        CollectDictKeysPine(items.Span[6], accumulator);
-    }
+    private static System.Numerics.BigInteger? AsPlainInteger(
+        PineValueInProcess value) =>
+        value.IsBlob() ? value.AsInteger() : null;
 
     /// <summary>
     /// Builtin implementation of <c>Basics.idiv</c> (the <c>//</c> operator): integer division that
     /// truncates toward zero, mirroring <c>elm-kernel-modules/Basics.elm</c>. Division by zero yields
     /// <c>0</c>, as in Elm.
     /// </summary>
-    private static PineValueInProcess? ResolveBasicsIdiv(IReadOnlyList<PineValueInProcess> arguments)
+    internal static PineValueInProcess? ResolveBasicsIdiv(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 2)
         {
@@ -451,8 +302,8 @@ public partial class ElmSyntaxInterpreter
             return null;
         }
 
-        if (IntegerEncoding.ParseSignedIntegerRelaxed(arguments[0].Evaluate()).IsOkOrNullable() is not { } dividend ||
-            IntegerEncoding.ParseSignedIntegerRelaxed(arguments[1].Evaluate()).IsOkOrNullable() is not { } divisor)
+        if (AsPlainInteger(arguments[0]) is not { } dividend ||
+            AsPlainInteger(arguments[1]) is not { } divisor)
         {
             // Operands are not plain integers: defer to the user-defined implementation.
             return null;
@@ -473,7 +324,7 @@ public partial class ElmSyntaxInterpreter
     /// example a <c>Float</c>), the builtin defers to the user-defined implementation, which handles
     /// the float cases.
     /// </summary>
-    private static PineValueInProcess? ResolveBasicsMul(IReadOnlyList<PineValueInProcess> arguments)
+    internal static PineValueInProcess? ResolveBasicsMul(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 2)
         {
@@ -481,13 +332,8 @@ public partial class ElmSyntaxInterpreter
             return null;
         }
 
-        var left = arguments[0].Evaluate();
-        var right = arguments[1].Evaluate();
-
-        if (left is not PineValue.BlobValue ||
-            right is not PineValue.BlobValue ||
-            IntegerEncoding.ParseSignedIntegerRelaxed(left).IsOkOrNullable() is not { } leftInteger ||
-            IntegerEncoding.ParseSignedIntegerRelaxed(right).IsOkOrNullable() is not { } rightInteger)
+        if (AsPlainInteger(arguments[0]) is not { } leftInteger ||
+            AsPlainInteger(arguments[1]) is not { } rightInteger)
         {
             // At least one operand is not a plain integer (for example a Float): defer.
             return null;
@@ -502,7 +348,7 @@ public partial class ElmSyntaxInterpreter
     /// When either operand is not a plain integer (for example a <c>Float</c>), the builtin defers to
     /// the user-defined implementation.
     /// </summary>
-    private static PineValueInProcess? ResolveBasicsAdd(IReadOnlyList<PineValueInProcess> arguments)
+    internal static PineValueInProcess? ResolveBasicsAdd(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 2)
         {
@@ -510,13 +356,8 @@ public partial class ElmSyntaxInterpreter
             return null;
         }
 
-        var left = arguments[0].Evaluate();
-        var right = arguments[1].Evaluate();
-
-        if (left is not PineValue.BlobValue ||
-            right is not PineValue.BlobValue ||
-            IntegerEncoding.ParseSignedIntegerRelaxed(left).IsOkOrNullable() is not { } leftInteger ||
-            IntegerEncoding.ParseSignedIntegerRelaxed(right).IsOkOrNullable() is not { } rightInteger)
+        if (AsPlainInteger(arguments[0]) is not { } leftInteger ||
+            AsPlainInteger(arguments[1]) is not { } rightInteger)
         {
             // At least one operand is not a plain integer (for example a Float): defer.
             return null;
@@ -532,7 +373,7 @@ public partial class ElmSyntaxInterpreter
     /// operand is not a plain integer (for example a <c>Float</c>), the builtin defers to the
     /// user-defined implementation.
     /// </summary>
-    private static PineValueInProcess? ResolveBasicsSub(IReadOnlyList<PineValueInProcess> arguments)
+    internal static PineValueInProcess? ResolveBasicsSub(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 2)
         {
@@ -540,13 +381,8 @@ public partial class ElmSyntaxInterpreter
             return null;
         }
 
-        var left = arguments[0].Evaluate();
-        var right = arguments[1].Evaluate();
-
-        if (left is not PineValue.BlobValue ||
-            right is not PineValue.BlobValue ||
-            IntegerEncoding.ParseSignedIntegerRelaxed(left).IsOkOrNullable() is not { } leftInteger ||
-            IntegerEncoding.ParseSignedIntegerRelaxed(right).IsOkOrNullable() is not { } rightInteger)
+        if (AsPlainInteger(arguments[0]) is not { } leftInteger ||
+            AsPlainInteger(arguments[1]) is not { } rightInteger)
         {
             // At least one operand is not a plain integer (for example a Float): defer.
             return null;
@@ -562,7 +398,7 @@ public partial class ElmSyntaxInterpreter
     /// differs from <c>remainderBy</c> for operands of opposite sign. When either operand is not a
     /// plain integer the builtin defers to the user-defined implementation.
     /// </summary>
-    private static PineValueInProcess? ResolveBasicsModBy(IReadOnlyList<PineValueInProcess> arguments)
+    internal static PineValueInProcess? ResolveBasicsModBy(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 2)
         {
@@ -570,13 +406,8 @@ public partial class ElmSyntaxInterpreter
             return null;
         }
 
-        var divisorValue = arguments[0].Evaluate();
-        var dividendValue = arguments[1].Evaluate();
-
-        if (divisorValue is not PineValue.BlobValue ||
-            dividendValue is not PineValue.BlobValue ||
-            IntegerEncoding.ParseSignedIntegerRelaxed(divisorValue).IsOkOrNullable() is not { } divisor ||
-            IntegerEncoding.ParseSignedIntegerRelaxed(dividendValue).IsOkOrNullable() is not { } dividend)
+        if (AsPlainInteger(arguments[0]) is not { } divisor ||
+            AsPlainInteger(arguments[1]) is not { } dividend)
         {
             // At least one operand is not a plain integer: defer.
             return null;
@@ -850,7 +681,7 @@ public partial class ElmSyntaxInterpreter
             return null;
         }
 
-        if (IntegerEncoding.ParseSignedIntegerRelaxed(arguments[0].Evaluate()).IsOkOrNullable() is not { } integer)
+        if (AsPlainInteger(arguments[0]) is not { } integer)
         {
             throw new System.InvalidOperationException(
                 "String.fromInt: expected an integer.");
@@ -986,8 +817,8 @@ public partial class ElmSyntaxInterpreter
             return null;
         }
 
-        if (IntegerEncoding.ParseSignedIntegerRelaxed(arguments[0].Evaluate()).IsOkOrNullable() is not { } start ||
-            IntegerEncoding.ParseSignedIntegerRelaxed(arguments[1].Evaluate()).IsOkOrNullable() is not { } end)
+        if (AsPlainInteger(arguments[0]) is not { } start ||
+            AsPlainInteger(arguments[1]) is not { } end)
         {
             throw new System.InvalidOperationException(
                 "String.slice: expected the start and end indexes to be integers.");
@@ -1173,7 +1004,7 @@ public partial class ElmSyntaxInterpreter
             return null;
         }
 
-        if (IntegerEncoding.ParseSignedIntegerRelaxed(arguments[0].Evaluate()).IsOkOrNullable() is not { } offsetBig)
+        if (AsPlainInteger(arguments[0]) is not { } offsetBig)
         {
             throw new System.InvalidOperationException(
                 "String.trimLeftCountBytesTrimmed: expected the offset to be an integer.");
@@ -1214,7 +1045,7 @@ public partial class ElmSyntaxInterpreter
             return null;
         }
 
-        if (IntegerEncoding.ParseSignedIntegerRelaxed(arguments[0].Evaluate()).IsOkOrNullable() is not { } remainingLengthBig)
+        if (AsPlainInteger(arguments[0]) is not { } remainingLengthBig)
         {
             throw new System.InvalidOperationException(
                 "String.trimRightCountBytesRemaining: expected the remaining length to be an integer.");
@@ -1549,6 +1380,14 @@ public partial class ElmSyntaxInterpreter
             return null;
         }
 
+        if (AsPlainInteger(arguments[0]) is { } plainInteger)
+        {
+            return
+                MakeElmString(
+                    StringEncoding.BlobValueFromString(
+                        plainInteger.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        }
+
         var value = arguments[0].Evaluate();
 
         if (IsElmFloat(value, out var numeratorValue, out var denominatorValue))
@@ -1565,17 +1404,8 @@ public partial class ElmSyntaxInterpreter
                     StringEncoding.BlobValueFromString(FromFloatDecimal(16, numerator, denominator)));
         }
 
-        // A plain integer Float reduces to String.fromInt.
-        if (IntegerEncoding.ParseSignedIntegerRelaxed(value).IsOkOrNullable() is not { } integer)
-        {
-            throw new System.InvalidOperationException(
-                "String.fromFloat: expected a Float or integer value.");
-        }
-
-        return
-            MakeElmString(
-                StringEncoding.BlobValueFromString(
-                    integer.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        throw new System.InvalidOperationException(
+            "String.fromFloat: expected a Float or integer value.");
     }
 
     /// <summary>
@@ -1705,7 +1535,8 @@ public partial class ElmSyntaxInterpreter
     /// Builtin implementation of <c>Dict.get</c> directly on the interpreter's value model,
     /// mirroring the recursive Elm implementation in <c>elm-kernel-modules/Dict.elm</c>: it walks
     /// the red-black tree, comparing the target key against each node's key via
-    /// <see cref="CoreBasicsPrecompiledLeaves.BasicsCompare(PineValue, PineValue)"/> and descending
+    /// <see cref="CoreBasicsPrecompiledLeaves.BasicsCompare(PineValueInProcess, PineValueInProcess)"/>
+    /// and descending
     /// left (<c>LT</c>) or right (<c>GT</c>) until the key matches (<c>EQ</c>) or an empty subtree is
     /// reached.
     /// <para>
@@ -1725,7 +1556,7 @@ public partial class ElmSyntaxInterpreter
             return null;
         }
 
-        var targetKey = arguments[0].Evaluate();
+        var targetKey = arguments[0];
 
         var currentDict = arguments[1];
 
@@ -1758,13 +1589,13 @@ public partial class ElmSyntaxInterpreter
                     "Dict.get: malformed RBNode_elm_builtin (expected 5 arguments).");
             }
 
-            var order = CoreBasicsPrecompiledLeaves.BasicsCompare(targetKey, dictItems[3].Evaluate());
+            var order = CoreBasicsPrecompiledLeaves.BasicsCompare(targetKey, dictItems[3]);
 
-            if (order == s_orderLTValue)
+            if (PineValueInProcess.AreEqual(order, s_orderLTValue))
             {
                 currentDict = dictItems[5];
             }
-            else if (order == s_orderGTValue)
+            else if (PineValueInProcess.AreEqual(order, s_orderGTValue))
             {
                 currentDict = dictItems[6];
             }
@@ -1934,8 +1765,7 @@ public partial class ElmSyntaxInterpreter
     /// tree, descending by comparing the inserted key against each node's key, then rebalancing on the
     /// way back up via <see cref="BalanceDict"/>.
     /// <para>
-    /// Only the <em>keys</em> are evaluated (to reuse the existing comparison logic); the inserted and
-    /// existing <em>values</em> are never forced, so values that are function closures
+    /// Keys and values remain in their in-process form, so values that are function closures
     /// (<see cref="ElmClosureInProcess"/>) are inserted and preserved unchanged.
     /// </para>
     /// </summary>
@@ -1951,11 +1781,10 @@ public partial class ElmSyntaxInterpreter
         var value = arguments[1];
         var dict = arguments[2];
 
-        return InsertHelp(key.Evaluate(), key, value, dict);
+        return InsertHelp(key, value, dict);
     }
 
     private static PineValueInProcess InsertHelp(
-        PineValue keyEvaluated,
         PineValueInProcess key,
         PineValueInProcess value,
         PineValueInProcess dict)
@@ -1966,20 +1795,20 @@ public partial class ElmSyntaxInterpreter
             return MakeDictNode(s_dictColorRed, key, value, s_dictRBEmpty, s_dictRBEmpty);
         }
 
-        var order = CoreBasicsPrecompiledLeaves.BasicsCompare(keyEvaluated, node.Key.Evaluate());
+        var order = CoreBasicsPrecompiledLeaves.BasicsCompare(key, node.Key);
 
-        if (order == s_orderLTValue)
+        if (PineValueInProcess.AreEqual(order, s_orderLTValue))
         {
             return
                 BalanceDict(
                     node.Color,
                     node.Key,
                     node.Value,
-                    InsertHelp(keyEvaluated, key, value, node.Left),
+                    InsertHelp(key, value, node.Left),
                     node.Right);
         }
 
-        if (order == s_orderGTValue)
+        if (PineValueInProcess.AreEqual(order, s_orderGTValue))
         {
             return
                 BalanceDict(
@@ -1987,7 +1816,7 @@ public partial class ElmSyntaxInterpreter
                     node.Key,
                     node.Value,
                     node.Left,
-                    InsertHelp(keyEvaluated, key, value, node.Right));
+                    InsertHelp(key, value, node.Right));
         }
 
         // EQ: replace the value, keeping the existing node's key, color, and children.
@@ -2078,7 +1907,7 @@ public partial class ElmSyntaxInterpreter
             return null;
         }
 
-        if (IntegerEncoding.ParseSignedIntegerRelaxed(arguments[0].Evaluate()).IsOkOrNullable() is not { } accumulator)
+        if (AsPlainInteger(arguments[0]) is not { } accumulator)
         {
             throw new System.InvalidOperationException(
                 "Dict.sizeHelp: expected an integer accumulator.");
