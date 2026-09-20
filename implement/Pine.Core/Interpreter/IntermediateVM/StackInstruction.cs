@@ -1,5 +1,6 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
+using Pine.Core.Internal;
 using Pine.Core.PineVM;
 using System;
 using System.Collections.Generic;
@@ -567,7 +568,7 @@ public readonly record struct SliceSwitchCase(
 /// </param>
 public record StackInstruction(
     StackInstructionKind Kind,
-    PineValue? Literal = null,
+    PineValueInProcess? Literal = null,
     BigInteger? IntegerLiteral = null,
     int? LocalIndex = null,
     int? SkipCount = null,
@@ -583,6 +584,55 @@ public record StackInstruction(
     /// </summary>
     public StackFrameInstructions? LinkedStackFrameInstructions =>
         OptimizedInvocation?.LinkedStackFrameInstructions;
+
+    /// <inheritdoc/>
+    public virtual bool Equals(StackInstruction? other)
+    {
+        if (ReferenceEquals(this, other))
+            return true;
+
+        if (other is null ||
+            Kind != other.Kind ||
+            IntegerLiteral != other.IntegerLiteral ||
+            LocalIndex != other.LocalIndex ||
+            SkipCount != other.SkipCount ||
+            TakeCount != other.TakeCount ||
+            JumpOffset != other.JumpOffset ||
+            ShiftCount != other.ShiftCount ||
+            OptimizedInvocation != other.OptimizedInvocation ||
+            !EqualityComparer<ImmutableDictionary<PineValue, int>?>.Default.Equals(
+                SwitchJumpTable,
+                other.SwitchJumpTable) ||
+            !SliceSwitchCases.Equals(other.SliceSwitchCases))
+        {
+            return false;
+        }
+
+        if (Literal is null || other.Literal is null)
+            return Literal is null && other.Literal is null;
+
+        return PineValueInProcess.AreEqual(Literal, other.Literal);
+    }
+
+    /// <inheritdoc/>
+    public override int GetHashCode()
+    {
+        var hashCode = new HashCode();
+
+        hashCode.Add(Kind);
+        hashCode.Add(Literal?.Evaluate());
+        hashCode.Add(IntegerLiteral);
+        hashCode.Add(LocalIndex);
+        hashCode.Add(SkipCount);
+        hashCode.Add(TakeCount);
+        hashCode.Add(JumpOffset);
+        hashCode.Add(ShiftCount);
+        hashCode.Add(OptimizedInvocation);
+        hashCode.Add(SwitchJumpTable);
+        hashCode.Add(SliceSwitchCases);
+
+        return hashCode.ToHashCode();
+    }
 
     /// <summary>
     /// A pre-built <see cref="StackInstructionKind.Return"/> instruction.
@@ -602,7 +652,10 @@ public record StackInstruction(
     /// is equal to the given literal value.
     /// </summary>
     public static StackInstruction Jump_If_Equal(int offset, PineValue literal) =>
-        new(StackInstructionKind.Jump_If_Equal_Const, JumpOffset: offset, Literal: literal);
+        new(
+            StackInstructionKind.Jump_If_Equal_Const,
+            JumpOffset: offset,
+            Literal: PineValueInProcess.CreateFullyRepresented(literal));
 
     /// <summary>
     /// Creates a new instruction to jump to the specified offset if the top value on the stack is true.
@@ -615,7 +668,9 @@ public record StackInstruction(
     /// Creates a <see cref="StackInstructionKind.Push_Literal"/> instruction that pushes the given literal value onto the stack.
     /// </summary>
     public static StackInstruction Push_Literal(PineValue literal) =>
-        new(StackInstructionKind.Push_Literal, Literal: literal);
+        new(
+            StackInstructionKind.Push_Literal,
+            Literal: PineValueInProcess.CreateFullyRepresented(literal));
 
     /// <summary>
     /// Creates a <see cref="StackInstructionKind.Local_Set"/> instruction that copies the top stack value
@@ -661,7 +716,10 @@ public record StackInstruction(
     /// with the given literal prefix and the given number of values from the stack.
     /// </summary>
     public static StackInstruction Build_List_With_Prefix(PineValue.ListValue prefix, int takeCount) =>
-        new(StackInstructionKind.Build_List_With_Prefix, Literal: prefix, TakeCount: takeCount);
+        new(
+            StackInstructionKind.Build_List_With_Prefix,
+            Literal: PineValueInProcess.CreateFullyRepresented(prefix),
+            TakeCount: takeCount);
 
     /// <summary>
     /// A pre-built <see cref="StackInstructionKind.Pop"/> instruction that drops one value.
@@ -894,14 +952,18 @@ public record StackInstruction(
     /// if the top value is not equal to the given literal.
     /// </summary>
     public static StackInstruction Not_Equal_Binary_Const(PineValue literal) =>
-        new(StackInstructionKind.Not_Equal_Binary_Const, Literal: literal);
+        new(
+            StackInstructionKind.Not_Equal_Binary_Const,
+            Literal: PineValueInProcess.CreateFullyRepresented(literal));
 
     /// <summary>
     /// Creates a <see cref="StackInstructionKind.Equal_Binary_Const"/> instruction that checks
     /// if the top value is equal to the given literal.
     /// </summary>
     public static StackInstruction Equal_Binary_Const(PineValue literal) =>
-        new(StackInstructionKind.Equal_Binary_Const, Literal: literal);
+        new(
+            StackInstructionKind.Equal_Binary_Const,
+            Literal: PineValueInProcess.CreateFullyRepresented(literal));
 
     /// <summary>
     /// A pre-built <see cref="StackInstructionKind.Is_List_Value"/> instruction.
@@ -950,7 +1012,9 @@ public record StackInstruction(
     /// the given encoded expression using the environment from the top of the stack.
     /// </summary>
     public static StackInstruction Eval_Const(PineValue expressionValue) =>
-        new(StackInstructionKind.Eval_Const, Literal: expressionValue);
+        new(
+            StackInstructionKind.Eval_Const,
+            Literal: PineValueInProcess.CreateFullyRepresented(expressionValue));
 
     /// <summary>
     /// Creates a <see cref="StackInstructionKind.Invoke_StackFrame_Const"/> instruction that invokes
@@ -1007,7 +1071,9 @@ public record StackInstruction(
     /// the bitwise AND of the top value with the given constant.
     /// </summary>
     public static StackInstruction Bit_And_Const(PineValue blobValue) =>
-        new(StackInstructionKind.Bit_And_Const, Literal: blobValue);
+        new(
+            StackInstructionKind.Bit_And_Const,
+            Literal: PineValueInProcess.CreateFullyRepresented(blobValue));
 
     /// <summary>
     /// A pre-built <see cref="StackInstructionKind.Bit_And_Binary"/> instruction.
@@ -1026,7 +1092,9 @@ public record StackInstruction(
     /// the bitwise OR of the top value with the given constant.
     /// </summary>
     public static StackInstruction Bit_Or_Const(PineValue blobValue) =>
-        new(StackInstructionKind.Bit_Or_Const, Literal: blobValue);
+        new(
+            StackInstructionKind.Bit_Or_Const,
+            Literal: PineValueInProcess.CreateFullyRepresented(blobValue));
 
     /// <summary>
     /// A pre-built <see cref="StackInstructionKind.Bit_Or_Binary"/> instruction.
@@ -1136,7 +1204,9 @@ public record StackInstruction(
     /// the source slice, skipping a variable count and taking the literal's length, equals the given literal.
     /// </summary>
     public static StackInstruction Slice_Skip_Var_Equal_Const(PineValue literal) =>
-        new(StackInstructionKind.Slice_Skip_Var_Equal_Const, Literal: literal);
+        new(
+            StackInstructionKind.Slice_Skip_Var_Equal_Const,
+            Literal: PineValueInProcess.CreateFullyRepresented(literal));
 
     /// <summary>
     /// Creates a <see cref="StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const"/>
@@ -1394,6 +1464,7 @@ public record StackInstruction(
                     [
                     literalDisplayString(
                         instruction.Literal
+                        ?.Evaluate()
                         ?? throw new Exception(
                             "Missing Literal for PushLiteral instruction"))
                     ])),
@@ -1687,6 +1758,7 @@ public record StackInstruction(
                     [
                     literalDisplayString(
                         instruction.Literal
+                        ?.Evaluate()
                         ?? throw new Exception(
                             "Missing Literal for EqualBinaryConst instruction"))
                     ])),
@@ -1699,6 +1771,7 @@ public record StackInstruction(
                     [
                     literalDisplayString(
                         instruction.Literal
+                        ?.Evaluate()
                         ?? throw new Exception(
                             "Missing Literal for NotEqualBinaryConst instruction"))
                     ])),
@@ -1808,6 +1881,7 @@ public record StackInstruction(
                     [
                     literalDisplayString(
                         instruction.Literal
+                        ?.Evaluate()
                         ?? throw new Exception(
                             "Missing Literal for Jump_If_Equal_Const instruction")),
                     instruction.JumpOffset?.ToString()
@@ -1858,6 +1932,7 @@ public record StackInstruction(
                     [
                     literalDisplayString(
                         instruction.Literal
+                        ?.Evaluate()
                         ?? throw new Exception(
                             "Missing Literal for EvalConst instruction"))
                     ])),
@@ -1973,6 +2048,7 @@ public record StackInstruction(
                     [
                     literalDisplayString(
                         instruction.Literal
+                        ?.Evaluate()
                         ?? throw new Exception(
                             "Missing Literal for BitAndConst instruction"))
                     ])),
@@ -1997,6 +2073,7 @@ public record StackInstruction(
                     [
                     literalDisplayString(
                         instruction.Literal
+                        ?.Evaluate()
                         ?? throw new Exception(
                             "Missing Literal for BitOrConst instruction"))
                     ])),
@@ -2085,6 +2162,7 @@ public record StackInstruction(
                     [
                     literalDisplayString(
                         instruction.Literal
+                        ?.Evaluate()
                         ??
                         throw new Exception("Missing Literal for Slice_Skip_Var_Equal_Const instruction"))
                     ])),
@@ -2112,10 +2190,12 @@ public record StackInstruction(
         StackInstruction instruction,
         Func<PineValue, string> literalDisplayString)
     {
-        if (instruction.Literal is not PineValue.ListValue prefix)
-        {
-            throw new Exception("Literal for BuildListWithPrefix instruction is not a list");
-        }
+        var prefix =
+            instruction.Literal
+            ?.ListItemsOrNull()
+            ??
+            throw new Exception(
+                "Literal for BuildListWithPrefix instruction has no direct list representation");
 
         var takeCount =
             instruction.TakeCount
@@ -2125,11 +2205,11 @@ public record StackInstruction(
             new InstructionDisplay(
                 Arguments:
                 [
-                prefix.Items.Length.ToString(),
+                prefix.Count.ToString(),
                 takeCount.ToString()
                 ],
                 DetailLines:
-                [.. prefix.Items.Span.ToArray().Select(literalDisplayString)]);
+                [.. prefix.Select(item => literalDisplayString(item.Evaluate()))]);
     }
 
     private static InstructionDisplay Render_Switch_Jump_If_Equal_Const_Details(

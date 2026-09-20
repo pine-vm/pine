@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Pine.Core.Internal;
 using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.PineVM;
 using System;
@@ -299,8 +300,7 @@ public class PineControlFlowGraphTests
             .Should()
             .NotContain(
             operation =>
-            operation.Instruction.Literal == PineKernelValues.TrueValue ||
-            operation.Instruction.Literal == PineKernelValues.FalseValue);
+            IsBooleanLiteral(operation.Instruction.Literal));
 
         optimized.Blocks
             .Should()
@@ -358,4 +358,9 @@ public class PineControlFlowGraphTests
                 StackInstruction.Return.ToString(),
             ]);
     }
+
+    private static bool IsBooleanLiteral(PineValueInProcess? literal) =>
+        literal is not null &&
+        (PineValueInProcess.AreEqual(literal, PineKernelValues.TrueValue) ||
+         PineValueInProcess.AreEqual(literal, PineKernelValues.FalseValue));
 }

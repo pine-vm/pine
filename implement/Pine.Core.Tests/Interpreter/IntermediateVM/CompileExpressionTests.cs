@@ -5,7 +5,6 @@ using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.Json;
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using Xunit;
@@ -31,7 +30,7 @@ public class CompileExpressionTests
         var instructions =
             ExpressionCompilation.InstructionsFromExpression(
                 expression,
-                rootExprAlternativeForms: ImmutableHashSet<Expression>.Empty,
+                rootExprAlternativeForms: [],
                 envClass: null,
                 parametersAsLocals: StaticFunctionInterface.Generic,
                 new PineVMParseCache());
