@@ -250,7 +250,7 @@ public partial class ElmSyntaxInterpreter
         // Build a prepared declarations dictionary keyed by full module-qualified name. For
         // InfixDeclaration entries, the key uses the operator symbol as DeclName (so
         // BuildInfixOperatorMap finds them).
-        var declarations = new Dictionary<DeclQualifiedName, PreparedDeclaration>();
+        var declarations = new Dictionary<DeclQualifiedName, AbstractDeclaration>();
 
         foreach (var (moduleNameKey, (canonicalizedFile, errors, shadowings)) in canonicalized)
         {
@@ -274,7 +274,7 @@ public partial class ElmSyntaxInterpreter
                 if (declNode is ElmSyntaxAbstract.Declaration.InfixDeclaration infixDecl)
                 {
                     declarations[DeclQualifiedName.Create(moduleNameParts, infixDecl.Infix.Operator)] =
-                        PrepareDeclaration(declNode);
+                        declNode;
 
                     continue;
                 }
@@ -285,11 +285,11 @@ public partial class ElmSyntaxInterpreter
                     continue;
 
                 declarations[DeclQualifiedName.Create(moduleNameParts, declName)] =
-                    PrepareDeclaration(declNode);
+                    declNode;
             }
         }
 
-        return new Prepared(declarations);
+        return new Prepared(PrepareDeclarations(declarations));
     }
 
     private static ElmSyntaxAbstract.File OptimizeSyntax(ElmSyntaxAbstract.File file)
@@ -335,14 +335,29 @@ public partial class ElmSyntaxInterpreter
     private static IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> PrepareDeclarations(
         IReadOnlyDictionary<DeclQualifiedName, AbstractDeclaration> declarations)
     {
-        var preparedDeclarations = new Dictionary<DeclQualifiedName, PreparedDeclaration>(declarations.Count);
+        var initialPreparedDeclarations =
+            declarations.ToDictionary(
+                declaration => declaration.Key,
+                declaration => PrepareDeclaration(declaration.Value));
+
+        var infixOperators = BuildInfixOperatorMap(initialPreparedDeclarations);
+        var resolver = BuildResolvers(initialPreparedDeclarations);
+        var reducedDeclarations = new Dictionary<DeclQualifiedName, PreparedDeclaration>(declarations.Count);
 
         foreach (var declaration in declarations)
         {
-            preparedDeclarations.Add(declaration.Key, PrepareDeclaration(declaration.Value));
+            var reducer =
+                new ClosedExpressionReducer(
+                    declaration.Key,
+                    resolver,
+                    infixOperators);
+
+            reducedDeclarations.Add(
+                declaration.Key,
+                PrepareDeclaration(declaration.Value, reducer));
         }
 
-        return preparedDeclarations;
+        return reducedDeclarations;
     }
 
     /// <summary>

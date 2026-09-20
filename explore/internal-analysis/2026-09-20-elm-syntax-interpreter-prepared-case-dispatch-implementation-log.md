@@ -10,6 +10,7 @@
 - Followed up with cached `PineValueInProcess` prepared literals so unit/string/char/integer/float literals reuse one in-process value, including integer and top-level list metadata, across runtime evaluation and prepared JSON reloads.
 - Followed up again by extending prepared constant-case detection from primitive/nullary shapes to exact binding-free composite patterns (tuples, non-empty lists, nested constructor patterns, and exact uncons chains that resolve to list constants) while preserving contiguous dispatch segmentation and `_` specialization.
 - Followed up again by replacing flat copied interpreter local-binding dictionaries with a linked layered environment that snapshots only mutable layers, keeps letrec closures on one shared mutable let layer, and removes per-scope parent-binding copies.
+- Added bottom-up preparation-time reduction of closed expressions to cached `ValueLiteral` nodes, including the closed `take` and `skip` subexpressions used to construct blob values in `Char.elm`.
 
 ## Progress
 
@@ -26,6 +27,8 @@
 - [x] Extended constant-case preparation to exact binding-free composite patterns and added mixed-segmentation regression coverage
 - [x] Replaced copied interpreter local-binding dictionaries with linked layered environments plus mutable-let snapshotting
 - [x] Added environment and semantic regression tests for linked lookup/shadowing, nested case shadowing, closure capture, and letrec recursion over linked scopes
+- [x] Reduced closed expressions and nested closed subexpressions to fully represented literal values during module preparation
+- [x] Added regression coverage for let/case reduction, top-level declaration references, and the `Char.elm` blob-building expressions
 - [x] Formatted changed C# files and reran validation
 
 ## Design Notes
@@ -46,6 +49,7 @@
 - `ApplicationContext` keeps its public constructor from `IReadOnlyDictionary<string, PineValueInProcess>` for source compatibility, but internally wraps bindings in `LocalBindingEnvironment`. Flat external dictionaries become one immutable child of the reusable empty root; interpreter-created scopes use linked child layers directly.
 - Lambdas now capture `currentEnv.LocalBindingEnvironment.Snapshot()`, which structurally shares immutable parents and copies only mutable local layers. Let-bound recursive function closures intentionally capture the live mutable let layer, so mutual recursion and forward references still see later sibling population without copying parent bindings.
 - Case arms with bindings add only one immutable child layer over the matched environment; constant/discard/no-binding matches reuse the existing environment. Function invocation similarly binds parameters into one child layer over the captured closure environment (or over the empty root for direct top-level calls) instead of cloning all captured bindings.
+- Closed-expression reduction runs bottom-up after an initial non-reducing preparation pass has made every declaration available for resolution. It uses abstract-syntax free-variable analysis, the standard interpreter resolver, and a bounded trampoline evaluation; successful concrete results within the materialization limits are rebuilt with `CreateFullyRepresented`, while function-bearing, oversized, or failed evaluations retain their prepared expression form.
 
 ## Validation
 
@@ -125,6 +129,25 @@ Commands run:
 21. `dotnet format /home/runner/work/super-duper-disco/super-duper-disco/implement/Pine.Core.Tests/Pine.Core.Tests.csproj --include /home/runner/work/super-duper-disco/super-duper-disco/implement/Pine.Core.Tests/Elm/ElmSyntax/ElmSyntaxInterpreter/LetBlockExpressionsTests.cs /home/runner/work/super-duper-disco/super-duper-disco/implement/Pine.Core.Tests/Elm/ElmSyntax/ElmSyntaxInterpreter/CaseBlockTests.cs /home/runner/work/super-duper-disco/super-duper-disco/implement/Pine.Core.Tests/Elm/ElmSyntax/ElmSyntaxInterpreter/LocalBindingEnvironmentTests.cs`
     - Result: Completed successfully
 
+22. `dotnet run -- --filter-class="*PreparedSyntaxTests" --no-progress --no-ansi`
+    - Result: Passed, 12 tests
+    - Log: `artifacts/test-logs/Pine.Core.Tests/2026-09-20T13-36-48_filtered.log`
+
+23. `dotnet run --no-build -- --filter-class="*CharBuiltinTests" --no-progress --no-ansi`
+    - Result: Passed, 25 tests
+    - Log: `artifacts/test-logs/Pine.Core.Tests/2026-09-20T13-37-32_filtered.log`
+
+24. `dotnet run -- --filter-class="*PreparedSyntaxTests" --no-progress --no-ansi`
+    - Result: Passed, 13 tests
+    - Log: `artifacts/test-logs/Pine.Core.Tests/2026-09-20T13-59-02_filtered.log`
+
+25. Focused `LetBlockExpressionsTests`, `CaseBlockTests`, `InfiniteRecursionTests`, and `ModuleImportTests`
+    - Result: Passed, 58 tests total
+
+26. `dotnet run --no-build -- --filter-class="*CharBuiltinTests" --no-progress --no-ansi`
+    - Result: Passed, 25 tests
+    - Log: `artifacts/test-logs/Pine.Core.Tests/2026-09-20T13-59-21_filtered.log`
+
 ## Challenges and Backtracking
 
 - Initial prepared semantic tests used unqualified `Just` / `Nothing` in direct interpreter entry expressions, which bypassed the module exposure context used inside source files. I corrected those checks to use `Test.Just` / `Test.Nothing`.
@@ -133,4 +156,6 @@ Commands run:
 - Review identified that the first mixed-dispatch test used disjoint constructors around the variable-bearing arm and therefore did not prove source-order behavior for overlapping branches. I strengthened it with an earlier variable-bearing `Any text` arm before `Any "constant"` and equivalent `[ 1, 2 ]` / `1 :: 2 :: []` constants.
 - Changing `ElmClosureInProcess.CapturedBindings` to the linked environment type initially broke existing tests that directly constructed closures with flat dictionaries. I restored source compatibility with an overload that still accepts `IReadOnlyDictionary<string, PineValueInProcess>` and wraps it into `LocalBindingEnvironment`.
 - A first attempt to run all focused classes in one invocation with repeated `--filter-class` arguments only executed one class under this runner, so I switched to one focused `dotnet run` per class for exact validation coverage and logs.
+- Syntactically closed expressions can evaluate to closures or partially applied constructors, which cannot be serialized as literal Pine values. The reducer therefore materializes only results without opaque function-bearing values and leaves the original prepared expression intact otherwise.
+- Closed source expressions can diverge, intentionally fail, or create excessively large lazy values. Preparation-time evaluation is bounded to 100,000 trampoline iterations, 100,000 value nodes, and 16 MiB of blob data, and falls back to the prepared expression on an error or exception instead of changing module-preparation behavior.
 - No other significant backtracking was needed.

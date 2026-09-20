@@ -200,11 +200,16 @@ public partial class ElmSyntaxInterpreter
 
     internal static PreparedDeclaration PrepareDeclaration(
         AbstractDeclaration declaration) =>
+        PrepareDeclaration(declaration, closedExpressionReducer: null);
+
+    private static PreparedDeclaration PrepareDeclaration(
+        AbstractDeclaration declaration,
+        ClosedExpressionReducer? closedExpressionReducer) =>
         declaration switch
         {
             AbstractDeclaration.FunctionDeclaration functionDeclaration =>
             new PreparedDeclaration.FunctionDeclaration(
-                PrepareFunctionStruct(functionDeclaration.Function)),
+                PrepareFunctionStruct(functionDeclaration.Function, closedExpressionReducer)),
 
             AbstractDeclaration.ChoiceTypeDeclaration choiceTypeDeclaration =>
             new PreparedDeclaration.ChoiceTypeDeclaration(choiceTypeDeclaration.TypeDeclaration),
@@ -225,130 +230,163 @@ public partial class ElmSyntaxInterpreter
 
     internal static PreparedFunctionStruct PrepareFunctionStruct(
         AbstractFunctionStruct functionStruct) =>
+        PrepareFunctionStruct(functionStruct, closedExpressionReducer: null);
+
+    private static PreparedFunctionStruct PrepareFunctionStruct(
+        AbstractFunctionStruct functionStruct,
+        ClosedExpressionReducer? closedExpressionReducer) =>
         new(
             functionStruct.Signature,
-            PrepareFunctionImplementation(functionStruct.Declaration));
+            PrepareFunctionImplementation(functionStruct.Declaration, closedExpressionReducer));
 
     internal static PreparedFunctionImplementation PrepareFunctionImplementation(
         AbstractFunctionImplementation functionImplementation) =>
+        PrepareFunctionImplementation(functionImplementation, closedExpressionReducer: null);
+
+    private static PreparedFunctionImplementation PrepareFunctionImplementation(
+        AbstractFunctionImplementation functionImplementation,
+        ClosedExpressionReducer? closedExpressionReducer) =>
         new(
             functionImplementation.Name,
             functionImplementation.Arguments,
-            PrepareExpression(functionImplementation.Expression));
+            PrepareExpression(functionImplementation.Expression, closedExpressionReducer));
 
     internal static PreparedExpression PrepareExpression(
         AbstractExpression expression) =>
-        expression switch
-        {
-            AbstractExpression.UnitExpr =>
-            PrepareValueLiteral(PineValue.EmptyList),
+        PrepareExpression(expression, closedExpressionReducer: null);
 
-            AbstractExpression.StringLiteral stringLiteral =>
-            PrepareValueLiteral(stringLiteral.ValueAsPineValue),
+    private static PreparedExpression PrepareExpression(
+        AbstractExpression expression,
+        ClosedExpressionReducer? closedExpressionReducer)
+    {
+        PreparedExpression preparedExpression =
+            expression switch
+            {
+                AbstractExpression.UnitExpr =>
+                PrepareValueLiteral(PineValue.EmptyList),
 
-            AbstractExpression.CharLiteral charLiteral =>
-            PrepareValueLiteral(charLiteral.ValueAsPineValue),
+                AbstractExpression.StringLiteral stringLiteral =>
+                PrepareValueLiteral(stringLiteral.ValueAsPineValue),
 
-            AbstractExpression.IntegerLiteral integerLiteral =>
-            PrepareValueLiteral(integerLiteral.ValueAsPineValue),
+                AbstractExpression.CharLiteral charLiteral =>
+                PrepareValueLiteral(charLiteral.ValueAsPineValue),
 
-            AbstractExpression.FloatLiteral floatLiteral =>
-            PrepareValueLiteral(
-                ElmValueEncoding.ElmValueAsPineValue(
-                    ElmValue.ElmFloat.Normalized(
-                        floatLiteral.Numerator,
-                        floatLiteral.Denominator))),
+                AbstractExpression.IntegerLiteral integerLiteral =>
+                PrepareValueLiteral(integerLiteral.ValueAsPineValue),
 
-            AbstractExpression.Negation negation =>
-            new PreparedExpression.Negation(PrepareExpression(negation.Expression)),
+                AbstractExpression.FloatLiteral floatLiteral =>
+                PrepareValueLiteral(
+                    ElmValueEncoding.ElmValueAsPineValue(
+                        ElmValue.ElmFloat.Normalized(
+                            floatLiteral.Numerator,
+                            floatLiteral.Denominator))),
 
-            AbstractExpression.ListExpr listExpr =>
-            new PreparedExpression.ListExpr([.. listExpr.Elements.Select(PrepareExpression)]),
+                AbstractExpression.Negation negation =>
+                new PreparedExpression.Negation(PrepareExpression(negation.Expression, closedExpressionReducer)),
 
-            AbstractExpression.Identifier identifier =>
-            new PreparedExpression.Identifier(identifier.QualifiedName),
+                AbstractExpression.ListExpr listExpr =>
+                new PreparedExpression.ListExpr(
+                    [.. listExpr.Elements.Select(element => PrepareExpression(element, closedExpressionReducer))]),
 
-            AbstractExpression.IfBlock ifBlock =>
-            new PreparedExpression.IfBlock(
-                PrepareExpression(ifBlock.Condition),
-                PrepareExpression(ifBlock.ThenBlock),
-                PrepareExpression(ifBlock.ElseBlock)),
+                AbstractExpression.Identifier identifier =>
+                new PreparedExpression.Identifier(identifier.QualifiedName),
 
-            AbstractExpression.PrefixOperator prefixOperator =>
-            new PreparedExpression.PrefixOperator(prefixOperator.Operator),
+                AbstractExpression.IfBlock ifBlock =>
+                new PreparedExpression.IfBlock(
+                    PrepareExpression(ifBlock.Condition, closedExpressionReducer),
+                    PrepareExpression(ifBlock.ThenBlock, closedExpressionReducer),
+                    PrepareExpression(ifBlock.ElseBlock, closedExpressionReducer)),
 
-            AbstractExpression.Application application =>
-            new PreparedExpression.Application(
-                PrepareExpression(application.Function),
-                [.. application.Arguments.Select(PrepareExpression)]),
+                AbstractExpression.PrefixOperator prefixOperator =>
+                new PreparedExpression.PrefixOperator(prefixOperator.Operator),
 
-            AbstractExpression.OperatorApplication operatorApplication =>
-            new PreparedExpression.OperatorApplication(
-                operatorApplication.Operator,
-                operatorApplication.Direction,
-                PrepareExpression(operatorApplication.Left),
-                PrepareExpression(operatorApplication.Right)),
+                AbstractExpression.Application application =>
+                new PreparedExpression.Application(
+                    PrepareExpression(application.Function, closedExpressionReducer),
+                    [
+                    .. application.Arguments.Select(argument => PrepareExpression(argument, closedExpressionReducer))
+                    ]),
 
-            AbstractExpression.TupledExpression tupledExpression =>
-            new PreparedExpression.TupledExpression([.. tupledExpression.Elements.Select(PrepareExpression)]),
+                AbstractExpression.OperatorApplication operatorApplication =>
+                new PreparedExpression.OperatorApplication(
+                    operatorApplication.Operator,
+                    operatorApplication.Direction,
+                    PrepareExpression(operatorApplication.Left, closedExpressionReducer),
+                    PrepareExpression(operatorApplication.Right, closedExpressionReducer)),
 
-            AbstractExpression.LambdaExpression lambdaExpression =>
-            new PreparedExpression.LambdaExpression(
-                lambdaExpression.Arguments,
-                PrepareExpression(lambdaExpression.Expression)),
+                AbstractExpression.TupledExpression tupledExpression =>
+                new PreparedExpression.TupledExpression(
+                    [
+                    .. tupledExpression.Elements.Select(element => PrepareExpression(element, closedExpressionReducer))
+                    ]),
 
-            AbstractExpression.CaseExpression caseExpression =>
-            new PreparedExpression.CaseExpression(
-                PrepareExpression(caseExpression.Expression),
-                PrepareCaseDispatch(caseExpression.Cases)),
+                AbstractExpression.LambdaExpression lambdaExpression =>
+                new PreparedExpression.LambdaExpression(
+                    lambdaExpression.Arguments,
+                    PrepareExpression(lambdaExpression.Expression, closedExpressionReducer)),
 
-            AbstractExpression.LetExpression letExpression =>
-            new PreparedExpression.LetExpression(
-                [.. letExpression.Declarations.Select(PrepareLetDeclaration)],
-                PrepareExpression(letExpression.Expression)),
+                AbstractExpression.CaseExpression caseExpression =>
+                new PreparedExpression.CaseExpression(
+                    PrepareExpression(caseExpression.Expression, closedExpressionReducer),
+                    PrepareCaseDispatch(caseExpression.Cases, closedExpressionReducer)),
 
-            AbstractExpression.RecordExpr recordExpr =>
-            new PreparedExpression.RecordExpr([.. recordExpr.Fields.Select(PrepareRecordSetter)]),
+                AbstractExpression.LetExpression letExpression =>
+                new PreparedExpression.LetExpression(
+                    [
+                    .. letExpression.Declarations.Select(
+                        declaration => PrepareLetDeclaration(declaration, closedExpressionReducer))
+                    ],
+                    PrepareExpression(letExpression.Expression, closedExpressionReducer)),
 
-            AbstractExpression.RecordAccess recordAccess =>
-            new PreparedExpression.RecordAccess(
-                PrepareExpression(recordAccess.Record),
-                recordAccess.FieldName,
-                recordAccess.FieldNameValue),
+                AbstractExpression.RecordExpr recordExpr =>
+                new PreparedExpression.RecordExpr(
+                    [.. recordExpr.Fields.Select(field => PrepareRecordSetter(field, closedExpressionReducer))]),
 
-            AbstractExpression.RecordAccessFunction recordAccessFunction =>
-            new PreparedExpression.RecordAccessFunction(
-                recordAccessFunction.FieldName,
-                recordAccessFunction.FieldNameValue),
+                AbstractExpression.RecordAccess recordAccess =>
+                new PreparedExpression.RecordAccess(
+                    PrepareExpression(recordAccess.Record, closedExpressionReducer),
+                    recordAccess.FieldName,
+                    recordAccess.FieldNameValue),
 
-            AbstractExpression.RecordUpdateExpression recordUpdateExpression =>
-            new PreparedExpression.RecordUpdateExpression(
-                recordUpdateExpression.RecordName,
-                [.. recordUpdateExpression.Fields.Select(PrepareRecordSetter)]),
+                AbstractExpression.RecordAccessFunction recordAccessFunction =>
+                new PreparedExpression.RecordAccessFunction(
+                    recordAccessFunction.FieldName,
+                    recordAccessFunction.FieldNameValue),
 
-            AbstractExpression.GLSLExpression glslExpression =>
-            new PreparedExpression.GLSLExpression(glslExpression.ShaderCode),
+                AbstractExpression.RecordUpdateExpression recordUpdateExpression =>
+                new PreparedExpression.RecordUpdateExpression(
+                    recordUpdateExpression.RecordName,
+                    [
+                    .. recordUpdateExpression.Fields.Select(field => PrepareRecordSetter(field, closedExpressionReducer))
+                    ]),
 
-            _ =>
-            throw new System.NotImplementedException(
-                "PrepareExpression does not handle expression variant: " + expression.GetType().Name),
-        };
+                AbstractExpression.GLSLExpression glslExpression =>
+                new PreparedExpression.GLSLExpression(glslExpression.ShaderCode),
+
+                _ =>
+                throw new System.NotImplementedException(
+                    "PrepareExpression does not handle expression variant: " + expression.GetType().Name),
+            };
+
+        return closedExpressionReducer?.Reduce(expression, preparedExpression) ?? preparedExpression;
+    }
 
     private static PreparedExpression.ValueLiteral PrepareValueLiteral(PineValue value) =>
         new(PineValueInProcess.CreateFullyRepresented(value));
 
     private static PreparedLetDeclaration PrepareLetDeclaration(
-        AbstractLetDeclaration declaration) =>
+        AbstractLetDeclaration declaration,
+        ClosedExpressionReducer? closedExpressionReducer) =>
         declaration switch
         {
             AbstractLetDeclaration.LetFunction letFunction =>
             new PreparedLetDeclaration.LetFunction(
-                PrepareFunctionStruct(letFunction.Function)),
+                PrepareFunctionStruct(letFunction.Function, closedExpressionReducer)),
 
             AbstractLetDeclaration.LetDestructuring letDestructuring =>
             new PreparedLetDeclaration.LetDestructuring(
                 letDestructuring.Pattern,
-                PrepareExpression(letDestructuring.Expression)),
+                PrepareExpression(letDestructuring.Expression, closedExpressionReducer)),
 
             _ =>
             throw new System.NotImplementedException(
@@ -356,14 +394,16 @@ public partial class ElmSyntaxInterpreter
         };
 
     private static PreparedRecordSetter PrepareRecordSetter(
-        AbstractRecordSetter recordSetter) =>
+        AbstractRecordSetter recordSetter,
+        ClosedExpressionReducer? closedExpressionReducer) =>
         new(
             recordSetter.FieldName,
             recordSetter.FieldNameValue,
-            PrepareExpression(recordSetter.Value));
+            PrepareExpression(recordSetter.Value, closedExpressionReducer));
 
     private static PreparedCaseDispatch PrepareCaseDispatch(
-        IReadOnlyList<AbstractCase> cases)
+        IReadOnlyList<AbstractCase> cases,
+        ClosedExpressionReducer? closedExpressionReducer)
     {
         var steps = new List<PreparedCaseDispatchSegment>();
         List<PreparedConstantCase>? pendingConstantCases = null;
@@ -379,7 +419,7 @@ public partial class ElmSyntaxInterpreter
 
         foreach (var caseNode in cases)
         {
-            var preparedExpression = PrepareExpression(caseNode.Expression);
+            var preparedExpression = PrepareExpression(caseNode.Expression, closedExpressionReducer);
 
             if (caseNode.Pattern is AbstractPattern.AllPattern)
             {

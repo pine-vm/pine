@@ -266,10 +266,10 @@ public class ElmParserExpressionTests
         // optimization opportunities.
         ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters).Should().Be(
             """
-            InstructionLoopCount: 2_020
-            DirectFunctionApplicationCount: 308
+            InstructionLoopCount: 2_008
+            DirectFunctionApplicationCount: 300
             FunctionValueApplicationCount: 0
-            PineBuiltinInvocationCount: 135
+            PineBuiltinInvocationCount: 133
             """);
     }
 
@@ -321,7 +321,7 @@ public class ElmParserExpressionTests
         ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters).Should().Be(
             """
             InstructionLoopCount: 3_452
-            DirectFunctionApplicationCount: 517
+            DirectFunctionApplicationCount: 504
             FunctionValueApplicationCount: 0
             PineBuiltinInvocationCount: 216
             """);

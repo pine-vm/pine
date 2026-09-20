@@ -4199,17 +4199,16 @@ public partial class ElmSyntaxInterpreter
             declarations,
             static concrete =>
             {
-                var converted =
-                    new Dictionary<DeclQualifiedName, PreparedDeclaration>(concrete.Count);
+                var abstractDeclarations =
+                    new Dictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>(concrete.Count);
 
                 foreach (var (name, declaration) in concrete)
                 {
-                    converted[name] =
-                        PrepareDeclaration(
-                            ElmSyntaxAbstract.ConvertFromConcrete.FromDeclaration(declaration));
+                    abstractDeclarations[name] =
+                        ElmSyntaxAbstract.ConvertFromConcrete.FromDeclaration(declaration);
                 }
 
-                return converted;
+                return PrepareDeclarations(abstractDeclarations);
             });
 
     /// <inheritdoc cref="UserDefinedResolver(Application, IReadOnlyDictionary{DeclQualifiedName, SyntaxModel.Declaration})"/>

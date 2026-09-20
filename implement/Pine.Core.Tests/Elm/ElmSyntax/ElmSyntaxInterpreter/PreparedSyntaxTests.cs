@@ -243,6 +243,152 @@ public class PreparedSyntaxTests
     }
 
     [Fact]
+    public void Preparation_reduces_closed_expressions_to_cached_literals()
+    {
+        const string moduleText =
+            """
+            module Test exposing (..)
+
+
+            baseValue =
+                40
+
+
+            closedValue =
+                let
+                    answer =
+                        Pine_builtin.int_add [ baseValue, 2 ]
+                in
+                case answer of
+                    42 ->
+                        ( answer, Pine_builtin.skip [ 2, 0x0000000100000000 ] )
+
+                    _ ->
+                        ( 0, 0 )
+            """;
+
+        var prepared = Prepare(moduleText);
+        var literal = GetLiteral(prepared, "closedValue");
+
+        literal.Value.ListItemsOrNull().Should().NotBeNull();
+        EvaluateInProcess(prepared, "closedValue").Should().BeSameAs(literal.Value);
+        Evaluate(prepared, "Test.closedValue").Should().Be("(42, '\0')");
+    }
+
+    [Fact]
+    public void Preparation_reduces_closed_subexpressions_in_char_kernel_functions()
+    {
+        const string moduleText =
+            """
+            module Test exposing (..)
+
+
+            toCode char =
+                Pine_builtin.int_add
+                    [ Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], char ]
+                    , 0
+                    ]
+
+
+            fromCode code =
+                Pine_builtin.reverse
+                    (Pine_builtin.take
+                        [ 4
+                        , Pine_builtin.concat
+                            [ Pine_builtin.reverse (Pine_builtin.skip [ 1, code ])
+                            , Pine_builtin.skip [ 2, 0x0000000100000000 ]
+                            ]
+                        ]
+                    )
+            """;
+
+        var prepared = Prepare(moduleText);
+
+        var toCodeBody =
+            prepared.Declarations[Name("Test", "toCode")]
+            .Should().BeOfType<ElmInterpreter.PreparedDeclaration.FunctionDeclaration>()
+            .Subject.Function.Declaration.Expression
+            .Should().BeOfType<ElmInterpreter.PreparedExpression.Application>()
+            .Subject;
+
+        var toCodeArguments =
+            toCodeBody.Arguments.Should().ContainSingle()
+            .Subject
+            .Should().BeOfType<ElmInterpreter.PreparedExpression.ListExpr>()
+            .Subject;
+
+        var concatArguments =
+            toCodeArguments.Elements[0]
+            .Should().BeOfType<ElmInterpreter.PreparedExpression.Application>()
+            .Subject.Arguments.Should().ContainSingle()
+            .Subject
+            .Should().BeOfType<ElmInterpreter.PreparedExpression.ListExpr>()
+            .Subject;
+
+        concatArguments.Elements[0]
+            .Should().BeOfType<ElmInterpreter.PreparedExpression.ValueLiteral>();
+
+        var fromCodeBody =
+            prepared.Declarations[Name("Test", "fromCode")]
+            .Should().BeOfType<ElmInterpreter.PreparedDeclaration.FunctionDeclaration>()
+            .Subject.Function.Declaration.Expression
+            .Should().BeOfType<ElmInterpreter.PreparedExpression.Application>()
+            .Subject;
+
+        var takeArguments =
+            fromCodeBody.Arguments.Should().ContainSingle()
+            .Subject
+            .Should().BeOfType<ElmInterpreter.PreparedExpression.Application>()
+            .Subject.Arguments.Should().ContainSingle()
+            .Subject
+            .Should().BeOfType<ElmInterpreter.PreparedExpression.ListExpr>()
+            .Subject;
+
+        var concatInFromCode =
+            takeArguments.Elements[1]
+            .Should().BeOfType<ElmInterpreter.PreparedExpression.Application>()
+            .Subject.Arguments.Should().ContainSingle()
+            .Subject
+            .Should().BeOfType<ElmInterpreter.PreparedExpression.ListExpr>()
+            .Subject;
+
+        concatInFromCode.Elements[1]
+            .Should().BeOfType<ElmInterpreter.PreparedExpression.ValueLiteral>();
+
+        Evaluate(prepared, "Test.toCode 65").Should().Be("1089");
+        Evaluate(prepared, "Test.fromCode 65").Should().Be("'A'");
+    }
+
+    [Fact]
+    public void Preparation_keeps_closed_function_values_as_expressions()
+    {
+        const string moduleText =
+            """
+            module Test exposing (..)
+
+
+            identity =
+                \value -> value
+
+
+            functions =
+                [ identity ]
+            """;
+
+        var prepared = Prepare(moduleText);
+
+        prepared.Declarations[Name("Test", "identity")]
+            .Should().BeOfType<ElmInterpreter.PreparedDeclaration.FunctionDeclaration>()
+            .Subject.Function.Declaration.Expression
+            .Should().BeOfType<ElmInterpreter.PreparedExpression.LambdaExpression>();
+
+        prepared.Declarations[Name("Test", "functions")]
+            .Should().BeOfType<ElmInterpreter.PreparedDeclaration.FunctionDeclaration>()
+            .Subject.Function.Declaration.Expression
+            .Should().BeOfType<ElmInterpreter.PreparedExpression.ListExpr>();
+    }
+
+    [Fact]
     public void Prepared_case_dispatch_emits_constant_values_for_binding_free_composite_patterns()
     {
         const string moduleText =
