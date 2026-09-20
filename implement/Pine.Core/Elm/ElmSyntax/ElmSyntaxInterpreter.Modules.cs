@@ -138,8 +138,10 @@ public partial class ElmSyntaxInterpreter
             resolvers.Add(ApplicationResolver(s_builtinFunctionResolvers));
         }
 
+        var resolverIndex = GetDeclarationResolverIndex(prepared.Declarations);
+
         resolvers.Add(app => PineBuiltinResolverCounting(app, invocationCounter));
-        resolvers.Add(app => UserDefinedResolver(app, prepared.Declarations));
+        resolvers.Add(app => UserDefinedResolver(app, resolverIndex));
 
         var combined = CombineResolvers(resolvers);
 

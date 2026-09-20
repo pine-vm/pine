@@ -4216,6 +4216,15 @@ public partial class ElmSyntaxInterpreter
         Application application,
         IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> declarations)
     {
+        var resolverIndex = GetDeclarationResolverIndex(declarations);
+
+        return UserDefinedResolver(application, resolverIndex);
+    }
+
+    private static ApplicationResolution? UserDefinedResolver(
+        Application application,
+        PreparedDeclarationResolverIndex resolverIndex)
+    {
         var requestedNamespaces = application.FunctionName.Namespaces;
 
         // For an unqualified reference, first restrict resolution to the caller's own module so
@@ -4229,149 +4238,14 @@ public partial class ElmSyntaxInterpreter
             if (callerNamespaces.Count is not 0)
             {
                 var sameModuleResolution =
-                    ResolveAgainstDeclarations(application, declarations, callerNamespaces);
+                    resolverIndex.Resolve(application, callerNamespaces);
 
                 if (sameModuleResolution is not null)
                     return sameModuleResolution;
             }
         }
 
-        return ResolveAgainstDeclarations(application, declarations, requiredNamespaces: null);
-    }
-
-    /// <summary>
-    /// Core matching loop for <see cref="UserDefinedResolver(Application, IReadOnlyDictionary{DeclQualifiedName, PreparedDeclaration})"/>. When
-    /// <paramref name="requiredNamespaces"/> is non-null, only declarations whose namespaces equal
-    /// it are considered (used both for qualified references and for the same-module preference pass
-    /// of unqualified references). When it is null, every declaration is considered (module-agnostic
-    /// fallback).
-    /// </summary>
-    private static ApplicationResolution? ResolveAgainstDeclarations(
-        Application application,
-        IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> declarations,
-        IReadOnlyList<string>? requiredNamespaces)
-    {
-        var requestedName = application.FunctionName.DeclName;
-        var requestedNamespaces = application.FunctionName.Namespaces;
-
-        // A qualified reference must always match the declaration's namespaces exactly.
-        var effectiveRequiredNamespaces =
-            requestedNamespaces.Count is not 0 ? requestedNamespaces : requiredNamespaces;
-
-        foreach (var (declName, declaration) in declarations)
-        {
-            if (effectiveRequiredNamespaces is not null
-                && !NamespacesEqual(effectiveRequiredNamespaces, declName.Namespaces))
-            {
-                continue;
-            }
-
-            switch (declaration)
-            {
-                case PreparedDeclaration.FunctionDeclaration functionDeclaration
-                when functionDeclaration.Function.Declaration.Name == requestedName:
-
-                    return
-                        new ApplicationResolution.ContinueWithFunction(
-                            functionDeclaration.Function.Declaration,
-                            ResolvedName: declName);
-
-                case PreparedDeclaration.AliasDeclaration aliasDeclaration
-                when aliasDeclaration.TypeAlias.Name == requestedName:
-
-                    {
-                        if (aliasDeclaration.TypeAlias.TypeAnnotation
-                            is ElmSyntaxAbstract.TypeAnnotation.Record recordAnnotation)
-                        {
-                            var fieldNames =
-                                recordAnnotation.RecordDefinition.Fields
-                                .Select(field => (field.FieldName, field.FieldNameValue))
-                                .ToList();
-
-                            if (fieldNames.Count == application.Arguments.Count)
-                            {
-                                var fields =
-                                    new List<(string FieldName, PineValue FieldNameValue, PineValueInProcess FieldValue)>(
-                                        fieldNames.Count);
-
-                                for (var i = 0; i < fieldNames.Count; i++)
-                                {
-                                    fields.Add(
-                                        (fieldNames[i].FieldName, fieldNames[i].FieldNameValue, application.Arguments[i]));
-                                }
-
-                                return
-                                    new ApplicationResolution.Resolved(
-                                        BuildRecordValue([.. fields.OrderBy(f => f.FieldName)]));
-                            }
-
-                            // Partial application of a record-type-alias constructor: synthesise a
-                            // closure that, when fully applied, re-enters the resolver with all
-                            // arguments and produces the record.
-                            if (application.Arguments.Count < fieldNames.Count)
-                            {
-                                return
-                                    new ApplicationResolution.Resolved(
-                                        new ElmRecordTypeConstructorInProcess(
-                                            typeName: declName,
-                                            fieldNames: [.. fieldNames],
-                                            arguments: [.. application.Arguments]));
-
-                            }
-                        }
-
-                        break;
-                    }
-
-                case PreparedDeclaration.ChoiceTypeDeclaration choiceTypeDeclaration:
-                    {
-                        foreach (var constructor in choiceTypeDeclaration.TypeDeclaration.Constructors)
-                        {
-                            if (constructor.Name != requestedName)
-                                continue;
-
-                            var ctorArity = constructor.Arguments.Count;
-
-                            if (ctorArity == application.Arguments.Count)
-                            {
-                                if (ctorArity is 0 && constructor.Name is "True")
-                                {
-                                    return
-                                        new ApplicationResolution.Resolved(
-                                            PineValueInProcess.KernelTrueValue);
-                                }
-
-                                if (ctorArity is 0 && constructor.Name is "False")
-                                {
-                                    return
-                                        new ApplicationResolution.Resolved(
-                                            PineValueInProcess.KernelFalseValue);
-                                }
-
-                                return
-                                    new ApplicationResolution.Resolved(
-                                        BuildTaggedValue(PineValueInProcess.Create(constructor.NameValue), application.Arguments));
-                            }
-
-                            // Partial application of a choice-type tag constructor.
-                            if (application.Arguments.Count < ctorArity)
-                            {
-                                return
-                                    new ApplicationResolution.Resolved(
-                                        new ElmChoiceTagConstructorInProcess(
-                                            typeName: declName,
-                                            tagName: constructor.Name,
-                                            totalArity: ctorArity,
-                                            arguments: [.. application.Arguments]));
-                            }
-                        }
-
-                        break;
-                    }
-            }
-        }
-
-        return null;
+        return resolverIndex.Resolve(application, requiredNamespaces: null);
     }
 
     private static PineValueInProcess BuildTaggedValue(
@@ -4470,13 +4344,7 @@ public partial class ElmSyntaxInterpreter
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations,
         IReadOnlyDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>? customFunctionResolvers = null)
     {
-        return
-            CombineResolvers(
-                [
-                ApplicationResolver(customFunctionResolvers ?? ImmutableDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>.Empty),
-                PineBuiltinResolver,
-                app => UserDefinedResolver(app, declarations)
-                ]);
+        return BuildResolvers(GetOrConvertDeclarations(declarations), customFunctionResolvers);
     }
 
     /// <summary>
@@ -4495,12 +4363,14 @@ public partial class ElmSyntaxInterpreter
         IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> declarations,
         IReadOnlyDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>? customFunctionResolvers)
     {
+        var resolverIndex = GetDeclarationResolverIndex(declarations);
+
         return
             CombineResolvers(
                 [
                 ApplicationResolver(customFunctionResolvers ?? ImmutableDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>.Empty),
                 PineBuiltinResolver,
-                app => UserDefinedResolver(app, declarations)
+                app => UserDefinedResolver(app, resolverIndex)
                 ]);
     }
 

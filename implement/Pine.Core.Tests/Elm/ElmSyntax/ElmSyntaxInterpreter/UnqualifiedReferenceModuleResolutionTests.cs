@@ -3,6 +3,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmSyntax;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Numerics;
 using Xunit;
@@ -170,6 +171,80 @@ public class UnqualifiedReferenceModuleResolutionTests
         application2.Arguments.Count.Should().Be(2);
     }
 
+    [Fact]
+    public void Prepared_resolver_indexes_declarations_once()
+    {
+        var prepared =
+            ElmInterpreter.PrepareModules([ModuleQ, ModuleP])
+            .Extract(err => throw new Exception("Failed to prepare modules: " + err));
+
+        var declarations =
+            new EnumerationCountingReadOnlyDictionary<
+                DeclQualifiedName,
+                ElmInterpreter.PreparedDeclaration>(
+                prepared.Declarations);
+
+        var resolver = ElmInterpreter.BuildResolvers(declarations);
+
+        declarations.EnumerationCount.Should().Be(1);
+
+        var callerContext =
+            new ElmInterpreter.ApplicationContext(
+                CurrentTopLevel: DeclQualifiedName.Create(["P"], "entry"),
+                LocalBindings:
+                System.Collections.Immutable.ImmutableDictionary<string, Core.Internal.PineValueInProcess>.Empty);
+
+        var application =
+            new ElmInterpreter.Application(
+                FunctionName: DeclQualifiedName.Create([], "helper"),
+                Arguments: [IntegerInProcess(7), IntegerInProcess(0)],
+                Context: callerContext);
+
+        for (var i = 0; i < 10; i++)
+        {
+            var resolved =
+                resolver(application)
+                .Should().BeOfType<ElmInterpreter.ApplicationResolution.ContinueWithFunction>()
+                .Subject;
+
+            resolved.ResolvedName.Should().Be(DeclQualifiedName.Create(["P"], "helper"));
+        }
+
+        declarations.EnumerationCount.Should().Be(1);
+    }
+
     private static Core.Internal.PineValueInProcess IntegerInProcess(BigInteger integer) =>
         Core.Internal.PineValueInProcess.Create(Core.CommonEncodings.IntegerEncoding.EncodeSignedInteger(integer));
+
+    private sealed class EnumerationCountingReadOnlyDictionary<TKey, TValue>(
+        IReadOnlyDictionary<TKey, TValue> inner)
+        : IReadOnlyDictionary<TKey, TValue>
+        where TKey : notnull
+    {
+        public int EnumerationCount { get; private set; }
+
+        public TValue this[TKey key] => inner[key];
+
+        public IEnumerable<TKey> Keys => inner.Keys;
+
+        public IEnumerable<TValue> Values => inner.Values;
+
+        public int Count => inner.Count;
+
+        public bool ContainsKey(TKey key) =>
+            inner.ContainsKey(key);
+
+        public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator()
+        {
+            EnumerationCount++;
+
+            return inner.GetEnumerator();
+        }
+
+        public bool TryGetValue(TKey key, out TValue value) =>
+            inner.TryGetValue(key, out value!);
+
+        IEnumerator IEnumerable.GetEnumerator() =>
+            GetEnumerator();
+    }
 }
