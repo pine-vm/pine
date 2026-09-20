@@ -62,7 +62,7 @@ public partial class ElmSyntaxInterpreter
             /// </summary>
             public sealed record Declared(
                 DeclQualifiedName Name,
-                ElmSyntaxAbstract.FunctionImplementation Implementation)
+                PreparedFunctionImplementation Implementation)
                 : SourceRef;
 
             /// <summary>
@@ -70,7 +70,7 @@ public partial class ElmSyntaxInterpreter
             /// use a fixed synthetic name (the abstract syntax model carries no source location).
             /// </summary>
             public sealed record Lambda(
-                ElmSyntaxAbstract.Expression.LambdaExpression LambdaExpression)
+                PreparedExpression.LambdaExpression LambdaExpression)
                 : SourceRef;
 
             public override string ToString()

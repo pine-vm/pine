@@ -4,6 +4,9 @@ using Pine.Core.Internal;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Text.Json.Serialization;
+
+using AbstractDeclaration = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract.Declaration;
 
 namespace Pine.Core.Elm.ElmSyntax;
 
@@ -19,8 +22,42 @@ public partial class ElmSyntaxInterpreter
     /// <summary>
     /// Program code of an app prepared to run functions in the interpreter.
     /// </summary>
-    public record Prepared(
-        IReadOnlyDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> Declarations);
+    /// <remarks>
+    /// <see cref="Declarations"/> intentionally exposes the prepared declaration model. A secondary
+    /// constructor accepts the former abstract-declaration dictionary shape and prepares it for source
+    /// compatibility, but full property-type and binary compatibility with older callers is not possible
+    /// because the property type changed to the new prepared model.
+    /// </remarks>
+    public record Prepared
+    {
+        /// <summary>
+        /// Creates a prepared app from declarations that are already in the prepared model.
+        /// </summary>
+        [JsonConstructor]
+        public Prepared(IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> declarations)
+        {
+            Declarations = declarations;
+        }
+
+        /// <summary>
+        /// Creates a prepared app from the legacy abstract-declaration model by preparing each declaration.
+        /// </summary>
+        public Prepared(IReadOnlyDictionary<DeclQualifiedName, AbstractDeclaration> declarations)
+            : this(PrepareDeclarations(declarations))
+        {
+        }
+
+        /// <summary>
+        /// Declarations prepared for interpreter execution, keyed by full module-qualified name.
+        /// </summary>
+        public IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> Declarations { get; init; }
+
+        /// <summary>
+        /// Deconstructs this value into its declaration dictionary.
+        /// </summary>
+        public void Deconstruct(out IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> declarations) =>
+            declarations = Declarations;
+    }
 
     /// <summary>
     /// Parses the supplied <paramref name="moduleSourceTexts"/> to qualify every reference in every module,
@@ -114,7 +151,8 @@ public partial class ElmSyntaxInterpreter
 
         var result =
             RunTrampoline(
-                initialExpression: ElmSyntaxAbstract.ConvertFromConcrete.FromExpression(rootExpression),
+                initialExpression:
+                PrepareExpression(ElmSyntaxAbstract.ConvertFromConcrete.FromExpression(rootExpression)),
                 initialEnv: rootContext,
                 initialApplication: null,
                 resolveApplication: combined,
@@ -210,10 +248,10 @@ public partial class ElmSyntaxInterpreter
                 "Unexpected canonicalization result type: " + canonicalizeResult.GetType().FullName);
         }
 
-        // Build a declarations dictionary keyed by full module-qualified name. For
+        // Build a prepared declarations dictionary keyed by full module-qualified name. For
         // InfixDeclaration entries, the key uses the operator symbol as DeclName (so
         // BuildInfixOperatorMap finds them).
-        var declarations = new Dictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>();
+        var declarations = new Dictionary<DeclQualifiedName, PreparedDeclaration>();
 
         foreach (var (moduleNameKey, (canonicalizedFile, errors, shadowings)) in canonicalized)
         {
@@ -236,7 +274,8 @@ public partial class ElmSyntaxInterpreter
             {
                 if (declNode is ElmSyntaxAbstract.Declaration.InfixDeclaration infixDecl)
                 {
-                    declarations[DeclQualifiedName.Create(moduleNameParts, infixDecl.Infix.Operator)] = declNode;
+                    declarations[DeclQualifiedName.Create(moduleNameParts, infixDecl.Infix.Operator)] =
+                        PrepareDeclaration(declNode);
 
                     continue;
                 }
@@ -246,7 +285,8 @@ public partial class ElmSyntaxInterpreter
                 if (declName is null)
                     continue;
 
-                declarations[DeclQualifiedName.Create(moduleNameParts, declName)] = declNode;
+                declarations[DeclQualifiedName.Create(moduleNameParts, declName)] =
+                    PrepareDeclaration(declNode);
             }
         }
 
@@ -270,7 +310,7 @@ public partial class ElmSyntaxInterpreter
     /// <summary>
     /// Invokes the function identified by <paramref name="functionName"/> with the given
     /// <paramref name="arguments"/>, resolving against the supplied <paramref name="prepared"/>
-    /// declarations (and the default builtins) via <see cref="BuildResolvers(IReadOnlyDictionary{DeclQualifiedName, ElmSyntaxAbstract.Declaration})"/>.
+    /// declarations (and the default builtins) via <see cref="BuildResolvers(IReadOnlyDictionary{DeclQualifiedName, PreparedDeclaration})"/>.
     /// </summary>
     public static Result<ElmInterpretationError, PineValueInProcess> Interpret(
         DeclQualifiedName functionName,
@@ -291,6 +331,19 @@ public partial class ElmSyntaxInterpreter
         SyntaxModel.Expression expr)
     {
         return Canonicalization.CanonicalizeExpression(expr, ImplicitImportConfig.Default);
+    }
+
+    private static IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> PrepareDeclarations(
+        IReadOnlyDictionary<DeclQualifiedName, AbstractDeclaration> declarations)
+    {
+        var preparedDeclarations = new Dictionary<DeclQualifiedName, PreparedDeclaration>(declarations.Count);
+
+        foreach (var declaration in declarations)
+        {
+            preparedDeclarations.Add(declaration.Key, PrepareDeclaration(declaration.Value));
+        }
+
+        return preparedDeclarations;
     }
 
     /// <summary>

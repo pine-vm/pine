@@ -673,7 +673,10 @@ public class PineValueInProcessTests
         var closure =
             new ElmInterpreter.ElmClosureInProcess(
                 new ElmInterpreter.ElmClosureInProcess.SourceRef.Lambda(
-                    new AbstractExpr.LambdaExpression([], AbstractExpr.UnitExpr.Instance)),
+                    new ElmInterpreter.PreparedExpression.LambdaExpression(
+                        [],
+                        new ElmInterpreter.PreparedExpression.ValueLiteral(
+                            PineValueInProcess.CreateFullyRepresented(PineValue.EmptyList)))),
                 parameterCount: 1,
                 argumentsAlreadyCollected: [],
                 capturedBindings: ImmutableDictionary<string, PineValueInProcess>.Empty,

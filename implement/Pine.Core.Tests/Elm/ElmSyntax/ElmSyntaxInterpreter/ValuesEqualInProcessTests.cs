@@ -39,17 +39,18 @@ public class ValuesEqualInProcessTests
 
     private static ElmInterpreter.ElmClosureInProcess.SourceRef LambdaSource() =>
         new ElmInterpreter.ElmClosureInProcess.SourceRef.Lambda(
-            new AbstractExpr.LambdaExpression(
+            new ElmInterpreter.PreparedExpression.LambdaExpression(
                 [],
-                AbstractExpr.UnitExpr.Instance));
+                new ElmInterpreter.PreparedExpression.ValueLiteral(
+                    PineValueInProcess.CreateFullyRepresented(PineValue.EmptyList))));
 
     private static ElmInterpreter.ElmClosureInProcess.SourceRef LambdaSourceReturning(int literal) =>
         new ElmInterpreter.ElmClosureInProcess.SourceRef.Lambda(
-            new AbstractExpr.LambdaExpression(
+            new ElmInterpreter.PreparedExpression.LambdaExpression(
                 [],
-                new AbstractExpr.IntegerLiteral(
-                    literal,
-                    IntegerEncoding.EncodeSignedInteger(literal))));
+                new ElmInterpreter.PreparedExpression.ValueLiteral(
+                    PineValueInProcess.CreateFullyRepresented(
+                        IntegerEncoding.EncodeSignedInteger(literal)))));
 
     private static ElmInterpreter.ElmClosureInProcess Closure(
         ElmInterpreter.ElmClosureInProcess.SourceRef source,

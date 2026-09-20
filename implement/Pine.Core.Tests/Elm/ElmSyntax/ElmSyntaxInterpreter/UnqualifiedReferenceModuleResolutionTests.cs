@@ -158,10 +158,10 @@ public class UnqualifiedReferenceModuleResolutionTests
         var body = continueWith.Function.Expression;
 
         var application2 =
-            body.Should().BeOfType<Core.Elm.ElmSyntax.ElmSyntaxAbstract.Expression.Application>().Subject;
+            body.Should().BeOfType<ElmInterpreter.PreparedExpression.Application>().Subject;
 
         var head =
-            application2.Function.Should().BeOfType<Core.Elm.ElmSyntax.ElmSyntaxAbstract.Expression.Identifier>()
+            application2.Function.Should().BeOfType<ElmInterpreter.PreparedExpression.Identifier>()
             .Subject;
 
         head.QualifiedName.DeclName.Should().Be("Good");

@@ -280,14 +280,14 @@ public partial class ElmSyntaxInterpreter
         /// </para>
         /// </summary>
         public sealed record ContinueWithFunction(
-            ElmSyntaxAbstract.FunctionImplementation Function,
+            PreparedFunctionImplementation Function,
             DeclQualifiedName? ResolvedName = null)
             : ApplicationResolution;
     }
 
     /// <summary>
     /// Interprets <paramref name="rootExpressionText"/> using a resolver that combines
-    /// <see cref="PineBuiltinResolver(Application)"/> with <see cref="UserDefinedResolver(Application, IReadOnlyDictionary{DeclQualifiedName, ElmSyntaxAbstract.Declaration})"/>
+    /// <see cref="PineBuiltinResolver(Application)"/> with <see cref="UserDefinedResolver(Application, IReadOnlyDictionary{DeclQualifiedName, PreparedDeclaration})"/>
     /// backed by the supplied <paramref name="prepared"/>.
     /// </summary>
     public static Result<ElmInterpretationError, ElmValue> InterpretAsElmValue(
@@ -392,7 +392,8 @@ public partial class ElmSyntaxInterpreter
 
         return
             RunTrampoline(
-                initialExpression: ElmSyntaxAbstract.ConvertFromConcrete.FromExpression(rootExpression),
+                initialExpression:
+                PrepareExpression(ElmSyntaxAbstract.ConvertFromConcrete.FromExpression(rootExpression)),
                 initialEnv: context,
                 initialApplication: null,
                 resolveApplication: resolveApplication,
@@ -578,13 +579,13 @@ public partial class ElmSyntaxInterpreter
     /// the resolver dispatches it like any other top-level call.
     /// </summary>
     private static IReadOnlyDictionary<string, DeclQualifiedName> BuildInfixOperatorMap(
-        IReadOnlyDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> declarations)
+        IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> declarations)
     {
         var map = new Dictionary<string, DeclQualifiedName>();
 
         foreach (var (declName, declaration) in declarations)
         {
-            if (declaration is ElmSyntaxAbstract.Declaration.InfixDeclaration infixDecl)
+            if (declaration is PreparedDeclaration.InfixDeclaration infixDecl)
             {
                 map[infixDecl.Infix.Operator] =
                     DeclQualifiedName.Create(
@@ -639,7 +640,8 @@ public partial class ElmSyntaxInterpreter
 
         var result =
             RunTrampoline(
-                initialExpression: ElmSyntaxAbstract.ConvertFromConcrete.FromExpression(rootExpression),
+                initialExpression:
+                PrepareExpression(ElmSyntaxAbstract.ConvertFromConcrete.FromExpression(rootExpression)),
                 initialEnv: rootContext,
                 initialApplication: null,
                 resolveApplication: combined,
@@ -700,7 +702,8 @@ public partial class ElmSyntaxInterpreter
 
         var result =
             RunTrampoline(
-                initialExpression: ElmSyntaxAbstract.ConvertFromConcrete.FromExpression(rootExpression),
+                initialExpression:
+                PrepareExpression(ElmSyntaxAbstract.ConvertFromConcrete.FromExpression(rootExpression)),
                 initialEnv: rootContext,
                 initialApplication: null,
                 resolveApplication: combined,
@@ -779,15 +782,15 @@ public partial class ElmSyntaxInterpreter
         /// filled by the currently-returned value.
         /// </summary>
         public sealed record BuildList(
-            IReadOnlyList<ElmSyntaxAbstract.Expression> Elements,
+            IReadOnlyList<PreparedExpression> Elements,
             int NextIndex,
             PineValueInProcess[] Accumulated,
             ApplicationContext Env) : Kont;
 
         /// <summary>After evaluating the condition of an if-expression, pick a branch.</summary>
         public sealed record IfBranch(
-            ElmSyntaxAbstract.Expression ThenBranch,
-            ElmSyntaxAbstract.Expression ElseBranch,
+            PreparedExpression ThenBranch,
+            PreparedExpression ElseBranch,
             ApplicationContext Env) : Kont;
 
         /// <summary>
@@ -796,7 +799,7 @@ public partial class ElmSyntaxInterpreter
         /// is the one the currently-returned value is for.
         /// </summary>
         public sealed record BuildRecord(
-            IReadOnlyList<ElmSyntaxAbstract.RecordSetter> Fields,
+            IReadOnlyList<PreparedRecordSetter> Fields,
             int NextIndex,
             (string FieldName, PineValue FieldNameValue, PineValueInProcess Value)[] Accumulated,
             ApplicationContext Env) : Kont;
@@ -807,8 +810,8 @@ public partial class ElmSyntaxInterpreter
         /// When all arguments are collected, the application is resolved.
         /// </summary>
         public sealed record BuildArgs(
-            ElmSyntaxAbstract.Expression.Identifier FunctionOrValue,
-            IReadOnlyList<ElmSyntaxAbstract.Expression> Arguments,
+            PreparedExpression.Identifier FunctionOrValue,
+            IReadOnlyList<PreparedExpression> Arguments,
             int NextIndex,
             PineValueInProcess[] Accumulated,
             ApplicationContext Env) : Kont;
@@ -823,8 +826,8 @@ public partial class ElmSyntaxInterpreter
         /// to perform the application once the function value is in hand.
         /// </summary>
         public sealed record BuildArgsForValue(
-            ElmSyntaxAbstract.Expression FunctionExpr,
-            IReadOnlyList<ElmSyntaxAbstract.Expression> Arguments,
+            PreparedExpression FunctionExpr,
+            IReadOnlyList<PreparedExpression> Arguments,
             int NextIndex,
             PineValueInProcess[] Accumulated,
             ApplicationContext Env) : Kont;
@@ -858,10 +861,10 @@ public partial class ElmSyntaxInterpreter
         /// </summary>
         public sealed record LetBindFunction(
             string BindingName,
-            IReadOnlyList<ElmSyntaxAbstract.LetDeclaration> Remaining,
+            IReadOnlyList<PreparedLetDeclaration> Remaining,
             int NextIndex,
             Dictionary<string, PineValueInProcess> Extended,
-            ElmSyntaxAbstract.Expression Body,
+            PreparedExpression Body,
             ApplicationContext Outer) : Kont;
 
         /// <summary>
@@ -870,10 +873,10 @@ public partial class ElmSyntaxInterpreter
         /// </summary>
         public sealed record LetBindDestructure(
             ElmSyntaxAbstract.Pattern Pattern,
-            IReadOnlyList<ElmSyntaxAbstract.LetDeclaration> Remaining,
+            IReadOnlyList<PreparedLetDeclaration> Remaining,
             int NextIndex,
             Dictionary<string, PineValueInProcess> Extended,
-            ElmSyntaxAbstract.Expression Body,
+            PreparedExpression Body,
             ApplicationContext Outer) : Kont;
 
         /// <summary>
@@ -927,9 +930,9 @@ public partial class ElmSyntaxInterpreter
         /// </para>
         /// </summary>
         public sealed record MatchCase(
-            IReadOnlyList<ElmSyntaxAbstract.Case> Cases,
+            PreparedCaseDispatch Dispatch,
             ApplicationContext Env,
-            ElmSyntaxAbstract.Expression? ScrutineeExpr = null) : Kont;
+            PreparedExpression? ScrutineeExpr = null) : Kont;
 
         /// <summary>
         /// After evaluating the record-position expression of a record-access
@@ -952,7 +955,7 @@ public partial class ElmSyntaxInterpreter
         /// </summary>
         public sealed record BuildRecordUpdate(
             PineValueInProcess? OriginalRecord,
-            IReadOnlyList<ElmSyntaxAbstract.RecordSetter> Fields,
+            IReadOnlyList<PreparedRecordSetter> Fields,
             int NextIndex,
             (string FieldName, PineValue FieldNameValue, PineValueInProcess FieldValue)[] Accumulated,
             ApplicationContext Env) : Kont;
@@ -966,7 +969,7 @@ public partial class ElmSyntaxInterpreter
     /// start by resolving <paramref name="initialApplication"/>.
     /// </summary>
     private static Result<ElmInterpretationError, PineValueInProcess> RunTrampoline(
-        ElmSyntaxAbstract.Expression? initialExpression,
+        PreparedExpression? initialExpression,
         ApplicationContext initialEnv,
         Application? initialApplication,
         System.Func<Application, ApplicationResolution> resolveApplication,
@@ -978,7 +981,7 @@ public partial class ElmSyntaxInterpreter
 
         // Either: (currentExpr, currentEnv) is the next thing to evaluate ("Eval" mode),
         // or currentValue holds the value about to be returned to the top kont ("Return" mode).
-        ElmSyntaxAbstract.Expression? currentExpr;
+        PreparedExpression? currentExpr;
         ApplicationContext currentEnv;
         PineValueInProcess? currentValue = null;
 
@@ -1046,43 +1049,17 @@ public partial class ElmSyntaxInterpreter
 
                 switch (currentExpr)
                 {
-                    case ElmSyntaxAbstract.Expression.UnitExpr:
-                        currentValue = PineValueInProcess.EmptyList;
+                    case PreparedExpression.ValueLiteral literal:
+                        currentValue = literal.Value;
                         currentExpr = null;
                         break;
 
-                    case ElmSyntaxAbstract.Expression.StringLiteral literal:
-                        currentValue = PineValueInProcess.Create(literal.ValueAsPineValue);
-                        currentExpr = null;
-                        break;
-
-                    case ElmSyntaxAbstract.Expression.CharLiteral charLiteral:
-                        currentValue = PineValueInProcess.Create(charLiteral.ValueAsPineValue);
-                        currentExpr = null;
-                        break;
-
-                    case ElmSyntaxAbstract.Expression.IntegerLiteral integer:
-                        currentValue = PineValueInProcess.Create(integer.ValueAsPineValue);
-                        currentExpr = null;
-                        break;
-
-                    case ElmSyntaxAbstract.Expression.FloatLiteral floatLiteral:
-                        currentValue =
-                            PineValueInProcess.Create(
-                                ElmValueEncoding.ElmValueAsPineValue(
-                                    ElmValue.ElmFloat.NotNormalized(
-                                        floatLiteral.Numerator,
-                                        floatLiteral.Denominator)));
-
-                        currentExpr = null;
-                        break;
-
-                    case ElmSyntaxAbstract.Expression.Negation negation:
+                    case PreparedExpression.Negation negation:
                         kstack.Push(new Kont.Negate());
                         currentExpr = negation.Expression;
                         break;
 
-                    case ElmSyntaxAbstract.Expression.ListExpr listExpr:
+                    case PreparedExpression.ListExpr listExpr:
                         {
                             var nodes = listExpr.Elements;
 
@@ -1106,7 +1083,7 @@ public partial class ElmSyntaxInterpreter
                             break;
                         }
 
-                    case ElmSyntaxAbstract.Expression.TupledExpression tupledExpression:
+                    case PreparedExpression.TupledExpression tupledExpression:
                         {
                             var nodes = tupledExpression.Elements;
 
@@ -1130,7 +1107,7 @@ public partial class ElmSyntaxInterpreter
                             break;
                         }
 
-                    case ElmSyntaxAbstract.Expression.IfBlock ifBlock:
+                    case PreparedExpression.IfBlock ifBlock:
                         kstack.Push(
                             new Kont.IfBranch(
                                 ThenBranch: ifBlock.ThenBlock,
@@ -1140,7 +1117,7 @@ public partial class ElmSyntaxInterpreter
                         currentExpr = ifBlock.Condition;
                         break;
 
-                    case ElmSyntaxAbstract.Expression.RecordExpr recordExpr:
+                    case PreparedExpression.RecordExpr recordExpr:
                         {
                             var fields = recordExpr.Fields;
 
@@ -1165,7 +1142,7 @@ public partial class ElmSyntaxInterpreter
                             break;
                         }
 
-                    case ElmSyntaxAbstract.Expression.Identifier functionOrValue:
+                    case PreparedExpression.Identifier functionOrValue:
                         {
                             // Bare name lookup. If it resolves to a local binding, return it directly;
                             // otherwise it's a nullary application which is handled by the same path
@@ -1222,7 +1199,7 @@ public partial class ElmSyntaxInterpreter
                             }
                         }
 
-                    case ElmSyntaxAbstract.Expression.Application application:
+                    case PreparedExpression.Application application:
                         {
                             var functionExpression = application.Function;
 
@@ -1241,7 +1218,7 @@ public partial class ElmSyntaxInterpreter
 
                             var accumulated = new PineValueInProcess[args.Count];
 
-                            if (functionExpression is ElmSyntaxAbstract.Expression.Identifier fnOrVal)
+                            if (functionExpression is PreparedExpression.Identifier fnOrVal)
                             {
                                 kstack.Push(
                                     new Kont.BuildArgs(
@@ -1270,7 +1247,7 @@ public partial class ElmSyntaxInterpreter
                             break;
                         }
 
-                    case ElmSyntaxAbstract.Expression.LambdaExpression lambdaExpression:
+                    case PreparedExpression.LambdaExpression lambdaExpression:
                         {
                             // A lambda evaluates to a closure value capturing the current local
                             // bindings (so any free variables in the body resolve to their values
@@ -1289,7 +1266,7 @@ public partial class ElmSyntaxInterpreter
                             break;
                         }
 
-                    case ElmSyntaxAbstract.Expression.LetExpression letExpression:
+                    case PreparedExpression.LetExpression letExpression:
                         {
                             var decls = letExpression.Declarations;
                             var extended = new Dictionary<string, PineValueInProcess>(currentEnv.LocalBindings);
@@ -1372,17 +1349,17 @@ public partial class ElmSyntaxInterpreter
                             }
                         }
 
-                    case ElmSyntaxAbstract.Expression.CaseExpression caseExpression:
+                    case PreparedExpression.CaseExpression caseExpression:
                         kstack.Push(
                             new Kont.MatchCase(
-                                Cases: caseExpression.Cases,
+                                Dispatch: caseExpression.Dispatch,
                                 Env: currentEnv,
                                 ScrutineeExpr: caseExpression.Expression));
 
                         currentExpr = caseExpression.Expression;
                         break;
 
-                    case ElmSyntaxAbstract.Expression.RecordAccess recordAccess:
+                    case PreparedExpression.RecordAccess recordAccess:
                         {
                             // Push a continuation that, once the record-position expression
                             // produces a value, looks up the requested field on it.
@@ -1395,7 +1372,7 @@ public partial class ElmSyntaxInterpreter
                             break;
                         }
 
-                    case ElmSyntaxAbstract.Expression.RecordAccessFunction recordAccessFunction:
+                    case PreparedExpression.RecordAccessFunction recordAccessFunction:
                         {
                             currentValue =
                                 ElmRecordAccessChainInProcess.CreateFromFieldNames([recordAccessFunction.FieldName]);
@@ -1404,7 +1381,7 @@ public partial class ElmSyntaxInterpreter
                             break;
                         }
 
-                    case ElmSyntaxAbstract.Expression.RecordUpdateExpression recordUpdate:
+                    case PreparedExpression.RecordUpdateExpression recordUpdate:
                         {
                             var fields = recordUpdate.Fields;
 
@@ -1421,7 +1398,7 @@ public partial class ElmSyntaxInterpreter
                             // First evaluate the record name as a bare FunctionOrValue so the
                             // existing local-binding / top-level lookup machinery applies.
                             var recordNameExpr =
-                                ElmSyntaxAbstract.Expression.Identifier.Create(
+                                PreparedExpression.Identifier.Create(
                                     moduleName: [],
                                     name: recordUpdate.RecordName);
 
@@ -1437,7 +1414,7 @@ public partial class ElmSyntaxInterpreter
                             break;
                         }
 
-                    case ElmSyntaxAbstract.Expression.OperatorApplication operatorApplication:
+                    case PreparedExpression.OperatorApplication operatorApplication:
                         {
                             // Translate the operator into the corresponding source-defined
                             // function call. Look up the operator symbol in the
@@ -1457,19 +1434,19 @@ public partial class ElmSyntaxInterpreter
                             }
 
                             var functionRef =
-                                ElmSyntaxAbstract.Expression.Identifier.Create(
+                                PreparedExpression.Identifier.Create(
                                     moduleName: opFunctionName.Namespaces,
                                     name: opFunctionName.DeclName);
 
                             currentExpr =
-                                new ElmSyntaxAbstract.Expression.Application(
+                                new PreparedExpression.Application(
                                     Function: functionRef,
                                     Arguments: [operatorApplication.Left, operatorApplication.Right]);
 
                             break;
                         }
 
-                    case ElmSyntaxAbstract.Expression.PrefixOperator prefixOperator:
+                    case PreparedExpression.PrefixOperator prefixOperator:
                         {
                             // The `(<op>)` prefix form denotes the function value referenced
                             // by the operator's infix declaration. Re-route it through the
@@ -1488,14 +1465,14 @@ public partial class ElmSyntaxInterpreter
                             }
 
                             currentExpr =
-                                ElmSyntaxAbstract.Expression.Identifier.Create(
+                                PreparedExpression.Identifier.Create(
                                     moduleName: opFunctionName.Namespaces,
                                     name: opFunctionName.DeclName);
 
                             break;
                         }
 
-                    case ElmSyntaxAbstract.Expression.GLSLExpression:
+                    case PreparedExpression.GLSLExpression:
                         throw new System.NotImplementedException(
                             "RunTrampoline does not handle expression variant: " + currentExpr.GetType().Name);
 
@@ -1905,31 +1882,71 @@ public partial class ElmSyntaxInterpreter
                         {
                             var matched = false;
 
-                            foreach (var caseNode in matchCase.Cases)
+                            foreach (var step in matchCase.Dispatch.Steps)
                             {
-                                var newBindings = new Dictionary<string, PineValueInProcess>();
-
-                                if (TryMatchPattern(caseNode.Pattern, value, newBindings))
+                                switch (step)
                                 {
-                                    var extendedEnv =
-                                        new Dictionary<string, PineValueInProcess>(
-                                            matchCase.Env.LocalBindings);
+                                    case PreparedCaseDispatchSegment.ConstantValuePatterns constantCases:
+                                        {
+                                            PreparedExpression? matchedExpression = null;
 
-                                    foreach (var (boundName, boundValue) in newBindings)
-                                    {
-                                        extendedEnv[boundName] = boundValue;
-                                    }
+                                            foreach (var constantCase in constantCases.Cases)
+                                            {
+                                                if (PineValueInProcess.AreEqual(value, constantCase.Value))
+                                                {
+                                                    matchedExpression = constantCase.Expression;
+                                                    break;
+                                                }
+                                            }
 
-                                    currentEnv =
-                                        new ApplicationContext(
-                                            CurrentTopLevel: matchCase.Env.CurrentTopLevel,
-                                            LocalBindings: extendedEnv);
+                                            if (matchedExpression is null)
+                                                break;
 
-                                    currentExpr = caseNode.Expression;
-                                    currentValue = null;
-                                    matched = true;
-                                    break;
+                                            currentEnv = matchCase.Env;
+                                            currentExpr = matchedExpression;
+                                            currentValue = null;
+                                            matched = true;
+                                            break;
+                                        }
+
+                                    case PreparedCaseDispatchSegment.DiscardCase discardCase:
+                                        currentEnv = matchCase.Env;
+                                        currentExpr = discardCase.Expression;
+                                        currentValue = null;
+                                        matched = true;
+                                        break;
+
+                                    case PreparedCaseDispatchSegment.PatternCase patternCase:
+                                        {
+                                            var newBindings = new Dictionary<string, PineValueInProcess>();
+
+                                            if (!TryMatchPattern(patternCase.Pattern, value, newBindings))
+                                                break;
+
+                                            currentEnv =
+                                                newBindings.Count is 0
+                                                ?
+                                                matchCase.Env
+                                                :
+                                                new ApplicationContext(
+                                                    CurrentTopLevel: matchCase.Env.CurrentTopLevel,
+                                                    LocalBindings:
+                                                    ExtendLocalBindings(matchCase.Env.LocalBindings, newBindings));
+
+                                            currentExpr = patternCase.Expression;
+                                            currentValue = null;
+                                            matched = true;
+                                            break;
+                                        }
+
+                                    default:
+                                        throw new System.NotImplementedException(
+                                            "Kont.MatchCase does not handle dispatch step variant: " +
+                                            step.GetType().Name);
                                 }
+
+                                if (matched)
+                                    break;
                             }
 
                             if (!matched)
@@ -2112,7 +2129,7 @@ public partial class ElmSyntaxInterpreter
             : ApplyCallOutcome;
 
         public sealed record ContinueEvaluating(
-            ElmSyntaxAbstract.Expression Expression,
+            PreparedExpression Expression,
             ApplicationContext Env)
             : ApplyCallOutcome;
     }
@@ -2212,7 +2229,7 @@ public partial class ElmSyntaxInterpreter
     }
 
     private static Result<ElmInterpretationError, ApplyCallOutcome> ApplyFunctionOrValue(
-        ElmSyntaxAbstract.Expression.Identifier functionOrValue,
+        PreparedExpression.Identifier functionOrValue,
         IReadOnlyList<PineValueInProcess> arguments,
         ApplicationContext env,
         System.Func<Application, ApplicationResolution> resolveApplication,
@@ -2619,7 +2636,7 @@ public partial class ElmSyntaxInterpreter
         var bodyBindings = new Dictionary<string, PineValueInProcess>(closure.CapturedBindings);
 
         IReadOnlyList<ElmSyntaxAbstract.Pattern> parameterPatterns;
-        ElmSyntaxAbstract.Expression bodyExpression;
+        PreparedExpression bodyExpression;
         DeclQualifiedName callFrameName;
         object callFrameSourceIdentity;
 
@@ -2709,7 +2726,7 @@ public partial class ElmSyntaxInterpreter
     /// than this name, so the synthetic name does not cause false positives.
     /// </summary>
     private static DeclQualifiedName SyntheticLambdaName(
-        ElmSyntaxAbstract.Expression.LambdaExpression lambda,
+        PreparedExpression.LambdaExpression lambda,
         DeclQualifiedName containingDeclaration)
     {
         _ = lambda;
@@ -2732,6 +2749,20 @@ public partial class ElmSyntaxInterpreter
             return alreadyImmutable;
 
         return bindings.ToImmutableDictionary();
+    }
+
+    private static IReadOnlyDictionary<string, PineValueInProcess> ExtendLocalBindings(
+        IReadOnlyDictionary<string, PineValueInProcess> existing,
+        IReadOnlyDictionary<string, PineValueInProcess> additions)
+    {
+        var extended = new Dictionary<string, PineValueInProcess>(existing);
+
+        foreach (var (boundName, boundValue) in additions)
+        {
+            extended[boundName] = boundValue;
+        }
+
+        return extended;
     }
 
     /// <summary>
@@ -2868,11 +2899,11 @@ public partial class ElmSyntaxInterpreter
     /// <c>LetFunction</c> bindings have already been materialised as closures in
     /// <paramref name="extended"/> by that helper and are not present in <paramref name="decls"/>.
     /// </remarks>
-    private static Result<ElmInterpretationError, (ElmSyntaxAbstract.Expression Expr, ApplicationContext Env)> BeginNextLetDecl(
-        IReadOnlyList<ElmSyntaxAbstract.LetDeclaration> decls,
+    private static Result<ElmInterpretationError, (PreparedExpression Expr, ApplicationContext Env)> BeginNextLetDecl(
+        IReadOnlyList<PreparedLetDeclaration> decls,
         int nextIndex,
         Dictionary<string, PineValueInProcess> extended,
-        ElmSyntaxAbstract.Expression body,
+        PreparedExpression body,
         ApplicationContext outerEnv,
         Stack<Kont> kstack)
     {
@@ -2882,7 +2913,7 @@ public partial class ElmSyntaxInterpreter
 
             switch (declNode)
             {
-                case ElmSyntaxAbstract.LetDeclaration.LetFunction letFunction:
+                case PreparedLetDeclaration.LetFunction letFunction:
                     {
                         var functionImpl = letFunction.Function.Declaration;
 
@@ -2916,7 +2947,7 @@ public partial class ElmSyntaxInterpreter
                         return (functionImpl.Expression, innerEnv);
                     }
 
-                case ElmSyntaxAbstract.LetDeclaration.LetDestructuring letDestructuring:
+                case PreparedLetDeclaration.LetDestructuring letDestructuring:
                     {
                         var innerEnv =
                             new ApplicationContext(
@@ -2972,9 +3003,9 @@ public partial class ElmSyntaxInterpreter
     ///   </item>
     /// </list>
     /// </summary>
-    private static Result<ElmInterpretationError, IReadOnlyList<ElmSyntaxAbstract.LetDeclaration>>
+    private static Result<ElmInterpretationError, IReadOnlyList<PreparedLetDeclaration>>
         PrepareLetGroupAndSortNonFunctionDecls(
-        ElmSyntaxAbstract.Expression.LetExpression letExpression,
+        PreparedExpression.LetExpression letExpression,
         Dictionary<string, PineValueInProcess> extended,
         DeclQualifiedName outerTopLevel,
         Stack<Kont> kstack)
@@ -3030,18 +3061,18 @@ public partial class ElmSyntaxInterpreter
         }
 
         return
-            Result<ElmInterpretationError, IReadOnlyList<ElmSyntaxAbstract.LetDeclaration>>
+            Result<ElmInterpretationError, IReadOnlyList<PreparedLetDeclaration>>
             .ok(plan.SortedNonFunctionDecls);
     }
 
     /// <summary>
     /// Cache of the static (AST-only) analysis produced by <see cref="ComputeLetGroupPlan"/>,
-    /// keyed by the <see cref="ElmSyntaxAbstract.Expression.LetExpression"/> node's reference
+    /// keyed by the <see cref="PreparedExpression.LetExpression"/> node's reference
     /// identity. The plan is independent of the runtime environment, so it is safe to reuse
     /// across every evaluation of the same let node.
     /// </summary>
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<
-        ElmSyntaxAbstract.Expression.LetExpression, LetGroupPlan>
+        PreparedExpression.LetExpression, LetGroupPlan>
         s_letGroupPlanCache = [];
 
     /// <summary>
@@ -3049,7 +3080,7 @@ public partial class ElmSyntaxInterpreter
     /// purely from the immutable let AST and are therefore reusable across evaluations.
     /// </summary>
     /// <param name="ParameterisedFunctions">
-    /// The parameterised <see cref="ElmSyntaxAbstract.LetDeclaration.LetFunction"/> bindings, in
+    /// The parameterised <see cref="PreparedLetDeclaration.LetFunction"/> bindings, in
     /// source order, for which a closure must be materialised at evaluation time.
     /// </param>
     /// <param name="SortedNonFunctionDecls">
@@ -3061,8 +3092,8 @@ public partial class ElmSyntaxInterpreter
     /// (static) diagnostic message to surface as a runtime error.
     /// </param>
     private sealed record LetGroupPlan(
-        IReadOnlyList<ElmSyntaxAbstract.LetDeclaration.LetFunction> ParameterisedFunctions,
-        IReadOnlyList<ElmSyntaxAbstract.LetDeclaration> SortedNonFunctionDecls,
+        IReadOnlyList<PreparedLetDeclaration.LetFunction> ParameterisedFunctions,
+        IReadOnlyList<PreparedLetDeclaration> SortedNonFunctionDecls,
         string? CycleErrorMessage);
 
     /// <summary>
@@ -3084,7 +3115,7 @@ public partial class ElmSyntaxInterpreter
     /// </list>
     /// </summary>
     private static LetGroupPlan ComputeLetGroupPlan(
-        IReadOnlyList<ElmSyntaxAbstract.LetDeclaration> decls)
+        IReadOnlyList<PreparedLetDeclaration> decls)
     {
         // Collect, per declaration, the set of names it introduces.
         var introducedByDecl = new HashSet<string>[decls.Count];
@@ -3095,11 +3126,11 @@ public partial class ElmSyntaxInterpreter
 
             switch (decls[i])
             {
-                case ElmSyntaxAbstract.LetDeclaration.LetFunction letFunction:
+                case PreparedLetDeclaration.LetFunction letFunction:
                     introduced.Add(letFunction.Function.Declaration.Name);
                     break;
 
-                case ElmSyntaxAbstract.LetDeclaration.LetDestructuring letDestructuring:
+                case PreparedLetDeclaration.LetDestructuring letDestructuring:
                     CollectPatternNames(letDestructuring.Pattern, introduced);
                     break;
             }
@@ -3110,16 +3141,16 @@ public partial class ElmSyntaxInterpreter
         // Separate the parameterised LetFunction bindings (materialised as closures at
         // evaluation time) from the non-function bindings (which need dependency ordering).
         var parameterisedFunctions =
-            new List<ElmSyntaxAbstract.LetDeclaration.LetFunction>();
+            new List<PreparedLetDeclaration.LetFunction>();
 
         var nonFunctionDecls =
-            new List<ElmSyntaxAbstract.LetDeclaration>(decls.Count);
+            new List<PreparedLetDeclaration>(decls.Count);
 
         var nonFunctionIntroduced = new List<HashSet<string>>(decls.Count);
 
         for (var i = 0; i < decls.Count; i++)
         {
-            if (decls[i] is ElmSyntaxAbstract.LetDeclaration.LetFunction letFunction
+            if (decls[i] is PreparedLetDeclaration.LetFunction letFunction
                 && letFunction.Function.Declaration.Arguments.Count is not 0)
             {
                 parameterisedFunctions.Add(letFunction);
@@ -3163,10 +3194,10 @@ public partial class ElmSyntaxInterpreter
             var rhs =
                 nonFunctionDecls[i] switch
                 {
-                    ElmSyntaxAbstract.LetDeclaration.LetFunction lf =>
+                    PreparedLetDeclaration.LetFunction lf =>
                     lf.Function.Declaration.Expression,
 
-                    ElmSyntaxAbstract.LetDeclaration.LetDestructuring ld =>
+                    PreparedLetDeclaration.LetDestructuring ld =>
                     ld.Expression,
 
                     _ =>
@@ -3199,7 +3230,7 @@ public partial class ElmSyntaxInterpreter
         var state = new byte[nonFunctionDecls.Count];
 
         var sorted =
-            new List<ElmSyntaxAbstract.LetDeclaration>(nonFunctionDecls.Count);
+            new List<PreparedLetDeclaration>(nonFunctionDecls.Count);
 
         // Iterative DFS to avoid blowing the .NET call stack for large let groups.
         var dfsStack = new Stack<(int node, IEnumerator<int> deps)>();
@@ -3377,51 +3408,47 @@ public partial class ElmSyntaxInterpreter
     /// — but it must never miss a name that <em>is</em> referenced.
     /// </remarks>
     private static void CollectFreeNames(
-        ElmSyntaxAbstract.Expression expression,
+        PreparedExpression expression,
         HashSet<string> shadowed,
         HashSet<string> free)
     {
         switch (expression)
         {
-            case ElmSyntaxAbstract.Expression.UnitExpr:
-            case ElmSyntaxAbstract.Expression.StringLiteral:
-            case ElmSyntaxAbstract.Expression.CharLiteral:
-            case ElmSyntaxAbstract.Expression.IntegerLiteral:
-            case ElmSyntaxAbstract.Expression.FloatLiteral:
-            case ElmSyntaxAbstract.Expression.PrefixOperator:
-            case ElmSyntaxAbstract.Expression.RecordAccessFunction:
-            case ElmSyntaxAbstract.Expression.GLSLExpression:
+            case PreparedExpression.ValueLiteral:
+            case PreparedExpression.PrefixOperator:
+            case PreparedExpression.RecordAccessFunction:
+            case PreparedExpression.GLSLExpression:
                 break;
 
-            case ElmSyntaxAbstract.Expression.Negation negation:
+            case PreparedExpression.Negation negation:
                 CollectFreeNames(negation.Expression, shadowed, free);
                 break;
 
-            case ElmSyntaxAbstract.Expression.ListExpr listExpr:
+            case PreparedExpression.ListExpr listExpr:
                 foreach (var element in listExpr.Elements)
                     CollectFreeNames(element, shadowed, free);
 
                 break;
 
-            case ElmSyntaxAbstract.Expression.TupledExpression tupledExpression:
+            case PreparedExpression.TupledExpression tupledExpression:
                 foreach (var element in tupledExpression.Elements)
                     CollectFreeNames(element, shadowed, free);
 
                 break;
 
-            case ElmSyntaxAbstract.Expression.IfBlock ifBlock:
+            case PreparedExpression.IfBlock ifBlock:
                 CollectFreeNames(ifBlock.Condition, shadowed, free);
                 CollectFreeNames(ifBlock.ThenBlock, shadowed, free);
                 CollectFreeNames(ifBlock.ElseBlock, shadowed, free);
                 break;
 
-            case ElmSyntaxAbstract.Expression.RecordExpr recordExpr:
+            case PreparedExpression.RecordExpr recordExpr:
                 foreach (var field in recordExpr.Fields)
                     CollectFreeNames(field.Value, shadowed, free);
 
                 break;
 
-            case ElmSyntaxAbstract.Expression.Identifier functionOrValue:
+            case PreparedExpression.Identifier functionOrValue:
                 if (functionOrValue.QualifiedName.Namespaces.Count is 0
                     && !shadowed.Contains(functionOrValue.QualifiedName.DeclName))
                 {
@@ -3430,7 +3457,7 @@ public partial class ElmSyntaxInterpreter
 
                 break;
 
-            case ElmSyntaxAbstract.Expression.Application application:
+            case PreparedExpression.Application application:
                 CollectFreeNames(application.Function, shadowed, free);
 
                 foreach (var argument in application.Arguments)
@@ -3438,7 +3465,7 @@ public partial class ElmSyntaxInterpreter
 
                 break;
 
-            case ElmSyntaxAbstract.Expression.OperatorApplication operatorApplication:
+            case PreparedExpression.OperatorApplication operatorApplication:
 
                 // The operator itself resolves through the infix-operator map to a
                 // top-level declaration, never to a let-group binding, so it is not
@@ -3447,7 +3474,7 @@ public partial class ElmSyntaxInterpreter
                 CollectFreeNames(operatorApplication.Right, shadowed, free);
                 break;
 
-            case ElmSyntaxAbstract.Expression.LambdaExpression lambdaExpression:
+            case PreparedExpression.LambdaExpression lambdaExpression:
                 {
                     var inner = new HashSet<string>(shadowed);
 
@@ -3458,21 +3485,43 @@ public partial class ElmSyntaxInterpreter
                     break;
                 }
 
-            case ElmSyntaxAbstract.Expression.CaseExpression caseExpression:
+            case PreparedExpression.CaseExpression caseExpression:
                 {
                     CollectFreeNames(caseExpression.Expression, shadowed, free);
 
-                    foreach (var caseNode in caseExpression.Cases)
+                    foreach (var step in caseExpression.Dispatch.Steps)
                     {
-                        var inner = new HashSet<string>(shadowed);
-                        CollectPatternNames(caseNode.Pattern, inner);
-                        CollectFreeNames(caseNode.Expression, inner, free);
+                        switch (step)
+                        {
+                            case PreparedCaseDispatchSegment.ConstantValuePatterns constantCases:
+                                foreach (var constantCase in constantCases.Cases)
+                                    CollectFreeNames(constantCase.Expression, shadowed, free);
+
+                                break;
+
+                            case PreparedCaseDispatchSegment.DiscardCase discardCase:
+                                CollectFreeNames(discardCase.Expression, shadowed, free);
+                                break;
+
+                            case PreparedCaseDispatchSegment.PatternCase patternCase:
+                                {
+                                    var inner = new HashSet<string>(shadowed);
+                                    CollectPatternNames(patternCase.Pattern, inner);
+                                    CollectFreeNames(patternCase.Expression, inner, free);
+                                    break;
+                                }
+
+                            default:
+                                throw new System.NotImplementedException(
+                                    "CollectFreeNames does not handle case dispatch step variant: " +
+                                    step.GetType().Name);
+                        }
                     }
 
                     break;
                 }
 
-            case ElmSyntaxAbstract.Expression.LetExpression letExpression:
+            case PreparedExpression.LetExpression letExpression:
                 {
                     // Names introduced by the nested let block shadow the outer scope
                     // for the purposes of free-name analysis (whether they are
@@ -3483,11 +3532,11 @@ public partial class ElmSyntaxInterpreter
                     {
                         switch (declNode)
                         {
-                            case ElmSyntaxAbstract.LetDeclaration.LetFunction nestedLet:
+                            case PreparedLetDeclaration.LetFunction nestedLet:
                                 inner.Add(nestedLet.Function.Declaration.Name);
                                 break;
 
-                            case ElmSyntaxAbstract.LetDeclaration.LetDestructuring nestedDestr:
+                            case PreparedLetDeclaration.LetDestructuring nestedDestr:
                                 CollectPatternNames(nestedDestr.Pattern, inner);
                                 break;
                         }
@@ -3497,7 +3546,7 @@ public partial class ElmSyntaxInterpreter
                     {
                         switch (declNode)
                         {
-                            case ElmSyntaxAbstract.LetDeclaration.LetFunction nestedLet:
+                            case PreparedLetDeclaration.LetFunction nestedLet:
                                 {
                                     // The function's own arguments shadow further inside its body.
                                     var bodyShadowed = new HashSet<string>(inner);
@@ -3513,7 +3562,7 @@ public partial class ElmSyntaxInterpreter
                                     break;
                                 }
 
-                            case ElmSyntaxAbstract.LetDeclaration.LetDestructuring nestedDestr:
+                            case PreparedLetDeclaration.LetDestructuring nestedDestr:
                                 CollectFreeNames(nestedDestr.Expression, inner, free);
                                 break;
                         }
@@ -3523,11 +3572,11 @@ public partial class ElmSyntaxInterpreter
                     break;
                 }
 
-            case ElmSyntaxAbstract.Expression.RecordAccess recordAccess:
+            case PreparedExpression.RecordAccess recordAccess:
                 CollectFreeNames(recordAccess.Record, shadowed, free);
                 break;
 
-            case ElmSyntaxAbstract.Expression.RecordUpdateExpression recordUpdate:
+            case PreparedExpression.RecordUpdateExpression recordUpdate:
                 if (!shadowed.Contains(recordUpdate.RecordName))
                     free.Add(recordUpdate.RecordName);
 
@@ -3632,6 +3681,13 @@ public partial class ElmSyntaxInterpreter
 
             case ElmSyntaxAbstract.Pattern.IntPattern intPattern:
                 return PineValueInProcess.AreEqual(value, intPattern.ValueAsPineValue);
+
+            case ElmSyntaxAbstract.Pattern.FloatPattern floatPattern:
+                return
+                    PineValueInProcess.AreEqual(
+                        value,
+                        ElmValueEncoding.ElmValueAsPineValue(
+                            ElmValue.ElmFloat.Convert(floatPattern.Value)));
 
             case ElmSyntaxAbstract.Pattern.TuplePattern tuplePattern:
                 {
@@ -3765,6 +3821,10 @@ public partial class ElmSyntaxInterpreter
                 break;
 
             case ElmSyntaxAbstract.Pattern.UnitPattern:
+            case ElmSyntaxAbstract.Pattern.CharPattern:
+            case ElmSyntaxAbstract.Pattern.StringPattern:
+            case ElmSyntaxAbstract.Pattern.IntPattern:
+            case ElmSyntaxAbstract.Pattern.FloatPattern:
                 break;
 
             case ElmSyntaxAbstract.Pattern.AsPattern asPattern:
@@ -4095,31 +4155,33 @@ public partial class ElmSyntaxInterpreter
         UserDefinedResolver(application, GetOrConvertDeclarations(declarations));
 
     /// <summary>
-    /// Caches the conversion of a concrete declaration dictionary to its abstract
-    /// (<see cref="ElmSyntaxAbstract.Declaration"/>) representation. The cache is keyed on the
+    /// Caches the conversion of a concrete declaration dictionary to its prepared
+    /// (<see cref="PreparedDeclaration"/>) representation. The cache is keyed on the
     /// concrete dictionary instance so that repeated resolver invocations during a single
-    /// interpretation reuse the <em>same</em> abstract <see cref="ElmSyntaxAbstract.FunctionImplementation"/>
+    /// interpretation reuse the <em>same</em> prepared <see cref="PreparedFunctionImplementation"/>
     /// instances. This is required for the interpreter's recursion detection, which compares call
     /// frame source identities by reference.
     /// </summary>
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration>,
-        IReadOnlyDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>>
-        s_abstractDeclarationsCache =
+        IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration>>
+        s_preparedDeclarationsCache =
         [];
 
-    private static IReadOnlyDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> GetOrConvertDeclarations(
+    private static IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> GetOrConvertDeclarations(
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations) =>
-        s_abstractDeclarationsCache.GetValue(
+        s_preparedDeclarationsCache.GetValue(
             declarations,
             static concrete =>
             {
                 var converted =
-                    new Dictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>(concrete.Count);
+                    new Dictionary<DeclQualifiedName, PreparedDeclaration>(concrete.Count);
 
                 foreach (var (name, declaration) in concrete)
                 {
-                    converted[name] = ElmSyntaxAbstract.ConvertFromConcrete.FromDeclaration(declaration);
+                    converted[name] =
+                        PrepareDeclaration(
+                            ElmSyntaxAbstract.ConvertFromConcrete.FromDeclaration(declaration));
                 }
 
                 return converted;
@@ -4128,7 +4190,7 @@ public partial class ElmSyntaxInterpreter
     /// <inheritdoc cref="UserDefinedResolver(Application, IReadOnlyDictionary{DeclQualifiedName, SyntaxModel.Declaration})"/>
     public static ApplicationResolution? UserDefinedResolver(
         Application application,
-        IReadOnlyDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> declarations)
+        IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> declarations)
     {
         var requestedNamespaces = application.FunctionName.Namespaces;
 
@@ -4154,7 +4216,7 @@ public partial class ElmSyntaxInterpreter
     }
 
     /// <summary>
-    /// Core matching loop for <see cref="UserDefinedResolver(Application, IReadOnlyDictionary{DeclQualifiedName, ElmSyntaxAbstract.Declaration})"/>. When
+    /// Core matching loop for <see cref="UserDefinedResolver(Application, IReadOnlyDictionary{DeclQualifiedName, PreparedDeclaration})"/>. When
     /// <paramref name="requiredNamespaces"/> is non-null, only declarations whose namespaces equal
     /// it are considered (used both for qualified references and for the same-module preference pass
     /// of unqualified references). When it is null, every declaration is considered (module-agnostic
@@ -4162,7 +4224,7 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     private static ApplicationResolution? ResolveAgainstDeclarations(
         Application application,
-        IReadOnlyDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> declarations,
+        IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> declarations,
         IReadOnlyList<string>? requiredNamespaces)
     {
         var requestedName = application.FunctionName.DeclName;
@@ -4182,7 +4244,7 @@ public partial class ElmSyntaxInterpreter
 
             switch (declaration)
             {
-                case ElmSyntaxAbstract.Declaration.FunctionDeclaration functionDeclaration
+                case PreparedDeclaration.FunctionDeclaration functionDeclaration
                 when functionDeclaration.Function.Declaration.Name == requestedName:
 
                     return
@@ -4190,7 +4252,7 @@ public partial class ElmSyntaxInterpreter
                             functionDeclaration.Function.Declaration,
                             ResolvedName: declName);
 
-                case ElmSyntaxAbstract.Declaration.AliasDeclaration aliasDeclaration
+                case PreparedDeclaration.AliasDeclaration aliasDeclaration
                 when aliasDeclaration.TypeAlias.Name == requestedName:
 
                     {
@@ -4237,7 +4299,7 @@ public partial class ElmSyntaxInterpreter
                         break;
                     }
 
-                case ElmSyntaxAbstract.Declaration.ChoiceTypeDeclaration choiceTypeDeclaration:
+                case PreparedDeclaration.ChoiceTypeDeclaration choiceTypeDeclaration:
                     {
                         foreach (var constructor in choiceTypeDeclaration.TypeDeclaration.Constructors)
                         {
@@ -4397,7 +4459,7 @@ public partial class ElmSyntaxInterpreter
     /// Default resolver for applications of named functions.
     /// </summary>
     public static System.Func<Application, ApplicationResolution> BuildResolvers(
-        IReadOnlyDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> declarations)
+        IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> declarations)
     {
         return BuildResolvers(declarations, s_builtinFunctionResolvers);
     }
@@ -4406,7 +4468,7 @@ public partial class ElmSyntaxInterpreter
     /// Default resolver for applications of named functions.
     /// </summary>
     public static System.Func<Application, ApplicationResolution> BuildResolvers(
-        IReadOnlyDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> declarations,
+        IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> declarations,
         IReadOnlyDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>? customFunctionResolvers)
     {
         return

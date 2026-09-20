@@ -22,6 +22,19 @@ public class JsonRoundtripTests
     private static Expression.IntegerLiteral IntExpr(int value) =>
         new(value, IntegerEncoding.EncodeSignedInteger(value));
 
+    private static Core.Elm.ElmSyntax.ElmSyntaxInterpreter.PreparedExpression.ValueLiteral GetPreparedLiteral(
+        Core.Elm.ElmSyntax.ElmSyntaxInterpreter.Prepared prepared,
+        string moduleName,
+        string declarationName) =>
+        prepared.Declarations[Core.CodeAnalysis.DeclQualifiedName.Create([moduleName], declarationName)]
+        .Should().BeOfType<Core.Elm.ElmSyntax.ElmSyntaxInterpreter.PreparedDeclaration.FunctionDeclaration>()
+        .Subject
+        .Function
+        .Declaration
+        .Expression
+        .Should().BeOfType<Core.Elm.ElmSyntax.ElmSyntaxInterpreter.PreparedExpression.ValueLiteral>()
+        .Subject;
+
     private static RecordSetter Setter(string name, Expression value) =>
         new(name, StringEncoding.ValueFromString(name), value);
 
@@ -430,8 +443,12 @@ public class JsonRoundtripTests
             back.Declarations.TryGetValue(entry.Key, out var decodedDeclaration)
                 .Should().BeTrue("declaration " + entry.Key.FullName + " should be present after roundtrip");
 
-            decodedDeclaration.Should().Be(entry.Value);
+            decodedDeclaration.Should().NotBeNull();
+            decodedDeclaration!.GetType().Should().Be(entry.Value.GetType());
         }
+
+        GetPreparedLiteral(back, "Sample", "floaty").Value.ListItemsOrNull().Should().NotBeNull();
+        GetPreparedLiteral(back, "Sample", "letter").Value.IsBlob().Should().BeTrue();
 
         // Re-encoding the decoded value yields identical JSON.
         ElmSyntaxInterpreterPreparedJson.ToJsonString(back).Should().Be(json);
@@ -477,9 +494,32 @@ public class JsonRoundtripTests
             back.Declarations.TryGetValue(entry.Key, out var decodedDeclaration)
                 .Should().BeTrue();
 
-            decodedDeclaration.Should().Be(entry.Value);
+            decodedDeclaration.Should().NotBeNull();
+            decodedDeclaration!.GetType().Should().Be(entry.Value.GetType());
         }
 
+        ElmSyntaxInterpreterPreparedJson.ToJsonString(back).Should().Be(json);
+    }
+
+    [Fact]
+    public void Roundtrip_prepared_preserves_integer_literal_metadata()
+    {
+        const string moduleText =
+            """
+            module Numbers exposing (..)
+
+            answer =
+                42
+            """;
+
+        var prepared =
+            Core.Elm.ElmSyntax.ElmSyntaxInterpreter.PrepareModules([moduleText])
+            .Extract(err => throw new System.Exception("Failed to prepare modules: " + err));
+
+        var json = ElmSyntaxInterpreterPreparedJson.ToJsonString(prepared);
+        var back = ElmSyntaxInterpreterPreparedJson.FromJsonString(json);
+
+        GetPreparedLiteral(back, "Numbers", "answer").Value.IntegerOrNull.Should().Be(new BigInteger(42));
         ElmSyntaxInterpreterPreparedJson.ToJsonString(back).Should().Be(json);
     }
 
@@ -488,7 +528,7 @@ public class JsonRoundtripTests
     {
         var prepared =
             new Core.Elm.ElmSyntax.ElmSyntaxInterpreter.Prepared(
-                new Dictionary<Core.CodeAnalysis.DeclQualifiedName, Declaration>());
+                new Dictionary<Core.CodeAnalysis.DeclQualifiedName, Core.Elm.ElmSyntax.ElmSyntaxInterpreter.PreparedDeclaration>());
 
         var json = ElmSyntaxInterpreterPreparedJson.ToJsonString(prepared);
 

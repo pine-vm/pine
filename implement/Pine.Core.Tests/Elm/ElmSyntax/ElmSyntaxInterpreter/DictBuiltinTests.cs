@@ -109,7 +109,10 @@ public class DictBuiltinTests
     private static ElmInterpreter.ElmClosureInProcess Closure() =>
         new(
             new ElmInterpreter.ElmClosureInProcess.SourceRef.Lambda(
-                new AbstractExpr.LambdaExpression([], AbstractExpr.UnitExpr.Instance)),
+                new ElmInterpreter.PreparedExpression.LambdaExpression(
+                    [],
+                    new ElmInterpreter.PreparedExpression.ValueLiteral(
+                        PineValueInProcess.CreateFullyRepresented(PineValue.EmptyList)))),
             parameterCount: 1,
             argumentsAlreadyCollected: [],
             capturedBindings: ImmutableDictionary<string, PineValueInProcess>.Empty,
@@ -301,6 +304,7 @@ public class DictBuiltinTests
     {
         var targetKey = PineValueInProcess.CreateInteger(20_001);
         var nodeKey = PineValueInProcess.CreateInteger(20_002);
+
         var dict =
             Node(
                 s_colorBlack,
