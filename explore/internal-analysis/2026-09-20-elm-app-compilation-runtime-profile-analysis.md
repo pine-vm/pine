@@ -213,7 +213,7 @@ without claiming that the program is necessarily non-terminating.
 
 - `InstructionCountLimit`, checked on every trampoline iteration;
 - `ContinuationDepthLimit`, checked against the live explicit continuation stack;
-- `Default`, configured for 1,000,000,000 instructions and 1,000,000 continuations;
+- `Default`, configured for 1,000,000,000 instructions and 100,000 continuations;
 - `Unbounded`, with both nullable limits disabled.
 
 The high default instruction limit is intentional. The profiled compilation workload exceeds
@@ -643,13 +643,24 @@ run.
 
 ### Priority 5: Tail-call frame replacement
 
-Detect when a call is in tail position and replace the current call frame instead of pushing a
-new one. Preserve enough logical call information for runtime-error diagnostics.
+Implemented after quota-based termination:
 
-Quota-based termination now bounds retained continuation state and removes recursion-scanning
-overhead. Tail-call replacement remains useful for reducing ordinary allocation and allowing
-legitimate deep recursion to run under smaller continuation limits, but it is no longer needed
-to support cycle classification.
+- before entering a saturated named or closure call, the interpreter checks whether the top
+  continuation is the current `Kont.CallFrame`;
+- if so, it removes that frame before pushing the callee frame;
+- non-tail continuations such as argument, list, record, condition, and case processing remain
+  above the caller frame and therefore prevent replacement;
+- over-application removes the tail caller before pushing `AfterCall` and the callee frame.
+
+Tests verify that 100,000 direct tail calls and 10,000 local-closure tail calls complete under a
+continuation-depth limit of 32, mutual tail recursion reaches the instruction quota rather than
+the continuation quota, a tail-recursive over-application chain stays bounded, non-tail recursion
+still exhausts the continuation quota, and runtime errors retain non-tail callers while omitting
+replaced tail callers.
+
+Quota-based termination bounds retained continuation state, while tail-call replacement reduces
+ordinary allocation and enables legitimate deep recursion to run under much smaller continuation
+limits.
 
 ### Priority 6: Parallelize independent snapshot cases only for batch throughput
 

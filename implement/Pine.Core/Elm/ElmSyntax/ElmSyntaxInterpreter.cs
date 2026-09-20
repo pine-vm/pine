@@ -292,7 +292,7 @@ public partial class ElmSyntaxInterpreter
         public static EvaluationConfig Default { get; } =
             new(
                 InstructionCountLimit: 1_000_000_000,
-                ContinuationDepthLimit: 1_000_000);
+                ContinuationDepthLimit: 100_000);
 
         /// <summary>
         /// A configuration that disables both quotas.
@@ -1056,6 +1056,8 @@ public partial class ElmSyntaxInterpreter
     // Each entry of the Kont ADT corresponds to one "hole" in the pre-refactor
     // EvaluateExpression switch. Entering a user-defined function body pushes
     // a Kont.CallFrame so the trace can be captured at any point of evaluation.
+    // If the top continuation is already a CallFrame, the new call is in tail
+    // position and replaces it, keeping tail-recursive execution at bounded depth.
     // Evaluation quotas bound the number of loop iterations and live
     // continuations so non-terminating programs return an Elm-level error
     // instead of exhausting process resources.
@@ -2637,6 +2639,8 @@ public partial class ElmSyntaxInterpreter
                             CurrentTopLevel: bodyTopLevel,
                             localBindings: innerBindings);
 
+                    ReplaceTailCallFrame(kstack);
+
                     if (extraArgs is not null)
                     {
                         // Push the over-application continuation BEFORE the CallFrame so that
@@ -2948,6 +2952,8 @@ public partial class ElmSyntaxInterpreter
                 CurrentTopLevel: closure.CapturedTopLevel,
                 localBindings: closure.CapturedBindings.CreateChild(bodyBindings));
 
+        ReplaceTailCallFrame(kstack);
+
         if (extraArgs is not null)
         {
             kstack.Push(
@@ -2965,6 +2971,17 @@ public partial class ElmSyntaxInterpreter
             new ApplyCallOutcome.ContinueEvaluating(
                 Expression: bodyExpression,
                 Env: innerContext);
+    }
+
+    /// <summary>
+    /// Removes the current Elm call frame when no continuation remains above it. In that state,
+    /// the pending application is in tail position: its result will be returned directly to the
+    /// current function's caller, so retaining the current frame would only consume memory.
+    /// </summary>
+    private static void ReplaceTailCallFrame(Stack<Kont> kstack)
+    {
+        if (kstack.TryPeek(out var top) && top is Kont.CallFrame)
+            kstack.Pop();
     }
 
     /// <summary>

@@ -89,12 +89,12 @@ public class EvaluationQuotaTests
             module Test exposing (..)
 
 
-            countUp n =
-                countUp (Pine_builtin.int_add [ n, 1 ])
+            build n =
+                Pine_builtin.int_add [ n, build (Pine_builtin.int_add [ n, 1 ]) ]
 
 
             main =
-                countUp 0
+                build 0
             """;
 
         var error =
@@ -105,13 +105,108 @@ public class EvaluationQuotaTests
                     ContinuationDepthLimit: continuationDepthLimit));
 
         error.QuotaExceeded.Should().NotBeNull();
+
         error.QuotaExceeded!.QuotaKind.Should().Be(
             ElmInterpreter.EvaluationQuotaKind.ContinuationDepth);
+
         error.QuotaExceeded.Limit.Should().Be(continuationDepthLimit);
         error.QuotaExceeded.Observed.Should().BeGreaterThan(continuationDepthLimit);
 
         error.Message.Should().Be("Continuation depth limit exceeded: 20");
         error.CallStack.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void Mutual_tail_recursion_reaches_instruction_quota_without_exhausting_continuation_depth()
+    {
+        const int instructionCountLimit = 10_000;
+        const int continuationDepthLimit = 16;
+
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            ping n =
+                pong (Pine_builtin.int_add [ n, 1 ])
+
+
+            pong n =
+                ping (Pine_builtin.int_add [ n, 1 ])
+
+
+            main =
+                ping 0
+            """;
+
+        var error =
+            InterpretAndGetError(
+                elmModuleText,
+                new ElmInterpreter.EvaluationConfig(
+                    InstructionCountLimit: instructionCountLimit,
+                    ContinuationDepthLimit: continuationDepthLimit));
+
+        error.QuotaExceeded.Should().Be(
+            new ElmInterpreter.EvaluationQuotaExceeded(
+                ElmInterpreter.EvaluationQuotaKind.InstructionCount,
+                Limit: instructionCountLimit,
+                Observed: instructionCountLimit + 1));
+
+        error.CallStack.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public void Non_tail_caller_remains_in_runtime_error_stack()
+    {
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            outer x =
+                Pine_builtin.int_add [ inner x, 1 ]
+
+
+            inner x =
+                Debug.todo "boom"
+
+
+            main =
+                outer 1
+            """;
+
+        var declarations = InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(elmModuleText);
+
+        var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
+
+        ElmInterpreter.ApplicationResolution FailingResolver(
+            ElmInterpreter.Application application)
+        {
+            if (application.FunctionName.Namespaces is ["Debug"]
+                && application.FunctionName.DeclName == "todo")
+            {
+                throw new System.InvalidOperationException("Debug.todo was called");
+            }
+
+            return
+                ElmInterpreter.PineBuiltinResolver(application)
+                ?? ElmInterpreter.UserDefinedResolver(application, declarations)
+                ?? throw new System.InvalidOperationException(
+                    "No resolver matched: " + application.FunctionName.FullName);
+        }
+
+        var error =
+            ElmInterpreter.Interpret(mainBody, FailingResolver)
+            .IsErrOrNull()
+            ?? throw new System.Exception("Expected an error.");
+
+        error.CallStack.Should().Equal(
+            new ElmCallStackFrame(
+                DeclQualifiedName.Create([], "inner"),
+                [ElmInterpreter.ToProcess(ElmValue.Integer(1))]),
+            new ElmCallStackFrame(
+                DeclQualifiedName.Create([], "outer"),
+                [ElmInterpreter.ToProcess(ElmValue.Integer(1))]));
     }
 
     [Fact]
@@ -154,7 +249,7 @@ public class EvaluationQuotaTests
             .Should().Be(1_000_000_000);
 
         ElmInterpreter.EvaluationConfig.Default.ContinuationDepthLimit
-            .Should().Be(1_000_000);
+            .Should().Be(100_000);
     }
 
     [Fact]

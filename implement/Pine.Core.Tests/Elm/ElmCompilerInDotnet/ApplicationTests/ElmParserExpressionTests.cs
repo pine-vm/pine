@@ -266,7 +266,7 @@ public class ElmParserExpressionTests
         // optimization opportunities.
         ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters).Should().Be(
             """
-            InstructionLoopCount: 2_008
+            InstructionLoopCount: 1_975
             DirectFunctionApplicationCount: 300
             FunctionValueApplicationCount: 0
             PineBuiltinInvocationCount: 133
@@ -320,7 +320,7 @@ public class ElmParserExpressionTests
         // VM's optimized cost.
         ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters).Should().Be(
             """
-            InstructionLoopCount: 3_452
+            InstructionLoopCount: 3_413
             DirectFunctionApplicationCount: 504
             FunctionValueApplicationCount: 0
             PineBuiltinInvocationCount: 216

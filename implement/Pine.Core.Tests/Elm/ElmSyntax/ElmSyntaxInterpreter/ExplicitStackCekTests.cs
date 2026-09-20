@@ -20,8 +20,8 @@ public class ExplicitStackCekTests
     /// <summary>
     /// Self-recursive (tail-call) function iterated many more times than the .NET
     /// thread stack could accommodate under plain C# recursion. Relies on the
-    /// trampoline to avoid consuming the CLR call stack. The interpreter's continuation-depth
-    /// quota bounds the explicit stack separately.
+    /// trampoline to avoid consuming the CLR call stack and on tail-call frame replacement to
+    /// remain below a small continuation-depth quota.
     /// </summary>
     [Fact]
     public void Deep_tail_recursion_does_not_overflow_stack()
@@ -48,10 +48,173 @@ public class ExplicitStackCekTests
         var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
 
         var result =
-            ElmInterpreter.InterpretAsElmValue(mainBody, declarations)
+            ElmInterpreter.InterpretAsElmValue(
+                mainBody,
+                declarations,
+                new ElmInterpreter.EvaluationConfig(
+                    InstructionCountLimit: 10_000_000,
+                    ContinuationDepthLimit: 32))
             .Extract(err => throw new System.Exception(err.ToString()));
 
         result.Should().Be(ElmValue.Integer(100000));
+    }
+
+    [Fact]
+    public void Deep_tail_recursion_through_local_closure_stays_below_continuation_limit()
+    {
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            main =
+                let
+                    loop n acc =
+                        if Pine_builtin.int_is_sorted_asc [ n, 0 ] then
+                            acc
+
+                        else
+                            loop (Pine_builtin.int_add [ n, -1 ]) (Pine_builtin.int_add [ acc, 1 ])
+                in
+                loop 10000 0
+            """;
+
+        var declarations = InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(elmModuleText);
+
+        var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
+
+        var result =
+            ElmInterpreter.InterpretAsElmValue(
+                mainBody,
+                declarations,
+                new ElmInterpreter.EvaluationConfig(
+                    InstructionCountLimit: 1_000_000,
+                    ContinuationDepthLimit: 32))
+            .Extract(err => throw new System.Exception(err.ToString()));
+
+        result.Should().Be(ElmValue.Integer(10000));
+    }
+
+    [Fact]
+    public void Deep_tail_recursion_from_case_arm_stays_below_continuation_limit()
+    {
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            loop n acc =
+                case Pine_builtin.int_is_sorted_asc [ n, 0 ] of
+                    True ->
+                        acc
+
+                    False ->
+                        loop (Pine_builtin.int_add [ n, -1 ]) (Pine_builtin.int_add [ acc, 1 ])
+
+
+            main =
+                loop 10000 0
+            """;
+
+        var declarations = InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(elmModuleText);
+
+        var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
+
+        var result =
+            ElmInterpreter.InterpretAsElmValue(
+                mainBody,
+                declarations,
+                new ElmInterpreter.EvaluationConfig(
+                    InstructionCountLimit: 1_000_000,
+                    ContinuationDepthLimit: 32))
+            .Extract(err => throw new System.Exception(err.ToString()));
+
+        result.Should().Be(ElmValue.Integer(10000));
+    }
+
+    [Fact]
+    public void Deep_mutual_tail_recursion_stays_below_continuation_limit()
+    {
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            ping n =
+                if Pine_builtin.int_is_sorted_asc [ n, 0 ] then
+                    0
+
+                else
+                    pong (Pine_builtin.int_add [ n, -1 ])
+
+
+            pong n =
+                if Pine_builtin.int_is_sorted_asc [ n, 0 ] then
+                    0
+
+                else
+                    ping (Pine_builtin.int_add [ n, -1 ])
+
+
+            main =
+                ping 10000
+            """;
+
+        var declarations = InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(elmModuleText);
+
+        var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
+
+        var result =
+            ElmInterpreter.InterpretAsElmValue(
+                mainBody,
+                declarations,
+                new ElmInterpreter.EvaluationConfig(
+                    InstructionCountLimit: 1_000_000,
+                    ContinuationDepthLimit: 32))
+            .Extract(err => throw new System.Exception(err.ToString()));
+
+        result.Should().Be(ElmValue.Integer(0));
+    }
+
+    [Fact]
+    public void Deep_tail_recursion_through_over_application_stays_below_continuation_limit()
+    {
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            next n =
+                \acc ->
+                    if Pine_builtin.int_is_sorted_asc [ n, 0 ] then
+                        acc
+
+                    else
+                        loop (Pine_builtin.int_add [ n, -1 ]) (Pine_builtin.int_add [ acc, 1 ])
+
+
+            loop n acc =
+                next n acc
+
+
+            main =
+                loop 10000 0
+            """;
+
+        var declarations = InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(elmModuleText);
+
+        var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
+
+        var result =
+            ElmInterpreter.InterpretAsElmValue(
+                mainBody,
+                declarations,
+                new ElmInterpreter.EvaluationConfig(
+                    InstructionCountLimit: 1_000_000,
+                    ContinuationDepthLimit: 32))
+            .Extract(err => throw new System.Exception(err.ToString()));
+
+        result.Should().Be(ElmValue.Integer(10000));
     }
 
     /// <summary>
@@ -117,13 +280,11 @@ public class ExplicitStackCekTests
             new List<ElmCallStackFrame>
             {
                 new(DeclQualifiedName.Create([], "inner"), [ElmInterpreter.ToProcess(ElmValue.Integer(1))]),
-                new(DeclQualifiedName.Create([], "middle"), [ElmInterpreter.ToProcess(ElmValue.Integer(1))]),
-                new(DeclQualifiedName.Create([], "outer"), [ElmInterpreter.ToProcess(ElmValue.Integer(1))]),
             });
 
         error.ToString().Should().Contain("inner");
-        error.ToString().Should().Contain("middle");
-        error.ToString().Should().Contain("outer");
+        error.ToString().Should().NotContain("middle");
+        error.ToString().Should().NotContain("outer");
     }
 
     /// <summary>
@@ -162,10 +323,8 @@ public class ExplicitStackCekTests
             ?? throw new System.Exception(
                 "Expected error result, got " + result.GetType().FullName);
 
-        // "negateString" is the innermost active call, followed by "outer".
-        error.CallStack.Should().ContainInOrder(
-            new ElmCallStackFrame(DeclQualifiedName.Create([], "negateString"), []),
-            new ElmCallStackFrame(DeclQualifiedName.Create([], "outer"), []));
+        error.CallStack.Should().Equal(
+            new ElmCallStackFrame(DeclQualifiedName.Create([], "negateString"), []));
     }
 
     /// <summary>

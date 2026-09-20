@@ -681,10 +681,15 @@ The Elm syntax interpreter offers:
 + Deterministically bounding evaluation with configurable instruction-count and continuation-depth quotas, returning structured exhaustion details and named Elm call stacks.
 
 `ElmSyntaxInterpreter.EvaluationConfig.Default` permits up to 1,000,000,000 trampoline
-instructions and 1,000,000 live continuations. Callers can provide tighter limits or use
+instructions and 100,000 live continuations. Callers can provide tighter limits or use
 `EvaluationConfig.Unbounded` for trusted workloads that are bounded externally. Quota exhaustion
 returns `ElmInterpretationError` with structured quota kind, limit, and observed-count details;
 it does not claim that the evaluated program is non-terminating.
+
+When a saturated named or closure call is in tail position, the interpreter replaces the
+caller's `Kont.CallFrame` instead of retaining it below the callee. This keeps direct, mutual, and
+local-closure tail recursion at bounded continuation depth while preserving non-tail callers in
+runtime-error stacks.
 
 #### Using the Interpreter to Diagnose Optimizer Defects
 
