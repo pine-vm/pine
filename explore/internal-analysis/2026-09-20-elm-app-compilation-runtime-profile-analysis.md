@@ -93,6 +93,166 @@ simultaneously existing threads repeatedly. Most non-application threads are rep
 `UNMANAGED_CODE_TIME`, `WaitHandle`, thread-pool polling, or test log pipe pumping. Those frames
 describe waiting support threads, not 130 seconds of compiler work.
 
+## Follow-up profile after indexed declaration resolution
+
+A second profile, `Pine.IntegrationTests.exe_20260920_155203.speedscope.json`, captures the same
+test using the latest implementation, including indexed declaration resolution and
+closed-expression folding. The capture is another approximately 10.7-second slice taken after
+the test started. It is not aligned to the same logical start/end points as the first profile,
+so absolute elapsed-time differences are not a benchmark result.
+
+### Capture comparison
+
+| Metric | 14:15 baseline | 15:52 indexed build |
+|---|---:|---:|
+| Active thread | `Thread (5520)` | `Thread (9388)` |
+| Captured span | 10,858.9 ms | 10,662.2 ms |
+| Represented `CPU_TIME` | 10,842.6 ms | 8,505.8 ms |
+| CPU share of slice | 99.85% | 79.78% |
+| `UNMANAGED_CODE_TIME` | 16.3 ms | 2,156.4 ms |
+| CPU intervals | 4,214 | 2,171 |
+| Median CPU interval | 2.0145 ms | 2.0171 ms |
+
+The newer slice contains 21.5% less represented CPU time over a similarly sized capture window,
+but this must not be reported as a 21.5% runtime improvement because the slices may cover
+different phases of the test.
+
+### Resolver result
+
+The old `ResolveAgainstDeclarations` frame is absent. Its 4,003.5 ms (36.87% of the old slice)
+has been replaced by:
+
+| Indexed resolver frame | Interval | Share of new wall slice | Share of new CPU |
+|---|---:|---:|---:|
+| `BuildResolvers` user-declaration lambda | 308.5 ms | 2.89% | 3.63% |
+| `ResolveFirstCandidate` | 156.8 ms | 1.47% | 1.84% |
+| `ResolveCandidate` | 130.7 ms | 1.23% | 1.54% |
+
+These rows are nested and must not be added. Comparing the outer resolver frames suggests roughly
+a 92% reduction in sampled wall-share, from 36.87% to 2.89%. Although the two slices are not
+phase-aligned, the disappearance of the linear-scan frame and appearance of the bounded indexed
+path strongly confirm that the intended bottleneck was removed.
+
+### Revised hotspots
+
+| Hotspot | New interval | New wall share | Share of represented CPU | Interpretation |
+|---|---:|---:|---:|---|
+| `Dictionary.Resize` | 3,505.3 ms | 32.88% | 41.21% | Largest structural allocation signal |
+| `CheckForInfiniteRecursion` | 2,588.0 ms | 24.27% | 30.43% | Periodic full continuation-stack scan |
+| `Dictionary.TryInsert` | 2,423.0 ms | 22.73% | 28.49% | Runtime binding insertion; mostly resize |
+| `PineBuiltinResolver` | 1,389.2 ms | 13.03% | 16.33% | Builtin dispatch and execution |
+| `BindPattern` | 1,217.0 ms | 11.41% | 14.31% | Function parameter binding |
+| `PineValueInProcess.Evaluate` | 435.5 ms | 4.08% | 5.12% | Forced value materialization |
+| `DeclQualifiedName.GetHashCode` | 336.7 ms | 3.16% | 3.96% | Primarily remaining builtin lookup |
+| Indexed user-declaration resolver | 308.5 ms | 2.89% | 3.63% | No longer a first-order hotspot |
+| `PineValueInProcess.ConcatBinary` | 264.8 ms | 2.48% | 3.11% | Concatenation |
+| `ApplyFunctionValue` | 195.2 ms | 1.83% | 2.29% | Closure/function-value application |
+| `PineValueInProcess.CreateList` | 189.4 ms | 1.78% | 2.23% | Deferred list construction |
+
+These intervals overlap when one frame is nested below another. In particular,
+`Dictionary.TryInsert`, `Dictionary.Resize`, and the GC-poll helper are one connected path and
+must not be summed.
+
+### Biggest remaining opportunity: binding storage
+
+`Dictionary.Resize` now covers 3,505.3 ms. Its visible callers include:
+
+- `Dictionary.TryInsert -> Dictionary.Resize`: 2,369.7 ms;
+- `BindPattern -> Dictionary.Resize`: 1,102.2 ms;
+- `ApplyFunctionValue -> Dictionary.Resize`: 33.5 ms.
+
+The direct `RunTrampoline -> Dictionary.TryInsert` edge is 2,421.1 ms, and 2,369.7 ms of that is
+below `Dictionary.Resize`. Likewise, 1,102.2 ms of the 1,217.0 ms `BindPattern` interval is below
+`Dictionary.Resize`. The evidence for replacing fresh zero-capacity binding dictionaries is
+therefore stronger than in the first profile.
+
+The largest structural improvement remains a prepared slot-based binding representation:
+
+1. Precompute the number and names of bindings for every function, lambda, let pattern, and case
+   pattern.
+2. Represent common function parameters as fixed slots backed by an array, avoiding string
+   hashing and dictionary growth.
+3. Retain a mutable fixed-size slot layer for recursive let groups.
+4. Keep a dictionary fallback only for compatibility/dynamic entry points.
+
+A smaller confirmation change is to initialize each remaining dictionary with its precomputed
+binding capacity. This should remove most `Resize` calls without changing environment semantics,
+but it will not remove insertion hashing or dictionary allocation.
+
+The aggregate `Dictionary.Resize` frame is 41.21% of represented CPU, but that is only an upper
+bound. Most of it is nested under `Thread.<PollGC>g__PollGCWorker`, so a dedicated allocation and
+GC trace is required before converting this percentage into an expected speedup.
+
+### Best immediate opportunity: make recursion checks allocation-free
+
+`CheckForInfiniteRecursion` increased from 83.8 ms (0.77%) in the first slice to 2,588.0 ms
+(24.27% wall, 30.43% of represented CPU) in the follow-up slice. The change may partly reflect
+different capture phases and deeper continuation stacks, but the implementation contains a clear
+pathological cost:
+
+- every 1,000 user calls, it scans the complete continuation stack;
+- it eagerly creates an `ElmCallStackFrame` for every encountered call frame;
+- it appends all those objects to a growing `List<ElmCallStackFrame>` even when no recursion is
+  found;
+- tail calls retain `Kont.CallFrame` entries, so the scanned stack can become very deep.
+
+The visible breakdown is:
+
+| Recursion-check component | Interval | Wall share |
+|---|---:|---:|
+| Direct `CheckForInfiniteRecursion` CPU | 1,561.2 ms | 14.64% |
+| `List.AddWithResize` | 640.8 ms | 6.01% |
+| `UNMANAGED_CODE_TIME` | 382.2 ms | 3.58% |
+| Structural argument equality | 3.9 ms | 0.04% |
+
+The first, low-risk fix is to scan without constructing the diagnostic call stack. Only after a
+duplicate is found should a second pass allocate the truncated `ElmCallStackFrame` list. That
+should remove the 6.01% list-growth bucket and some associated GC pressure on all successful
+checks.
+
+The structural follow-up is to avoid full-stack scans:
+
+- pass the just-pushed top call frame directly instead of first searching for it;
+- maintain an active-call index by `SourceIdentity`, so only frames for the same function/lambda
+  are candidates;
+- update that index when call frames are pushed and popped;
+- combine this with tail-call frame replacement so recursive compiler loops do not accumulate
+  unbounded continuation depth.
+
+Eliminating the complete recursion-check bucket has a theoretical ceiling of about 1.44x based
+on represented CPU. A realistic initial target is lower, but the two-pass diagnostic construction
+is unusually well isolated and should be implemented before broader trampoline refactoring.
+
+### Remaining builtin and value work
+
+After the two allocation-heavy paths:
+
+1. `PineBuiltinResolver` is 16.33% of represented CPU.
+2. `PineValueInProcess.Evaluate` is 5.12%; `PineValue.List` below it is 4.64%.
+3. `ConcatBinary` is 3.11%.
+4. `CreateList` is 2.23%.
+
+Use `FunctionStepCountingInvocationLogger` to rank the Elm-level functions and Pine builtins
+driving these operations. Add in-process specializations only for the most frequent paths.
+Avoiding list materialization is a better target than micro-optimizing the already small indexed
+resolver.
+
+### GC-poll caveat
+
+Both profiles contain `Thread.<PollGC>g__PollGCWorker` below resize/copy paths:
+
+| Capture | Poll-GC worker interval | Share of represented CPU |
+|---|---:|---:|
+| 14:15 baseline | 2,873.1 ms | 26.50% |
+| 15:52 indexed build | 4,075.3 ms | 47.91% |
+
+In the new capture, 3,464.2 ms of that frame is below `Dictionary.Resize`, with another 459.7 ms
+below `Buffer.BulkMoveWithWriteBarrierBatch` and 151.4 ms below `Array.Copy`. This strongly links
+the signal to allocation-heavy resize/copy operations, but a sampled speedscope export does not
+establish whether the time represents GC synchronization, safe-point polling, suspension, or
+exporter attribution artifacts. Repeat the CPU capture and collect allocation stacks plus GC
+events before attributing all of this time to managed allocation.
+
 ## Observed hot path
 
 The dominant stack is:
@@ -308,8 +468,9 @@ Before changing another hot path:
    - top Elm functions by direct application count.
 6. Add temporary counters for declaration entries examined, same-module fallback count,
    parameter-binding count, let/case binding count, and maximum continuation depth.
-7. Capture an allocation profile in addition to CPU samples. This trace contains no GC or
-   allocation-stack frames, so it cannot quantify bytes allocated or collection pauses.
+7. Capture an allocation profile in addition to CPU samples. The trace contains runtime GC-poll
+   frames but no allocation stacks, allocation sizes, collection counts, or pause events, so it
+   cannot quantify allocation volume or GC pauses.
 
 The repository-specific test invocation should use the Microsoft Testing Platform form:
 
@@ -471,9 +632,11 @@ Detect when a call is in tail position and replace the current call frame instea
 new one. Preserve enough logical call information for errors and recursion detection, possibly
 using a compact cycle detector separate from the evaluation continuation stack.
 
-This is primarily a scalability and allocation improvement. The directly measured recursion
-check is only 0.75%, so tail-call work should follow the first three priorities unless allocation
-profiling reveals a larger hidden cost.
+The first profile made this look like primarily a scalability improvement, with only 0.75%
+directly measured in recursion checking. The follow-up profile changes the priority:
+`CheckForInfiniteRecursion` reaches 24.27% of the wall slice and 30.43% of represented CPU.
+Allocation-free diagnostic construction should now be treated as an immediate fix, followed by
+an active-call index and tail-call frame replacement.
 
 ### Priority 6: Parallelize independent snapshot cases only for batch throughput
 
@@ -498,8 +661,9 @@ change, not as a substitute for optimizing the interpreter.
 - **Further optimizing let dependency planning first:** the cached
   `PrepareLetGroupAndSortNonFunctionDecls` path is only 0.28%.
 - **Focusing on `StringEncoding.ValueFromString`:** it is only 0.11% in this capture.
-- **Assuming GC is irrelevant:** no GC frame is visible, but this is not an allocation profile.
-  Allocation rate still needs a dedicated measurement.
+- **Treating `PollGCWorker` as a measured GC pause:** the frame is visible under resize/copy
+  operations, but this is not an allocation or GC-events profile. Allocation volume, collection
+  count, and pause duration still need dedicated measurement.
 
 ## Validation matrix
 
@@ -554,7 +718,8 @@ target should be set only after the current revision is reprofiled.
 - Synthetic `CPU_TIME` leaves prevent conventional method self-time reporting. Direct
   parent-to-`CPU_TIME` intervals are the closest available exclusive estimate.
 - Raw inclusive totals are distorted by recursion and repeated stack frames.
-- No allocation stacks, allocation sizes, heap snapshots, or GC pause events are present.
+- Runtime GC-poll frames are present, but allocation stacks, allocation sizes, heap snapshots,
+  collection counts, and GC pause events are not.
 - No hardware-counter data is available for cache misses or branch misprediction.
 - Framework and async frames dominate process-wide inclusive totals but do not identify
   application optimization targets.
