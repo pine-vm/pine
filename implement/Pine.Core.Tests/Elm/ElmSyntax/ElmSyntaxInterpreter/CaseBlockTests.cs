@@ -506,6 +506,41 @@ public class CaseBlockTests
     }
 
     [Fact]
+    public void Inner_case_shadowing_does_not_change_closure_captured_from_outer_case_binding()
+    {
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            type Maybe a
+                = Nothing
+                | Just a
+
+
+            classify value =
+                case value of
+                    ( base, maybeDelta ) ->
+                        let
+                            addBase =
+                                \n -> Pine_builtin.int_add [ base, n ]
+                        in
+                        case maybeDelta of
+                            Just base ->
+                                Pine_builtin.int_add [ addBase 1, base ]
+
+                            Nothing ->
+                                addBase 2
+            """;
+
+        Evaluate(elmModuleText, "classify ( 10, Just 5 )")
+            .Should().Be("16");
+
+        Evaluate(elmModuleText, "classify ( 10, Nothing )")
+            .Should().Be("12");
+    }
+
+    [Fact]
     public void No_arm_matches_produces_runtime_error_with_rendered_value_and_stack_trace()
     {
         // The classifier only handles `Just`. Calling it with `Nothing` reaches the end of the

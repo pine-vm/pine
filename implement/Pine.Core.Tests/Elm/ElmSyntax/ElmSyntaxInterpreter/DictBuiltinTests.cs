@@ -8,7 +8,6 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using Xunit;
 
-using AbstractExpr = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract.Expression;
 using ElmInterpreter = Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter;
 using ElmValue = Pine.Core.Elm.ElmValue;
 

@@ -8,7 +8,6 @@ using System.Collections.Immutable;
 using System.Linq;
 using Xunit;
 
-using AbstractExpr = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract.Expression;
 using ElmInterpreter = Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter;
 
 namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;

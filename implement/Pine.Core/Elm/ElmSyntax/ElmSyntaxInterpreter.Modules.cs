@@ -2,7 +2,6 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Internal;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 using System.Text.Json.Serialization;
 
@@ -147,7 +146,7 @@ public partial class ElmSyntaxInterpreter
         var rootContext =
             new ApplicationContext(
                 CurrentTopLevel: DeclQualifiedName.Create([], ""),
-                LocalBindings: ImmutableDictionary<string, PineValueInProcess>.Empty);
+                localBindings: LocalBindingEnvironment.Empty);
 
         var result =
             RunTrampoline(

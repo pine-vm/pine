@@ -27,17 +27,32 @@ public partial class ElmSyntaxInterpreter
         ElmClosureInProcess.SourceRef source,
         int parameterCount,
         IReadOnlyList<PineValueInProcess> argumentsAlreadyCollected,
-        IReadOnlyDictionary<string, PineValueInProcess> capturedBindings,
+        LocalBindingEnvironment capturedBindings,
         DeclQualifiedName capturedTopLevel)
         : PineValueInProcess
     {
+        public ElmClosureInProcess(
+            ElmClosureInProcess.SourceRef source,
+            int parameterCount,
+            IReadOnlyList<PineValueInProcess> argumentsAlreadyCollected,
+            IReadOnlyDictionary<string, PineValueInProcess> capturedBindings,
+            DeclQualifiedName capturedTopLevel)
+            : this(
+                source,
+                parameterCount,
+                argumentsAlreadyCollected,
+                LocalBindingEnvironment.FromBindings(capturedBindings),
+                capturedTopLevel)
+        {
+        }
+
         public SourceRef Source { get; } = source;
 
         public int ParameterCount { get; } = parameterCount;
 
         public IReadOnlyList<PineValueInProcess> ArgumentsAlreadyCollected { get; } = argumentsAlreadyCollected;
 
-        public IReadOnlyDictionary<string, PineValueInProcess> CapturedBindings { get; } = capturedBindings;
+        public LocalBindingEnvironment CapturedBindings { get; } = capturedBindings;
 
         public DeclQualifiedName CapturedTopLevel { get; } = capturedTopLevel;
 

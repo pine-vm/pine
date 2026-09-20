@@ -251,9 +251,59 @@ public partial class ElmSyntaxInterpreter
     /// Contextual information accompanying an <see cref="Application"/>: the top-level declaration
     /// currently being evaluated and the local bindings visible at the call site.
     /// </summary>
-    public record ApplicationContext(
-        DeclQualifiedName CurrentTopLevel,
-        IReadOnlyDictionary<string, PineValueInProcess> LocalBindings);
+    public record ApplicationContext
+    {
+        private LocalBindingEnvironment localBindingEnvironment = LocalBindingEnvironment.Empty;
+
+        /// <summary>
+        /// Creates an application context from any read-only binding map. Flat dictionaries are
+        /// wrapped into the interpreter's linked environment representation.
+        /// </summary>
+        public ApplicationContext(
+            DeclQualifiedName CurrentTopLevel,
+            IReadOnlyDictionary<string, PineValueInProcess> LocalBindings)
+        {
+            this.CurrentTopLevel = CurrentTopLevel;
+            this.LocalBindings = LocalBindings;
+        }
+
+        internal ApplicationContext(
+            DeclQualifiedName CurrentTopLevel,
+            LocalBindingEnvironment localBindings)
+        {
+            this.CurrentTopLevel = CurrentTopLevel;
+            localBindingEnvironment = localBindings;
+        }
+
+        /// <summary>
+        /// Fully-qualified name of the top-level declaration whose body is currently being evaluated.
+        /// </summary>
+        public DeclQualifiedName CurrentTopLevel { get; init; } = default!;
+
+        /// <summary>
+        /// Visible local bindings at this point in evaluation.
+        /// </summary>
+        public IReadOnlyDictionary<string, PineValueInProcess> LocalBindings
+        {
+            get => localBindingEnvironment;
+
+            init => localBindingEnvironment = LocalBindingEnvironment.FromBindings(value);
+        }
+
+        internal LocalBindingEnvironment LocalBindingEnvironment =>
+            localBindingEnvironment;
+
+        /// <summary>
+        /// Deconstructs the context into its current top-level declaration and visible bindings.
+        /// </summary>
+        public void Deconstruct(
+            out DeclQualifiedName currentTopLevel,
+            out IReadOnlyDictionary<string, PineValueInProcess> localBindings)
+        {
+            currentTopLevel = CurrentTopLevel;
+            localBindings = LocalBindings;
+        }
+    }
 
     /// <summary>
     /// Outcome of attempting to resolve an <see cref="Application"/>: either a final value
@@ -388,7 +438,7 @@ public partial class ElmSyntaxInterpreter
         var context =
             new ApplicationContext(
                 CurrentTopLevel: DeclQualifiedName.Create([], ""),
-                LocalBindings: ImmutableDictionary<string, PineValueInProcess>.Empty);
+                localBindings: LocalBindingEnvironment.Empty);
 
         return
             RunTrampoline(
@@ -479,7 +529,7 @@ public partial class ElmSyntaxInterpreter
         var rootContext =
             new ApplicationContext(
                 CurrentTopLevel: functionName,
-                LocalBindings: ImmutableDictionary<string, PineValueInProcess>.Empty);
+                localBindings: LocalBindingEnvironment.Empty);
 
         var application =
             new Application(
@@ -636,7 +686,7 @@ public partial class ElmSyntaxInterpreter
         var rootContext =
             new ApplicationContext(
                 CurrentTopLevel: DeclQualifiedName.Create([], ""),
-                LocalBindings: ImmutableDictionary<string, PineValueInProcess>.Empty);
+                localBindings: LocalBindingEnvironment.Empty);
 
         var result =
             RunTrampoline(
@@ -698,7 +748,7 @@ public partial class ElmSyntaxInterpreter
         var rootContext =
             new ApplicationContext(
                 CurrentTopLevel: DeclQualifiedName.Create([], ""),
-                LocalBindings: ImmutableDictionary<string, PineValueInProcess>.Empty);
+                localBindings: LocalBindingEnvironment.Empty);
 
         var result =
             RunTrampoline(
@@ -914,7 +964,7 @@ public partial class ElmSyntaxInterpreter
             DeclQualifiedName FunctionName,
             object SourceIdentity,
             IReadOnlyList<PineValueInProcess> Arguments,
-            IReadOnlyDictionary<string, PineValueInProcess> CapturedBindings,
+            LocalBindingEnvironment CapturedBindings,
             DeclQualifiedName CapturedTopLevel) : Kont;
 
 
@@ -1259,7 +1309,7 @@ public partial class ElmSyntaxInterpreter
                                     source: new ElmClosureInProcess.SourceRef.Lambda(lambdaExpression),
                                     parameterCount: lambdaExpression.Arguments.Count,
                                     argumentsAlreadyCollected: [],
-                                    capturedBindings: SnapshotBindings(currentEnv.LocalBindings),
+                                    capturedBindings: currentEnv.LocalBindingEnvironment.Snapshot(),
                                     capturedTopLevel: currentEnv.CurrentTopLevel);
 
                             currentExpr = null;
@@ -1269,30 +1319,29 @@ public partial class ElmSyntaxInterpreter
                     case PreparedExpression.LetExpression letExpression:
                         {
                             var decls = letExpression.Declarations;
-                            var extended = new Dictionary<string, PineValueInProcess>(currentEnv.LocalBindings);
 
                             if (decls.Count is 0)
                             {
-                                currentEnv =
-                                    new ApplicationContext(
-                                        CurrentTopLevel: currentEnv.CurrentTopLevel,
-                                        LocalBindings: extended);
-
                                 currentExpr = letExpression.Expression;
                                 break;
                             }
+
+                            var extended = new Dictionary<string, PineValueInProcess>();
+
+                            var letBindings =
+                                currentEnv.LocalBindingEnvironment.CreateMutableChild(extended);
 
                             // Implements Elm's letrec semantics: every binding in the let
                             // group is mutually visible, regardless of source order. Pre-build
                             // closures for parameterised LetFunction bindings (their bodies
                             // are not yet evaluated, so they can freely reference any sibling
-                            // through the shared mutable `extended` dictionary captured as
-                            // their environment), then evaluate non-function bindings in
-                            // dependency order.
+                            // through the shared mutable let layer), then evaluate
+                            // non-function bindings in dependency order.
 
                             var prepareResult =
                                 PrepareLetGroupAndSortNonFunctionDecls(
                                     letExpression: letExpression,
+                                    letBindings: letBindings,
                                     extended: extended,
                                     outerTopLevel: currentEnv.CurrentTopLevel,
                                     kstack: kstack);
@@ -1304,7 +1353,7 @@ public partial class ElmSyntaxInterpreter
                                     currentEnv =
                                         new ApplicationContext(
                                             CurrentTopLevel: currentEnv.CurrentTopLevel,
-                                            LocalBindings: extended);
+                                            localBindings: letBindings);
 
                                     currentExpr = letExpression.Expression;
                                     break;
@@ -1317,7 +1366,10 @@ public partial class ElmSyntaxInterpreter
                                         nextIndex: 0,
                                         extended: extended,
                                         body: letExpression.Expression,
-                                        outerEnv: currentEnv,
+                                        outerEnv:
+                                        new ApplicationContext(
+                                            CurrentTopLevel: currentEnv.CurrentTopLevel,
+                                            localBindings: letBindings),
                                         kstack: kstack);
 
                                 if (beginNextResult.IsOkOrNullable() is { } beginNextOk)
@@ -1930,8 +1982,8 @@ public partial class ElmSyntaxInterpreter
                                                 :
                                                 new ApplicationContext(
                                                     CurrentTopLevel: matchCase.Env.CurrentTopLevel,
-                                                    LocalBindings:
-                                                    ExtendLocalBindings(matchCase.Env.LocalBindings, newBindings));
+                                                    localBindings:
+                                                    matchCase.Env.LocalBindingEnvironment.CreateChild(newBindings));
 
                                             currentExpr = patternCase.Expression;
                                             currentValue = null;
@@ -2308,7 +2360,7 @@ public partial class ElmSyntaxInterpreter
                                     sourceRef,
                                     parameterCount: expectedArity,
                                     argumentsAlreadyCollected: [.. application.Arguments],
-                                    capturedBindings: ImmutableDictionary<string, PineValueInProcess>.Empty,
+                                    capturedBindings: LocalBindingEnvironment.Empty,
                                     capturedTopLevel: bodyTopLevel));
                     }
 
@@ -2356,10 +2408,13 @@ public partial class ElmSyntaxInterpreter
                         }
                     }
 
+                    var innerBindings =
+                        LocalBindingEnvironment.Empty.CreateChild(bindings);
+
                     var innerContext =
                         new ApplicationContext(
                             CurrentTopLevel: bodyTopLevel,
-                            LocalBindings: bindings);
+                            localBindings: innerBindings);
 
                     if (extraArgs is not null)
                     {
@@ -2385,7 +2440,7 @@ public partial class ElmSyntaxInterpreter
                             application.FunctionName,
                             functionImpl,
                             saturatingArgs,
-                            ImmutableDictionary<string, PineValueInProcess>.Empty,
+                            LocalBindingEnvironment.Empty,
                             bodyTopLevel));
 
                     if (invocationLogger.IncrementUserCallDepth() % InfiniteRecursionCheckInterval is 0)
@@ -2633,7 +2688,7 @@ public partial class ElmSyntaxInterpreter
         }
 
         // Bind parameter patterns according to the closure's source.
-        var bodyBindings = new Dictionary<string, PineValueInProcess>(closure.CapturedBindings);
+        var bodyBindings = new Dictionary<string, PineValueInProcess>();
 
         IReadOnlyList<ElmSyntaxAbstract.Pattern> parameterPatterns;
         PreparedExpression bodyExpression;
@@ -2686,7 +2741,7 @@ public partial class ElmSyntaxInterpreter
         var innerContext =
             new ApplicationContext(
                 CurrentTopLevel: closure.CapturedTopLevel,
-                LocalBindings: bodyBindings);
+                localBindings: closure.CapturedBindings.CreateChild(bodyBindings));
 
         if (extraArgs is not null)
         {
@@ -2732,37 +2787,6 @@ public partial class ElmSyntaxInterpreter
         _ = lambda;
 
         return containingDeclaration.ContainedDeclName("<lambda>");
-    }
-
-    /// <summary>
-    /// Snapshots the local-binding environment as an immutable dictionary suitable for capture
-    /// inside an <see cref="ElmClosureInProcess"/> closure. Avoids accidental aliasing of the
-    /// caller's mutable <c>Dictionary&lt;string, ElmValue&gt;</c> instances.
-    /// </summary>
-    private static IReadOnlyDictionary<string, PineValueInProcess> SnapshotBindings(
-        IReadOnlyDictionary<string, PineValueInProcess> bindings)
-    {
-        if (bindings.Count is 0)
-            return ImmutableDictionary<string, PineValueInProcess>.Empty;
-
-        if (bindings is ImmutableDictionary<string, PineValueInProcess> alreadyImmutable)
-            return alreadyImmutable;
-
-        return bindings.ToImmutableDictionary();
-    }
-
-    private static IReadOnlyDictionary<string, PineValueInProcess> ExtendLocalBindings(
-        IReadOnlyDictionary<string, PineValueInProcess> existing,
-        IReadOnlyDictionary<string, PineValueInProcess> additions)
-    {
-        var extended = new Dictionary<string, PineValueInProcess>(existing);
-
-        foreach (var (boundName, boundValue) in additions)
-        {
-            extended[boundName] = boundValue;
-        }
-
-        return extended;
     }
 
     /// <summary>
@@ -2848,8 +2872,8 @@ public partial class ElmSyntaxInterpreter
     /// applications) are not mistaken for a single self-recursive call.
     /// </summary>
     private static bool CapturedBindingsEqual(
-        IReadOnlyDictionary<string, PineValueInProcess> left,
-        IReadOnlyDictionary<string, PineValueInProcess> right)
+        LocalBindingEnvironment left,
+        LocalBindingEnvironment right)
     {
         if (ReferenceEquals(left, right))
             return true;
@@ -2933,7 +2957,7 @@ public partial class ElmSyntaxInterpreter
                         var innerEnv =
                             new ApplicationContext(
                                 CurrentTopLevel: outerEnv.CurrentTopLevel,
-                                LocalBindings: extended);
+                                localBindings: outerEnv.LocalBindingEnvironment);
 
                         kstack.Push(
                             new Kont.LetBindFunction(
@@ -2952,7 +2976,7 @@ public partial class ElmSyntaxInterpreter
                         var innerEnv =
                             new ApplicationContext(
                                 CurrentTopLevel: outerEnv.CurrentTopLevel,
-                                LocalBindings: extended);
+                                localBindings: outerEnv.LocalBindingEnvironment);
 
                         kstack.Push(
                             new Kont.LetBindDestructure(
@@ -2976,7 +3000,7 @@ public partial class ElmSyntaxInterpreter
         var bodyEnv =
             new ApplicationContext(
                 CurrentTopLevel: outerEnv.CurrentTopLevel,
-                LocalBindings: extended);
+                localBindings: outerEnv.LocalBindingEnvironment);
 
         return (body, bodyEnv);
     }
@@ -3006,6 +3030,7 @@ public partial class ElmSyntaxInterpreter
     private static Result<ElmInterpretationError, IReadOnlyList<PreparedLetDeclaration>>
         PrepareLetGroupAndSortNonFunctionDecls(
         PreparedExpression.LetExpression letExpression,
+        LocalBindingEnvironment letBindings,
         Dictionary<string, PineValueInProcess> extended,
         DeclQualifiedName outerTopLevel,
         Stack<Kont> kstack)
@@ -3053,10 +3078,10 @@ public partial class ElmSyntaxInterpreter
                         Implementation: functionImpl),
                     parameterCount: functionImpl.Arguments.Count,
                     argumentsAlreadyCollected: [],
-                    // Capture `extended` itself (not a snapshot): future additions to the
-                    // dictionary as the let group is populated will be visible to the
+                    // Capture the live let environment (not a snapshot): future additions to
+                    // the mutable let layer as the group is populated will be visible to the
                     // closure when it is later invoked.
-                    capturedBindings: extended,
+                    capturedBindings: letBindings,
                     capturedTopLevel: outerTopLevel);
         }
 

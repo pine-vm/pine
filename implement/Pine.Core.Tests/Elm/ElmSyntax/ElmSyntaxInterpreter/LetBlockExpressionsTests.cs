@@ -311,6 +311,53 @@ public class LetBlockExpressionsTests
         result.Should().Be(ElmValue.Integer(107));
     }
 
+    [Fact]
+    public void Letrec_function_and_lambda_share_linked_scopes_without_copying_outer_bindings()
+    {
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            main =
+                let
+                    seed =
+                        100
+
+                    walk values =
+                        case values of
+                            head :: tail ->
+                                let
+                                    makeStep =
+                                        \delta -> Pine_builtin.int_add [ head, Pine_builtin.int_add [ seed, delta ] ]
+
+                                    recurse remaining =
+                                        case remaining of
+                                            [] ->
+                                                makeStep 0
+
+                                            next :: rest ->
+                                                Pine_builtin.int_add [ makeStep next, recurse rest ]
+                                in
+                                recurse tail
+
+                            [] ->
+                                0
+                in
+                walk [ 5, 6, 7 ]
+            """;
+
+        var declarations = InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(elmModuleText);
+
+        var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
+
+        var result =
+            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(
+                err => throw new System.Exception(err.ToString()));
+
+        result.Should().Be(ElmValue.Integer(328));
+    }
+
     /// <summary>
     /// A non-function let binding cycle (where two value bindings depend on each other
     /// without a function intermediary) must surface as a runtime error rather than
