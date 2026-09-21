@@ -289,8 +289,8 @@ public class LanguageServerFormattingTests
             new List<Task<IReadOnlyList<Pine.Core.LanguageServerProtocol.TextEdit>>>
             {
                 server.TextDocument_formattingAsync(
-                new TextDocumentIdentifier(documentUri),
-                new FormattingOptions())
+                    new TextDocumentIdentifier(documentUri),
+                    new FormattingOptions())
             };
 
         await formatterStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));

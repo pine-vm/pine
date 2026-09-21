@@ -49,17 +49,15 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
         new FileStoreFromSystemIOFile(
             ProcessStoreDirectory,
             retryOptions:
-            new FileStoreFromSystemIOFile.FileStoreRetryOptions
-            (
+            new FileStoreFromSystemIOFile.FileStoreRetryOptions(
                 MaxRetryAttempts: 5,
                 InitialRetryDelay: TimeSpan.FromMilliseconds(100),
-                MaxRetryDelay: TimeSpan.FromMilliseconds(1000)
-            ));
+                MaxRetryDelay: TimeSpan.FromMilliseconds(1000)));
 
     private readonly IFileStore _fileStore;
 
     public WebApplication StartWebHost(
-         Func<IFileStore, IFileStore>? processStoreFileStoreMap = null)
+        Func<IFileStore, IFileStore>? processStoreFileStoreMap = null)
     {
         var builder = WebApplication.CreateBuilder();
 
@@ -121,40 +119,44 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
     {
         var testDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
-        var setup = new WebHostAdminInterfaceTestSetup(
-            testDirectory,
-            adminPassword: adminPassword,
-            fileStore: fileStore,
-            deployAppAndInitElmState: deployAppAndInitElmState,
-            webAppBuilderMap: webAppBuilderMap,
-            adminWebHostUrlOverride: adminWebHostUrlOverride,
-            publicWebHostUrlOverride: publicWebHostUrlOverride,
-            persistentProcessHostDateTime: persistentProcessHostDateTime);
+        var setup =
+            new WebHostAdminInterfaceTestSetup(
+                testDirectory,
+                adminPassword: adminPassword,
+                fileStore: fileStore,
+                deployAppAndInitElmState: deployAppAndInitElmState,
+                webAppBuilderMap: webAppBuilderMap,
+                adminWebHostUrlOverride: adminWebHostUrlOverride,
+                publicWebHostUrlOverride: publicWebHostUrlOverride,
+                persistentProcessHostDateTime: persistentProcessHostDateTime);
 
         return setup;
     }
 
     public System.Net.Http.HttpClient BuildPublicAppHttpClient()
     {
-        var handler = new System.Net.Http.HttpClientHandler
-        {
-            AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
-        };
+        var handler =
+            new System.Net.Http.HttpClientHandler
+            {
+                AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
+            };
 
-        return new System.Net.Http.HttpClient(handler)
-        {
-            BaseAddress = new Uri(PublicWebHostUrl),
-            Timeout = TimeSpan.FromMinutes(5),
-        };
+        return
+            new System.Net.Http.HttpClient(handler)
+            {
+                BaseAddress = new Uri(PublicWebHostUrl),
+                Timeout = TimeSpan.FromMinutes(5),
+            };
     }
 
     public System.Net.Http.HttpClient BuildAdminInterfaceHttpClient()
     {
-        return new System.Net.Http.HttpClient
-        {
-            BaseAddress = new Uri(AdminWebHostUrl),
-            Timeout = TimeSpan.FromMinutes(5),
-        };
+        return
+            new System.Net.Http.HttpClient
+            {
+                BaseAddress = new Uri(AdminWebHostUrl),
+                Timeout = TimeSpan.FromMinutes(5),
+            };
     }
 
     public System.Net.Http.HttpClient SetDefaultRequestHeaderAuthorizeForAdmin(System.Net.Http.HttpClient client)
@@ -162,10 +164,12 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
         if (_adminPassword is null)
             return client;
 
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-            "Basic",
-            Convert.ToBase64String(Encoding.UTF8.GetBytes(
-                Configuration.BasicAuthenticationForAdmin(_adminPassword))));
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue(
+                "Basic",
+                Convert.ToBase64String(
+                    Encoding.UTF8.GetBytes(
+                        Configuration.BasicAuthenticationForAdmin(_adminPassword))));
 
         return client;
     }
@@ -204,11 +208,11 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
             new ElmTime.Platform.WebService.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent
             {
                 DeployAppConfigAndInitElmAppState =
-                    new ElmTime.Platform.WebService.ProcessStoreSupportingMigrations.ValueInFileStructure
-                    {
-                        HashBase16 =
-                        Convert.ToHexStringLower(PineValueHashTree.ComputeHash(deployAppAndInitElmState).Span)
-                    }
+                new ElmTime.Platform.WebService.ProcessStoreSupportingMigrations.ValueInFileStructure
+                {
+                    HashBase16 =
+                    Convert.ToHexStringLower(PineValueHashTree.ComputeHash(deployAppAndInitElmState).Span)
+                }
             };
 
         var processStoreWriter =

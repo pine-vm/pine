@@ -90,7 +90,8 @@ public static class TruncateProcessHistoryCommand
             responseBodyReport =
                 System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.Nodes.JsonObject>(responseContentString)!;
         }
-        catch { }
+        catch
+        { }
 
         var responseFromServer =
             new PineCliCommand.ResponseFromServerReport(

@@ -202,13 +202,15 @@ internal static class TestLogFileWriter
                     {
                         Console.Out.Flush();
                     }
-                    catch { }
+                    catch
+                    { }
 
                     try
                     {
                         Console.Error.Flush();
                     }
-                    catch { }
+                    catch
+                    { }
 
                     // Restore original fd 1/2 first so we can still print to the terminal after the pumps drain.
                     // Restoring also closes the pipe write ends (via dup2), which causes read() on the pipes
@@ -383,13 +385,15 @@ internal static class TestLogFileWriter
                     {
                         Console.Out.Flush();
                     }
-                    catch { }
+                    catch
+                    { }
 
                     try
                     {
                         Console.Error.Flush();
                     }
-                    catch { }
+                    catch
+                    { }
 
                     // Restore original stdio handles first so we can still print to the terminal
                     // after the pumps drain. Unlike Unix dup2, SetStdHandle does not close the

@@ -61,7 +61,7 @@ public class WebServiceTests
 
         IEnumerable<string> ReadStoredReductionFileRelativePaths()
         {
-            System.Threading.Thread.Sleep(1111);  //  Storing reduction may be completed after client has received response.
+            System.Threading.Thread.Sleep(1111); //  Storing reduction may be completed after client has received response.
             return testSetup.BuildProcessStoreReaderInFileDirectory().ReductionsFilesNames();
         }
 
@@ -104,8 +104,9 @@ public class WebServiceTests
             }
 
             ReadStoredReductionFileRelativePaths().Count().Should()
-                .Be(beforeBatchStoredReductionsCount + 1,
-                    "Number of stored reductions has increased by one since previous batch.");
+                .Be(
+                beforeBatchStoredReductionsCount + 1,
+                "Number of stored reductions has increased by one since previous batch.");
         }
     }
 
@@ -114,23 +115,26 @@ public class WebServiceTests
     {
         var defaultAppSourceFiles = TestSetup.ReadSourceFileWebApp;
 
-        var demoFiles = new[]
-        {
-            new
+        var demoFiles =
+            new[]
             {
-                path= ImmutableList.Create("demo-file.mp3"),
-                content= (ReadOnlyMemory<byte>)Enumerable.Range(0, 10_000).SelectMany(elem => BitConverter.GetBytes((UInt16)elem))
+                new
+                {
+                    path= ImmutableList.Create("demo-file.mp3"),
+                    content=
+                    (ReadOnlyMemory<byte>)Enumerable.Range(0, 10_000)
+                    .SelectMany(elem => BitConverter.GetBytes((UInt16)elem))
                     .Concat(System.Text.Encoding.UTF8.GetBytes("Default static file content from String\nAnother line"))
                     .Concat(Enumerable.Range(0, 100_000).SelectMany(elem => BitConverter.GetBytes((ushort)elem)))
                     .ToImmutableList()
                     .ToArray()
-            },
-            new
-            {
-                path= ImmutableList.Create("alpha", "beta","demo-file-gamma.text"),
-                content= (ReadOnlyMemory<byte>)System.Text.Encoding.UTF8.GetBytes("Some file content")
-            }
-        };
+                },
+                new
+                {
+                    path= ImmutableList.Create("alpha", "beta", "demo-file-gamma.text"),
+                    content= (ReadOnlyMemory<byte>)System.Text.Encoding.UTF8.GetBytes("Some file content")
+                }
+            };
 
         var webAppSourceFiles =
             demoFiles
@@ -193,7 +197,9 @@ public class WebServiceTests
             var responseContent =
                 await httpResponse.Content.ReadAsStringAsync();
 
-            responseContent.Should().Be("Text file content", "Content of the alpha-file-via-other-interface-module should match the expected value.");
+            responseContent.Should().Be(
+                "Text file content",
+                "Content of the alpha-file-via-other-interface-module should match the expected value.");
         }
     }
 
@@ -213,11 +219,10 @@ public class WebServiceTests
         IFileStoreReader getCurrentFileStoreReader() =>
             fileStoreWriter.ReaderFromAppliedOperationsOnEmptyStore();
 
-        var fileStoreReader = new DelegatingFileStoreReader
-        (
-            GetFileContentDelegate: path => getCurrentFileStoreReader().GetFileContent(path),
-            ListFilesInDirectoryDelegate: path => getCurrentFileStoreReader().ListFilesInDirectory(path)
-        );
+        var fileStoreReader =
+            new DelegatingFileStoreReader(
+                GetFileContentDelegate: path => getCurrentFileStoreReader().GetFileContent(path),
+                ListFilesInDirectoryDelegate: path => getCurrentFileStoreReader().ListFilesInDirectory(path));
 
         var fileStore = new FileStoreFromWriterAndReader(fileStoreWriter, fileStoreReader);
 
@@ -229,16 +234,18 @@ public class WebServiceTests
 
         var requestsBatches =
             Enumerable.Range(0, 3)
-            .Select(batchIndex =>
+            .Select(
+                batchIndex =>
                 Enumerable.Range(0, RequestBatchSize)
-                .Select(indexInBatch =>
-                new
-                {
-                    batchIndex,
-                    indexInBatch,
-                    addition = batchIndex * RequestBatchSize + indexInBatch
-                }).ToList())
-                .ToList();
+                .Select(
+                    indexInBatch =>
+                    new
+                    {
+                        batchIndex,
+                        indexInBatch,
+                        addition = batchIndex * RequestBatchSize + indexInBatch
+                    }).ToList())
+            .ToList();
 
         var deploymentFiles = TestSetup.CounterElmWebApp;
 
@@ -277,17 +284,19 @@ public class WebServiceTests
             httpResponses.Where(httpResponse => httpResponse.StatusCode == HttpStatusCode.TooManyRequests);
 
         using var server = testSetup.StartWebHost();
+
         {
             var firstBatchHttpResponses =
-                requestsBatches[0].Select(processEvent =>
-                {
-                    letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(1));
+                requestsBatches[0].Select(
+                    processEvent =>
+                    {
+                        letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(1));
 
-                    return PostStringContentToPublicAppAsync(processEvent.addition).Result;
-                }).ToList();
+                        return PostStringContentToPublicAppAsync(processEvent.addition).Result;
+                    }).ToList();
 
             WhereStatusCodeTooManyRequests(firstBatchHttpResponses).Count()
-            .Should().Be(0, "No HTTP response from the first batch has status code 'Too Many Requests'.");
+                .Should().Be(0, "No HTTP response from the first batch has status code 'Too Many Requests'.");
         }
 
         var storeAppendCountBeforeSecondBatch =
@@ -295,16 +304,18 @@ public class WebServiceTests
 
         {
             var secondBatchHttpResponses =
-                requestsBatches[1].Select(processEvent =>
-                {
-                    //  Process the events in the second batch in smaller timespan so that effect of the rate-limit should be observable.
-                    letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(0.1));
+                requestsBatches[1].Select(
+                    processEvent =>
+                    {
+                        //  Process the events in the second batch in smaller timespan so that effect of the rate-limit should be observable.
+                        letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(0.1));
 
-                    return PostStringContentToPublicAppAsync(processEvent.addition).Result;
-                }).ToList();
+                        return PostStringContentToPublicAppAsync(processEvent.addition).Result;
+                    }).ToList();
 
             WhereStatusCodeTooManyRequests(secondBatchHttpResponses).Count()
-            .Should().BeGreaterThan(MinimumNumberOfRequestsInFastBatchExpectedToBeBlockedByRateLimit,
+                .Should().BeGreaterThan(
+                MinimumNumberOfRequestsInFastBatchExpectedToBeBlockedByRateLimit,
                 "At least this many requests in the fast batch are expected to be answered with status code 'Too Many Requests'.");
         }
 
@@ -323,22 +334,24 @@ public class WebServiceTests
 
         {
             var thirdBatchHttpResponses =
-                requestsBatches[2].Select(processEvent =>
-                {
-                    letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(1));
+                requestsBatches[2].Select(
+                    processEvent =>
+                    {
+                        letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(1));
 
-                    return PostStringContentToPublicAppAsync(processEvent.addition).Result;
-                }).ToList();
+                        return PostStringContentToPublicAppAsync(processEvent.addition).Result;
+                    }).ToList();
 
             WhereStatusCodeTooManyRequests(thirdBatchHttpResponses).Count()
-            .Should().Be(0, "No HTTP response from the third batch has status code 'Too Many Requests'.");
+                .Should().Be(0, "No HTTP response from the third batch has status code 'Too Many Requests'.");
         }
 
         var storeAppendCountAfterThirdBatch =
             fileStoreHistoryCountAppendOperations();
 
         storeAppendCountAfterThirdBatch.Should()
-            .BeGreaterThanOrEqualTo(storeAppendCountBeforeThirdBatch + RequestBatchSize,
+            .BeGreaterThanOrEqualTo(
+            storeAppendCountBeforeThirdBatch + RequestBatchSize,
             "All events from the third batch have been stored.");
     }
 
@@ -349,9 +362,10 @@ public class WebServiceTests
 
         var deploymentFiles = TestSetup.StringBuilderElmWebApp;
 
-        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-            deployAppAndInitElmState: FileTreeEncoding.Encode(
-                FileTree.FromSetOfFilesWithStringPath(deploymentFiles)));
+        using var testSetup =
+            WebHostAdminInterfaceTestSetup.Setup(
+                deployAppAndInitElmState: FileTreeEncoding.Encode(
+                    FileTree.FromSetOfFilesWithStringPath(deploymentFiles)));
 
         async System.Threading.Tasks.Task<HttpResponseMessage> PostStringContentToPublicAppAsync(
             string requestContent)
@@ -374,7 +388,8 @@ public class WebServiceTests
             "small enough content" + new string('_', sufficientlySmallRequestContentSize))).StatusCode.Should()
             .Be(HttpStatusCode.OK, "Receive OK status code for sufficiently small request.");
 
-        (await PostStringContentToPublicAppAsync("too large content" + new string('_', RequestSizeLimit))).StatusCode.Should()
+        (await PostStringContentToPublicAppAsync("too large content" + new string('_', RequestSizeLimit))).StatusCode
+            .Should()
             .Be(HttpStatusCode.RequestEntityTooLarge, "Receive non-OK status code for too large request.");
     }
 
@@ -420,42 +435,50 @@ public class WebServiceTests
             using (var client = testSetup.BuildAdminInterfaceHttpClient())
             {
                 (await HttpGetElmAppStateAsync(client)).StatusCode
-                    .Should().Be(HttpStatusCode.Unauthorized,
-                        "HTTP status code for authorized request to get elm app state.");
+                    .Should().Be(
+                    HttpStatusCode.Unauthorized,
+                    "HTTP status code for authorized request to get elm app state.");
 
                 (await HttpSetElmAppStateAsync(client, "new-state")).StatusCode
-                    .Should().Be(HttpStatusCode.Unauthorized,
-                        "HTTP status code for unauthorized request to set elm app state.");
+                    .Should().Be(
+                    HttpStatusCode.Unauthorized,
+                    "HTTP status code for unauthorized request to set elm app state.");
 
                 (await (await publicAppClient.GetAsync("")).Content.ReadAsStringAsync())
-                    .Should().Be("part-a-⚙️-part-b",
+                    .Should().Be(
+                    "part-a-⚙️-part-b",
                     "State after failing to set elm app state.");
 
                 client.DefaultRequestHeaders.Authorization =
                     new AuthenticationHeaderValue(
                         "Basic",
-                        Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                            Configuration.BasicAuthenticationForAdmin(AdminPassword))));
+                        Convert.ToBase64String(
+                            System.Text.Encoding.UTF8.GetBytes(
+                                Configuration.BasicAuthenticationForAdmin(AdminPassword))));
 
                 {
                     var getElmAppStateResponse = await HttpGetElmAppStateAsync(client);
 
                     getElmAppStateResponse.StatusCode
-                        .Should().Be(HttpStatusCode.OK,
-                            "HTTP status code for authorized request to get elm app state after authorization.");
+                        .Should().Be(
+                        HttpStatusCode.OK,
+                        "HTTP status code for authorized request to get elm app state after authorization.");
 
                     (await getElmAppStateResponse.Content.ReadAsStringAsync())
-                        .Should().Be(@"""part-a-⚙️-part-b""",
-                            "State after getting elm app state after authorization.");
+                        .Should().Be(
+                        @"""part-a-⚙️-part-b""",
+                        "State after getting elm app state after authorization.");
                 }
 
                 (await HttpSetElmAppStateAsync(client, @"""new-state""")).StatusCode
-                    .Should().Be(HttpStatusCode.OK,
-                        "HTTP status code for authorized request to set elm app state.");
+                    .Should().Be(
+                    HttpStatusCode.OK,
+                    "HTTP status code for authorized request to set elm app state.");
             }
 
             (await (await publicAppClient.GetAsync("")).Content.ReadAsStringAsync())
-                .Should().Be("new-state",
+                .Should().Be(
+                "new-state",
                 "State after setting elm app state.");
 
             HttpPostStringContentAtRoot(publicAppClient, "_appendix").StatusCode
@@ -467,7 +490,8 @@ public class WebServiceTests
             using var publicAppClient = testSetup.BuildPublicAppHttpClient();
 
             publicAppClient.GetAsync("").Result.Content.ReadAsStringAsync().Result
-                .Should().Be("new-state_appendix",
+                .Should().Be(
+                "new-state_appendix",
                 "State after setting elm app state, appending, and restarting server.");
         }
     }
@@ -513,14 +537,18 @@ public class WebServiceTests
             .First(entry => entry.name == appSpecificHttpRequestHeaderName);
 
         WebUtility.UrlDecode(matchingEntryFromResponseContent.values.FirstOrDefault())
-            .Should().Be(requestHeaderValue,
+            .Should().Be(
+            requestHeaderValue,
             "Expect the HTTP request header was propagated to an entry in the response content.");
 
         response.Headers.TryGetValues(appSpecificHttpResponseHeaderName, out var appSpecificHttpHeaderValues);
 
         WebUtility.UrlDecode(appSpecificHttpHeaderValues?.FirstOrDefault())
-            .Should().Be(requestContentString,
-            "Expect the HTTP request content was propagated to the response header with name '" + appSpecificHttpResponseHeaderName + "'");
+            .Should().Be(
+            requestContentString,
+            "Expect the HTTP request content was propagated to the response header with name '" +
+            appSpecificHttpResponseHeaderName +
+            "'");
     }
 
     [Fact(Skip = "Skip temporary while performance optimizations are WIP")]
@@ -533,33 +561,36 @@ public class WebServiceTests
 
         using var echoApp = echoAppBuilder.Build();
 
-        echoApp.Run(async context =>
-        {
-            var requestRecord = await Asp.AsInterfaceHttpRequestAsync(context.Request);
+        echoApp.Run(
+            async context =>
+            {
+                var requestRecord = await Asp.AsInterfaceHttpRequestAsync(context.Request);
 
-            var requestRecordSerialFormat =
-            new TestAppInterface.HttpProxyWebApp.HttpRequest(
-                method: requestRecord.Method,
-                uri: requestRecord.Uri,
-                bodyAsBase64:
-                Maybe.NothingFromNull(
-                    requestRecord.Body is { } body
-                    ?
-                    Convert.ToBase64String(body.Span)
-                    :
-                    null),
-                headers:
-                [..requestRecord.Headers
-                .Select(h => new TestAppInterface.HttpProxyWebApp.HttpHeader(
-                    name: h.Name,
-                    values: [..h.Values]))
-                ]);
+                var requestRecordSerialFormat =
+                    new TestAppInterface.HttpProxyWebApp.HttpRequest(
+                        method: requestRecord.Method,
+                        uri: requestRecord.Uri,
+                        bodyAsBase64:
+                        Maybe.NothingFromNull(
+                            requestRecord.Body is { } body
+                            ?
+                            Convert.ToBase64String(body.Span)
+                            :
+                            null),
+                        headers:
+                        [
+                            ..requestRecord.Headers
+                            .Select(
+                                h => new TestAppInterface.HttpProxyWebApp.HttpHeader(
+                                    name: h.Name,
+                                    values: [..h.Values]))
+                        ]);
 
-            context.Response.StatusCode = 200;
+                context.Response.StatusCode = 200;
 
-            await context.Response.WriteAsync(
-                System.Text.Json.JsonSerializer.Serialize(requestRecordSerialFormat));
-        });
+                await context.Response.WriteAsync(
+                    System.Text.Json.JsonSerializer.Serialize(requestRecordSerialFormat));
+            });
 
         echoApp.StartAsync().Wait();
 
@@ -600,7 +631,8 @@ public class WebServiceTests
                     responseContentString)!;
 
             echoRequestStructure.bodyAsBase64.WithDefault("").ToLowerInvariant()
-                .Should().Be(Convert.ToBase64String(requestContentBytes).ToLowerInvariant(),
+                .Should().Be(
+                Convert.ToBase64String(requestContentBytes).ToLowerInvariant(),
                 "Request body is propagated.");
 
             var echoCustomHeaderValues =
@@ -641,11 +673,15 @@ public class WebServiceTests
 
             var observedContentType =
                 echoRequestStructure.headers
-                .SingleOrDefault(header => string.Equals(
-                    header.name, contentTypeHeaderName, StringComparison.InvariantCultureIgnoreCase))
+                .SingleOrDefault(
+                    header => string.Equals(
+                        header.name,
+                        contentTypeHeaderName,
+                        StringComparison.InvariantCultureIgnoreCase))
                 ?.values.SingleOrDefault();
 
-            observedContentType.Should().Be(customContentType,
+            observedContentType.Should().Be(
+                customContentType,
                 "Sent HTTP request with content type '" + customContentType + "'.");
         }
     }
@@ -662,7 +698,8 @@ public class WebServiceTests
         {
             using var publicAppClient = testSetup.BuildPublicAppHttpClient();
 
-            return await
+            return
+                await
                 publicAppClient.PostAsync(
                     "",
                     new StringContent(postContent, System.Text.Encoding.UTF8));
@@ -670,38 +707,45 @@ public class WebServiceTests
 
         Action? runBeforeMutateInFileStore = null;
 
-        using var server = testSetup.StartWebHost(
-            processStoreFileStoreMap: originalFileStore =>
-            {
-                return new FileStoreFromDelegates(
-                    setFileContent: new Action<IImmutableList<string>, ReadOnlyMemory<byte>>((path, fileContent) =>
-                    {
-                        runBeforeMutateInFileStore?.Invoke();
-                        originalFileStore.SetFileContent(path, fileContent);
-                    }),
-                    appendFileContent: new Action<IImmutableList<string>, ReadOnlyMemory<byte>>((path, fileContent) =>
-                    {
-                        runBeforeMutateInFileStore?.Invoke();
-                        originalFileStore.AppendFileContent(path, fileContent);
-                    }),
-                    deleteFile: new Action<IImmutableList<string>>(path =>
-                    {
-                        runBeforeMutateInFileStore?.Invoke();
-                        originalFileStore.DeleteFile(path);
-                    }),
-                    getFileContent: originalFileStore.GetFileContent,
-                    listFilesInDirectory: originalFileStore.ListFilesInDirectory);
-            });
+        using var server =
+            testSetup.StartWebHost(
+                processStoreFileStoreMap: originalFileStore =>
+                {
+                    return
+                        new FileStoreFromDelegates(
+                            setFileContent: new Action<IImmutableList<string>, ReadOnlyMemory<byte>>(
+                                (path, fileContent) =>
+                                {
+                                    runBeforeMutateInFileStore?.Invoke();
+                                    originalFileStore.SetFileContent(path, fileContent);
+                                }),
+                            appendFileContent: new Action<IImmutableList<string>, ReadOnlyMemory<byte>>(
+                                (path, fileContent) =>
+                                {
+                                    runBeforeMutateInFileStore?.Invoke();
+                                    originalFileStore.AppendFileContent(path, fileContent);
+                                }),
+                            deleteFile: new Action<IImmutableList<string>>(
+                                path =>
+                                {
+                                    runBeforeMutateInFileStore?.Invoke();
+                                    originalFileStore.DeleteFile(path);
+                                }),
+                            getFileContent: originalFileStore.GetFileContent,
+                            listFilesInDirectory: originalFileStore.ListFilesInDirectory);
+                });
 
         var delayMutateInFileStore = true;
 
-        runBeforeMutateInFileStore = new Action(() =>
-        {
-            while (delayMutateInFileStore)
-            {
-                System.Threading.Tasks.Task.Delay(TimeSpan.FromMilliseconds(11)).Wait();
-            }
-        });
+        runBeforeMutateInFileStore =
+            new Action(
+                () =>
+                {
+                    while (delayMutateInFileStore)
+                    {
+                        System.Threading.Tasks.Task.Delay(TimeSpan.FromMilliseconds(11)).Wait();
+                    }
+                });
 
         /*
          * We need to cause an event that actually changes the state of the Elm app,
@@ -779,7 +823,8 @@ public class WebServiceTests
                         ZipArchive.EntriesFromZipArchive(getAppResponseContent).ToImmutableList());
 
                 PineValueHashTree.ComputeHashSorted(responseAppConfigTree).ToArray()
-                    .Should().Equal(PineValueHashTree.ComputeHashSorted(deploymentTree).ToArray(),
+                    .Should().Equal(
+                    PineValueHashTree.ComputeHashSorted(deploymentTree).ToArray(),
                     "Get the same configuration back.");
             }
 
@@ -795,7 +840,8 @@ public class WebServiceTests
                 var httpResponseContent =
                     await httpResponse.Content.ReadAsStringAsync();
 
-                httpResponseContent.Should().Be(expectedResponse,
+                httpResponseContent.Should().Be(
+                    expectedResponse,
                     "server response matches " + expectedResponse);
             }
 
@@ -843,7 +889,8 @@ public class WebServiceTests
                 var httpResponseContent =
                     await httpResponse.Content.ReadAsStringAsync();
 
-                httpResponseContent.Should().Be(expectedResponse,
+                httpResponseContent.Should().Be(
+                    expectedResponse,
                     "server response matches " + expectedResponse);
             }
 
@@ -885,7 +932,8 @@ public class WebServiceTests
             var httpResponse = await client.GetAsync("");
 
             (await httpResponse.Content.ReadAsStringAsync())
-                .Should().Be(stateToTriggerInvalidMigration,
+                .Should().Be(
+                stateToTriggerInvalidMigration,
                 "Get same state back.");
         }
 
@@ -898,7 +946,8 @@ public class WebServiceTests
                     StartupAdminInterface.PathApiDeployAndMigrateAppState,
                     new ByteArrayContent(deploymentZipArchive));
 
-            migrateHttpResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest,
+            migrateHttpResponse.StatusCode.Should().Be(
+                HttpStatusCode.BadRequest,
                 "migrate-elm-state response status code is BadRequest");
 
             if (migrateHttpResponse.Content is not { } migrateHttpResponseContent)
@@ -923,7 +972,8 @@ public class WebServiceTests
             }
 
             (await responseContent.ReadAsStringAsync())
-                .Should().Be(stateToTriggerInvalidMigration,
+                .Should().Be(
+                stateToTriggerInvalidMigration,
                 "Get same state back after attempted migration.");
         }
 
@@ -938,8 +988,10 @@ public class WebServiceTests
                     new StringContent(stateNotTriggeringInvalidMigration, System.Text.Encoding.UTF8));
 
             var responseContentString =
-                httpResponse.Content is { } responseContent ?
-                await responseContent.ReadAsStringAsync() :
+                httpResponse.Content is { } responseContent
+                ?
+                await responseContent.ReadAsStringAsync()
+                :
                 null;
 
             httpResponse.IsSuccessStatusCode.Should()
@@ -963,7 +1015,8 @@ public class WebServiceTests
             var httpResponse = await client.GetAsync("");
 
             (await httpResponse.Content.ReadAsStringAsync())
-                .Should().Be(stateNotTriggeringInvalidMigration.Replace("sometext", "sometext8"),
+                .Should().Be(
+                stateNotTriggeringInvalidMigration.Replace("sometext", "sometext8"),
                 "Get expected state from public app, reflecting the mapping coded in the Elm migration code.");
         }
     }
@@ -1002,7 +1055,8 @@ public class WebServiceTests
             var httpResponseContent =
                 await httpResponse.Content.ReadAsStringAsync();
 
-            httpResponseContent.Should().Be(expectedResponse,
+            httpResponseContent.Should().Be(
+                expectedResponse,
                 "server response matches " + expectedResponse);
         }
 
@@ -1029,7 +1083,8 @@ public class WebServiceTests
             var initialGetResponse = await client.GetAsync("");
 
             (await initialGetResponse.Content.ReadAsStringAsync())
-                .Should().Be("14",
+                .Should().Be(
+                "14",
                 "State migrated from counter app");
 
             var firstPostResponse =
@@ -1045,7 +1100,8 @@ public class WebServiceTests
             var finalGetResponse = await client.GetAsync("");
 
             (await finalGetResponse.Content.ReadAsStringAsync())
-                .Should().Be("14-part-a-part-b",
+                .Should().Be(
+                "14-part-a-part-b",
                 "State after multiple posts");
         }
     }
@@ -1074,8 +1130,9 @@ public class WebServiceTests
         var secondBatchOfCounterAppEvents =
             eventsAndExpectedResponsesBatches.ElementAt(1);
 
-        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-            deployAppAndInitElmState: ElmWebServiceAppTests.CounterWebApp);
+        using var testSetup =
+            WebHostAdminInterfaceTestSetup.Setup(
+                deployAppAndInitElmState: ElmWebServiceAppTests.CounterWebApp);
 
         using var server = testSetup.StartWebHost();
 
@@ -1095,7 +1152,8 @@ public class WebServiceTests
         }
 
         var processVersionAfterFirstBatch =
-            ElmTime.Platform.WebService.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.HashBase16FromCompositionRecord(
+            ElmTime.Platform
+            .WebService.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.HashBase16FromCompositionRecord(
                 testSetup
                 .BuildProcessStoreReaderInFileDirectory()
                 .EnumerateSerializedCompositionLogRecordsReverse().First());
@@ -1123,7 +1181,8 @@ public class WebServiceTests
                     null);
 
             revertResponse.IsSuccessStatusCode
-                .Should().BeTrue("revertResponse IsSuccessStatusCode (" +
+                .Should().BeTrue(
+                "revertResponse IsSuccessStatusCode (" +
                 await revertResponse.Content.ReadAsStringAsync() + ")");
         }
 
@@ -1336,16 +1395,20 @@ public class WebServiceTests
         {
             var truncateResponse =
                 await adminClient.PostAsync(
-                    StartupAdminInterface.PathApiTruncateProcessHistory, null);
+                    StartupAdminInterface.PathApiTruncateProcessHistory,
+                    null);
 
             truncateResponse.IsSuccessStatusCode
-                .Should().BeTrue("truncateResponse IsSuccessStatusCode (" +
+                .Should().BeTrue(
+                "truncateResponse IsSuccessStatusCode (" +
                 await truncateResponse.Content.ReadAsStringAsync() + ")");
         }
 
         var numberOfFilesAfter = countFilesInProcessFileStore();
 
-        numberOfFilesAfter.Should().BeLessThan(numberOfFilesBefore, because:
+        numberOfFilesAfter.Should().BeLessThan(
+            numberOfFilesBefore,
+            because:
             "Number of files in store is lower after truncate request.");
 
         foreach (var (serializedEvent, expectedResponse) in thirdBatchOfCounterAppEvents)
@@ -1392,9 +1455,10 @@ public class WebServiceTests
         var thirdBatchOfCounterAppEvents =
             eventsAndExpectedResponsesBatches.ElementAt(2);
 
-        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-            persistentProcessHostDateTime: () => persistentProcessHostDateTime,
-            deployAppAndInitElmState: ElmWebServiceAppTests.CounterWebApp);
+        using var testSetup =
+            WebHostAdminInterfaceTestSetup.Setup(
+                persistentProcessHostDateTime: () => persistentProcessHostDateTime,
+                deployAppAndInitElmState: ElmWebServiceAppTests.CounterWebApp);
 
         using (var server = testSetup.StartWebHost())
         {
@@ -1474,11 +1538,10 @@ public class WebServiceTests
         IFileStoreReader getCurrentFileStoreReader() =>
             fileStoreWriter.ReaderFromAppliedOperationsOnEmptyStore();
 
-        var fileStoreReader = new DelegatingFileStoreReader
-        (
-            GetFileContentDelegate: path => getCurrentFileStoreReader().GetFileContent(path),
-            ListFilesInDirectoryDelegate: path => getCurrentFileStoreReader().ListFilesInDirectory(path)
-        );
+        var fileStoreReader =
+            new DelegatingFileStoreReader(
+                GetFileContentDelegate: path => getCurrentFileStoreReader().GetFileContent(path),
+                ListFilesInDirectoryDelegate: path => getCurrentFileStoreReader().ListFilesInDirectory(path));
 
         var fileStore = new FileStoreFromWriterAndReader(fileStoreWriter, fileStoreReader);
 
@@ -1489,7 +1552,8 @@ public class WebServiceTests
                 await httpClient.PostAsync(
                     "",
                     new StringContent(
-                        System.Text.Json.JsonSerializer.Serialize(new { addition = 0 }), System.Text.Encoding.UTF8));
+                        System.Text.Json.JsonSerializer.Serialize(new { addition = 0 }),
+                        System.Text.Encoding.UTF8));
 
             return await httpResponse.Content.ReadAsStringAsync();
         }
@@ -1524,8 +1588,9 @@ public class WebServiceTests
 
         var storeHistoryLessTrailingReduction =
             storeOriginalHistory
-            .SkipLastWhile(writeOperation =>
-            writeOperation.SetFileContent?.path
+            .SkipLastWhile(
+                writeOperation =>
+                writeOperation.SetFileContent?.path
             ?.Any((segment) => segment.Contains("reduction", StringComparison.OrdinalIgnoreCase)) ?? false);
 
         var lastWriteOperation = storeHistoryLessTrailingReduction.Last();
@@ -1538,10 +1603,11 @@ public class WebServiceTests
         var storeHistoryWithCrash =
             storeHistoryLessTrailingReduction
             .SkipLast(1)
-            .Append(new RecordingFileStoreWriter.WriteOperation
-            {
-                AppendFileContent = (appendFileContentPath, Enumerable.Repeat((byte)4, 123).ToArray()),
-            });
+            .Append(
+                new RecordingFileStoreWriter.WriteOperation
+                {
+                    AppendFileContent = (appendFileContentPath, Enumerable.Repeat((byte)4, 123).ToArray()),
+                });
 
         var fileStoreReaderAfterCrash =
             RecordingFileStoreWriter.WriteOperation.ReaderFromAppliedOperationsOnEmptyStore(storeHistoryWithCrash);
@@ -1564,12 +1630,13 @@ public class WebServiceTests
     {
         var testDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
 
-        var deployReport = global::Pine.CLI.DeployCommand.DeployApp(
-            sourcePath: "./../../../../example-apps/docker-image-default-app",
-            site: testDirectory,
-            siteDefaultPassword: null,
-            initElmAppState: true,
-            promptForPasswordOnConsole: false);
+        var deployReport =
+            global::Pine.CLI.DeployCommand.DeployApp(
+                sourcePath: "./../../../../example-apps/docker-image-default-app",
+                site: testDirectory,
+                siteDefaultPassword: null,
+                initElmAppState: true,
+                promptForPasswordOnConsole: false);
 
         await using (var restoredProcess =
             PersistentProcessLive.LoadFromStoreAndRestoreProcess(
@@ -1586,7 +1653,8 @@ public class WebServiceTests
             restoredProcessLastDeployedAppComponent.Should().NotBeNull("Restored process has app deployed.");
 
             Convert.ToHexStringLower(PineValueHashTree.ComputeHash(restoredProcessLastDeployedAppComponent).Span)
-                .Should().Be(deployReport.filteredSourceCompositionId,
+                .Should().Be(
+                deployReport.filteredSourceCompositionId,
                 "App ID in restored process equals app ID from deployment report.");
         }
 
@@ -1634,7 +1702,8 @@ public class WebServiceTests
 
             httpStopwatch.Stop();
 
-            httpStopwatch.ElapsedMilliseconds.Should().BeGreaterThanOrEqualTo(expectedDelayMilliseconds,
+            httpStopwatch.ElapsedMilliseconds.Should().BeGreaterThanOrEqualTo(
+                expectedDelayMilliseconds,
                 "Actual delay should be greater than or equal to expected delay");
 
             var additionalDelayMilliseconds =
@@ -1687,9 +1756,11 @@ public class WebServiceTests
                 Uri: "/test",
                 Body: null,
                 Headers:
-                [new WebServiceInterface.HttpHeader(
-                    Name: "delay-milliseconds",
-                    Values: [delayMilliseconds.ToString()])]);
+                [
+                    new WebServiceInterface.HttpHeader(
+                        Name: "delay-milliseconds",
+                        Values: [delayMilliseconds.ToString()])
+                ]);
 
         {
             // Warmup
@@ -1699,13 +1770,11 @@ public class WebServiceTests
 
             var httpResponse =
                 await webServiceApp.HttpRequestSendAsync(
-                    new WebServiceInterface.HttpRequestEventStruct
-                    (
+                    new WebServiceInterface.HttpRequestEventStruct(
                         HttpRequestId: "r-" + httpRequestId++.ToString(),
                         PosixTimeMilli: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                         Request: httpRequest,
-                        RequestContext: new WebServiceInterface.HttpRequestContext(ClientAddress: null)
-                    ));
+                        RequestContext: new WebServiceInterface.HttpRequestContext(ClientAddress: null)));
         }
 
         for (var delay = 0; delay < 4; ++delay)
@@ -1719,17 +1788,16 @@ public class WebServiceTests
 
             var httpResponse =
                 await webServiceApp.HttpRequestSendAsync(
-                    new WebServiceInterface.HttpRequestEventStruct
-                    (
+                    new WebServiceInterface.HttpRequestEventStruct(
                         HttpRequestId: "r-" + httpRequestId++.ToString(),
                         PosixTimeMilli: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                         Request: httpRequest,
-                        RequestContext: new WebServiceInterface.HttpRequestContext(ClientAddress: null)
-                    ));
+                        RequestContext: new WebServiceInterface.HttpRequestContext(ClientAddress: null)));
 
             httpStopwatch.Stop();
 
-            httpStopwatch.ElapsedMilliseconds.Should().BeGreaterThanOrEqualTo(expectedDelayMilliseconds,
+            httpStopwatch.ElapsedMilliseconds.Should().BeGreaterThanOrEqualTo(
+                expectedDelayMilliseconds,
                 "Actual delay should be greater than or equal to expected delay");
 
             var additionalDelayMilliseconds =
@@ -1752,14 +1820,13 @@ public class WebServiceTests
         IFileStoreReader getCurrentFileStoreReader() =>
             fileStoreWriter.ReaderFromAppliedOperationsOnEmptyStore();
 
-        var fileStoreReader = new DelegatingFileStoreReader
-        (
-            GetFileContentDelegate:
-            path => getCurrentFileStoreReader().GetFileContent(path),
+        var fileStoreReader =
+            new DelegatingFileStoreReader(
+                GetFileContentDelegate:
+                path => getCurrentFileStoreReader().GetFileContent(path),
 
-            ListFilesInDirectoryDelegate:
-            path => getCurrentFileStoreReader().ListFilesInDirectory(path)
-        );
+                ListFilesInDirectoryDelegate:
+                path => getCurrentFileStoreReader().ListFilesInDirectory(path));
 
         var fileStore = new FileStoreFromWriterAndReader(fileStoreWriter, fileStoreReader);
 
@@ -1801,7 +1868,6 @@ public class WebServiceTests
             storeOperationCountIncrease.Should()
                 .BeGreaterThan(0, "Store operations increase should be greater than 0");
         }
-
 
         {
             var storeOperationCountBefore =
@@ -1851,9 +1917,10 @@ public class WebServiceTests
     {
         var adminPassword = "test";
 
-        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-            deployAppAndInitElmState: ElmWebServiceAppTests.CounterWebApp,
-            adminPassword: adminPassword);
+        using var testSetup =
+            WebHostAdminInterfaceTestSetup.Setup(
+                deployAppAndInitElmState: ElmWebServiceAppTests.CounterWebApp,
+                adminPassword: adminPassword);
 
         using var server = testSetup.StartWebHost();
 
@@ -1925,5 +1992,5 @@ public class WebServiceTests
 
     private static HttpResponseMessage HttpPostStringContentAtRoot(
         HttpClient client, string requestContent) =>
-            client.PostAsync("", new StringContent(requestContent, System.Text.Encoding.UTF8)).Result;
+        client.PostAsync("", new StringContent(requestContent, System.Text.Encoding.UTF8)).Result;
 }

@@ -221,7 +221,8 @@ public class PineCliCommand
         {
             return Directory.Exists(site) || File.Exists(site);
         }
-        catch { }
+        catch
+        { }
 
         return false;
     }

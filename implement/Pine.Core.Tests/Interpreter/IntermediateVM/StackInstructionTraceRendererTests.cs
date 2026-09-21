@@ -98,24 +98,22 @@ public class StackInstructionTraceRendererTests
                 StackInstruction.Return,
                 ]);
 
-        StackInstructionTraceRenderer.RenderStackFrameInstructions(frameInstructions)
-            .Should()
-            .Be(
-                """
-                0: Jump_Const (6, 6)
-                1: Push_Literal (Blob [2] (0x0407 | int 7))
-                2: Jump_If_Equal_Const (Blob [2] (0x0407 | int 7), 4, 6)
-                3: Push_Literal (Blob [2] (0x0401 | int 1))
-                4: Switch_Jump_If_Equal_Const (2)
-                  case Blob [2] (0x0401 | int 1): jump (2, 6)
-                  case Blob [2] (0x0402 | int 2): jump (3, 7)
-                5: Push_Literal (Blob [2] (0x0400 | int 0))
-                jumps_arriving_from 3 (0, 2, 4)
-                6: Push_Literal (Blob [2] (0x0401 | int 1))
-                jumps_arriving_from 1 (4)
-                7: Push_Literal (Blob [2] (0x0402 | int 2))
-                8: Return
-                """);
+        StackInstructionTraceRenderer.RenderStackFrameInstructions(frameInstructions).Should().Be(
+            """
+            0: Jump_Const (6, 6)
+            1: Push_Literal (Blob [2] (0x0407 | int 7))
+            2: Jump_If_Equal_Const (Blob [2] (0x0407 | int 7), 4, 6)
+            3: Push_Literal (Blob [2] (0x0401 | int 1))
+            4: Switch_Jump_If_Equal_Const (2)
+              case Blob [2] (0x0401 | int 1): jump (2, 6)
+              case Blob [2] (0x0402 | int 2): jump (3, 7)
+            5: Push_Literal (Blob [2] (0x0400 | int 0))
+            jumps_arriving_from 3 (0, 2, 4)
+            6: Push_Literal (Blob [2] (0x0401 | int 1))
+            jumps_arriving_from 1 (4)
+            7: Push_Literal (Blob [2] (0x0402 | int 2))
+            8: Return
+            """);
     }
 
     [Fact]
@@ -145,13 +143,13 @@ public class StackInstructionTraceRendererTests
         StackInstructionTraceRenderer.RenderStackFrameInstructions(frameInstructions)
             .Should()
             .Be(
-                $"""
-                0: Push_Literal (Blob [1] (0xff | hash 0x{expectedBlobHash}))
-                1: Push_Literal (List [1] (1 | hash 0x{expectedListHash}))
-                2: Push_Literal (Blob [16] (0x00000074000000650000007800000074 | UTF32 "text"))
-                3: Push_Literal (Blob [2] (0x0403 | int 3))
-                4: Return
-                """);
+            $"""
+            0: Push_Literal (Blob [1] (0xff | hash 0x{expectedBlobHash}))
+            1: Push_Literal (List [1] (1 | hash 0x{expectedListHash}))
+            2: Push_Literal (Blob [16] (0x00000074000000650000007800000074 | UTF32 "text"))
+            3: Push_Literal (Blob [2] (0x0403 | int 3))
+            4: Return
+            """);
     }
 
     [Fact]

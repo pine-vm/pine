@@ -73,225 +73,234 @@ public class PGOTests
                 s_parseCache)
             .Extract(err => throw new Exception(err));
 
-        var usingRecordAccessScenarios = new[]
-        {
-            new
+        var usingRecordAccessScenarios =
+            new[]
             {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(13)),
-                    ("delta", ElmValue.Integer(17))
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(13)),
+                        ("delta", ElmValue.Integer(17))
+                        ]),
 
-                fieldId = 0,
+                    fieldId = 0,
 
-                expected = IntegerEncoding.EncodeSignedInteger(13)
-            },
+                    expected = IntegerEncoding.EncodeSignedInteger(13)
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(41)),
-                    ("delta", ElmValue.Integer(47))
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(41)),
+                        ("delta", ElmValue.Integer(47))
+                        ]),
 
-                fieldId = 1,
+                    fieldId = 1,
 
-                expected = IntegerEncoding.EncodeSignedInteger(47)
-            },
+                    expected = IntegerEncoding.EncodeSignedInteger(47)
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.StringInstance("Arancino")),
-                    ("delta", ElmValue.StringInstance("Bruschetta"))
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.StringInstance("Arancino")),
+                        ("delta", ElmValue.StringInstance("Bruschetta"))
+                        ]),
 
-                fieldId = 0,
+                    fieldId = 0,
 
-                expected = ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("Arancino"))
-            },
+                    expected = ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("Arancino"))
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.StringInstance("hello")),
-                    ("delta", ElmValue.StringInstance("world"))
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.StringInstance("hello")),
+                        ("delta", ElmValue.StringInstance("world"))
+                        ]),
 
-                fieldId = 1,
+                    fieldId = 1,
 
-                expected = ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("world"))
-            },
+                    expected = ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("world"))
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(89)),
-                    ("other", ElmValue.Integer(97))
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(89)),
+                        ("other", ElmValue.Integer(97))
+                        ]),
 
-                fieldId = 3,
+                    fieldId = 3,
 
-                expected = ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(97))
-            },
+                    expected = ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(97))
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(41)),
-                    ("beta", ElmValue.Integer(43)),
-                    ("gamma", ElmValue.Integer(47)),
-                    ("delta", ElmValue.Integer(49))
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(41)),
+                        ("beta", ElmValue.Integer(43)),
+                        ("gamma", ElmValue.Integer(47)),
+                        ("delta", ElmValue.Integer(49))
+                        ]),
 
-                fieldId = 1,
+                    fieldId = 1,
 
-                expected = IntegerEncoding.EncodeSignedInteger(49)
-            },
+                    expected = IntegerEncoding.EncodeSignedInteger(49)
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(71)),
-                    ("beta", ElmValue.Integer(73)),
-                    ("gamma", ElmValue.Integer(79)),
-                    ("delta", ElmValue.Integer(83))
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(71)),
+                        ("beta", ElmValue.Integer(73)),
+                        ("gamma", ElmValue.Integer(79)),
+                        ("delta", ElmValue.Integer(83))
+                        ]),
 
-                fieldId = 0,
+                    fieldId = 0,
 
-                expected = IntegerEncoding.EncodeSignedInteger(71)
-            },
+                    expected = IntegerEncoding.EncodeSignedInteger(71)
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.StringInstance("Arancino")),
-                    ("beta", ElmValue.Integer(43)),
-                    ("gamma", ElmValue.Integer(47)),
-                    ("delta", ElmValue.Integer(49)),
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.StringInstance("Arancino")),
+                        ("beta", ElmValue.Integer(43)),
+                        ("gamma", ElmValue.Integer(47)),
+                        ("delta", ElmValue.Integer(49)),
+                        ]),
 
-                fieldId = 0,
+                    fieldId = 0,
 
-                expected = ElmValueEncoding.ElmValueAsPineValue( ElmValue.StringInstance("Arancino"))
-            },
+                    expected = ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("Arancino"))
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.StringInstance("Arancini")),
-                    ("beta", ElmValue.StringInstance("Bruschette")),
-                    ("gamma", ElmValue.Integer(123)),
-                    ("delta", ElmValue.StringInstance("Dolmades")),
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.StringInstance("Arancini")),
+                        ("beta", ElmValue.StringInstance("Bruschette")),
+                        ("gamma", ElmValue.Integer(123)),
+                        ("delta", ElmValue.StringInstance("Dolmades")),
+                        ]),
 
-                fieldId = 1,
+                    fieldId = 1,
 
-                expected = ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("Dolmades"))
-            },
+                    expected = ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("Dolmades"))
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(11)),
-                    ("beta", ElmValue.Integer(13)),
-                    ("gamma", ElmValue.Integer(17)),
-                    ("delta", ElmValue.Integer(31)),
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(11)),
+                        ("beta", ElmValue.Integer(13)),
+                        ("gamma", ElmValue.Integer(17)),
+                        ("delta", ElmValue.Integer(31)),
+                        ]),
 
-                fieldId = 1,
+                    fieldId = 1,
 
-                expected = ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(31))
-            },
+                    expected = ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(31))
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(21)),
-                    ("beta", ElmValue.Integer(23)),
-                    ("gamma", ElmValue.Integer(27)),
-                    ("delta", ElmValue.Integer(41)),
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(21)),
+                        ("beta", ElmValue.Integer(23)),
+                        ("gamma", ElmValue.Integer(27)),
+                        ("delta", ElmValue.Integer(41)),
+                        ]),
 
-                fieldId = 1,
+                    fieldId = 1,
 
-                expected = ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(41))
-            },
+                    expected = ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(41))
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.StringInstance("Arancino")),
-                    ("beta", ElmValue.StringInstance("Bruschetta")),
-                    ("other", ElmValue.Integer(101)),
-                    ("delta", ElmValue.StringInstance("Dolmades")),
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.StringInstance("Arancino")),
+                        ("beta", ElmValue.StringInstance("Bruschetta")),
+                        ("other", ElmValue.Integer(101)),
+                        ("delta", ElmValue.StringInstance("Dolmades")),
+                        ]),
 
-                fieldId = 3,
+                    fieldId = 3,
 
-                expected = ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(101))
-            },
+                    expected = ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(101))
+                },
 
-        };
+            };
 
         static long ReportsAverageInstructionCount(IReadOnlyList<EvaluationReport> reports) =>
             reports.Sum(report => report.InstructionCount) / reports.Count;
 
         IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(Core.Interpreter.IntermediateVM.PineVM pineVM) =>
-            [.. usingRecordAccessScenarios
-            .Select(scenario =>
-            {
-                return
-                ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(
-                        usingRecordAccessFunction,
-                        appendArguments:
-                        [
-                            ElmValueEncoding.ElmValueAsPineValue(scenario.record),
-                            IntegerEncoding.EncodeSignedInteger(scenario.fieldId)
-                        ])
-                .AndThen(composedArgs =>
-                pineVM.EvaluateExpressionOnCustomStack(
-                    composedArgs.expression,
-                    composedArgs.environment,
-                    new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(InvocationCountLimit: 1234, LoopIterationCountLimit: null, StackDepthLimit: null))
-                .MapError(err => err.ToString())
-                .Map(evalReport =>
+            [
+            .. usingRecordAccessScenarios
+            .Select(
+                scenario =>
                 {
-                    evalReport.ReturnValue.Should().Be(scenario.expected);
+                    return
+                        ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(
+                            usingRecordAccessFunction,
+                            appendArguments:
+                            [
+                                ElmValueEncoding.ElmValueAsPineValue(scenario.record),
+                                IntegerEncoding.EncodeSignedInteger(scenario.fieldId)
+                            ])
+                        .AndThen(
+                            composedArgs =>
+                            pineVM.EvaluateExpressionOnCustomStack(
+                                composedArgs.expression,
+                                composedArgs.environment,
+                                new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(
+                                    InvocationCountLimit: 1234,
+                                    LoopIterationCountLimit: null,
+                                    StackDepthLimit: null))
+                            .MapError(err => err.ToString())
+                            .Map(
+                                evalReport =>
+                                {
+                                    evalReport.ReturnValue.Should().Be(scenario.expected);
 
-                    Console.WriteLine(
-                        "Completed scenario using " + evalReport.InstructionCount +
-                        " instructions and " + evalReport.InvocationCount + " invocations");
+                                    Console.WriteLine(
+                                        "Completed scenario using " + evalReport.InstructionCount +
+                                        " instructions and " + evalReport.InvocationCount + " invocations");
 
-                    return evalReport;
-                }))
-                .Extract(fromErr: err => throw new Exception("Failed for scenario: " + err));
-            })];
+                                    return evalReport;
+                                }))
+                        .Extract(fromErr: err => throw new Exception("Failed for scenario: " + err));
+                })
+            ];
 
         var nonOptimizingPineVM = SetupVM.Create();
 
@@ -440,7 +449,8 @@ public class PGOTests
                 autoPGO: null);
 
         // Force integration of the 'Test' module.
-        var testSubmissionResult = interactiveSession.Submit(" Test.usingRecordUpdate { alfa = 4, delta = 71 }  0  41 ");
+        var testSubmissionResult =
+            interactiveSession.Submit(" Test.usingRecordUpdate { alfa = 4, delta = 71 }  0  41 ");
 
         var testSubmissionResponse =
             testSubmissionResult.Extract(err => throw new Exception(err));
@@ -457,444 +467,453 @@ public class PGOTests
                 s_parseCache)
             .Extract(err => throw new Exception(err));
 
-        var recordUpdateScenarios = new[]
-        {
-            new
+        var recordUpdateScenarios =
+            new[]
             {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(13)),
-                    ("beta", ElmValue.Integer(43)),
-                    ("delta", ElmValue.Integer(17))
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(13)),
+                        ("beta", ElmValue.Integer(43)),
+                        ("delta", ElmValue.Integer(17))
+                        ]),
 
-                fieldId = 0,
+                    fieldId = 0,
 
-                fieldValue = ElmValue.Integer(73),
+                    fieldValue = ElmValue.Integer(73),
 
-                expected =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(73)),
-                    ("beta", ElmValue.Integer(43)),
-                    ("delta", ElmValue.Integer(17))
-                    ]),
-            },
+                    expected =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(73)),
+                        ("beta", ElmValue.Integer(43)),
+                        ("delta", ElmValue.Integer(17))
+                        ]),
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(41)),
-                    ("beta", ElmValue.Integer(43)),
-                    ("delta", ElmValue.Integer(47))
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(41)),
+                        ("beta", ElmValue.Integer(43)),
+                        ("delta", ElmValue.Integer(47))
+                        ]),
 
-                fieldId = 1,
+                    fieldId = 1,
 
-                fieldValue = ElmValue.Integer(79),
+                    fieldValue = ElmValue.Integer(79),
 
-                expected =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(41)),
-                    ("beta", ElmValue.Integer(43)),
-                    ("delta", ElmValue.Integer(79))
-                    ]),
-            },
+                    expected =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(41)),
+                        ("beta", ElmValue.Integer(43)),
+                        ("delta", ElmValue.Integer(79))
+                        ]),
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.StringInstance("Arancino")),
-                    ("beta", ElmValue.Integer(49)),
-                    ("delta", ElmValue.StringInstance("Bruschetta"))
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.StringInstance("Arancino")),
+                        ("beta", ElmValue.Integer(49)),
+                        ("delta", ElmValue.StringInstance("Bruschetta"))
+                        ]),
 
-                fieldId = 0,
+                    fieldId = 0,
 
-                fieldValue = ElmValue.StringInstance("Pane"),
+                    fieldValue = ElmValue.StringInstance("Pane"),
 
-                expected =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.StringInstance("Pane")),
-                    ("beta", ElmValue.Integer(49)),
-                    ("delta", ElmValue.StringInstance("Bruschetta"))
-                    ])
-            },
+                    expected =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.StringInstance("Pane")),
+                        ("beta", ElmValue.Integer(49)),
+                        ("delta", ElmValue.StringInstance("Bruschetta"))
+                        ])
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.StringInstance("hello")),
-                    ("beta", ElmValue.Integer(119)),
-                    ("delta", ElmValue.StringInstance("world"))
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.StringInstance("hello")),
+                        ("beta", ElmValue.Integer(119)),
+                        ("delta", ElmValue.StringInstance("world"))
+                        ]),
 
-                fieldId = 1,
+                    fieldId = 1,
 
-                fieldValue = ElmValue.StringInstance("mondo"),
+                    fieldValue = ElmValue.StringInstance("mondo"),
 
-                expected =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.StringInstance("hello")),
-                    ("beta", ElmValue.Integer(119)),
-                    ("delta", ElmValue.StringInstance("mondo"))
-                    ])
-            },
+                    expected =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.StringInstance("hello")),
+                        ("beta", ElmValue.Integer(119)),
+                        ("delta", ElmValue.StringInstance("mondo"))
+                        ])
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(89)),
-                    ("beta", ElmValue.Integer(113)),
-                    ("epsilon", ElmValue.Integer(117)),
-                    ("zeta", ElmValue.Integer(119)),
-                    ("eta", ElmValue.Integer(121)),
-                    ("theta", ElmValue.Integer(123)),
-                    ("iota", ElmValue.Integer(127)),
-                    ("zz_other", ElmValue.Integer(97))
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(89)),
+                        ("beta", ElmValue.Integer(113)),
+                        ("epsilon", ElmValue.Integer(117)),
+                        ("zeta", ElmValue.Integer(119)),
+                        ("eta", ElmValue.Integer(121)),
+                        ("theta", ElmValue.Integer(123)),
+                        ("iota", ElmValue.Integer(127)),
+                        ("zz_other", ElmValue.Integer(97))
+                        ]),
 
-                fieldId = 3,
+                    fieldId = 3,
 
-                fieldValue = ElmValue.Integer(171),
+                    fieldValue = ElmValue.Integer(171),
 
-                expected =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(89)),
-                    ("beta", ElmValue.Integer(113)),
-                    ("epsilon", ElmValue.Integer(117)),
-                    ("zeta", ElmValue.Integer(119)),
-                    ("eta", ElmValue.Integer(121)),
-                    ("theta", ElmValue.Integer(123)),
-                    ("iota", ElmValue.Integer(127)),
-                    ("zz_other", ElmValue.Integer(171))
-                    ]),
-            },
+                    expected =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(89)),
+                        ("beta", ElmValue.Integer(113)),
+                        ("epsilon", ElmValue.Integer(117)),
+                        ("zeta", ElmValue.Integer(119)),
+                        ("eta", ElmValue.Integer(121)),
+                        ("theta", ElmValue.Integer(123)),
+                        ("iota", ElmValue.Integer(127)),
+                        ("zz_other", ElmValue.Integer(171))
+                        ]),
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(1_89)),
-                    ("beta", ElmValue.Integer(1_113)),
-                    ("epsilon", ElmValue.Integer(1_117)),
-                    ("zeta", ElmValue.Integer(1_119)),
-                    ("eta", ElmValue.Integer(1_121)),
-                    ("theta", ElmValue.Integer(1_123)),
-                    ("iota", ElmValue.Integer(1_127)),
-                    ("zz_other", ElmValue.Integer(1_013))
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(1_89)),
+                        ("beta", ElmValue.Integer(1_113)),
+                        ("epsilon", ElmValue.Integer(1_117)),
+                        ("zeta", ElmValue.Integer(1_119)),
+                        ("eta", ElmValue.Integer(1_121)),
+                        ("theta", ElmValue.Integer(1_123)),
+                        ("iota", ElmValue.Integer(1_127)),
+                        ("zz_other", ElmValue.Integer(1_013))
+                        ]),
 
-                fieldId = 3,
+                    fieldId = 3,
 
-                fieldValue = ElmValue.Integer(11_871),
+                    fieldValue = ElmValue.Integer(11_871),
 
-                expected =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(1_89)),
-                    ("beta", ElmValue.Integer(1_113)),
-                    ("epsilon", ElmValue.Integer(1_117)),
-                    ("zeta", ElmValue.Integer(1_119)),
-                    ("eta", ElmValue.Integer(1_121)),
-                    ("theta", ElmValue.Integer(1_123)),
-                    ("iota", ElmValue.Integer(1_127)),
-                    ("zz_other", ElmValue.Integer(11_871))
-                    ]),
-            },
+                    expected =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(1_89)),
+                        ("beta", ElmValue.Integer(1_113)),
+                        ("epsilon", ElmValue.Integer(1_117)),
+                        ("zeta", ElmValue.Integer(1_119)),
+                        ("eta", ElmValue.Integer(1_121)),
+                        ("theta", ElmValue.Integer(1_123)),
+                        ("iota", ElmValue.Integer(1_127)),
+                        ("zz_other", ElmValue.Integer(11_871))
+                        ]),
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(2_089)),
-                    ("beta", ElmValue.Integer(2_113)),
-                    ("epsilon", ElmValue.Integer(2_117)),
-                    ("zeta", ElmValue.Integer(2_119)),
-                    ("eta", ElmValue.Integer(2_121)),
-                    ("theta", ElmValue.Integer(2_123)),
-                    ("iota", ElmValue.Integer(2_127)),
-                    ("zz_other", ElmValue.Integer(2_013))
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(2_089)),
+                        ("beta", ElmValue.Integer(2_113)),
+                        ("epsilon", ElmValue.Integer(2_117)),
+                        ("zeta", ElmValue.Integer(2_119)),
+                        ("eta", ElmValue.Integer(2_121)),
+                        ("theta", ElmValue.Integer(2_123)),
+                        ("iota", ElmValue.Integer(2_127)),
+                        ("zz_other", ElmValue.Integer(2_013))
+                        ]),
 
-                fieldId = 3,
+                    fieldId = 3,
 
-                fieldValue = ElmValue.Integer(17_951),
+                    fieldValue = ElmValue.Integer(17_951),
 
-                expected =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(2_089)),
-                    ("beta", ElmValue.Integer(2_113)),
-                    ("epsilon", ElmValue.Integer(2_117)),
-                    ("zeta", ElmValue.Integer(2_119)),
-                    ("eta", ElmValue.Integer(2_121)),
-                    ("theta", ElmValue.Integer(2_123)),
-                    ("iota", ElmValue.Integer(2_127)),
-                    ("zz_other", ElmValue.Integer(17_951))
-                    ]),
-            },
+                    expected =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(2_089)),
+                        ("beta", ElmValue.Integer(2_113)),
+                        ("epsilon", ElmValue.Integer(2_117)),
+                        ("zeta", ElmValue.Integer(2_119)),
+                        ("eta", ElmValue.Integer(2_121)),
+                        ("theta", ElmValue.Integer(2_123)),
+                        ("iota", ElmValue.Integer(2_127)),
+                        ("zz_other", ElmValue.Integer(17_951))
+                        ]),
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(3_089)),
-                    ("beta", ElmValue.Integer(3_113)),
-                    ("epsilon", ElmValue.Integer(3_117)),
-                    ("zeta", ElmValue.Integer(3_119)),
-                    ("eta", ElmValue.Integer(3_121)),
-                    ("theta", ElmValue.Integer(3_123)),
-                    ("iota", ElmValue.Integer(3_127)),
-                    ("zz_other", ElmValue.Integer(3_013))
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(3_089)),
+                        ("beta", ElmValue.Integer(3_113)),
+                        ("epsilon", ElmValue.Integer(3_117)),
+                        ("zeta", ElmValue.Integer(3_119)),
+                        ("eta", ElmValue.Integer(3_121)),
+                        ("theta", ElmValue.Integer(3_123)),
+                        ("iota", ElmValue.Integer(3_127)),
+                        ("zz_other", ElmValue.Integer(3_013))
+                        ]),
 
-                fieldId = 3,
+                    fieldId = 3,
 
-                fieldValue = ElmValue.Integer(37_951),
+                    fieldValue = ElmValue.Integer(37_951),
 
-                expected =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(3_089)),
-                    ("beta", ElmValue.Integer(3_113)),
-                    ("epsilon", ElmValue.Integer(3_117)),
-                    ("zeta", ElmValue.Integer(3_119)),
-                    ("eta", ElmValue.Integer(3_121)),
-                    ("theta", ElmValue.Integer(3_123)),
-                    ("iota", ElmValue.Integer(3_127)),
-                    ("zz_other", ElmValue.Integer(37_951))
-                    ]),
-            },
+                    expected =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(3_089)),
+                        ("beta", ElmValue.Integer(3_113)),
+                        ("epsilon", ElmValue.Integer(3_117)),
+                        ("zeta", ElmValue.Integer(3_119)),
+                        ("eta", ElmValue.Integer(3_121)),
+                        ("theta", ElmValue.Integer(3_123)),
+                        ("iota", ElmValue.Integer(3_127)),
+                        ("zz_other", ElmValue.Integer(37_951))
+                        ]),
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(41)),
-                    ("beta", ElmValue.Integer(43)),
-                    ("gamma", ElmValue.Integer(47)),
-                    ("delta", ElmValue.Integer(49))
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(41)),
+                        ("beta", ElmValue.Integer(43)),
+                        ("gamma", ElmValue.Integer(47)),
+                        ("delta", ElmValue.Integer(49))
+                        ]),
 
-                fieldId = 1,
+                    fieldId = 1,
 
-                fieldValue = ElmValue.Integer(173),
+                    fieldValue = ElmValue.Integer(173),
 
-                expected =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(41)),
-                    ("beta", ElmValue.Integer(43)),
-                    ("gamma", ElmValue.Integer(47)),
-                    ("delta", ElmValue.Integer(173))
-                    ]),
-            },
+                    expected =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(41)),
+                        ("beta", ElmValue.Integer(43)),
+                        ("gamma", ElmValue.Integer(47)),
+                        ("delta", ElmValue.Integer(173))
+                        ]),
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(71)),
-                    ("beta", ElmValue.Integer(73)),
-                    ("gamma", ElmValue.Integer(79)),
-                    ("delta", ElmValue.Integer(83))
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(71)),
+                        ("beta", ElmValue.Integer(73)),
+                        ("gamma", ElmValue.Integer(79)),
+                        ("delta", ElmValue.Integer(83))
+                        ]),
 
-                fieldId = 0,
+                    fieldId = 0,
 
-                fieldValue = ElmValue.Integer(91),
+                    fieldValue = ElmValue.Integer(91),
 
-                expected =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(91)),
-                    ("beta", ElmValue.Integer(73)),
-                    ("gamma", ElmValue.Integer(79)),
-                    ("delta", ElmValue.Integer(83))
-                    ]),
-            },
+                    expected =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(91)),
+                        ("beta", ElmValue.Integer(73)),
+                        ("gamma", ElmValue.Integer(79)),
+                        ("delta", ElmValue.Integer(83))
+                        ]),
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.StringInstance("Arancino")),
-                    ("beta", ElmValue.Integer(43)),
-                    ("gamma", ElmValue.Integer(47)),
-                    ("delta", ElmValue.Integer(49)),
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.StringInstance("Arancino")),
+                        ("beta", ElmValue.Integer(43)),
+                        ("gamma", ElmValue.Integer(47)),
+                        ("delta", ElmValue.Integer(49)),
+                        ]),
 
-                fieldId = 0,
+                    fieldId = 0,
 
-                fieldValue = ElmValue.StringInstance("Acciughe"),
+                    fieldValue = ElmValue.StringInstance("Acciughe"),
 
-                expected =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.StringInstance("Acciughe")),
-                    ("beta", ElmValue.Integer(43)),
-                    ("gamma", ElmValue.Integer(47)),
-                    ("delta", ElmValue.Integer(49)),
-                    ]),
-            },
+                    expected =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.StringInstance("Acciughe")),
+                        ("beta", ElmValue.Integer(43)),
+                        ("gamma", ElmValue.Integer(47)),
+                        ("delta", ElmValue.Integer(49)),
+                        ]),
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.StringInstance("Arancini")),
-                    ("beta", ElmValue.StringInstance("Bruschette")),
-                    ("gamma", ElmValue.Integer(123)),
-                    ("delta", ElmValue.StringInstance("Dolmades")),
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.StringInstance("Arancini")),
+                        ("beta", ElmValue.StringInstance("Bruschette")),
+                        ("gamma", ElmValue.Integer(123)),
+                        ("delta", ElmValue.StringInstance("Dolmades")),
+                        ]),
 
-                fieldId = 1,
+                    fieldId = 1,
 
-                fieldValue = ElmValue.StringInstance("Dragoncello"),
+                    fieldValue = ElmValue.StringInstance("Dragoncello"),
 
-                expected =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.StringInstance("Arancini")),
-                    ("beta", ElmValue.StringInstance("Bruschette")),
-                    ("gamma", ElmValue.Integer(123)),
-                    ("delta", ElmValue.StringInstance("Dragoncello")),
-                    ])
-            },
+                    expected =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.StringInstance("Arancini")),
+                        ("beta", ElmValue.StringInstance("Bruschette")),
+                        ("gamma", ElmValue.Integer(123)),
+                        ("delta", ElmValue.StringInstance("Dragoncello")),
+                        ])
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(11)),
-                    ("beta", ElmValue.Integer(13)),
-                    ("gamma", ElmValue.Integer(17)),
-                    ("delta", ElmValue.Integer(31)),
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(11)),
+                        ("beta", ElmValue.Integer(13)),
+                        ("gamma", ElmValue.Integer(17)),
+                        ("delta", ElmValue.Integer(31)),
+                        ]),
 
-                fieldId = 1,
+                    fieldId = 1,
 
-                fieldValue = ElmValue.Integer(97),
+                    fieldValue = ElmValue.Integer(97),
 
-                expected =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(11)),
-                    ("beta", ElmValue.Integer(13)),
-                    ("gamma", ElmValue.Integer(17)),
-                    ("delta", ElmValue.Integer(97)),
-                    ])
-            },
+                    expected =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(11)),
+                        ("beta", ElmValue.Integer(13)),
+                        ("gamma", ElmValue.Integer(17)),
+                        ("delta", ElmValue.Integer(97)),
+                        ])
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(21)),
-                    ("beta", ElmValue.Integer(23)),
-                    ("gamma", ElmValue.Integer(27)),
-                    ("delta", ElmValue.Integer(41)),
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(21)),
+                        ("beta", ElmValue.Integer(23)),
+                        ("gamma", ElmValue.Integer(27)),
+                        ("delta", ElmValue.Integer(41)),
+                        ]),
 
-                fieldId = 1,
+                    fieldId = 1,
 
-                fieldValue = ElmValue.Integer(107),
+                    fieldValue = ElmValue.Integer(107),
 
-                expected =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.Integer(21)),
-                    ("beta", ElmValue.Integer(23)),
-                    ("gamma", ElmValue.Integer(27)),
-                    ("delta", ElmValue.Integer(107)),
-                    ])
-            },
+                    expected =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.Integer(21)),
+                        ("beta", ElmValue.Integer(23)),
+                        ("gamma", ElmValue.Integer(27)),
+                        ("delta", ElmValue.Integer(107)),
+                        ])
+                },
 
-            new
-            {
-                record =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.StringInstance("Arancino")),
-                    ("beta", ElmValue.StringInstance("Bruschetta")),
-                    ("zz_other", ElmValue.Integer(101)),
-                    ("delta", ElmValue.StringInstance("Dolmades")),
-                    ]),
+                new
+                {
+                    record =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.StringInstance("Arancino")),
+                        ("beta", ElmValue.StringInstance("Bruschetta")),
+                        ("zz_other", ElmValue.Integer(101)),
+                        ("delta", ElmValue.StringInstance("Dolmades")),
+                        ]),
 
-                fieldId = 3,
+                    fieldId = 3,
 
-                fieldValue = ElmValue.Integer(131),
+                    fieldValue = ElmValue.Integer(131),
 
-                expected =
-                new ElmValue.ElmRecord(
-                    [
-                    ("alfa", ElmValue.StringInstance("Arancino")),
-                    ("beta", ElmValue.StringInstance("Bruschetta")),
-                    ("zz_other", ElmValue.Integer(131)),
-                    ("delta", ElmValue.StringInstance("Dolmades")),
-                    ])
-            },
-        };
+                    expected =
+                    new ElmValue.ElmRecord(
+                        [
+                        ("alfa", ElmValue.StringInstance("Arancino")),
+                        ("beta", ElmValue.StringInstance("Bruschetta")),
+                        ("zz_other", ElmValue.Integer(131)),
+                        ("delta", ElmValue.StringInstance("Dolmades")),
+                        ])
+                },
+            };
 
         static long ReportsAverageInstructionCount(IReadOnlyList<EvaluationReport> reports) =>
             reports.Sum(report => report.InstructionCount) / reports.Count;
 
         IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(Core.Interpreter.IntermediateVM.PineVM pineVM) =>
-            [.. recordUpdateScenarios
-            .Select(scenario =>
-            {
-                return
-                ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(
-                    usingRecordUpdateFunction,
-                    appendArguments:
-                    [
-                        ElmValueEncoding.ElmValueAsPineValue(scenario.record),
-                        IntegerEncoding.EncodeSignedInteger(scenario.fieldId),
-                        ElmValueEncoding.ElmValueAsPineValue(scenario.fieldValue),
-                    ])
-                .AndThen(composedArgs =>
-                pineVM.EvaluateExpressionOnCustomStack(
-                    composedArgs.expression,
-                    composedArgs.environment,
-                    new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(InvocationCountLimit: 1234, LoopIterationCountLimit: null, StackDepthLimit: null))
-                .MapError(err => err.ToString())
-                .Map(evalReport =>
+            [
+            .. recordUpdateScenarios
+            .Select(
+                scenario =>
                 {
-                    evalReport.ReturnValue.Should().Be(
-                        ElmValueEncoding.ElmValueAsPineValue(scenario.expected),
-                        "New record value matches expected");
+                    return
+                        ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(
+                            usingRecordUpdateFunction,
+                            appendArguments:
+                            [
+                                ElmValueEncoding.ElmValueAsPineValue(scenario.record),
+                                IntegerEncoding.EncodeSignedInteger(scenario.fieldId),
+                                ElmValueEncoding.ElmValueAsPineValue(scenario.fieldValue),
+                            ])
+                        .AndThen(
+                            composedArgs =>
+                            pineVM.EvaluateExpressionOnCustomStack(
+                                composedArgs.expression,
+                                composedArgs.environment,
+                                new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(
+                                    InvocationCountLimit: 1234,
+                                    LoopIterationCountLimit: null,
+                                    StackDepthLimit: null))
+                            .MapError(err => err.ToString())
+                            .Map(
+                                evalReport =>
+                                {
+                                    evalReport.ReturnValue.Should().Be(
+                                        ElmValueEncoding.ElmValueAsPineValue(scenario.expected),
+                                        "New record value matches expected");
 
-                    Console.WriteLine(
-                        "Completed scenario using " + evalReport.InstructionCount +
-                        " instructions and " + evalReport.InvocationCount + " invocations");
+                                    Console.WriteLine(
+                                        "Completed scenario using " + evalReport.InstructionCount +
+                                        " instructions and " + evalReport.InvocationCount + " invocations");
 
-                    return evalReport;
-                }))
-                .Extract(fromErr: err => throw new Exception("Failed for scenario: " + err));
-            })];
+                                    return evalReport;
+                                }))
+                        .Extract(fromErr: err => throw new Exception("Failed for scenario: " + err));
+                })
+            ];
 
         var nonOptimizingPineVM = SetupVM.Create();
 
@@ -1066,7 +1085,8 @@ public class PGOTests
                 autoPGO: null);
 
         // Force integration of the 'Test' module.
-        var testSubmissionResult = interactiveSession.Submit(""" Test.usingListMap [ ("alfa", 31), ("beta", 41) ] 0 """);
+        var testSubmissionResult =
+            interactiveSession.Submit(""" Test.usingListMap [ ("alfa", 31), ("beta", 41) ] 0 """);
 
         var testSubmissionResponse =
             testSubmissionResult.Extract(err => throw new Exception(err));
@@ -1086,24 +1106,25 @@ public class PGOTests
         {
             // Help identify functions.
 
-            var functionsToInspect = new[]
-            {
-                new
+            var functionsToInspect =
+                new[]
                 {
-                    moduleName = "Test",
-                    declarationName = "listMap",
-                },
-                new
-                {
-                    moduleName = "Test",
-                    declarationName = "listMapHelp",
-                },
-                new
-                {
-                    moduleName = "Tuple",
-                    declarationName = "first",
-                },
-            };
+                    new
+                    {
+                        moduleName = "Test",
+                        declarationName = "listMap",
+                    },
+                    new
+                    {
+                        moduleName = "Test",
+                        declarationName = "listMapHelp",
+                    },
+                    new
+                    {
+                        moduleName = "Tuple",
+                        declarationName = "first",
+                    },
+                };
 
             foreach (var functionToInspect in functionsToInspect)
             {
@@ -1124,145 +1145,148 @@ public class PGOTests
                     .ToArray();
 
                 Console.WriteLine(
-                    "\nFunction " + functionToInspect.moduleName + "." + functionToInspect.declarationName + " has hash " +
+                    "\nFunction " + functionToInspect.moduleName + "." + functionToInspect.declarationName +
+                    " has hash " +
                     Convert.ToHexStringLower(functionValueHash.Span)[..8] + " and " +
                     functionRecord.EnvFunctions.Length + " env functions:\n" +
                     string.Join(
                         "\n",
-                        envFunctionsHashes.Select(envFunctionHash => Convert.ToHexStringLower(envFunctionHash.Span)[..8])));
+                        envFunctionsHashes.Select(
+                            envFunctionHash => Convert.ToHexStringLower(envFunctionHash.Span)[..8])));
             }
         }
 
 
-        var usageScenarios = new[]
-        {
-            new
+        var usageScenarios =
+            new[]
             {
-                list =
-                new ElmValue.ElmList([]),
+                new
+                {
+                    list =
+                    new ElmValue.ElmList([]),
 
-                functionId = 0,
+                    functionId = 0,
 
-                expected =
-                new ElmValue.ElmList([]),
-            },
+                    expected =
+                    new ElmValue.ElmList([]),
+                },
 
-            new
-            {
-                list =
-                new ElmValue.ElmList(
-                    [
-                    new ElmValue.ElmList([ElmValue.StringInstance("alfa"), ElmValue.Integer(31)]),
-                    new ElmValue.ElmList([ElmValue.StringInstance("beta"), ElmValue.Integer(41)]),
-                    ]),
+                new
+                {
+                    list =
+                    new ElmValue.ElmList(
+                        [
+                        new ElmValue.ElmList([ElmValue.StringInstance("alfa"), ElmValue.Integer(31)]),
+                        new ElmValue.ElmList([ElmValue.StringInstance("beta"), ElmValue.Integer(41)]),
+                        ]),
 
-                functionId = 0,
+                    functionId = 0,
 
-                expected =
-                new ElmValue.ElmList(
-                    [
-                    ElmValue.StringInstance("alfa"),
-                    ElmValue.StringInstance("beta"),
-                    ]),
-            },
+                    expected =
+                    new ElmValue.ElmList(
+                        [
+                        ElmValue.StringInstance("alfa"),
+                        ElmValue.StringInstance("beta"),
+                        ]),
+                },
 
-            new
-            {
-                list =
-                new ElmValue.ElmList(
-                    [
-                    new ElmValue.ElmList([ElmValue.StringInstance("alfa"), ElmValue.Integer(31)]),
-                    new ElmValue.ElmList([ElmValue.StringInstance("beta"), ElmValue.Integer(41)]),
-                    ]),
+                new
+                {
+                    list =
+                    new ElmValue.ElmList(
+                        [
+                        new ElmValue.ElmList([ElmValue.StringInstance("alfa"), ElmValue.Integer(31)]),
+                        new ElmValue.ElmList([ElmValue.StringInstance("beta"), ElmValue.Integer(41)]),
+                        ]),
 
-                functionId = 1,
+                    functionId = 1,
 
-                expected =
-                new ElmValue.ElmList(
-                    [
-                    ElmValue.StringInstance("alfaalfaalfa"),
-                    ElmValue.StringInstance("betabetabeta"),
-                    ]),
-            },
+                    expected =
+                    new ElmValue.ElmList(
+                        [
+                        ElmValue.StringInstance("alfaalfaalfa"),
+                        ElmValue.StringInstance("betabetabeta"),
+                        ]),
+                },
 
-            new
-            {
-                list =
-                new ElmValue.ElmList(
-                    [
-                    new ElmValue.ElmList([ElmValue.StringInstance("alfa"), ElmValue.Integer(31)]),
-                    new ElmValue.ElmList([ElmValue.StringInstance("beta"), ElmValue.Integer(41)]),
-                    ]),
+                new
+                {
+                    list =
+                    new ElmValue.ElmList(
+                        [
+                        new ElmValue.ElmList([ElmValue.StringInstance("alfa"), ElmValue.Integer(31)]),
+                        new ElmValue.ElmList([ElmValue.StringInstance("beta"), ElmValue.Integer(41)]),
+                        ]),
 
-                functionId = 11,
+                    functionId = 11,
 
-                expected =
-                new ElmValue.ElmList(
-                    [
-                    ElmValue.StringInstance("afla"),
-                    ElmValue.StringInstance("ateb"),
-                    ]),
-            },
+                    expected =
+                    new ElmValue.ElmList(
+                        [
+                        ElmValue.StringInstance("afla"),
+                        ElmValue.StringInstance("ateb"),
+                        ]),
+                },
 
-            new
-            {
-                list =
-                new ElmValue.ElmList(
-                    [
-                    new ElmValue.ElmList([ElmValue.StringInstance("Focaccia"), ElmValue.Integer(31)]),
-                    new ElmValue.ElmList([ElmValue.StringInstance("Pizza"), ElmValue.Integer(41)]),
-                    new ElmValue.ElmList([ElmValue.StringInstance("Arancino"), ElmValue.Integer(71)]),
-                    new ElmValue.ElmList([ElmValue.StringInstance("Lasagna"), ElmValue.Integer(43)]),
-                    new ElmValue.ElmList([ElmValue.StringInstance("Risotto"), ElmValue.Integer(47)]),
-                    new ElmValue.ElmList([ElmValue.StringInstance("Pasta"), ElmValue.Integer(49)]),
-                    new ElmValue.ElmList([ElmValue.StringInstance("Gelato"), ElmValue.Integer(73)]),
-                    new ElmValue.ElmList([ElmValue.StringInstance("Tiramisu"), ElmValue.Integer(79)]),
-                    ]),
+                new
+                {
+                    list =
+                    new ElmValue.ElmList(
+                        [
+                        new ElmValue.ElmList([ElmValue.StringInstance("Focaccia"), ElmValue.Integer(31)]),
+                        new ElmValue.ElmList([ElmValue.StringInstance("Pizza"), ElmValue.Integer(41)]),
+                        new ElmValue.ElmList([ElmValue.StringInstance("Arancino"), ElmValue.Integer(71)]),
+                        new ElmValue.ElmList([ElmValue.StringInstance("Lasagna"), ElmValue.Integer(43)]),
+                        new ElmValue.ElmList([ElmValue.StringInstance("Risotto"), ElmValue.Integer(47)]),
+                        new ElmValue.ElmList([ElmValue.StringInstance("Pasta"), ElmValue.Integer(49)]),
+                        new ElmValue.ElmList([ElmValue.StringInstance("Gelato"), ElmValue.Integer(73)]),
+                        new ElmValue.ElmList([ElmValue.StringInstance("Tiramisu"), ElmValue.Integer(79)]),
+                        ]),
 
-                functionId = 0,
+                    functionId = 0,
 
-                expected =
-                new ElmValue.ElmList(
-                    [
-                    ElmValue.StringInstance("Focaccia"),
-                    ElmValue.StringInstance("Pizza"),
-                    ElmValue.StringInstance("Arancino"),
-                    ElmValue.StringInstance("Lasagna"),
-                    ElmValue.StringInstance("Risotto"),
-                    ElmValue.StringInstance("Pasta"),
-                    ElmValue.StringInstance("Gelato"),
-                    ElmValue.StringInstance("Tiramisu"),
-                    ]),
-            },
+                    expected =
+                    new ElmValue.ElmList(
+                        [
+                        ElmValue.StringInstance("Focaccia"),
+                        ElmValue.StringInstance("Pizza"),
+                        ElmValue.StringInstance("Arancino"),
+                        ElmValue.StringInstance("Lasagna"),
+                        ElmValue.StringInstance("Risotto"),
+                        ElmValue.StringInstance("Pasta"),
+                        ElmValue.StringInstance("Gelato"),
+                        ElmValue.StringInstance("Tiramisu"),
+                        ]),
+                },
 
 
-            new
-            {
-                list =
-                new ElmValue.ElmList(
-                    [
-                    new ElmValue.ElmList([ElmValue.Integer(71), ElmValue.Integer(31)]),
-                    new ElmValue.ElmList([ElmValue.Integer(79), ElmValue.Integer(37)]),
-                    new ElmValue.ElmList([ElmValue.Integer(73), ElmValue.Integer(41)]),
-                    new ElmValue.ElmList([ElmValue.Integer(83), ElmValue.Integer(43)]),
-                    new ElmValue.ElmList([ElmValue.Integer(97), ElmValue.Integer(47)]),
-                    new ElmValue.ElmList([ElmValue.Integer(89), ElmValue.Integer(49)]),
-                    ]),
+                new
+                {
+                    list =
+                    new ElmValue.ElmList(
+                        [
+                        new ElmValue.ElmList([ElmValue.Integer(71), ElmValue.Integer(31)]),
+                        new ElmValue.ElmList([ElmValue.Integer(79), ElmValue.Integer(37)]),
+                        new ElmValue.ElmList([ElmValue.Integer(73), ElmValue.Integer(41)]),
+                        new ElmValue.ElmList([ElmValue.Integer(83), ElmValue.Integer(43)]),
+                        new ElmValue.ElmList([ElmValue.Integer(97), ElmValue.Integer(47)]),
+                        new ElmValue.ElmList([ElmValue.Integer(89), ElmValue.Integer(49)]),
+                        ]),
 
-                functionId = 0,
+                    functionId = 0,
 
-                expected =
-                new ElmValue.ElmList(
-                    [
-                    ElmValue.Integer(71),
-                    ElmValue.Integer(79),
-                    ElmValue.Integer(73),
-                    ElmValue.Integer(83),
-                    ElmValue.Integer(97),
-                    ElmValue.Integer(89),
-                    ]),
-            },
-        };
+                    expected =
+                    new ElmValue.ElmList(
+                        [
+                        ElmValue.Integer(71),
+                        ElmValue.Integer(79),
+                        ElmValue.Integer(73),
+                        ElmValue.Integer(83),
+                        ElmValue.Integer(97),
+                        ElmValue.Integer(89),
+                        ]),
+                },
+            };
 
         static long ReportsAverageInvocationCount(IReadOnlyList<EvaluationReport> reports) =>
             reports.Sum(report => report.InvocationCount) / reports.Count;
@@ -1281,35 +1305,43 @@ public class PGOTests
                         ElmValueEncoding.ElmValueAsPineValue(scenarioList),
                         IntegerEncoding.EncodeSignedInteger(scenarioFunctionId),
                     ])
-                .AndThen(composedArgs =>
-                pineVM.EvaluateExpressionOnCustomStack(
-                    composedArgs.expression,
-                    composedArgs.environment,
-                    new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(InvocationCountLimit: 12345, LoopIterationCountLimit: null, StackDepthLimit: null))
-                .MapError(err => err.ToString())
-                .Map(evalReport =>
-                {
-                    evalReport.ReturnValue.Should().Be(
-                        ElmValueEncoding.ElmValueAsPineValue(scenarioExpected),
-                        "Return value matches expected for scenario with functionId " + scenarioFunctionId);
+                .AndThen(
+                    composedArgs =>
+                    pineVM.EvaluateExpressionOnCustomStack(
+                        composedArgs.expression,
+                        composedArgs.environment,
+                        new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(
+                            InvocationCountLimit: 12345,
+                            LoopIterationCountLimit: null,
+                            StackDepthLimit: null))
+                    .MapError(err => err.ToString())
+                    .Map(
+                        evalReport =>
+                        {
+                            evalReport.ReturnValue.Should().Be(
+                                ElmValueEncoding.ElmValueAsPineValue(scenarioExpected),
+                                "Return value matches expected for scenario with functionId " + scenarioFunctionId);
 
-                    Console.WriteLine(
-                        "Completed scenario using " + evalReport.InstructionCount +
-                        " instructions and " + evalReport.InvocationCount + " invocations");
+                            Console.WriteLine(
+                                "Completed scenario using " + evalReport.InstructionCount +
+                                " instructions and " + evalReport.InvocationCount + " invocations");
 
-                    return evalReport;
-                }))
+                            return evalReport;
+                        }))
                 .Extract(fromErr: err => throw new Exception("Failed for scenario: " + err));
         }
 
         IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(Core.Interpreter.IntermediateVM.PineVM pineVM) =>
-            [.. usageScenarios
-            .Select(scenario =>
-            RunScenario(
-                scenarioList: scenario.list,
-                scenarioFunctionId: scenario.functionId,
-                scenarioExpected: scenario.expected,
-                pineVM: pineVM))];
+            [
+            .. usageScenarios
+            .Select(
+                scenario =>
+                RunScenario(
+                    scenarioList: scenario.list,
+                    scenarioFunctionId: scenario.functionId,
+                    scenarioExpected: scenario.expected,
+                    pineVM: pineVM))
+            ];
 
         var nonOptimizingPineVM = SetupVM.Create();
 
@@ -1520,29 +1552,30 @@ public class PGOTests
         {
             // Help identify functions.
 
-            var functionsToInspect = new[]
-            {
-                new
+            var functionsToInspect =
+                new[]
                 {
-                    moduleName = "Test",
-                    declarationName = "usingDictFold",
-                },
-                new
-                {
-                    moduleName = "Dict",
-                    declarationName = "fromList",
-                },
-                new
-                {
-                    moduleName = "Dict",
-                    declarationName = "foldl",
-                },
-                new
-                {
-                    moduleName = "Dict",
-                    declarationName = "foldr",
-                },
-            };
+                    new
+                    {
+                        moduleName = "Test",
+                        declarationName = "usingDictFold",
+                    },
+                    new
+                    {
+                        moduleName = "Dict",
+                        declarationName = "fromList",
+                    },
+                    new
+                    {
+                        moduleName = "Dict",
+                        declarationName = "foldl",
+                    },
+                    new
+                    {
+                        moduleName = "Dict",
+                        declarationName = "foldr",
+                    },
+                };
 
             foreach (var functionToInspect in functionsToInspect)
             {
@@ -1563,69 +1596,72 @@ public class PGOTests
                     .ToArray();
 
                 Console.WriteLine(
-                    "\nFunction " + functionToInspect.moduleName + "." + functionToInspect.declarationName + " has hash " +
+                    "\nFunction " + functionToInspect.moduleName + "." + functionToInspect.declarationName +
+                    " has hash " +
                     Convert.ToHexStringLower(functionValueHash.Span)[..8] + " and " +
                     functionRecord.EnvFunctions.Length + " env functions:\n" +
                     string.Join(
                         "\n",
-                        envFunctionsHashes.Select(envFunctionHash => Convert.ToHexStringLower(envFunctionHash.Span)[..8])));
+                        envFunctionsHashes.Select(
+                            envFunctionHash => Convert.ToHexStringLower(envFunctionHash.Span)[..8])));
             }
         }
 
 
-        var usageScenarios = new[]
-        {
-            new
+        var usageScenarios =
+            new[]
             {
-                list =
-                new ElmValue.ElmList([]),
+                new
+                {
+                    list =
+                    new ElmValue.ElmList([]),
 
-                functionId = 0,
+                    functionId = 0,
 
-                expected =
-                new ElmValue.ElmList([]),
-            },
+                    expected =
+                    new ElmValue.ElmList([]),
+                },
 
-            new
-            {
-                list =
-                new ElmValue.ElmList(
-                    [
-                    new ElmValue.ElmList([ElmValue.StringInstance("alfa"), ElmValue.Integer(31)]),
-                    new ElmValue.ElmList([ElmValue.StringInstance("beta"), ElmValue.Integer(41)]),
-                    ]),
+                new
+                {
+                    list =
+                    new ElmValue.ElmList(
+                        [
+                        new ElmValue.ElmList([ElmValue.StringInstance("alfa"), ElmValue.Integer(31)]),
+                        new ElmValue.ElmList([ElmValue.StringInstance("beta"), ElmValue.Integer(41)]),
+                        ]),
 
-                functionId = 0,
+                    functionId = 0,
 
-                expected =
-                new ElmValue.ElmList(
-                    [
-                    new ElmValue.ElmList([ElmValue.Integer(41), ElmValue.StringInstance("beta")]),
-                    new ElmValue.ElmList([ElmValue.Integer(31), ElmValue.StringInstance("alfa")]),
-                    ]),
-            },
+                    expected =
+                    new ElmValue.ElmList(
+                        [
+                        new ElmValue.ElmList([ElmValue.Integer(41), ElmValue.StringInstance("beta")]),
+                        new ElmValue.ElmList([ElmValue.Integer(31), ElmValue.StringInstance("alfa")]),
+                        ]),
+                },
 
-            new
-            {
-                list =
-                new ElmValue.ElmList(
-                    [
-                    new ElmValue.ElmList([ElmValue.StringInstance("alfa"), ElmValue.Integer(31)]),
-                    new ElmValue.ElmList([ElmValue.StringInstance("gamma"), ElmValue.Integer(41)]),
-                    new ElmValue.ElmList([ElmValue.StringInstance("beta"), ElmValue.Integer(47)]),
-                    ]),
+                new
+                {
+                    list =
+                    new ElmValue.ElmList(
+                        [
+                        new ElmValue.ElmList([ElmValue.StringInstance("alfa"), ElmValue.Integer(31)]),
+                        new ElmValue.ElmList([ElmValue.StringInstance("gamma"), ElmValue.Integer(41)]),
+                        new ElmValue.ElmList([ElmValue.StringInstance("beta"), ElmValue.Integer(47)]),
+                        ]),
 
-                functionId = 0,
+                    functionId = 0,
 
-                expected =
-                new ElmValue.ElmList(
-                    [
-                    new ElmValue.ElmList([ElmValue.Integer(41), ElmValue.StringInstance("gamma")]),
-                    new ElmValue.ElmList([ElmValue.Integer(47), ElmValue.StringInstance("beta")]),
-                    new ElmValue.ElmList([ElmValue.Integer(31), ElmValue.StringInstance("alfa")]),
-                    ]),
-            },
-        };
+                    expected =
+                    new ElmValue.ElmList(
+                        [
+                        new ElmValue.ElmList([ElmValue.Integer(41), ElmValue.StringInstance("gamma")]),
+                        new ElmValue.ElmList([ElmValue.Integer(47), ElmValue.StringInstance("beta")]),
+                        new ElmValue.ElmList([ElmValue.Integer(31), ElmValue.StringInstance("alfa")]),
+                        ]),
+                },
+            };
 
         var toDictPineVM = SetupVM.Create();
 
@@ -1653,38 +1689,46 @@ public class PGOTests
                         scenarioDict,
                         IntegerEncoding.EncodeSignedInteger(scenarioFunctionId),
                     ])
-                .AndThen(composedArgs =>
-                pineVM.EvaluateExpressionOnCustomStack(
-                    composedArgs.expression,
-                    composedArgs.environment,
-                    new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(InvocationCountLimit: 12345, LoopIterationCountLimit: null, StackDepthLimit: null))
-                .MapError(err => err.ToString())
-                .Map(evalReport =>
-                {
-                    if (scenarioExpected is not null)
-                    {
-                        evalReport.ReturnValue.Should().Be(
-                            ElmValueEncoding.ElmValueAsPineValue(scenarioExpected),
-                            "Return value matches expected for scenario with functionId " + scenarioFunctionId);
-                    }
+                .AndThen(
+                    composedArgs =>
+                    pineVM.EvaluateExpressionOnCustomStack(
+                        composedArgs.expression,
+                        composedArgs.environment,
+                        new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(
+                            InvocationCountLimit: 12345,
+                            LoopIterationCountLimit: null,
+                            StackDepthLimit: null))
+                    .MapError(err => err.ToString())
+                    .Map(
+                        evalReport =>
+                        {
+                            if (scenarioExpected is not null)
+                            {
+                                evalReport.ReturnValue.Should().Be(
+                                    ElmValueEncoding.ElmValueAsPineValue(scenarioExpected),
+                                    "Return value matches expected for scenario with functionId " + scenarioFunctionId);
+                            }
 
-                    Console.WriteLine(
-                        "Completed scenario using " + evalReport.InstructionCount +
-                        " instructions and " + evalReport.InvocationCount + " invocations");
+                            Console.WriteLine(
+                                "Completed scenario using " + evalReport.InstructionCount +
+                                " instructions and " + evalReport.InvocationCount + " invocations");
 
-                    return evalReport;
-                }))
+                            return evalReport;
+                        }))
                 .Extract(fromErr: err => throw new Exception("Failed for scenario: " + err));
         }
 
         IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(Core.Interpreter.IntermediateVM.PineVM pineVM) =>
-            [.. usageScenarios
-            .Select(scenario =>
-            RunScenario(
-                scenarioDict: DictFromList(scenario.list),
-                scenarioFunctionId: scenario.functionId,
-                scenarioExpected: scenario.expected,
-                pineVM: pineVM))];
+            [
+            .. usageScenarios
+            .Select(
+                scenario =>
+                RunScenario(
+                    scenarioDict: DictFromList(scenario.list),
+                    scenarioFunctionId: scenario.functionId,
+                    scenarioExpected: scenario.expected,
+                    pineVM: pineVM))
+            ];
 
         var nonOptimizingPineVM = SetupVM.Create();
 
@@ -1704,12 +1748,13 @@ public class PGOTests
         {
             var largeProfilingList =
                 Enumerable.Range(0, 40)
-                .Select(index =>
-                new ElmValue.ElmList(
-                    [
-                    ElmValue.StringInstance("key-" + index),
-                    ElmValue.Integer(100 + index)
-                    ]))
+                .Select(
+                    index =>
+                    new ElmValue.ElmList(
+                        [
+                        ElmValue.StringInstance("key-" + index),
+                        ElmValue.Integer(100 + index)
+                        ]))
                 .ToImmutableArray();
 
             RunScenario(
@@ -1819,12 +1864,16 @@ public class PGOTests
             var largerListOutput =
                 largerList
                 .OrderByDescending(item => item.itemKey)
-                .Select(item => new ElmValue.ElmList([ElmValue.Integer(item.itemValue), ElmValue.StringInstance(item.itemKey)]))
+                .Select(
+                    item =>
+                    new ElmValue.ElmList([ElmValue.Integer(item.itemValue), ElmValue.StringInstance(item.itemKey)]))
                 .ToImmutableArray();
 
             var largerListInput =
                 largerList
-                .Select(item => new ElmValue.ElmList([ElmValue.StringInstance(item.itemKey), ElmValue.Integer(item.itemValue)]))
+                .Select(
+                    item =>
+                    new ElmValue.ElmList([ElmValue.StringInstance(item.itemKey), ElmValue.Integer(item.itemValue)]))
                 .ToImmutableArray();
 
             var scenarioReport =
@@ -1848,12 +1897,12 @@ public class PGOTests
     }
 
     public static FileTree AppCodeTreeForElmModules(
-    IReadOnlyList<string> elmModuleTexts)
+        IReadOnlyList<string> elmModuleTexts)
     {
         var compilerProgram = ElmCompilerInElm.CompilerSourceFilesDefault.Value;
 
         var elmJson =
-        """
+            """
 {
     "type": "application",
     "source-directories": [
@@ -1876,12 +1925,16 @@ public class PGOTests
 """;
 
         var elmModulesFiles =
-        elmModuleTexts
-        .Select(moduleText =>
-        ("src/" +
-        string.Join('/', ElmModule.ParseModuleName(moduleText).Extract(err => throw new Exception(err))) + ".elm",
-        Encoding.UTF8.GetBytes(moduleText)))
-        .ToImmutableArray();
+            elmModuleTexts
+            .Select(
+                moduleText =>
+                ("src/" +
+                string.Join(
+                    '/',
+                    ElmModule.ParseModuleName(moduleText).Extract(err => throw new Exception(err))) +
+                ".elm",
+                Encoding.UTF8.GetBytes(moduleText)))
+            .ToImmutableArray();
 
         var appCodeTree =
             FileTree.FromSetOfFilesWithCommonFilePath(

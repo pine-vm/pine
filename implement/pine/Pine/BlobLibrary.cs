@@ -34,9 +34,11 @@ public class BlobLibrary
 
         var hash = Convert.FromHexString(hashAndRemoteSource.hash);
 
-        return GetBlobWithSHA256Cached(
-            hash,
-            getIfNotCached: () => DownloadFromUrlAndExtractBlobWithMatchingHash(hashAndRemoteSource.remoteSource, hash));
+        return
+            GetBlobWithSHA256Cached(
+                hash,
+                getIfNotCached:
+                () => DownloadFromUrlAndExtractBlobWithMatchingHash(hashAndRemoteSource.remoteSource, hash));
     }
 
     public static ReadOnlyMemory<byte>? GetBlobWithSHA256(ReadOnlyMemory<byte> sha256)
@@ -155,7 +157,8 @@ public class BlobLibrary
             {
                 return TryUpdateCacheAndContinueFromHttpResponse(DownloadViaHttp(Url(true)));
             }
-            catch { }
+            catch
+            { }
         }
 
         return TryUpdateCacheAndContinueFromHttpResponse(httpResponse);
@@ -164,7 +167,8 @@ public class BlobLibrary
     public static Result<string, ReadOnlyMemory<byte>> DownloadBlobViaHttpGetResponseBody(string sourceUrl) =>
         DownloadBlobViaHttpGetResponseBodyAsync(sourceUrl).Result;
 
-    public static async Task<Result<string, ReadOnlyMemory<byte>>> DownloadBlobViaHttpGetResponseBodyAsync(string sourceUrl)
+    public static async Task<Result<string, ReadOnlyMemory<byte>>> DownloadBlobViaHttpGetResponseBodyAsync(
+        string sourceUrl)
     {
         try
         {
@@ -173,7 +177,9 @@ public class BlobLibrary
             if (!httpResponse.IsSuccessStatusCode)
             {
                 return
-                    "Unexpected HTTP response status code: " + (int)httpResponse.StatusCode + " (" + httpResponse.StatusCode + ")";
+                    "Unexpected HTTP response status code: " + (int)httpResponse.StatusCode + " (" +
+                    httpResponse.StatusCode +
+                    ")";
             }
 
             var responseContent = await httpResponse.Content.ReadAsByteArrayAsync();

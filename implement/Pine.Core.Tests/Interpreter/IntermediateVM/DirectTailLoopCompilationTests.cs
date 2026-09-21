@@ -103,31 +103,31 @@ public class DirectTailLoopCompilationTests
     public void Literal_encoded_tail_call_to_different_expression_uses_direct_invocation_without_loop_guard()
     {
         var expression =
-                new Expression.Eval(
-                    encoded:
-                    Expression.LitralInst(
-                        ExpressionEncoding.EncodeExpressionAsValue(
-                            Expression.EnvironmentInstance)),
-                    environment: Expression.EnvironmentInstance);
+            new Expression.Eval(
+                encoded:
+                Expression.LitralInst(
+                    ExpressionEncoding.EncodeExpressionAsValue(
+                        Expression.EnvironmentInstance)),
+                environment: Expression.EnvironmentInstance);
 
         var compilation =
-                ExpressionCompilation.CompileExpression(
-                    expression,
-                    specializations: [],
-                    parseCache: new(),
-                    disableReduction: true,
-                    enableTailRecursionOptimization: true,
-                    skipInlining: (_, _) => false);
+            ExpressionCompilation.CompileExpression(
+                expression,
+                specializations: [],
+                parseCache: new(),
+                disableReduction: true,
+                enableTailRecursionOptimization: true,
+                skipInlining: (_, _) => false);
 
         compilation.Generic.Instructions
-                .Should().ContainSingle(
-                    instruction => instruction.Kind == StackInstructionKind.Invoke_StackFrame_Const);
+            .Should().ContainSingle(
+            instruction => instruction.Kind == StackInstructionKind.Invoke_StackFrame_Const);
 
         compilation.Generic.Instructions
-                .Should().NotContain(
-                    instruction =>
-                    instruction.Kind == StackInstructionKind.Jump_If_Equal_Const ||
-                    instruction.Kind == StackInstructionKind.Jump_Const);
+            .Should().NotContain(
+            instruction =>
+            instruction.Kind == StackInstructionKind.Jump_If_Equal_Const ||
+            instruction.Kind == StackInstructionKind.Jump_Const);
     }
 
     [Fact]
@@ -135,27 +135,27 @@ public class DirectTailLoopCompilationTests
     {
         var expression =
             new Expression.Eval(
-                    encoded: Expression.LitralInst(PineValue.EmptyList),
-                    environment: Expression.EnvironmentInstance);
+                encoded: Expression.LitralInst(PineValue.EmptyList),
+                environment: Expression.EnvironmentInstance);
 
         var compilation =
             ExpressionCompilation.CompileExpression(
-                    expression,
-                    specializations: [],
-                    parseCache: new(),
-                    disableReduction: true,
-                    enableTailRecursionOptimization: true,
-                    skipInlining: (_, _) => false);
+                expression,
+                specializations: [],
+                parseCache: new(),
+                disableReduction: true,
+                enableTailRecursionOptimization: true,
+                skipInlining: (_, _) => false);
 
         compilation.Generic.Instructions
             .Should().ContainSingle(
-                    instruction => instruction.Kind == StackInstructionKind.Eval_Const);
+            instruction => instruction.Kind == StackInstructionKind.Eval_Const);
 
         compilation.Generic.Instructions
             .Should().NotContain(
-                    instruction =>
-                    instruction.Kind == StackInstructionKind.Jump_If_Equal_Const ||
-                    instruction.Kind == StackInstructionKind.Jump_Const);
+            instruction =>
+            instruction.Kind == StackInstructionKind.Jump_If_Equal_Const ||
+            instruction.Kind == StackInstructionKind.Jump_Const);
     }
 
     [Fact]
@@ -165,65 +165,65 @@ public class DirectTailLoopCompilationTests
 
         var expression =
             new Expression.Eval(
-                    encoded:
-                    Expression.LitralInst(
-                        ExpressionEncoding.EncodeExpressionAsValue(rootAlternative)),
-                    environment: Expression.EnvironmentInstance);
+                encoded:
+                Expression.LitralInst(
+                    ExpressionEncoding.EncodeExpressionAsValue(rootAlternative)),
+                environment: Expression.EnvironmentInstance);
 
         var instructions =
             PineIRCompiler.CompileExpression(
-                    expression,
-                    rootExprAlternativeForms: [rootAlternative],
-                    envClass: null,
-                    parametersAsLocals: StaticFunctionInterface.FromExpression(expression),
-                    parseCache: new(),
-                    enableTailRecursionOptimization: true)
+                expression,
+                rootExprAlternativeForms: [rootAlternative],
+                envClass: null,
+                parametersAsLocals: StaticFunctionInterface.FromExpression(expression),
+                parseCache: new(),
+                enableTailRecursionOptimization: true)
             .Instructions;
 
         instructions
             .Should().ContainSingle(
-                    instruction =>
-                    instruction.Kind == StackInstructionKind.Jump_Const &&
-                    instruction.JumpOffset < 0);
+            instruction =>
+            instruction.Kind == StackInstructionKind.Jump_Const &&
+            instruction.JumpOffset < 0);
 
         instructions
             .Should().NotContain(
-                    instruction =>
-                    instruction.Kind == StackInstructionKind.Jump_If_Equal_Const ||
-                    instruction.Kind == StackInstructionKind.Eval_Const ||
-                    instruction.Kind == StackInstructionKind.Eval_Binary);
+            instruction =>
+            instruction.Kind == StackInstructionKind.Jump_If_Equal_Const ||
+            instruction.Kind == StackInstructionKind.Eval_Const ||
+            instruction.Kind == StackInstructionKind.Eval_Binary);
     }
 
     [Fact]
     public void Unresolved_tail_call_retains_loop_guard()
     {
         var expression =
-                new Expression.Eval(
-                    encoded: EnvironmentPath([0]),
-                    environment: EnvironmentPath([1]));
+            new Expression.Eval(
+                encoded: EnvironmentPath([0]),
+                environment: EnvironmentPath([1]));
 
         var compilation =
-                ExpressionCompilation.CompileExpression(
-                    expression,
-                    specializations: [],
-                    parseCache: new(),
-                    disableReduction: true,
-                    enableTailRecursionOptimization: true,
-                    skipInlining: (_, _) => false);
+            ExpressionCompilation.CompileExpression(
+                expression,
+                specializations: [],
+                parseCache: new(),
+                disableReduction: true,
+                enableTailRecursionOptimization: true,
+                skipInlining: (_, _) => false);
 
         compilation.Generic.Instructions
-                .Should().ContainSingle(
-                    instruction => instruction.Kind == StackInstructionKind.Jump_If_Equal_Const);
+            .Should().ContainSingle(
+            instruction => instruction.Kind == StackInstructionKind.Jump_If_Equal_Const);
 
         compilation.Generic.Instructions
-                .Should().Contain(
-                    instruction =>
-                    instruction.Kind == StackInstructionKind.Jump_Const &&
-                    instruction.JumpOffset < 0);
+            .Should().Contain(
+            instruction =>
+            instruction.Kind == StackInstructionKind.Jump_Const &&
+            instruction.JumpOffset < 0);
 
         compilation.Generic.Instructions
-                .Should().ContainSingle(
-                    instruction => instruction.Kind == StackInstructionKind.Eval_Binary);
+            .Should().ContainSingle(
+            instruction => instruction.Kind == StackInstructionKind.Eval_Binary);
     }
 
     [Fact]

@@ -82,7 +82,8 @@ public static class ApplyFunctionCommand
 
             return argumentFromCLI;
         }
-        catch { }
+        catch
+        { }
 
         return File.ReadAllText(argumentFromCLI);
     }
@@ -158,7 +159,8 @@ public static class ApplyFunctionCommand
                 responseBodyReport =
                     System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.Nodes.JsonObject>(responseContentString)!;
             }
-            catch { }
+            catch
+            { }
 
             responseFromServer =
                 new PineCliCommand.ResponseFromServerReport(

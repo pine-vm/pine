@@ -70,6 +70,7 @@ public class PineVMInstructionTraceTests
             ?.ListItemsOrNull();
 
         literalItems.Should().NotBeNull();
+
         literalItems!
             .Select(item => item.IntegerOrNull)
             .Should()
@@ -175,11 +176,11 @@ public class PineVMInstructionTraceTests
             .Where(item => item.FrameExpression.Equals(expression))
             .Select(item => item.Instruction)
             .Should().Equal(
-                StackInstruction.Push_Literal(nestedEnvironment),
-                StackInstruction.Invoke_StackFrame_Const(
-                    Expression.EnvironmentInstance,
-                    ExpressionEncoding.EncodeExpressionAsValue(Expression.EnvironmentInstance),
-                    StaticFunctionInterface.Generic));
+            StackInstruction.Push_Literal(nestedEnvironment),
+            StackInstruction.Invoke_StackFrame_Const(
+                Expression.EnvironmentInstance,
+                ExpressionEncoding.EncodeExpressionAsValue(Expression.EnvironmentInstance),
+                StaticFunctionInterface.Generic));
 
         var nestedFrameTrace =
             trace.First(item => item.FrameExpression.Equals(Expression.EnvironmentInstance));

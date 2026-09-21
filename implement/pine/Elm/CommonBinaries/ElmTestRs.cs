@@ -59,7 +59,8 @@ public class ElmTestRsReportJsonEntryFailureReasonDataJsonConverter :
 
             return asEquality;
         }
-        catch { }
+        catch
+        { }
 
         return
             new ElmTestRsReportJsonEntryFailureReasonData(

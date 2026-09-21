@@ -14,34 +14,38 @@ public class ParseElmInteractiveSubmissionTests
     [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
     public void Parse_Elm_Interactive_submission()
     {
-        var testCases = new[]
-        {
-            new
+        var testCases =
+            new[]
             {
-                SubmissionText = "123",
-                ExpectedResponse = "ExpressionSubmission (Integer 123)"
-            },
-            new
-            {
-                SubmissionText = "test",
-                ExpectedResponse = "ExpressionSubmission (FunctionOrValue [] \"test\")"
-            },
-            new
-            {
-                SubmissionText = "greet \"World\"",
-                ExpectedResponse = "ExpressionSubmission (Application [ Node { end = { column = 10, row = 7 }, start = { column = 5, row = 7 } } (FunctionOrValue [] \"greet\"), Node { end = { column = 18, row = 7 }, start = { column = 11, row = 7 } } (Literal \"World\") ])"
-            },
-            new
-            {
-                SubmissionText = "replicate 2 3",
-                ExpectedResponse = "ExpressionSubmission (Application [ Node { end = { column = 14, row = 7 }, start = { column = 5, row = 7 } } (FunctionOrValue [] \"replicate\"), Node { end = { column = 16, row = 7 }, start = { column = 15, row = 7 } } (Integer 2), Node { end = { column = 18, row = 7 }, start = { column = 17, row = 7 } } (Integer 3) ])"
-            },
-            new
-            {
-                SubmissionText = "test = 123",
-                ExpectedResponse = "DeclarationSubmission (FunctionDeclaration { declaration = Node { end = { column = 11, row = 6 }, start = { column = 1, row = 6 } } { arguments = [], expression = Node { end = { column = 11, row = 6 }, start = { column = 8, row = 6 } } (Integer 123), name = Node { end = { column = 5, row = 6 }, start = { column = 1, row = 6 } } \"test\" }, documentation = Nothing, signature = Nothing })"
-            }
-        };
+                new
+                {
+                    SubmissionText = "123",
+                    ExpectedResponse = "ExpressionSubmission (Integer 123)"
+                },
+                new
+                {
+                    SubmissionText = "test",
+                    ExpectedResponse = "ExpressionSubmission (FunctionOrValue [] \"test\")"
+                },
+                new
+                {
+                    SubmissionText = "greet \"World\"",
+                    ExpectedResponse =
+                    "ExpressionSubmission (Application [ Node { end = { column = 10, row = 7 }, start = { column = 5, row = 7 } } (FunctionOrValue [] \"greet\"), Node { end = { column = 18, row = 7 }, start = { column = 11, row = 7 } } (Literal \"World\") ])"
+                },
+                new
+                {
+                    SubmissionText = "replicate 2 3",
+                    ExpectedResponse =
+                    "ExpressionSubmission (Application [ Node { end = { column = 14, row = 7 }, start = { column = 5, row = 7 } } (FunctionOrValue [] \"replicate\"), Node { end = { column = 16, row = 7 }, start = { column = 15, row = 7 } } (Integer 2), Node { end = { column = 18, row = 7 }, start = { column = 17, row = 7 } } (Integer 3) ])"
+                },
+                new
+                {
+                    SubmissionText = "test = 123",
+                    ExpectedResponse =
+                    "DeclarationSubmission (FunctionDeclaration { declaration = Node { end = { column = 11, row = 6 }, start = { column = 1, row = 6 } } { arguments = [], expression = Node { end = { column = 11, row = 6 }, start = { column = 8, row = 6 } } (Integer 123), name = Node { end = { column = 5, row = 6 }, start = { column = 1, row = 6 } } \"test\" }, documentation = Nothing, signature = Nothing })"
+                }
+            };
 
         for (var i = 0; i < testCases.Length; i++)
         {

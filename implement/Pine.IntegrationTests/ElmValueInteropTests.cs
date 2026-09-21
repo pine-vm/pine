@@ -45,14 +45,14 @@ public class ElmValueInteropTests
                 nothing: () => true,
                 just: _ => false,
                 invalid: error => throw new System.Exception(error))
-            .Should().BeTrue();
+                .Should().BeTrue();
 
             ElmValueInterop.ParseElmMaybeValue(
                 encodeTag("Just", [payload]),
                 nothing: () => null,
                 just: value => value,
                 invalid: error => throw new System.Exception(error))
-            .Should().Be(payload);
+                .Should().Be(payload);
         }
     }
 
@@ -68,14 +68,14 @@ public class ElmValueInteropTests
                 err: value => ("Err", value),
                 ok: value => ("Ok", value),
                 invalid: error => throw new System.Exception(error))
-            .Should().Be(("Err", payload));
+                .Should().Be(("Err", payload));
 
             ElmValueInterop.ParseElmResultValue(
                 encodeTag("Ok", [payload]),
                 err: value => ("Err", value),
                 ok: value => ("Ok", value),
                 invalid: error => throw new System.Exception(error))
-            .Should().Be(("Ok", payload));
+                .Should().Be(("Ok", payload));
         }
     }
 

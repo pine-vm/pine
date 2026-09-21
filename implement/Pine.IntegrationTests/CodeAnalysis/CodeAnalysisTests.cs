@@ -2433,50 +2433,51 @@ public class CodeAnalysisTests
     [Fact]
     public void Build_environment_class_for_static_program()
     {
-        var testCases = new[]
-        {
-            new
+        var testCases =
+            new[]
             {
-                Name = "Empty",
+                new
+                {
+                    Name = "Empty",
 
-                expression =
-                (Expression)
-                Expression.LitralInst(PineValue.EmptyBlob),
+                    expression =
+                    (Expression)
+                    Expression.LitralInst(PineValue.EmptyBlob),
 
-                environment =
-                PineValue.EmptyList,
+                    environment =
+                    PineValue.EmptyList,
 
-                expectedResult =
-                Result<string, PineValueClass>.ok(PineValueClass.Create([])),
-            },
+                    expectedResult =
+                    Result<string, PineValueClass>.ok(PineValueClass.Create([])),
+                },
 
-            new
-            {
-                Name = "Everything observed",
+                new
+                {
+                    Name = "Everything observed",
 
-                expression =
-                (Expression)
-                new Expression.Eval(
-                    encoded: Expression.EnvironmentInstance,
-                    environment: Expression.ListInst([])),
+                    expression =
+                    (Expression)
+                    new Expression.Eval(
+                        encoded: Expression.EnvironmentInstance,
+                        environment: Expression.ListInst([])),
 
-                environment =
-                PineValue.List(
-                    [
-                    PineValue.EmptyBlob,
-                    StringEncoding.ValueFromString("Testing"),
-                    ]),
-
-                expectedResult =
-                Result<string, PineValueClass>.ok(
-                    PineValueClass.CreateEquals(
-                        PineValue.List(
+                    environment =
+                    PineValue.List(
                         [
                         PineValue.EmptyBlob,
                         StringEncoding.ValueFromString("Testing"),
-                        ])))
-            }
-        };
+                        ]),
+
+                    expectedResult =
+                    Result<string, PineValueClass>.ok(
+                        PineValueClass.CreateEquals(
+                            PineValue.List(
+                            [
+                            PineValue.EmptyBlob,
+                            StringEncoding.ValueFromString("Testing"),
+                            ])))
+                }
+            };
 
         for (var testCaseIndex = 0; testCaseIndex < testCases.Length; ++testCaseIndex)
         {

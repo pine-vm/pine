@@ -54,7 +54,8 @@ public class CommandInputValidationTests
 
     private static IEnumerable<RequiredArgumentCase> RequiredArgumentCases()
     {
-        var userSecretsStoreCommand = UserSecretsCommand.Create().Subcommands.Single(command => command.Name is "store");
+        var userSecretsStoreCommand =
+            UserSecretsCommand.Create().Subcommands.Single(command => command.Name is "store");
 
         yield return new(userSecretsStoreCommand, ["site", "password"], ["site", "password"]);
         yield return new(TruncateProcessHistoryCommand.Create(), ["process-site"], ["site"]);

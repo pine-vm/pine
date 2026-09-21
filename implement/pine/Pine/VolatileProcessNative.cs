@@ -175,6 +175,7 @@ public class VolatileProcessNative : VolatileProcess, IDisposable
             if (containerDirectory is not null)
                 Directory.Delete(containerDirectory, recursive: true);
         }
-        catch { }
+        catch
+        { }
     }
 }

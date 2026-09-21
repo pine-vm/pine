@@ -146,7 +146,8 @@ namespace Pine
                         Encoding.UTF8.GetString(
                             BytesConversions.Inflate(Convert.FromBase64String(projectStateDeflateBase64String)).Span);
                 }
-                catch { }
+                catch
+                { }
 
                 if (projectStateString is null)
                     return null;

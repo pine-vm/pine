@@ -90,11 +90,12 @@ public static class Elm019Binaries
                 PineValueHashTree.ComputeHashSorted(
                     FileTree.FromSetOfFilesWithStringPath(elmCodeFiles)).Span);
 
-        var requestIdentifier = new ElmMakeRequestIdentifier(
-            elmCodeFilesHash: elmCodeFilesHash,
-            pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint,
-            outputFileName: outputFileName,
-            elmMakeCommandAppendix: elmMakeCommandAppendix);
+        var requestIdentifier =
+            new ElmMakeRequestIdentifier(
+                elmCodeFilesHash: elmCodeFilesHash,
+                pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint,
+                outputFileName: outputFileName,
+                elmMakeCommandAppendix: elmMakeCommandAppendix);
 
         var requestHash =
             Convert.ToHexStringLower(
@@ -111,14 +112,16 @@ public static class Elm019Binaries
             if (cacheEntryFile is not null)
             {
                 var resultFromCache =
-                    System.Text.Json.JsonSerializer.Deserialize<Result<string, ElmMakeOkJsonStructure>>(cacheEntryFile.Value.Span)
+                    System.Text.Json.JsonSerializer.Deserialize<Result<string, ElmMakeOkJsonStructure>>(
+                        cacheEntryFile.Value.Span)
                     ?.Map(AsElmMakeOk);
 
                 if (resultFromCache is Result<string, ElmMakeOk>.Ok resultOk)
                     return resultFromCache;
             }
         }
-        catch { }
+        catch
+        { }
 
         var result =
             ElmMakeIgnoringCachedResults(
@@ -136,7 +139,8 @@ public static class Elm019Binaries
                     cacheEntryPath,
                     System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(result.Map(AsJsonStructure)));
             }
-            catch { }
+            catch
+            { }
         }
 
         return result;
@@ -179,45 +183,51 @@ public static class Elm019Binaries
         */
         const int maxRetryCount = 2;
 
-        var command = "make " + Filesystem.MakePlatformSpecificPath(pathToFileWithElmEntryPoint) + " --output=\"" + outputFileName + "\" " + elmMakeCommandAppendix;
+        var command =
+            "make " + Filesystem.MakePlatformSpecificPath(pathToFileWithElmEntryPoint) + " --output=\"" +
+            outputFileName +
+            "\" " +
+            elmMakeCommandAppendix;
 
-        var attemptsResults = new List<(ExecutableFile.ProcessOutput processOutput, IReadOnlyCollection<(IReadOnlyList<string> path, ReadOnlyMemory<byte> content)> resultingFiles)>();
+        var attemptsResults =
+            new List<(ExecutableFile.ProcessOutput processOutput, IReadOnlyCollection<(IReadOnlyList<string> path, ReadOnlyMemory<byte> content)> resultingFiles)>();
 
         do
         {
-            var commandResults = ExecutableFile.ExecuteFileWithArguments(
-                environmentFilesNotExecutable: elmCodeFiles,
-                GetElmExecutableFile,
-                command,
-                new Dictionary<string, string>
-                {
-                    //  Avoid elm make failing on `getAppUserDataDirectory`.
-                    /* Also, work around problems with elm make like this:
-                    -- HTTP PROBLEM ----------------------------------------------------------------
-
-                    The following HTTP request failed:
-                        <https://github.com/elm/core/zipball/1.0.0/>
-
-                    Here is the error message I was able to extract:
-
-                    HttpExceptionRequest Request { host = "github.com" port = 443 secure = True
-                    requestHeaders = [("User-Agent","elm/0.19.0"),("Accept-Encoding","gzip")]
-                    path = "/elm/core/zipball/1.0.0/" queryString = "" method = "GET" proxy =
-                    Nothing rawBody = False redirectCount = 10 responseTimeout =
-                    ResponseTimeoutDefault requestVersion = HTTP/1.1 } (StatusCodeException
-                    (Response {responseStatus = Status {statusCode = 429, statusMessage = "Too
-                    Many Requests"}, responseVersion = HTTP/1.1, responseHeaders =
-                    [("Server","GitHub.com"),("Date","Sun, 18 Nov 2018 16:53:18
-                    GMT"),("Content-Type","text/html"),("Transfer-Encoding","chunked"),("Status","429
-                    Too Many
-                    Requests"),("Retry-After","120")
-
-                    To avoid elm make failing with this error, break isolation here and reuse elm home directory.
-                    An alternative would be retrying when this error is parsed from `commandResults.processOutput.StandardError`.
-                    */
-                    {"ELM_HOME", GetElmHomeDirectory()},
-                },
-                workingDirectoryRelative: workingDirectoryRelative);
+            var commandResults =
+                ExecutableFile.ExecuteFileWithArguments(
+                    environmentFilesNotExecutable: elmCodeFiles,
+                    GetElmExecutableFile,
+                    command,
+                    new Dictionary<string, string>
+                    {
+                        //  Avoid elm make failing on `getAppUserDataDirectory`.
+                        /* Also, work around problems with elm make like this:
+                        -- HTTP PROBLEM ----------------------------------------------------------------
+    
+                        The following HTTP request failed:
+                            <https://github.com/elm/core/zipball/1.0.0/>
+    
+                        Here is the error message I was able to extract:
+    
+                        HttpExceptionRequest Request { host = "github.com" port = 443 secure = True
+                        requestHeaders = [("User-Agent","elm/0.19.0"),("Accept-Encoding","gzip")]
+                        path = "/elm/core/zipball/1.0.0/" queryString = "" method = "GET" proxy =
+                        Nothing rawBody = False redirectCount = 10 responseTimeout =
+                        ResponseTimeoutDefault requestVersion = HTTP/1.1 } (StatusCodeException
+                        (Response {responseStatus = Status {statusCode = 429, statusMessage = "Too
+                        Many Requests"}, responseVersion = HTTP/1.1, responseHeaders =
+                        [("Server","GitHub.com"),("Date","Sun, 18 Nov 2018 16:53:18
+                        GMT"),("Content-Type","text/html"),("Transfer-Encoding","chunked"),("Status","429
+                        Too Many
+                        Requests"),("Retry-After","120")
+    
+                        To avoid elm make failing with this error, break isolation here and reuse elm home directory.
+                        An alternative would be retrying when this error is parsed from `commandResults.processOutput.StandardError`.
+                        */
+                        {"ELM_HOME", GetElmHomeDirectory()},
+                    },
+                    workingDirectoryRelative: workingDirectoryRelative);
 
             attemptsResults.Add(commandResults);
 
@@ -242,12 +252,14 @@ public static class Elm019Binaries
             if (!ElmMakeOutputQualifiesForRetry(standardErrorText: commandResults.processOutput.StandardError))
                 break;
 
-        } while (attemptsResults.Count <= maxRetryCount);
+        }
+        while (attemptsResults.Count <= maxRetryCount);
 
         var lastAttemptResults = attemptsResults.Last();
 
         return
-            "Failed for " + attemptsResults.Count + " attempts. Output file not found. Maybe the output from the Elm make process from the last attempt helps to find the cause:" +
+            "Failed for " + attemptsResults.Count +
+            " attempts. Output file not found. Maybe the output from the Elm make process from the last attempt helps to find the cause:" +
             "\nExit Code: " + lastAttemptResults.processOutput.ExitCode +
             "\nStandard Output:\n'" + lastAttemptResults.processOutput.StandardOutput + "'" +
             "\nStandard Error:\n'" + lastAttemptResults.processOutput.StandardError + "'";

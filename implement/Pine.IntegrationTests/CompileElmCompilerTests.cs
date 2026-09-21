@@ -419,8 +419,8 @@ public class CompileElmCompilerTests
             .Modules.Single(m => m.moduleName is "Basics");
 
         compilerInteractiveSession.Submit("1 + 3")
-        .Extract(err => throw new Exception(err))
-        .InteractiveResponse.DisplayText.Should().Be("4");
+            .Extract(err => throw new Exception(err))
+            .InteractiveResponse.DisplayText.Should().Be("4");
 
         var pineVM = SetupVM.Create();
 
@@ -530,10 +530,11 @@ public class CompileElmCompilerTests
 
         var compilerModulesParsedAsPineValues =
             parsedCompilerModules
-            .Select(parsedModule =>
-            ParsedElmFileRecordValue(
-                fileText: parsedModule.Value.moduleText,
-                parsedModuleValue: parsedModule.Value.parsed))
+            .Select(
+                parsedModule =>
+                ParsedElmFileRecordValue(
+                    fileText: parsedModule.Value.moduleText,
+                    parsedModuleValue: parsedModule.Value.parsed))
             .ToImmutableArray();
 
         var pineValueEmptyListElmValue =
@@ -630,15 +631,21 @@ public class CompileElmCompilerTests
                 throw new Exception("Unexpected result type: " + parseAsTagResult.GetType().FullName);
 
             if (parseAsTagOk.Value.Item1 is not "Ok")
+            {
                 return
                     "Failed to extract environment: Tag not 'Ok': " +
                     ElmValueEncoding.PineValueAsElmValue(applyFunctionOk.Value, null, null)
                     .Unpack(
                         fromErr: err => "Failed to parse as Elm value: " + err,
                         fromOk: elmValue => ElmValue.RenderAsElmExpression(elmValue).expressionString);
+            }
 
             if (parseAsTagOk.Value.Item2.Length is not 1)
-                return "Failed to extract environment: Expected one element in the list, got " + parseAsTagOk.Value.Item2.Length;
+            {
+                return
+                    "Failed to extract environment: Expected one element in the list, got " +
+                    parseAsTagOk.Value.Item2.Length;
+            }
 
             var parseAsRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(parseAsTagOk.Value.Item2.Span[0]);
 
@@ -1321,19 +1328,24 @@ public class CompileElmCompilerTests
         {
             return
                 elmCompilerCache.PineValueDecodedAsElmValue(moduleEncodedInCompiler)
-                .AndThen(moduleAsElmValueEncodedInCompiler =>
-                elmCompilerCache.DecodeElmValueFromCompiler(moduleAsElmValueEncodedInCompiler)
-                .AndThen(modulePineValue =>
-                ElmInteractiveEnvironment.ParseNamedElmModule(modulePineValue)));
+                .AndThen(
+                    moduleAsElmValueEncodedInCompiler =>
+                    elmCompilerCache.DecodeElmValueFromCompiler(moduleAsElmValueEncodedInCompiler)
+                    .AndThen(
+                        modulePineValue =>
+                        ElmInteractiveEnvironment.ParseNamedElmModule(modulePineValue)));
         }
 
         return
-        Result<string, IReadOnlyList<Func<Result<string, (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent)>>>>.ok(
-            [..environmentList.Items
-            .ToArray()
-                .Select(envItem =>
-                new Func<Result<string, (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent)>>(
-                    () => ParseModuleEncodedInCompiler(envItem)))]);
+            Result<string, IReadOnlyList<Func<Result<string, (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent)>>>>.ok(
+                [
+                ..environmentList.Items
+                .ToArray()
+                .Select(
+                    envItem =>
+                    new Func<Result<string, (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent)>>(
+                        () => ParseModuleEncodedInCompiler(envItem)))
+                ]);
     }
 
     public static IEnumerable<string> CompareCompiledEnvironmentsAndAssertEqual(
@@ -1423,16 +1435,17 @@ public class CompileElmCompilerTests
     public static IEnumerable<string> ReportOnCompiledModule(
         ElmInteractiveEnvironment.ElmModule expectedModule,
         ElmInteractiveEnvironment.ElmModule actualModule) =>
-        [ "Type declarations",
-            ..ReportComparingDeclarations(
-                expectedModule.TypeDeclarations,
-                actualModule.TypeDeclarations),
+        [
+        "Type declarations",
+        ..ReportComparingDeclarations(
+            expectedModule.TypeDeclarations,
+            actualModule.TypeDeclarations),
 
-            "Function declarations",
-            ..ReportComparingDeclarations(
-                expectedModule.FunctionDeclarations,
-                actualModule.FunctionDeclarations),
-            ];
+        "Function declarations",
+        ..ReportComparingDeclarations(
+            expectedModule.FunctionDeclarations,
+            actualModule.FunctionDeclarations),
+        ];
 
     public static IEnumerable<string> ReportComparingDeclarations(
         IReadOnlyDictionary<string, PineValue> expectedDecls,
@@ -1460,8 +1473,10 @@ public class CompileElmCompilerTests
 
             return
                 expected == actual
-                ? (true, "")
-                : (false, "Mismatch (size: " + actualSize + ")");
+                ?
+                (true, "")
+                :
+                (false, "Mismatch (size: " + actualSize + ")");
         }
 
         foreach (var declName in expectedNames)

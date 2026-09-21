@@ -238,7 +238,8 @@ public static class CopyAppStateCommand
             responseBodyReport =
                 System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.Nodes.JsonObject>((string)responseBodyReport)!;
         }
-        catch { }
+        catch
+        { }
 
         return
             new PineCliCommand.ResponseFromServerReport(

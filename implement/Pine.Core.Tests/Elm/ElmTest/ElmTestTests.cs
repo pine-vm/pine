@@ -259,8 +259,8 @@ public class ElmTestTests
         completed.Tests
             .Single(test => test.Kind is CompletedTestKind.Failed)
             .Failure.Should().Be(
-                new MessageFailure(
-                    "Failed evaluating test: Invocation count limit exceeded: 10_000_000"));
+            new MessageFailure(
+                "Failed evaluating test: Invocation count limit exceeded: 10_000_000"));
     }
 
 

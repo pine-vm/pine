@@ -158,7 +158,8 @@ public static class DeployCommand
                     responseBodyReport =
                         System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.Nodes.JsonObject>(responseContentString)!;
                 }
-                catch { }
+                catch
+                { }
 
                 responseFromServer =
                     new PineCliCommand.ResponseFromServerReport(

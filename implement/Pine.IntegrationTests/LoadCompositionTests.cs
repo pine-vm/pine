@@ -65,7 +65,8 @@ public class LoadCompositionTests
                             {
                                 utf8 = System.Text.Encoding.UTF8.GetString(blobAtPath.fileContent.Span);
                             }
-                            catch { }
+                            catch
+                            { }
 
                             return
                                 new

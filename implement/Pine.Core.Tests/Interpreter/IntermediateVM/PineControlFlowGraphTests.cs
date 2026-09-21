@@ -362,5 +362,5 @@ public class PineControlFlowGraphTests
     private static bool IsBooleanLiteral(PineValueInProcess? literal) =>
         literal is not null &&
         (PineValueInProcess.AreEqual(literal, PineKernelValues.TrueValue) ||
-         PineValueInProcess.AreEqual(literal, PineKernelValues.FalseValue));
+        PineValueInProcess.AreEqual(literal, PineKernelValues.FalseValue));
 }

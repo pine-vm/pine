@@ -11,10 +11,11 @@ public class Program
 
         var echoJsonCommand = new Command("echo-json", "Echoes the JSON string to the console.");
 
-        echoJsonCommand.SetHandler(() =>
-        {
-            EchoJson.EchoJsonLoop();
-        });
+        echoJsonCommand.SetHandler(
+            () =>
+            {
+                EchoJson.EchoJsonLoop();
+            });
 
         rootCommand.Add(echoJsonCommand);
 

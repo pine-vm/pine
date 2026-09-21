@@ -42,7 +42,8 @@ public class CommonMappings
                     FileTree.FromSetOfFilesWithCommonFilePath(
                         ZipArchive.EntriesFromZipArchive(blobContent));
             }
-            catch { }
+            catch
+            { }
 
             if (fromZipArchive is not null)
                 yield return fromZipArchive;
@@ -58,7 +59,8 @@ public class CommonMappings
                 fromTarArchive =
                     TarArchive.TreeWithStringPathFromTarArchive(BytesConversions.DecompressGzip(blobContent));
             }
-            catch { }
+            catch
+            { }
 
             if (fromTarArchive is not null)
                 yield return fromTarArchive;
@@ -73,7 +75,8 @@ public class CommonMappings
                 {
                     fromGzip = BytesConversions.DecompressGzip(blobContent);
                 }
-                catch { }
+                catch
+                { }
 
                 if (fromGzip is not null)
                     yield return FileTree.File(fromGzip.Value);

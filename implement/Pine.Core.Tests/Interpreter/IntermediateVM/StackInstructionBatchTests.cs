@@ -24,8 +24,8 @@ public class StackInstructionBatchTests
             multiplier,
             IntegerEncoding.EncodeSignedInteger(addend),
             IntegerEncoding.EncodeSignedInteger(multiplied))
-        .Should()
-        .Be(IntegerEncoding.EncodeSignedInteger(expected));
+            .Should()
+            .Be(IntegerEncoding.EncodeSignedInteger(expected));
     }
 
     [Fact]
@@ -35,15 +35,15 @@ public class StackInstructionBatchTests
             4,
             PineValue.EmptyList,
             IntegerEncoding.EncodeSignedInteger(3))
-        .Should()
-        .Be(PineValue.EmptyList);
+            .Should()
+            .Be(PineValue.EmptyList);
 
         ExecuteIntMulConstAddBinary(
             4,
             IntegerEncoding.EncodeSignedInteger(11),
             PineValue.EmptyList)
-        .Should()
-        .Be(PineValue.EmptyList);
+            .Should()
+            .Be(PineValue.EmptyList);
     }
 
     [Fact]

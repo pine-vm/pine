@@ -112,6 +112,7 @@ public class ReducePineExpressionTests
 
         if (BuiltinFunction.SignedIntegerFromValueRelaxed(operand) is null)
             reducedValue.Should().Be(PineValue.EmptyList);
+
         else
             reducedValue.Should().Be(IntegerEncoding.EncodeSignedInteger(0));
     }
