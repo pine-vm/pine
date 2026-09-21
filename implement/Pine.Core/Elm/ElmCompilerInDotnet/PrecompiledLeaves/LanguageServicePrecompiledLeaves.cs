@@ -123,7 +123,7 @@ public static class LanguageServicePrecompiledLeaves
         if (!EnvironmentMatches(environment, "removeWrappingFromMultilineComment") ||
             environment.ValueFromPathOrEmptyList([1]) is not PineValue.ListValue stringValue ||
             stringValue.Items.Length is not 3 ||
-            stringValue.Items.Span[0] != ElmValue.ElmChoiceTypeTagNameAsValue ||
+            !ElmValue.IsFlatChoiceTypeTag(stringValue.Items.Span[0]) ||
             stringValue.Items.Span[1] != ElmValue.ElmStringTypeTagNameAsValue ||
             stringValue.Items.Span[2] is not PineValue.BlobValue chars ||
             chars.Bytes.Length % 4 is not 0)
@@ -330,7 +330,7 @@ public static class LanguageServicePrecompiledLeaves
     {
         if (value is PineValue.ListValue rangeValue &&
             rangeValue.Items.Length is 4 &&
-            rangeValue.Items.Span[0] == ElmValue.ElmChoiceTypeTagNameAsValue &&
+            ElmValue.IsFlatChoiceTypeTag(rangeValue.Items.Span[0]) &&
             rangeValue.Items.Span[1] == s_rangeTagName &&
             rangeValue.Items.Span[2] is PineValue.ListValue start &&
             start.Items.Length is 2 &&
@@ -371,7 +371,7 @@ public static class LanguageServicePrecompiledLeaves
     {
         if (value is PineValue.ListValue stringValue &&
             stringValue.Items.Length is 3 &&
-            stringValue.Items.Span[0] == ElmValue.ElmChoiceTypeTagNameAsValue &&
+            ElmValue.IsFlatChoiceTypeTag(stringValue.Items.Span[0]) &&
             stringValue.Items.Span[1] == ElmValue.ElmStringTypeTagNameAsValue &&
             stringValue.Items.Span[2] is PineValue.BlobValue charsBlob &&
             charsBlob.Bytes.Length % 4 is 0)

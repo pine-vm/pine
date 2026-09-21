@@ -152,7 +152,7 @@ public static class ElmSyntaxAbstractConvertFromConcretePrecompiledLeaves
         if (setter is PineValue.ListValue setterRecord &&
             setterRecord.Items.Length >= 3 &&
             setterRecord.Items.Length % 2 is 1 &&
-            setterRecord.Items.Span[0] == ElmValue.ElmRecordTypeTagNameAsValue)
+            ElmValue.IsFlatRecordTypeTag(setterRecord.Items.Span[0]))
         {
             for (var index = 1; index + 1 < setterRecord.Items.Length; index += 2)
             {
@@ -163,7 +163,7 @@ public static class ElmSyntaxAbstractConvertFromConcretePrecompiledLeaves
 
                 if (setterRecord.Items.Span[index + 1] is PineValue.ListValue stringValue &&
                     stringValue.Items.Length is 3 &&
-                    stringValue.Items.Span[0] == ElmValue.ElmChoiceTypeTagNameAsValue &&
+                    ElmValue.IsFlatChoiceTypeTag(stringValue.Items.Span[0]) &&
                     stringValue.Items.Span[1] == ElmValue.ElmStringTypeTagNameAsValue &&
                     stringValue.Items.Span[2] is PineValue.BlobValue characters &&
                     characters.Bytes.Length % 4 is 0)

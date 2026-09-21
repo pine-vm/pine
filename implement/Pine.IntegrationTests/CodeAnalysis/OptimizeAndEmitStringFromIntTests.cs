@@ -48,7 +48,7 @@ public class OptimizeAndEmitStringFromIntTests
                     return
                         PineValue.List(
                             [
-                            CommonReusedValues.Blob_91938c50,
+                            CommonReusedValues.Blob_ffbe4088,
                             CommonReusedValues.Blob_Str_String,
                             BuiltinFunction.concat(String.fromIntAsList(param_1))
                             ]);

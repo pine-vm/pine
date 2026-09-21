@@ -332,7 +332,7 @@ public partial class ElmSyntaxInterpreter
 
         if (value is not PineValue.ListValue list ||
             list.Items.Length is not 4 ||
-            list.Items.Span[0] != ElmValue.ElmChoiceTypeTagNameAsValue ||
+            !ElmValue.IsFlatChoiceTypeTag(list.Items.Span[0]) ||
             list.Items.Span[1] != ElmValue.ElmFloatTypeTagNameAsValue)
         {
             return false;
@@ -509,7 +509,7 @@ public partial class ElmSyntaxInterpreter
     private static System.ReadOnlyMemory<byte> AsStringCharsBytes(PineValue value, string operationName)
     {
         if (value is PineValue.ListValue { Items: { Length: 3 } items } &&
-            items.Span[0] == ElmValue.ElmChoiceTypeTagNameAsValue &&
+            ElmValue.IsFlatChoiceTypeTag(items.Span[0]) &&
             items.Span[1] == ElmValue.ElmStringTypeTagNameAsValue)
         {
             return items.Span[2] switch

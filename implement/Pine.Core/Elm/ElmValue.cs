@@ -65,12 +65,22 @@ public abstract record ElmValue
     /// <see cref="ElmRecordTypeTagName_2025"/>.
     /// </para>
     /// </summary>
-    public const string ElmRecordTypeTagName = "<Record_Type>";
+    public const string ElmRecordTypeTagName = "<Record>";
 
     /// <summary>
     /// Marker at the start of the flat Pine representation of an Elm choice value.
     /// </summary>
-    public const string ElmChoiceTypeTagName = "<Choice_Type>";
+    public const string ElmChoiceTypeTagName = "<Choice>";
+
+    /// <summary>
+    /// Previous marker for the flat Pine representation of an Elm record.
+    /// </summary>
+    public const string ElmRecordTypeTagName_2026 = "<Record_Type>";
+
+    /// <summary>
+    /// Previous marker for the flat Pine representation of an Elm choice value.
+    /// </summary>
+    public const string ElmChoiceTypeTagName_2026 = "<Choice_Type>";
 
     /// <summary>
     /// Legacy (pre-migration) tag name used to represent Elm records when encoding as <see cref="PineValue"/>.
@@ -119,7 +129,7 @@ public abstract record ElmValue
     public const string ElmFloatTypeTagName = "Elm_Float";
 
     /// <summary>
-    /// Represents the new record tag name (<c>&lt;Record_Type&gt;</c>) as a <see cref="PineValue"/> using the default string encoding.
+    /// Represents the record tag name (<c>&lt;Record&gt;</c>) as a <see cref="PineValue"/> using the default string encoding.
     /// </summary>
     public static readonly PineValue ElmRecordTypeTagNameAsValue =
         StringEncoding.ValueFromString(ElmRecordTypeTagName);
@@ -129,6 +139,32 @@ public abstract record ElmValue
     /// </summary>
     public static readonly PineValue ElmChoiceTypeTagNameAsValue =
         StringEncoding.ValueFromString(ElmChoiceTypeTagName);
+
+    /// <summary>
+    /// Represents the previous flat record tag name as a <see cref="PineValue"/>.
+    /// </summary>
+    public static readonly PineValue ElmRecordTypeTagNameAsValue_2026 =
+        StringEncoding.ValueFromString(ElmRecordTypeTagName_2026);
+
+    /// <summary>
+    /// Represents the previous flat choice tag name as a <see cref="PineValue"/>.
+    /// </summary>
+    public static readonly PineValue ElmChoiceTypeTagNameAsValue_2026 =
+        StringEncoding.ValueFromString(ElmChoiceTypeTagName_2026);
+
+    /// <summary>
+    /// Returns whether the value is a supported flat record marker.
+    /// </summary>
+    public static bool IsFlatRecordTypeTag(PineValue? value) =>
+        value == ElmRecordTypeTagNameAsValue ||
+        value == ElmRecordTypeTagNameAsValue_2026;
+
+    /// <summary>
+    /// Returns whether the value is a supported flat choice marker.
+    /// </summary>
+    public static bool IsFlatChoiceTypeTag(PineValue? value) =>
+        value == ElmChoiceTypeTagNameAsValue ||
+        value == ElmChoiceTypeTagNameAsValue_2026;
 
     /// <summary>
     /// Represents the legacy record tag name (<c>Elm_Record</c>) as a <see cref="PineValue"/> using the default string encoding.

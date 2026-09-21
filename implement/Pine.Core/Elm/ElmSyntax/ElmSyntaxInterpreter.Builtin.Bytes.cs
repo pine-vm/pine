@@ -165,7 +165,7 @@ public partial class ElmSyntaxInterpreter
     private static void AppendEncoderBlob(PineValue encoder, System.IO.Stream output)
     {
         if (encoder is not PineValue.ListValue { Items.Length: >= 2 } encoderList ||
-            encoderList.Items.Span[0] != ElmValue.ElmChoiceTypeTagNameAsValue)
+            !ElmValue.IsFlatChoiceTypeTag(encoderList.Items.Span[0]))
         {
             throw new System.InvalidOperationException(
                 "Bytes.Encode.encodeBlob: expected an Encoder tagged value.");
@@ -285,7 +285,7 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     private static bool IsLittleEndian(PineValue endianness) =>
         endianness is PineValue.ListValue { Items.Length: 2 } tagged &&
-        tagged.Items.Span[0] == ElmValue.ElmChoiceTypeTagNameAsValue &&
+        ElmValue.IsFlatChoiceTypeTag(tagged.Items.Span[0]) &&
         tagged.Items.Span[1] == s_endiannessLittleEndianTagNameValue;
 
     /// <summary>
@@ -294,7 +294,7 @@ public partial class ElmSyntaxInterpreter
     private static System.ReadOnlyMemory<byte> AsBytesValueBlob(PineValue value, string operationName)
     {
         if (value is PineValue.ListValue { Items.Length: 3 } items &&
-            items.Items.Span[0] == ElmValue.ElmChoiceTypeTagNameAsValue &&
+            ElmValue.IsFlatChoiceTypeTag(items.Items.Span[0]) &&
             items.Items.Span[1] == ElmValue.ElmBytesTypeTagNameAsValue)
         {
             return AsRawBlobBytes(items.Items.Span[2], operationName);

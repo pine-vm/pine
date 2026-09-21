@@ -1,5 +1,10 @@
 # Pine Changelog - Implement
 
+## 2026-09-21 - Elm - Make Elm value encodings for choices and records more compact
+
++ Changed encoding of Elm choice values to `<Choice>`
++ Changed encoding of Elm record values to `<Record>`
+
 ## 2026-09-06 - VS Code Extension Package Fix
 
 + Fixed packaging for VS Code extension: included `vscode-languageserver-textdocument` in the extension bundle so language client and server start properly on activation.

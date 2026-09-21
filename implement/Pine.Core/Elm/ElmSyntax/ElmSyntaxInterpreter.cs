@@ -2292,7 +2292,8 @@ public partial class ElmSyntaxInterpreter
                             {
                                 // Just received the original record value.
 
-                                if (!PineValueInProcess.AreEqual(value.GetElementAt(0), ElmValue.ElmRecordTypeTagNameAsValue))
+                                if (!PineValueInProcess.AreEqual(value.GetElementAt(0), ElmValue.ElmRecordTypeTagNameAsValue) &&
+                                    !PineValueInProcess.AreEqual(value.GetElementAt(0), ElmValue.ElmRecordTypeTagNameAsValue_2026))
                                 {
                                     var renderedValue =
                                         RenderArgumentForError(value).rendered;
@@ -3915,7 +3916,7 @@ public partial class ElmSyntaxInterpreter
                         return false;
 
                     if (value.GetLength() >= 2 &&
-                        value.GetElementAt(0).EvaluatedOrNull == ElmValue.ElmChoiceTypeTagNameAsValue)
+                        ElmValue.IsFlatChoiceTypeTag(value.GetElementAt(0).EvaluatedOrNull))
                     {
                         return false;
                     }
@@ -4419,7 +4420,8 @@ public partial class ElmSyntaxInterpreter
 
         var firstListItem = recordValue.GetElementAt(0);
 
-        if (!PineValueInProcess.AreEqual(firstListItem, ElmValue.ElmRecordTypeTagNameAsValue))
+        if (!PineValueInProcess.AreEqual(firstListItem, ElmValue.ElmRecordTypeTagNameAsValue) &&
+            !PineValueInProcess.AreEqual(firstListItem, ElmValue.ElmRecordTypeTagNameAsValue_2026))
         {
             var renderedValue =
                 ElmValue.RenderAsElmExpression(ToElm(recordValue)).expressionString;

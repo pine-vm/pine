@@ -184,7 +184,7 @@ public static class ElmValueEncoding
                 // 1-item degenerate empty-record case is also recognized here.
                 if (listValue.Items.Length >= 1 &&
                     (listValue.Items.Length & 1) == 1 &&
-                    listValue.Items.Span[0] == ElmValue.ElmRecordTypeTagNameAsValue)
+                    ElmValue.IsFlatRecordTypeTag(listValue.Items.Span[0]))
                 {
                     var asRecordResult =
                         PineValueAsElmRecord(
@@ -204,9 +204,9 @@ public static class ElmValueEncoding
             }
 
             {
-                // New flat choice format: [<Choice_Type>, tagName, arg0, arg1, ...].
+                // Flat choice format: [<Choice>, tagName, arg0, arg1, ...].
                 if (listValue.Items.Length >= 2 &&
-                    listValue.Items.Span[0] == ElmValue.ElmChoiceTypeTagNameAsValue)
+                    ElmValue.IsFlatChoiceTypeTag(listValue.Items.Span[0]))
                 {
                     return
                         DecodeChoice(
@@ -415,7 +415,7 @@ public static class ElmValueEncoding
             return "Value is not a list.";
 
         if (list.Items.Length >= 2 &&
-            list.Items.Span[0] == ElmValue.ElmChoiceTypeTagNameAsValue)
+            ElmValue.IsFlatChoiceTypeTag(list.Items.Span[0]))
         {
             var parseFlatTagNameResult = StringEncoding.StringFromValue(list.Items.Span[1]);
 
@@ -558,7 +558,7 @@ public static class ElmValueEncoding
     /// </summary>
     /// <param name="pineValue">
     /// The Pine value to parse. Expected structure:
-    /// <c>[&lt;Record_Type&gt;, fieldName0, fieldValue0, fieldName1, fieldValue1, ...]</c>.
+    /// <c>[&lt;Record&gt;, fieldName0, fieldValue0, fieldName1, fieldValue1, ...]</c>.
     /// </param>
     /// <returns>
     /// <see cref="Result{ErrT, OkT}"/> with the ordered list of fields on success; otherwise an error message.
@@ -577,7 +577,7 @@ public static class ElmValueEncoding
         if ((itemsSpan.Length & 1) is not 1)
             return "List does not have an odd number of elements.";
 
-        if (itemsSpan[0] != ElmValue.ElmRecordTypeTagNameAsValue)
+        if (!ElmValue.IsFlatRecordTypeTag(itemsSpan[0]))
             return "First element is not the record tag name.";
 
         var fieldCount = (itemsSpan.Length - 1) / 2;

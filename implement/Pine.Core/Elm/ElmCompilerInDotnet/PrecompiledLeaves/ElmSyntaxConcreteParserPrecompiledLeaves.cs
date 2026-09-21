@@ -509,7 +509,7 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     {
         if (value is PineValue.ListValue stringValue &&
             stringValue.Items.Length is 3 &&
-            stringValue.Items.Span[0] == ElmValue.ElmChoiceTypeTagNameAsValue &&
+            ElmValue.IsFlatChoiceTypeTag(stringValue.Items.Span[0]) &&
             stringValue.Items.Span[1] == ElmValue.ElmStringTypeTagNameAsValue &&
             stringValue.Items.Span[2] is PineValue.BlobValue chars &&
             chars.Bytes.Length % 4 is 0)

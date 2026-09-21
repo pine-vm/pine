@@ -95,9 +95,35 @@ public class ElmValueTests
 
         items.Length.Should().Be(4);
         items.Span[0].Should().Be(ElmValue.ElmChoiceTypeTagNameAsValue);
+        items.Span[0].Should().NotBe(ElmValue.ElmChoiceTypeTagNameAsValue_2026);
         items.Span[1].Should().Be(StringEncoding.ValueFromString("Pair"));
         items.Span[2].Should().Be(IntegerEncoding.EncodeSignedInteger(11));
         items.Span[3].Should().Be(ElmValueEncoding.TagAsPineValue("Nothing", []));
+    }
+
+    [Fact]
+    public void Elm_choice_decoder_accepts_previous_flat_tag()
+    {
+        var encoded =
+            PineValue.List(
+                [
+                ElmValue.ElmChoiceTypeTagNameAsValue_2026,
+                StringEncoding.ValueFromString("Just"),
+                IntegerEncoding.EncodeSignedInteger(42),
+                ]);
+
+        var decoded =
+            ElmValueEncoding.PineValueAsElmValue(encoded, null, null)
+            .Extract(err => throw new System.Exception(err));
+
+        decoded.Should().Be(ElmValue.TagInstance("Just", [ElmValue.Integer(42)]));
+
+        var parsed =
+            ElmValueEncoding.ParseAsTag(encoded)
+            .Extract(err => throw new System.Exception(err));
+
+        parsed.tagName.Should().Be("Just");
+        parsed.tagArguments.Span[0].Should().Be(IntegerEncoding.EncodeSignedInteger(42));
     }
 
     [Fact]
@@ -330,7 +356,7 @@ public class ElmValueTests
     /// <summary>
     /// Verifies that the new (post-2025) encoder produces the flat record layout
     /// <c>[tag, name0, value0, name1, value1, ...]</c> with field names sorted
-    /// alphabetically (ordinal) and the new <c>&lt;Record_Type&gt;</c> tag.
+    /// alphabetically (ordinal) and the new <c>&lt;Record&gt;</c> tag.
     /// </summary>
     [Fact]
     public void Elm_record_encoder_emits_flat_layout_with_new_tag()
@@ -352,6 +378,7 @@ public class ElmValueTests
 
         // First item must be the new tag, not the legacy one.
         asListValue.Items.Span[0].Should().Be(ElmValue.ElmRecordTypeTagNameAsValue);
+        asListValue.Items.Span[0].Should().NotBe(ElmValue.ElmRecordTypeTagNameAsValue_2026);
         asListValue.Items.Span[0].Should().NotBe(ElmValue.ElmRecordTypeTagNameAsValue_2025);
 
         // Field names alternate with values starting at index 1, sorted alphabetically.
@@ -361,6 +388,43 @@ public class ElmValueTests
         asListValue.Items.Span[4].Should().Be(IntegerEncoding.EncodeSignedInteger(13));
         asListValue.Items.Span[5].Should().Be(StringEncoding.ValueFromString("gamma"));
         asListValue.Items.Span[6].Should().Be(IntegerEncoding.EncodeSignedInteger(17));
+    }
+
+    [Fact]
+    public void Elm_record_decoder_accepts_previous_flat_tag()
+    {
+        var canonical =
+            (PineValue.ListValue)
+            ElmValueEncoding.ElmRecordAsPineValue(
+                [
+                ("alfa", ElmValue.Integer(11)),
+                ("beta", ElmValue.Integer(13)),
+                ],
+                additionalReusableEncodings: null,
+                reportNewEncoding: null);
+
+        var previousItems = canonical.Items.ToArray();
+        previousItems[0] = ElmValue.ElmRecordTypeTagNameAsValue_2026;
+        var previous = PineValue.List(previousItems);
+
+        var decoded =
+            ElmValueEncoding.PineValueAsElmValue(previous, null, null)
+            .Extract(err => throw new System.Exception(err));
+
+        decoded.Should().Be(
+            new ElmValue.ElmRecord(
+                [
+                ("alfa", ElmValue.Integer(11)),
+                ("beta", ElmValue.Integer(13)),
+                ]));
+
+        var parsed =
+            ElmValueEncoding.ParsePineValueAsRecordTagged(previous)
+            .Extract(err => throw new System.Exception(err));
+
+        parsed.Should().HaveCount(2);
+        parsed[0].fieldName.Should().Be("alfa");
+        parsed[1].fieldName.Should().Be("beta");
     }
 
     /// <summary>

@@ -17,7 +17,7 @@ For parameters and return values of entry points, the encoding of Elm values fol
 Elm choice-type constructors use this flat Pine list representation:
 
 ```text
-[<Choice_Type>, tagName, arg0, arg1, ...]
+[<Choice>, tagName, arg0, arg1, ...]
 ```
 
 The marker and constructor name occupy the first two items. A constructor with
@@ -351,10 +351,10 @@ For Elm code producing record values, we always produce records with fields sort
 A record is encoded as a flat Pine list with an odd number of items:
 
 ```text
-[<Record_Type>, fieldName0, fieldValue0, fieldName1, fieldValue1, ...]
+[<Record>, fieldName0, fieldValue0, fieldName1, fieldValue1, ...]
 ```
 
-The first item is the tag (the UTF-32 encoding of the literal string `<Record_Type>`); the remaining items are field-name and field-value pairs interleaved, with the field names sorted alphabetically (ordinal). The empty record is `[<Record_Type>]` (length 1).
+The first item is the tag (the UTF-32 encoding of the literal string `<Record>`); the remaining items are field-name and field-value pairs interleaved, with the field names sorted alphabetically (ordinal). The empty record is `[<Record>]` (length 1).
 
 The new tag uses characters that are not legal in Elm identifiers, so it cannot be confused with a user-defined custom-type constructor.
 

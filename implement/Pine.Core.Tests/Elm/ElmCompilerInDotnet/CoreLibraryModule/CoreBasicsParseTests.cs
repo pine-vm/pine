@@ -2073,7 +2073,7 @@ public class CoreBasicsParseTests
                         , Elm_Float
                         ]
                 then
-                    [ Blob 0x0000003c00000043000000680000006f0000006900000063000000650000005f000000540000007900000070000000650000003e
+                    [ Blob 0x0000003c00000043000000680000006f0000006900000063000000650000003e
                     , Elm_Float
                     , Pine_builtin.int_mul
                         [ -1

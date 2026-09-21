@@ -273,7 +273,7 @@ public partial class ElmSyntaxInterpreter
         if (items.Count >= 1 &&
             (items.Count & 1) == 1 &&
             !IsOpaque(items[0]) &&
-            items[0].Evaluate() == ElmValue.ElmRecordTypeTagNameAsValue)
+            ElmValue.IsFlatRecordTypeTag(items[0].Evaluate()))
         {
             var fieldCount = (items.Count - 1) / 2;
 
@@ -294,10 +294,10 @@ public partial class ElmSyntaxInterpreter
             return new ElmValue.ElmRecord(recordFields);
         }
 
-        // Choice-type tag: [<Choice_Type>, tagName, tagArg0, ...].
+        // Choice-type tag: [<Choice>, tagName, tagArg0, ...].
         if (items.Count >= 2 &&
             !IsOpaque(items[0]) &&
-            items[0].Evaluate() == ElmValue.ElmChoiceTypeTagNameAsValue &&
+            ElmValue.IsFlatChoiceTypeTag(items[0].Evaluate()) &&
             !IsOpaque(items[1]) &&
             StringEncoding.StringFromValue(items[1].Evaluate()).IsOkOrNull() is { } tagName &&
             ElmValueEncoding.StringIsValidTagName(tagName))

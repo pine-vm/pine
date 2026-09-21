@@ -47,7 +47,7 @@ public class OptimizeAndEmitStringTrimTests
                     return
                         PineValue.List(
                             [
-                            CommonReusedValues.Blob_91938c50,
+                            CommonReusedValues.Blob_ffbe4088,
                             CommonReusedValues.Blob_Str_String,
                             BuiltinFunctionFused.TakeAndSkip(
                                 skipCountValue: String.trimLeftCountBytesTrimmed(CommonReusedValues.Blob_Int_0, param_1_2),

@@ -214,7 +214,7 @@ public class OptimizeAndEmitValueFromStringTests
                     return
                         PineValue.List(
                             [
-                            CommonReusedValues.Blob_91938c50,
+                            CommonReusedValues.Blob_ffbe4088,
                             CommonReusedValues.Blob_Str_BlobValue,
                             BuiltinFunction.concat(
                                 Test.blobBytesFromChars(
