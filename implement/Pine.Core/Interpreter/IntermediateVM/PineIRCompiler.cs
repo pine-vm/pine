@@ -16,10 +16,14 @@ namespace Pine.Core.Interpreter.IntermediateVM;
 public class PineIRCompiler
 {
     /// <summary>
-    /// Accumulates emitted instructions together with the locals reserved for reused expressions.
+    /// Accumulates emitted structured control flow together with the locals reserved for reused expressions.
+    /// <para>
+    /// The fragment contains no instruction offsets. Sequential stack instructions are only created
+    /// after building a <see cref="PineControlFlowGraph"/> from it.
+    /// </para>
     /// </summary>
     public record NodeCompilationResult(
-        ImmutableList<StackInstruction> Instructions,
+        PineControlFlowFragment Fragment,
         ImmutableDictionary<Expression, int> LocalsSet)
     {
         /// <summary>
@@ -39,7 +43,7 @@ public class PineIRCompiler
 
             return
                 new NodeCompilationResult(
-                    Instructions.AddRange(exprResult.Instructions),
+                    Fragment.Append(exprResult.Fragment),
                     LocalsSet.AddRange(exprResult.LocalsSet));
         }
 
@@ -55,7 +59,16 @@ public class PineIRCompiler
         public NodeCompilationResult AppendInstructions(IEnumerable<StackInstruction> instructions) =>
             this with
             {
-                Instructions = Instructions.AddRange(instructions)
+                Fragment = Fragment.AppendOperations(instructions)
+            };
+
+        /// <summary>
+        /// Appends a structured control-flow node to the accumulated result.
+        /// </summary>
+        public NodeCompilationResult AppendNode(PineControlFlowNode node) =>
+            this with
+            {
+                Fragment = Fragment.Append(node)
             };
     }
 
@@ -66,7 +79,6 @@ public class PineIRCompiler
         ImmutableHashSet<Expression> CopyToLocal,
         TailLoopTarget? TailLoop,
         StaticFunctionInterface StackFrameParameters,
-        int InstructionOffset,
         bool IsTailPosition,
         bool EnableDirectInvocation,
         Func<PineValue, bool>? SkipDirectInvocation)
@@ -82,19 +94,9 @@ public class PineIRCompiler
                 CopyToLocal: [],
                 TailLoop: null,
                 StackFrameParameters: stackFrameParameters,
-                InstructionOffset: 0,
                 IsTailPosition: true,
                 EnableDirectInvocation: enableDirectInvocation,
                 SkipDirectInvocation: skipDirectInvocation);
-
-        /// <summary>
-        /// Returns a copy of the context with the instruction offset advanced by the given amount.
-        /// </summary>
-        public CompilationContext AddInstructionOffset(int offset) =>
-            this with
-            {
-                InstructionOffset = InstructionOffset + offset
-            };
 
         /// <summary>
         /// Resolves an expression to an already-available local index when possible.
@@ -137,7 +139,7 @@ public class PineIRCompiler
     }
 
     /// <summary>
-    /// Recursively compile an expression into a flat list of instructions.
+    /// Recursively compile an expression into structured control flow.
     /// </summary>
     public static NodeCompilationResult CompileExpression(
         Expression rootExpression,
@@ -151,7 +153,7 @@ public class PineIRCompiler
     {
         var prior =
             new NodeCompilationResult(
-                Instructions: [],
+                Fragment: PineControlFlowFragment.Empty,
                 []);
 
         var rootExpressionForms =
@@ -248,7 +250,7 @@ public class PineIRCompiler
     }
 
     /// <summary>
-    /// Recursively compile an expression into a flat list of instructions.
+    /// Recursively compile an expression into structured control flow.
     /// </summary>
     public static NodeCompilationResult CompileExpressionTransitive(
         Expression expression,
@@ -261,7 +263,7 @@ public class PineIRCompiler
                 expression,
                 context: context,
                 new NodeCompilationResult(
-                    Instructions: [],
+                    Fragment: PineControlFlowFragment.Empty,
                     localIndexFromExpr),
                 parseCache);
     }
@@ -317,7 +319,7 @@ public class PineIRCompiler
     }
 
     /// <summary>
-    /// Recursively compile an expression into a flat list of instructions.
+    /// Recursively compile an expression into structured control flow.
     /// </summary>
     public static NodeCompilationResult CompileExpressionTransitive(
         Expression expression,
@@ -764,19 +766,19 @@ public class PineIRCompiler
                     parseCache);
         }
 
-        var defaultBranchInstructions =
+        var defaultBranchFragment =
             CompileExpressionTransitive(
                 defaultBranch,
-                context.AddInstructionOffset(afterCondition.Instructions.Count + 1),
+                context,
                 new NodeCompilationResult(
-                    Instructions: [],
+                    Fragment: PineControlFlowFragment.Empty,
                     LocalsSet: afterCondition.LocalsSet),
                 parseCache)
-            .Instructions;
+            .Fragment;
 
         var distinctCaseBranches = new List<Expression>();
         var distinctCaseBranchIndexes = new Dictionary<Expression, int>();
-        var caseBranchIndexes = new int[cases.Count];
+        var switchCases = ImmutableArray.CreateBuilder<PineSwitchFragmentCase>(cases.Count);
 
         for (var caseIndex = 0; caseIndex < cases.Count; caseIndex++)
         {
@@ -787,115 +789,32 @@ public class PineIRCompiler
                 distinctCaseBranchIndexes.Add(cases[caseIndex].Branch, branchIndex);
             }
 
-            caseBranchIndexes[caseIndex] = branchIndex;
+            switchCases.Add(new PineSwitchFragmentCase(cases[caseIndex].Literal, branchIndex));
         }
 
-        var caseInstructions = new ImmutableList<StackInstruction>[distinctCaseBranches.Count];
-        var nextCaseOffset = 1 + defaultBranchInstructions.Count + 1;
+        var caseBranchFragments =
+            ImmutableArray.CreateBuilder<PineControlFlowFragment>(distinctCaseBranches.Count);
 
         for (var branchIndex = 0; branchIndex < distinctCaseBranches.Count; branchIndex++)
         {
-            var compiledCase =
+            caseBranchFragments.Add(
                 CompileExpressionTransitive(
                     distinctCaseBranches[branchIndex],
-                    context.AddInstructionOffset(afterCondition.Instructions.Count + nextCaseOffset),
+                    context,
                     new NodeCompilationResult(
-                        Instructions: [],
+                        Fragment: PineControlFlowFragment.Empty,
                         LocalsSet: afterCondition.LocalsSet),
                     parseCache)
-                .Instructions;
-
-            caseInstructions[branchIndex] = compiledCase;
-            nextCaseOffset += compiledCase.Count;
-
-            if (branchIndex < distinctCaseBranches.Count - 1)
-            {
-                nextCaseOffset++;
-            }
+                .Fragment);
         }
 
-        var caseOffset = 1 + defaultBranchInstructions.Count + 1;
-        var caseOffsets = new int[caseInstructions.Length];
-
-        for (var branchIndex = 0; branchIndex < caseInstructions.Length; branchIndex++)
-        {
-            caseOffsets[branchIndex] = caseOffset;
-            caseOffset += caseInstructions[branchIndex].Count;
-
-            if (branchIndex < caseInstructions.Length - 1)
-            {
-                caseOffset++;
-            }
-        }
-
-        StackInstruction switchInstruction;
-
-        if (sliceSkipVar is null)
-        {
-            var jumpTableBuilder = ImmutableDictionary.CreateBuilder<PineValue, int>();
-
-            for (var caseIndex = 0; caseIndex < cases.Count; caseIndex++)
-            {
-                jumpTableBuilder.Add(
-                    cases[caseIndex].Literal,
-                    caseOffsets[caseBranchIndexes[caseIndex]]);
-            }
-
-            switchInstruction =
-                new StackInstruction(
-                    StackInstructionKind.Switch_Jump_If_Equal_Const,
-                    SwitchJumpTable: jumpTableBuilder.ToImmutable());
-        }
-        else
-        {
-            var sliceCasesBuilder =
-                ImmutableArray.CreateBuilder<SliceSwitchCase>(cases.Count);
-
-            for (var caseIndex = 0; caseIndex < cases.Count; caseIndex++)
-            {
-                sliceCasesBuilder.Add(
-                    new SliceSwitchCase(
-                        cases[caseIndex].Literal,
-                        caseOffsets[caseBranchIndexes[caseIndex]]));
-            }
-
-            switchInstruction =
-                StackInstruction.Switch_Jump_If_Slice_Skip_Var_Equal_Const(
-                    sliceCasesBuilder.MoveToImmutable());
-        }
-
-        var branchInstructions =
-            new List<StackInstruction>
-            {
-                switchInstruction
-            };
-
-        branchInstructions.AddRange(defaultBranchInstructions);
-
-        var instructionsAfterConditionCount =
-            1 +
-            defaultBranchInstructions.Count +
-            1 +
-            caseInstructions.Sum(instructions => instructions.Count) +
-            caseInstructions.Length - 1;
-
-        branchInstructions.Add(
-            StackInstruction.Jump_Unconditional(
-                instructionsAfterConditionCount - branchInstructions.Count));
-
-        for (var branchIndex = 0; branchIndex < caseInstructions.Length; branchIndex++)
-        {
-            branchInstructions.AddRange(caseInstructions[branchIndex]);
-
-            if (branchIndex < caseInstructions.Length - 1)
-            {
-                branchInstructions.Add(
-                    StackInstruction.Jump_Unconditional(
-                        instructionsAfterConditionCount - branchInstructions.Count));
-            }
-        }
-
-        return afterCondition.AppendInstructions(branchInstructions);
+        return
+            afterCondition.AppendNode(
+                new PineControlFlowNode.Switch(
+                    Kind: sliceSkipVar is null ? PineSwitchKind.Equal : PineSwitchKind.SliceSkipVarEqual,
+                    Cases: switchCases.MoveToImmutable(),
+                    Default: defaultBranchFragment,
+                    Branches: caseBranchFragments.MoveToImmutable()));
     }
 
     private static (Expression ComparedExpression, PineValue Literal)? TryParseEqualCondition(
@@ -944,48 +863,32 @@ public class PineIRCompiler
                 prior,
                 parseCache);
 
-        var falseBranchInstructions =
+        var falseBranchFragment =
             CompileExpressionTransitive(
                 falseBranch,
-                context
-                .AddInstructionOffset(afterCondition.Instructions.Count + 1),
+                context,
                 new NodeCompilationResult(
-                    Instructions: [],
+                    Fragment: PineControlFlowFragment.Empty,
                     LocalsSet: afterCondition.LocalsSet),
                 parseCache)
-            .Instructions;
+            .Fragment;
 
-        var trueBranchInstructions =
+        var trueBranchFragment =
             CompileExpressionTransitive(
                 trueBranch,
-                context
-                .AddInstructionOffset(afterCondition.Instructions.Count + 1)
-                .AddInstructionOffset(falseBranchInstructions.Count + 1),
+                context,
                 new NodeCompilationResult(
-                    Instructions: [],
+                    Fragment: PineControlFlowFragment.Empty,
                     LocalsSet: afterCondition.LocalsSet),
                 parseCache)
-            .Instructions;
-
-        IReadOnlyList<StackInstruction> falseBranchInstructionsAndJump =
-            [
-            .. falseBranchInstructions,
-            StackInstruction.Jump_Unconditional(trueBranchInstructions.Count + 1)
-            ];
-
-        var branchInstruction =
-            StackInstruction.Jump_If_Equal(
-                offset: falseBranchInstructionsAndJump.Count + 1,
-                literal: jumpLiteralValue);
-
-        var afterConditionAndJump =
-            afterCondition
-            .AppendInstruction(branchInstruction);
+            .Fragment;
 
         return
-            afterConditionAndJump
-            .AppendInstructions(falseBranchInstructionsAndJump)
-            .AppendInstructions(trueBranchInstructions);
+            afterCondition.AppendNode(
+                new PineControlFlowNode.Conditional(
+                    Literal: jumpLiteralValue,
+                    FallThrough: falseBranchFragment,
+                    Branch: trueBranchFragment));
     }
 
     /// <summary>
@@ -1032,15 +935,9 @@ public class PineIRCompiler
                     prior,
                     parseCache);
 
-            var jumpOffset =
-                -afterEnvironment.Instructions.Count - context.InstructionOffset;
-
             return
                 afterEnvironment
-                .AppendInstructions(
-                    [
-                    StackInstruction.Jump_Unconditional(jumpOffset)
-                    ]);
+                .AppendNode(new PineControlFlowNode.JumpToEntry());
         }
 
         return CompileNormalEval(evalExpr, context, prior, parseCache);
@@ -1169,41 +1066,27 @@ public class PineIRCompiler
         var genericBranch =
             CompileExpressionTransitive(
                 evalExpr.Environment,
-                context.AddInstructionOffset(afterEncoded.Instructions.Count + 1),
-                new NodeCompilationResult([], afterEncoded.LocalsSet),
+                context,
+                new NodeCompilationResult(PineControlFlowFragment.Empty, afterEncoded.LocalsSet),
                 parseCache)
             .AppendInstruction(StackInstruction.Local_Get(encodedLocalIndex))
             .AppendInstruction(StackInstruction.Eval_Binary);
 
-        var loopBranchInstructionOffset =
-            afterEncoded.Instructions.Count + genericBranch.Instructions.Count + 2;
-
         var loopBranch =
             CompileLoopArguments(
                 evalExpr.Environment,
-                context.AddInstructionOffset(loopBranchInstructionOffset),
-                new NodeCompilationResult([], afterEncoded.LocalsSet),
-                parseCache);
-
-        var backwardJumpOffset =
-            -context.InstructionOffset -
-            loopBranchInstructionOffset -
-            loopBranch.Instructions.Count;
-
-        loopBranch =
-            loopBranch.AppendInstruction(
-                StackInstruction.Jump_Unconditional(backwardJumpOffset));
+                context,
+                new NodeCompilationResult(PineControlFlowFragment.Empty, afterEncoded.LocalsSet),
+                parseCache)
+            .AppendNode(new PineControlFlowNode.JumpToEntry());
 
         return
             afterEncoded
-            .AppendInstruction(
-                StackInstruction.Jump_If_Equal(
-                    genericBranch.Instructions.Count + 2,
-                    guardExpressionValues[0]))
-            .AppendInstructions(genericBranch.Instructions)
-            .AppendInstruction(
-                StackInstruction.Jump_Unconditional(loopBranch.Instructions.Count + 1))
-            .AppendInstructions(loopBranch.Instructions);
+            .AppendNode(
+                new PineControlFlowNode.Conditional(
+                    Literal: guardExpressionValues[0],
+                    FallThrough: genericBranch.Fragment,
+                    Branch: loopBranch.Fragment));
     }
 
     private static NodeCompilationResult CompileLoopArguments(
@@ -1696,7 +1579,7 @@ public class PineIRCompiler
 
             if (TryParse_IndependentSignedIntegerRelaxed(skip.skipCountExpr, parseCache) is { } skipCountConst)
             {
-                if (afterSource.Instructions.LastOrDefault() is
+                if (afterSource.Fragment.LastOperationOrNull is
                     {
                         Kind: StackInstructionKind.Local_Get,
                         LocalIndex: { } localIndex
@@ -1705,10 +1588,8 @@ public class PineIRCompiler
                     return
                         afterSource with
                         {
-                            Instructions =
-                            afterSource.Instructions
-                            .RemoveAt(afterSource.Instructions.Count - 1)
-                            .Add(
+                            Fragment =
+                            afterSource.Fragment.ReplaceLastOperation(
                                 StackInstruction.Local_Get_Skip_Head_Const(
                                     localIndex,
                                     (int)skipCountConst))
@@ -2351,8 +2232,7 @@ public class PineIRCompiler
                     prior,
                     parseCache);
 
-            if (compiledInput.Instructions.Count is not 0 &&
-                compiledInput.Instructions[^1] is
+            if (compiledInput.Fragment.LastOperationOrNull is
                 {
                     Kind: StackInstructionKind.Build_List,
                     TakeCount: 2
@@ -2361,10 +2241,8 @@ public class PineIRCompiler
                 return
                     compiledInput with
                     {
-                        Instructions =
-                        compiledInput.Instructions
-                        .RemoveAt(compiledInput.Instructions.Count - 1)
-                        .Add(StackInstruction.Int_Add_Binary)
+                        Fragment =
+                        compiledInput.Fragment.ReplaceLastOperation(StackInstruction.Int_Add_Binary)
                     };
             }
 

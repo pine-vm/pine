@@ -26,7 +26,18 @@ public sealed record PineControlFlowOperation(
     ImmutableArray<PineVirtualValueId> Results);
 
 /// <summary>
+/// One case of a <see cref="PineControlFlowTerminator.Switch"/>: the literal to compare with and the successor block.
+/// </summary>
+public readonly record struct PineSwitchCase(
+    PineValue Literal,
+    PineBlockId Target);
+
+/// <summary>
 /// Ends a basic block and names all possible successor blocks explicitly.
+/// <para>
+/// Terminators do not contain instruction offsets. Offsets are only assigned when lowering the graph
+/// to sequential stack instructions in <see cref="PineControlFlowGraph.LowerToStackInstructions"/>.
+/// </para>
 /// </summary>
 public abstract record PineControlFlowTerminator
 {
@@ -37,34 +48,48 @@ public abstract record PineControlFlowTerminator
     /// <summary>
     /// Returns the value at the top of the evaluation stack.
     /// </summary>
-    public sealed record Return(StackInstruction Instruction) : PineControlFlowTerminator;
+    public sealed record Return : PineControlFlowTerminator;
 
     /// <summary>
     /// Transfers control and the block arguments to one successor.
     /// </summary>
+    /// <param name="Target">The successor block.</param>
+    /// <param name="Arguments">The values passed to the parameters of <paramref name="Target"/>.</param>
+    /// <param name="IsFallThrough">
+    /// Whether the edge is implicit: The target must be laid out directly after this block,
+    /// and lowering emits no jump instruction.
+    /// </param>
     public sealed record Jump(
         PineBlockId Target,
         ImmutableArray<PineVirtualValueId> Arguments,
-        StackInstruction? Instruction) : PineControlFlowTerminator;
+        bool IsFallThrough) : PineControlFlowTerminator;
 
     /// <summary>
-    /// Consumes a condition and transfers control to one of two successors.
+    /// Consumes a condition and transfers control to <paramref name="Branch"/> if it equals
+    /// <paramref name="Literal"/>, otherwise to <paramref name="FallThrough"/>.
     /// </summary>
     public sealed record ConditionalJump(
         PineBlockId FallThrough,
         PineBlockId Branch,
         ImmutableArray<PineVirtualValueId> FallThroughArguments,
         ImmutableArray<PineVirtualValueId> BranchArguments,
-        StackInstruction Instruction) : PineControlFlowTerminator;
+        PineValue Literal) : PineControlFlowTerminator;
 
     /// <summary>
-    /// Consumes a value and transfers control based on an equality jump table.
+    /// Consumes the scrutinee and transfers control based on an ordered equality jump table.
     /// </summary>
     public sealed record Switch(
+        PineSwitchKind Kind,
         PineBlockId FallThrough,
-        ImmutableDictionary<PineValue, PineBlockId> Branches,
-        ImmutableArray<PineVirtualValueId> Arguments,
-        StackInstruction Instruction) : PineControlFlowTerminator;
+        ImmutableArray<PineSwitchCase> Cases,
+        ImmutableArray<PineVirtualValueId> Arguments) : PineControlFlowTerminator
+    {
+        /// <summary>
+        /// Number of values the switch consumes from the evaluation stack.
+        /// </summary>
+        public int PopCount =>
+            Kind is PineSwitchKind.SliceSkipVarEqual ? 2 : 1;
+    }
 
     /// <summary>
     /// Invokes another frame and continues in a return block.
@@ -75,11 +100,10 @@ public abstract record PineControlFlowTerminator
         StackInstruction Instruction) : PineControlFlowTerminator;
 
     /// <summary>
-    /// Invokes another frame without a continuation in the current frame.
+    /// Invokes another frame and returns its result without a continuation in the current frame.
     /// </summary>
     public sealed record TailInvoke(
-        StackInstruction InvokeInstruction,
-        StackInstruction ReturnInstruction) : PineControlFlowTerminator;
+        StackInstruction InvokeInstruction) : PineControlFlowTerminator;
 }
 
 /// <summary>
@@ -94,168 +118,402 @@ public sealed record PineBasicBlock(
 /// <summary>
 /// Validated control-flow representation used between recursive expression compilation and
 /// physical stack-instruction layout.
+/// <para>
+/// Block IDs equal the index of the block in <see cref="Blocks"/>, which is also the layout order used
+/// when lowering to stack instructions.
+/// </para>
 /// </summary>
 public sealed record PineControlFlowGraph(
     PineBlockId Entry,
     ImmutableArray<PineBasicBlock> Blocks)
 {
     /// <summary>
-    /// Builds a control-flow graph from symbolic instruction positions.
+    /// Builds a control-flow graph from structured control flow emitted by expression compilation.
+    /// The graph returns the value remaining on the evaluation stack at the end of <paramref name="fragment"/>.
     /// </summary>
-    public static PineControlFlowGraph FromInstructions(
-        IReadOnlyList<StackInstruction> instructions)
+    public static PineControlFlowGraph FromFragment(PineControlFlowFragment fragment)
     {
-        if (instructions.Count is 0)
+        var builder = new GraphBuilder();
+
+        var entry = builder.StartBlock(parameterCount: 0);
+
+        if (builder.Emit(fragment, entry) is { } end)
         {
-            throw new InvalidOperationException("Cannot build control flow for an empty instruction list.");
+            GraphBuilder.Pop(end, 1);
+            end.Terminator = new PineControlFlowTerminator.Return();
         }
 
-        var leaders = new SortedSet<int> { 0 };
+        var graph =
+            new PineControlFlowGraph(entry.Id, builder.Build())
+            .RemoveEmptyForwardingBlocks();
 
-        for (var instructionIndex = 0; instructionIndex < instructions.Count; instructionIndex++)
+        graph.Validate();
+
+        return graph;
+    }
+
+    private sealed class BlockUnderConstruction(
+        PineBlockId id,
+        ImmutableArray<PineVirtualValueId> parameters)
+    {
+        public PineBlockId Id { get; } = id;
+
+        public ImmutableArray<PineVirtualValueId> Parameters { get; } = parameters;
+
+        public List<PineVirtualValueId> Stack { get; } = [.. parameters];
+
+        public ImmutableArray<PineControlFlowOperation>.Builder Operations { get; } =
+            ImmutableArray.CreateBuilder<PineControlFlowOperation>();
+
+        public PineControlFlowTerminator? Terminator { get; set; }
+    }
+
+    private sealed class GraphBuilder
+    {
+        private readonly List<BlockUnderConstruction> _blocks = [];
+
+        private int _nextVirtualValue;
+
+        public BlockUnderConstruction StartBlock(int parameterCount)
         {
-            var instruction = instructions[instructionIndex];
+            var parameters = ImmutableArray.CreateBuilder<PineVirtualValueId>(parameterCount);
 
-            switch (instruction.Kind)
+            for (var i = 0; i < parameterCount; i++)
             {
-                case StackInstructionKind.Jump_Const:
-                case StackInstructionKind.Jump_If_Equal_Const:
-                    var targetIndex =
-                        instructionIndex +
-                        (instruction.JumpOffset ??
-                        throw new InvalidOperationException(
-                            $"Jump without offset at instruction {instructionIndex}."));
+                parameters.Add(NewValue());
+            }
 
-                    if (targetIndex < 0 || targetIndex >= instructions.Count)
+            var block =
+                new BlockUnderConstruction(
+                    new PineBlockId(_blocks.Count),
+                    parameters.MoveToImmutable());
+
+            _blocks.Add(block);
+
+            return block;
+        }
+
+        private PineVirtualValueId NewValue() =>
+            new(_nextVirtualValue++);
+
+        /// <summary>
+        /// Emits the fragment starting in <paramref name="current"/>.
+        /// Returns the block in which control continues after the fragment,
+        /// or null if the fragment ends in a transfer.
+        /// </summary>
+        public BlockUnderConstruction? Emit(
+            PineControlFlowFragment fragment,
+            BlockUnderConstruction current)
+        {
+            BlockUnderConstruction? open = current;
+
+            foreach (var node in fragment.Nodes)
+            {
+                if (open is null)
+                {
+                    throw new InvalidOperationException(
+                        "Fragment contains a node after a control transfer: " + node.GetType().Name);
+                }
+
+                open = EmitNode(node, open);
+            }
+
+            return open;
+        }
+
+        private BlockUnderConstruction? EmitNode(
+            PineControlFlowNode node,
+            BlockUnderConstruction current)
+        {
+            switch (node)
+            {
+                case PineControlFlowNode.Operation operation:
+                    return EmitOperation(operation.Instruction, current);
+
+                case PineControlFlowNode.Conditional conditional:
                     {
-                        throw new InvalidOperationException(
-                            $"Jump at instruction {instructionIndex} targets {targetIndex} outside the frame.");
+                        Pop(current, 1);
+
+                        var arguments = current.Stack.ToImmutableArray();
+
+                        var fallThroughStart = StartBlock(arguments.Length);
+                        var fallThroughEnd = Emit(conditional.FallThrough, fallThroughStart);
+
+                        var branchStart = StartBlock(arguments.Length);
+                        var branchEnd = Emit(conditional.Branch, branchStart);
+
+                        current.Terminator =
+                            new PineControlFlowTerminator.ConditionalJump(
+                                FallThrough: fallThroughStart.Id,
+                                Branch: branchStart.Id,
+                                FallThroughArguments: arguments,
+                                BranchArguments: arguments,
+                                Literal: conditional.Literal);
+
+                        return Join(arguments.Length + 1, [fallThroughEnd, branchEnd]);
                     }
 
-                    leaders.Add(targetIndex);
-
-                    if (instructionIndex + 1 < instructions.Count)
+                case PineControlFlowNode.Switch switchNode:
                     {
-                        leaders.Add(instructionIndex + 1);
-                    }
+                        var terminatorPopCount =
+                            switchNode.Kind is PineSwitchKind.SliceSkipVarEqual ? 2 : 1;
 
-                    break;
+                        Pop(current, terminatorPopCount);
 
-                case StackInstructionKind.Switch_Jump_If_Equal_Const:
-                case StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const:
-                    foreach (var switchCase in StackInstruction.EnumerateSwitchCases(instruction))
-                    {
-                        var jumpOffset = switchCase.Value;
-                        var switchTargetIndex = instructionIndex + jumpOffset;
+                        var arguments = current.Stack.ToImmutableArray();
 
-                        if (switchTargetIndex < 0 || switchTargetIndex >= instructions.Count)
+                        var defaultStart = StartBlock(arguments.Length);
+
+                        var ends =
+                            new List<BlockUnderConstruction?>
+                            {
+                                Emit(switchNode.Default, defaultStart)
+                            };
+
+                        var branchStarts = new PineBlockId[switchNode.Branches.Length];
+
+                        for (var branchIndex = 0; branchIndex < switchNode.Branches.Length; branchIndex++)
                         {
-                            throw new InvalidOperationException(
-                                $"Switch at instruction {instructionIndex} targets {switchTargetIndex} outside the frame.");
+                            var branchStart = StartBlock(arguments.Length);
+                            branchStarts[branchIndex] = branchStart.Id;
+                            ends.Add(Emit(switchNode.Branches[branchIndex], branchStart));
                         }
 
-                        leaders.Add(switchTargetIndex);
+                        current.Terminator =
+                            new PineControlFlowTerminator.Switch(
+                                Kind: switchNode.Kind,
+                                FallThrough: defaultStart.Id,
+                                Cases:
+                                [
+                                .. switchNode.Cases.Select(
+                                    switchCase =>
+                                    new PineSwitchCase(switchCase.Literal, branchStarts[switchCase.BranchIndex]))
+                                ],
+                                Arguments: arguments);
+
+                        return Join(arguments.Length + 1, ends);
                     }
 
-                    if (instructionIndex + 1 < instructions.Count)
-                    {
-                        leaders.Add(instructionIndex + 1);
-                    }
+                case PineControlFlowNode.JumpToEntry:
+                    current.Terminator =
+                        new PineControlFlowTerminator.Jump(
+                            Target: _blocks[0].Id,
+                            Arguments: current.Stack.ToImmutableArray(),
+                            IsFallThrough: false);
 
-                    break;
-
-                case StackInstructionKind.Eval_Binary:
-                case StackInstructionKind.Eval_Multi:
-                case StackInstructionKind.Eval_Const:
-                case StackInstructionKind.Invoke_StackFrame_Const:
-                case StackInstructionKind.Return:
-                    if (instructionIndex + 1 < instructions.Count)
-                    {
-                        leaders.Add(instructionIndex + 1);
-                    }
-
-                    break;
+                    return null;
 
                 default:
-                    break;
+                    throw new NotImplementedException(
+                        "Unexpected control-flow node: " + node.GetType().Name);
             }
         }
 
-        var leaderIndexes = leaders.ToArray();
-
-        var blockFromInstructionIndex =
-            leaderIndexes
-            .Select((instructionIndex, blockIndex) => (instructionIndex, blockIndex))
-            .ToDictionary(item => item.instructionIndex, item => new PineBlockId(item.blockIndex));
-
-        var rawBlocks = new List<RawBlock>(leaderIndexes.Length);
-
-        for (var blockIndex = 0; blockIndex < leaderIndexes.Length; blockIndex++)
+        private BlockUnderConstruction EmitOperation(
+            StackInstruction instruction,
+            BlockUnderConstruction current)
         {
-            var firstInstructionIndex = leaderIndexes[blockIndex];
+            var details = StackInstruction.GetDetails(instruction);
+            var inputs = Pop(current, details.PopCount);
+            var results = ImmutableArray.CreateBuilder<PineVirtualValueId>(details.PushCount);
 
-            var endInstructionIndexExclusive =
-                blockIndex + 1 < leaderIndexes.Length
-                ?
-                leaderIndexes[blockIndex + 1]
-                :
-                instructions.Count;
-
-            rawBlocks.Add(
-                BuildRawBlock(
-                    new PineBlockId(blockIndex),
-                    firstInstructionIndex,
-                    endInstructionIndexExclusive,
-                    instructions,
-                    blockFromInstructionIndex));
-        }
-
-        var stackDepthAtEntry = ComputeStackDepths(rawBlocks);
-        var nextVirtualValue = 0;
-        var blocks = ImmutableArray.CreateBuilder<PineBasicBlock>(rawBlocks.Count);
-
-        foreach (var rawBlock in rawBlocks)
-        {
-            var stack =
-                new List<PineVirtualValueId>(
-                    Enumerable.Range(0, stackDepthAtEntry[rawBlock.Id])
-                    .Select(_ => new PineVirtualValueId(nextVirtualValue++)));
-
-            var parameters = stack.ToImmutableArray();
-            var operations = ImmutableArray.CreateBuilder<PineControlFlowOperation>();
-
-            foreach (var instruction in rawBlock.Operations)
+            for (var resultIndex = 0; resultIndex < details.PushCount; resultIndex++)
             {
-                var details = StackInstruction.GetDetails(instruction);
-                var inputs = PopVirtualValues(stack, details.PopCount, rawBlock.Id);
-                var results = ImmutableArray.CreateBuilder<PineVirtualValueId>(details.PushCount);
+                var result = NewValue();
+                current.Stack.Add(result);
+                results.Add(result);
+            }
 
-                for (var resultIndex = 0; resultIndex < details.PushCount; resultIndex++)
-                {
-                    var result = new PineVirtualValueId(nextVirtualValue++);
-                    stack.Add(result);
-                    results.Add(result);
-                }
-
-                operations.Add(
+            if (!IsInvocation(instruction.Kind))
+            {
+                current.Operations.Add(
                     new PineControlFlowOperation(
                         instruction,
                         inputs,
                         results.MoveToImmutable()));
+
+                return current;
             }
 
-            ApplyTerminatorVirtualStack(rawBlock.Terminator, stack, rawBlock.Id, ref nextVirtualValue);
+            var arguments = current.Stack.ToImmutableArray();
+            var continuation = StartBlock(arguments.Length);
 
-            blocks.Add(
-                new PineBasicBlock(
-                    rawBlock.Id,
-                    parameters,
-                    operations.ToImmutable(),
-                    AddArguments(rawBlock.Terminator, stack)));
+            current.Terminator =
+                new PineControlFlowTerminator.Invoke(
+                    Continuation: continuation.Id,
+                    Arguments: arguments,
+                    Instruction: instruction);
+
+            return continuation;
         }
 
-        var graph = new PineControlFlowGraph(new PineBlockId(0), blocks.MoveToImmutable());
+        /// <summary>
+        /// Creates the block where control continues after branches. The last branch falls through,
+        /// since its end is the block laid out directly before the join.
+        /// </summary>
+        private BlockUnderConstruction Join(
+            int depthIfUnreachable,
+            IReadOnlyList<BlockUnderConstruction?> branchEnds)
+        {
+            int? depth = null;
+
+            foreach (var branchEnd in branchEnds)
+            {
+                if (branchEnd is null)
+                {
+                    continue;
+                }
+
+                if (depth is { } previousDepth && previousDepth != branchEnd.Stack.Count)
+                {
+                    throw new InvalidOperationException(
+                        $"Inconsistent stack depth at join ({previousDepth} vs {branchEnd.Stack.Count}).");
+                }
+
+                depth = branchEnd.Stack.Count;
+            }
+
+            var join = StartBlock(depth ?? depthIfUnreachable);
+
+            for (var branchIndex = 0; branchIndex < branchEnds.Count; branchIndex++)
+            {
+                if (branchEnds[branchIndex] is not { } branchEnd)
+                {
+                    continue;
+                }
+
+                branchEnd.Terminator =
+                    new PineControlFlowTerminator.Jump(
+                        Target: join.Id,
+                        Arguments: branchEnd.Stack.ToImmutableArray(),
+                        IsFallThrough: branchIndex == branchEnds.Count - 1);
+            }
+
+            return join;
+        }
+
+        public static ImmutableArray<PineVirtualValueId> Pop(
+            BlockUnderConstruction block,
+            int count) =>
+            PopVirtualValues(block.Stack, count, block.Id);
+
+        public ImmutableArray<PineBasicBlock> Build() =>
+            [
+            .. _blocks.Select(
+                block =>
+                new PineBasicBlock(
+                    block.Id,
+                    block.Parameters,
+                    block.Operations.ToImmutable(),
+                    block.Terminator ??
+                    throw new InvalidOperationException(
+                        $"Block {block.Id.Value} has no terminator.")))
+            ];
+    }
+
+    /// <summary>
+    /// Whether the instruction invokes another frame, which ends a basic block with
+    /// <see cref="PineControlFlowTerminator.Invoke"/>.
+    /// </summary>
+    public static bool IsInvocation(StackInstructionKind kind) =>
+        kind is
+        StackInstructionKind.Eval_Binary or
+        StackInstructionKind.Eval_Multi or
+        StackInstructionKind.Eval_Const or
+        StackInstructionKind.Invoke_StackFrame_Const;
+
+    /// <summary>
+    /// Removes blocks without operations that only forward their parameters to the block laid out next,
+    /// redirecting their predecessors to the forwarding target.
+    /// </summary>
+    private PineControlFlowGraph RemoveEmptyForwardingBlocks()
+    {
+        var forwardTargets = new Dictionary<PineBlockId, PineBlockId>();
+
+        for (var blockIndex = Blocks.Length - 1; blockIndex >= 0; blockIndex--)
+        {
+            var block = Blocks[blockIndex];
+
+            if (block.Id != Entry &&
+                block.Operations.IsEmpty &&
+                block.Terminator is PineControlFlowTerminator.Jump
+                {
+                    IsFallThrough: true,
+                    Target: var target,
+                    Arguments: var arguments
+                } &&
+                arguments.SequenceEqual(block.Parameters))
+            {
+                forwardTargets.Add(
+                    block.Id,
+                    forwardTargets.TryGetValue(target, out var transitiveTarget) ? transitiveTarget : target);
+            }
+        }
+
+        if (forwardTargets.Count is 0)
+        {
+            return this;
+        }
+
+        var rewrittenBlocks =
+            Blocks
+            .Where(block => !forwardTargets.ContainsKey(block.Id))
+            .Select(
+                block =>
+                block with
+                {
+                    Terminator =
+                    RedirectTargets(
+                        block.Terminator,
+                        target => forwardTargets.TryGetValue(target, out var forwarded) ? forwarded : target)
+                })
+            .ToImmutableArray();
+
+        return
+            TryRemapBlockIds(rewrittenBlocks) ??
+            throw new InvalidOperationException("Entry block was removed.");
+    }
+
+    /// <summary>
+    /// Replaces explicit jumps to blocks that consist only of a return with a return.
+    /// </summary>
+    public PineControlFlowGraph ForwardJumpsToReturn()
+    {
+        var blocks = Blocks.ToArray();
+        var changed = false;
+
+        for (var blockIndex = blocks.Length - 1; blockIndex >= 0; blockIndex--)
+        {
+            if (blocks[blockIndex].Terminator is PineControlFlowTerminator.Jump
+                {
+                    IsFallThrough: false,
+                    Target: var target
+                } &&
+                blocks[target.Value] is
+                {
+                    Operations.IsEmpty: true,
+                    Terminator: PineControlFlowTerminator.Return
+                })
+            {
+                blocks[blockIndex] =
+                    blocks[blockIndex] with
+                    {
+                        Terminator = new PineControlFlowTerminator.Return()
+                    };
+
+                changed = true;
+            }
+        }
+
+        if (!changed)
+        {
+            return this;
+        }
+
+        var graph = new PineControlFlowGraph(Entry, [.. blocks]);
+
         graph.Validate();
+
         return graph;
     }
 
@@ -267,6 +525,15 @@ public sealed record PineControlFlowGraph(
         if (Blocks.IsEmpty || Entry.Value < 0 || Entry.Value >= Blocks.Length)
         {
             throw new InvalidOperationException("Control-flow graph has no valid entry block.");
+        }
+
+        for (var blockIndex = 0; blockIndex < Blocks.Length; blockIndex++)
+        {
+            if (Blocks[blockIndex].Id.Value != blockIndex)
+            {
+                throw new InvalidOperationException(
+                    $"Block at index {blockIndex} has ID {Blocks[blockIndex].Id.Value}.");
+            }
         }
 
         var blockById = Blocks.ToDictionary(block => block.Id);
@@ -293,42 +560,23 @@ public sealed record PineControlFlowGraph(
                 }
             }
 
-            if (block.Terminator is PineControlFlowTerminator.Switch
-                {
-                    Instruction.Kind:
-                    StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const
-                } sliceSwitch)
+            if (block.Terminator is PineControlFlowTerminator.Switch switchTerminator)
             {
+                if (switchTerminator.Cases.IsDefault)
+                {
+                    throw new InvalidOperationException(
+                        $"Switch in block {block.Id.Value} has no cases.");
+                }
+
                 var caseLiterals = new HashSet<PineValue>();
-                var switchCases = sliceSwitch.Instruction.SliceSwitchCases;
 
-                if (switchCases.IsDefault)
+                foreach (var switchCase in switchTerminator.Cases)
                 {
-                    throw new InvalidOperationException(
-                        $"Slice switch in block {block.Id.Value} has no cases.");
-                }
-
-                for (var i = 0; i < switchCases.Length; ++i)
-                {
-                    var literal = switchCases[i].Literal;
-
-                    if (!caseLiterals.Add(literal))
+                    if (!caseLiterals.Add(switchCase.Literal))
                     {
                         throw new InvalidOperationException(
-                            $"Slice switch in block {block.Id.Value} contains duplicate case literals.");
+                            $"Switch in block {block.Id.Value} contains duplicate case literals.");
                     }
-
-                    if (!sliceSwitch.Branches.ContainsKey(literal))
-                    {
-                        throw new InvalidOperationException(
-                            $"Slice switch in block {block.Id.Value} has no branch for a case literal.");
-                    }
-                }
-
-                if (caseLiterals.Count != sliceSwitch.Branches.Count)
-                {
-                    throw new InvalidOperationException(
-                        $"Slice switch in block {block.Id.Value} has branches without corresponding cases.");
                 }
             }
 
@@ -380,9 +628,9 @@ public sealed record PineControlFlowGraph(
         {
             if (conditionalBlock.Operations.Length is not 0 ||
                 conditionalBlock.Terminator is not PineControlFlowTerminator.ConditionalJump conditional ||
-                conditional.Instruction.Literal is not { } comparedLiteral ||
-                !PineValueInProcess.AreEqual(comparedLiteral, PineKernelValues.TrueValue) &&
-                !PineValueInProcess.AreEqual(comparedLiteral, PineKernelValues.FalseValue) ||
+                conditional.Literal is not { } comparedLiteral ||
+                !comparedLiteral.Equals(PineKernelValues.TrueValue) &&
+                !comparedLiteral.Equals(PineKernelValues.FalseValue) ||
                 conditionalBlock.Parameters.Length is 0)
             {
                 continue;
@@ -618,7 +866,7 @@ public sealed record PineControlFlowGraph(
         PineControlFlowTerminator terminator) =>
         terminator switch
         {
-            PineControlFlowTerminator.Jump { Instruction: null } jump =>
+            PineControlFlowTerminator.Jump { IsFallThrough: true } jump =>
             jump.Target,
 
             PineControlFlowTerminator.ConditionalJump conditional =>
@@ -656,10 +904,11 @@ public sealed record PineControlFlowGraph(
             switchTerminator with
             {
                 FallThrough = redirect(switchTerminator.FallThrough),
-                Branches =
-                switchTerminator.Branches.ToImmutableDictionary(
-                    branch => branch.Key,
-                    branch => redirect(branch.Value))
+                Cases =
+                [
+                .. switchTerminator.Cases.Select(
+                    switchCase => switchCase with { Target = redirect(switchCase.Target) })
+                ]
             },
 
             PineControlFlowTerminator.Invoke invoke =>
@@ -676,6 +925,7 @@ public sealed record PineControlFlowGraph(
 
     /// <summary>
     /// Assigns physical instruction offsets after the graph has been validated.
+    /// This is the only place where sequential stack instructions are created from the graph.
     /// </summary>
     public ImmutableArray<StackInstruction> LowerToStackInstructions()
     {
@@ -701,12 +951,12 @@ public sealed record PineControlFlowGraph(
 
             switch (block.Terminator)
             {
-                case PineControlFlowTerminator.Return returnTerminator:
-                    result.Add(returnTerminator.Instruction);
+                case PineControlFlowTerminator.Return:
+                    result.Add(StackInstruction.Return);
                     break;
 
                 case PineControlFlowTerminator.Jump jump:
-                    if (jump.Instruction is not null)
+                    if (!jump.IsFallThrough)
                     {
                         result.Add(
                             StackInstruction.Jump_Unconditional(
@@ -722,47 +972,47 @@ public sealed record PineControlFlowGraph(
 
                 case PineControlFlowTerminator.ConditionalJump conditional:
                     result.Add(
-                        new StackInstruction(
-                            StackInstructionKind.Jump_If_Equal_Const,
-                            Literal:
-                            conditional.Instruction.Literal ??
-                            throw new InvalidOperationException(
-                                $"Conditional block {block.Id.Value} has no comparison literal."),
-                            JumpOffset:
-                            firstInstructionIndexByBlock[conditional.Branch] - result.Count));
+                        StackInstruction.Jump_If_Equal(
+                            offset: firstInstructionIndexByBlock[conditional.Branch] - result.Count,
+                            literal: conditional.Literal));
+
+                    if (conditional.FallThrough.Value != block.Id.Value + 1)
+                    {
+                        throw new InvalidOperationException(
+                            $"Conditional fall-through from block {block.Id.Value} is not laid out next.");
+                    }
 
                     break;
 
                 case PineControlFlowTerminator.Switch switchTerminator:
-                    if (switchTerminator.Instruction.Kind is
-                        StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const)
+                    if (switchTerminator.Kind is PineSwitchKind.SliceSkipVarEqual)
                     {
                         result.Add(
-                            switchTerminator.Instruction with
-                            {
-                                SliceSwitchCases =
+                            StackInstruction.Switch_Jump_If_Slice_Skip_Var_Equal_Const(
                                 [
-                                .. switchTerminator.Instruction.SliceSwitchCases.Select(
+                                .. switchTerminator.Cases.Select(
                                     switchCase =>
                                     new SliceSwitchCase(
                                         switchCase.Literal,
-                                        firstInstructionIndexByBlock[
-                                            switchTerminator.Branches[switchCase.Literal]] -
-                                        result.Count))
-                                ]
-                            });
+                                        firstInstructionIndexByBlock[switchCase.Target] - result.Count))
+                                ]));
                     }
                     else
                     {
                         result.Add(
-                            switchTerminator.Instruction with
-                            {
-                                SwitchJumpTable =
-                                switchTerminator.Branches
+                            new StackInstruction(
+                                StackInstructionKind.Switch_Jump_If_Equal_Const,
+                                SwitchJumpTable:
+                                switchTerminator.Cases
                                 .ToImmutableDictionary(
-                                    branch => branch.Key,
-                                    branch => firstInstructionIndexByBlock[branch.Value] - result.Count)
-                            });
+                                    switchCase => switchCase.Literal,
+                                    switchCase => firstInstructionIndexByBlock[switchCase.Target] - result.Count)));
+                    }
+
+                    if (switchTerminator.FallThrough.Value != block.Id.Value + 1)
+                    {
+                        throw new InvalidOperationException(
+                            $"Switch fall-through from block {block.Id.Value} is not laid out next.");
                     }
 
                     break;
@@ -780,7 +1030,7 @@ public sealed record PineControlFlowGraph(
 
                 case PineControlFlowTerminator.TailInvoke tailInvoke:
                     result.Add(tailInvoke.InvokeInstruction);
-                    result.Add(tailInvoke.ReturnInstruction);
+                    result.Add(StackInstruction.Return);
                     break;
 
                 default:
@@ -791,346 +1041,6 @@ public sealed record PineControlFlowGraph(
         }
 
         return result.MoveToImmutable();
-    }
-
-    private static RawBlock BuildRawBlock(
-        PineBlockId id,
-        int firstInstructionIndex,
-        int endInstructionIndexExclusive,
-        IReadOnlyList<StackInstruction> instructions,
-        IReadOnlyDictionary<int, PineBlockId> blockFromInstructionIndex)
-    {
-        var blockInstructions =
-            instructions
-            .Skip(firstInstructionIndex)
-            .Take(endInstructionIndexExclusive - firstInstructionIndex)
-            .ToArray();
-
-        if (blockInstructions.Length is 0)
-        {
-            throw new InvalidOperationException($"Block {id.Value} contains no instructions.");
-        }
-
-        var last = blockInstructions[^1];
-        var operations = blockInstructions.AsSpan(0, blockInstructions.Length - 1).ToArray();
-
-        PineControlFlowTerminator terminator =
-            last.Kind switch
-            {
-                StackInstructionKind.Return =>
-                new PineControlFlowTerminator.Return(last),
-
-                StackInstructionKind.Jump_Const =>
-                new PineControlFlowTerminator.Jump(
-                    Target: ResolveJumpTarget(
-                        endInstructionIndexExclusive - 1,
-                        last,
-                        blockFromInstructionIndex),
-                    Arguments: [],
-                    Instruction: last),
-
-                StackInstructionKind.Jump_If_Equal_Const =>
-                new PineControlFlowTerminator.ConditionalJump(
-                    FallThrough: ResolveBlock(
-                        endInstructionIndexExclusive,
-                        blockFromInstructionIndex),
-                    Branch: ResolveJumpTarget(
-                        endInstructionIndexExclusive - 1,
-                        last,
-                        blockFromInstructionIndex),
-                    FallThroughArguments: [],
-                    BranchArguments: [],
-                    Instruction: last),
-
-                StackInstructionKind.Switch_Jump_If_Equal_Const or
-                StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const =>
-                new PineControlFlowTerminator.Switch(
-                    FallThrough: ResolveBlock(
-                        endInstructionIndexExclusive,
-                        blockFromInstructionIndex),
-                    Branches:
-                    StackInstruction.EnumerateSwitchCases(last)
-                    .ToImmutableDictionary(
-                        branch => branch.Key,
-                        branch =>
-                        ResolveBlock(
-                            endInstructionIndexExclusive - 1 + branch.Value,
-                            blockFromInstructionIndex)),
-                    Arguments: [],
-                    Instruction: last),
-
-                StackInstructionKind.Eval_Binary or
-                StackInstructionKind.Eval_Multi or
-                StackInstructionKind.Eval_Const or
-                StackInstructionKind.Invoke_StackFrame_Const =>
-                new PineControlFlowTerminator.Invoke(
-                    Continuation: ResolveBlock(
-                        endInstructionIndexExclusive,
-                        blockFromInstructionIndex),
-                    Arguments: [],
-                    Instruction: last),
-
-                _ when endInstructionIndexExclusive < instructions.Count =>
-                new PineControlFlowTerminator.Jump(
-                    Target: ResolveBlock(
-                        endInstructionIndexExclusive,
-                        blockFromInstructionIndex),
-                    Arguments: [],
-                    Instruction: null),
-
-                _ =>
-                throw new InvalidOperationException(
-                    $"Final block {id.Value} does not end in a return or transfer.")
-            };
-
-        if (terminator is PineControlFlowTerminator.Jump { Instruction: null })
-        {
-            operations = blockInstructions;
-        }
-
-        return new RawBlock(id, [.. operations], terminator);
-    }
-
-    private static IReadOnlyDictionary<PineBlockId, int> ComputeStackDepths(
-        IReadOnlyList<RawBlock> blocks)
-    {
-        var depthAtEntry =
-            new Dictionary<PineBlockId, int>
-            {
-                [new PineBlockId(0)] = 0
-            };
-
-        var worklist = new Stack<PineBlockId>();
-        worklist.Push(new PineBlockId(0));
-
-        while (worklist.TryPop(out var blockId))
-        {
-            var block = blocks[blockId.Value];
-            var depth = depthAtEntry[blockId];
-
-            foreach (var instruction in block.Operations)
-            {
-                depth = ApplyStackEffect(instruction, depth, blockId);
-            }
-
-            depth = ApplyTerminatorStackEffect(block.Terminator, depth, blockId);
-
-            foreach (var (target, _) in Successors(block.Terminator))
-            {
-                if (depthAtEntry.TryGetValue(target, out var existingDepth))
-                {
-                    if (existingDepth != depth)
-                    {
-                        throw new InvalidOperationException(
-                            $"Inconsistent stack depth at block {target.Value} ({existingDepth} vs {depth}).");
-                    }
-
-                    continue;
-                }
-
-                depthAtEntry.Add(target, depth);
-                worklist.Push(target);
-            }
-        }
-
-        foreach (var block in blocks)
-        {
-            depthAtEntry.TryAdd(block.Id, MinimumInputDepth(block));
-        }
-
-        return depthAtEntry;
-    }
-
-    private static int MinimumInputDepth(RawBlock block)
-    {
-        var relativeDepth = 0;
-        var minimumRelativeDepth = 0;
-
-        void Apply(StackInstruction instruction)
-        {
-            var details = StackInstruction.GetDetails(instruction);
-            relativeDepth += -details.PopCount + details.PushCount;
-            minimumRelativeDepth = Math.Min(minimumRelativeDepth, relativeDepth);
-        }
-
-        foreach (var instruction in block.Operations)
-        {
-            Apply(instruction);
-        }
-
-        switch (block.Terminator)
-        {
-            case PineControlFlowTerminator.Return returnTerminator:
-                Apply(returnTerminator.Instruction);
-                break;
-
-            case PineControlFlowTerminator.Jump jump when jump.Instruction is not null:
-                Apply(jump.Instruction);
-                break;
-
-            case PineControlFlowTerminator.Jump:
-                break;
-
-            case PineControlFlowTerminator.ConditionalJump conditional:
-                Apply(conditional.Instruction);
-                break;
-
-            case PineControlFlowTerminator.Switch switchTerminator:
-                Apply(switchTerminator.Instruction);
-                break;
-
-            case PineControlFlowTerminator.Invoke invoke:
-                Apply(invoke.Instruction);
-                break;
-
-            case PineControlFlowTerminator.TailInvoke tailInvoke:
-                Apply(tailInvoke.InvokeInstruction);
-                Apply(tailInvoke.ReturnInstruction);
-                break;
-
-            default:
-                throw new NotImplementedException(
-                    "MinimumInputDepth does not handle terminator variant: " +
-                    block.Terminator.GetType().Name);
-        }
-
-        return -minimumRelativeDepth;
-    }
-
-    private static int ApplyTerminatorStackEffect(
-        PineControlFlowTerminator terminator,
-        int depth,
-        PineBlockId blockId) =>
-        terminator switch
-        {
-            PineControlFlowTerminator.Return returnTerminator =>
-            ApplyStackEffect(returnTerminator.Instruction, depth, blockId),
-
-            PineControlFlowTerminator.Jump jump =>
-            jump.Instruction is null
-            ?
-            depth
-            :
-            ApplyStackEffect(jump.Instruction, depth, blockId),
-
-            PineControlFlowTerminator.ConditionalJump conditional =>
-            ApplyStackEffect(conditional.Instruction, depth, blockId),
-
-            PineControlFlowTerminator.Switch switchTerminator =>
-            ApplyStackEffect(switchTerminator.Instruction, depth, blockId),
-
-            PineControlFlowTerminator.Invoke invoke =>
-            ApplyStackEffect(invoke.Instruction, depth, blockId),
-
-            PineControlFlowTerminator.TailInvoke tailInvoke =>
-            ApplyStackEffect(
-                tailInvoke.ReturnInstruction,
-                ApplyStackEffect(tailInvoke.InvokeInstruction, depth, blockId),
-                blockId),
-
-            _ =>
-            throw new NotImplementedException(
-                "ApplyTerminatorStackEffect does not handle terminator variant: " +
-                terminator.GetType().Name)
-        };
-
-    private static int ApplyStackEffect(
-        StackInstruction instruction,
-        int depth,
-        PineBlockId blockId)
-    {
-        var details = StackInstruction.GetDetails(instruction);
-
-        if (depth < details.PopCount)
-        {
-            throw new InvalidOperationException(
-                $"Stack underflow in block {blockId.Value} while applying {instruction.Kind}.");
-        }
-
-        return depth - details.PopCount + details.PushCount;
-    }
-
-    private static PineControlFlowTerminator AddArguments(
-        PineControlFlowTerminator terminator,
-        IReadOnlyList<PineVirtualValueId> stack)
-    {
-        var arguments = stack.ToImmutableArray();
-
-        return
-            terminator switch
-            {
-                PineControlFlowTerminator.Return returnTerminator =>
-                returnTerminator,
-
-                PineControlFlowTerminator.Jump jump =>
-                jump with { Arguments = arguments },
-
-                PineControlFlowTerminator.ConditionalJump conditional =>
-                conditional with
-                {
-                    FallThroughArguments = arguments,
-                    BranchArguments = arguments
-                },
-
-                PineControlFlowTerminator.Switch switchTerminator =>
-                switchTerminator with { Arguments = arguments },
-
-                PineControlFlowTerminator.Invoke invoke =>
-                invoke with { Arguments = arguments },
-
-                PineControlFlowTerminator.TailInvoke tailInvoke =>
-                tailInvoke,
-
-                _ =>
-                throw new NotImplementedException(
-                    "AddArguments does not handle terminator variant: " +
-                    terminator.GetType().Name)
-            };
-    }
-
-    private static void ApplyTerminatorVirtualStack(
-        PineControlFlowTerminator terminator,
-        List<PineVirtualValueId> stack,
-        PineBlockId blockId,
-        ref int nextVirtualValue)
-    {
-        IEnumerable<StackInstruction> instructions =
-            terminator switch
-            {
-                PineControlFlowTerminator.Return returnTerminator =>
-                [returnTerminator.Instruction],
-
-                PineControlFlowTerminator.Jump jump =>
-                jump.Instruction is null ? [] : [jump.Instruction],
-
-                PineControlFlowTerminator.ConditionalJump conditional =>
-                [conditional.Instruction],
-
-                PineControlFlowTerminator.Switch switchTerminator =>
-                [switchTerminator.Instruction],
-
-                PineControlFlowTerminator.Invoke invoke =>
-                [invoke.Instruction],
-
-                PineControlFlowTerminator.TailInvoke tailInvoke =>
-                [tailInvoke.InvokeInstruction, tailInvoke.ReturnInstruction],
-
-                _ =>
-                throw new NotImplementedException(
-                    "ApplyTerminatorVirtualStack does not handle terminator variant: " +
-                    terminator.GetType().Name)
-            };
-
-        foreach (var instruction in instructions)
-        {
-            var details = StackInstruction.GetDetails(instruction);
-            PopVirtualValues(stack, details.PopCount, blockId);
-
-            for (var resultIndex = 0; resultIndex < details.PushCount; resultIndex++)
-            {
-                stack.Add(new PineVirtualValueId(nextVirtualValue++));
-            }
-        }
     }
 
     private static IEnumerable<(PineBlockId Target, ImmutableArray<PineVirtualValueId> Arguments)>
@@ -1154,9 +1064,9 @@ public sealed record PineControlFlowGraph(
             case PineControlFlowTerminator.Switch switchTerminator:
                 yield return (switchTerminator.FallThrough, switchTerminator.Arguments);
 
-                foreach (var branch in switchTerminator.Branches.Values)
+                foreach (var switchCase in switchTerminator.Cases)
                 {
-                    yield return (branch, switchTerminator.Arguments);
+                    yield return (switchCase.Target, switchTerminator.Arguments);
                 }
 
                 yield break;
@@ -1189,31 +1099,11 @@ public sealed record PineControlFlowGraph(
         return result;
     }
 
-    private static PineBlockId ResolveJumpTarget(
-        int instructionIndex,
-        StackInstruction instruction,
-        IReadOnlyDictionary<int, PineBlockId> blockFromInstructionIndex) =>
-        ResolveBlock(
-            instructionIndex +
-            (instruction.JumpOffset ??
-            throw new InvalidOperationException($"Jump at {instructionIndex} has no offset.")),
-            blockFromInstructionIndex);
-
-    private static PineBlockId ResolveBlock(
-        int instructionIndex,
-        IReadOnlyDictionary<int, PineBlockId> blockFromInstructionIndex) =>
-        blockFromInstructionIndex.TryGetValue(instructionIndex, out var block)
-        ?
-        block
-        :
-        throw new InvalidOperationException(
-            $"Instruction {instructionIndex} is not the start of a basic block.");
-
     private static int TerminatorInstructionCount(PineControlFlowTerminator terminator) =>
         terminator switch
         {
             PineControlFlowTerminator.Return => 1,
-            PineControlFlowTerminator.Jump jump => jump.Instruction is null ? 0 : 1,
+            PineControlFlowTerminator.Jump jump => jump.IsFallThrough ? 0 : 1,
             PineControlFlowTerminator.ConditionalJump => 1,
             PineControlFlowTerminator.Switch => 1,
             PineControlFlowTerminator.Invoke => 1,
@@ -1224,9 +1114,4 @@ public sealed record PineControlFlowGraph(
                 "TerminatorInstructionCount does not handle terminator variant: " +
                 terminator.GetType().Name)
         };
-
-    private sealed record RawBlock(
-        PineBlockId Id,
-        ImmutableArray<StackInstruction> Operations,
-        PineControlFlowTerminator Terminator);
 }

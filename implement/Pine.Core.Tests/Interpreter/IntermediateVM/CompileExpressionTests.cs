@@ -28,15 +28,70 @@ public class CompileExpressionTests
                         ])));
 
         var instructions =
-            ExpressionCompilation.InstructionsFromExpression(
+            ExpressionCompilation.ControlFlowGraphFromExpression(
                 expression,
                 rootExprAlternativeForms: [],
                 envClass: null,
                 parametersAsLocals: StaticFunctionInterface.Generic,
-                new PineVMParseCache());
+                new PineVMParseCache())
+            .LowerToStackInstructions();
 
         instructions.Should().Equal(
-            StackInstruction.Local_Get_Skip_Head_Const(localIndex: 0, skipCount: 6));
+            StackInstruction.Local_Get_Skip_Head_Const(localIndex: 0, skipCount: 6),
+            StackInstruction.Return);
+    }
+
+    [Fact]
+    public void Compile_head_after_constant_skip_from_conditional_does_not_fuse_into_one_branch()
+    {
+        var comparedLiteral = PineValue.Blob([7]);
+        var falseBranchLiteral = PineValue.List([PineValue.EmptyBlob, PineValue.EmptyList, PineValue.EmptyBlob]);
+
+        var conditional =
+            Expression.ConditionalInst(
+                condition:
+                Expression.BuiltinInst(
+                    nameof(BuiltinFunction.equal),
+                    Expression.ListInst(
+                        [
+                        Expression.EnvironmentInstance,
+                        Expression.LitralInst(comparedLiteral),
+                        ])),
+                falseBranch: Expression.LitralInst(falseBranchLiteral),
+                trueBranch: Expression.EnvironmentInstance);
+
+        var expression =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.head),
+                Expression.BuiltinInst(
+                    nameof(BuiltinFunction.skip),
+                    Expression.ListInst(
+                        [
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(2)),
+                        conditional
+                        ])));
+
+        var instructions =
+            ExpressionCompilation.ControlFlowGraphFromExpression(
+                expression,
+                rootExprAlternativeForms: [],
+                envClass: null,
+                parametersAsLocals: StaticFunctionInterface.Generic,
+                new PineVMParseCache())
+            .LowerToStackInstructions();
+
+        /*
+         * The skip applies to the value from both branches, so it must follow the join
+         * instead of being fused into the local read at the end of the true branch.
+         * */
+        instructions.Should().Equal(
+            StackInstruction.Local_Get(0),
+            StackInstruction.Jump_If_Equal(3, comparedLiteral),
+            StackInstruction.Push_Literal(falseBranchLiteral),
+            StackInstruction.Jump_Unconditional(2),
+            StackInstruction.Local_Get(0),
+            StackInstruction.Skip_Head_Const(2),
+            StackInstruction.Return);
     }
 
     [Fact]
@@ -206,21 +261,33 @@ public class CompileExpressionTests
             .Select(switchCase => switchCase.Literal)
             .Should().Equal(firstLiteral, secondLiteral);
 
-        var loweredSwitchInstruction =
-            PineControlFlowGraph
-            .FromInstructions(compiled.Generic.Instructions)
-            .LowerToStackInstructions()
-            .Single(
-                instruction =>
-                instruction.Kind is
-                StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const);
+        var graph =
+            ExpressionCompilation.ControlFlowGraphFromExpression(
+                expression,
+                rootExprAlternativeForms: [],
+                envClass: null,
+                parametersAsLocals: StaticFunctionInterface.FromExpression(expression),
+                new PineVMParseCache());
 
-        loweredSwitchInstruction.SliceSwitchCases
+        var switchTerminator =
+            graph.Blocks
+            .Select(block => block.Terminator)
+            .OfType<PineControlFlowTerminator.Switch>()
+            .Single();
+
+        switchTerminator.Kind.Should().Be(PineSwitchKind.SliceSkipVarEqual);
+        switchTerminator.PopCount.Should().Be(2);
+
+        switchTerminator.Cases
             .Select(switchCase => switchCase.Literal)
             .Should().Equal(firstLiteral, secondLiteral);
 
-        loweredSwitchInstruction.SliceSwitchCases.Should().Equal(
-            switchInstruction.SliceSwitchCases);
+        graph.LowerToStackInstructions()
+            .Single(
+            instruction =>
+            instruction.Kind is
+            StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const)
+            .SliceSwitchCases.Should().Equal(switchInstruction.SliceSwitchCases);
 
         var instructionDetails = StackInstruction.GetDetails(switchInstruction);
 
