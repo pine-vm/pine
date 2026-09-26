@@ -270,7 +270,7 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     private static BigInteger ParseEncoderInteger(PineValue value)
     {
-        if (IntegerEncoding.ParseSignedIntegerRelaxed(value).IsOkOrNullable() is not { } integer)
+        if (BuiltinFunction.SignedIntegerFromValueRelaxed(value) is not { } integer)
         {
             throw new System.InvalidOperationException(
                 "Bytes.Encode.encodeBlob: expected an integer encoder argument.");

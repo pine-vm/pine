@@ -166,9 +166,9 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     {
         if (!EnvironmentMatches(environment, StringParsingModuleName, "skipWhitespaceAt") ||
             !TryGetStringBytes(environment.ValueFromPathOrEmptyList([1]), out var source) ||
-            !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([2]), out var offset) ||
-            !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([3]), out var row) ||
-            !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([4]), out var column))
+            !TryParseNonnegativeInteger(environment, [2], out var offset) ||
+            !TryParseNonnegativeInteger(environment, [3], out var row) ||
+            !TryParseNonnegativeInteger(environment, [4], out var column))
         {
             return null;
         }
@@ -211,7 +211,7 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     {
         if (!EnvironmentMatches(environment, StringParsingModuleName, "numberEndDecimal") ||
             !TryGetStringBytes(environment.ValueFromPathOrEmptyList([1]), out var source) ||
-            !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([2]), out var offset))
+            !TryParseNonnegativeInteger(environment, [2], out var offset))
         {
             return null;
         }
@@ -263,7 +263,7 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     {
         if (!EnvironmentMatches(environment, StringParsingModuleName, "isFloatLiteralAt") ||
             !TryGetStringBytes(environment.ValueFromPathOrEmptyList([1]), out var source) ||
-            !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([2]), out var offset))
+            !TryParseNonnegativeInteger(environment, [2], out var offset))
         {
             return null;
         }
@@ -295,8 +295,8 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
                 environment,
                 StringParsingModuleName,
                 "convert0OrMoreHexadecimalValue") ||
-            !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([1]), out var value) ||
-            !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([2]), out var offset) ||
+            !TryParseNonnegativeInteger(environment, [1], out var value) ||
+            !TryParseNonnegativeInteger(environment, [2], out var offset) ||
             !TryGetStringBytes(environment.ValueFromPathOrEmptyList([3]), out var source))
         {
             return null;
@@ -323,8 +323,8 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     {
         if (!EnvironmentMatches(environment, StringParsingModuleName, "skipOperatorChars") ||
             !TryGetStringBytes(environment.ValueFromPathOrEmptyList([1]), out var source) ||
-            !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([2]), out var offset) ||
-            !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([3]), out var offsetMax))
+            !TryParseNonnegativeInteger(environment, [2], out var offset) ||
+            !TryParseNonnegativeInteger(environment, [3], out var offsetMax))
         {
             return null;
         }
@@ -346,7 +346,7 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     {
         if (!EnvironmentMatches(environment, StringParsingModuleName, "scanUnicodeEscapeDigits") ||
             !TryGetStringBytes(environment.ValueFromPathOrEmptyList([1]), out var source) ||
-            !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([2]), out var offset))
+            !TryParseNonnegativeInteger(environment, [2], out var offset))
         {
             return null;
         }
@@ -383,7 +383,7 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
                 environment.ValueFromPathOrEmptyList([1]),
                 out var termination) ||
             !TryGetStringBytes(environment.ValueFromPathOrEmptyList([2]), out var source) ||
-            !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([3]), out var offset))
+            !TryParseNonnegativeInteger(environment, [3], out var offset))
         {
             return null;
         }
@@ -442,7 +442,7 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     {
         if (!EnvironmentMatches(environment, StringParsingModuleName, functionName) ||
             !TryGetStringBytes(environment.ValueFromPathOrEmptyList([1]), out var source) ||
-            !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([2]), out var offset))
+            !TryParseNonnegativeInteger(environment, [2], out var offset))
         {
             return null;
         }
@@ -525,9 +525,12 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     private static uint ReadStringCodePoint(ReadOnlyMemory<byte> bytes, int index) =>
         BinaryPrimitives.ReadUInt32BigEndian(bytes.Span.Slice(index * 4, 4));
 
-    private static bool TryParseNonnegativeInteger(PineValue value, out BigInteger integer)
+    private static bool TryParseNonnegativeInteger(
+        PineValueInProcess environment,
+        ReadOnlySpan<int> path,
+        out BigInteger integer)
     {
-        var parsed = IntegerEncoding.ParseSignedIntegerRelaxed(value).IsOkOrNullable();
+        var parsed = environment.IntegerFromPathOrNull(path);
 
         if (parsed is null || parsed < 0)
         {

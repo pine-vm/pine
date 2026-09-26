@@ -73,6 +73,53 @@ public class PineValueInProcessTests
     }
 
     [Fact]
+    public void IntegerFromPathOrNull_reuses_integer_representation_without_evaluation()
+    {
+        var descendant = PineValueInProcess.CreateInteger(20_001);
+        var nested = PineValueInProcess.CreateList([descendant]);
+        var root = PineValueInProcess.CreateList([PineValueInProcess.EmptyList, nested]);
+
+        PineValueInProcess.IntegerFromPathOrNull(root, [1, 0]).Should().Be(new BigInteger(20_001));
+
+        root.EvaluatedOrNull.Should().BeNull();
+        nested.EvaluatedOrNull.Should().BeNull();
+        descendant.EvaluatedOrNull.Should().BeNull();
+    }
+
+    [Fact]
+    public void IntegerFromPathOrNull_matches_relaxed_parsing_of_evaluated_values()
+    {
+        var evaluatedRoot =
+            PineValueInProcess.Create(
+                PineValue.List(
+                    [
+                    IntegerEncoding.EncodeSignedInteger(-17),
+                    PineValue.Blob([4, 0, 3]),
+                    PineValue.Blob([1]),
+                    PineValue.EmptyList,
+                    ]));
+
+        PineValueInProcess.IntegerFromPathOrNull(evaluatedRoot, [0]).Should().Be(new BigInteger(-17));
+        PineValueInProcess.IntegerFromPathOrNull(evaluatedRoot, [1]).Should().Be(new BigInteger(3));
+        PineValueInProcess.IntegerFromPathOrNull(evaluatedRoot, [2]).Should().BeNull();
+        PineValueInProcess.IntegerFromPathOrNull(evaluatedRoot, [3]).Should().BeNull();
+        PineValueInProcess.IntegerFromPathOrNull(evaluatedRoot, [4]).Should().BeNull();
+        PineValueInProcess.IntegerFromPathOrNull(evaluatedRoot, [0, 0]).Should().BeNull();
+
+        var directRoot =
+            PineValueInProcess.CreateList(
+                [
+                PineValueInProcess.CreateList([PineValueInProcess.CreateInteger(1)]),
+                PineValueInProcess.Create(PineValue.Blob([2, 9])),
+                ]);
+
+        PineValueInProcess.IntegerFromPathOrNull(directRoot, [0]).Should().BeNull();
+        PineValueInProcess.IntegerFromPathOrNull(directRoot, [1]).Should().Be(new BigInteger(-9));
+        PineValueInProcess.IntegerFromPathOrNull(directRoot, [2]).Should().BeNull();
+        directRoot.EvaluatedOrNull.Should().BeNull();
+    }
+
+    [Fact]
     public void CreateList_initializes_without_immediate_evaluation()
     {
         var items =

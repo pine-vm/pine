@@ -1733,6 +1733,69 @@ public class PineValueInProcess
     }
 
     /// <summary>
+    /// Resolve a descendant value by following a sequence of indices and interpret it as a signed integer
+    /// (relaxed decoding, as in <see cref="BuiltinFunction.SignedIntegerFromValueRelaxed(PineValue)"/>).
+    /// </summary>
+    /// <remarks>
+    /// Reuses an integer representation already present on the in-process descendant and avoids
+    /// materializing the containing lists or encoding the integer as a blob.
+    /// </remarks>
+    /// <param name="root">The value serving as the traversal root.</param>
+    /// <param name="path">The zero-based index path to traverse.</param>
+    /// <returns>The integer at the given path or <c>null</c> if any step is missing or the value is not an integer.</returns>
+    public static BigInteger? IntegerFromPathOrNull(
+        PineValueInProcess root,
+        ReadOnlySpan<int> path)
+    {
+        var current = root;
+
+        for (var i = 0; i < path.Length; i++)
+        {
+            if (current._list is { } directItems)
+            {
+                var index = path[i] < 0 ? 0 : path[i];
+
+                if (directItems.Count <= index)
+                {
+                    return null;
+                }
+
+                current = directItems[index];
+                continue;
+            }
+
+            if (current._evaluated is { } currentMaterialized)
+            {
+                return
+                    PineValueExtension.ValueFromPathOrNull(currentMaterialized, path[i..]) is { } concreteValue
+                    ?
+                    BuiltinFunction.SignedIntegerFromValueRelaxed(concreteValue)
+                    :
+                    null;
+            }
+
+            if (!current.IsList())
+            {
+                return null;
+            }
+
+            current = current.GetElementAt(path[i]);
+        }
+
+        if (current._integer is { } integer)
+        {
+            return integer;
+        }
+
+        if (!current.IsBlob())
+        {
+            return null;
+        }
+
+        return current.AsInteger();
+    }
+
+    /// <summary>
     /// Resolve a descendant value by following a sequence of indices, preserving deferred evaluation when possible.
     /// </summary>
     /// <param name="root">The value serving as the traversal root.</param>

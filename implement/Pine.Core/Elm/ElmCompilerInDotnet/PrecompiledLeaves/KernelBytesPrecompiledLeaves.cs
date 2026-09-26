@@ -122,10 +122,9 @@ public static class KernelBytesPrecompiledLeaves
             PineValueInProcess.ValueInProcessFromPathOrNull(environment, [1])
             ?? PineValueInProcess.EmptyList;
 
-        var offsetValue = environment.ValueFromPathOrEmptyList([2]);
         var charsValue = environment.ValueFromPathOrEmptyList([3]);
 
-        if (IntegerEncoding.ParseSignedIntegerRelaxed(offsetValue).IsOkOrNullable() is not { } offset ||
+        if (environment.IntegerFromPathOrNull([2]) is not { } offset ||
             offset < 0)
         {
             return null;
@@ -202,9 +201,7 @@ public static class KernelBytesPrecompiledLeaves
     public static PineValueInProcess? DecodeBlobAsCharsRecLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, "decodeBlobAsCharsRec") ||
-            IntegerEncoding.ParseSignedIntegerRelaxed(
-                environment.ValueFromPathOrEmptyList([1]))
-            .IsOkOrNullable() is not { } offset ||
+            environment.IntegerFromPathOrNull([1]) is not { } offset ||
             offset < 0 ||
             PineValueInProcess.ValueInProcessFromPathOrNull(environment, [3]) is not { } initialChars ||
             !initialChars.IsList())
@@ -296,9 +293,14 @@ public static class KernelBytesPrecompiledLeaves
 
         for (var index = initialChars.GetLength() - 1; index >= 0; --index)
         {
-            if (IntegerEncoding.ParseUnsignedInteger(initialChars.GetElementAt(index).Evaluate())
-                .IsOkOrNullable() is not { } code ||
-                code > int.MaxValue)
+            if (initialChars.GetElementAt(index).Evaluate() is not PineValue.BlobValue charBlob)
+            {
+                return null;
+            }
+
+            var code = IntegerEncoding.ParseUnsignedInteger(charBlob.Bytes.Span);
+
+            if (code > int.MaxValue)
             {
                 return null;
             }

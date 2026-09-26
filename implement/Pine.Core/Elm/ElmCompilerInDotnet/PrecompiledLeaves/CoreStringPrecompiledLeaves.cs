@@ -135,7 +135,7 @@ public static class CoreStringPrecompiledLeaves
     public static PineValueInProcess? ToListRecursiveLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, "toListRecursive") ||
-            !TryParseIndex(environment.ValueFromPathOrEmptyList([1]), out var offset) ||
+            !TryParseIndex(environment, [1], out var offset) ||
             PineValueInProcess.ValueInProcessFromPathOrNull(environment, [2]) is not { } collected ||
             !collected.IsList() ||
             environment.ValueFromPathOrEmptyList([3]) is not PineValue.BlobValue chars)
@@ -170,10 +170,10 @@ public static class CoreStringPrecompiledLeaves
     public static PineValueInProcess? SplitHelperOnBlobLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, "splitHelperOnBlob") ||
-            !TryParseIndex(environment.ValueFromPathOrEmptyList([1]), out var offset) ||
+            !TryParseIndex(environment, [1], out var offset) ||
             PineValueInProcess.ValueInProcessFromPathOrNull(environment, [2]) is not { } collected ||
             !collected.IsList() ||
-            !TryParseIndex(environment.ValueFromPathOrEmptyList([3]), out var lastStart) ||
+            !TryParseIndex(environment, [3], out var lastStart) ||
             environment.ValueFromPathOrEmptyList([4]) is not PineValue.BlobValue separator ||
             environment.ValueFromPathOrEmptyList([5]) is not PineValue.BlobValue chars ||
             separator.Bytes.Length is 0 ||
@@ -218,10 +218,10 @@ public static class CoreStringPrecompiledLeaves
     public static PineValueInProcess? LinesHelperLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, "linesHelper") ||
-            !TryParseIndex(environment.ValueFromPathOrEmptyList([1]), out var currentLineStart) ||
+            !TryParseIndex(environment, [1], out var currentLineStart) ||
             PineValueInProcess.ValueInProcessFromPathOrNull(environment, [2]) is not { } currentLines ||
             !currentLines.IsList() ||
-            !TryParseIndex(environment.ValueFromPathOrEmptyList([3]), out var offset) ||
+            !TryParseIndex(environment, [3], out var offset) ||
             environment.ValueFromPathOrEmptyList([4]) is not PineValue.BlobValue chars ||
             currentLineStart > offset ||
             offset > chars.Bytes.Length ||
@@ -335,9 +335,7 @@ public static class CoreStringPrecompiledLeaves
     public static PineValueInProcess? FromIntLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, "fromInt") ||
-            IntegerEncoding.ParseSignedIntegerRelaxed(
-                environment.ValueFromPathOrEmptyList([1]))
-            .IsOkOrNullable() is not { } integer)
+            environment.IntegerFromPathOrNull([1]) is not { } integer)
         {
             return null;
         }
@@ -356,7 +354,7 @@ public static class CoreStringPrecompiledLeaves
     public static PineValueInProcess? TrimLeftCountBytesTrimmedLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, "trimLeftCountBytesTrimmed") ||
-            !TryParseIndex(environment.ValueFromPathOrEmptyList([1]), out var offset) ||
+            !TryParseIndex(environment, [1], out var offset) ||
             environment.ValueFromPathOrEmptyList([2]) is not PineValue.BlobValue chars ||
             chars.Bytes.Length % 4 is not 0 ||
             offset > chars.Bytes.Length ||
@@ -381,7 +379,7 @@ public static class CoreStringPrecompiledLeaves
     public static PineValueInProcess? TrimRightCountBytesRemainingLeafDelegate(PineValueInProcess environment)
     {
         if (!EnvironmentMatches(environment, "trimRightCountBytesRemaining") ||
-            !TryParseIndex(environment.ValueFromPathOrEmptyList([1]), out var remainingLength) ||
+            !TryParseIndex(environment, [1], out var remainingLength) ||
             environment.ValueFromPathOrEmptyList([2]) is not PineValue.BlobValue chars ||
             chars.Bytes.Length % 4 is not 0 ||
             remainingLength > chars.Bytes.Length ||
@@ -630,9 +628,9 @@ public static class CoreStringPrecompiledLeaves
             environment.GetElementAt(0),
             s_leafInfos.Value[functionName].envFunctionsValue);
 
-    private static bool TryParseIndex(PineValue value, out int index)
+    private static bool TryParseIndex(PineValueInProcess environment, ReadOnlySpan<int> path, out int index)
     {
-        var parsed = IntegerEncoding.ParseSignedIntegerRelaxed(value).IsOkOrNullable();
+        var parsed = environment.IntegerFromPathOrNull(path);
 
         if (parsed is null || parsed < 0 || parsed > int.MaxValue)
         {

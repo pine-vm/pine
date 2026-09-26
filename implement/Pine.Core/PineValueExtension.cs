@@ -27,6 +27,15 @@ public static class PineValueExtension
         PineValueInProcess.EmptyList;
 
     /// <summary>
+    /// Navigates an in-process Pine value and interprets the selected descendant as a signed integer,
+    /// reusing an existing integer representation instead of materializing a blob.
+    /// </summary>
+    public static System.Numerics.BigInteger? IntegerFromPathOrNull(
+        this PineValueInProcess environment,
+        ReadOnlySpan<int> path) =>
+        PineValueInProcess.IntegerFromPathOrNull(environment, path);
+
+    /// <summary>
     /// Navigates a nested <see cref="PineValue"/> list structure by following the given sequence of indices.
     /// </summary>
     /// <param name="environment">The root <see cref="PineValue"/> to start navigation from.</param>

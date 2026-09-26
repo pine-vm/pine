@@ -1524,8 +1524,8 @@ public partial class ElmSyntaxInterpreter
 
         if (IsElmFloat(value, out var numeratorValue, out var denominatorValue))
         {
-            if (IntegerEncoding.ParseSignedIntegerRelaxed(numeratorValue).IsOkOrNullable() is not { } numerator ||
-                IntegerEncoding.ParseSignedIntegerRelaxed(denominatorValue).IsOkOrNullable() is not { } denominator)
+            if (BuiltinFunction.SignedIntegerFromValueRelaxed(numeratorValue) is not { } numerator ||
+                BuiltinFunction.SignedIntegerFromValueRelaxed(denominatorValue) is not { } denominator)
             {
                 throw new System.InvalidOperationException(
                     "String.fromFloat: expected the float components to be integers.");

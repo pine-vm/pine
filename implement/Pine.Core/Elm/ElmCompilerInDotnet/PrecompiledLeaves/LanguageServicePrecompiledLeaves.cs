@@ -353,7 +353,7 @@ public static class LanguageServicePrecompiledLeaves
 
     private static bool TryParsePositiveInt(PineValue value, out int parsedInt)
     {
-        var parsed = IntegerEncoding.ParseSignedIntegerRelaxed(value).IsOkOrNullable();
+        var parsed = BuiltinFunction.SignedIntegerFromValueRelaxed(value);
 
         if (parsed is null || parsed < 1 || parsed > int.MaxValue)
         {
