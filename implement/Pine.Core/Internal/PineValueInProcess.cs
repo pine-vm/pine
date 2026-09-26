@@ -46,6 +46,71 @@ public class PineValueInProcess
     private PartialApplicationState? _partialApplication;
 
     /// <summary>
+    /// Read-only view of a contiguous range of the in-process items in <see cref="_list"/>: the
+    /// counterpart of <see cref="ImmutableSliceBuilder"/> for lists that are not evaluated to a
+    /// <see cref="PineValue.ListValue"/>. <see cref="Skip(int, PineValueInProcess)"/> and
+    /// <see cref="Take(int, PineValueInProcess)"/> use it so that slicing (for example taking the
+    /// tail in an uncons pattern <c>x :: xs</c>) does not copy the items.
+    /// </summary>
+    /// <remarks>
+    /// Slicing a slice composes the offsets, so repeated slicing costs constant time per step and
+    /// never nests views.
+    /// </remarks>
+    private sealed class ListItemsSlice : IReadOnlyList<PineValueInProcess>
+    {
+        private readonly IReadOnlyList<PineValueInProcess> _source;
+
+        private readonly int _offset;
+
+        public int Count { get; }
+
+        private ListItemsSlice(IReadOnlyList<PineValueInProcess> source, int offset, int count)
+        {
+            _source = source;
+            _offset = offset;
+            Count = count;
+        }
+
+        /// <summary>
+        /// Requires <c>0 &lt;= start</c>, <c>0 &lt; count</c> and <c>start + count &lt;= list.Count</c>.
+        /// </summary>
+        public static IReadOnlyList<PineValueInProcess> Create(
+            IReadOnlyList<PineValueInProcess> list,
+            int start,
+            int count)
+        {
+            if (list is ListItemsSlice slice)
+            {
+                return new ListItemsSlice(slice._source, slice._offset + start, count);
+            }
+
+            return new ListItemsSlice(list, start, count);
+        }
+
+        public PineValueInProcess this[int index]
+        {
+            get
+            {
+                if ((uint)index >= (uint)Count)
+                    throw new ArgumentOutOfRangeException(nameof(index));
+
+                return _source[_offset + index];
+            }
+        }
+
+        public IEnumerator<PineValueInProcess> GetEnumerator()
+        {
+            for (var i = 0; i < Count; ++i)
+            {
+                yield return _source[_offset + i];
+            }
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() =>
+            GetEnumerator();
+    }
+
+    /// <summary>
     /// Runtime representation of a partially applied function whose canonical Pine value is
     /// constructed only when an operation requires the concrete representation.
     /// </summary>
@@ -700,14 +765,7 @@ public class PineValueInProcess
                 return EmptyList;
             }
 
-            var sublist = new PineValueInProcess[list.Count - skipCount];
-
-            for (var i = 0; i < sublist.Length; i++)
-            {
-                sublist[i] = list[i + skipCount];
-            }
-
-            return CreateList(sublist);
+            return CreateList(ListItemsSlice.Create(list, skipCount, list.Count - skipCount));
         }
 
         var evaluated = source.Evaluate();
@@ -761,14 +819,7 @@ public class PineValueInProcess
                 return EmptyList;
             }
 
-            var sublist = new PineValueInProcess[takeCount];
-
-            for (var i = 0; i < takeCount; i++)
-            {
-                sublist[i] = list[i];
-            }
-
-            return CreateList(sublist);
+            return CreateList(ListItemsSlice.Create(list, 0, takeCount));
         }
 
         var evaluated = source.Evaluate();
@@ -953,6 +1004,11 @@ public class PineValueInProcess
         if (length is 1)
             return input.GetElementAt(0);
 
+        if (length is 2 && TryConcatByPrepending(input.GetElementAt(0), input.GetElementAt(1)) is { } prepended)
+        {
+            return prepended;
+        }
+
         if (length is 2)
         {
             if (input._list is { } list &&
@@ -1033,6 +1089,50 @@ public class PineValueInProcess
         }
 
         return Create(BuiltinFunction.concat(input.Evaluate()));
+    }
+
+    private const int PrependMaxFrontLength = 8;
+
+    private const int PrependMinBackLength = 32;
+
+    /// <summary>
+    /// Covers the accumulator pattern <c>concat [ [ item ], acc ]</c> (as in <c>List.map</c>) with a
+    /// <see cref="PrependListView"/>, so that building a list of n items this way costs O(n) in total
+    /// instead of O(n²). Returns null when the pattern does not apply.
+    /// </summary>
+    private static PineValueInProcess? TryConcatByPrepending(
+        PineValueInProcess front,
+        PineValueInProcess back)
+    {
+        if (back._list is not { } backList)
+            return null;
+
+        if (backList is not PrependListView && backList.Count < PrependMinBackLength)
+            return null;
+
+        if (!front.IsList())
+            return null;
+
+        var frontLength = front.GetLength();
+
+        if (frontLength is 0 || PrependMaxFrontLength < frontLength)
+            return null;
+
+        var frontItems = front.UnevaluatedStructuralItemsOrNull();
+
+        if (frontItems is null)
+        {
+            var copiedFrontItems = new PineValueInProcess[frontLength];
+
+            for (var i = 0; i < frontLength; ++i)
+            {
+                copiedFrontItems[i] = front.GetElementAt(i);
+            }
+
+            frontItems = copiedFrontItems;
+        }
+
+        return CreateList(PrependListView.Prepend(frontItems, backList));
     }
 
     /// <summary>
