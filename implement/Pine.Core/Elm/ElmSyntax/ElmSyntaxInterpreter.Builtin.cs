@@ -76,6 +76,10 @@ public partial class ElmSyntaxInterpreter
             ResolveStringJoin);
 
         builder.Add(
+            DeclQualifiedName.Create(["String"], "replace"),
+            ResolveStringReplace);
+
+        builder.Add(
             DeclQualifiedName.Create(["String"], "toList"),
             ResolveStringToList);
 
@@ -687,6 +691,75 @@ public partial class ElmSyntaxInterpreter
         segments.Add(MakeElmString(stringBytes[lastStart..]));
 
         return PineValueInProcess.CreateList(segments);
+    }
+
+    /// <summary>
+    /// Builtin implementation of <c>String.replace</c> directly on the interpreter's value model,
+    /// mirroring <c>elm-kernel-modules/String.elm</c> (<c>join after (split before string)</c>):
+    /// replaces every non-overlapping occurrence of <c>before</c>, scanning from the start. An empty
+    /// <c>before</c> inserts <c>after</c> between consecutive characters.
+    /// </summary>
+    private static PineValueInProcess? ResolveStringReplace(IReadOnlyList<PineValueInProcess> arguments)
+    {
+        if (arguments.Count is not 3)
+        {
+            // Defer to regular currying / the user-defined implementation when not saturated.
+            return null;
+        }
+
+        var beforeBytes = AsStringCharsBytes(arguments[0].Evaluate(), "String.replace");
+        var afterBytes = AsStringCharsBytes(arguments[1].Evaluate(), "String.replace");
+        var stringBytes = AsStringCharsBytes(arguments[2].Evaluate(), "String.replace");
+
+        var builder = new System.IO.MemoryStream(stringBytes.Length);
+
+        if (beforeBytes.Length is 0)
+        {
+            // Same as joining the single-character segments from String.split "".
+            for (var offset = 0; offset + 4 <= stringBytes.Length; offset += 4)
+            {
+                if (0 < offset)
+                {
+                    builder.Write(afterBytes.Span);
+                }
+
+                builder.Write(stringBytes.Span.Slice(offset, 4));
+            }
+
+            return MakeElmString(builder.ToArray());
+        }
+
+        var beforeSpan = beforeBytes.Span;
+        var stringSpan = stringBytes.Span;
+
+        var lastStart = 0;
+        var offset0 = 0;
+
+        while (offset0 + beforeBytes.Length <= stringBytes.Length)
+        {
+            if (System.MemoryExtensions.SequenceEqual(stringSpan.Slice(offset0, beforeBytes.Length), beforeSpan))
+            {
+                builder.Write(stringSpan[lastStart..offset0]);
+                builder.Write(afterBytes.Span);
+
+                offset0 += beforeBytes.Length;
+                lastStart = offset0;
+            }
+            else
+            {
+                offset0 += 4;
+            }
+        }
+
+        if (lastStart is 0)
+        {
+            // No occurrence: reuse the input value.
+            return arguments[2];
+        }
+
+        builder.Write(stringSpan[lastStart..]);
+
+        return MakeElmString(builder.ToArray());
     }
 
     /// <summary>

@@ -1,7 +1,10 @@
 using AwesomeAssertions;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Xunit;
 
+using ApplicationLogEntry = Pine.Core.Elm.ElmSyntax.ApplicationLogEntry;
 using ElmInterpreter = Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter;
 
 namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
@@ -82,6 +85,79 @@ public class StringBuiltinTests
         AssertEvaluatesEqual(
             "String.join \"" + separator + "\" (String.split \"" + separator + "\" \"" + text + "\")",
             "\"" + text + "\"");
+
+    // ============================================================
+    // replace
+    // ============================================================
+
+    [Theory]
+    [InlineData("""String.replace "," ";" "a,b,c" """, "\"a;b;c\"")]
+    [InlineData("""String.replace "ab" "X" "abcabab" """, "\"XcXX\"")]
+    [InlineData("""String.replace "aa" "b" "aaa" """, "\"ba\"")]
+    [InlineData("""String.replace "x" "y" "abc" """, "\"abc\"")]
+    [InlineData("""String.replace "x" "" "xaxbx" """, "\"ab\"")]
+    [InlineData("""String.replace "a" "aa" "aba" """, "\"aabaa\"")]
+    [InlineData("""String.replace "\\" "\\\\" "a\\b" """, "\"a\\\\\\\\b\"")]
+    [InlineData("""String.replace "€" "EUR" "5 € and 3 €" """, "\"5 EUR and 3 EUR\"")]
+    [InlineData("""String.replace "abc" "x" "ab" """, "\"ab\"")]
+    [InlineData("""String.replace "" "-" "abc" """, "\"a-b-c\"")]
+    [InlineData("""String.replace "" "-" "" """, "\"\"")]
+    [InlineData("""String.replace "a" "b" "" """, "\"\"")]
+    public void Replace_matches_Elm_semantics(string expression, string expected) =>
+        AssertEvaluatesEqual(expression, expected);
+
+    [Theory]
+    [InlineData("""String.replace "," ";" "a,b,c" """)]
+    [InlineData("""String.replace "ab" "X" "abcabab" """)]
+    [InlineData("""String.replace "aa" "b" "aaaaa" """)]
+    [InlineData("""String.replace "x" "y" "abc" """)]
+    [InlineData("""String.replace "x" "" "xxx" """)]
+    [InlineData("""String.replace "\n" "\\n" "line1\nline2\n" """)]
+    [InlineData("""String.replace "😀" "🙂" "a😀b😀" """)]
+    [InlineData("""String.replace "" "-" "abc" """)]
+    [InlineData("""String.replace "abc" "x" "ab" """)]
+    // Not covered here: 'String.replace "" "-" ""', where the Elm implementation joins an empty
+    // list and so encodes the empty result string with an empty list instead of an empty blob.
+    // Replace_matches_Elm_semantics covers that case.
+    public void Replace_builtin_matches_Elm_implementation(string expression) =>
+        AssertBuiltinMatchesElm(expression);
+
+    [Fact]
+    public void Replace_builtin_short_circuits_split_and_join()
+    {
+        const string Expression = """String.replace "," ";" "a,b,c" """;
+
+        var withBuiltin = LogDirectApplications(Expression, enableDefaultBuiltins: true);
+
+        withBuiltin.Count(name => name is "String.replace").Should().Be(1);
+        withBuiltin.Should().NotContain("String.split");
+        withBuiltin.Should().NotContain("String.join");
+
+        var withoutBuiltin = LogDirectApplications(Expression, enableDefaultBuiltins: false);
+
+        withoutBuiltin.Should().Contain("String.split");
+    }
+
+    private static IReadOnlyList<string> LogDirectApplications(string expression, bool enableDefaultBuiltins)
+    {
+        var log = new List<ApplicationLogEntry>();
+
+        var (result, _) =
+            ElmInterpreter.ParseAndInterpretWithCounters(
+                expression,
+                s_prepared.Value,
+                log.Add,
+                enableDefaultBuiltins: enableDefaultBuiltins);
+
+        result.Extract(err => throw new Exception(err.ToString()));
+
+        return
+            [
+            .. log
+            .OfType<ApplicationLogEntry.Direct>()
+            .Select(direct => direct.Application.FunctionName.FullName)
+            ];
+    }
 
     // ============================================================
     // lines

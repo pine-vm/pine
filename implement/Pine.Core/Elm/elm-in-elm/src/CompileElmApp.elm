@@ -4366,39 +4366,18 @@ bytes_decode_withOffset offset decoder =
 
 stringExpressionFromString : String -> String
 stringExpressionFromString string =
-    let
-        escapedChars : List (List Char)
-        escapedChars =
-            List.map
-                escapeCharForStringLiteral
-                (String.toList string)
-    in
-    String.fromList
-        (List.concat
-            [ [ '"' ]
-            , List.concat escapedChars
-            , [ '"' ]
-            ]
-        )
-
-
-escapeCharForStringLiteral : Char -> List Char
-escapeCharForStringLiteral char =
-    case char of
-        '\\' ->
-            [ '\\', '\\' ]
-
-        '\n' ->
-            [ '\\', 'n' ]
-
-        '\u{000D}' ->
-            [ '\\', 'r' ]
-
-        '"' ->
-            [ '\\', '"' ]
-
-        _ ->
-            [ char ]
+    {- Replacing whole substrings instead of mapping each character keeps the cost linear in
+       the string length, which matters for large strings such as the output of 'elm make'.
+       Backslashes are escaped first so that the escapes added afterwards remain intact.
+    -}
+    "\""
+        ++ (string
+                |> String.replace "\\" "\\\\"
+                |> String.replace "\n" "\\n"
+                |> String.replace "\u{000D}" "\\r"
+                |> String.replace "\"" "\\\""
+           )
+        ++ "\""
 
 
 includeFilePathInElmMakeRequest : List String -> Bool
