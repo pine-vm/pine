@@ -17,6 +17,14 @@ Download the pre-built Pine binary for your platform at <https://pine.build/down
 
 The `pine` executable file integrates all functionality to build apps and operate web services.
 
+After extracting the download, run `./pine install` from its directory on Linux or macOS
+(or `.\pine.exe install` on Windows). On Linux and macOS this installs a copy in
+`~/.local/bin` without administrator rights. If that directory is not on your `PATH`,
+the command prints the shell setup needed to use `pine` from any directory.
+Put `~/.local/bin` before older Pine installations on `PATH` if you have one.
+On Windows, the command adds the extracted executable's directory to your user `PATH`;
+keep that directory in place after installing.
+
 The command below runs a server and deploys a full-stack web app:
 
 ```txt
