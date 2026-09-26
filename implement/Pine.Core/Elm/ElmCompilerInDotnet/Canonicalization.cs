@@ -1894,15 +1894,7 @@ public class Canonicalization
                 NoErrors((SyntaxTypes.Expression)recordAccessFunction),
 
                 SyntaxTypes.Expression.RecordUpdateExpression recordUpdate =>
-                CanonicalizationResultExtensions.ConcatMap(
-                    recordUpdate.Fields,
-                    f => CanonicalizeRecordFieldExpr(f, context))
-                .MapValue(
-                    fields =>
-                    (SyntaxTypes.Expression)new SyntaxTypes.Expression.RecordUpdateExpression(
-                        recordUpdate.RecordName,
-                        recordUpdate.PipeLocation,
-                        RebuildSeparated(recordUpdate.Fields, [.. fields]))),
+                CanonicalizeRecordUpdateExpression(recordUpdate, exprNode.Range, context),
 
                 SyntaxTypes.Expression.GLSLExpression glslExpression =>
                 NoErrors((SyntaxTypes.Expression)glslExpression),
@@ -1965,6 +1957,97 @@ public class Canonicalization
                 rightResult,
                 (left, right) => (SyntaxTypes.Expression)new SyntaxTypes.Expression.OperatorApplication(opApp.Operator, opApp.Direction, left, right));
     }
+
+    /// <summary>
+    /// Canonicalizes a record update expression.
+    /// <para>
+    /// When the record name refers to a local binding (parameter, let binding, pattern variable),
+    /// the record update keeps its form. When the record name instead refers to a module-level
+    /// declaration (declared in the current module or imported via an exposing list), as in
+    /// <c>{ initSetup | field = value }</c>, the record update syntax cannot carry the module name.
+    /// For that case, we bind the fully qualified reference to a fresh local name and update that:
+    /// <c>let fresh = Module.initSetup in { fresh | field = value }</c>.
+    /// This way, later stages (lambda lifting, inlining, type inference, expression compilation)
+    /// only ever see record updates on local names.
+    /// </para>
+    /// </summary>
+    private static CanonicalizationResult<SyntaxTypes.Expression> CanonicalizeRecordUpdateExpression(
+        SyntaxTypes.Expression.RecordUpdateExpression recordUpdate,
+        Range range,
+        CanonicalizationContext context)
+    {
+        var fieldsResult =
+            CanonicalizationResultExtensions.ConcatMap(
+                recordUpdate.Fields,
+                f => CanonicalizeRecordFieldExpr(f, context));
+
+        var recordName = recordUpdate.RecordName.Value;
+
+        if (context.LocalDeclarations.Contains(recordName))
+        {
+            return
+                fieldsResult
+                .MapValue(
+                    fields =>
+                    (SyntaxTypes.Expression)new SyntaxTypes.Expression.RecordUpdateExpression(
+                        recordUpdate.RecordName,
+                        recordUpdate.PipeLocation,
+                        RebuildSeparated(recordUpdate.Fields, [.. fields])));
+        }
+
+        var recordReferenceResult =
+            CanonicalizeFunctionOrValue(
+                new SyntaxTypes.Expression.Identifier(ModuleName: [], Name: recordName),
+                recordUpdate.RecordName.Range,
+                context);
+
+        var freshName = recordName + "__recordUpdateBase";
+
+        for (var i = 1; IsNameInScope(freshName, context); ++i)
+        {
+            freshName = recordName + "__recordUpdateBase" + i;
+        }
+
+        return
+            CanonicalizationResultExtensions.Map2(
+                recordReferenceResult,
+                fieldsResult,
+                (recordReference, fields) =>
+                {
+                    var letDeclaration =
+                        new Node<SyntaxTypes.Expression.LetDeclaration>(
+                            range,
+                            new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
+                                Pattern:
+                                new Node<SyntaxTypes.Pattern>(
+                                    recordUpdate.RecordName.Range,
+                                    new SyntaxTypes.Pattern.VarPattern(freshName)),
+                                EqualsTokenLocation: recordUpdate.RecordName.Range.End,
+                                Expression:
+                                new Node<SyntaxTypes.Expression>(
+                                    recordUpdate.RecordName.Range,
+                                    recordReference)));
+
+                    var rebuiltRecordUpdate =
+                        new SyntaxTypes.Expression.RecordUpdateExpression(
+                            new Node<string>(recordUpdate.RecordName.Range, freshName),
+                            recordUpdate.PipeLocation,
+                            RebuildSeparated(recordUpdate.Fields, [.. fields]));
+
+                    return
+                        (SyntaxTypes.Expression)new SyntaxTypes.Expression.LetExpression(
+                            new SyntaxTypes.Expression.LetBlock(
+                                LetTokenLocation: range.Start,
+                                Declarations: [letDeclaration],
+                                InTokenLocation: range.Start,
+                                Expression: new Node<SyntaxTypes.Expression>(range, rebuiltRecordUpdate)));
+                });
+    }
+
+    private static bool IsNameInScope(string name, CanonicalizationContext context) =>
+        context.LocalDeclarations.Contains(name) ||
+        context.ModuleLevelDeclarations.Contains(name) ||
+        context.ValueImportMap.ContainsKey(name);
 
     private static CanonicalizationResult<SyntaxTypes.Expression.Identifier> CanonicalizeFunctionOrValue(
         SyntaxTypes.Expression.Identifier funcOrValue,
