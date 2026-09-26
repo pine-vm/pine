@@ -1,4 +1,6 @@
+using System;
 using System.CommandLine;
+using System.IO;
 
 namespace Pine.CLI;
 
@@ -14,7 +16,16 @@ public static class InstallCommand
         command.SetAction(
             (parseResult) =>
             {
-                checkInstallation().registerExecutableDirectoryOnPath();
+                try
+                {
+                    checkInstallation().registerExecutableDirectoryOnPath();
+                    return 0;
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+                {
+                    Console.Error.WriteLine("Installation failed: " + exception.Message);
+                    return 1;
+                }
             });
 
         return command;

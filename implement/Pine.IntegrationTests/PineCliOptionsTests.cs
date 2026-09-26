@@ -18,6 +18,110 @@ public class PineCliOptionsTests
         result.StandardError.Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Install_on_unix_uses_user_bin_and_explains_path_setup(bool binOnPath)
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var homeDirectory = CreateFormatTestDirectory();
+        var sourceExecutable = Path.Combine(AppContext.BaseDirectory, "pine");
+        var installDirectory = Path.Combine(homeDirectory, ".local", "bin");
+        var installedExecutable = Path.Combine(installDirectory, "pine");
+
+        var path =
+            binOnPath
+            ?
+            installDirectory + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH")
+            :
+            Environment.GetEnvironmentVariable("PATH") ?? "";
+
+        try
+        {
+            var result = RunPineProcess(sourceExecutable, homeDirectory, path, "install");
+
+            result.ExitCode.Should().Be(0);
+            result.StandardError.Should().BeEmpty();
+            result.StandardOutput.Should().Contain(installedExecutable);
+            File.ReadAllBytes(installedExecutable).Should().Equal(File.ReadAllBytes(sourceExecutable));
+            File.GetUnixFileMode(installedExecutable).Should().HaveFlag(UnixFileMode.UserExecute);
+
+            if (binOnPath)
+                result.StandardOutput.Should().Contain("new terminal instances");
+
+            else
+                result.StandardOutput.Should().Contain("export PATH=\"$HOME/.local/bin:$PATH\"");
+
+            // The test project's apphost needs its companion assemblies; the published Pine executable is single-file.
+            var installedResult = RunPineProcess(sourceExecutable, homeDirectory, path, "install");
+
+            installedResult.ExitCode.Should().Be(0);
+            installedResult.StandardOutput.Should().Contain("already installed");
+            installedResult.StandardError.Should().BeEmpty();
+
+            var helpResult = RunPineProcess(sourceExecutable, homeDirectory, path, "help");
+
+            helpResult.ExitCode.Should().Be(0);
+
+            if (binOnPath)
+                helpResult.StandardOutput.Should().NotContain("Set up your development environment:");
+
+            else
+                helpResult.StandardOutput.Should().Contain("Set up your development environment:");
+        }
+        finally
+        {
+            Directory.Delete(homeDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Install_on_unix_reports_unwritable_destination_without_a_stack_trace()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var homeDirectory = CreateFormatTestDirectory();
+
+        try
+        {
+            File.WriteAllText(Path.Combine(homeDirectory, ".local"), "not a directory");
+
+            var result =
+                RunPineProcess(
+                    Path.Combine(AppContext.BaseDirectory, "pine"),
+                    homeDirectory,
+                    Environment.GetEnvironmentVariable("PATH"),
+                    "install");
+
+            result.ExitCode.Should().Be(1);
+            result.StandardError.Should().Contain("Installation failed:");
+            result.StandardError.Should().NotContain("Unhandled exception");
+        }
+        finally
+        {
+            Directory.Delete(homeDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Missing_home_does_not_break_help_and_reports_an_install_error()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var executable = Path.Combine(AppContext.BaseDirectory, "pine");
+        var helpResult = RunPineProcess(executable, "", null, "help");
+        var installResult = RunPineProcess(executable, "", null, "install");
+
+        helpResult.ExitCode.Should().Be(0);
+        helpResult.StandardOutput.Should().Contain("install");
+        installResult.ExitCode.Should().Be(1);
+        installResult.StandardError.Should().Contain("HOME must be set to an absolute path");
+    }
+
     [Fact]
     public void Lowercase_short_verbose_option_is_available_to_subcommands()
     {
@@ -240,18 +344,33 @@ public class PineCliOptionsTests
     private static ProcessResult RunElmFormat(string path, bool verifyNoChanges) =>
         RunPine("elm", "format", path, verifyNoChanges ? "--verify-no-changes" : "--yes", "--color", "never");
 
-    private static ProcessResult RunPine(params string[] arguments)
-    {
-        var executableName = OperatingSystem.IsWindows() ? "pine.exe" : "pine";
+    private static ProcessResult RunPine(params string[] arguments) =>
+        RunPineProcess(
+            Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "pine.exe" : "pine"),
+            homeDirectory: null,
+            pathEnvironment: null,
+            arguments);
 
+    private static ProcessResult RunPineProcess(
+        string executablePath,
+        string? homeDirectory,
+        string? pathEnvironment,
+        params string[] arguments)
+    {
         var startInfo =
-            new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, executableName))
+            new ProcessStartInfo(executablePath)
             {
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 CreateNoWindow = true
             };
+
+        if (homeDirectory is not null)
+            startInfo.Environment["HOME"] = homeDirectory;
+
+        if (pathEnvironment is not null)
+            startInfo.Environment["PATH"] = pathEnvironment;
 
         foreach (var argument in arguments)
             startInfo.ArgumentList.Add(argument);

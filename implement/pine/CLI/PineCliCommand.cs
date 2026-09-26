@@ -292,38 +292,93 @@ public class PineCliCommand
             }
             else
             {
-                var destinationExecutableFilePath = "/usr/local/bin/" + commandName;
+                var userProfileDirectory = Environment.GetEnvironmentVariable("HOME");
 
-                byte[]? currentRegisteredFileContent = null;
-
-                if (File.Exists(destinationExecutableFilePath))
+                if (string.IsNullOrEmpty(userProfileDirectory) || !Path.IsPathFullyQualified(userProfileDirectory))
                 {
-                    currentRegisteredFileContent = File.ReadAllBytes(destinationExecutableFilePath);
+                    return
+                        (false,
+                        () => throw new InvalidOperationException(
+                            "HOME must be set to an absolute path to install for the current user."));
                 }
 
-                var currentExecuableFileContent = File.ReadAllBytes(executableFilePath);
+                var destinationDirectory =
+                    Path.Combine(userProfileDirectory, ".local", "bin");
 
-                var executableIsRegisteredOnPath =
-                    currentRegisteredFileContent != null &&
-                    currentRegisteredFileContent.SequenceEqual(currentExecuableFileContent);
+                var destinationExecutableFilePath = Path.Combine(destinationDirectory, commandName);
+
+                var pathEntries =
+                    (Environment.GetEnvironmentVariable("PATH") ?? "")
+                    .Split(ExecutableFile.PathEnvironmentVarSeparator, StringSplitOptions.RemoveEmptyEntries);
+
+                var destinationOnPath =
+                    pathEntries.Any(
+                        path =>
+                        string.Equals(
+                            Path.TrimEndingDirectorySeparator(path),
+                            destinationDirectory,
+                            StringComparison.Ordinal));
+
+                var executableIsInstalled =
+                    File.Exists(destinationExecutableFilePath) &&
+                    File.ReadAllBytes(destinationExecutableFilePath).SequenceEqual(
+                        File.ReadAllBytes(executableFilePath));
 
                 var registerExecutableForCurrentUser =
                     new Action(
                         () =>
                         {
-                            ExecutableFile.CreateAndWriteFileToPath(
-                                destinationExecutableFilePath,
-                                currentExecuableFileContent,
-                                makeExecutable: true);
+                            if (executableIsInstalled)
+                            {
+                                Console.WriteLine(
+                                    "The executable is already installed at '" + destinationExecutableFilePath + "'.");
+                            }
+                            else
+                            {
+                                Directory.CreateDirectory(destinationDirectory);
 
-                            Console.WriteLine(
-                                "I copied the executable file to '" + destinationExecutableFilePath +
-                                "'. You will be able to use the '" +
-                                commandName +
-                                "' command in newer terminal instances.");
+                                var temporaryFilePath =
+                                    Path.Combine(
+                                        destinationDirectory,
+                                        "." + commandName + "-" + Guid.NewGuid().ToString("N"));
+
+                                try
+                                {
+                                    ExecutableFile.CreateAndWriteFileToPath(
+                                        temporaryFilePath,
+                                        File.ReadAllBytes(executableFilePath),
+                                        makeExecutable: true);
+
+                                    File.Move(temporaryFilePath, destinationExecutableFilePath, overwrite: true);
+                                }
+                                finally
+                                {
+                                    if (File.Exists(temporaryFilePath))
+                                        File.Delete(temporaryFilePath);
+                                }
+
+                                Console.WriteLine(
+                                    "Installed '" + commandName + "' at '" + destinationExecutableFilePath + "'.");
+                            }
+
+                            if (!destinationOnPath)
+                            {
+                                Console.WriteLine(
+                                    "Add '" + destinationDirectory + "' to your PATH to run '" + commandName +
+                                    "' from any directory. For this terminal, run:");
+
+                                Console.WriteLine("  export PATH=\"$HOME/.local/bin:$PATH\"");
+                                Console.WriteLine("Add the same line to your shell startup file to make it permanent.");
+                            }
+                            else
+                            {
+                                Console.WriteLine(
+                                    "You can use the '" + commandName + "' command in new terminal instances " +
+                                    "if no earlier PATH entry contains another copy.");
+                            }
                         });
 
-                return (executableIsRegisteredOnPath, registerExecutableForCurrentUser);
+                return (executableIsInstalled && destinationOnPath, registerExecutableForCurrentUser);
             }
         }
 
