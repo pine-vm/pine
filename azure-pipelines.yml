@@ -28,14 +28,8 @@ steps:
   displayName: 'Prebuild'
   workingDirectory: ./implement/
 
-- task: DotNetCoreCLI@2
+- script: dotnet run --project ./implement/Pine.IntegrationTests/Pine.IntegrationTests.csproj -- --report-xunit-trx
   displayName: 'test'
-  inputs:
-    command: test
-    projects: |
-      **/Pine.IntegrationTests.csproj
-    arguments:  --logger trx
-    publishTestResults: false
 
 - task: PublishTestResults@2
   condition: succeededOrFailed()
