@@ -3892,12 +3892,7 @@ public partial class ElmSyntaxInterpreter
                         return false;
 
                     var head = value.GetElementAt(0);
-                    var tailItems = new PineValueInProcess[value.GetLength() - 1];
-
-                    for (var i = 1; i < value.GetLength(); i++)
-                        tailItems[i - 1] = value.GetElementAt(i);
-
-                    var tail = PineValueInProcess.CreateList(tailItems);
+                    var tail = PineValueInProcess.Skip(1, value);
 
                     if (!TryMatchPattern(unConsPattern.Head, head, bindings))
                         return false;
@@ -4020,13 +4015,7 @@ public partial class ElmSyntaxInterpreter
             case ElmSyntaxAbstract.Pattern.UnConsPattern unConsPattern:
                 {
                     var headValue = value.GetElementAt(0);
-
-                    var tailItems = new PineValueInProcess[value.GetLength() - 1];
-
-                    for (var i = 1; i < value.GetLength(); i++)
-                        tailItems[i - 1] = value.GetElementAt(i);
-
-                    var tailValue = PineValueInProcess.CreateList(tailItems);
+                    var tailValue = PineValueInProcess.Skip(1, value);
 
                     BindPattern(unConsPattern.Head, headValue, bindings);
                     BindPattern(unConsPattern.Tail, tailValue, bindings);
