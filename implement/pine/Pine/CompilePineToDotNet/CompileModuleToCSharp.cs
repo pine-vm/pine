@@ -286,8 +286,22 @@ public static class CompileModuleToCSharp
                 parametersAsLocals: StaticFunctionInterface.Generic,
                 parseCache: parseCache);
 
+        var loweredInstructions =
+            PineControlFlowGraph
+            .FromFragment(irCompilationResult.Fragment)
+            .LowerToStackInstructions();
+
+        /*
+         * The SSA derivation here treats the last instruction as the returned value,
+         * so we omit the trailing return instruction.
+         * */
         var ssaInstructionsLessFilter =
-            SSAInstructionsFromIRCompilationResult(irCompilationResult.Instructions)
+            SSAInstructionsFromIRCompilationResult(
+                loweredInstructions is [.., { Kind: StackInstructionKind.Return }]
+                ?
+                loweredInstructions[..^1]
+                :
+                loweredInstructions)
             .ToImmutableList();
 
         var ssaInstructions =

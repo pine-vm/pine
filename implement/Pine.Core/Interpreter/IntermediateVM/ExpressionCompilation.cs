@@ -312,8 +312,8 @@ public record ExpressionCompilation(
                 pathMaxHighInclusive: pathMaxHighInclusive,
                 disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
 
-        var allInstructionsBeforeReturn =
-            InstructionsFromExpression(
+        return
+            ControlFlowGraphFromExpression(
                 rootExpression: reducedExpression,
                 rootExprAlternativeForms: [rootExpression],
                 envClass: enableTailRecursionOptimization ? envConstraintId : null,
@@ -322,52 +322,7 @@ public record ExpressionCompilation(
                 enableTailRecursionOptimization,
                 enableDirectInvocation,
                 skipDirectInvocation)
-            .ToArray();
-
-        for (var instructionIndex = allInstructionsBeforeReturn.Length - 1; instructionIndex >= 0; instructionIndex--)
-        {
-            var instruction = allInstructionsBeforeReturn[instructionIndex];
-
-            if (instruction.Kind is StackInstructionKind.Jump_Const)
-            {
-                var jumpOffset =
-                    instruction.JumpOffset
-                    ??
-                    throw new InvalidOperationException(
-                        "Jump instruction without offset: " + instruction);
-
-                var destInstructionIndex =
-                    instructionIndex + jumpOffset;
-
-                if (destInstructionIndex >= allInstructionsBeforeReturn.Length)
-                {
-                    allInstructionsBeforeReturn[instructionIndex] =
-                        StackInstruction.Return;
-
-                    continue;
-                }
-
-                var destInstruction =
-                    allInstructionsBeforeReturn[destInstructionIndex];
-
-                if (destInstruction.Kind is StackInstructionKind.Return)
-                {
-                    // Remove jump to return instruction.
-                    allInstructionsBeforeReturn[instructionIndex] =
-                        StackInstruction.Return;
-                }
-            }
-        }
-
-        IReadOnlyList<StackInstruction> allInstructions =
-            [
-            .. allInstructionsBeforeReturn,
-            StackInstruction.Return
-            ];
-
-        return
-            PineControlFlowGraph
-            .FromInstructions(allInstructions)
+            .ForwardJumpsToReturn()
             .ForwardConstantBooleanBranches()
             .LowerToStackInstructions();
     }
@@ -1240,9 +1195,11 @@ public record ExpressionCompilation(
     }
 
     /// <summary>
-    /// Compiles an expression into the stack instructions that the intermediate VM executes for the supplied environment classification.
+    /// Compiles an expression into the control-flow graph of the stack frame the intermediate VM executes
+    /// for the supplied environment classification.
+    /// The graph is built from structured control flow, before any sequential instruction list is created.
     /// </summary>
-    public static IReadOnlyList<StackInstruction> InstructionsFromExpression(
+    public static PineControlFlowGraph ControlFlowGraphFromExpression(
         Expression rootExpression,
         ImmutableHashSet<Expression> rootExprAlternativeForms,
         PineValueClass? envClass,
@@ -1252,7 +1209,7 @@ public record ExpressionCompilation(
         bool enableDirectInvocation = true,
         Func<PineValue, bool>? skipDirectInvocation = null)
     {
-        return
+        var compiled =
             PineIRCompiler.CompileExpression(
                 rootExpression,
                 rootExprAlternativeForms: rootExprAlternativeForms,
@@ -1261,8 +1218,9 @@ public record ExpressionCompilation(
                 parseCache,
                 enableTailRecursionOptimization,
                 enableDirectInvocation,
-                skipDirectInvocation)
-            .Instructions;
+                skipDirectInvocation);
+
+        return PineControlFlowGraph.FromFragment(compiled.Fragment);
     }
 
     /// <summary>

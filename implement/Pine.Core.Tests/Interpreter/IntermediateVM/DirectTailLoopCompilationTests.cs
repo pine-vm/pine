@@ -170,15 +170,22 @@ public class DirectTailLoopCompilationTests
                     ExpressionEncoding.EncodeExpressionAsValue(rootAlternative)),
                 environment: Expression.EnvironmentInstance);
 
-        var instructions =
-            PineIRCompiler.CompileExpression(
+        var graph =
+            ExpressionCompilation.ControlFlowGraphFromExpression(
                 expression,
                 rootExprAlternativeForms: [rootAlternative],
                 envClass: null,
                 parametersAsLocals: StaticFunctionInterface.FromExpression(expression),
                 parseCache: new(),
-                enableTailRecursionOptimization: true)
-            .Instructions;
+                enableTailRecursionOptimization: true);
+
+        graph.Blocks
+            .Should().ContainSingle(
+            block =>
+            block.Terminator is PineControlFlowTerminator.Jump &&
+            ((PineControlFlowTerminator.Jump)block.Terminator).Target == graph.Entry);
+
+        var instructions = graph.LowerToStackInstructions();
 
         instructions
             .Should().ContainSingle(
