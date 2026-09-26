@@ -2249,7 +2249,7 @@ public partial class ElmSyntaxInterpreter
                                 var scrutineeExprText =
                                     matchCase.ScrutineeExpr is { } scrutineeExpr
                                     ?
-                                    "\nScrutinee expression: " + scrutineeExpr
+                                    "\nScrutinee expression: " + PreparedExpressionRendering.Render(scrutineeExpr)
                                     :
                                     "";
 

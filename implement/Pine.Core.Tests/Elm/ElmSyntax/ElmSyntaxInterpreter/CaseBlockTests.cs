@@ -578,9 +578,40 @@ public class CaseBlockTests
             """
             Case expression did not match any arm.
             Scrutinee value: Nothing
-            Scrutinee expression: Identifier { QualifiedName = m }
+            Scrutinee expression: m
             Elm call stack (innermost first):
               at classify Nothing
             """);
+    }
+
+    [Fact]
+    public void No_arm_matches_renders_application_scrutinee_in_runtime_error()
+    {
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            type Maybe a
+                = Nothing
+                | Just a
+
+
+            classify =
+                case Just 1 of
+                    Nothing ->
+                        0
+            """;
+
+        var declarations = InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(elmModuleText);
+
+        var result = ElmInterpreter.ParseAndInterpret("classify", declarations);
+
+        result.IsErr().Should().BeTrue();
+
+        result.Unpack(
+            fromErr: err => err.ToString(),
+            fromOk: _ => throw new System.Exception("Expected error but got a value."))
+            .Should().Contain("Scrutinee expression: Just 1");
     }
 }
