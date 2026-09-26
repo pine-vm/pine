@@ -46,6 +46,7 @@ public class PineCliOptionsTests
             result.StandardError.Should().BeEmpty();
             result.StandardOutput.Should().Contain(installedExecutable);
             File.ReadAllBytes(installedExecutable).Should().Equal(File.ReadAllBytes(sourceExecutable));
+            File.GetUnixFileMode(installedExecutable).Should().HaveFlag(UnixFileMode.UserExecute);
 
             if (binOnPath)
                 result.StandardOutput.Should().Contain("new terminal instances");
@@ -53,13 +54,14 @@ public class PineCliOptionsTests
             else
                 result.StandardOutput.Should().Contain("export PATH=\"$HOME/.local/bin:$PATH\"");
 
-            var installedResult = RunPineProcess(installedExecutable, homeDirectory, path, "install");
+            // The test project's apphost needs its companion assemblies; the published Pine executable is single-file.
+            var installedResult = RunPineProcess(sourceExecutable, homeDirectory, path, "install");
 
             installedResult.ExitCode.Should().Be(0);
             installedResult.StandardOutput.Should().Contain("already installed");
             installedResult.StandardError.Should().BeEmpty();
 
-            var helpResult = RunPineProcess(installedExecutable, homeDirectory, path, "help");
+            var helpResult = RunPineProcess(sourceExecutable, homeDirectory, path, "help");
 
             helpResult.ExitCode.Should().Be(0);
 
