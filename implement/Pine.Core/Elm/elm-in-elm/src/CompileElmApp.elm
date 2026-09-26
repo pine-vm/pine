@@ -1897,7 +1897,7 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
                                                                 Nothing
 
                                                             Just ( _, instantiatedModule ) ->
-                                                                instantiatedModule.parsedSyntax
+                                                                Just instantiatedModule.parsedSyntax
 
                                                     else
                                                         Nothing
