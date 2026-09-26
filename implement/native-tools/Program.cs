@@ -11,14 +11,14 @@ public class Program
 
         var echoJsonCommand = new Command("echo-json", "Echoes the JSON string to the console.");
 
-        echoJsonCommand.SetHandler(
-            () =>
+        echoJsonCommand.SetAction(
+            _ =>
             {
                 EchoJson.EchoJsonLoop();
             });
 
-        rootCommand.Add(echoJsonCommand);
+        rootCommand.Subcommands.Add(echoJsonCommand);
 
-        return await rootCommand.InvokeAsync(args);
+        return await rootCommand.Parse(args).InvokeAsync();
     }
 }
