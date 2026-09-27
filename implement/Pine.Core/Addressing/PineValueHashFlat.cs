@@ -19,7 +19,7 @@ public class PineValueHashFlat
     {
         using var stream = new System.IO.MemoryStream();
 
-        ValueEncodingFlatDeterministic.Encode(stream, value);
+        ValueEncodingBinaryDeterministic.Encode(stream, value);
 
         var encodingBytes = stream.ToArray();
 

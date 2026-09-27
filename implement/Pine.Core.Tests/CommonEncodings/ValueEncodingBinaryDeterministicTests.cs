@@ -8,10 +8,12 @@ using System.IO;
 using System.Linq;
 using Xunit;
 
+using DecodeError = Pine.Core.CommonEncodings.ValueEncodingBinaryDeterministic.DecodeError;
+
 namespace Pine.Core.Tests.CommonEncodings;
 
 /// <summary>
-/// Regression tests for <see cref="ValueEncodingFlatDeterministic"/> intended to lock down
+/// Regression tests for <see cref="ValueEncodingBinaryDeterministic"/> intended to lock down
 /// the on-the-wire format and observable behaviour, so that future refactors (or migration
 /// to a more generalized implementation) can be validated against the existing format.
 ///
@@ -23,7 +25,7 @@ namespace Pine.Core.Tests.CommonEncodings;
 ///      mixed, large, all byte values, sharing of components, etc.) along with the
 ///      decode-time interning behaviour.
 /// </summary>
-public class ValueEncodingFlatDeterministicTests
+public class ValueEncodingBinaryDeterministicTests
 {
     [Fact]
     public void Reuses_components()
@@ -52,25 +54,25 @@ public class ValueEncodingFlatDeterministicTests
 
         using var compositionAlfaEncodedBytes = new MemoryStream();
 
-        ValueEncodingFlatDeterministic.Encode(compositionAlfaEncodedBytes, compositionAlfa);
+        ValueEncodingBinaryDeterministic.Encode(compositionAlfaEncodedBytes, compositionAlfa);
 
         compositionAlfaEncodedBytes.Seek(
             offset: 0,
             SeekOrigin.Begin);
 
         var reproducedAlfa =
-            ValueEncodingFlatDeterministic.DecodeRoot(compositionAlfaEncodedBytes.ToArray());
+            DecodeRootExpectingOk(compositionAlfaEncodedBytes.ToArray());
 
         using var compositionBetaEncodedBytes = new MemoryStream();
 
-        ValueEncodingFlatDeterministic.Encode(compositionBetaEncodedBytes, compositionBeta);
+        ValueEncodingBinaryDeterministic.Encode(compositionBetaEncodedBytes, compositionBeta);
 
         compositionBetaEncodedBytes.Seek(
             offset: 0,
             SeekOrigin.Begin);
 
         var reproducedBeta =
-            ValueEncodingFlatDeterministic.DecodeRoot(compositionBetaEncodedBytes.ToArray());
+            DecodeRootExpectingOk(compositionBetaEncodedBytes.ToArray());
 
         reproducedAlfa.Should().Be(compositionAlfa);
 
@@ -155,12 +157,12 @@ public class ValueEncodingFlatDeterministicTests
             {
                 using var encodedStream = new MemoryStream();
 
-                ValueEncodingFlatDeterministic.Encode(encodedStream, testCase);
+                ValueEncodingBinaryDeterministic.Encode(encodedStream, testCase);
 
                 var encodedFlat = encodedStream.ToArray();
 
                 var decoded =
-                    ValueEncodingFlatDeterministic.DecodeRoot(encodedFlat);
+                    DecodeRootExpectingOk(encodedFlat);
 
                 decoded.Should().Be(testCase);
             }
@@ -182,10 +184,12 @@ public class ValueEncodingFlatDeterministicTests
     {
         // These constants are part of the on-the-wire format. Changing any of them
         // would break compatibility with previously encoded data.
-        ValueEncodingFlatDeterministic.TagSize.Should().Be(4);
-        ValueEncodingFlatDeterministic.TagBlob.Should().Be(1);
-        ValueEncodingFlatDeterministic.TagList.Should().Be(3);
-        ValueEncodingFlatDeterministic.TagReference.Should().Be(4);
+        ValueEncodingBinaryDeterministic.TagSize.Should().Be(4);
+        ValueEncodingBinaryDeterministic.TagBlob.Should().Be(1);
+        ValueEncodingBinaryDeterministic.TagList.Should().Be(3);
+        ValueEncodingBinaryDeterministic.TagReferenceInteral.Should().Be(4);
+        ValueEncodingBinaryDeterministic.TagReferenceExternal256.Should().Be(5);
+        ValueEncodingBinaryDeterministic.ReferenceExternal256Length.Should().Be(32);
     }
 
     /* ------------------------------------------------------------------ */
@@ -359,11 +363,11 @@ public class ValueEncodingFlatDeterministicTests
                 PineValue.EmptyList);
 
         using var streamEncoded = new MemoryStream();
-        ValueEncodingFlatDeterministic.Encode(streamEncoded, composition);
+        ValueEncodingBinaryDeterministic.Encode(streamEncoded, composition);
 
         var delegateBuffer = new MemoryStream();
 
-        ValueEncodingFlatDeterministic.Encode(
+        ValueEncodingBinaryDeterministic.Encode(
             bytes => delegateBuffer.Write(bytes),
             composition);
 
@@ -396,7 +400,7 @@ public class ValueEncodingFlatDeterministicTests
         var composition = PineValue.List(blob, blob, blob);
 
         var encoded = EncodeToBytes(composition);
-        var decoded = ValueEncodingFlatDeterministic.DecodeRoot(encoded);
+        var decoded = DecodeRootExpectingOk(encoded);
 
         decoded.Should().Be(composition);
 
@@ -421,7 +425,7 @@ public class ValueEncodingFlatDeterministicTests
                 sharedInner);
 
         var encoded = EncodeToBytes(composition);
-        var decoded = ValueEncodingFlatDeterministic.DecodeRoot(encoded);
+        var decoded = DecodeRootExpectingOk(encoded);
 
         decoded.Should().Be(composition);
     }
@@ -443,7 +447,7 @@ public class ValueEncodingFlatDeterministicTests
 
         // The four additional references should each contribute only 8 bytes
         // (tag + relative offset), regardless of the blob's size.
-        var expectedExtraBytes = 4 * (ValueEncodingFlatDeterministic.TagSize + 4);
+        var expectedExtraBytes = 4 * (ValueEncodingBinaryDeterministic.TagSize + 4);
         manyEncoded.Length.Should().Be(singleEncoded.Length + expectedExtraBytes);
     }
 
@@ -458,7 +462,7 @@ public class ValueEncodingFlatDeterministicTests
         var composition = PineValue.List(inner, inner, inner);
 
         var encoded = EncodeToBytes(composition);
-        var decoded = ValueEncodingFlatDeterministic.DecodeRoot(encoded);
+        var decoded = DecodeRootExpectingOk(encoded);
 
         decoded.Should().Be(composition);
 
@@ -484,7 +488,7 @@ public class ValueEncodingFlatDeterministicTests
         {
             var tag = BinaryPrimitives.ReadInt32BigEndian(span.Slice(offset, 4));
 
-            if (tag == ValueEncodingFlatDeterministic.TagReference)
+            if (tag == ValueEncodingBinaryDeterministic.TagReferenceInteral)
             {
                 foundAnyReference = true;
 
@@ -530,7 +534,7 @@ public class ValueEncodingFlatDeterministicTests
                 [sharedBytes.Length] = new HashSet<PineValue.BlobValue> { reusableBlob }.ToFrozenSet(),
             };
 
-        var decoded = ValueEncodingFlatDeterministic.DecodeRoot(encoded, blobInstancesToReuse: reuseDict);
+        var decoded = DecodeRootExpectingOk(encoded, blobInstancesToReuse: reuseDict);
 
         decoded.Should().BeSameAs(reusableBlob);
     }
@@ -558,7 +562,7 @@ public class ValueEncodingFlatDeterministicTests
             };
 
         var decoded =
-            ValueEncodingFlatDeterministic.DecodeRoot(
+            DecodeRootExpectingOk(
                 encoded,
                 listInstancesToReuse: reuseDict);
 
@@ -590,7 +594,7 @@ public class ValueEncodingFlatDeterministicTests
             };
 
         var decoded =
-            ValueEncodingFlatDeterministic.DecodeRoot(
+            DecodeRootExpectingOk(
                 encoded,
                 blobInstancesToReuse: emptyBlobDict,
                 listInstancesToReuse: emptyListDict);
@@ -632,7 +636,7 @@ public class ValueEncodingFlatDeterministicTests
         (encoded.Length % 4).Should().Be(0);
 
         // Header layout: 4 bytes tag + 4 bytes length + payload + padding to multiple of 4.
-        var expectedLength = ValueEncodingFlatDeterministic.TagSize + 4 + ((blobSize + 3) & ~3);
+        var expectedLength = ValueEncodingBinaryDeterministic.TagSize + 4 + ((blobSize + 3) & ~3);
         encoded.Length.Should().Be(expectedLength);
 
         // Any padding bytes (between payload end and encoded end) must be zero.
@@ -641,7 +645,7 @@ public class ValueEncodingFlatDeterministicTests
             encoded[i].Should().Be(0, because: "padding bytes must be zero");
         }
 
-        var decoded = ValueEncodingFlatDeterministic.DecodeRoot(encoded);
+        var decoded = DecodeRootExpectingOk(encoded);
         decoded.Should().Be(blob);
     }
 
@@ -652,7 +656,7 @@ public class ValueEncodingFlatDeterministicTests
         var blob = PineValue.Blob(bytes);
 
         var encoded = EncodeToBytes(blob);
-        var decoded = ValueEncodingFlatDeterministic.DecodeRoot(encoded);
+        var decoded = DecodeRootExpectingOk(encoded);
 
         decoded.Should().Be(blob);
     }
@@ -669,7 +673,7 @@ public class ValueEncodingFlatDeterministicTests
         }
 
         var encoded = EncodeToBytes(current);
-        var decoded = ValueEncodingFlatDeterministic.DecodeRoot(encoded);
+        var decoded = DecodeRootExpectingOk(encoded);
 
         decoded.Should().Be(current);
     }
@@ -685,7 +689,7 @@ public class ValueEncodingFlatDeterministicTests
         var composition = PineValue.List(items);
 
         var encoded = EncodeToBytes(composition);
-        var decoded = ValueEncodingFlatDeterministic.DecodeRoot(encoded);
+        var decoded = DecodeRootExpectingOk(encoded);
 
         decoded.Should().Be(composition);
     }
@@ -715,7 +719,7 @@ public class ValueEncodingFlatDeterministicTests
                 sharedBlob);
 
         var encoded = EncodeToBytes(composition);
-        var decoded = ValueEncodingFlatDeterministic.DecodeRoot(encoded);
+        var decoded = DecodeRootExpectingOk(encoded);
 
         decoded.Should().Be(composition);
     }
@@ -732,7 +736,7 @@ public class ValueEncodingFlatDeterministicTests
         var composition = PineValue.List(items);
 
         var encoded = EncodeToBytes(composition);
-        var decoded = ValueEncodingFlatDeterministic.DecodeRoot(encoded);
+        var decoded = DecodeRootExpectingOk(encoded);
 
         decoded.Should().Be(composition);
 
@@ -744,18 +748,413 @@ public class ValueEncodingFlatDeterministicTests
     }
 
     /* ------------------------------------------------------------------ */
+    /*  Malformed input                                                    */
+    /* ------------------------------------------------------------------ */
+
+    [Fact]
+    public void Decode_returns_err_for_empty_input()
+    {
+        DecodeRootExpectingErr(Array.Empty<byte>())
+            .Should().Be(new DecodeError.UnexpectedEndOfInput(Offset: 0, Expected: "tag"));
+    }
+
+    [Fact]
+    public void Decode_returns_err_for_truncated_tag()
+    {
+        DecodeRootExpectingErr(new byte[] { 0, 0, 0 })
+            .Should().Be(new DecodeError.UnexpectedEndOfInput(Offset: 0, Expected: "tag"));
+    }
+
+    [Fact]
+    public void Decode_returns_err_for_missing_length()
+    {
+        DecodeRootExpectingErr(Int32Sequence(ValueEncodingBinaryDeterministic.TagBlob))
+            .Should().Be(new DecodeError.UnexpectedEndOfInput(Offset: 4, Expected: "byte count of blob"));
+
+        DecodeRootExpectingErr(Int32Sequence(ValueEncodingBinaryDeterministic.TagList))
+            .Should().Be(new DecodeError.UnexpectedEndOfInput(Offset: 4, Expected: "item count of list"));
+
+        DecodeRootExpectingErr(Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceInteral))
+            .Should().Be(new DecodeError.UnexpectedEndOfInput(Offset: 4, Expected: "relative address of reference"));
+    }
+
+    [Fact]
+    public void Decode_returns_err_for_unknown_tag()
+    {
+        var error = DecodeRootExpectingErr(Int32Sequence(7, 0));
+
+        error.Should().Be(new DecodeError.UnknownTag(Offset: 0, Tag: 7));
+
+        error.ToString().Should().Contain("tag 7");
+    }
+
+    [Fact]
+    public void Decode_returns_err_for_blob_length_exceeding_input()
+    {
+        DecodeRootExpectingErr(Int32Sequence(ValueEncodingBinaryDeterministic.TagBlob, 5, 0))
+            .Should().Be(
+            new DecodeError.LengthExceedsRemainingInput(
+                Offset: 0,
+                Tag: ValueEncodingBinaryDeterministic.TagBlob,
+                Length: 5,
+                RemainingBytes: 4));
+
+        DecodeRootExpectingErr(Int32Sequence(ValueEncodingBinaryDeterministic.TagBlob, int.MaxValue))
+            .Should().Be(
+            new DecodeError.LengthExceedsRemainingInput(
+                Offset: 0,
+                Tag: ValueEncodingBinaryDeterministic.TagBlob,
+                Length: int.MaxValue,
+                RemainingBytes: 0));
+    }
+
+    [Fact]
+    public void Decode_returns_err_for_negative_lengths()
+    {
+        DecodeRootExpectingErr(Int32Sequence(ValueEncodingBinaryDeterministic.TagBlob, -1))
+            .Should().Be(
+            new DecodeError.NegativeLength(Offset: 0, Tag: ValueEncodingBinaryDeterministic.TagBlob, Length: -1));
+
+        DecodeRootExpectingErr(Int32Sequence(ValueEncodingBinaryDeterministic.TagList, -1))
+            .Should().Be(
+            new DecodeError.NegativeLength(Offset: 0, Tag: ValueEncodingBinaryDeterministic.TagList, Length: -1));
+    }
+
+    [Fact]
+    public void Decode_returns_err_for_list_item_count_exceeding_input()
+    {
+        DecodeRootExpectingErr(Int32Sequence(ValueEncodingBinaryDeterministic.TagList, int.MaxValue))
+            .Should().Be(
+            new DecodeError.LengthExceedsRemainingInput(
+                Offset: 0,
+                Tag: ValueEncodingBinaryDeterministic.TagList,
+                Length: int.MaxValue,
+                RemainingBytes: 0));
+
+        // Declares two items but contains only one.
+        DecodeRootExpectingErr(
+            Int32Sequence(
+                ValueEncodingBinaryDeterministic.TagList,
+                2,
+                ValueEncodingBinaryDeterministic.TagBlob,
+                0))
+            .Should().Be(
+            new DecodeError.LengthExceedsRemainingInput(
+                Offset: 0,
+                Tag: ValueEncodingBinaryDeterministic.TagList,
+                Length: 2,
+                RemainingBytes: 8));
+    }
+
+    [Fact]
+    public void Decode_returns_err_for_truncated_nested_list()
+    {
+        var encoded =
+            EncodeToBytes(
+                PineValue.List(
+                    PineValue.List(PineValue.Blob([1]), PineValue.Blob([2])),
+                    PineValue.Blob([3])));
+
+        for (var length = 0; length < encoded.Length; length++)
+        {
+            ValueEncodingBinaryDeterministic.DecodeRoot(encoded.AsMemory(0, length))
+                .IsErr().Should().BeTrue("truncated to " + length + " bytes");
+        }
+    }
+
+    [Fact]
+    public void Decode_returns_err_for_invalid_reference()
+    {
+        // Reference pointing to itself (no completed value there).
+        DecodeRootExpectingErr(Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceInteral, -4))
+            .Should().Be(new DecodeError.InvalidInternalReference(Offset: 0, ReferencedAddress: 0));
+
+        // Reference pointing outside of the input.
+        DecodeRootExpectingErr(Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceInteral, int.MinValue))
+            .Should().Be(
+            new DecodeError.InvalidInternalReference(Offset: 0, ReferencedAddress: 4L + int.MinValue));
+
+        // Reference from inside a list to the enclosing (not yet completed) list.
+        DecodeRootExpectingErr(
+            Int32Sequence(
+                ValueEncodingBinaryDeterministic.TagList,
+                1,
+                ValueEncodingBinaryDeterministic.TagReferenceInteral,
+                -12))
+            .Should().Be(new DecodeError.InvalidInternalReference(Offset: 8, ReferencedAddress: 0));
+    }
+
+    [Fact]
+    public void Encode_and_decode_deeply_nested_list_without_stack_overflow()
+    {
+        PineValue value = PineValue.EmptyList;
+
+        for (var i = 0; i < 200_000; i++)
+        {
+            value = PineValue.List(value);
+        }
+
+        var encoded = EncodeToBytes(value);
+
+        DecodeRootExpectingOk(encoded).Should().Be(value);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  External references                                                */
+    /* ------------------------------------------------------------------ */
+
+    [Fact]
+    public void Decode_resolves_external_reference_at_root_via_delegate()
+    {
+        var reference = ExternalReferenceBytes(seed: 17);
+
+        var externalValue = PineValue.List(PineValue.Blob([1, 2, 3]), PineValue.EmptyList);
+
+        var receivedReferences = new List<byte[]>();
+
+        var decoded =
+            DecodeRootExpectingOk(
+                EncodeExternalReference(reference),
+                resolveExternalReference:
+                requested =>
+                {
+                    receivedReferences.Add(requested.ToArray());
+
+                    return externalValue;
+                });
+
+        decoded.Should().BeSameAs(externalValue);
+
+        receivedReferences.Should().HaveCount(1);
+        receivedReferences[0].Should().Equal(reference);
+    }
+
+    [Fact]
+    public void Decode_resolves_external_references_nested_in_lists()
+    {
+        var referenceAlfa = ExternalReferenceBytes(seed: 1);
+        var referenceBeta = ExternalReferenceBytes(seed: 2);
+
+        var valueAlfa = PineValue.Blob([0xAA]);
+        var valueBeta = PineValue.List(PineValue.Blob([0xBB]));
+
+        var encoded =
+            Concat(
+                Int32Sequence(ValueEncodingBinaryDeterministic.TagList, 3),
+                EncodeExternalReference(referenceAlfa),
+                Int32Sequence(ValueEncodingBinaryDeterministic.TagBlob, 1),
+                [0x07, 0, 0, 0],
+                EncodeExternalReference(referenceBeta));
+
+        var decoded =
+            DecodeRootExpectingOk(
+                encoded,
+                resolveExternalReference:
+                requested =>
+                requested.Span.SequenceEqual(referenceAlfa)
+                ?
+                valueAlfa
+                :
+                requested.Span.SequenceEqual(referenceBeta)
+                ?
+                valueBeta
+                :
+                null);
+
+        decoded.Should().Be(
+            PineValue.List(
+                valueAlfa,
+                PineValue.Blob([0x07]),
+                valueBeta));
+    }
+
+    [Fact]
+    public void Decode_supports_internal_reference_to_external_reference_entry()
+    {
+        var reference = ExternalReferenceBytes(seed: 3);
+
+        var externalValue = PineValue.Blob([4, 5, 6, 7, 8]);
+
+        // List [ external, reference to the external entry at offset 8 ].
+        // The internal reference is located at offset 8 + 4 + 32 = 44, its address base is 48.
+        var encoded =
+            Concat(
+                Int32Sequence(ValueEncodingBinaryDeterministic.TagList, 2),
+                EncodeExternalReference(reference),
+                Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceInteral, 8 - 48));
+
+        var resolveCount = 0;
+
+        var decoded =
+            DecodeRootExpectingOk(
+                encoded,
+                resolveExternalReference:
+                _ =>
+                {
+                    resolveCount++;
+                    return externalValue;
+                });
+
+        decoded.Should().Be(PineValue.List(externalValue, externalValue));
+
+        resolveCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void Decode_returns_err_containing_reference_when_delegate_returns_null()
+    {
+        var reference = ExternalReferenceBytes(seed: 0x40);
+
+        var encoded =
+            Concat(
+                Int32Sequence(ValueEncodingBinaryDeterministic.TagList, 1),
+                EncodeExternalReference(reference));
+
+        var error =
+            ValueEncodingBinaryDeterministic.DecodeRoot(
+                encoded,
+                resolveExternalReference: _ => null);
+
+        var notFound =
+            error.Should().BeOfType<Result<DecodeError, PineValue>.Err>()
+            .Which.Value.Should().BeOfType<DecodeError.ExternalReferenceNotFound>()
+            .Subject;
+
+        notFound.Offset.Should().Be(8);
+        notFound.Reference.ToArray().Should().Equal(reference);
+
+        notFound.Should().Be(new DecodeError.ExternalReferenceNotFound(Offset: 8, Reference: reference.ToArray()));
+
+        notFound.ToString().Should().Contain(Convert.ToHexStringLower(reference));
+    }
+
+    [Fact]
+    public void Decode_returns_err_for_external_reference_when_no_delegate_given()
+    {
+        var reference = ExternalReferenceBytes(seed: 9);
+
+        DecodeRootExpectingErr(EncodeExternalReference(reference))
+            .Should().Be(new DecodeError.ExternalReferenceNotFound(Offset: 0, Reference: reference));
+    }
+
+    [Fact]
+    public void Decode_returns_err_for_truncated_external_reference()
+    {
+        var encoded = EncodeExternalReference(ExternalReferenceBytes(seed: 5));
+
+        var resolveCount = 0;
+
+        for (var length = 4; length < encoded.Length; length++)
+        {
+            ValueEncodingBinaryDeterministic.DecodeRoot(
+                encoded.AsMemory(0, length),
+                resolveExternalReference:
+                _ =>
+                {
+                    resolveCount++;
+                    return PineValue.EmptyList;
+                })
+                .Should().Be(
+                Result<DecodeError, PineValue>.err(
+                    new DecodeError.UnexpectedEndOfInput(Offset: 4, Expected: "reference of external reference")));
+        }
+
+        resolveCount.Should().Be(0);
+    }
+
+    [Fact]
+    public void Encode_does_not_emit_external_references()
+    {
+        var composition =
+            PineValue.List(
+                PineValue.Blob([1, 2, 3]),
+                PineValue.List(PineValue.Blob([1, 2, 3]), PineValue.EmptyList),
+                PineValue.EmptyList);
+
+        var encoded = EncodeToBytes(composition);
+
+        // The walk only accepts blob, list, and internal reference entries.
+        CountReferenceMarkers(encoded).Should().BeGreaterThan(0);
+    }
+
+    /* ------------------------------------------------------------------ */
     /*  Helpers                                                            */
     /* ------------------------------------------------------------------ */
 
     private static byte[] EncodeToBytes(PineValue value)
     {
         using var stream = new MemoryStream();
-        ValueEncodingFlatDeterministic.Encode(stream, value);
+
+        ValueEncodingBinaryDeterministic.Encode(stream, value);
+
         return stream.ToArray();
     }
 
+    private static PineValue DecodeRootExpectingOk(
+        ReadOnlyMemory<byte> sourceBytes,
+        IReadOnlyDictionary<int, FrozenSet<PineValue.BlobValue>>? blobInstancesToReuse = null,
+        IReadOnlyDictionary<int, FrozenSet<PineValue.ListValue>>? listInstancesToReuse = null,
+        Func<ReadOnlyMemory<byte>, PineValue?>? resolveExternalReference = null)
+    {
+        var decodeResult =
+            ValueEncodingBinaryDeterministic.DecodeRoot(
+                sourceBytes,
+                blobInstancesToReuse: blobInstancesToReuse,
+                listInstancesToReuse: listInstancesToReuse,
+                resolveExternalReference: resolveExternalReference);
+
+        if (decodeResult is Result<DecodeError, PineValue>.Ok ok)
+        {
+            return ok.Value;
+        }
+
+        throw new Exception("Expected decoding to succeed, but got: " + decodeResult);
+    }
+
+    private static DecodeError DecodeRootExpectingErr(ReadOnlyMemory<byte> sourceBytes)
+    {
+        var decodeResult = ValueEncodingBinaryDeterministic.DecodeRoot(sourceBytes);
+
+        if (decodeResult is Result<DecodeError, PineValue>.Err err)
+        {
+            return err.Value;
+        }
+
+        throw new Exception("Expected decoding to fail, but got: " + decodeResult);
+    }
+
+    private static byte[] ExternalReferenceBytes(byte seed)
+    {
+        var bytes = new byte[ValueEncodingBinaryDeterministic.ReferenceExternal256Length];
+
+        for (var i = 0; i < bytes.Length; i++)
+        {
+            bytes[i] = (byte)(seed + i * 7);
+        }
+
+        return bytes;
+    }
+
+    private static byte[] EncodeExternalReference(byte[] reference) =>
+        Concat(Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceExternal256), reference);
+
+    private static byte[] Concat(params byte[][] parts) =>
+        [.. parts.SelectMany(part => part)];
+
+    private static byte[] Int32Sequence(params int[] values)
+    {
+        var bytes = new byte[values.Length * 4];
+
+        for (var i = 0; i < values.Length; i++)
+        {
+            BinaryPrimitives.WriteInt32BigEndian(bytes.AsSpan(i * 4, 4), values[i]);
+        }
+
+        return bytes;
+    }
+
     /// <summary>
-    /// Walks the encoded stream entry-by-entry and counts how many <see cref="ValueEncodingFlatDeterministic.TagReference"/>
+    /// Walks the encoded stream entry-by-entry and counts how many <see cref="ValueEncodingBinaryDeterministic.TagReferenceInteral"/>
     /// entries appear. The walk uses the on-the-wire layout, so it implicitly
     /// validates that all non-reference headers are well-formed.
     /// </summary>
@@ -768,7 +1167,7 @@ public class ValueEncodingFlatDeterministicTests
         {
             var tag = BinaryPrimitives.ReadInt32BigEndian(encoded.Slice(offset, 4));
 
-            if (tag == ValueEncodingFlatDeterministic.TagReference)
+            if (tag == ValueEncodingBinaryDeterministic.TagReferenceInteral)
             {
                 count++;
                 offset += 8;
@@ -792,12 +1191,12 @@ public class ValueEncodingFlatDeterministicTests
     /// </summary>
     private static int AdvancePastNonReferenceEntry(ReadOnlySpan<byte> encoded, int offset, int tag)
     {
-        if (tag == ValueEncodingFlatDeterministic.TagList)
+        if (tag == ValueEncodingBinaryDeterministic.TagList)
         {
             return 8;
         }
 
-        if (tag == ValueEncodingFlatDeterministic.TagBlob)
+        if (tag == ValueEncodingBinaryDeterministic.TagBlob)
         {
             var length = BinaryPrimitives.ReadInt32BigEndian(encoded.Slice(offset + 4, 4));
             var paddedLength = (length + 3) & ~3;

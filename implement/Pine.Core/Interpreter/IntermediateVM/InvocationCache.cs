@@ -208,15 +208,18 @@ public sealed class PersistentInvocationCacheAccess : IInvocationCacheAccess
             return false;
         }
 
-        try
+        switch (ValueEncodingBinaryDeterministic.DecodeRoot(cachedContent))
         {
-            value = ValueEncodingFlatDeterministic.DecodeRoot(cachedContent);
-        }
-        catch (Exception ex)
-        {
-            throw new Exception(
-                "Failed to decode cached value for cache file '" + fileName + "'.",
-                ex);
+            case Result<ValueEncodingBinaryDeterministic.DecodeError, PineValue>.Ok decodeOk:
+                value = decodeOk.Value;
+                break;
+
+            case Result<ValueEncodingBinaryDeterministic.DecodeError, PineValue>.Err decodeErr:
+                throw new Exception(
+                    "Failed to decode cached value for cache file '" + fileName + "': " + decodeErr.Value);
+
+            default:
+                throw new NotImplementedException("Unexpected result type.");
         }
 
         _memoryCache?.TryAdd(key, value);
@@ -238,7 +241,7 @@ public sealed class PersistentInvocationCacheAccess : IInvocationCacheAccess
 
         using var stream = new MemoryStream();
 
-        ValueEncodingFlatDeterministic.Encode(stream, value);
+        ValueEncodingBinaryDeterministic.Encode(stream, value);
 
         _fileStore.SetFileContent(
             path: [fileName],
