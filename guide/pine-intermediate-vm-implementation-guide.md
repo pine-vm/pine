@@ -92,3 +92,78 @@ Direct evaluation of template-forming expressions already skips the overhead of 
 In addition, the VM also uses a specialized representation to accumulate consecutive `Eval`s while deferring evaluation.
 
 A value is said to have an arity of zero if it does not encode an expression.
+
+### Inlining Using the Control Flow Graph
+
+As part of compiling expressions into sequential representations, we inline some invocations based on the control flow graph.
+
+That inlining is not limited to a single level.
+For example, Pine code compiled from the frontend code shown below can be inlined so far that the representation of `skipIdentifier` contains no invocations at all (the recursion in `skipToIdentifierEnd` is represented as a loop).
+
+```Elm
+
+skipIdentifier : String -> Int -> Int
+skipIdentifier source offset =
+    if isIdentifierStart (String.left 1 (String.dropLeft offset source)) then
+        skipToIdentifierEnd source (offset + 1)
+
+    else
+        offset
+
+
+skipToIdentifierEnd : String -> Int -> Int
+skipToIdentifierEnd source offset =
+    if isIdentifierChar (String.left 1 (String.dropLeft offset source)) then
+        skipToIdentifierEnd source (offset + 1)
+
+    else
+        offset
+
+
+isIdentifierStart : String -> Bool
+isIdentifierStart character =
+    case character of
+        "_" ->
+            True
+
+        "a" ->
+            True
+
+        "b" ->
+            True
+
+        _ ->
+            False
+
+
+isIdentifierChar : String -> Bool
+isIdentifierChar character =
+    case character of
+        "_" ->
+            True
+
+        "0" ->
+            True
+
+        "a" ->
+            True
+
+        "b" ->
+            True
+
+        _ ->
+            False
+
+```
+
+While inlining decisions can be predicated on code size, the Pine expression node count is not part of such a gating.
+
+Instead, size-based gates use counts closer to the number of instructions in the final representation, which can differ significantly.
+
+For example, when compiling the Elm function `isIdentifierChar` from the example above, we emit a Pine condition node for each of the case arms.
+
+However, since the patterns are constant values and contain only a literal expression, all these arms end up as a single map instruction in the sequential IR.
+
+Adding more case arms increases the Pine expression size, but the sequential IR size remains constant.
+
+But inlining does not stop there. For example, multiple instances of `skipIdentifier` can be inlined in another function, resulting in multiple local loops.

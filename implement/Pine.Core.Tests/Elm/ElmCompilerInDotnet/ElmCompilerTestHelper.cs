@@ -353,7 +353,8 @@ public class ElmCompilerTestHelper
     /// </summary>
     public static Core.Interpreter.IntermediateVM.PineVM PineVMForProfiling(
         Action<EvaluationReport> reportFunctionApplication,
-        bool enableTailRecursionOptimization = false)
+        bool enableTailRecursionOptimization = false,
+        ReportExecutedStackInstruction? reportExecutedStackInstruction = null)
     {
         var vm =
             Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
@@ -370,7 +371,8 @@ public class ElmCompilerTestHelper
                 reportEnterPrecompiledLeaf: null,
                 reportExitPrecompiledLeaf: null,
                 optimizationParametersSerial: null,
-                cacheFileStore: null);
+                cacheFileStore: null,
+                reportExecutedStackInstruction: reportExecutedStackInstruction);
 
         return vm;
     }

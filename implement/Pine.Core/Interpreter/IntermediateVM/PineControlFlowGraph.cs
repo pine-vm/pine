@@ -97,6 +97,7 @@ public abstract record PineControlFlowTerminator
     public sealed record Invoke(
         PineBlockId Continuation,
         ImmutableArray<PineVirtualValueId> Arguments,
+        ImmutableArray<PineVirtualValueId> Inputs,
         StackInstruction Instruction) : PineControlFlowTerminator;
 
     /// <summary>
@@ -123,7 +124,7 @@ public sealed record PineBasicBlock(
 /// when lowering to stack instructions.
 /// </para>
 /// </summary>
-public sealed record PineControlFlowGraph(
+public sealed partial record PineControlFlowGraph(
     PineBlockId Entry,
     ImmutableArray<PineBasicBlock> Blocks)
 {
@@ -342,6 +343,7 @@ public sealed record PineControlFlowGraph(
                 new PineControlFlowTerminator.Invoke(
                     Continuation: continuation.Id,
                     Arguments: arguments,
+                    Inputs: inputs,
                     Instruction: instruction);
 
             return continuation;
@@ -595,7 +597,7 @@ public sealed record PineControlFlowGraph(
                         $"for {targetBlock.Parameters.Length} parameters.");
                 }
 
-                if (target.Value <= block.Id.Value && arguments.Length is not 0)
+                if (target == Entry && target.Value <= block.Id.Value && arguments.Length is not 0)
                 {
                     throw new InvalidOperationException(
                         $"Loop edge {block.Id.Value} -> {target.Value} carries a non-empty evaluation stack.");

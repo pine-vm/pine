@@ -312,7 +312,7 @@ public record ExpressionCompilation(
                 pathMaxHighInclusive: pathMaxHighInclusive,
                 disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
 
-        return
+        var graph =
             ControlFlowGraphFromExpression(
                 rootExpression: reducedExpression,
                 rootExprAlternativeForms: [rootExpression],
@@ -321,10 +321,144 @@ public record ExpressionCompilation(
                 parseCache,
                 enableTailRecursionOptimization,
                 enableDirectInvocation,
-                skipDirectInvocation)
+                skipDirectInvocation);
+
+        var optimizedGraph =
+            enableTailRecursionOptimization
+            ?
+            graph
+            :
+            InlineStaticInvocations(
+                graph,
+                parseCache,
+                parametersAsLocals.ParamsPaths.Count,
+                skipInlining,
+                envConstraintId,
+                enableDirectInvocation,
+                skipDirectInvocation,
+                activeExpressions: [rootExpression, reducedExpression],
+                remainingDepth: 8);
+
+        return
+            optimizedGraph
             .ForwardJumpsToReturn()
             .ForwardConstantBooleanBranches()
+            .ReplaceNonEscapingLists(parametersAsLocals.ParamsPaths.Count)
+            .EliminateLocalCopies()
+            .FuseLocalListProjections()
             .LowerToStackInstructions();
+    }
+
+    private static PineControlFlowGraph InlineStaticInvocations(
+        PineControlFlowGraph graph,
+        PineVMParseCache parseCache,
+        int parameterCount,
+        Func<Expression, PineValueClass?, bool> skipInlining,
+        PineValueClass? envConstraint,
+        bool enableDirectInvocation,
+        Func<PineValue, bool>? skipDirectInvocation,
+        ImmutableHashSet<Expression> activeExpressions,
+        int remainingDepth)
+    {
+        const int maxCalleeInstructions = 256;
+        const int maxFrameInstructions = 2_048;
+
+        if (remainingDepth is 0)
+        {
+            return graph;
+        }
+
+        for (var blockIndex = 0; blockIndex < graph.Blocks.Length; blockIndex++)
+        {
+            if (graph.Blocks[blockIndex].Terminator is not PineControlFlowTerminator.Invoke invoke)
+            {
+                continue;
+            }
+
+            if (invoke.Instruction is not
+                { Kind: StackInstructionKind.Invoke_StackFrame_Const, OptimizedInvocation: { } direct } ||
+                CurriedFunctionPlan.TryParseFunctionRecord(direct.ExpressionEncoded, parseCache) is not null)
+            {
+                continue;
+            }
+
+            var target = direct.Expression;
+            var parameters = direct.InvocationInterface;
+
+            if (activeExpressions.Contains(target) ||
+                skipInlining(target, envConstraint) ||
+                skipInlining(target, null))
+            {
+                continue;
+            }
+
+            var callBlock = graph.Blocks[blockIndex];
+
+            var knownArguments =
+                callBlock.Operations
+                .Where(operation => operation.Instruction is
+                { Kind: StackInstructionKind.Push_Literal, Literal: not null })
+                .Select(operation => (operation.Results, operation.Instruction.Literal))
+                .ToDictionary(item => item.Results[0], item => item.Literal!.Evaluate());
+
+            var knownParameterValues =
+                invoke.Inputs
+                .Select((input, index) =>
+                    (Path: parameters.ParamsPaths[index],
+                     Value: knownArguments.TryGetValue(input, out var value) ? value : null))
+                .Where(item => item.Value is not null && item.Value.Equals(direct.ExpressionEncoded))
+                .Select(item => new KeyValuePair<IReadOnlyList<int>, PineValue>(item.Path, item.Value!))
+                .ToArray();
+
+            var calleeEnvironmentClass =
+                knownParameterValues.Length is 0 ? null : PineValueClass.Create(knownParameterValues);
+
+            var calleeGraph =
+                ControlFlowGraphFromExpression(
+                    target,
+                    rootExprAlternativeForms: [],
+                    envClass: calleeEnvironmentClass,
+                    parametersAsLocals: parameters,
+                    parseCache,
+                    enableTailRecursionOptimization: true,
+                    enableDirectInvocation,
+                    skipDirectInvocation);
+
+            var callee =
+                InlineStaticInvocations(
+                    calleeGraph,
+                    parseCache,
+                    parameters.ParamsPaths.Count,
+                    skipInlining,
+                    envConstraint: null,
+                    enableDirectInvocation,
+                    skipDirectInvocation,
+                    activeExpressions.Add(target),
+                    remainingDepth - 1)
+                .ForwardConstantBooleanBranches();
+
+            var calleeInstructionCount = callee.LowerToStackInstructions().Length;
+
+            if (calleeInstructionCount <= 2 ||
+                calleeInstructionCount > maxCalleeInstructions ||
+                graph.LowerToStackInstructions().Length + calleeInstructionCount >
+                maxFrameInstructions)
+            {
+                continue;
+            }
+
+            graph =
+                graph.InlineInvocation(
+                    graph.Blocks[blockIndex].Id,
+                    callee,
+                    parameterCount,
+                    parameters.ParamsPaths.Count);
+
+            // Blocks inserted at this site have already been processed transitively.
+            blockIndex += callee.Blocks.Length;
+        }
+
+        return graph;
     }
 
 

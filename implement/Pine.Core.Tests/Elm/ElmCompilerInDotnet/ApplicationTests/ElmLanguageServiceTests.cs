@@ -834,9 +834,9 @@ public class ElmLanguageServiceTests
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
             InvocationCount: 1_698
-            BuildListCount: 3_207
-            LoopIterationCount: 980
-            InstructionCount: 77_231
+            BuildListCount: 3_083
+            LoopIterationCount: 982
+            InstructionCount: 76_962
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
@@ -1249,9 +1249,9 @@ public class ElmLanguageServiceTests
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
             InvocationCount: 3_919
-            BuildListCount: 6_488
-            LoopIterationCount: 2_291
-            InstructionCount: 158_906
+            BuildListCount: 6_230
+            LoopIterationCount: 2_298
+            InstructionCount: 158_299
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
@@ -1380,9 +1380,9 @@ public class ElmLanguageServiceTests
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
             InvocationCount: 5_243
-            BuildListCount: 8_487
-            LoopIterationCount: 3_871
-            InstructionCount: 236_194
+            BuildListCount: 8_152
+            LoopIterationCount: 3_878
+            InstructionCount: 235_508
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
@@ -1574,9 +1574,9 @@ public class ElmLanguageServiceTests
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
             InvocationCount: 5_360
-            BuildListCount: 8_849
-            LoopIterationCount: 4_107
-            InstructionCount: 223_512
+            BuildListCount: 8_621
+            LoopIterationCount: 4_117
+            InstructionCount: 222_922
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(

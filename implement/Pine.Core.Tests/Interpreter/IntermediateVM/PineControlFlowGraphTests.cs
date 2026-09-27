@@ -1,8 +1,10 @@
 using AwesomeAssertions;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Internal;
 using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.PineVM;
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Xunit;
@@ -35,6 +37,165 @@ public class PineControlFlowGraphTests
         .ForwardJumpsToReturn()
         .ForwardConstantBooleanBranches()
         .LowerToStackInstructions();
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    [InlineData(6)]
+    public void Fuse_local_list_projection_preserves_result_without_building_a_list(int index)
+    {
+        var items = Enumerable.Range(0, 7).Select(i => PineValue.Blob([(byte)i])).ToArray();
+
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Skip_Head_Const(index)));
+
+        var optimized = original.FuseLocalListProjections();
+
+        optimized.LowerToStackInstructions().Should().Equal(
+            StackInstruction.Local_Get_Skip_Head_Const(0, index),
+            StackInstruction.Return);
+
+        Evaluate(optimized, PineValue.List(items)).Should()
+            .Be(Evaluate(original, PineValue.List(items)));
+    }
+
+    [Fact]
+    public void Fuse_local_list_projection_does_not_cross_an_intervening_operation()
+    {
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Set(1),
+                    StackInstruction.Skip_Head_Const(1)));
+
+        original.FuseLocalListProjections().LowerToStackInstructions()
+            .Should().Equal(original.LowerToStackInstructions());
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    [InlineData(4)]
+    public void Eliminate_local_copy_and_fuse_repeated_projections(int index)
+    {
+        var input =
+            PineValue.List(
+                Enumerable.Range(0, 5).Select(i => PineValue.Blob([(byte)i])).ToArray());
+
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Set_Descending(2, 1),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Get(2),
+                    StackInstruction.Skip_Head_Const(index),
+                    StackInstruction.Local_Get(2),
+                    StackInstruction.Skip_Head_Const(1),
+                    StackInstruction.Build_List(2)));
+
+        var optimized = original.EliminateLocalCopies().FuseLocalListProjections();
+
+        optimized.LowerToStackInstructions().Should().Equal(
+            StackInstruction.Local_Get_Skip_Head_Const(0, index),
+            StackInstruction.Local_Get_Skip_Head_Const(0, 1),
+            StackInstruction.Build_List(2),
+            StackInstruction.Return);
+
+        Evaluate(optimized, input).Should().Be(Evaluate(original, input));
+    }
+
+    [Fact]
+    public void Eliminate_local_copy_preserves_alias_when_source_is_overwritten()
+    {
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Set_Descending(2, 1),
+                    StackInstruction.Pop,
+                    StackInstruction.Push_Literal(PineValue.EmptyList),
+                    StackInstruction.Local_Set(0),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Get(2),
+                    StackInstruction.Skip_Head_Const(1)));
+
+        original.EliminateLocalCopies().LowerToStackInstructions()
+            .Should().Equal(original.LowerToStackInstructions());
+    }
+
+    [Fact]
+    public void Eliminate_local_copy_preserves_alias_when_descending_write_overwrites_source()
+    {
+        var input = PineValue.List([PineValue.Blob([11]), PineValue.Blob([22])]);
+
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Set_Descending(3, 1),
+                    StackInstruction.Pop,
+                    StackInstruction.Push_Literal(PineValue.EmptyBlob),
+                    StackInstruction.Push_Literal(PineValue.EmptyList),
+                    StackInstruction.Local_Set_Descending(1, 2),
+                    StackInstruction.PopMultiple(2),
+                    StackInstruction.Local_Get_Skip_Head_Const(3, 1)));
+
+        original.EliminateLocalCopies().LowerToStackInstructions()
+            .Should().Equal(original.LowerToStackInstructions());
+
+        Evaluate(original.EliminateLocalCopies(), input).Should().Be(Evaluate(original, input));
+    }
+
+    [Fact]
+    public void Scalar_replacement_and_local_copy_elimination_share_an_existing_local()
+    {
+        var item = PineValue.Blob([11]);
+
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Build_List(1),
+                    StackInstruction.Skip_Head_Const(0)));
+
+        var optimized =
+            original
+            .ReplaceNonEscapingLists(parameterCount: 1)
+            .EliminateLocalCopies()
+            .FuseLocalListProjections();
+
+        optimized.LowerToStackInstructions().Should().NotContain(
+            instruction =>
+            instruction.Kind == StackInstructionKind.Build_List ||
+            instruction.Kind == StackInstructionKind.Local_Set_Descending);
+
+        Evaluate(optimized, item).Should().Be(Evaluate(original, item));
+    }
+
+    [Fact]
+    public void Eliminate_local_copy_preserves_alias_used_in_another_block()
+    {
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Set_Descending(2, 1),
+                    StackInstruction.Pop,
+                    StackInstruction.Push_Literal(PineKernelValues.TrueValue))
+                .Append(
+                    Conditional(
+                        PineKernelValues.TrueValue,
+                        Ops(StackInstruction.Local_Get_Skip_Head_Const(2, 0)),
+                        Ops(StackInstruction.Local_Get_Skip_Head_Const(2, 1)))));
+
+        original.EliminateLocalCopies().LowerToStackInstructions()
+            .Should().Equal(original.LowerToStackInstructions());
+    }
 
     [Fact]
     public void Invoke_ends_block_and_continues_in_next_block()
@@ -709,6 +870,550 @@ public class PineControlFlowGraphTests
                 StackInstruction.Return.ToString(),
             ]);
     }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void List_scalar_replacement_preserves_prefix_and_out_of_bounds_elements(int index)
+    {
+        var prefix = PineValue.Blob([11]);
+        var item = PineValue.Blob([22]);
+
+        var fragment =
+            Ops(
+                StackInstruction.Push_Literal(item),
+                StackInstruction.Build_List_With_Prefix(PineValue.List([prefix]), 1),
+                StackInstruction.Skip_Head_Const(index));
+
+        var original = PineControlFlowGraph.FromFragment(fragment);
+        var optimized = original.ReplaceNonEscapingLists(parameterCount: 1);
+
+        optimized.LowerToStackInstructions().Should()
+            .NotContain(instruction => instruction.Kind == StackInstructionKind.Build_List_With_Prefix);
+
+        var expected = index <= 0 ? prefix : index is 1 ? item : PineValue.EmptyList;
+        Evaluate(optimized, PineValue.EmptyBlob).Should().Be(expected);
+        Evaluate(original, PineValue.EmptyBlob).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void List_scalar_replacement_follows_block_arguments_and_branch_specific_projections(bool branch)
+    {
+        var first = PineValue.Blob([11]);
+        var second = PineValue.Blob([22]);
+
+        var fragment =
+            Ops(
+                StackInstruction.Push_Literal(first),
+                StackInstruction.Push_Literal(second),
+                StackInstruction.Build_List(2),
+                StackInstruction.Local_Get(0))
+            .Append(
+                Conditional(
+                    PineKernelValues.TrueValue,
+                    Ops(StackInstruction.Skip_Head_Const(0)),
+                    Ops(StackInstruction.Skip_Head_Const(1))));
+
+        var optimized = PineControlFlowGraph.FromFragment(fragment).ReplaceNonEscapingLists(1);
+
+        optimized.LowerToStackInstructions().Should()
+            .NotContain(instruction => instruction.Kind == StackInstructionKind.Build_List);
+
+        Evaluate(optimized, branch ? PineKernelValues.TrueValue : PineKernelValues.FalseValue)
+            .Should().Be(branch ? second : first);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void List_scalar_replacement_tracks_local_aliases_and_reassignments(bool branch)
+    {
+        var first = PineValue.Blob([11]);
+        var second = PineValue.Blob([22]);
+        var other = PineValue.Blob([33]);
+
+        var fragment =
+            Ops(
+                StackInstruction.Push_Literal(first),
+                StackInstruction.Push_Literal(second),
+                StackInstruction.Build_List(2),
+                StackInstruction.Local_Set(1),
+                StackInstruction.Pop,
+                StackInstruction.Local_Get(0))
+            .Append(
+                Conditional(
+                    PineKernelValues.TrueValue,
+                    Ops(
+                        StackInstruction.Push_Literal(PineValue.List([other])),
+                        StackInstruction.Local_Set(1),
+                        StackInstruction.Pop,
+                        StackInstruction.Local_Get(1),
+                        StackInstruction.Skip_Head_Const(0)),
+                    Ops(StackInstruction.Local_Get_Skip_Head_Const(1, 1))));
+
+        var optimized = PineControlFlowGraph.FromFragment(fragment).ReplaceNonEscapingLists(1);
+
+        optimized.LowerToStackInstructions().Should()
+            .NotContain(instruction => instruction.Kind == StackInstructionKind.Build_List);
+
+        Evaluate(optimized, branch ? PineKernelValues.TrueValue : PineKernelValues.FalseValue)
+            .Should().Be(branch ? second : other);
+    }
+
+    [Fact]
+    public void List_scalar_replacement_preserves_two_distinct_local_aliases()
+    {
+        var first = PineValue.Blob([11]);
+        var second = PineValue.Blob([22]);
+
+        var fragment =
+            Ops(
+                StackInstruction.Push_Literal(first),
+                StackInstruction.Build_List(1),
+                StackInstruction.Local_Set(1),
+                StackInstruction.Pop,
+                StackInstruction.Push_Literal(second),
+                StackInstruction.Build_List(1),
+                StackInstruction.Local_Set(2),
+                StackInstruction.Pop,
+                StackInstruction.Local_Get_Skip_Head_Const(1, 0),
+                StackInstruction.Local_Get_Skip_Head_Const(2, 0),
+                StackInstruction.Build_List(2));
+
+        var original = PineControlFlowGraph.FromFragment(fragment);
+        var optimized = original.ReplaceNonEscapingLists(1);
+
+        optimized.LowerToStackInstructions().Count(
+            instruction => instruction.Kind == StackInstructionKind.Build_List).Should().Be(1);
+
+        Evaluate(optimized, PineValue.EmptyBlob).Should().Be(Evaluate(original, PineValue.EmptyBlob));
+    }
+
+    [Fact]
+    public void List_scalar_replacement_supports_head_length_and_length_comparison()
+    {
+        var item = PineValue.Blob([11]);
+
+        foreach (var projection in new[]
+        {
+            StackInstruction.Head_Generic,
+            StackInstruction.Length,
+            StackInstruction.Length_Equal_Const(2),
+            StackInstruction.Length_Equal_Const(3),
+        })
+        {
+            var graph =
+                PineControlFlowGraph.FromFragment(
+                    Ops(
+                        StackInstruction.Push_Literal(item),
+                        StackInstruction.Build_List_With_Prefix(PineValue.List([PineValue.EmptyBlob]), 1),
+                        projection));
+
+            var optimized = graph.ReplaceNonEscapingLists(1);
+
+            optimized.LowerToStackInstructions().Should().NotContain(
+                instruction => instruction.Kind == StackInstructionKind.Build_List_With_Prefix);
+
+            Evaluate(optimized, PineValue.EmptyBlob).Should().Be(Evaluate(graph, PineValue.EmptyBlob));
+        }
+    }
+
+    [Fact]
+    public void List_scalar_replacement_follows_local_set_descending()
+    {
+        var item = PineValue.Blob([11]);
+
+        var graph =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(item),
+                    StackInstruction.Build_List(1),
+                    StackInstruction.Local_Set_Descending(2, 1),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Get_Skip_Head_Const(2, 0)));
+
+        var optimized = graph.ReplaceNonEscapingLists(1);
+
+        optimized.LowerToStackInstructions().Should().NotContain(
+            instruction => instruction.Kind == StackInstructionKind.Build_List);
+
+        Evaluate(optimized, PineValue.EmptyBlob).Should().Be(item);
+    }
+
+    [Fact]
+    public void List_scalar_replacement_respects_descending_local_indices_for_multiple_values()
+    {
+        var first = PineValue.Blob([11]);
+        var second = PineValue.Blob([22]);
+
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(first),
+                    StackInstruction.Push_Literal(second),
+                    StackInstruction.Build_List(1),
+                    StackInstruction.Local_Set_Descending(7, 2),
+                    StackInstruction.PopMultiple(2),
+                    StackInstruction.Local_Get_Skip_Head_Const(7, 0),
+                    StackInstruction.Local_Get(6),
+                    StackInstruction.Build_List(2)));
+
+        var optimized = original.ReplaceNonEscapingLists(parameterCount: 1);
+
+        optimized.LowerToStackInstructions().Count(
+            instruction => instruction.Kind == StackInstructionKind.Build_List).Should().Be(1);
+
+        Evaluate(optimized, PineValue.EmptyBlob).Should().Be(PineValue.List([second, first]));
+        Evaluate(optimized, PineValue.EmptyBlob).Should().Be(Evaluate(original, PineValue.EmptyBlob));
+    }
+
+    [Fact]
+    public void List_scalar_replacement_handles_prefixed_list_stored_in_a_reassigned_parameter_local()
+    {
+        var items =
+            Enumerable.Range(0, 7)
+            .Select(index => PineValue.Blob([(byte)(index + 1)]))
+            .ToArray();
+
+        var fragment =
+            Ops(
+                StackInstruction.Push_Literal(items[2]),
+                StackInstruction.Push_Literal(items[3]),
+                StackInstruction.Push_Literal(items[4]),
+                StackInstruction.Push_Literal(items[5]),
+                StackInstruction.Push_Literal(items[6]),
+                StackInstruction.Build_List_With_Prefix(PineValue.List([items[0], items[1]]), 5),
+                StackInstruction.Local_Set(0),
+                StackInstruction.Skip_Head_Const(1),
+                StackInstruction.Local_Get_Skip_Head_Const(0, 3),
+                StackInstruction.Build_List(2));
+
+        var original = PineControlFlowGraph.FromFragment(fragment);
+        var optimized = original.ReplaceNonEscapingLists(parameterCount: 1);
+        var instructions = optimized.LowerToStackInstructions();
+
+        instructions.Should().NotContain(
+            instruction => instruction.Kind == StackInstructionKind.Build_List_With_Prefix);
+
+        instructions.Count(instruction => instruction.Kind == StackInstructionKind.Build_List)
+            .Should().Be(1);
+
+        Evaluate(optimized, PineValue.EmptyBlob).Should().Be(PineValue.List([items[1], items[3]]));
+        Evaluate(optimized, PineValue.EmptyBlob).Should().Be(Evaluate(original, PineValue.EmptyBlob));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void List_scalar_replacement_follows_prefixed_list_through_jumps_and_tag_check(bool branch)
+    {
+        var tag = PineValue.Blob([1]);
+        var first = PineValue.Blob([2]);
+        var second = PineValue.Blob([3]);
+
+        var fragment =
+            Ops(
+                StackInstruction.Push_Literal(first),
+                StackInstruction.Push_Literal(second),
+                StackInstruction.Build_List_With_Prefix(PineValue.List([PineValue.EmptyBlob, tag]), 2),
+                StackInstruction.Local_Get(0))
+            .Append(
+                Conditional(
+                    PineKernelValues.TrueValue,
+                    Ops(StackInstruction.Push_Literal(PineValue.EmptyBlob), StackInstruction.Pop),
+                    Ops(StackInstruction.Push_Literal(PineValue.EmptyList), StackInstruction.Pop)))
+            .Append(
+                Ops(
+                    StackInstruction.Local_Set(0),
+                    StackInstruction.Skip_Head_Const(1)))
+            .Append(
+                Conditional(
+                    tag,
+                    Ops(StackInstruction.Local_Get_Skip_Head_Const(0, 2)),
+                    Ops(StackInstruction.Local_Get_Skip_Head_Const(0, 3))));
+
+        var original = PineControlFlowGraph.FromFragment(fragment);
+        var optimized = original.ReplaceNonEscapingLists(parameterCount: 1);
+
+        optimized.LowerToStackInstructions().Should().NotContain(
+            instruction => instruction.Kind == StackInstructionKind.Build_List_With_Prefix);
+
+        var environment = branch ? PineKernelValues.TrueValue : PineKernelValues.FalseValue;
+        Evaluate(optimized, environment).Should().Be(second);
+        Evaluate(optimized, environment).Should().Be(Evaluate(original, environment));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void List_scalar_replacement_handles_a_cross_block_local_set_and_multiple_projections(bool branch)
+    {
+        var first = PineValue.Blob([11]);
+        var second = PineValue.Blob([22]);
+        var third = PineValue.Blob([33]);
+
+        var fragment =
+            Ops(
+                StackInstruction.Push_Literal(first),
+                StackInstruction.Push_Literal(second),
+                StackInstruction.Push_Literal(third),
+                StackInstruction.Build_List(3),
+                StackInstruction.Local_Get(0))
+            .Append(
+                Conditional(
+                    PineKernelValues.TrueValue,
+                    Ops(StackInstruction.Push_Literal(PineValue.EmptyBlob), StackInstruction.Pop),
+                    Ops(StackInstruction.Push_Literal(PineValue.EmptyList), StackInstruction.Pop)))
+            .Append(
+                Ops(
+                    StackInstruction.Local_Set(7),
+                    StackInstruction.Head_Generic,
+                    StackInstruction.Local_Get_Skip_Head_Const(7, 1),
+                    StackInstruction.Local_Get_Skip_Head_Const(7, 2),
+                    StackInstruction.Build_List(3)));
+
+        var original = PineControlFlowGraph.FromFragment(fragment);
+        var optimized = original.ReplaceNonEscapingLists(parameterCount: 1);
+        var instructions = optimized.LowerToStackInstructions();
+
+        instructions.Count(instruction => instruction.Kind == StackInstructionKind.Build_List)
+            .Should().Be(1);
+
+        var environment = branch ? PineKernelValues.TrueValue : PineKernelValues.FalseValue;
+        Evaluate(optimized, environment).Should().Be(PineValue.List([first, second, third]));
+        Evaluate(optimized, environment).Should().Be(Evaluate(original, environment));
+    }
+
+    [Fact]
+    public void List_scalar_replacement_keeps_ambiguous_alias_at_a_join()
+    {
+        var first = PineValue.Blob([11]);
+        var second = PineValue.Blob([22]);
+
+        var fragment =
+            Ops(
+                StackInstruction.Push_Literal(first),
+                StackInstruction.Build_List(1),
+                StackInstruction.Local_Set(1),
+                StackInstruction.Pop,
+                StackInstruction.Local_Get(0))
+            .Append(
+                Conditional(
+                    PineKernelValues.TrueValue,
+                    Ops(StackInstruction.Push_Literal(PineValue.EmptyList), StackInstruction.Pop),
+                    Ops(
+                        StackInstruction.Push_Literal(PineValue.List([second])),
+                        StackInstruction.Local_Set(1),
+                        StackInstruction.Pop,
+                        StackInstruction.Push_Literal(PineValue.EmptyList),
+                        StackInstruction.Pop)))
+            .AppendOperation(StackInstruction.Local_Get_Skip_Head_Const(1, 0));
+
+        var original = PineControlFlowGraph.FromFragment(fragment);
+        var optimized = original.ReplaceNonEscapingLists(1);
+
+        optimized.LowerToStackInstructions().Should()
+            .Contain(instruction => instruction.Kind == StackInstructionKind.Build_List);
+
+        foreach (var condition in new[] { PineKernelValues.TrueValue, PineKernelValues.FalseValue })
+        {
+            Evaluate(optimized, condition).Should().Be(Evaluate(original, condition));
+        }
+    }
+
+    [Fact]
+    public void List_scalar_replacement_keeps_a_list_that_escapes_on_one_branch()
+    {
+        var item = PineValue.Blob([11]);
+
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(item),
+                    StackInstruction.Build_List(1),
+                    StackInstruction.Local_Set(1),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Get(0))
+                .Append(
+                    Conditional(
+                        PineKernelValues.TrueValue,
+                        Ops(StackInstruction.Local_Get(1)),
+                        Ops(StackInstruction.Local_Get_Skip_Head_Const(1, 0)))));
+
+        var optimized = original.ReplaceNonEscapingLists(parameterCount: 1);
+
+        optimized.LowerToStackInstructions().Should().Contain(
+            instruction => instruction.Kind == StackInstructionKind.Build_List);
+
+        foreach (var environment in new[] { PineKernelValues.TrueValue, PineKernelValues.FalseValue })
+        {
+            Evaluate(optimized, environment).Should().Be(Evaluate(original, environment));
+        }
+    }
+
+    [Fact]
+    public void List_scalar_replacement_ignores_unrelated_tail_invocation()
+    {
+        var item = PineValue.Blob([11]);
+
+        var fragment =
+            Ops(StackInstruction.Local_Get(0))
+            .Append(
+                Conditional(
+                    PineKernelValues.TrueValue,
+                    Ops(StackInstruction.Push_Literal(PineValue.EmptyBlob)),
+                    Ops(
+                        StackInstruction.Push_Literal(item),
+                        StackInstruction.Build_List(1),
+                        StackInstruction.Head_Generic)));
+
+        var original = PineControlFlowGraph.FromFragment(fragment);
+        var blocks = original.Blocks.ToArray();
+
+        blocks[1] =
+            blocks[1] with
+            {
+                Terminator =
+                new PineControlFlowTerminator.TailInvoke(
+                    StackInstruction.Eval_Const(PineValue.EmptyList))
+            };
+
+        var withTailInvoke = new PineControlFlowGraph(original.Entry, [.. blocks]);
+        var optimized = withTailInvoke.ReplaceNonEscapingLists(parameterCount: 1);
+
+        optimized.LowerToStackInstructions().Should().NotContain(
+            instruction => instruction.Kind == StackInstructionKind.Build_List);
+
+        Evaluate(optimized, PineKernelValues.TrueValue).Should().Be(item);
+    }
+
+    [Fact]
+    public void List_scalar_replacement_keeps_a_list_passed_to_tail_invocation()
+    {
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(PineValue.EmptyBlob),
+                    StackInstruction.Build_List(1)));
+
+        var blocks = original.Blocks.ToArray();
+
+        blocks[0] =
+            blocks[0] with
+            {
+                Terminator =
+                new PineControlFlowTerminator.TailInvoke(
+                    StackInstruction.Eval_Const(PineValue.EmptyList))
+            };
+
+        var withTailInvoke = new PineControlFlowGraph(original.Entry, [.. blocks]);
+
+        withTailInvoke.ReplaceNonEscapingLists(parameterCount: 1)
+            .Should().BeSameAs(withTailInvoke);
+    }
+
+    [Fact]
+    public void List_scalar_replacement_does_not_change_escaping_or_cyclic_builds()
+    {
+        var escaping =
+            PineControlFlowGraph.FromFragment(
+                Ops(StackInstruction.Local_Get(0), StackInstruction.Build_List(1)));
+
+        escaping.ReplaceNonEscapingLists(1).Should().BeSameAs(escaping);
+
+        var cyclic =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(PineValue.EmptyBlob),
+                    StackInstruction.Build_List(1),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Get(0))
+                .Append(
+                    Conditional(
+                        PineKernelValues.TrueValue,
+                        Ops(StackInstruction.Push_Literal(PineValue.EmptyList)),
+                        PineControlFlowFragment.Empty.Append(new PineControlFlowNode.JumpToEntry()))));
+
+        cyclic.ReplaceNonEscapingLists(1).LowerToStackInstructions().Should()
+            .Contain(instruction => instruction.Kind == StackInstructionKind.Build_List);
+    }
+
+    [Fact]
+    public void Expression_compilation_replaces_a_deconstructed_list()
+    {
+        var expression =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.head),
+                Expression.ListInst([Expression.EnvironmentInstance, Expression.LitralInst(PineValue.EmptyBlob)]));
+
+        var unoptimized =
+            ExpressionCompilation.ControlFlowGraphFromExpression(
+                expression,
+                rootExprAlternativeForms: [],
+                envClass: null,
+                parametersAsLocals: StaticFunctionInterface.FromExpression(expression),
+                parseCache: new());
+
+        unoptimized.LowerToStackInstructions().Should()
+            .Contain(instruction => instruction.Kind == StackInstructionKind.Build_List);
+
+        var compiled =
+            ExpressionCompilation.CompileExpression(
+                expression,
+                specializations: [],
+                parseCache: new(),
+                disableReduction: true,
+                enableTailRecursionOptimization: false,
+                skipInlining: (_, _) => false);
+
+        compiled.Generic.Instructions.Should()
+            .NotContain(instruction => instruction.Kind == StackInstructionKind.Build_List);
+
+        var vm = CreateVm();
+
+        foreach (var environment in new[] { PineValue.EmptyList, PineValue.Blob([1, 2]) })
+        {
+            vm.EvaluateExpression(expression, environment).IsOkOrNull().Should().Be(environment);
+        }
+    }
+
+    private static PineValue Evaluate(PineControlFlowGraph graph, PineValue environment)
+    {
+        var expression = Expression.ListInst([Expression.EnvironmentInstance]);
+
+        var compilation =
+            new ExpressionCompilation(
+                new StackFrameInstructions(StaticFunctionInterface.Generic, graph.LowerToStackInstructions()),
+                Specialized: []);
+
+        var vm =
+            CreateVm(new Dictionary<Expression, ExpressionCompilation> { [expression] = compilation });
+
+        return vm.EvaluateExpression(expression, environment).IsOkOrNull()!;
+    }
+
+    private static Core.Interpreter.IntermediateVM.PineVM CreateVm(
+        IReadOnlyDictionary<Expression, ExpressionCompilation>? overrides = null) =>
+        Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
+            evalCache: null,
+            evaluationConfigDefault: null,
+            reportFunctionApplication: null,
+            compilationEnvClasses: null,
+            disableReductionInCompilation: true,
+            selectPrecompiled: null,
+            skipInlineForExpression: _ => false,
+            enableTailRecursionOptimization: false,
+            parseCache: null,
+            precompiledLeaves: null,
+            reportEnterPrecompiledLeaf: null,
+            reportExitPrecompiledLeaf: null,
+            optimizationParametersSerial: null,
+            cacheFileStore: null,
+            expressionCompilationOverrides: overrides);
 
     private static bool IsBooleanLiteral(PineValueInProcess? literal) =>
         literal is not null &&

@@ -226,9 +226,7 @@ public class PineIRCompiler
         foreach (var constraint in envClass.ParsedItems)
         {
             var nextValueExpression =
-                ExpressionBuilder.BuildExpressionForPathInExpression(
-                    [.. constraint.Key],
-                    tailCall.Environment);
+                BuildArgument(constraint.Key, tailCall.Environment);
 
             var nextValueExpressionWithConstraint =
                 ExpressionCompilation.SubstituteSubexpressionsForEnvironmentConstraint(

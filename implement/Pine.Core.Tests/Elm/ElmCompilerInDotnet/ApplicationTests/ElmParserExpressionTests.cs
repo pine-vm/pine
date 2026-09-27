@@ -212,10 +212,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 24
-            BuildListCount: 43
-            LoopIterationCount: 0
-            InstructionCount: 639
+            InvocationCount: 14
+            BuildListCount: 36
+            LoopIterationCount: 4
+            InstructionCount: 706
             """);
     }
 
@@ -235,10 +235,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 36
-            BuildListCount: 58
-            LoopIterationCount: 0
-            InstructionCount: 848
+            InvocationCount: 14
+            BuildListCount: 42
+            LoopIterationCount: 12
+            InstructionCount: 914
             """);
     }
 
@@ -251,10 +251,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report.VmCounters).Should().Be(
             """
-            InvocationCount: 26
-            BuildListCount: 49
-            LoopIterationCount: 0
-            InstructionCount: 723
+            InvocationCount: 14
+            BuildListCount: 42
+            LoopIterationCount: 3
+            InstructionCount: 793
             """);
 
         // Snapshot of the Elm syntax interpreter's metrics for the same root expression.
@@ -289,10 +289,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 33
-            BuildListCount: 54
-            LoopIterationCount: 0
-            InstructionCount: 910
+            InvocationCount: 18
+            BuildListCount: 46
+            LoopIterationCount: 3
+            InstructionCount: 955
             """);
     }
 
@@ -308,10 +308,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report.VmCounters).Should().Be(
             """
-            InvocationCount: 56
-            BuildListCount: 99
-            LoopIterationCount: 0
-            InstructionCount: 1_458
+            InvocationCount: 38
+            BuildListCount: 88
+            LoopIterationCount: 5
+            InstructionCount: 1_529
             """);
 
         // Snapshot of the Elm syntax interpreter's metrics for the same root expression.
@@ -345,10 +345,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 238
-            BuildListCount: 478
-            LoopIterationCount: 0
-            InstructionCount: 6_044
+            InvocationCount: 209
+            BuildListCount: 457
+            LoopIterationCount: 15
+            InstructionCount: 6_340
             """);
     }
 
@@ -369,10 +369,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 633
-            BuildListCount: 1_081
-            LoopIterationCount: 0
-            InstructionCount: 14_408
+            InvocationCount: 392
+            BuildListCount: 938
+            LoopIterationCount: 138
+            InstructionCount: 15_352
             """);
     }
 
@@ -394,10 +394,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 918
-            BuildListCount: 1_788
-            LoopIterationCount: 0
-            InstructionCount: 22_214
+            InvocationCount: 779
+            BuildListCount: 1_687
+            LoopIterationCount: 95
+            InstructionCount: 23_560
             """);
     }
 
@@ -426,10 +426,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 1_102
-            BuildListCount: 1_976
-            LoopIterationCount: 0
-            InstructionCount: 26_086
+            InvocationCount: 863
+            BuildListCount: 1_855
+            LoopIterationCount: 111
+            InstructionCount: 27_668
             """);
     }
 

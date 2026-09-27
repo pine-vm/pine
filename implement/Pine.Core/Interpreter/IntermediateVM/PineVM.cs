@@ -397,7 +397,8 @@ public class PineVM : ICancellablePineVM
 
         bool SkipInlining(Expression expr, PineValueClass? envConstraintId)
         {
-            if (_skipInlineForExpression(expr))
+            if (_skipInlineForExpression(expr) ||
+                _expressionCompilationOverrides?.ContainsKey(expr) is true)
             {
                 return true;
             }

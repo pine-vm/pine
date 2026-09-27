@@ -1,7 +1,9 @@
 Local_Get (0)
 Negate
 Skip_Head_Const (23)
-Build_List_With_Prefix (1, 1)
-  Blob [2] (int 21)
-Skip_Head_Const (17)
+Local_Set_Descending (1, 1)
+Pop (1)
+Push_Literal (List [0] (0))
+Pop (1)
+Push_Literal (List [0] (0))
 Return
