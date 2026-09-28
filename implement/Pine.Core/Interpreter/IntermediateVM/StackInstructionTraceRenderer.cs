@@ -45,7 +45,12 @@ public static class StackInstructionTraceRenderer
 
         return
             new BlobRepresentation(
-                blob => RenderBlobBase16(blob.Bytes.Span, maxByteCount));
+                blob =>
+                blob.Bytes.Length is 0
+                ?
+                null
+                :
+                RenderBlobBase16(blob.Bytes.Span, maxByteCount));
     }
 
     /// <summary>
@@ -66,6 +71,9 @@ public static class StackInstructionTraceRenderer
             new BlobRepresentation(
                 blob =>
                 {
+                    if (blob.Bytes.Length is 0)
+                        return null;
+
                     if (StringEncoding.StringFromBlobValue(blob.Bytes).IsOkOrNull() is not { } asString)
                         return NormalizeNoMatchRepresentation(noStringRepresentation);
 
