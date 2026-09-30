@@ -262,9 +262,10 @@ public static partial class ValueEncodingBinaryDeterministic
 
                 if (!decoded.TryGetValue(referencedAddress, out var referencedValue))
                 {
-                    return new DecodeError.InvalidInternalReference(
-                        Offset: startAddress,
-                        ReferencedAddress: referencedAddress);
+                    return
+                        new DecodeError.InvalidInternalReference(
+                            Offset: startAddress,
+                            ReferencedAddress: referencedAddress);
                 }
 
                 completedValue = referencedValue;
@@ -282,9 +283,10 @@ public static partial class ValueEncodingBinaryDeterministic
 
                 if (resolveExternalReference?.Invoke(reference) is not { } referencedValue)
                 {
-                    return new DecodeError.ExternalReferenceNotFound(
-                        Offset: startAddress,
-                        Reference: reference);
+                    return
+                        new DecodeError.ExternalReferenceNotFound(
+                            Offset: startAddress,
+                            Reference: reference);
                 }
 
                 decoded[startAddress] = referencedValue;
@@ -306,11 +308,12 @@ public static partial class ValueEncodingBinaryDeterministic
                 // Each item occupies at least a tag and a 32-bit integer.
                 if ((sourceBytes.Length - readPosition) / (TagSize + 4) < itemCount)
                 {
-                    return new DecodeError.LengthExceedsRemainingInput(
-                        Offset: startAddress,
-                        Tag: tag,
-                        Length: itemCount,
-                        RemainingBytes: sourceBytes.Length - readPosition);
+                    return
+                        new DecodeError.LengthExceedsRemainingInput(
+                            Offset: startAddress,
+                            Tag: tag,
+                            Length: itemCount,
+                            RemainingBytes: sourceBytes.Length - readPosition);
                 }
 
                 if (itemCount is not 0)
@@ -339,11 +342,12 @@ public static partial class ValueEncodingBinaryDeterministic
 
                 if (sourceBytes.Length - readPosition < paddedBytesCount)
                 {
-                    return new DecodeError.LengthExceedsRemainingInput(
-                        Offset: startAddress,
-                        Tag: tag,
-                        Length: byteCount,
-                        RemainingBytes: sourceBytes.Length - readPosition);
+                    return
+                        new DecodeError.LengthExceedsRemainingInput(
+                            Offset: startAddress,
+                            Tag: tag,
+                            Length: byteCount,
+                            RemainingBytes: sourceBytes.Length - readPosition);
                 }
 
                 var blobBytes =

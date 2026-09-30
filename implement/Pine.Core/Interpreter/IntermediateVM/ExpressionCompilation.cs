@@ -396,16 +396,18 @@ public record ExpressionCompilation(
 
             var knownArguments =
                 callBlock.Operations
-                .Where(operation => operation.Instruction is
+                .Where(
+                    operation => operation.Instruction is
                 { Kind: StackInstructionKind.Push_Literal, Literal: not null })
                 .Select(operation => (operation.Results, operation.Instruction.Literal))
                 .ToDictionary(item => item.Results[0], item => item.Literal!.Evaluate());
 
             var knownParameterValues =
                 invoke.Inputs
-                .Select((input, index) =>
+                .Select(
+                    (input, index) =>
                     (Path: parameters.ParamsPaths[index],
-                     Value: knownArguments.TryGetValue(input, out var value) ? value : null))
+                    Value: knownArguments.TryGetValue(input, out var value) ? value : null))
                 .Where(item => item.Value is not null && item.Value.Equals(direct.ExpressionEncoded))
                 .Select(item => new KeyValuePair<IReadOnlyList<int>, PineValue>(item.Path, item.Value!))
                 .ToArray();

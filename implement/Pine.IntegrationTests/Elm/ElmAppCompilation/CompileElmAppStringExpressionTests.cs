@@ -107,7 +107,9 @@ public class CompileElmAppStringExpressionTests
                     '\n' => "\\n",
                     '\r' => "\\r",
                     '"' => "\\\"",
-                    _ => c.ToString(),
+
+                    _ =>
+                    c.ToString(),
                 });
         }
 
