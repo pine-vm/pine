@@ -7069,4 +7069,177 @@ public class CSharpFormatTests
 
         AssertFormattedSyntax(input, input, scriptMode: true);
     }
+
+    [Fact]
+    public void Places_enum_members_to_separate_line()
+    {
+        var input =
+            """"
+            internal enum TypeName { Alfa, Beta }
+            """";
+
+        var expected =
+            """"
+            internal enum TypeName
+            {
+                Alfa, Beta
+            }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Places_nested_enum_with_trailing_comma_on_separate_lines()
+    {
+        var input =
+            """"
+            class Container
+            {
+                enum Values { Alpha, Beta, }
+            }
+            """";
+
+        var expected =
+            """"
+            class Container
+            {
+                enum Values
+                {
+                    Alpha, Beta,
+                }
+            }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: false);
+    }
+
+    [Fact]
+    public void Places_empty_enum_braces_on_separate_lines()
+    {
+        var input =
+            """"
+            internal enum Empty { }
+            """";
+
+        var expected =
+            """"
+            internal enum Empty
+            {
+            }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: false);
+    }
+
+    [Fact]
+    public void Normalizes_spaces_in_enum_declaration()
+    {
+        var input =
+            """"
+            private enum EncodedExpressionTag  :byte
+            {
+                Litral,
+                List,
+                Builtin
+            }
+            """";
+
+        var expected =
+            """"
+            private enum EncodedExpressionTag : byte
+            {
+                Litral,
+                List,
+                Builtin
+            }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: false);
+    }
+
+    [Fact]
+    public void Normalizes_compact_enum_underlying_type_spacing()
+    {
+        var input =
+            """"
+            internal enum Flags:  byte { A }
+            """";
+
+        var expected =
+            """"
+            internal enum Flags : byte
+            {
+                A
+            }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: false);
+    }
+
+    [Fact]
+    public void Formats_multiline_in_pipeline_lambda_pattern()
+    {
+        var input =
+            """"
+            var knownArguments =
+                callBlock.Operations
+                .Where(operation => operation.Instruction is
+                { Kind: StackInstructionKind.Push_Literal, Literal: not null })
+                .Select(operation => (operation.Results, operation.Instruction.Literal));
+            """";
+
+        var expected =
+            """"
+            var knownArguments =
+                callBlock.Operations
+                .Where(
+                    operation => operation.Instruction is
+                    { Kind: StackInstructionKind.Push_Literal, Literal: not null })
+                .Select(operation => (operation.Results, operation.Instruction.Literal));
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: false);
+    }
+
+    [Fact]
+    public void Preserves_multiline_if_statement_condition_containing_pattern()
+    {
+        var input =
+            """"
+            if (instruction.Kind is
+                StackInstructionKind.Switch_Jump_If_Equal_Const or
+                StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const)
+            {
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: false);
+    }
+
+    [Fact]
+    public void Normalizes_indent_in_multiline_pattern()
+    {
+        var input =
+            """"
+            var isProjection =
+                kind is
+            StackInstructionKind.Skip_Head_Const or
+            StackInstructionKind.Head_Generic or
+            StackInstructionKind.Length or
+            StackInstructionKind.Length_Equal_Const;
+            """";
+
+        var expected =
+            """"
+            var isProjection =
+                kind is
+                StackInstructionKind.Skip_Head_Const or
+                StackInstructionKind.Head_Generic or
+                StackInstructionKind.Length or
+                StackInstructionKind.Length_Equal_Const;
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: false);
+    }
 }
