@@ -1308,7 +1308,7 @@ public static class OptimizationOpportunityFinder
                 TypeInference.TryUnify(
                     existingArgumentType,
                     argumentTypes[argumentIndex]) is
-                    Result<string, TypeInference.InferredType>.Ok unified
+                Result<string, TypeInference.InferredType>.Ok unified
                 ?
                 unified.Value
                 :
