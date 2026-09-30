@@ -1276,8 +1276,73 @@ public static class FormatCSharpFile
     /// <summary>Formats an enum declaration with correct brace placement.</summary>
     private static EnumDeclarationSyntax FormatEnumDeclaration(EnumDeclarationSyntax node, FormatContext ctx)
     {
+        if (node.BaseList is { } baseList)
+        {
+            if (node.Identifier.TrailingTrivia.All(IsWhitespace) &&
+                baseList.ColonToken.LeadingTrivia.All(IsWhitespace))
+            {
+                node = node.WithIdentifier(node.Identifier.WithTrailingTrivia(s_space));
+                baseList = baseList.WithColonToken(baseList.ColonToken.WithLeadingTrivia());
+            }
+
+            if (baseList.Types.Count > 0 &&
+                baseList.ColonToken.TrailingTrivia.All(IsWhitespace) &&
+                baseList.Types[0].GetLeadingTrivia().All(IsWhitespace))
+            {
+                var firstType = baseList.Types[0];
+
+                baseList =
+                    baseList
+                    .WithColonToken(baseList.ColonToken.WithTrailingTrivia(s_space))
+                    .WithTypes(baseList.Types.Replace(firstType, firstType.WithLeadingTrivia()));
+            }
+
+            if (baseList.Types.Count > 0)
+            {
+                var lastTypeToken = baseList.Types[^1].GetLastToken();
+
+                if (lastTypeToken.TrailingTrivia.All(IsWhitespace))
+                    baseList = (BaseListSyntax)baseList.ReplaceToken(lastTypeToken, lastTypeToken.WithTrailingTrivia());
+            }
+
+            node = node.WithBaseList(baseList);
+        }
+        else if (node.Identifier.TrailingTrivia.All(IsWhitespace))
+        {
+            node = node.WithIdentifier(node.Identifier.WithTrailingTrivia());
+        }
+
+        if (node.Members.Count > 0)
+        {
+            var first = node.Members[0];
+
+            node =
+                node.WithMembers(
+                    node.Members.Replace(
+                        first,
+                        first.WithLeadingTrivia(RebuildLeading(first.GetLeadingTrivia(), ctx.IndentLevel + 1))));
+
+            var lastToken = node.CloseBraceToken.GetPreviousToken();
+
+            if (lastToken.TrailingTrivia.All(IsWhitespace))
+                node = (EnumDeclarationSyntax)node.ReplaceToken(lastToken, lastToken.WithTrailingTrivia());
+        }
+
         var open = FormatOpenBrace(node.OpenBraceToken, ctx);
-        var close = node.CloseBraceToken.WithLeadingTrivia(Indent(ctx.IndentLevel)).WithTrailingTrivia();
+        var closeLeading = node.CloseBraceToken.LeadingTrivia;
+
+        var close =
+            node.CloseBraceToken
+            .WithLeadingTrivia(
+                node.Members.Count is 0 ||
+                node.CloseBraceToken.GetPreviousToken().TrailingTrivia.Any(IsLineBreak) ||
+                closeLeading.Any(IsLineBreak)
+                ?
+                RebuildLeading(closeLeading, ctx.IndentLevel)
+                :
+                EnsureLeadingBreaks(closeLeading, 1, ctx.IndentLevel))
+            .WithTrailingTrivia();
+
         return node.WithOpenBraceToken(open).WithCloseBraceToken(close);
     }
 
