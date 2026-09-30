@@ -215,7 +215,7 @@ public class ElmParserExpressionTests
             InvocationCount: 14
             BuildListCount: 36
             LoopIterationCount: 4
-            InstructionCount: 706
+            InstructionCount: 687
             """);
     }
 
@@ -238,7 +238,7 @@ public class ElmParserExpressionTests
             InvocationCount: 14
             BuildListCount: 42
             LoopIterationCount: 12
-            InstructionCount: 914
+            InstructionCount: 900
             """);
     }
 
@@ -254,7 +254,7 @@ public class ElmParserExpressionTests
             InvocationCount: 14
             BuildListCount: 42
             LoopIterationCount: 3
-            InstructionCount: 793
+            InstructionCount: 779
             """);
 
         // Snapshot of the Elm syntax interpreter's metrics for the same root expression.
@@ -292,7 +292,7 @@ public class ElmParserExpressionTests
             InvocationCount: 18
             BuildListCount: 46
             LoopIterationCount: 3
-            InstructionCount: 955
+            InstructionCount: 933
             """);
     }
 
@@ -311,7 +311,7 @@ public class ElmParserExpressionTests
             InvocationCount: 38
             BuildListCount: 88
             LoopIterationCount: 5
-            InstructionCount: 1_529
+            InstructionCount: 1_492
             """);
 
         // Snapshot of the Elm syntax interpreter's metrics for the same root expression.
@@ -348,7 +348,7 @@ public class ElmParserExpressionTests
             InvocationCount: 209
             BuildListCount: 457
             LoopIterationCount: 15
-            InstructionCount: 6_340
+            InstructionCount: 6_167
             """);
     }
 
@@ -372,7 +372,7 @@ public class ElmParserExpressionTests
             InvocationCount: 392
             BuildListCount: 938
             LoopIterationCount: 138
-            InstructionCount: 15_352
+            InstructionCount: 14_927
             """);
     }
 
@@ -397,7 +397,7 @@ public class ElmParserExpressionTests
             InvocationCount: 779
             BuildListCount: 1_687
             LoopIterationCount: 95
-            InstructionCount: 23_560
+            InstructionCount: 22_897
             """);
     }
 
@@ -429,7 +429,7 @@ public class ElmParserExpressionTests
             InvocationCount: 863
             BuildListCount: 1_855
             LoopIterationCount: 111
-            InstructionCount: 27_668
+            InstructionCount: 26_881
             """);
     }
 

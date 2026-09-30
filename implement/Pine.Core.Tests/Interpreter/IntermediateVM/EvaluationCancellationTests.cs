@@ -136,7 +136,8 @@ public class EvaluationCancellationTests
                 StackInstruction.Push_Literal(PineValue.EmptyList),
                 StackInstruction.Push_Literal(IntegerEncoding.EncodeSignedInteger(0)),
                 StackInstruction.Switch_Jump_If_Slice_Skip_Var_Equal_Const(
-                    []),
+                    [],
+                    skipCountMultiplier: 1),
                 StackInstruction.Push_Literal(PineValue.EmptyList),
                 StackInstruction.Return,
             ],

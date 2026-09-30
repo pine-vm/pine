@@ -29,7 +29,8 @@ public class PineControlFlowGraphTests
             PineSwitchKind.Equal,
             [.. cases.Select((switchCase, index) => new PineSwitchFragmentCase(switchCase.Literal, index))],
             defaultBranch,
-            [.. cases.Select(switchCase => switchCase.Branch)]);
+            [.. cases.Select(switchCase => switchCase.Branch)],
+            SkipCountMultiplier: 1);
 
     private static ImmutableArray<StackInstruction> Optimize(PineControlFlowFragment fragment) =>
         PineControlFlowGraph
@@ -454,7 +455,8 @@ public class PineControlFlowGraphTests
                     [
                     Ops(StackInstruction.Push_Literal(PineValue.EmptyBlob)),
                     Ops(StackInstruction.Local_Get(1)),
-                    ]));
+                    ],
+                    SkipCountMultiplier: 1));
 
         var graph = PineControlFlowGraph.FromFragment(fragment);
 
@@ -505,7 +507,8 @@ public class PineControlFlowGraphTests
                     [
                     Ops(StackInstruction.Push_Literal(first)),
                     Ops(StackInstruction.Push_Literal(second)),
-                    ]));
+                    ],
+                    SkipCountMultiplier: 1));
 
         var graph = PineControlFlowGraph.FromFragment(fragment);
 
@@ -651,7 +654,8 @@ public class PineControlFlowGraphTests
                     new PineSwitchFragmentCase(selectorB, 0),
                     ],
                     Default: Ops(StackInstruction.Push_Literal(PineKernelValues.FalseValue)),
-                    Branches: [Ops(StackInstruction.Push_Literal(PineKernelValues.TrueValue))]))
+                    Branches: [Ops(StackInstruction.Push_Literal(PineKernelValues.TrueValue))],
+                    SkipCountMultiplier: 1))
             .Append(
                 Conditional(
                     comparedBoolean,

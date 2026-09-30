@@ -737,6 +737,7 @@ public class PineIRCompiler
         }
 
         NodeCompilationResult afterCondition;
+        BigInteger skipCountMultiplier = 1;
 
         if (sliceSkipVar is { } parsedSliceSkipVar)
         {
@@ -753,6 +754,27 @@ public class PineIRCompiler
                     context with { IsTailPosition = false },
                     afterSource,
                     parseCache);
+
+            var nodes = afterCondition.Fragment.Nodes;
+
+            if (nodes.Count > afterSource.Fragment.Nodes.Count &&
+                nodes[^1] is PineControlFlowNode.Operation
+                {
+                    Instruction:
+                    {
+                        Kind: StackInstructionKind.Int_Mul_Const,
+                        IntegerLiteral: { } multiplier
+                    }
+                })
+            {
+                skipCountMultiplier = multiplier;
+
+                afterCondition =
+                    afterCondition with
+                    {
+                        Fragment = afterCondition.Fragment with { Nodes = nodes.RemoveAt(nodes.Count - 1) }
+                    };
+            }
         }
         else
         {
@@ -812,7 +834,8 @@ public class PineIRCompiler
                     Kind: sliceSkipVar is null ? PineSwitchKind.Equal : PineSwitchKind.SliceSkipVarEqual,
                     Cases: switchCases.MoveToImmutable(),
                     Default: defaultBranchFragment,
-                    Branches: caseBranchFragments.MoveToImmutable()));
+                    Branches: caseBranchFragments.MoveToImmutable(),
+                    SkipCountMultiplier: skipCountMultiplier));
     }
 
     private static (Expression ComparedExpression, PineValue Literal)? TryParseEqualCondition(

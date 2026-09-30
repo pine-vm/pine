@@ -176,10 +176,10 @@ public sealed partial record PineControlFlowGraph
 
                         var isProjection =
                             kind is
-                        StackInstructionKind.Skip_Head_Const or
-                        StackInstructionKind.Head_Generic or
-                        StackInstructionKind.Length or
-                        StackInstructionKind.Length_Equal_Const;
+                            StackInstructionKind.Skip_Head_Const or
+                            StackInstructionKind.Head_Generic or
+                            StackInstructionKind.Length or
+                            StackInstructionKind.Length_Equal_Const;
 
                         if (kind is StackInstructionKind.Local_Get_Skip_Head_Const &&
                             operation.Instruction.LocalIndex is { } localIndex)

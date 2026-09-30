@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Numerics;
 
 namespace Pine.Core.Interpreter.IntermediateVM;
 
@@ -93,7 +94,8 @@ public abstract record PineControlFlowNode
         PineSwitchKind Kind,
         ImmutableArray<PineSwitchFragmentCase> Cases,
         PineControlFlowFragment Default,
-        ImmutableArray<PineControlFlowFragment> Branches)
+        ImmutableArray<PineControlFlowFragment> Branches,
+        BigInteger SkipCountMultiplier)
         : PineControlFlowNode;
 
     /// <summary>

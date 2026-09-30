@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Numerics;
 
 namespace Pine.Core.Interpreter.IntermediateVM;
 
@@ -82,7 +83,8 @@ public abstract record PineControlFlowTerminator
         PineSwitchKind Kind,
         PineBlockId FallThrough,
         ImmutableArray<PineSwitchCase> Cases,
-        ImmutableArray<PineVirtualValueId> Arguments) : PineControlFlowTerminator
+        ImmutableArray<PineVirtualValueId> Arguments,
+        BigInteger SkipCountMultiplier) : PineControlFlowTerminator
     {
         /// <summary>
         /// Number of values the switch consumes from the evaluation stack.
@@ -290,7 +292,8 @@ public sealed partial record PineControlFlowGraph(
                                     switchCase =>
                                     new PineSwitchCase(switchCase.Literal, branchStarts[switchCase.BranchIndex]))
                                 ],
-                                Arguments: arguments);
+                                Arguments: arguments,
+                                SkipCountMultiplier: switchNode.SkipCountMultiplier);
 
                         return Join(arguments.Length + 1, ends);
                     }
@@ -997,7 +1000,8 @@ public sealed partial record PineControlFlowGraph(
                                     new SliceSwitchCase(
                                         switchCase.Literal,
                                         firstInstructionIndexByBlock[switchCase.Target] - result.Count))
-                                ]));
+                                ],
+                                skipCountMultiplier: switchTerminator.SkipCountMultiplier));
                     }
                     else
                     {

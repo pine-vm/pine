@@ -2794,13 +2794,24 @@ public class PineVM : ICancellablePineVM
 
                             var switchCases = switchCasesArray.AsSpan();
                             var skipCount = skipCountValue.AsInteger();
+
+                            var skipCountMultiplier =
+                                currentInstruction.IntegerLiteral
+                                ?? throw new Exception("Invalid operation form: Missing skip count multiplier");
+
                             var matchedJumpOffset = 0;
                             var foundMatch = false;
 
                             if (skipCount is { } skipCountInteger)
                             {
+                                var multipliedSkipCount = skipCountInteger * skipCountMultiplier;
+
                                 var skipCountInt =
-                                    skipCountInteger < 0 ? 0 : (int)skipCountInteger;
+                                    multipliedSkipCount < 0
+                                    ?
+                                    0
+                                    :
+                                    (int)multipliedSkipCount;
 
                                 for (var caseIndex = 0; caseIndex < switchCases.Length; ++caseIndex)
                                 {

@@ -470,8 +470,10 @@ public enum StackInstructionKind
 
     /// <summary>
     /// Pops the skip count (top) and source value (second) from the stack and jumps by the
-    /// offset for the case whose literal equals the source slice beginning at the skip count.
-    /// Depends on the property <see cref="StackInstruction.SliceSwitchCases"/>.
+    /// offset for the case whose literal equals the source slice beginning at the skip count
+    /// multiplied by <see cref="StackInstruction.IntegerLiteral"/>.
+    /// Depends on the properties <see cref="StackInstruction.SliceSwitchCases"/> and
+    /// <see cref="StackInstruction.IntegerLiteral"/>.
     /// </summary>
     Switch_Jump_If_Slice_Skip_Var_Equal_Const,
 
@@ -555,7 +557,8 @@ public readonly record struct SliceSwitchCase(
 /// <param name="IntegerLiteral">An optional integer constant used by comparison and arithmetic instructions
 /// such as <see cref="StackInstructionKind.Length_Equal_Const"/>,
 /// <see cref="StackInstructionKind.Int_Add_Const"/>,
-/// and <see cref="StackInstructionKind.Int_Mul_Const"/>.</param>
+/// <see cref="StackInstructionKind.Int_Mul_Const"/>, and
+/// <see cref="StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const"/>.</param>
 /// <param name="OptimizedInvocation">
 /// An optional <see cref="DirectInvocation"/> describing a direct stack-frame invocation target.
 /// </param>
@@ -1210,10 +1213,11 @@ public record StackInstruction(
 
     /// <summary>
     /// Creates a <see cref="StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const"/>
-    /// instruction using the given cases and relative jump offsets.
+    /// instruction using the given cases, relative jump offsets, and skip-count multiplier.
     /// </summary>
     public static StackInstruction Switch_Jump_If_Slice_Skip_Var_Equal_Const(
-        ImmutableArray<SliceSwitchCase> cases)
+        ImmutableArray<SliceSwitchCase> cases,
+        BigInteger skipCountMultiplier)
     {
         if (cases.IsDefault)
             throw new ArgumentException("Slice switch cases must be initialized.", nameof(cases));
@@ -1234,6 +1238,7 @@ public record StackInstruction(
         return
             new(
                 StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const,
+                IntegerLiteral: skipCountMultiplier,
                 SliceSwitchCases: cases);
     }
 
@@ -2235,6 +2240,14 @@ public record StackInstruction(
         return
             new InstructionDisplay(
                 Arguments:
+                instruction.Kind is StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const
+                ?
+                [
+                entriesOrdered.Length.ToString(),
+                (instruction.IntegerLiteral
+                ?? throw new Exception("Missing skip count multiplier for slice switch instruction")).ToString()
+                ]
+                :
                 [entriesOrdered.Length.ToString()],
                 DetailLines:
                 detailLines);

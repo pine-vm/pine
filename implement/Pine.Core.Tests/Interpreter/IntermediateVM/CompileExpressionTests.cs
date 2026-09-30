@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Numerics;
 using Xunit;
 
 namespace Pine.Core.Tests.Interpreter.IntermediateVM;
@@ -157,6 +158,19 @@ public class CompileExpressionTests
                 ]));
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(4)]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Compile_switch_over_scaled_slice(int multiplier)
+    {
+        AssertSwitchOverSliceCompilation(
+            firstLiteral: PineValue.Blob([4, 5]),
+            secondLiteral: PineValue.Blob([6, 7]),
+            multiplier: multiplier);
+    }
+
     [Fact]
     public void Slice_switch_rejects_duplicate_literals()
     {
@@ -168,7 +182,8 @@ public class CompileExpressionTests
                 [
                 new SliceSwitchCase(literal, 1),
                 new SliceSwitchCase(literal, 2)
-                ]);
+                ],
+                skipCountMultiplier: 1);
 
         action.Should()
             .Throw<ArgumentException>()
@@ -177,13 +192,28 @@ public class CompileExpressionTests
 
     private static void AssertSwitchOverSliceCompilation(
         PineValue firstLiteral,
-        PineValue secondLiteral)
+        PineValue secondLiteral,
+        int? multiplier = null)
     {
-        var skipCountExpression =
+        var rawSkipCountExpression =
             (Expression)
             Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.head),
                 input: Expression.EnvironmentInstance);
+
+        var skipCountExpression =
+            multiplier is { } factor
+            ?
+            Expression.BuiltinInst(
+                function: nameof(BuiltinFunction.int_mul),
+                input:
+                Expression.ListInst(
+                    [
+                    rawSkipCountExpression,
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(factor))
+                    ]))
+            :
+            rawSkipCountExpression;
 
         var sourceExpression =
             (Expression)
@@ -255,7 +285,11 @@ public class CompileExpressionTests
                 StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const);
 
         switchInstruction.SwitchJumpTable.Should().BeNull();
+        switchInstruction.IntegerLiteral.Should().Be(new BigInteger(multiplier ?? 1));
         switchInstruction.SliceSwitchCases.Should().HaveCount(2);
+
+        compiled.Generic.Instructions.Should().NotContain(
+            instruction => instruction.Kind == StackInstructionKind.Int_Mul_Const);
 
         switchInstruction.SliceSwitchCases
             .Select(switchCase => switchCase.Literal)
@@ -277,6 +311,7 @@ public class CompileExpressionTests
 
         switchTerminator.Kind.Should().Be(PineSwitchKind.SliceSkipVarEqual);
         switchTerminator.PopCount.Should().Be(2);
+        switchTerminator.SkipCountMultiplier.Should().Be(new BigInteger(multiplier ?? 1));
 
         switchTerminator.Cases
             .Select(switchCase => switchCase.Literal)
@@ -316,10 +351,14 @@ public class CompileExpressionTests
             literal switch
             {
                 PineValue.BlobValue blob =>
-                PineValue.Blob([9, .. blob.Bytes.Span]),
+                PineValue.Blob([.. Enumerable.Repeat((byte)9, Math.Max(0, multiplier ?? 1)), .. blob.Bytes.Span]),
 
                 PineValue.ListValue list =>
-                PineValue.List([IntegerEncoding.EncodeSignedInteger(9), .. list.Items.Span]),
+                PineValue.List(
+                    [
+                    .. Enumerable.Repeat(IntegerEncoding.EncodeSignedInteger(9), Math.Max(0, multiplier ?? 1)),
+                    .. list.Items.Span
+                    ]),
 
                 _ =>
                 throw new System.NotImplementedException()
@@ -328,9 +367,10 @@ public class CompileExpressionTests
         var evaluations =
             new[]
             {
-                (Source: PrefixLiteral(firstLiteral), Expected: 1),
-                (Source: PrefixLiteral(secondLiteral), Expected: 2),
-                (Source: firstLiteral, Expected: 0),
+                (Source: PrefixLiteral(firstLiteral), SkipCount: (PineValue)IntegerEncoding.EncodeSignedInteger(1), Expected: 1),
+                (Source: PrefixLiteral(secondLiteral), SkipCount: (PineValue)IntegerEncoding.EncodeSignedInteger(1), Expected: 2),
+                (Source: firstLiteral, SkipCount: (PineValue)IntegerEncoding.EncodeSignedInteger(1), Expected: multiplier is null or > 0 ? 0 : 1),
+                (Source: PrefixLiteral(firstLiteral), SkipCount: PineValue.EmptyList, Expected: 0),
             };
 
         foreach (var evaluation in evaluations)
@@ -338,7 +378,7 @@ public class CompileExpressionTests
             var environment =
                 PineValue.List(
                     [
-                    IntegerEncoding.EncodeSignedInteger(1),
+                    evaluation.SkipCount,
                     evaluation.Source,
                     ]);
 
