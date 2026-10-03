@@ -301,8 +301,7 @@ public class PreparedExpressionRenderingTests
                 new Pattern.FloatPattern(1.5),
                 new Pattern.FloatPattern(1),
                 new Pattern.RecordPattern(
-                    System.Collections.Immutable.ImmutableArray.Create(
-                        (FieldName: "a", FieldNameValue: StringEncoding.ValueFromString("a")))),
+                    [(FieldName: "a", FieldNameValue: StringEncoding.ValueFromString("a"))]),
                 new Pattern.UnConsPattern(new Pattern.VarPattern("head"), new Pattern.VarPattern("tail")),
                 new Pattern.ListPattern([new Pattern.VarPattern("x")]),
                 new Pattern.AsPattern(new Pattern.VarPattern("x"), "whole")

@@ -428,6 +428,46 @@ public sealed partial record PineControlFlowGraph(
         StackInstructionKind.Invoke_StackFrame_Const;
 
     /// <summary>
+    /// Makes jumps to the immediately next block implicit and removes any empty forwarding
+    /// blocks exposed by the new fall-through edges.
+    /// </summary>
+    public PineControlFlowGraph RemoveRedundantForwardJumps()
+    {
+        var graph = this;
+
+        while (true)
+        {
+            var adjacentJumpRemoved = false;
+            var blocks = graph.Blocks.ToBuilder();
+
+            for (var index = 0; index < blocks.Count; index++)
+            {
+                var block = blocks[index];
+
+                if (block.Terminator is PineControlFlowTerminator.Jump
+                    {
+                        IsFallThrough: false,
+                        Target: var target
+                    } jump &&
+                    target.Value == block.Id.Value + 1)
+                {
+                    blocks[index] = block with { Terminator = jump with { IsFallThrough = true } };
+                    adjacentJumpRemoved = true;
+                }
+            }
+
+            var next = (graph with { Blocks = blocks.ToImmutable() }).RemoveEmptyForwardingBlocks();
+
+            if (!adjacentJumpRemoved && next.Blocks.Length == graph.Blocks.Length)
+            {
+                return graph;
+            }
+
+            graph = next;
+        }
+    }
+
+    /// <summary>
     /// Removes blocks without operations that only forward their parameters to the block laid out next,
     /// redirecting their predecessors to the forwarding target.
     /// </summary>

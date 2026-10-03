@@ -17,10 +17,10 @@ public sealed partial record PineControlFlowGraph
         ImmutableHashSet<int> Candidates,
         bool MayBeOther)
     {
-        public static ListOrigin Other => new(ImmutableHashSet<int>.Empty, true);
+        public static ListOrigin Other => new([], true);
 
         public static ListOrigin FromCandidate(int index) =>
-            new(ImmutableHashSet.Create(index), false);
+            new([index], false);
 
         public ListOrigin Union(ListOrigin other) =>
             new(Candidates.Union(other.Candidates), MayBeOther || other.MayBeOther);
