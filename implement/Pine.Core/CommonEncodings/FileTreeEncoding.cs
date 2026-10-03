@@ -1,102 +1,31 @@
 using Pine.Core.Files;
-using System;
 using System.Collections.Generic;
 
 namespace Pine.Core.CommonEncodings;
 
 /// <summary>
-/// Encoding file trees as Pine values and parsing Pine values as file trees.
+/// The standard encoding of file trees as Pine values.
+/// Emits the flat 2026 format and accepts both the 2026 and legacy 2025 formats.
 /// </summary>
 public static class FileTreeEncoding
 {
     /// <summary>
-    /// Parse a Pine value as a file tree.
-    /// <para>
-    /// The error case contains a list of path items that can be used to construct an
-    /// error message pointing to the problematic part of the tree.
-    /// </para>
+    /// Parses a file tree by trying the flat 2026 format first and falling back to the legacy 2025 format.
     /// </summary>
     public static Result<IReadOnlyList<(int index, string name)>, FileTree> Parse(
         PineValue composition)
     {
-        return
-            composition switch
-            {
-                PineValue.BlobValue compositionAsBlob =>
-                Result<IReadOnlyList<(int index, string name)>, FileTree>.ok(
-                    FileTree.File(compositionAsBlob.Bytes)),
+        var parsed2026 = FileTreeEncoding2026.Parse(composition);
 
-                PineValue.ListValue compositionAsList =>
-                Parse(compositionAsList),
+        if (parsed2026.IsOkOrNull() is not null)
+            return parsed2026;
 
-                _ =>
-                throw new NotImplementedException(
-                    "Unexpected composition type: " + composition.GetType().FullName)
-            };
-    }
-
-    private static Result<IReadOnlyList<(int index, string name)>, FileTree> Parse(
-        PineValue.ListValue compositionAsList)
-    {
-        var parsedItems = new (string name, FileTree component)[compositionAsList.Items.Length];
-
-        for (var itemIndex = 0; itemIndex < compositionAsList.Items.Length; itemIndex++)
-        {
-            var item = compositionAsList.Items.Span[itemIndex];
-
-            if (item is not PineValue.ListValue itemAsList || itemAsList.Items.Length is not 2)
-            {
-                return Result<IReadOnlyList<(int index, string name)>, FileTree>.err([]);
-            }
-
-            if (StringEncoding.StringFromValue(itemAsList.Items.Span[0]).IsOkOrNull() is not { } itemName)
-            {
-                return Result<IReadOnlyList<(int index, string name)>, FileTree>.err([]);
-            }
-
-            var itemComponent = itemAsList.Items.Span[1];
-
-            if (Parse(itemComponent).IsOkOrNull() is not { } itemComponentOk)
-            {
-                return Result<IReadOnlyList<(int index, string name)>, FileTree>.err([]);
-            }
-
-            parsedItems[itemIndex] = (itemName, itemComponentOk);
-        }
-
-        return FileTree.SortedDirectory(parsedItems);
+        return FileTreeEncoding2025.Parse(composition);
     }
 
     /// <summary>
-    /// Encode a file tree as a Pine value.
+    /// Encodes a file tree using the flat 2026 format.
     /// </summary>
-    public static PineValue Encode(FileTree node)
-    {
-        if (node is FileTree.FileNode file)
-        {
-            return PineValue.Blob(file.Bytes);
-        }
-
-        if (node is FileTree.DirectoryNode directory)
-        {
-            var encodedItems = new PineValue[directory.Items.Count];
-
-            for (var itemIndex = 0; itemIndex < directory.Items.Count; itemIndex++)
-            {
-                var (name, component) = directory.Items[itemIndex];
-
-                encodedItems[itemIndex] =
-                    PineValue.List(
-                        [
-                        StringEncoding.ValueFromString(name),
-                        Encode(component)
-                        ]);
-            }
-
-            return PineValue.List(encodedItems);
-        }
-
-        throw new NotImplementedException(
-            "Unexpected node type: " + node.GetType());
-    }
+    public static PineValue Encode(FileTree node) =>
+        FileTreeEncoding2026.Encode(node);
 }
