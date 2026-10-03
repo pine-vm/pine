@@ -863,33 +863,22 @@ public class ExpressionCompiler
         var recordName = expr.RecordName;
 
         Expression recordExpr;
-        TypeInference.InferredType.RecordType? recordType = null;
-
         // Check if it's a local binding first
         if (context.TryGetLocalBinding(recordName) is { } bindingExpr)
         {
             recordExpr = bindingExpr;
-            // Try to get the type from local bindings
-            if (context.TryGetLocalBindingType(recordName) is TypeInference.InferredType.RecordType localRecordType)
-            {
-                recordType = localRecordType;
-            }
         }
         // Check if it's a parameter reference
         else if (context.TryGetParameterIndex(recordName) is { } paramIndex)
         {
             recordExpr = BuiltinHelpers.BuildPathToParameter(paramIndex);
-            // Try to get the type from parameter types
-            if (context.ParameterTypes.TryGetValue(recordName, out var paramType) &&
-                paramType is TypeInference.InferredType.RecordType paramRecordType)
-            {
-                recordType = paramRecordType;
-            }
         }
         else
         {
             return new CompilationError.UnresolvedReference(recordName, context.CurrentModuleName);
         }
+
+        var recordType = TryGetRecordTypeForVariable(recordName, context);
 
         // Compile each field update and sort by field name alphabetically.
         // This ordering is required because the runtime update function relies on both 
@@ -1150,39 +1139,37 @@ public class ExpressionCompiler
         SyntaxTypes.Expression expression,
         ExpressionCompilationContext context)
     {
-        // Check if the expression is a simple variable reference
-        if (expression is SyntaxTypes.Expression.Identifier funcOrValue &&
-            funcOrValue.QualifiedName.Namespaces.Count is 0)
+        return
+            expression is SyntaxTypes.Expression.Identifier identifier &&
+            identifier.QualifiedName.Namespaces.Count is 0
+            ?
+            TryGetRecordTypeForVariable(identifier.QualifiedName.DeclName, context)
+            :
+            null;
+    }
+
+    private static TypeInference.InferredType.RecordType? TryGetRecordTypeForVariable(
+        string name,
+        ExpressionCompilationContext context)
+    {
+        // Local bindings shadow parameters, including when no type was inferred for the binding.
+        if (context.TryGetLocalBinding(name) is not null)
         {
-            var varName = funcOrValue.QualifiedName.DeclName;
-
-            // Local bindings shadow parameters, including when no type was inferred for the binding.
-            if (context.TryGetLocalBinding(varName) is not null)
-            {
-                return
-                    context.TryGetLocalBindingType(varName) is
-                    TypeInference.InferredType.RecordType localRecordType
-                    ?
-                    localRecordType
-                    :
-                    null;
-            }
-
-            // Check parameter types
-            if (context.TryGetParameterIndex(varName) is not null &&
-                context.ParameterTypes.TryGetValue(varName, out var paramType))
-            {
-                if (paramType is TypeInference.InferredType.RecordType paramRecordType)
-                    return paramRecordType;
-
-                if (TryExpandDirectRecordAlias(paramType, context) is not { } aliasRecordType)
-                    return null;
-
-                return aliasRecordType;
-            }
+            return
+                context.TryGetLocalBindingType(name) is { } localType
+                ?
+                TryExpandDirectRecordAlias(localType, context)
+                :
+                null;
         }
 
-        return null;
+        return
+            context.TryGetParameterIndex(name) is not null &&
+            context.ParameterTypes.TryGetValue(name, out var parameterType)
+            ?
+            TryExpandDirectRecordAlias(parameterType, context)
+            :
+            null;
     }
 
     private static TypeInference.InferredType.RecordType? TryExpandDirectRecordAlias(
