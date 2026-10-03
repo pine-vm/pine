@@ -1,55 +1,74 @@
 {
   "Conditional": [
     {
-      "List": [
-        [
-          {
-            "Builtin": [
-              "int_mul",
+      "Builtin": [
+        "equal",
+        {
+          "List": [
+            [
               {
                 "List": [
                   [
                     {
-                      "Environment": [
+                      "Builtin": [
+                        "int_mul",
+                        {
+                          "List": [
+                            [
+                              {
+                                "Environment": []
+                              },
+                              {
+                                "Environment": []
+                              },
+                              {
+                                "Environment": []
+                              }
+                            ]
+                          ]
+                        }
                       ]
                     },
                     {
-                      "Environment": [
+                      "Builtin": [
+                        "int_mul",
+                        {
+                          "List": [
+                            [
+                              {
+                                "Environment": []
+                              },
+                              {
+                                "Environment": []
+                              },
+                              {
+                                "Environment": []
+                              }
+                            ]
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                ]
+              },
+              {
+                "List": [
+                  [
+                    {
+                      "Litral": [
+                        1
                       ]
                     },
                     {
-                      "Environment": [
-                      ]
+                      "Environment": []
                     }
                   ]
                 ]
               }
             ]
-          },
-          {
-            "Builtin": [
-              "int_mul",
-              {
-                "List": [
-                  [
-                    {
-                      "Environment": [
-                      ]
-                    },
-                    {
-                      "Environment": [
-                      ]
-                    },
-                    {
-                      "Environment": [
-                      ]
-                    }
-                  ]
-                ]
-              }
-            ]
-          }
-        ]
+          ]
+        }
       ]
     },
     {
@@ -61,16 +80,13 @@
               "List": [
                 [
                   {
-                    "Environment": [
-                    ]
+                    "Environment": []
                   },
                   {
-                    "Environment": [
-                    ]
+                    "Environment": []
                   },
                   {
-                    "Environment": [
-                    ]
+                    "Environment": []
                   }
                 ]
               ]

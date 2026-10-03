@@ -1,6 +1,7 @@
-Push_Literal (Blob [2] (int 11))
-Jump_If_Equal_Const (Blob [1] (0x04), 9)
-Push_Literal (Blob [2] (int 13))
+Local_Get (0)
+Jump_If_Equal_Const (Blob [1] (0x04), 10)
+Local_Get (0)
+Head_Generic
 Jump_If_Equal_Const (Blob [1] (0x04), 5)
 Local_Get (0)
 Local_Get (0)

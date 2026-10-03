@@ -344,11 +344,14 @@ public record ExpressionCompilation(
             .RemoveEmptyForwardingBlocks()
             .ForwardJumpsToReturn()
             .ForwardConstantBooleanBranches()
+            .RemoveUnreachableBlocks()
             .ReplaceNonEscapingLists(parametersAsLocals.ParamsPaths.Count)
             .EliminateLocalCopies()
             .FuseLocalListProjections()
+            .ForwardProvenEqualityBranches()
             .EliminateDeadLocalStores()
             .RemoveEmptyForwardingBlocks()
+            .RemoveUnreachableBlocks()
             .LowerToStackInstructions();
     }
 

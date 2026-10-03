@@ -1,15 +1,16 @@
 {
   "Conditional": [
     {
-      "Litral": [
-        11
-      ]
+      "Environment": []
     },
     {
       "Conditional": [
         {
-          "Litral": [
-            13
+          "Builtin": [
+            "head",
+            {
+              "Environment": []
+            }
           ]
         },
         {

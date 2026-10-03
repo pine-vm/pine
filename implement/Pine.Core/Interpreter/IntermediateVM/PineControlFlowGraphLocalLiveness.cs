@@ -105,11 +105,39 @@ public sealed partial record PineControlFlowGraph
                         if (instruction.Kind is StackInstructionKind.Local_Set_Descending &&
                             instruction.LocalIndex is { } highest &&
                             instruction.TakeCount is { } count &&
-                            Enumerable.Range(highest - count + 1, count).All(local => !live.Contains(local)))
+                            count >= 0 &&
+                            highest >= count - 1)
                         {
-                            operations.RemoveAt(index);
-                            changed = true;
-                            continue;
+                            var lastLiveDepth = -1;
+
+                            for (var depth = 0; depth < count; depth++)
+                            {
+                                if (live.Contains(highest - depth))
+                                {
+                                    lastLiveDepth = depth;
+                                }
+                            }
+
+                            if (lastLiveDepth < 0)
+                            {
+                                operations.RemoveAt(index);
+                                changed = true;
+                                continue;
+                            }
+
+                            if (lastLiveDepth + 1 < count)
+                            {
+                                operations[index] =
+                                    operations[index] with
+                                    {
+                                        Instruction =
+                                        StackInstruction.Local_Set_Descending(
+                                            highest,
+                                            lastLiveDepth + 1)
+                                    };
+
+                                changed = true;
+                            }
                         }
 
                         var written = new HashSet<int>();

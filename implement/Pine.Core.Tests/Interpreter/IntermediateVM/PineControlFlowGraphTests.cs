@@ -40,6 +40,472 @@ public class PineControlFlowGraphTests
         .LowerToStackInstructions();
 
     [Fact]
+    public void Value_facts_cross_blocks_and_local_projections()
+    {
+        var tag = PineValue.Blob([10]);
+        var otherTag = PineValue.Blob([11]);
+        var known = PineValue.List([tag, PineValue.Blob([12])]);
+        var matched = PineValue.Blob([20]);
+        var unmatched = PineValue.Blob([21]);
+
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(known),
+                    StackInstruction.Local_Set(2),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Get(0))
+                .Append(
+                    Conditional(
+                        tag,
+                        Ops(StackInstruction.Push_Literal(tag)),
+                        Ops(StackInstruction.Push_Literal(tag))))
+                .AppendOperation(StackInstruction.Pop)
+                .AppendOperation(StackInstruction.Local_Get_Skip_Head_Const(2, 0))
+                .Append(
+                    Conditional(
+                        tag,
+                        Ops(StackInstruction.Push_Literal(unmatched)),
+                        Ops(StackInstruction.Push_Literal(matched)))));
+
+        var optimized = original.ForwardProvenEqualityBranches();
+
+        optimized.LowerToStackInstructions().Should()
+            .NotContain(StackInstruction.Local_Get_Skip_Head_Const(2, 0));
+
+        optimized.Blocks.Select(block => block.Terminator)
+            .OfType<PineControlFlowTerminator.ConditionalJump>().Should().ContainSingle();
+
+        foreach (var input in new[] { tag, otherTag })
+        {
+            Evaluate(optimized, input).Should().Be(matched);
+            Evaluate(optimized, input).Should().Be(Evaluate(original, input));
+        }
+    }
+
+    [Fact]
+    public void Value_facts_meet_different_local_definitions_as_unknown()
+    {
+        var first = PineValue.Blob([30]);
+        var second = PineValue.Blob([31]);
+
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(StackInstruction.Local_Get(0))
+                .Append(
+                    Conditional(
+                        first,
+                        Ops(StackInstruction.Push_Literal(first), StackInstruction.Local_Set(2)),
+                        Ops(StackInstruction.Push_Literal(second), StackInstruction.Local_Set(2))))
+                .AppendOperation(StackInstruction.Pop)
+                .AppendOperation(StackInstruction.Local_Get(2))
+                .Append(
+                    Conditional(
+                        first,
+                        Ops(StackInstruction.Push_Literal(second)),
+                        Ops(StackInstruction.Push_Literal(first)))));
+
+        var optimized = original.ForwardProvenEqualityBranches();
+
+        optimized.Blocks.Select(block => block.Terminator)
+            .OfType<PineControlFlowTerminator.ConditionalJump>().Should().HaveCount(2);
+
+        foreach (var input in new[] { first, second })
+        {
+            Evaluate(optimized, input).Should().Be(Evaluate(original, input));
+        }
+    }
+
+    [Fact]
+    public void Value_facts_follow_descending_local_writes_and_switches()
+    {
+        var tag = PineValue.List([PineValue.Blob([40])]);
+        var known = PineValue.List([PineValue.List([PineValue.Blob([40])])]);
+        var result = PineValue.Blob([41]);
+
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(known),
+                    StackInstruction.Push_Literal(PineValue.EmptyBlob),
+                    StackInstruction.Local_Set_Descending(4, 2),
+                    StackInstruction.PopMultiple(2),
+                    StackInstruction.Local_Get_Skip_Head_Const(3, 0))
+                .Append(
+                    Switch(
+                        Ops(StackInstruction.Push_Literal(PineValue.EmptyList)),
+                        (tag, Ops(StackInstruction.Push_Literal(result))))));
+
+        var optimized = original.ForwardProvenEqualityBranches();
+
+        optimized.LowerToStackInstructions().Should()
+            .NotContain(StackInstruction.Local_Get_Skip_Head_Const(3, 0));
+
+        optimized.Blocks.Select(block => block.Terminator)
+            .Should().NotContain(terminator => terminator is PineControlFlowTerminator.Switch);
+
+        Evaluate(optimized, PineValue.EmptyList).Should().Be(result);
+        Evaluate(optimized, PineValue.EmptyList).Should().Be(Evaluate(original, PineValue.EmptyList));
+    }
+
+    [Fact]
+    public void Value_facts_drop_loop_carried_local_constants_on_unknown_back_edges()
+    {
+        var first = PineValue.Blob([50]);
+        var next = PineValue.Blob([51]);
+        var result = PineValue.Blob([52]);
+
+        var original =
+            new PineControlFlowGraph(
+                new PineBlockId(0),
+                [
+                new PineBasicBlock(
+                    new PineBlockId(0),
+                    [],
+                    [
+                    new(StackInstruction.Push_Literal(first), [], [new PineVirtualValueId(0)]),
+                    new(StackInstruction.Local_Set(2), [], []),
+                    new(StackInstruction.Pop, [new PineVirtualValueId(0)], [])
+                    ],
+                    new PineControlFlowTerminator.Jump(new PineBlockId(1), [], true)),
+                new PineBasicBlock(
+                    new PineBlockId(1),
+                    [],
+                    [new(StackInstruction.Local_Get(2), [], [new PineVirtualValueId(1)])],
+                    new PineControlFlowTerminator.ConditionalJump(
+                        new PineBlockId(2),
+                        new PineBlockId(3),
+                        [],
+                        [],
+                        first)),
+                new PineBasicBlock(
+                    new PineBlockId(2),
+                    [],
+                    [new(StackInstruction.Push_Literal(result), [], [new PineVirtualValueId(2)])],
+                    new PineControlFlowTerminator.Return()),
+                new PineBasicBlock(
+                    new PineBlockId(3),
+                    [],
+                    [
+                    new(StackInstruction.Local_Get(0), [], [new PineVirtualValueId(3)]),
+                    new(StackInstruction.Local_Set(2), [], []),
+                    new(StackInstruction.Pop, [new PineVirtualValueId(3)], [])
+                    ],
+                    new PineControlFlowTerminator.Jump(new PineBlockId(1), [], false))
+                ]);
+
+        var optimized = original.ForwardProvenEqualityBranches();
+
+        optimized.Blocks[1].Terminator.Should()
+            .BeOfType<PineControlFlowTerminator.ConditionalJump>();
+
+        Evaluate(optimized, next).Should().Be(result);
+        Evaluate(optimized, next).Should().Be(Evaluate(original, next));
+    }
+
+    [Fact]
+    public void Value_facts_consume_projected_stack_input_before_a_taken_branch()
+    {
+        var tag = PineValue.Blob([60]);
+        var result = PineValue.Blob([61]);
+
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(StackInstruction.Push_Literal(PineValue.List([tag])), StackInstruction.Head_Generic)
+                .Append(
+                    Conditional(
+                        tag,
+                        Ops(StackInstruction.Push_Literal(PineValue.EmptyList)),
+                        Ops(StackInstruction.Push_Literal(result)))));
+
+        var optimized = original.ForwardProvenEqualityBranches();
+
+        optimized.LowerToStackInstructions().Should().Contain(StackInstruction.Pop);
+        optimized.LowerToStackInstructions().Should().NotContain(StackInstruction.Head_Generic);
+        Evaluate(optimized, PineValue.EmptyList).Should().Be(result);
+        Evaluate(optimized, PineValue.EmptyList).Should().Be(Evaluate(original, PineValue.EmptyList));
+    }
+
+    [Fact]
+    public void List_length_fact_survives_stack_join_and_local_store()
+    {
+        var result = PineValue.Blob([71]);
+        var unreachable = PineValue.Blob([72]);
+
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(StackInstruction.Local_Get(0))
+                .Append(
+                    Conditional(
+                        PineKernelValues.TrueValue,
+                        Ops(StackInstruction.Local_Get(0), StackInstruction.Build_List(1)),
+                        Ops(
+                            StackInstruction.Push_Literal(PineValue.EmptyBlob),
+                            StackInstruction.Build_List(1))))
+                .AppendOperation(StackInstruction.Local_Set(2))
+                .Append(
+                    Conditional(
+                        PineValue.EmptyList,
+                        Ops(StackInstruction.Push_Literal(result)),
+                        Ops(StackInstruction.Push_Literal(unreachable)))));
+
+        var optimized = original.ForwardProvenEqualityBranches();
+
+        optimized.Blocks.Select(block => block.Terminator)
+            .OfType<PineControlFlowTerminator.ConditionalJump>().Should().ContainSingle();
+
+        foreach (var input in new PineValue[] { PineKernelValues.TrueValue, PineKernelValues.FalseValue })
+        {
+            Evaluate(optimized, input).Should().Be(result);
+            Evaluate(optimized, input).Should().Be(Evaluate(original, input));
+        }
+    }
+
+    [Fact]
+    public void List_shape_facts_survive_join_of_literal_and_constructed_list()
+    {
+        var tag = PineValue.Blob([79]);
+        var result = PineValue.Blob([80]);
+
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(StackInstruction.Local_Get(0))
+                .Append(
+                    Conditional(
+                        PineKernelValues.TrueValue,
+                        Ops(StackInstruction.Push_Literal(PineValue.List([tag, PineValue.EmptyBlob]))),
+                        Ops(
+                            StackInstruction.Local_Get(0),
+                            StackInstruction.Build_List_With_Prefix(PineValue.List([tag]), 1))))
+                .AppendOperation(StackInstruction.Local_Set(2))
+                .AppendOperation(StackInstruction.Pop)
+                .AppendOperation(StackInstruction.Local_Get_Skip_Head_Const(2, 0))
+                .Append(
+                    Conditional(
+                        tag,
+                        Ops(StackInstruction.Push_Literal(PineValue.EmptyList)),
+                        Ops(StackInstruction.Push_Literal(result)))));
+
+        var optimized = original.ForwardProvenEqualityBranches();
+
+        optimized.Blocks.Select(block => block.Terminator)
+            .OfType<PineControlFlowTerminator.ConditionalJump>().Should().ContainSingle();
+
+        foreach (var input in new PineValue[] { PineKernelValues.TrueValue, PineKernelValues.FalseValue })
+        {
+            Evaluate(optimized, input).Should().Be(result);
+            Evaluate(optimized, input).Should().Be(Evaluate(original, input));
+        }
+    }
+
+    [Fact]
+    public void List_shape_equality_requires_every_element_to_be_known()
+    {
+        var tag = PineValue.Blob([81]);
+        var value = PineValue.Blob([82]);
+        var result = PineValue.Blob([83]);
+
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(tag),
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Build_List(2))
+                .Append(
+                    Conditional(
+                        PineValue.List([tag, value]),
+                        Ops(StackInstruction.Push_Literal(PineValue.EmptyList)),
+                        Ops(StackInstruction.Push_Literal(result)))));
+
+        var unknown = original.ForwardProvenEqualityBranches();
+
+        unknown.Blocks.Select(block => block.Terminator)
+            .OfType<PineControlFlowTerminator.ConditionalJump>().Should().ContainSingle();
+
+        foreach (var input in new PineValue[] { value, PineValue.EmptyBlob })
+        {
+            Evaluate(unknown, input).Should().Be(Evaluate(original, input));
+        }
+
+        var known =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(tag),
+                    StackInstruction.Push_Literal(value),
+                    StackInstruction.Build_List(2))
+                .Append(
+                    Conditional(
+                        PineValue.List([tag, value]),
+                        Ops(StackInstruction.Push_Literal(PineValue.EmptyList)),
+                        Ops(StackInstruction.Push_Literal(result)))));
+
+        var optimized = known.ForwardProvenEqualityBranches();
+
+        optimized.Blocks.Select(block => block.Terminator)
+            .Should().NotContain(terminator => terminator is PineControlFlowTerminator.ConditionalJump);
+
+        Evaluate(optimized, PineValue.EmptyList).Should().Be(result);
+        Evaluate(optimized, PineValue.EmptyList).Should().Be(Evaluate(known, PineValue.EmptyList));
+    }
+
+    [Fact]
+    public void List_prefix_fact_proves_unequal_case_without_knowing_dynamic_element()
+    {
+        var tag = PineValue.Blob([73]);
+        var otherTag = PineValue.Blob([74]);
+        var result = PineValue.Blob([75]);
+
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Build_List_With_Prefix(PineValue.List([tag]), 1),
+                    StackInstruction.Local_Set(2))
+                .Append(
+                    Switch(
+                        Ops(StackInstruction.Push_Literal(result)),
+                        (PineValue.List([otherTag, PineValue.EmptyBlob]),
+                        Ops(StackInstruction.Push_Literal(PineValue.EmptyList))))));
+
+        var optimized = original.ForwardProvenEqualityBranches();
+
+        optimized.Blocks.Select(block => block.Terminator)
+            .Should().NotContain(terminator => terminator is PineControlFlowTerminator.Switch);
+
+        foreach (var input in new PineValue[] { PineValue.EmptyBlob, PineValue.List([tag]) })
+        {
+            Evaluate(optimized, input).Should().Be(result);
+            Evaluate(optimized, input).Should().Be(Evaluate(original, input));
+        }
+    }
+
+    [Fact]
+    public void List_shape_switch_requires_a_proven_case_or_all_cases_disproven()
+    {
+        var tag = PineValue.Blob([84]);
+        var item = PineValue.Blob([85]);
+        var result = PineValue.Blob([86]);
+        var fallback = PineValue.Blob([87]);
+
+        PineControlFlowGraph BuildGraph(StackInstruction input) =>
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    input,
+                    StackInstruction.Build_List_With_Prefix(PineValue.List([tag]), 1))
+                .Append(
+                    Switch(
+                        Ops(StackInstruction.Push_Literal(fallback)),
+                        (PineValue.EmptyList, Ops(StackInstruction.Push_Literal(PineValue.EmptyBlob))),
+                        (PineValue.List([tag, item]), Ops(StackInstruction.Push_Literal(result))))));
+
+        var unknown = BuildGraph(StackInstruction.Local_Get(0));
+        var optimizedUnknown = unknown.ForwardProvenEqualityBranches();
+
+        optimizedUnknown.Blocks.Select(block => block.Terminator)
+            .Should().Contain(terminator => terminator is PineControlFlowTerminator.Switch);
+
+        foreach (var input in new PineValue[] { item, PineValue.EmptyBlob })
+        {
+            Evaluate(optimizedUnknown, input).Should().Be(Evaluate(unknown, input));
+        }
+
+        var known = BuildGraph(StackInstruction.Push_Literal(item));
+        var optimizedKnown = known.ForwardProvenEqualityBranches();
+
+        optimizedKnown.Blocks.Select(block => block.Terminator)
+            .Should().NotContain(terminator => terminator is PineControlFlowTerminator.Switch);
+
+        Evaluate(optimizedKnown, PineValue.EmptyBlob).Should().Be(result);
+        Evaluate(optimizedKnown, PineValue.EmptyBlob).Should().Be(Evaluate(known, PineValue.EmptyBlob));
+    }
+
+    [Fact]
+    public void List_prefix_fact_projects_across_local_without_materializing_an_exact_list()
+    {
+        var tag = PineValue.Blob([76]);
+        var result = PineValue.Blob([77]);
+
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Build_List_With_Prefix(PineValue.List([tag]), 1),
+                    StackInstruction.Local_Set(2),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Get_Skip_Head_Const(2, 0))
+                .Append(
+                    Conditional(
+                        tag,
+                        Ops(StackInstruction.Push_Literal(PineValue.EmptyList)),
+                        Ops(StackInstruction.Push_Literal(result)))));
+
+        var optimized = original.ForwardProvenEqualityBranches();
+
+        optimized.LowerToStackInstructions().Should()
+            .NotContain(StackInstruction.Local_Get_Skip_Head_Const(2, 0));
+
+        foreach (var input in new PineValue[] { PineValue.EmptyBlob, PineValue.EmptyList })
+        {
+            Evaluate(optimized, input).Should().Be(result);
+            Evaluate(optimized, input).Should().Be(Evaluate(original, input));
+        }
+    }
+
+    [Fact]
+    public void List_length_fact_folds_length_test_but_not_an_unknown_local_reassignment()
+    {
+        var result = PineValue.Blob([78]);
+
+        var lengthTest =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Build_List(1),
+                    StackInstruction.Length_Equal_Const(1))
+                .Append(
+                    Conditional(
+                        PineKernelValues.TrueValue,
+                        Ops(StackInstruction.Push_Literal(PineValue.EmptyList)),
+                        Ops(StackInstruction.Push_Literal(result)))));
+
+        var optimizedLengthTest = lengthTest.ForwardProvenEqualityBranches();
+
+        optimizedLengthTest.LowerToStackInstructions().Should()
+            .NotContain(StackInstruction.Length_Equal_Const(1));
+
+        Evaluate(optimizedLengthTest, PineValue.EmptyBlob).Should().Be(result);
+
+        Evaluate(optimizedLengthTest, PineValue.EmptyBlob)
+            .Should().Be(Evaluate(lengthTest, PineValue.EmptyBlob));
+
+        var overwritten =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Build_List(1),
+                    StackInstruction.Local_Set(2),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Set(2),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Get(2))
+                .Append(
+                    Conditional(
+                        PineValue.EmptyList,
+                        Ops(StackInstruction.Push_Literal(result)),
+                        Ops(StackInstruction.Push_Literal(PineValue.EmptyBlob)))));
+
+        overwritten.ForwardProvenEqualityBranches().Blocks.Select(block => block.Terminator)
+            .OfType<PineControlFlowTerminator.ConditionalJump>().Should().ContainSingle();
+
+        foreach (var input in new PineValue[] { PineValue.EmptyList, PineValue.EmptyBlob })
+        {
+            Evaluate(overwritten.ForwardProvenEqualityBranches(), input).Should()
+                .Be(Evaluate(overwritten, input));
+        }
+    }
+
+    [Fact]
     public void Dead_local_store_preserves_its_stack_value_and_result()
     {
         var input = PineValue.Blob([11]);
@@ -145,6 +611,48 @@ public class PineControlFlowGraphTests
             .Should().Contain(StackInstruction.Local_Set_Descending(3, 2));
     }
 
+    [Theory]
+    [InlineData(5, 1)]
+    [InlineData(4, 2)]
+    public void Partially_dead_descending_store_trims_only_unread_bottom_slots(
+        int readLocal,
+        int expectedCount)
+    {
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(PineValue.Blob([1])),
+                    StackInstruction.Push_Literal(PineValue.Blob([2])),
+                    StackInstruction.Push_Literal(PineValue.Blob([3])),
+                    StackInstruction.Local_Set_Descending(5, 3),
+                    StackInstruction.PopMultiple(3),
+                    StackInstruction.Local_Get(readLocal)));
+
+        var optimized = original.EliminateDeadLocalStores();
+
+        optimized.LowerToStackInstructions().Should()
+            .Contain(StackInstruction.Local_Set_Descending(5, expectedCount));
+
+        optimized.LowerToStackInstructions().Should().Contain(StackInstruction.PopMultiple(3));
+        Evaluate(optimized, PineValue.EmptyList).Should().Be(Evaluate(original, PineValue.EmptyList));
+    }
+
+    [Fact]
+    public void Partially_dead_descending_store_keeps_bottom_slot_when_read()
+    {
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Set_Descending(5, 2),
+                    StackInstruction.PopMultiple(2),
+                    StackInstruction.Local_Get(4)));
+
+        original.EliminateDeadLocalStores().LowerToStackInstructions().Should()
+            .Contain(StackInstruction.Local_Set_Descending(5, 2));
+    }
+
     [Fact]
     public void Dead_local_store_liveness_converges_across_loop_back_edges()
     {
@@ -191,6 +699,65 @@ public class PineControlFlowGraphTests
 
         Evaluate(optimized, PineValue.Blob([11])).Should()
             .Be(Evaluate(original, PineValue.Blob([11])));
+    }
+
+    [Fact]
+    public void Remove_unreachable_blocks_preserves_conditional_fallthrough_and_jump_targets()
+    {
+        var falseResult = PineValue.Blob([11]);
+        var trueResult = PineValue.Blob([22]);
+
+        PineBasicBlock ResultBlock(int id, PineValue value) =>
+            new(
+                new PineBlockId(id),
+                [],
+                [
+                new PineControlFlowOperation(
+                    StackInstruction.Push_Literal(value),
+                    [],
+                    [new PineVirtualValueId(id)])
+                ],
+                new PineControlFlowTerminator.Return());
+
+        var original =
+            new PineControlFlowGraph(
+                new PineBlockId(0),
+                [
+                    new PineBasicBlock(
+                        new PineBlockId(0),
+                        [],
+                        [
+                        new PineControlFlowOperation(
+                            StackInstruction.Local_Get(0),
+                            [],
+                            [new PineVirtualValueId(0)])
+                        ],
+                        new PineControlFlowTerminator.ConditionalJump(
+                            new PineBlockId(1),
+                            new PineBlockId(3),
+                            [],
+                            [],
+                            PineKernelValues.TrueValue)),
+                    ResultBlock(1, falseResult),
+                    ResultBlock(2, PineValue.Blob([33])),
+                    ResultBlock(3, trueResult)
+                ]);
+
+        original.Validate();
+        var optimized = original.RemoveUnreachableBlocks();
+
+        optimized.Blocks.Should().HaveCount(3);
+
+        optimized.Blocks[0].Terminator.Should()
+            .BeOfType<PineControlFlowTerminator.ConditionalJump>()
+            .Which.Branch.Should().Be(new PineBlockId(2));
+
+        foreach (var condition in new[] { PineKernelValues.FalseValue, PineKernelValues.TrueValue })
+        {
+            Evaluate(optimized, condition).Should().Be(Evaluate(original, condition));
+        }
+
+        optimized.RemoveUnreachableBlocks().Should().BeSameAs(optimized);
     }
 
     [Theory]

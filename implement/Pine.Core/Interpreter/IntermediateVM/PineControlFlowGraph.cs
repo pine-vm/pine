@@ -483,6 +483,39 @@ public sealed partial record PineControlFlowGraph(
     }
 
     /// <summary>
+    /// Removes blocks with no path from the entry, preserving the layout of the remaining blocks.
+    /// </summary>
+    public PineControlFlowGraph RemoveUnreachableBlocks()
+    {
+        var reachable = new HashSet<PineBlockId> { Entry };
+        var pending = new Stack<PineBlockId>();
+        pending.Push(Entry);
+
+        while (pending.TryPop(out var blockId))
+        {
+            foreach (var (target, _) in Successors(Blocks[blockId.Value].Terminator))
+            {
+                if (reachable.Add(target))
+                {
+                    pending.Push(target);
+                }
+            }
+        }
+
+        if (reachable.Count == Blocks.Length)
+        {
+            return this;
+        }
+
+        var result =
+            TryRemapBlockIds([.. Blocks.Where(block => reachable.Contains(block.Id))]) ??
+            throw new InvalidOperationException("Entry block was removed.");
+
+        result.Validate();
+        return result;
+    }
+
+    /// <summary>
     /// Replaces explicit jumps to blocks that consist only of a return with a return.
     /// </summary>
     public PineControlFlowGraph ForwardJumpsToReturn()
