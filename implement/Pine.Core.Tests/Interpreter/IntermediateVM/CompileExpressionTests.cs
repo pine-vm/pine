@@ -171,6 +171,39 @@ public class CompileExpressionTests
             multiplier: multiplier);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData(1)]
+    [InlineData(4)]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Compile_single_case_switch_over_slice(int? multiplier)
+    {
+        AssertSwitchOverSliceCompilation(
+            firstLiteral: PineValue.Blob([4, 5]),
+            secondLiteral: PineValue.Blob([6, 7]),
+            multiplier: multiplier,
+            singleCase: true);
+    }
+
+    [Fact]
+    public void Compile_single_case_switch_over_list_slice()
+    {
+        AssertSwitchOverSliceCompilation(
+            firstLiteral: PineValue.List(
+                [
+                IntegerEncoding.EncodeSignedInteger(4),
+                IntegerEncoding.EncodeSignedInteger(5),
+                ]),
+            secondLiteral: PineValue.List(
+                [
+                IntegerEncoding.EncodeSignedInteger(6),
+                IntegerEncoding.EncodeSignedInteger(7),
+                ]),
+            multiplier: 4,
+            singleCase: true);
+    }
+
     [Fact]
     public void Slice_switch_rejects_duplicate_literals()
     {
@@ -193,7 +226,8 @@ public class CompileExpressionTests
     private static void AssertSwitchOverSliceCompilation(
         PineValue firstLiteral,
         PineValue secondLiteral,
-        int? multiplier = null)
+        int? multiplier = null,
+        bool singleCase = false)
     {
         var rawSkipCountExpression =
             (Expression)
@@ -261,7 +295,10 @@ public class CompileExpressionTests
             (Expression)
             Expression.ConditionalInst(
                 condition: EqualTo(firstLiteral),
-                falseBranch:
+                falseBranch: singleCase
+                ?
+                Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(0))
+                :
                 Expression.ConditionalInst(
                     condition: EqualTo(secondLiteral),
                     falseBranch: Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(0)),
@@ -286,14 +323,14 @@ public class CompileExpressionTests
 
         switchInstruction.SwitchJumpTable.Should().BeNull();
         switchInstruction.IntegerLiteral.Should().Be(new BigInteger(multiplier ?? 1));
-        switchInstruction.SliceSwitchCases.Should().HaveCount(2);
+        switchInstruction.SliceSwitchCases.Should().HaveCount(singleCase ? 1 : 2);
 
         compiled.Generic.Instructions.Should().NotContain(
             instruction => instruction.Kind == StackInstructionKind.Int_Mul_Const);
 
         switchInstruction.SliceSwitchCases
             .Select(switchCase => switchCase.Literal)
-            .Should().Equal(firstLiteral, secondLiteral);
+            .Should().Equal(singleCase ? [firstLiteral] : [firstLiteral, secondLiteral]);
 
         var graph =
             ExpressionCompilation.ControlFlowGraphFromExpression(
@@ -315,7 +352,7 @@ public class CompileExpressionTests
 
         switchTerminator.Cases
             .Select(switchCase => switchCase.Literal)
-            .Should().Equal(firstLiteral, secondLiteral);
+            .Should().Equal(singleCase ? [firstLiteral] : [firstLiteral, secondLiteral]);
 
         graph.LowerToStackInstructions()
             .Single(
@@ -328,7 +365,7 @@ public class CompileExpressionTests
 
         instructionDetails.PopCount.Should().Be(2);
         instructionDetails.PushCount.Should().Be(0);
-        instructionDetails.Display().DetailLines.Should().HaveCount(2);
+        instructionDetails.Display().DetailLines.Should().HaveCount(singleCase ? 1 : 2);
 
         var pineVM =
             Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
@@ -368,9 +405,10 @@ public class CompileExpressionTests
             new[]
             {
                 (Source: PrefixLiteral(firstLiteral), SkipCount: (PineValue)IntegerEncoding.EncodeSignedInteger(1), Expected: 1),
-                (Source: PrefixLiteral(secondLiteral), SkipCount: (PineValue)IntegerEncoding.EncodeSignedInteger(1), Expected: 2),
+                (Source: PrefixLiteral(secondLiteral), SkipCount: (PineValue)IntegerEncoding.EncodeSignedInteger(1), Expected: singleCase ? 0 : 2),
                 (Source: firstLiteral, SkipCount: (PineValue)IntegerEncoding.EncodeSignedInteger(1), Expected: multiplier is null or > 0 ? 0 : 1),
                 (Source: PrefixLiteral(firstLiteral), SkipCount: PineValue.EmptyList, Expected: 0),
+                (Source: PrefixLiteral(firstLiteral), SkipCount: (PineValue)IntegerEncoding.EncodeSignedInteger(-1), Expected: multiplier is 0 ? 1 : 0),
             };
 
         foreach (var evaluation in evaluations)
@@ -385,6 +423,24 @@ public class CompileExpressionTests
             pineVM.EvaluateExpression(expression, environment)
                 .Should()
                 .Be(Result<string, PineValue>.ok(IntegerEncoding.EncodeSignedInteger(evaluation.Expected)));
+        }
+
+        if (singleCase && multiplier is 4)
+        {
+            var environment =
+                PineValue.List(
+                    [
+                    IntegerEncoding.EncodeSignedInteger((BigInteger)int.MinValue - 1),
+                    firstLiteral,
+                    ]);
+
+            pineVM.EvaluateExpression(slicedExpression, environment)
+                .Should()
+                .Be(Result<string, PineValue>.ok(firstLiteral));
+
+            pineVM.EvaluateExpression(expression, environment)
+                .Should()
+                .Be(Result<string, PineValue>.ok(IntegerEncoding.EncodeSignedInteger(1)));
         }
     }
 

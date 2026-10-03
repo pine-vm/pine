@@ -1897,8 +1897,11 @@ public class PineVM : ICancellablePineVM
 
                             if (skipCountValue.AsInteger() is { } skipCount)
                             {
+                                var skipCountInt =
+                                    skipCount < 0 ? 0 : (int)skipCount;
+
                                 resultValue =
-                                    PineValueInProcess.Slice((int)skipCount, takeCount, prevValue);
+                                    PineValueInProcess.Slice(skipCountInt, takeCount, prevValue);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);

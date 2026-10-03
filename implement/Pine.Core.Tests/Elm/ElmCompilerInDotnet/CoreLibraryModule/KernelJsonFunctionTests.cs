@@ -1420,7 +1420,7 @@ public class KernelJsonFunctionTests
             InvocationCount: 40
             BuildListCount: 70
             LoopIterationCount: 25
-            InstructionCount: 1_625
+            InstructionCount: 1_620
             """);
     }
 
@@ -1442,7 +1442,7 @@ public class KernelJsonFunctionTests
             InvocationCount: 13
             BuildListCount: 40
             LoopIterationCount: 23
-            InstructionCount: 1_080
+            InstructionCount: 1_077
             """);
     }
 
@@ -1499,7 +1499,7 @@ public class KernelJsonFunctionTests
             InvocationCount: 20
             BuildListCount: 49
             LoopIterationCount: 24
-            InstructionCount: 1_217
+            InstructionCount: 1_216
             """);
     }
 
@@ -1522,7 +1522,7 @@ public class KernelJsonFunctionTests
             InvocationCount: 46
             BuildListCount: 121
             LoopIterationCount: 40
-            InstructionCount: 2_331
+            InstructionCount: 2_329
             """);
     }
 
@@ -1545,7 +1545,7 @@ public class KernelJsonFunctionTests
             InvocationCount: 13
             BuildListCount: 48
             LoopIterationCount: 23
-            InstructionCount: 1_211
+            InstructionCount: 1_207
             """);
     }
 
@@ -1566,7 +1566,7 @@ public class KernelJsonFunctionTests
             InvocationCount: 13
             BuildListCount: 48
             LoopIterationCount: 23
-            InstructionCount: 1_211
+            InstructionCount: 1_207
             """);
     }
 
@@ -1629,7 +1629,7 @@ public class KernelJsonFunctionTests
             InvocationCount: 22
             BuildListCount: 58
             LoopIterationCount: 15
-            InstructionCount: 1_127
+            InstructionCount: 1_123
             """);
     }
 
@@ -1649,7 +1649,7 @@ public class KernelJsonFunctionTests
             InvocationCount: 18
             BuildListCount: 49
             LoopIterationCount: 16
-            InstructionCount: 1_069
+            InstructionCount: 1_065
             """);
     }
 
@@ -1697,7 +1697,7 @@ public class KernelJsonFunctionTests
             InvocationCount: 26
             BuildListCount: 56
             LoopIterationCount: 2
-            InstructionCount: 800
+            InstructionCount: 799
             """);
     }
 
@@ -1742,7 +1742,7 @@ public class KernelJsonFunctionTests
             InvocationCount: 13
             BuildListCount: 46
             LoopIterationCount: 21
-            InstructionCount: 1_359
+            InstructionCount: 1_356
             """);
     }
 

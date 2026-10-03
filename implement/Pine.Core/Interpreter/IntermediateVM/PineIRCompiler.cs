@@ -709,11 +709,6 @@ public class PineIRCompiler
             defaultBranch = nestedConditional.FalseBranch;
         }
 
-        if (cases.Count < 2)
-        {
-            return null;
-        }
-
         (Expression sourceExpr, Expression skipCountExpr)? sliceSkipVar = null;
 
         if (TryParse_Builtin_Take_Const(comparedExpression, parseCache) is { } parsedTake &&
@@ -734,6 +729,11 @@ public class PineIRCompiler
                 }))
         {
             sliceSkipVar = (parsedSkip.sourceExpr, parsedSkip.skipCountExpr);
+        }
+
+        if (cases.Count < 2 && sliceSkipVar is null)
+        {
+            return null;
         }
 
         NodeCompilationResult afterCondition;
