@@ -141,7 +141,7 @@ public sealed partial record PineControlFlowGraph
             var instruction = operation.Instruction;
 
             if (instruction.Kind is
-                    (StackInstructionKind.Local_Get or StackInstructionKind.Local_Get_Skip_Head_Const) &&
+                    StackInstructionKind.Local_Get or StackInstructionKind.Local_Get_Skip_Head_Const &&
                 instruction.LocalIndex is >= 0 and var local)
             {
                 var equivalents = EquivalentLocals(equalLocals, local);
@@ -181,6 +181,19 @@ public sealed partial record PineControlFlowGraph
                     .ToArray();
 
                 equalLocals = StoreEqualLocals(equalLocals, values, assignments);
+            }
+            else if (instruction.Kind is StackInstructionKind.Local_Int_Add_Const &&
+                instruction.LocalIndex is >= 0 and var incrementedLocal)
+            {
+                equalLocals =
+                    equalLocals
+                    .Where(pair => pair.Lower != incrementedLocal && pair.Higher != incrementedLocal)
+                    .ToImmutableHashSet();
+
+                foreach (var value in values.Keys.ToArray())
+                {
+                    values[value] = values[value].Remove(incrementedLocal);
+                }
             }
 
             if (!operation.Inputs.IsEmpty)

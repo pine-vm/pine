@@ -95,8 +95,8 @@ public sealed partial record PineControlFlowGraph
                         operationIndex <= lastRead &&
                         operation.Instruction.LocalIndex == destination &&
                         operation.Instruction.Kind is
-                        (StackInstructionKind.Local_Get or
-                         StackInstructionKind.Local_Get_Skip_Head_Const))
+                        StackInstructionKind.Local_Get or
+                         StackInstructionKind.Local_Get_Skip_Head_Const)
                     {
                         operation =
                             operation with
@@ -120,7 +120,7 @@ public sealed partial record PineControlFlowGraph
     }
 
     private static bool WritesLocal(StackInstruction instruction, int index) =>
-        instruction.Kind is StackInstructionKind.Local_Set &&
+        instruction.Kind is StackInstructionKind.Local_Set or StackInstructionKind.Local_Int_Add_Const &&
         instruction.LocalIndex == index ||
         instruction.Kind is StackInstructionKind.Local_Set_Descending &&
         instruction.LocalIndex is { } highest &&
@@ -164,6 +164,65 @@ public sealed partial record PineControlFlowGraph
                         }
 
                         operations.Add(get);
+                    }
+
+                    return block with { Operations = operations.ToImmutable() };
+                }).ToImmutableArray();
+
+        var result = this with { Blocks = blocks };
+        result.Validate();
+        return result;
+    }
+
+    /// <summary>
+    /// Fuses a local increment and its immediately discarded stack result into one local update.
+    /// </summary>
+    public PineControlFlowGraph FuseLocalIntegerAdditions()
+    {
+        var blocks =
+            Blocks.Select(
+                block =>
+                {
+                    var operations = ImmutableArray.CreateBuilder<PineControlFlowOperation>();
+
+                    for (var index = 0; index < block.Operations.Length; index++)
+                    {
+                        if (index + 3 < block.Operations.Length &&
+                            block.Operations[index] is { } get &&
+                            get.Instruction.Kind is StackInstructionKind.Local_Get &&
+                            get.Instruction.LocalIndex is >= 0 and var local &&
+                            get.Inputs.IsEmpty &&
+                            get.Results.Length is 1 &&
+                            block.Operations[index + 1] is { } add &&
+                            add.Instruction.Kind is StackInstructionKind.Int_Add_Const &&
+                            add.Instruction.IntegerLiteral is { } increment &&
+                            add.Inputs.Length is 1 &&
+                            add.Inputs[0] == get.Results[0] &&
+                            add.Results.Length is 1 &&
+                            block.Operations[index + 2] is { } set &&
+                            set.Instruction.Kind is StackInstructionKind.Local_Set_Descending &&
+                            set.Instruction.LocalIndex == local &&
+                            set.Instruction.TakeCount is 1 &&
+                            set.Inputs.IsEmpty &&
+                            set.Results.IsEmpty &&
+                            block.Operations[index + 3] is { } pop &&
+                            pop.Instruction.Kind is StackInstructionKind.Pop &&
+                            pop.Instruction.SkipCount is 1 &&
+                            pop.Inputs.Length is 1 &&
+                            pop.Inputs[0] == add.Results[0] &&
+                            pop.Results.IsEmpty)
+                        {
+                            operations.Add(
+                                new(
+                                    StackInstruction.Local_Int_Add_Const(local, increment),
+                                    [],
+                                    []));
+
+                            index += 3;
+                            continue;
+                        }
+
+                        operations.Add(block.Operations[index]);
                     }
 
                     return block with { Operations = operations.ToImmutable() };

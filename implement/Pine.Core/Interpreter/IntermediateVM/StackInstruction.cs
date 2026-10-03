@@ -489,6 +489,13 @@ public enum StackInstructionKind
     /// using the environment from the top of the stack.
     /// </summary>
     Eval_Const,
+
+    /// <summary>
+    /// Add <see cref="StackInstruction.IntegerLiteral"/> to the integer in
+    /// <see cref="StackInstruction.LocalIndex"/> and store the result in that local.
+    /// Leaves the evaluation stack unchanged.
+    /// </summary>
+    Local_Int_Add_Const,
 }
 
 /// <summary>
@@ -695,6 +702,12 @@ public record StackInstruction(
     /// </summary>
     public static StackInstruction Local_Get(int index) =>
         new(StackInstructionKind.Local_Get, LocalIndex: index);
+
+    /// <summary>
+    /// Creates an instruction to add an integer constant to a local without using the stack.
+    /// </summary>
+    public static StackInstruction Local_Int_Add_Const(int localIndex, BigInteger integerLiteral) =>
+        new(StackInstructionKind.Local_Int_Add_Const, LocalIndex: localIndex, IntegerLiteral: integerLiteral);
 
     /// <summary>
     /// Creates a <see cref="StackInstructionKind.Local_Get_Skip_Head_Const"/> instruction.
@@ -1511,6 +1524,18 @@ public record StackInstruction(
                     instruction.LocalIndex?.ToString()
                     ?? throw new Exception(
                         "Missing LocalIndex for LocalGet instruction")
+                    ])),
+
+            StackInstructionKind.Local_Int_Add_Const =>
+            new InstructionDetails(
+                PopCount: 0,
+                PushCount: 0,
+                Display: () => InstructionDisplay.WithoutDetailLines(
+                    [
+                    instruction.LocalIndex?.ToString()
+                    ?? throw new Exception("Missing LocalIndex for LocalIntAddConst instruction"),
+                    instruction.IntegerLiteral?.ToString()
+                    ?? throw new Exception("Missing IntegerLiteral for LocalIntAddConst instruction")
                     ])),
 
             StackInstructionKind.Local_Get_Skip_Head_Const =>

@@ -166,7 +166,8 @@ public sealed partial record PineControlFlowGraph
     private static int? ReadLocal(StackInstruction instruction) =>
         instruction.Kind is
         StackInstructionKind.Local_Get or
-        StackInstructionKind.Local_Get_Skip_Head_Const
+        StackInstructionKind.Local_Get_Skip_Head_Const or
+        StackInstructionKind.Local_Int_Add_Const
         ?
         instruction.LocalIndex
         :
@@ -174,7 +175,7 @@ public sealed partial record PineControlFlowGraph
 
     private static void AddWrittenLocals(StackInstruction instruction, HashSet<int> written)
     {
-        if (instruction.Kind is StackInstructionKind.Local_Set &&
+        if (instruction.Kind is StackInstructionKind.Local_Set or StackInstructionKind.Local_Int_Add_Const &&
             instruction.LocalIndex is { } local)
         {
             written.Add(local);

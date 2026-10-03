@@ -39,6 +39,144 @@ public class PineControlFlowGraphTests
         .ForwardConstantBooleanBranches()
         .LowerToStackInstructions();
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(-2)]
+    public void Fuse_local_integer_addition_preserves_stack_and_local_value(int increment)
+    {
+        var marker = PineValue.Blob([72]);
+
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(marker),
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Int_Add_Const(increment),
+                    StackInstruction.Local_Set_Descending(0, 1),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Build_List(2)));
+
+        var fused = original.FuseLocalIntegerAdditions();
+
+        fused.LowerToStackInstructions().Should().Equal(
+            StackInstruction.Push_Literal(marker),
+            StackInstruction.Local_Int_Add_Const(0, increment),
+            StackInstruction.Local_Get(0),
+            StackInstruction.Build_List(2),
+            StackInstruction.Return);
+
+        var details = StackInstruction.GetDetails(StackInstruction.Local_Int_Add_Const(0, increment));
+        details.PopCount.Should().Be(0);
+        details.PushCount.Should().Be(0);
+
+        StackInstruction.Local_Int_Add_Const(0, increment).ToString().Should()
+            .Contain($"Local_Int_Add_Const (0, {increment})");
+
+        StackFrameInstructions.ComputeLocalsCount(
+            [StackInstruction.Local_Int_Add_Const(4, increment)],
+            StaticFunctionInterface.Generic).Should().BeGreaterThan(4);
+
+        foreach (var input in new PineValue[] { PineValueInProcess.CreateInteger(4).Evaluate(), PineValue.EmptyList })
+        {
+            Evaluate(fused, input).Should().Be(Evaluate(original, input));
+        }
+    }
+
+    [Fact]
+    public void Fuse_local_integer_addition_requires_a_discarded_result_and_same_destination()
+    {
+        var retained =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Int_Add_Const(1),
+                    StackInstruction.Local_Set_Descending(0, 1)));
+
+        retained.FuseLocalIntegerAdditions().LowerToStackInstructions()
+            .Should().Equal(retained.LowerToStackInstructions());
+
+        var differentDestination =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Int_Add_Const(1),
+                    StackInstruction.Local_Set_Descending(1, 1),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Get(1)));
+
+        differentDestination.FuseLocalIntegerAdditions().LowerToStackInstructions()
+            .Should().Equal(differentDestination.LowerToStackInstructions());
+    }
+
+    [Fact]
+    public void Local_integer_addition_invalidates_facts_and_local_aliases()
+    {
+        var four = PineValueInProcess.CreateInteger(4).Evaluate();
+
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(four),
+                    StackInstruction.Local_Set(1),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Int_Add_Const(1, 1),
+                    StackInstruction.Local_Get(1))
+                .Append(
+                    Conditional(
+                        four,
+                        Ops(StackInstruction.Push_Literal(PineValue.EmptyList)),
+                        Ops(StackInstruction.Push_Literal(PineValue.EmptyBlob)))));
+
+        var optimized = original.ForwardProvenEqualityBranches();
+
+        optimized.Blocks.Select(block => block.Terminator)
+            .Should().Contain(terminator => terminator is PineControlFlowTerminator.ConditionalJump);
+
+        Evaluate(optimized, PineValue.EmptyList).Should().Be(Evaluate(original, PineValue.EmptyList));
+
+        var aliases =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Set(1),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Int_Add_Const(1, 1),
+                    StackInstruction.Local_Get(1)));
+
+        aliases.ForwardEquivalentLocalReads().LowerToStackInstructions()
+            .Should().Contain(StackInstruction.Local_Get(1));
+
+        Evaluate(aliases.ForwardEquivalentLocalReads(), four).Should().Be(Evaluate(aliases, four));
+    }
+
+    [Fact]
+    public void Fused_integer_addition_keeps_its_local_initialization_live()
+    {
+        var four = PineValueInProcess.CreateInteger(4).Evaluate();
+
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(four),
+                    StackInstruction.Local_Set(1),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Get(1),
+                    StackInstruction.Int_Add_Const(1),
+                    StackInstruction.Local_Set_Descending(1, 1),
+                    StackInstruction.Pop,
+                    StackInstruction.Push_Literal(four)));
+
+        var fused = original.FuseLocalIntegerAdditions();
+        var withDeadStoresRemoved = fused.EliminateDeadLocalStores();
+
+        withDeadStoresRemoved.LowerToStackInstructions()
+            .Should().Contain(StackInstruction.Local_Set(1));
+
+        Evaluate(withDeadStoresRemoved, PineValue.EmptyList)
+            .Should().Be(Evaluate(original, PineValue.EmptyList));
+    }
+
     [Fact]
     public void Descending_store_drops_unchanged_bottom_locals_and_their_reads()
     {

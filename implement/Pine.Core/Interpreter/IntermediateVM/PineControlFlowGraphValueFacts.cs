@@ -410,6 +410,11 @@ public sealed partial record PineControlFlowGraph
             {
                 locals[local] = values.GetValueOrDefault(stack[^1], ValueFacts.Unknown);
             }
+            else if (instruction.Kind is StackInstructionKind.Local_Int_Add_Const &&
+                instruction.LocalIndex is { } incrementedLocal)
+            {
+                locals.Remove(incrementedLocal);
+            }
             else if (instruction.Kind is StackInstructionKind.Local_Set_Descending &&
                 instruction.LocalIndex is { } highest &&
                 instruction.TakeCount is { } count)

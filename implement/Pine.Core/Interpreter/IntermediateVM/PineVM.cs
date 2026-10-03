@@ -2039,6 +2039,28 @@ public class PineVM : ICancellablePineVM
                             continue;
                         }
 
+                    case StackInstructionKind.Local_Int_Add_Const:
+                        {
+                            var localIndex =
+                                currentInstruction.LocalIndex
+                                ?? throw new Exception("Invalid operation form: Missing local index");
+
+                            var increment =
+                                currentInstruction.IntegerLiteral
+                                ?? throw new Exception("Invalid operation form: Missing literal value");
+
+                            var resultValue = PineValueInProcess.EmptyList;
+
+                            if (currentFrame.LocalGet(localIndex).AsInteger() is { } currentValue)
+                            {
+                                resultValue = PineValueInProcess.CreateInteger(currentValue + increment);
+                            }
+
+                            currentFrame.LocalSet(localIndex, resultValue);
+                            currentFrame.InstructionPointer++;
+                            continue;
+                        }
+
                     case StackInstructionKind.Int_Unsigned_Add_Const:
                         {
                             var rightInt =

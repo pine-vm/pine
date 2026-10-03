@@ -160,6 +160,7 @@ public record StackFrameInstructions(
                 StackInstructionKind.Local_Get or
                 StackInstructionKind.Local_Get_Skip_Head_Const or
                 StackInstructionKind.Local_Set or
+                StackInstructionKind.Local_Int_Add_Const or
                 StackInstructionKind.Local_Set_Descending)
             {
                 if (inst.LocalIndex is null)
