@@ -465,7 +465,7 @@ public class CoreBasics
             // toFloat : Int -> Float
             "toFloat" =>
             new CoreFunctionInfo(
-                [TypeInference.InferredType.Int(), TypeInference.InferredType.Number()],
+                [TypeInference.InferredType.Int(), TypeInference.InferredType.Float()],
                 args => Generic_Identity(args[0])),
 
             // always : a -> b -> a
@@ -2304,23 +2304,6 @@ public class CoreBasics
     /// </summary>
     public static PineValue Floor_FunctionValue()
     {
-        /*
-        floor : Float -> Int
-        floor number =
-            case number of
-                Elm_Float numerator denom ->
-                    idiv numerator denom
-
-                _ ->
-                    number
-
-        This reproduces the observable result of the kernel `Basics.floor`
-        implementation (which scales numerator/denominator to a power of ten
-        before integer-dividing). Because scaling both operands by the same
-        positive factor preserves the truncated quotient, this is equivalent to
-        `idiv numerator denom`.
-         * */
-
         var n = Expression.EnvironmentInstance;
 
         // Check if the value is a float by checking if head(n) equals "Elm_Float"
@@ -2332,8 +2315,34 @@ public class CoreBasics
         var numerator = ChoiceArgument(n, 0);
         var denominator = ChoiceArgument(n, 1);
 
-        // For float: integer division of numerator by denominator
-        var floorFloat = Internal_Int_div(numerator, denominator);
+        var quotient = Internal_Int_div(numerator, denominator);
+
+        var denominatorIsZero =
+            BuiltinHelpers.ApplyBuiltinEqualBinary(denominator, LiteralInt(0));
+
+        var dividesEvenly =
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                BuiltinMul(quotient, denominator),
+                numerator);
+
+        var signsMatch =
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                BuiltinIntIsSortedAsc(LiteralInt(0), numerator),
+                BuiltinIntIsSortedAsc(LiteralInt(0), denominator));
+
+        var floorFloat =
+            Expression.ConditionalInst(
+                condition: denominatorIsZero,
+                trueBranch: quotient,
+                falseBranch:
+                Expression.ConditionalInst(
+                    condition: dividesEvenly,
+                    trueBranch: quotient,
+                    falseBranch:
+                    Expression.ConditionalInst(
+                        condition: signsMatch,
+                        trueBranch: quotient,
+                        falseBranch: BuiltinAdd(quotient, LiteralInt(-1)))));
 
         // For non-float: the value is already an integer
         var asExpr =

@@ -786,14 +786,7 @@ floor : Float -> Int
 floor number =
     case number of
         Elm_Float numerator denom ->
-            if Pine_builtin.int_is_sorted_asc [ 0, numerator ] then
-                ratioFloor numerator denom
-
-            else
-                Pine_builtin.int_mul
-                    [ -1
-                    , ratioFloor (Pine_builtin.int_mul [ -1, numerator ]) denom
-                    ]
+            ratioFloor numerator denom
 
         _ ->
             number
@@ -802,39 +795,25 @@ floor number =
 ratioFloor : Int -> Int -> Int
 ratioFloor numerator denom =
     let
-        ( multiplier, denomProd ) =
-            findMultiplierToDecimal 1 denom
+        quotient =
+            idiv numerator denom
     in
-    idiv
-        (Pine_builtin.int_mul [ numerator, multiplier ])
-        denomProd
+    if Pine_builtin.equal [ denom, 0 ] then
+        quotient
 
+    else if Pine_builtin.equal [ Pine_builtin.int_mul [ quotient, denom ], numerator ] then
+        quotient
 
-findMultiplierToDecimal : Int -> Int -> ( Int, Int, Int )
-findMultiplierToDecimal factor denom =
-    let
-        denomProd =
-            Pine_builtin.int_mul [ denom, factor ]
-
-        lowerPowerOfTen =
-            findLowerPowerOfTen denomProd
-    in
-    if Pine_builtin.equal [ pow 10 lowerPowerOfTen, denomProd ] then
-        ( factor, denomProd )
+    else if
+        Pine_builtin.equal
+            [ Pine_builtin.int_is_sorted_asc [ 0, numerator ]
+            , Pine_builtin.int_is_sorted_asc [ 0, denom ]
+            ]
+    then
+        quotient
 
     else
-        findMultiplierToDecimal
-            (Pine_builtin.int_add [ factor, 1 ])
-            denom
-
-
-findLowerPowerOfTen : Int -> Int
-findLowerPowerOfTen int =
-    if Pine_builtin.int_is_sorted_asc [ int, 9 ] then
-        0
-
-    else
-        Pine_builtin.int_add [ findLowerPowerOfTen (idiv int 10), 1 ]
+        Pine_builtin.int_add [ quotient, -1 ]
 
 
 isNaN : Float -> Bool

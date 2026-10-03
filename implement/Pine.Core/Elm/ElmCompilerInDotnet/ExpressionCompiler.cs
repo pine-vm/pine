@@ -1305,8 +1305,7 @@ public class ExpressionCompiler
             return err;
         }
 
-        var negativeOne = Expression.LitralInst(EmitIntegerLiteral(-1));
-        return BuiltinHelpers.ApplyBuiltinIntMul([negativeOne, innerResult.IsOkOrNull()!]);
+        return CoreLibraryModule.CoreBasics.Generic_Negate(innerResult.IsOkOrNull()!);
     }
 
     private static Result<CompilationError, Expression> CompileIfBlock(

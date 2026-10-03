@@ -2093,6 +2093,43 @@ public class CoreBasicsParseTests
     }
 
     [Fact]
+    public void Unary_negation_preserves_float_and_int_values()
+    {
+        var (parsedEnv, _) =
+            ElmCompilerTestHelper.CompileElmModules(
+                [
+                """
+                module Test exposing (..)
+
+                negated value =
+                    -value
+                """
+                ],
+                disableInlining: true);
+
+        var declaration =
+            parsedEnv.Modules.Single(module => module.moduleName is "Test")
+            .moduleContent.FunctionDeclarations.Single(decl => decl.Key is "negated").Value;
+
+        var parsed =
+            FunctionRecord.ParseFunctionRecordTagged(declaration, new PineVMParseCache())
+            .Extract(err => throw new Exception(err.ToString()));
+
+        var invoke = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(parsed);
+
+        ElmValue Negate(ElmValue value) =>
+            ElmValueEncoding.PineValueAsElmValue(
+                invoke([ElmValueEncoding.ElmValueAsPineValue(value)]).evalReport.ReturnValue.Evaluate(),
+                null,
+                null)
+            .Extract(err => throw new Exception(err.ToString()));
+
+        Negate(ElmValue.ElmFloat.Convert(0.7)).Should().Be(ElmValue.ElmFloat.Convert(-0.7));
+        Negate(ElmValue.ElmFloat.Convert(-0.7)).Should().Be(ElmValue.ElmFloat.Convert(0.7));
+        Negate(ElmValue.Integer(7)).Should().Be(ElmValue.Integer(-7));
+    }
+
+    [Fact]
     public void Function_identity()
     {
         var elmModuleText =

@@ -85,6 +85,26 @@ public class BuiltinOperatorLoweringTests
     }
 
     [Fact]
+    public void Keeps_float_multiplication_after_toFloat_generic()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                searchRatio : Int -> Float -> Float
+                searchRatio denominator value =
+                    toFloat denominator * value
+                """);
+
+        var rendered = RenderCanonicalized(loweredModule);
+
+        rendered.Should().Contain("Basics.mul");
+        rendered.Should().NotContain("Pine_builtin.int_mul");
+    }
+
+    [Fact]
     public void Lowers_string_append_operator_application()
     {
         var loweredModule =

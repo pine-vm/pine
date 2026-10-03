@@ -94,6 +94,15 @@ interactiveScenarios =
                     , submission = """ floor 1.7  """
                     , expectedValueElmExpression = "1"
                     }
+        , Test.test "floor negative decimal" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context =
+                        CustomModulesContext { includeCoreModules = Just OnlyCoreModules, modulesTexts = [] }
+                    , previousSubmissions = []
+                    , submission = """ floor -0.7 """
+                    , expectedValueElmExpression = "-1"
+                    }
         , Test.test "String.toFloat empty" <|
             \_ ->
                 expectationForElmInteractiveScenario
@@ -129,6 +138,42 @@ interactiveScenarios =
                     , previousSubmissions = []
                     , submission = """ String.toFloat "0.7"  """
                     , expectedValueElmExpression = "Just 0.7"
+                    }
+        , Test.test "fromFloat 0.7" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context =
+                        CustomModulesContext { includeCoreModules = Just OnlyCoreModules, modulesTexts = [] }
+                    , previousSubmissions = []
+                    , submission = """ String.fromFloat 0.7 """
+                    , expectedValueElmExpression = "\"0.7\""
+                    }
+        , Test.test "fromFloat negative fraction" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context =
+                        CustomModulesContext { includeCoreModules = Just OnlyCoreModules, modulesTexts = [] }
+                    , previousSubmissions = []
+                    , submission = """ String.fromFloat -0.7 """
+                    , expectedValueElmExpression = "\"-0.7\""
+                    }
+        , Test.test "fromFloat leading fractional zero" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context =
+                        CustomModulesContext { includeCoreModules = Just OnlyCoreModules, modulesTexts = [] }
+                    , previousSubmissions = []
+                    , submission = """ String.fromFloat 0.05 """
+                    , expectedValueElmExpression = "\"0.05\""
+                    }
+        , Test.test "Literal float 0.7" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context =
+                        CustomModulesContext { includeCoreModules = Just OnlyCoreModules, modulesTexts = [] }
+                    , previousSubmissions = []
+                    , submission = """ 0.7 """
+                    , expectedValueElmExpression = "0.7"
                     }
         , Test.test "Just a literal List String" <|
             \_ ->
@@ -474,6 +519,56 @@ expectationForElmInteractiveScenario scenario =
         (ElmInteractiveParser.submissionInInteractive scenario.context scenario.previousSubmissions scenario.submission
             |> Result.map .displayText
         )
+
+
+floatValueRegressions : Test.Test
+floatValueRegressions =
+    Test.describe "Float values and strings"
+        [ Test.test "whole float literal encodes as an integer" <|
+            \_ ->
+                ElmCompiler.valueFromFloat 1.0
+                    |> Expect.equal (Pine.valueFromInt 1)
+        , Test.test "fractional float literal encodes as a rational" <|
+            \_ ->
+                ElmCompiler.valueFromFloat 0.5
+                    |> Expect.equal
+                        (Pine.ListValue
+                            [ Pine.valueFromString "Elm_Float"
+                            , Pine.ListValue [ Pine.valueFromInt 1, Pine.valueFromInt 2 ]
+                            ]
+                        )
+        , Test.test "decimal float literal encodes as a rational" <|
+            \_ ->
+                ElmCompiler.valueFromFloat 0.7
+                    |> Expect.equal
+                        (Pine.ListValue
+                            [ Pine.valueFromString "Elm_Float"
+                            , Pine.ListValue [ Pine.valueFromInt 7, Pine.valueFromInt 10 ]
+                            ]
+                        )
+        , Test.test "negative float literal encodes as a rational" <|
+            \_ ->
+                ElmCompiler.valueFromFloat -0.7
+                    |> Expect.equal
+                        (Pine.ListValue
+                            [ Pine.valueFromString "Elm_Float"
+                            , Pine.ListValue [ Pine.valueFromInt -7, Pine.valueFromInt 10 ]
+                            ]
+                        )
+        , Test.test "fromFloat returns a flat string" <|
+            \_ ->
+                String.fromFloat 0.7
+                    |> String.toList
+                    |> Expect.equal [ '0', '.', '7' ]
+        , Test.test "fromFloat renders negative fractions" <|
+            \_ ->
+                String.fromFloat -0.7
+                    |> Expect.equal "-0.7"
+        , Test.test "fromFloat preserves leading fractional zeros" <|
+            \_ ->
+                String.fromFloat 0.05
+                    |> Expect.equal "0.05"
+        ]
 
 
 evolutionStagesToMakeElmFunction : Test.Test
