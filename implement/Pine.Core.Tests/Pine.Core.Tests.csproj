@@ -16,6 +16,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="TestData/StackInstructionTraces/*.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="AwesomeAssertions" Version="9.6.0" />
     <PackageReference Include="GitCore" Version="0.2.5" />
     <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.12" />

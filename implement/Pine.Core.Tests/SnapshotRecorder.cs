@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading;
 
@@ -28,5 +29,17 @@ public static class SnapshotRecorder
         }
 
         return snapshot;
+    }
+
+    public static string ReadEmbeddedTrace(string name)
+    {
+        using var stream =
+            typeof(SnapshotRecorder).Assembly.GetManifestResourceStream(
+                "Pine.Core.Tests.TestData.StackInstructionTraces." + name + ".txt")
+            ?? throw new FileNotFoundException("Missing embedded instruction trace: " + name);
+
+        using var reader = new StreamReader(stream);
+
+        return reader.ReadToEnd();
     }
 }
