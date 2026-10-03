@@ -341,11 +341,14 @@ public record ExpressionCompilation(
 
         return
             optimizedGraph
+            .RemoveEmptyForwardingBlocks()
             .ForwardJumpsToReturn()
             .ForwardConstantBooleanBranches()
             .ReplaceNonEscapingLists(parametersAsLocals.ParamsPaths.Count)
             .EliminateLocalCopies()
             .FuseLocalListProjections()
+            .EliminateDeadLocalStores()
+            .RemoveEmptyForwardingBlocks()
             .LowerToStackInstructions();
     }
 

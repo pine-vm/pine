@@ -431,7 +431,7 @@ public sealed partial record PineControlFlowGraph(
     /// Removes blocks without operations that only forward their parameters to the block laid out next,
     /// redirecting their predecessors to the forwarding target.
     /// </summary>
-    private PineControlFlowGraph RemoveEmptyForwardingBlocks()
+    public PineControlFlowGraph RemoveEmptyForwardingBlocks()
     {
         var forwardTargets = new Dictionary<PineBlockId, PineBlockId>();
 
@@ -474,9 +474,12 @@ public sealed partial record PineControlFlowGraph(
                 })
             .ToImmutableArray();
 
-        return
+        var result =
             TryRemapBlockIds(rewrittenBlocks) ??
             throw new InvalidOperationException("Entry block was removed.");
+
+        result.Validate();
+        return result;
     }
 
     /// <summary>

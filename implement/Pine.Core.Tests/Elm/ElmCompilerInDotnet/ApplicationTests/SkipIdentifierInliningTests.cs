@@ -289,7 +289,11 @@ public class SkipIdentifierInliningTests
                 source);
 
             if (source is "ab a0 _b")
-                AssertFrameSnapshot(frames, nameof(ParseThreeIdentifiers_without_string_slice_values_and_all_stack_frame_instructions));
+            {
+                AssertFrameSnapshot(
+                    frames,
+                    nameof(ParseThreeIdentifiers_without_string_slice_values_and_all_stack_frame_instructions));
+            }
         }
     }
 
@@ -334,7 +338,11 @@ public class SkipIdentifierInliningTests
                 source);
 
             if (source is "a\n b\n  _0")
-                AssertFrameSnapshot(frames, nameof(ParseApplicationExpression_without_string_slice_values_and_all_stack_frame_instructions));
+            {
+                AssertFrameSnapshot(
+                    frames,
+                    nameof(ParseApplicationExpression_without_string_slice_values_and_all_stack_frame_instructions));
+            }
         }
     }
 

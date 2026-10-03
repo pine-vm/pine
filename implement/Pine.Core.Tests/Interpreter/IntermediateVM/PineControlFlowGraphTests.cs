@@ -39,6 +39,160 @@ public class PineControlFlowGraphTests
         .ForwardConstantBooleanBranches()
         .LowerToStackInstructions();
 
+    [Fact]
+    public void Dead_local_store_preserves_its_stack_value_and_result()
+    {
+        var input = PineValue.Blob([11]);
+
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(StackInstruction.Local_Get(0), StackInstruction.Local_Set(3)));
+
+        var optimized = original.EliminateDeadLocalStores();
+
+        optimized.LowerToStackInstructions().Should().Equal(
+            StackInstruction.Local_Get(0),
+            StackInstruction.Return);
+
+        Evaluate(optimized, input).Should().Be(Evaluate(original, input));
+    }
+
+    [Fact]
+    public void Dead_local_store_preserves_effectful_invocation()
+    {
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(PineValue.EmptyList),
+                    StackInstruction.Push_Literal(PineValue.EmptyList),
+                    StackInstruction.Eval_Binary,
+                    StackInstruction.Local_Set(3)));
+
+        var optimized = original.EliminateDeadLocalStores();
+
+        optimized.LowerToStackInstructions().Should().Equal(
+            StackInstruction.Push_Literal(PineValue.EmptyList),
+            StackInstruction.Push_Literal(PineValue.EmptyList),
+            StackInstruction.Eval_Binary,
+            StackInstruction.Return);
+    }
+
+    [Fact]
+    public void Dead_local_store_tracks_reads_across_branches_and_overwrites()
+    {
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Set(2),
+                    StackInstruction.Local_Set(3),
+                    StackInstruction.Pop,
+                    StackInstruction.Push_Literal(PineKernelValues.TrueValue))
+                .Append(
+                    Conditional(
+                        PineKernelValues.TrueValue,
+                        Ops(
+                            StackInstruction.Local_Get(0),
+                            StackInstruction.Local_Set(2),
+                            StackInstruction.Pop,
+                            StackInstruction.Local_Get(2)),
+                        Ops(StackInstruction.Local_Get(2)))));
+
+        var optimized = original.EliminateDeadLocalStores();
+
+        optimized.LowerToStackInstructions().Should().NotContain(
+            instruction => instruction.Kind == StackInstructionKind.Local_Set &&
+                instruction.LocalIndex == 3);
+
+        optimized.LowerToStackInstructions().Count(
+            instruction => instruction.Kind == StackInstructionKind.Local_Set &&
+                instruction.LocalIndex == 2).Should().Be(2);
+
+        Evaluate(optimized, PineValue.Blob([1])).Should()
+            .Be(Evaluate(original, PineValue.Blob([1])));
+    }
+
+    [Fact]
+    public void Dead_descending_store_is_removed_only_when_all_of_its_slots_are_dead()
+    {
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Set_Descending(3, 2),
+                    StackInstruction.PopMultiple(2),
+                    StackInstruction.Local_Get(0)));
+
+        var optimized = original.EliminateDeadLocalStores();
+
+        optimized.LowerToStackInstructions().Should().NotContain(
+            instruction => instruction.Kind == StackInstructionKind.Local_Set_Descending);
+
+        Evaluate(optimized, PineValue.Blob([11])).Should()
+            .Be(Evaluate(original, PineValue.Blob([11])));
+
+        var partiallyLive =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Set_Descending(3, 2),
+                    StackInstruction.PopMultiple(2),
+                    StackInstruction.Local_Get(2)));
+
+        partiallyLive.EliminateDeadLocalStores().LowerToStackInstructions()
+            .Should().Contain(StackInstruction.Local_Set_Descending(3, 2));
+    }
+
+    [Fact]
+    public void Dead_local_store_liveness_converges_across_loop_back_edges()
+    {
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Set(2),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Set(3),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Get(0))
+                .Append(
+                    Conditional(
+                        PineKernelValues.TrueValue,
+                        Ops(StackInstruction.Local_Get(2)),
+                        PineControlFlowFragment.Empty.Append(new PineControlFlowNode.JumpToEntry()))));
+
+        var optimized = original.EliminateDeadLocalStores().LowerToStackInstructions();
+
+        optimized.Should().Contain(StackInstruction.Local_Set(2));
+        optimized.Should().NotContain(StackInstruction.Local_Set(3));
+    }
+
+    [Fact]
+    public void Remove_empty_forwarding_blocks_after_dead_store_elimination()
+    {
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Push_Literal(PineKernelValues.TrueValue))
+                .Append(
+                    Conditional(
+                        PineKernelValues.TrueValue,
+                        Ops(StackInstruction.Local_Set(2)),
+                        Ops(StackInstruction.Local_Set(3)))));
+
+        var withoutStores = original.EliminateDeadLocalStores();
+        var optimized = withoutStores.RemoveEmptyForwardingBlocks();
+
+        optimized.Blocks.Length.Should().BeLessThan(withoutStores.Blocks.Length);
+
+        Evaluate(optimized, PineValue.Blob([11])).Should()
+            .Be(Evaluate(original, PineValue.Blob([11])));
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(2)]
