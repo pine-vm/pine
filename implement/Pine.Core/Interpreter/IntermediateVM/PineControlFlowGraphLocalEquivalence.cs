@@ -141,7 +141,7 @@ public sealed partial record PineControlFlowGraph
             var instruction = operation.Instruction;
 
             if (instruction.Kind is
-                    StackInstructionKind.Local_Get or StackInstructionKind.Local_Get_Skip_Head_Const &&
+                StackInstructionKind.Local_Get or StackInstructionKind.Local_Get_Skip_Head_Const &&
                 instruction.LocalIndex is >= 0 and var local)
             {
                 var equivalents = EquivalentLocals(equalLocals, local);

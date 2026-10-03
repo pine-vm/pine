@@ -330,16 +330,16 @@ public sealed partial record PineControlFlowGraph
 
                     var dropLast =
                         last?.Instruction.Kind is
-                            StackInstructionKind.Push_Literal or
-                            StackInstructionKind.Local_Get or
-                            StackInstructionKind.Local_Get_Skip_Head_Const;
+                        StackInstructionKind.Push_Literal or
+                        StackInstructionKind.Local_Get or
+                        StackInstructionKind.Local_Get_Skip_Head_Const;
 
                     var replaceLastWithPop =
                         last?.Instruction.Kind is
-                            StackInstructionKind.Head_Generic or
-                            StackInstructionKind.Skip_Head_Const or
-                            StackInstructionKind.Length or
-                            StackInstructionKind.Length_Equal_Const;
+                        StackInstructionKind.Head_Generic or
+                        StackInstructionKind.Skip_Head_Const or
+                        StackInstructionKind.Length or
+                        StackInstructionKind.Length_Equal_Const;
 
                     changed = true;
 

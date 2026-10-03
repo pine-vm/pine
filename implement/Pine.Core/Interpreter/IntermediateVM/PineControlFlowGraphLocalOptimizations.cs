@@ -96,7 +96,7 @@ public sealed partial record PineControlFlowGraph
                         operation.Instruction.LocalIndex == destination &&
                         operation.Instruction.Kind is
                         StackInstructionKind.Local_Get or
-                         StackInstructionKind.Local_Get_Skip_Head_Const)
+                        StackInstructionKind.Local_Get_Skip_Head_Const)
                     {
                         operation =
                             operation with
