@@ -83,6 +83,19 @@ public class CoreBasicsTests
             .Extract(err => throw new Exception(err.ToString())))
         .expressionString;
 
+    [Theory]
+    [InlineData(1, 3, 0)]
+    [InlineData(4, 3, 1)]
+    [InlineData(-1, 3, -1)]
+    [InlineData(-4, 3, -2)]
+    [InlineData(1, -3, -1)]
+    [InlineData(-4, -3, 1)]
+    public void RatioFloor_handles_non_decimal_denominators(int numerator, int denominator, int expected)
+    {
+        Evaluate($"ratioFloor ({numerator}) ({denominator})")
+            .Should().Be(expected.ToString());
+    }
+
     // ============================================================
     // compare on integers
     // ============================================================

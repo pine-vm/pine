@@ -778,14 +778,7 @@ floor : Float -> Int
 floor number =
     case number of
         Elm_Float numerator denom ->
-            if Pine_builtin.int_is_sorted_asc [ 0, numerator ] then
-                ratioFloor numerator denom
-
-            else
-                Pine_builtin.int_mul
-                    [ -1
-                    , ratioFloor (Pine_builtin.int_mul [ -1, numerator ]) denom
-                    ]
+            ratioFloor numerator denom
 
         _ ->
             number
@@ -794,39 +787,25 @@ floor number =
 ratioFloor : Int -> Int -> Int
 ratioFloor numerator denom =
     let
-        ( multiplier, denomProd ) =
-            findMultiplierToDecimal 1 denom
+        quotient =
+            idiv numerator denom
     in
-    idiv
-        (Pine_builtin.int_mul [ numerator, multiplier ])
-        denomProd
+    if Pine_builtin.equal [ denom, 0 ] then
+        quotient
 
+    else if Pine_builtin.equal [ Pine_builtin.int_mul [ quotient, denom ], numerator ] then
+        quotient
 
-findMultiplierToDecimal : Int -> Int -> ( Int, Int, Int )
-findMultiplierToDecimal factor denom =
-    let
-        denomProd =
-            Pine_builtin.int_mul [ denom, factor ]
-
-        lowerPowerOfTen =
-            findLowerPowerOfTen denomProd
-    in
-    if Pine_builtin.equal [ pow 10 lowerPowerOfTen, denomProd ] then
-        ( factor, denomProd )
+    else if
+        Pine_builtin.equal
+            [ Pine_builtin.int_is_sorted_asc [ 0, numerator ]
+            , Pine_builtin.int_is_sorted_asc [ 0, denom ]
+            ]
+    then
+        quotient
 
     else
-        findMultiplierToDecimal
-            (Pine_builtin.int_add [ factor, 1 ])
-            denom
-
-
-findLowerPowerOfTen : Int -> Int
-findLowerPowerOfTen int =
-    if Pine_builtin.int_is_sorted_asc [ int, 9 ] then
-        0
-
-    else
-        Pine_builtin.int_add [ findLowerPowerOfTen (idiv int 10), 1 ]
+        Pine_builtin.int_add [ quotient, -1 ]
 
 
 isNaN : Float -> Bool
@@ -2664,29 +2643,22 @@ fromFloatDecimal decimalPlacesMax ( numerator, denom ) =
                 -- No remainder OR no decimal places requested
                 String
                     (Pine_builtin.concat
-                        [ signStr
-                        , fromIntAsList intPart
-                        ]
+                        (Pine_builtin.concat
+                            [ signStr
+                            , fromIntAsList intPart
+                            ]
+                        )
                     )
 
             else
                 -- 3) Scale and round remainder to get fractional part
                 let
+                    ( scaledInt, leftover, decimalPlaces ) =
+                        scaleFractionalPart denom decimalPlacesMax remainder 0 0
+
                     scale : Int
                     scale =
-                        intPow 1 10 decimalPlacesMax
-
-                    scaledVal : Int
-                    scaledVal =
-                        Pine_builtin.int_mul [ remainder, scale ]
-
-                    scaledInt : Int
-                    scaledInt =
-                        scaledVal // denom
-
-                    leftover : Int
-                    leftover =
-                        modBy denom scaledVal
+                        intPow 1 10 decimalPlaces
 
                     -- 4) ROUND HALF-UP:
                     scaledIntRounded : Int
@@ -2731,7 +2703,7 @@ fromFloatDecimal decimalPlacesMax ( numerator, denom ) =
                                 neededZeros : Int
                                 neededZeros =
                                     Pine_builtin.int_add
-                                        [ decimalPlacesMax
+                                        [ decimalPlaces
                                         , Pine_builtin.int_mul [ -1, Pine_builtin.length scaledStr ]
                                         ]
 
@@ -2753,19 +2725,23 @@ fromFloatDecimal decimalPlacesMax ( numerator, denom ) =
                     -- Entire fractional part was zeros, so just show an integer.
                     String
                         (Pine_builtin.concat
-                            [ signStr
-                            , fromIntAsList newIntPart
-                            ]
+                            (Pine_builtin.concat
+                                [ signStr
+                                , fromIntAsList newIntPart
+                                ]
+                            )
                         )
 
                 else
                     String
                         (Pine_builtin.concat
-                            [ signStr
-                            , fromIntAsList newIntPart
-                            , [ '.' ]
-                            , trimmedFraction
-                            ]
+                            (Pine_builtin.concat
+                                [ signStr
+                                , fromIntAsList newIntPart
+                                , [ '.' ]
+                                , trimmedFraction
+                                ]
+                            )
                         )
 
 
@@ -2796,6 +2772,30 @@ removeTrailingZerosHelper offset chars =
 
             _ ->
                 Pine_builtin.take [ offset, chars ]
+
+
+scaleFractionalPart : Int -> Int -> Int -> Int -> Int -> ( Int, Int, Int )
+scaleFractionalPart denom placesRemaining remainder scaledInt decimalPlaces =
+    if Pine_builtin.equal [ placesRemaining, 0 ] then
+        ( scaledInt, remainder, decimalPlaces )
+
+    else if Pine_builtin.equal [ remainder, 0 ] then
+        ( scaledInt, remainder, decimalPlaces )
+
+    else
+        let
+            expanded =
+                Pine_builtin.int_mul [ remainder, 10 ]
+
+            digit =
+                expanded // denom
+        in
+        scaleFractionalPart
+            denom
+            (Pine_builtin.int_add [ placesRemaining, -1 ])
+            (modBy denom expanded)
+            (Pine_builtin.int_add [ Pine_builtin.int_mul [ scaledInt, 10 ], digit ])
+            (Pine_builtin.int_add [ decimalPlaces, 1 ])
 
 
 intPow : Int -> Int -> Int -> Int

@@ -1829,7 +1829,24 @@ public class CoreBasicsFunctionTests
                 CoreBasics.Floor_FunctionValue(),
                 ElmValue.ElmFloat.Convert(-3.7));
 
-        resultValue.Should().Be(ElmValue.Integer(-3));
+        resultValue.Should().Be(ElmValue.Integer(-4));
+    }
+
+    [Theory]
+    [InlineData(1, 3, 0)]
+    [InlineData(4, 3, 1)]
+    [InlineData(-1, 3, -1)]
+    [InlineData(-4, 3, -2)]
+    [InlineData(1, -3, -1)]
+    [InlineData(-4, -3, 1)]
+    public void Floor_non_decimal_rational(int numerator, int denominator, int expected)
+    {
+        var resultValue =
+            ApplyUnary(
+                CoreBasics.Floor_FunctionValue(),
+                ElmValue.ElmFloat.NotNormalized(numerator, denominator));
+
+        resultValue.Should().Be(ElmValue.Integer(expected));
     }
 
     [Fact]

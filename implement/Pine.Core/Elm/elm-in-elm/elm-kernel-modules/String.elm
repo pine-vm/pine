@@ -1186,29 +1186,22 @@ fromFloatDecimal decimalPlacesMax ( numerator, denom ) =
                 -- No remainder OR no decimal places requested
                 String
                     (Pine_builtin.concat
-                        [ signStr
-                        , fromIntAsList intPart
-                        ]
+                        (Pine_builtin.concat
+                            [ signStr
+                            , fromIntAsList intPart
+                            ]
+                        )
                     )
 
             else
                 -- 3) Scale and round remainder to get fractional part
                 let
+                    ( scaledInt, leftover, decimalPlaces ) =
+                        scaleFractionalPart denom decimalPlacesMax remainder 0 0
+
                     scale : Int
                     scale =
-                        intPow 1 10 decimalPlacesMax
-
-                    scaledVal : Int
-                    scaledVal =
-                        Pine_builtin.int_mul [ remainder, scale ]
-
-                    scaledInt : Int
-                    scaledInt =
-                        scaledVal // denom
-
-                    leftover : Int
-                    leftover =
-                        modBy denom scaledVal
+                        intPow 1 10 decimalPlaces
 
                     -- 4) ROUND HALF-UP:
                     scaledIntRounded : Int
@@ -1253,7 +1246,7 @@ fromFloatDecimal decimalPlacesMax ( numerator, denom ) =
                                 neededZeros : Int
                                 neededZeros =
                                     Pine_builtin.int_add
-                                        [ decimalPlacesMax
+                                        [ decimalPlaces
                                         , Pine_builtin.int_mul [ -1, Pine_builtin.length scaledStr ]
                                         ]
 
@@ -1275,19 +1268,23 @@ fromFloatDecimal decimalPlacesMax ( numerator, denom ) =
                     -- Entire fractional part was zeros, so just show an integer.
                     String
                         (Pine_builtin.concat
-                            [ signStr
-                            , fromIntAsList newIntPart
-                            ]
+                            (Pine_builtin.concat
+                                [ signStr
+                                , fromIntAsList newIntPart
+                                ]
+                            )
                         )
 
                 else
                     String
                         (Pine_builtin.concat
-                            [ signStr
-                            , fromIntAsList newIntPart
-                            , [ '.' ]
-                            , trimmedFraction
-                            ]
+                            (Pine_builtin.concat
+                                [ signStr
+                                , fromIntAsList newIntPart
+                                , [ '.' ]
+                                , trimmedFraction
+                                ]
+                            )
                         )
 
 
@@ -1318,6 +1315,30 @@ removeTrailingZerosHelper offset chars =
 
             _ ->
                 Pine_builtin.take [ offset, chars ]
+
+
+scaleFractionalPart : Int -> Int -> Int -> Int -> Int -> ( Int, Int, Int )
+scaleFractionalPart denom placesRemaining remainder scaledInt decimalPlaces =
+    if Pine_builtin.equal [ placesRemaining, 0 ] then
+        ( scaledInt, remainder, decimalPlaces )
+
+    else if Pine_builtin.equal [ remainder, 0 ] then
+        ( scaledInt, remainder, decimalPlaces )
+
+    else
+        let
+            expanded =
+                Pine_builtin.int_mul [ remainder, 10 ]
+
+            digit =
+                expanded // denom
+        in
+        scaleFractionalPart
+            denom
+            (Pine_builtin.int_add [ placesRemaining, -1 ])
+            (modBy denom expanded)
+            (Pine_builtin.int_add [ Pine_builtin.int_mul [ scaledInt, 10 ], digit ])
+            (Pine_builtin.int_add [ decimalPlaces, 1 ])
 
 
 intPow : Int -> Int -> Int -> Int

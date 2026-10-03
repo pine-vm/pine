@@ -43,28 +43,43 @@ public class OptimizeAndEmitStringFromIntTests
             """"
             public static class String
             {
-                public static PineValue fromInt(PineValue param_1)
+                public static PineValue fromInt()
                 {
                     return
                         PineValue.List(
                             [
                             CommonReusedValues.Blob_ffbe4088,
                             CommonReusedValues.Blob_Str_String,
-                            BuiltinFunction.concat(String.fromIntAsList(param_1))
+                            BuiltinFunction.concat(
+                                String.fromIntAsList(
+                                    PineValueExtension.ValueFromPathOrEmptyList(PineValue.EmptyList, [1]),
+                                    PineValueExtension.ValueFromPathOrEmptyList(PineValue.EmptyList, [2]),
+                                    PineValueExtension.ValueFromPathOrEmptyList(PineValue.EmptyList, [3])))
                             ]);
                 }
 
-                public static PineValue fromIntAsList(PineValue param_1)
+                public static PineValue fromIntAsList(PineValue param_1_1, PineValue param_1_2, PineValue param_1_3)
                 {
-                    if (BuiltinFunctionSpecialized.int_is_sorted_asc_as_boolean(0, param_1))
+                    if (BuiltinFunctionSpecialized.int_is_sorted_asc_as_boolean(0, PineValue.EmptyList))
                     {
-                        return String.fromUnsignedIntAsList(param_1);
+                        return String.fromUnsignedIntAsList(PineValue.EmptyList);
                     }
 
                     return
                         BuiltinFunctionFused.ListPrependItem(
                             itemToPrepend: CommonReusedValues.Blob_Char_hyphen,
-                            suffix: String.fromUnsignedIntAsList(BuiltinFunctionSpecialized.int_mul(-1, param_1)));
+                            suffix: String.fromUnsignedIntAsList(
+                                param_1_1 == CommonReusedValues.Blob_Str_Elm_Float
+                                ?
+                                PineValue.List(
+                                    [
+                                    CommonReusedValues.Blob_ffbe4088,
+                                    CommonReusedValues.Blob_Str_Elm_Float,
+                                    BuiltinFunctionSpecialized.int_mul(-1, param_1_2),
+                                    param_1_3
+                                    ])
+                                :
+                                BuiltinFunctionSpecialized.int_mul(-1, PineValue.EmptyList)));
                 }
 
                 public static PineValue fromUnsignedIntAsList(PineValue param_1)
@@ -287,6 +302,7 @@ public class OptimizeAndEmitStringFromIntTests
                     }
                 }
             }
+            
             """".Trim());
 
         moduleGlobalAnonymousText.Trim().Should().Be(
