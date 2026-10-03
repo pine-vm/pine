@@ -120,6 +120,37 @@ public record ImmutableSliceBuilder(
     }
 
     /// <summary>
+    /// Compose a skip followed by a take without creating an intermediate builder.
+    /// </summary>
+    public ImmutableSliceBuilder Slice(int skipCount, int takeCount)
+    {
+        if (skipCount <= 0)
+            return Take(takeCount);
+
+        var newSkipCount = checked(SkipCount + skipCount);
+
+        var remainingTakeCount =
+            TakeCount is { } currentTake
+            ?
+            System.Math.Max(0, currentTake - System.Math.Min(skipCount, currentTake))
+            :
+            (int?)null;
+
+        var clampedTakeCount = System.Math.Max(0, takeCount);
+
+        return
+            new(
+                Original,
+                SkipCount: newSkipCount,
+                TakeCount: remainingTakeCount is { } remaining
+                ?
+                System.Math.Min(remaining, clampedTakeCount)
+                :
+                clampedTakeCount,
+                FinalValue);
+    }
+
+    /// <summary>
     /// Apply <see cref="BuiltinFunction.skip(PineValue)"/> on the value resulting from the previous operations,
     /// trying to parse the skip count from a <see cref="PineValue"/>.
     /// </summary>
@@ -246,7 +277,7 @@ public record ImmutableSliceBuilder(
         // To take the last N elements, we need to skip (length - N) elements
         var skipAmount = currentLength - count;
 
-        return Skip(skipAmount).Take(count);
+        return Slice(skipAmount, count);
     }
 
     /// <summary>

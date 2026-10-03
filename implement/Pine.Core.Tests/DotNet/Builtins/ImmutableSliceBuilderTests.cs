@@ -43,6 +43,35 @@ public class ImmutableSliceBuilderTests
         builder.Original.Should().Be(original);
     }
 
+    [Theory]
+    [InlineData(-1, 2)]
+    [InlineData(0, 0)]
+    [InlineData(1, -1)]
+    [InlineData(2, 2)]
+    [InlineData(20, 20)]
+    public void Slice_matches_skip_followed_by_take(int skipCount, int takeCount)
+    {
+        var original = PineValue.List([PineValue.Blob([1]), PineValue.Blob([2]), PineValue.Blob([3])]);
+
+        var builders =
+            new[]
+            {
+                ImmutableSliceBuilder.Create(original),
+                ImmutableSliceBuilder.Create(original).Skip(1),
+                ImmutableSliceBuilder.Create(original).Take(2),
+                ImmutableSliceBuilder.Create(original).Take(0),
+            };
+
+        foreach (var builder in builders)
+        {
+            var expected = builder.Skip(skipCount).Take(takeCount);
+            var actual = builder.Slice(skipCount, takeCount);
+
+            actual.Should().Be(expected);
+            actual.Evaluate().Should().Be(expected.Evaluate());
+        }
+    }
+
     [Fact]
     public void Evaluate_with_no_operations_returns_original()
     {

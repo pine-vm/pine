@@ -469,7 +469,7 @@ public class PineValueInProcess
         return
             new PineValueInProcess
             {
-                _sliceBuilder = ImmutableSliceBuilder.Create(source).Skip(startIndex).Take(takeCount),
+                _sliceBuilder = new ImmutableSliceBuilder(source, startIndex, takeCount, FinalValue: null),
             };
     }
 
@@ -781,7 +781,80 @@ public class PineValueInProcess
         return
             new PineValueInProcess
             {
-                _sliceBuilder = ImmutableSliceBuilder.Create(evaluated).Skip(skipCount),
+                _sliceBuilder = new ImmutableSliceBuilder(evaluated, skipCount, TakeCount: null, FinalValue: null),
+            };
+    }
+
+    /// <summary>
+    /// Skip elements or bytes, then take up to <paramref name="takeCount"/> from the remainder.
+    /// </summary>
+    public static PineValueInProcess Slice(int skipCount, int takeCount, PineValueInProcess source)
+    {
+        if (skipCount <= 0)
+            return Take(takeCount, source);
+
+        if (source._sliceBuilder is { } sliceBuilder)
+        {
+            var remaining = Math.Max(0, sliceBuilder.GetLength() - skipCount);
+
+            return
+                new PineValueInProcess
+                {
+                    _sliceBuilder =
+                    takeCount >= remaining
+                    ?
+                    sliceBuilder.Skip(skipCount)
+                    :
+                    sliceBuilder.Slice(skipCount, takeCount),
+                };
+        }
+
+        if (source._list is { } list)
+        {
+            var remaining = list.Count - skipCount;
+
+            if (remaining <= 0 || takeCount <= 0)
+                return EmptyList;
+
+            return CreateList(ListItemsSlice.Create(list, skipCount, Math.Min(remaining, takeCount)));
+        }
+
+        var evaluated = source.Evaluate();
+
+        if (evaluated is PineValue.BlobValue blobValue)
+        {
+            var startIndex = Math.Min(skipCount, blobValue.Bytes.Length);
+            var remaining = blobValue.Bytes.Length - startIndex;
+
+            if (remaining > ShortBlobLengthThreshold)
+            {
+                return
+                    new PineValueInProcess
+                    {
+                        _sliceBuilder =
+                        new ImmutableSliceBuilder(
+                            blobValue,
+                            startIndex,
+                            takeCount >= remaining ? remaining : Math.Max(0, takeCount),
+                            FinalValue: null),
+                    };
+            }
+
+            return CreateFromBlob(blobValue, startIndex, Math.Min(remaining, takeCount));
+        }
+
+        var listLength = ((PineValue.ListValue)evaluated).Items.Length;
+        var remainingLength = Math.Max(0, listLength - skipCount);
+
+        return
+            new PineValueInProcess
+            {
+                _sliceBuilder =
+                new ImmutableSliceBuilder(
+                    evaluated,
+                    skipCount,
+                    takeCount < remainingLength ? Math.Max(0, takeCount) : null,
+                    FinalValue: null),
             };
     }
 
@@ -832,7 +905,7 @@ public class PineValueInProcess
         return
             new PineValueInProcess
             {
-                _sliceBuilder = ImmutableSliceBuilder.Create(evaluated).Take(takeCount),
+                _sliceBuilder = new ImmutableSliceBuilder(evaluated, SkipCount: 0, takeCount, FinalValue: null),
             };
     }
 
@@ -899,7 +972,16 @@ public class PineValueInProcess
         return
             new PineValueInProcess
             {
-                _sliceBuilder = ImmutableSliceBuilder.Create(evaluated).TakeLast(takeCount),
+                _sliceBuilder =
+                takeCount <= 0
+                ?
+                new ImmutableSliceBuilder(evaluated, SkipCount: 0, TakeCount: 0, PineValue.EmptyList)
+                :
+                new ImmutableSliceBuilder(
+                    evaluated,
+                    SkipCount: ((PineValue.ListValue)evaluated).Items.Length - takeCount,
+                    TakeCount: takeCount,
+                    FinalValue: null),
             };
     }
 

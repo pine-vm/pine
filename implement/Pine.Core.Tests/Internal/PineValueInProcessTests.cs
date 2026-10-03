@@ -679,6 +679,58 @@ public class PineValueInProcessTests
         VerifyConsistencyOfDerivedProperties(result);
     }
 
+    [Theory]
+    [InlineData(-2, 2)]
+    [InlineData(0, -1)]
+    [InlineData(1, 0)]
+    [InlineData(1, 2)]
+    [InlineData(2, 20)]
+    [InlineData(20, 2)]
+    public void Slice_matches_skip_followed_by_take(int skipCount, int takeCount)
+    {
+        var listValue =
+            PineValue.List(
+                [.. Enumerable.Range(0, 12).Select(i => PineValue.Blob([(byte)i]))]);
+
+        var blobValue =
+            PineValue.Blob([.. Enumerable.Range(0, 20).Select(i => (byte)i)]);
+
+        PineValueInProcess[] sources =
+            [
+                PineValueInProcess.Create(listValue),
+                PineValueInProcess.CreateFullyRepresented(listValue),
+                PineValueInProcess.CreateList(
+                    [.. Enumerable.Range(0, 12).Select(i => PineValueInProcess.Create(PineValue.Blob([(byte)i])))]),
+                PineValueInProcess.Skip(1, PineValueInProcess.Create(listValue)),
+                PineValueInProcess.Take(6, PineValueInProcess.Create(listValue)),
+                PineValueInProcess.Create(blobValue),
+                PineValueInProcess.Skip(1, PineValueInProcess.Create(blobValue)),
+                PineValueInProcess.Create(PineValue.Blob([4, 42, 99])),
+            ];
+
+        foreach (var source in sources)
+        {
+            var expected = PineValueInProcess.Take(takeCount, PineValueInProcess.Skip(skipCount, source));
+            var actual = PineValueInProcess.Slice(skipCount, takeCount, source);
+
+            actual.GetLength().Should().Be(expected.GetLength());
+            actual.Evaluate().Should().Be(expected.Evaluate());
+        }
+    }
+
+    [Fact]
+    public void Slice_of_long_blob_keeps_short_result_deferred()
+    {
+        var source =
+            PineValueInProcess.Create(
+                PineValue.Blob([.. Enumerable.Range(0, 20).Select(i => (byte)i)]));
+
+        var result = PineValueInProcess.Slice(2, 2, source);
+
+        result.EvaluatedOrNull.Should().BeNull();
+        result.Evaluate().Should().Be(PineValue.Blob([2, 3]));
+    }
+
     [Fact]
     public void ConcatBinary_with_two_evaluated_values()
     {
