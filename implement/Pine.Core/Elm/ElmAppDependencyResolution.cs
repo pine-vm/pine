@@ -246,6 +246,9 @@ public class ElmAppDependencyResolution
             .ToImmutableDictionary();
 
         var elmJsonAggregateDependenciesVersions =
+            ImmutableDictionary.CreateBuilder<string, string>();
+
+        var declaredDependencies =
             elmJsonFiles
             .SelectMany(
                 elmJsonFile =>
@@ -271,8 +274,20 @@ public class ElmAppDependencyResolution
                         return [];
                     }
                 })
-            .SelectMany(dependency => dependency)
-            .ToImmutableDictionary();
+            .SelectMany(dependency => dependency);
+
+        foreach (var dependency in declaredDependencies)
+        {
+            if (elmJsonAggregateDependenciesVersions.TryGetValue(dependency.Key, out var existingVersion) &&
+                existingVersion != dependency.Value)
+            {
+                throw new ArgumentException(
+                    $"Conflicting versions for package '{dependency.Key}': " +
+                    $"existing value '{existingVersion}', new value '{dependency.Value}'.");
+            }
+
+            elmJsonAggregateDependenciesVersions[dependency.Key] = dependency.Value;
+        }
 
         var elmJsonAggregateDependencies =
             elmJsonAggregateDependenciesVersions
