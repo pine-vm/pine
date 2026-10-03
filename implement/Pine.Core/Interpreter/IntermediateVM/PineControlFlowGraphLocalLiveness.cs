@@ -36,7 +36,7 @@ public sealed partial record PineControlFlowGraph
 
             uses[block.Id.Value] = readBeforeWrite;
             definitions[block.Id.Value] = written;
-            liveIn[block.Id.Value] = new HashSet<int>(readBeforeWrite);
+            liveIn[block.Id.Value] = [.. readBeforeWrite];
             liveOut[block.Id.Value] = [];
         }
 

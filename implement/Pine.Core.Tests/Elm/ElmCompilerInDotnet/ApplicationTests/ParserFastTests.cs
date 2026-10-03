@@ -583,18 +583,26 @@ public class ParserFastTests
             InvocationCount: 4
             BuildListCount: 1
             LoopIterationCount: 4
-            InstructionCount: 206
+            InstructionCount: 181
             """);
     }
 
     [Fact]
     public void SkipWhileWithoutLinebreakHelp_digits()
     {
+        var instructionTrace = new List<ExecutedStackInstruction>();
+
+        var vm =
+            ElmCompilerTestHelper.PineVMForProfiling(
+                _ => { },
+                reportExecutedStackInstruction:
+                (in ExecutedStackInstruction instruction) => instructionTrace.Add(instruction));
+
         var (value, report) =
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("testWithoutLinebreak_digits"),
                 ElmString("12345"),
-                s_vm);
+                vm);
 
         value.Should().Be(Integer(5));
 
@@ -603,8 +611,27 @@ public class ParserFastTests
             InvocationCount: 4
             BuildListCount: 1
             LoopIterationCount: 4
-            InstructionCount: 182
+            InstructionCount: 157
             """);
+
+        instructionTrace.Should().HaveCount((int)report.InstructionCount);
+
+        instructionTrace.Count(
+            item =>
+            item.Instruction.Kind is StackInstructionKind.Build_List or
+                StackInstructionKind.Build_List_With_Prefix)
+            .Should().Be((int)report.BuildListCount);
+
+        var renderedInstructions =
+            StackInstructionTraceRenderer.RenderInstructionTrace(
+                instructionTrace,
+                renderInstructionIndex: true);
+
+        SnapshotRecorder.LogString(
+            PerformanceCountersFormatting.FormatCounts(report) + "\n<<<TRACE>>>\n" + renderedInstructions);
+
+        renderedInstructions.Should().Be(
+            SnapshotRecorder.ReadEmbeddedTrace(nameof(SkipWhileWithoutLinebreakHelp_digits)));
     }
 
     [Fact]
@@ -623,7 +650,7 @@ public class ParserFastTests
             InvocationCount: 8
             BuildListCount: 6
             LoopIterationCount: 1
-            InstructionCount: 216
+            InstructionCount: 206
             """);
     }
 

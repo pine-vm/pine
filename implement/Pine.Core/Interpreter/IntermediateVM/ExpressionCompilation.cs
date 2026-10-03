@@ -347,10 +347,17 @@ public record ExpressionCompilation(
             .RemoveUnreachableBlocks()
             .ReplaceNonEscapingLists(parametersAsLocals.ParamsPaths.Count)
             .EliminateLocalCopies()
+            .EliminateRedundantLocalWrites(parametersAsLocals.ParamsPaths.Count)
+            .ForwardEquivalentLocalReads()
             .FuseLocalListProjections()
             .ForwardProvenEqualityBranches()
             .EliminateDeadLocalStores()
-            .RemoveEmptyForwardingBlocks()
+            .EliminateRedundantLocalWrites(parametersAsLocals.ParamsPaths.Count)
+            .EliminateDiscardedStackValues(parametersAsLocals.ParamsPaths.Count)
+            .EliminateDeadLocalStores()
+            .EliminateRedundantLocalWrites(parametersAsLocals.ParamsPaths.Count)
+            .EliminateDiscardedStackValues(parametersAsLocals.ParamsPaths.Count)
+            .RemoveRedundantForwardJumps()
             .RemoveUnreachableBlocks()
             .LowerToStackInstructions();
     }
