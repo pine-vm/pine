@@ -148,7 +148,10 @@ tokenizeHelp source offset row column tokensRev =
     else
         Err
             ("Internal error: negative offset "
-                ++ String.fromInt offset ++ " at " ++ locationString (makeLocation row column) ++ "."
+                ++ String.fromInt offset
+                ++ " at "
+                ++ locationString (makeLocation row column)
+                ++ "."
             )
 
 
@@ -708,7 +711,10 @@ tokenizeMultilineComment source offset row column startRow startColumn tokensRev
     else
         Err
             ("Internal error: negative offset "
-                ++ String.fromInt offset ++ " at " ++ locationString (makeLocation row column) ++ "."
+                ++ String.fromInt offset
+                ++ " at "
+                ++ locationString (makeLocation row column)
+                ++ "."
             )
 
 

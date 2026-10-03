@@ -481,7 +481,8 @@ type alias AppState =
 
 stateShimModuleText : String
 stateShimModuleText =
-    String.trimLeft """
+    String.trimLeft
+        """
 module Backend.Generated.StateShim exposing (..)
 
 import Backend.Generated.StateShimTypes exposing (..)
@@ -553,7 +554,8 @@ exposedFunctionExpectingSingleArgumentAndAppState argumentDecoder funcAfterDecod
 
 stateShimTypesModuleText : String
 stateShimTypesModuleText =
-    String.trimLeft """
+    String.trimLeft
+        """
 module Backend.Generated.StateShimTypes exposing (..)
 
 import Json.Encode
