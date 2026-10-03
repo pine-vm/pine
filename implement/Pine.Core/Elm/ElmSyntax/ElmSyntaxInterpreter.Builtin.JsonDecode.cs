@@ -922,13 +922,13 @@ public partial class ElmSyntaxInterpreter
 
         if (c is >= 0x61 and <= 0x66)
         {
-            digit = (c - 0x61) + 10;
+            digit = c - 0x61 + 10;
             return true;
         }
 
         if (c is >= 0x41 and <= 0x46)
         {
-            digit = (c - 0x41) + 10;
+            digit = c - 0x41 + 10;
             return true;
         }
 

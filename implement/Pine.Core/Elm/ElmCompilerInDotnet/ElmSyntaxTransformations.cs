@@ -762,8 +762,8 @@ internal static class ElmSyntaxTransformations
         DeclQualifiedName right)
     {
         return
-            (left.Name == right.DeclName &&
-            (left.ModuleName.Count is 0 || left.ModuleName.SequenceEqual(right.Namespaces)));
+            left.Name == right.DeclName &&
+            (left.ModuleName.Count is 0 || left.ModuleName.SequenceEqual(right.Namespaces));
     }
 
     internal static int CountUnshadowedLocalVariableReferences(

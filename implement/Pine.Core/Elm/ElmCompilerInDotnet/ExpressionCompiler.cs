@@ -98,7 +98,7 @@ public class ExpressionCompiler
     {
         var floatValue =
             ElmValue.ElmFloat.Convert(
-                ((double)expr.Numerator / (double)expr.Denominator));
+                (double)expr.Numerator / (double)expr.Denominator);
 
         var pineValue =
             ElmValueEncoding.ElmValueAsPineValue(floatValue);
