@@ -302,7 +302,7 @@ public sealed partial record PineControlFlowGraph(
                     current.Terminator =
                         new PineControlFlowTerminator.Jump(
                             Target: _blocks[0].Id,
-                            Arguments: current.Stack.ToImmutableArray(),
+                            Arguments: [.. current.Stack],
                             IsFallThrough: false);
 
                     return null;
@@ -390,7 +390,7 @@ public sealed partial record PineControlFlowGraph(
                 branchEnd.Terminator =
                     new PineControlFlowTerminator.Jump(
                         Target: join.Id,
-                        Arguments: branchEnd.Stack.ToImmutableArray(),
+                        Arguments: [.. branchEnd.Stack],
                         IsFallThrough: branchIndex == branchEnds.Count - 1);
             }
 
@@ -932,7 +932,8 @@ public sealed partial record PineControlFlowGraph(
         return
             new PineControlFlowGraph(
                 newEntry,
-                blocks
+                [
+                .. blocks
                 .Select(
                     block =>
                     block with
@@ -940,7 +941,7 @@ public sealed partial record PineControlFlowGraph(
                         Id = Remap(block.Id),
                         Terminator = RedirectTargets(block.Terminator, Remap)
                     })
-                .ToImmutableArray());
+                ]);
     }
 
     private static PineBlockId? RequiredFallthroughTarget(

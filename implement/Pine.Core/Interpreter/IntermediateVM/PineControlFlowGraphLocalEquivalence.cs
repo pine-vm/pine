@@ -186,9 +186,7 @@ public sealed partial record PineControlFlowGraph
                 instruction.LocalIndex is >= 0 and var incrementedLocal)
             {
                 equalLocals =
-                    equalLocals
-                    .Where(pair => pair.Lower != incrementedLocal && pair.Higher != incrementedLocal)
-                    .ToImmutableHashSet();
+                    [.. equalLocals.Where(pair => pair.Lower != incrementedLocal && pair.Higher != incrementedLocal)];
 
                 foreach (var value in values.Keys.ToArray())
                 {
@@ -215,11 +213,12 @@ public sealed partial record PineControlFlowGraph
     private static ImmutableHashSet<int> EquivalentLocals(
         ImmutableHashSet<LocalPair> equalLocals,
         int local) =>
-        equalLocals
-        .Where(pair => pair.Lower == local || pair.Higher == local)
-        .Select(pair => pair.Lower == local ? pair.Higher : pair.Lower)
-        .Append(local)
-        .ToImmutableHashSet();
+        [
+            .. equalLocals
+            .Where(pair => pair.Lower == local || pair.Higher == local)
+            .Select(pair => pair.Lower == local ? pair.Higher : pair.Lower),
+            local,
+        ];
 
     private static ImmutableHashSet<LocalPair> StoreEqualLocals(
         ImmutableHashSet<LocalPair> equalLocals,
@@ -235,8 +234,7 @@ public sealed partial record PineControlFlowGraph
                 Equivalents: values.GetValueOrDefault(assignment.Value) ?? [])).ToArray();
 
         equalLocals =
-            equalLocals.Where(pair => !written.Contains(pair.Lower) && !written.Contains(pair.Higher))
-            .ToImmutableHashSet();
+            [.. equalLocals.Where(pair => !written.Contains(pair.Lower) && !written.Contains(pair.Higher))];
 
         foreach (var value in values.Keys.ToArray())
         {
