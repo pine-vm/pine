@@ -2,7 +2,7 @@
 
 ## Motivation
 
-We want to use existing Elm tests to explore further opportunities to improve efficiency and response times of Elm apps. Using an Elm test as entry point is an easy way to model a scenario to be profiled as a proxy for production workloads, such as the Elm language server.
+We want to use existing Elm tests to explore further opportunities to improve efficiency and response times of Elm apps. Using an Elm test as an entry point is an easy way to model a scenario to profile as a proxy for production workloads, such as the Elm language server.
 
 ## Elm Compiler Expansion to Support Attribution
 
