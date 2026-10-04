@@ -19,10 +19,21 @@ Expand the Elm compiler to return a map of compiled declarations to support attr
 ## CLI Command Elm Test Profile
 
 + Add a new CLI command `elm  test  profile  instrument`
++ Has `--filter` option like the `elm  test` command.
+
+### Limit to Single Test
+
+For now the command should reject any run that would not include exactly one Elm test, and point the user to use the `--filter` option.
 
 ### Instrument Report
 
-### Option `--output-location`
+#### Report Root File
+
+The instrumentation report always contains a root file with statistics and a listing of all arguments and options given for the run.
+
+File name: `elm-test-instrument-report.txt`
+
+#### Option `--output-location`
 
 Specifies a location to write the report files to. Defaults to the current directory.
 
@@ -31,10 +42,14 @@ Specifies a location to write the report files to. Defaults to the current direc
 + If the `--output-form` is `files`, its meant to be a directory.
 + If the `--output-form` is `zip` and the given location looks like a directory, generate a file name that is prefixed with current data and time in format `yyyy-mm-ddTHH-MM-ss`.
 
-### Option `--output-form`
+#### Option `--output-form`
 
 + `zip` (default): bundle the report files in a zip archive.
 + `files`: write the report files individually to the file system.
+
+#### Option `--include-compiled-ir`
+
+When this option is set, the report includes listings of sequential IR compiled by PineVM, in the subdirectory `compiled-ir`
 
 ## Smoke Integration Test
 
