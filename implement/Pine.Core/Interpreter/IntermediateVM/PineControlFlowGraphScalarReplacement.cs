@@ -10,8 +10,19 @@ public sealed partial record PineControlFlowGraph
 {
     private sealed record ListCandidate(
         PineBlockId Block,
+        int OperationIndex,
         ImmutableArray<PineValue> Prefix,
-        int ItemCount);
+        int ItemCount,
+        bool IsBuilder)
+    {
+        public int Length => Prefix.Length + ItemCount;
+    }
+
+    private sealed record ListSlotLayout(
+        ImmutableArray<PineValue> CommonPrefix,
+        int FirstLocal,
+        int MaxLength,
+        int? LengthLocal);
 
     private readonly record struct ListOrigin(
         ImmutableHashSet<int> Candidates,
@@ -25,8 +36,6 @@ public sealed partial record PineControlFlowGraph
         public ListOrigin Union(ListOrigin other) =>
             new(Candidates.Union(other.Candidates), MayBeOther || other.MayBeOther);
 
-        public int? SoleCandidate =>
-            !MayBeOther && Candidates.Count is 1 ? Candidates.Single() : null;
     }
 
     private sealed record ListFlowState(
@@ -51,18 +60,31 @@ public sealed partial record PineControlFlowGraph
                 var operation = block.Operations[index];
                 var instruction = operation.Instruction;
 
-                if (instruction.Kind is not
-                    (StackInstructionKind.Build_List or StackInstructionKind.Build_List_With_Prefix) ||
-                    instruction.TakeCount is not { } count ||
-                    count < 0 ||
-                    operation.Results.Length is not 1)
+                if (operation.Results.Length is not 1)
                 {
                     continue;
                 }
 
                 ImmutableArray<PineValue> prefix = [];
 
-                if (instruction.Kind is StackInstructionKind.Build_List_With_Prefix)
+                var isBuilder =
+                    instruction.Kind is
+                    StackInstructionKind.Build_List or StackInstructionKind.Build_List_With_Prefix;
+
+                var count = 0;
+
+                if (isBuilder)
+                {
+                    if (instruction.TakeCount is not { } takeCount || takeCount < 0)
+                    {
+                        continue;
+                    }
+
+                    count = takeCount;
+                }
+
+                if (instruction.Kind is
+                    StackInstructionKind.Build_List_With_Prefix or StackInstructionKind.Push_Literal)
                 {
                     if (instruction.Literal?.Evaluate() is not PineValue.ListValue literal)
                     {
@@ -71,19 +93,28 @@ public sealed partial record PineControlFlowGraph
 
                     prefix = [.. literal.Items.ToArray()];
                 }
+                else if (!isBuilder)
+                {
+                    continue;
+                }
 
                 candidateByResult.Add(operation.Results[0], candidates.Count);
-                candidates.Add(new ListCandidate(block.Id, prefix, count));
+                candidates.Add(new ListCandidate(block.Id, index, prefix, count, isBuilder));
             }
         }
 
-        if (candidates.Count is 0)
+        if (!candidates.Any(candidate => candidate.IsBuilder))
         {
             return this;
         }
 
         var states = new ListFlowState?[Blocks.Length];
-        states[Entry.Value] = new ListFlowState([], []);
+
+        states[Entry.Value] =
+            new ListFlowState(
+                [.. Enumerable.Repeat(ListOrigin.Other, Blocks[Entry.Value].Parameters.Length)],
+                []);
+
         var pending = new Queue<PineBlockId>();
         pending.Enqueue(Entry);
 
@@ -146,7 +177,27 @@ public sealed partial record PineControlFlowGraph
         }
 
         var escapes = new bool[candidates.Count];
-        var projections = new Dictionary<(PineBlockId, int), int>();
+        var projections = new Dictionary<(PineBlockId, int), ListOrigin>();
+
+        for (var index = 0; index < candidates.Count; index++)
+        {
+            if (states[candidates[index].Block.Value] is null)
+            {
+                escapes[index] = true;
+            }
+        }
+
+        void RecordProjection(PineBlockId block, int index, ListOrigin origin)
+        {
+            if (origin.MayBeOther)
+            {
+                Escape(origin);
+            }
+            else if (origin.Candidates.Count > 0)
+            {
+                projections.Add((block, index), origin);
+            }
+        }
 
         void Escape(ListOrigin origin)
         {
@@ -186,26 +237,12 @@ public sealed partial record PineControlFlowGraph
                         {
                             var origin = locals.GetValueOrDefault(localIndex, ListOrigin.Other);
 
-                            if (origin.SoleCandidate is { } candidate)
-                            {
-                                projections.Add((block.Id, index), candidate);
-                            }
-                            else
-                            {
-                                Escape(origin);
-                            }
+                            RecordProjection(block.Id, index, origin);
                         }
 
                         if (isProjection && inputs.Length is 1)
                         {
-                            if (inputs[0].SoleCandidate is { } candidate)
-                            {
-                                projections.Add((block.Id, index), candidate);
-                            }
-                            else
-                            {
-                                Escape(inputs[0]);
-                            }
+                            RecordProjection(block.Id, index, inputs[0]);
 
                             return;
                         }
@@ -277,29 +314,223 @@ public sealed partial record PineControlFlowGraph
             }
         }
 
-        // Repeated execution of one builder could overwrite slots still referenced by an older alias.
-        foreach (var (candidate, index) in candidates.Select((item, index) => (item, index)))
+        // Alternatives can share a layout only when they cannot coexist before the
+        // next loop backedge, and no old alias remains live when the layout is overwritten.
+        var groupByCandidate = Enumerable.Range(0, candidates.Count).ToArray();
+
+        foreach (var origin in projections.Values)
+        {
+            var roots = origin.Candidates.Select(index => groupByCandidate[index]).ToHashSet();
+            var first = groupByCandidate[origin.Candidates.First()];
+
+            for (var index = 0; index < groupByCandidate.Length; index++)
+            {
+                if (roots.Contains(groupByCandidate[index]))
+                {
+                    groupByCandidate[index] = first;
+                }
+            }
+        }
+
+        bool CanReach(PineBlockId source, PineBlockId target, PineBlockId? excluded = null)
         {
             var visited = new HashSet<PineBlockId>();
+            var pendingBlocks = new Stack<PineBlockId>();
+            pendingBlocks.Push(source);
 
-            var todo =
-                new Stack<PineBlockId>(
-                    Successors(Blocks[candidate.Block.Value].Terminator).Select(edge => edge.Target));
-
-            while (todo.TryPop(out var next))
+            while (pendingBlocks.TryPop(out var block))
             {
-                if (next == candidate.Block)
+                if (block == excluded)
                 {
-                    escapes[index] = true;
-                    break;
+                    continue;
                 }
 
-                if (visited.Add(next))
+                if (block == target)
                 {
-                    foreach (var (target, _) in Successors(Blocks[next.Value].Terminator))
+                    return true;
+                }
+
+                if (visited.Add(block))
+                {
+                    foreach (var (successor, _) in Successors(Blocks[block.Value].Terminator))
                     {
-                        todo.Push(target);
+                        pendingBlocks.Push(successor);
                     }
+                }
+            }
+
+            return false;
+        }
+
+        var backEdges = new Dictionary<(PineBlockId, PineBlockId), bool>();
+
+        bool IsBackEdge(PineBlockId source, PineBlockId target)
+        {
+            if (!backEdges.TryGetValue((source, target), out var backEdge))
+            {
+                backEdge =
+                    source == target ||
+                    target == Entry ||
+                    !CanReach(Entry, source, excluded: target);
+
+                backEdges.Add((source, target), backEdge);
+            }
+
+            return backEdge;
+        }
+
+        bool CanReachInOneIteration(PineBlockId source, PineBlockId target)
+        {
+            var visited = new HashSet<PineBlockId>();
+            var pendingBlocks = new Stack<PineBlockId>();
+            pendingBlocks.Push(source);
+
+            while (pendingBlocks.TryPop(out var block))
+            {
+                if (block == target)
+                {
+                    return true;
+                }
+
+                if (visited.Add(block))
+                {
+                    foreach (var (successor, _) in Successors(Blocks[block.Value].Terminator))
+                    {
+                        if (!IsBackEdge(block, successor))
+                        {
+                            pendingBlocks.Push(successor);
+                        }
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        bool CanReachFromSuccessors(PineBlockId source, PineBlockId target) =>
+            Successors(Blocks[source.Value].Terminator)
+            .Any(edge => CanReach(edge.Target, target));
+
+        bool LocalMayBeReadAfter(PineBlockId block, int operationIndex, int local)
+        {
+            var visited = new HashSet<(PineBlockId, int)>();
+            var pendingBlocks = new Stack<(PineBlockId Block, int Start)>();
+            pendingBlocks.Push((block, operationIndex + 1));
+
+            while (pendingBlocks.TryPop(out var pendingBlock))
+            {
+                if (!visited.Add(pendingBlock))
+                {
+                    continue;
+                }
+
+                var current = Blocks[pendingBlock.Block.Value];
+                var overwritten = false;
+
+                for (var index = pendingBlock.Start; index < current.Operations.Length; index++)
+                {
+                    var instruction = current.Operations[index].Instruction;
+
+                    if (ReadLocal(instruction) == local)
+                    {
+                        return true;
+                    }
+
+                    var writes = new HashSet<int>();
+                    AddWrittenLocals(instruction, writes);
+
+                    if (writes.Contains(local))
+                    {
+                        overwritten = true;
+                        break;
+                    }
+                }
+
+                if (!overwritten)
+                {
+                    foreach (var (successor, _) in Successors(current.Terminator))
+                    {
+                        pendingBlocks.Push((successor, 0));
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        var groups =
+            Enumerable.Range(0, candidates.Count)
+            .GroupBy(index => groupByCandidate[index])
+            .Select(group => group.ToArray())
+            .ToArray();
+
+        foreach (var group in groups)
+        {
+            var groupMembers = group.ToHashSet();
+
+            bool OldAliasMaySurviveReplacement(ListCandidate candidate)
+            {
+                var block = Blocks[candidate.Block.Value];
+                var state = states[candidate.Block.Value]!;
+                var oldLocals = new HashSet<int>();
+
+                var (values, _) =
+                    TraceListOrigins(
+                        block,
+                        state,
+                        candidateByResult,
+                        (index, _, _, locals) =>
+                        {
+                            if (index == candidate.OperationIndex)
+                            {
+                                foreach (var (local, origin) in locals)
+                                {
+                                    if (origin.Candidates.Overlaps(groupMembers))
+                                    {
+                                        oldLocals.Add(local);
+                                    }
+                                }
+                            }
+                        });
+
+                var stack = block.Parameters.ToList();
+
+                for (var index = 0; index < candidate.OperationIndex; index++)
+                {
+                    var operation = block.Operations[index];
+                    var popCount = StackInstruction.GetDetails(operation.Instruction).PopCount;
+                    stack.RemoveRange(stack.Count - popCount, popCount);
+                    stack.AddRange(operation.Results);
+                }
+
+                if (stack.Any(
+                    value =>
+                    values.GetValueOrDefault(value, ListOrigin.Other).Candidates.Overlaps(groupMembers)))
+                {
+                    return true;
+                }
+
+                return
+                    oldLocals.Any(
+                        local =>
+                        LocalMayBeReadAfter(candidate.Block, candidate.OperationIndex, local));
+            }
+
+            var canShare =
+                !group.Any(index => escapes[index]) &&
+                !group.Where((left, leftIndex) =>
+                    group.Skip(leftIndex + 1).Any(right =>
+                        CanReachInOneIteration(candidates[left].Block, candidates[right].Block) ||
+                        CanReachInOneIteration(candidates[right].Block, candidates[left].Block))).Any() &&
+                !group.Any(index =>
+                    CanReachFromSuccessors(candidates[index].Block, candidates[index].Block) &&
+                    OldAliasMaySurviveReplacement(candidates[index]));
+
+            if (!canShare)
+            {
+                foreach (var index in group)
+                {
+                    escapes[index] = true;
                 }
             }
         }
@@ -317,16 +548,66 @@ public sealed partial record PineControlFlowGraph
                 .Select(operation => operation.Instruction.LocalIndex!.Value + 1)
                 .DefaultIfEmpty(0).Max());
 
-        var itemLocals = new int[candidates.Count];
+        var layouts = new ListSlotLayout?[candidates.Count];
 
-        for (var index = 0; index < candidates.Count; index++)
+        foreach (var group in groups)
         {
-            if (!escapes[index])
+            if (escapes[group[0]] || !group.Any(index => candidates[index].IsBuilder))
             {
-                itemLocals[index] = nextLocal;
-                nextLocal += candidates[index].ItemCount;
+                continue;
+            }
+
+            var firstPrefix = candidates[group[0]].Prefix;
+            var commonLength = firstPrefix.Length;
+
+            foreach (var index in group.Skip(1))
+            {
+                var prefix = candidates[index].Prefix;
+                commonLength = Math.Min(commonLength, prefix.Length);
+
+                for (var item = 0; item < commonLength; item++)
+                {
+                    if (!firstPrefix[item].Equals(prefix[item]))
+                    {
+                        commonLength = item;
+                        break;
+                    }
+                }
+            }
+
+            var maxLength = group.Max(index => candidates[index].Length);
+            var hasDifferentLengths = group.Any(index => candidates[index].Length != candidates[group[0]].Length);
+
+            var needsLength =
+                hasDifferentLengths &&
+                projections.Any(
+                    projection =>
+                    projection.Value.Candidates.Any(index => groupByCandidate[index] == groupByCandidate[group[0]]) &&
+                    Blocks[projection.Key.Item1.Value].Operations[projection.Key.Item2].Instruction.Kind is
+                    (StackInstructionKind.Length or StackInstructionKind.Length_Equal_Const));
+
+            var layout =
+                new ListSlotLayout(
+                    [.. firstPrefix.Take(commonLength)],
+                    nextLocal,
+                    maxLength,
+                    needsLength ? nextLocal + maxLength - commonLength : null);
+
+            nextLocal += maxLength - commonLength + (needsLength ? 1 : 0);
+
+            foreach (var index in group)
+            {
+                layouts[index] = layout;
             }
         }
+
+        var nextValue =
+            Blocks.SelectMany(
+                block =>
+                block.Parameters.Concat(block.Operations.SelectMany(operation => operation.Results)))
+            .Select(value => value.Value + 1)
+            .DefaultIfEmpty(0)
+            .Max();
 
         var rewritten =
             Blocks.Select(
@@ -340,19 +621,52 @@ public sealed partial record PineControlFlowGraph
 
                         if (operation.Results.Length is 1 &&
                             candidateByResult.TryGetValue(operation.Results[0], out var buildIndex) &&
-                            !escapes[buildIndex])
+                            layouts[buildIndex] is { } buildLayout)
                         {
-                            var count = candidates[buildIndex].ItemCount;
+                            var candidate = candidates[buildIndex];
+                            var count = candidate.ItemCount;
+
+                            var firstItemLocal =
+                                buildLayout.FirstLocal + candidate.Prefix.Length - buildLayout.CommonPrefix.Length;
 
                             if (count > 0)
                             {
                                 operations.Add(
                                     new(
-                                        StackInstruction.Local_Set_Descending(itemLocals[buildIndex] + count - 1, count),
+                                        StackInstruction.Local_Set_Descending(firstItemLocal + count - 1, count),
                                         [],
                                         []));
 
                                 operations.Add(new(StackInstruction.PopMultiple(count), operation.Inputs, []));
+                            }
+
+                            void StoreLiteral(int local, PineValue value)
+                            {
+                                var temporary = new PineVirtualValueId(nextValue++);
+                                operations.Add(new(StackInstruction.Push_Literal(value), [], [temporary]));
+                                operations.Add(new(StackInstruction.Local_Set(local), [], []));
+                                operations.Add(new(StackInstruction.Pop, [temporary], []));
+                            }
+
+                            for (var item = buildLayout.CommonPrefix.Length; item < candidate.Prefix.Length; item++)
+                            {
+                                StoreLiteral(
+                                    buildLayout.FirstLocal + item - buildLayout.CommonPrefix.Length,
+                                    candidate.Prefix[item]);
+                            }
+
+                            for (var item = candidate.Length; item < buildLayout.MaxLength; item++)
+                            {
+                                StoreLiteral(
+                                    buildLayout.FirstLocal + item - buildLayout.CommonPrefix.Length,
+                                    PineValue.EmptyList);
+                            }
+
+                            if (buildLayout.LengthLocal is { } lengthLocal)
+                            {
+                                StoreLiteral(
+                                    lengthLocal,
+                                    PineValueInProcess.CreateInteger(candidate.Length).Evaluate());
                             }
 
                             operations.Add(
@@ -365,7 +679,7 @@ public sealed partial record PineControlFlowGraph
                         }
 
                         if (projections.TryGetValue((block.Id, index), out var projected) &&
-                            !escapes[projected])
+                            layouts[projected.Candidates.First()] is { } projectionLayout)
                         {
                             var instruction = operation.Instruction;
 
@@ -374,31 +688,46 @@ public sealed partial record PineControlFlowGraph
                                 operations.Add(new(StackInstruction.Pop, operation.Inputs, []));
                             }
 
+                            var projectedLength = candidates[projected.Candidates.First()].Length;
+
+                            if (instruction.Kind is StackInstructionKind.Length_Equal_Const &&
+                                projectionLayout.LengthLocal is { } lengthLocal)
+                            {
+                                var lengthValue = new PineVirtualValueId(nextValue++);
+                                operations.Add(new(StackInstruction.Local_Get(lengthLocal), [], [lengthValue]));
+
+                                operations.Add(
+                                    new(
+                                        StackInstruction.Equal_Binary_Const(
+                                            PineValueInProcess.CreateInteger(instruction.IntegerLiteral!.Value)
+                                            .Evaluate()),
+                                        [lengthValue],
+                                        operation.Results));
+
+                                continue;
+                            }
+
                             var projection =
                                 instruction.Kind switch
                                 {
                                     StackInstructionKind.Skip_Head_Const or
                                     StackInstructionKind.Local_Get_Skip_Head_Const =>
-                                    ProjectElement(
-                                        candidates[projected],
-                                        itemLocals[projected],
-                                        instruction.SkipCount!.Value),
+                                    ProjectElement(projectionLayout, instruction.SkipCount!.Value),
 
                                     StackInstructionKind.Head_Generic =>
-                                    ProjectElement(candidates[projected], itemLocals[projected], 0),
+                                    ProjectElement(projectionLayout, 0),
+
+                                    StackInstructionKind.Length when projectionLayout.LengthLocal is { } projectedLengthLocal =>
+                                    StackInstruction.Local_Get(projectedLengthLocal),
 
                                     StackInstructionKind.Length =>
                                     StackInstruction.Push_Literal(
-                                        PineValueInProcess.CreateInteger(
-                                            candidates[projected].Prefix.Length +
-                                            candidates[projected].ItemCount).Evaluate()),
+                                        PineValueInProcess.CreateInteger(projectedLength).Evaluate()),
 
                                     StackInstructionKind.Length_Equal_Const =>
                                     StackInstruction.Push_Literal(
-                                        PineValueInProcess.CreateBool(
-                                            candidates[projected].Prefix.Length +
-                                            candidates[projected].ItemCount ==
-                                            instruction.IntegerLiteral).Evaluate()),
+                                        PineValueInProcess.CreateBool(projectedLength == instruction.IntegerLiteral)
+                                        .Evaluate()),
 
                                     _ =>
                                     throw new InvalidOperationException("Unexpected list projection.")
@@ -420,17 +749,17 @@ public sealed partial record PineControlFlowGraph
         return result;
     }
 
-    private static StackInstruction ProjectElement(ListCandidate candidate, int firstLocal, int index) =>
-        ProjectElementClamped(candidate, firstLocal, Math.Max(0, index));
+    private static StackInstruction ProjectElement(ListSlotLayout layout, int index) =>
+        ProjectElementClamped(layout, Math.Max(0, index));
 
-    private static StackInstruction ProjectElementClamped(ListCandidate candidate, int firstLocal, int index) =>
-        index < candidate.Prefix.Length
+    private static StackInstruction ProjectElementClamped(ListSlotLayout layout, int index) =>
+        index < layout.CommonPrefix.Length
         ?
-        StackInstruction.Push_Literal(candidate.Prefix[index])
+        StackInstruction.Push_Literal(layout.CommonPrefix[index])
         :
-        index - candidate.Prefix.Length < candidate.ItemCount
+        index < layout.MaxLength
         ?
-        StackInstruction.Local_Get(firstLocal + index - candidate.Prefix.Length)
+        StackInstruction.Local_Get(layout.FirstLocal + index - layout.CommonPrefix.Length)
         :
         StackInstruction.Push_Literal(PineValue.EmptyList);
 

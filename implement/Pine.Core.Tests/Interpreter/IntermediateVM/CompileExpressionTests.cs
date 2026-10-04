@@ -108,9 +108,6 @@ public class CompileExpressionTests
                     var expressionJson = File.ReadAllText(Path.Combine(caseDir, "expression.json"));
                     var expression = EncodePineExpressionAsJson.SingleFromJsonString(expressionJson);
 
-                    var expectedInstructionsText =
-                        File.ReadAllText(Path.Combine(caseDir, "instructions.txt")).TrimEnd();
-
                     var compiled =
                         ExpressionCompilation.CompileExpression(
                             expression,
@@ -122,6 +119,16 @@ public class CompileExpressionTests
 
                     var compiledInstructionsText =
                         InstructionsToText(compiled.Generic.Instructions);
+
+                    var instructionsPath = Path.Combine(caseDir, "instructions.txt");
+                    var expectedInstructionsText = File.ReadAllText(instructionsPath).TrimEnd();
+
+                    if (Environment.GetEnvironmentVariable("UPDATE_STACK_FRAME_INSTRUCTION_SNAPSHOTS") is "1" &&
+                        expectedInstructionsText != compiledInstructionsText.TrimEnd())
+                    {
+                        File.WriteAllText(instructionsPath, compiledInstructionsText);
+                        expectedInstructionsText = compiledInstructionsText;
+                    }
 
                     return (expected: expectedInstructionsText, actual: compiledInstructionsText);
                 },

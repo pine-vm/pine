@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Interpreter.IntermediateVM;
 using System.Collections.Generic;
@@ -334,7 +335,18 @@ public class SkipIdentifierStringSliceInliningTests
                 source);
 
             if (source is "a\n b\n  _0")
+            {
+                frames.SelectMany(frame => frame.Instructions.Instructions).Any(
+                    instruction =>
+                    instruction.Kind == StackInstructionKind.Build_List_With_Prefix &&
+                    instruction.Literal?.Evaluate() is PineValue.ListValue prefix &&
+                    prefix.Items.Length == 2 &&
+                    prefix.Items.Span[0].Equals(StringEncoding.ValueFromString("<Choice>")) &&
+                    prefix.Items.Span[1].Equals(StringEncoding.ValueFromString("Just")))
+                    .Should().BeFalse();
+
                 AssertFrameSnapshot(frames, nameof(ParseApplicationExpression_values_and_all_stack_frame_instructions));
+            }
         }
     }
 
