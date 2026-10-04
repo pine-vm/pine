@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Internal;
 using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.PineVM;
@@ -38,6 +39,36 @@ public class PineControlFlowGraphTests
         .ForwardJumpsToReturn()
         .ForwardConstantBooleanBranches()
         .LowerToStackInstructions();
+
+    [Fact]
+    public void Length_jump_fusion_preserves_branches_for_lists_and_blobs()
+    {
+        var trueValue = PineValue.Blob([41]);
+        var falseValue = PineValue.Blob([43]);
+
+        var graph =
+            PineControlFlowGraph.FromFragment(
+                Ops(StackInstruction.Local_Get(0), StackInstruction.Length)
+                .Append(
+                    Conditional(
+                        IntegerEncoding.EncodeSignedInteger(2),
+                        Ops(StackInstruction.Push_Literal(falseValue)),
+                        Ops(StackInstruction.Push_Literal(trueValue)))));
+
+        var instructions = graph.LowerToStackInstructions();
+
+        instructions.Should().ContainSingle(
+            instruction =>
+            instruction.Kind == StackInstructionKind.Length_Jump_If_Equal_Const &&
+            instruction.IntegerLiteral == 2);
+
+        instructions.Should().NotContain(instruction => instruction.Kind == StackInstructionKind.Length);
+
+        Evaluate(graph, PineValue.Blob([1, 2])).Should().Be(trueValue);
+        Evaluate(graph, PineValue.Blob([1])).Should().Be(falseValue);
+        Evaluate(graph, PineValue.List([PineValue.EmptyList, PineValue.EmptyBlob])).Should().Be(trueValue);
+        Evaluate(graph, PineValue.EmptyList).Should().Be(falseValue);
+    }
 
     [Fact]
     public void Known_literal_projections_release_unused_descending_local_stores()

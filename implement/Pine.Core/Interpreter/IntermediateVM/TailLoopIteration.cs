@@ -27,8 +27,9 @@ public delegate void ReportTailLoopIteration(
 public enum TailLoopIterationKind
 {
     /// <summary>
-    /// A backward jump (negative-offset <c>Jump_Const</c> or
-    /// <c>Jump_If_Equal_Const</c>) inside a single stack frame.
+    /// A backward jump (negative-offset <c>Jump_Const</c>,
+    /// <c>Jump_If_Equal_Const</c>, or <c>Length_Jump_If_Equal_Const</c>)
+    /// inside a single stack frame.
     /// </summary>
     BackwardJump = 1,
 

@@ -1,0 +1,14 @@
+{
+  "Conditional": [
+    {
+      "Builtin": ["equal", {
+        "List": [[
+          {"Builtin": ["length", {"Environment": []}]},
+          {"Litral": [{"AsBase64": "BAI="}]}
+        ]]
+      }]
+    },
+    {"Litral": [41]},
+    {"Litral": [43]}
+  ]
+}

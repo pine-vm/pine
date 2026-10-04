@@ -284,6 +284,12 @@ public enum StackInstructionKind
     Jump_If_Equal_Const,
 
     /// <summary>
+    /// Pops the top value and jumps by <see cref="StackInstruction.JumpOffset"/> if its length
+    /// equals <see cref="StackInstruction.IntegerLiteral"/>.
+    /// </summary>
+    Length_Jump_If_Equal_Const,
+
+    /// <summary>
     /// Unconditional jump to the offset from <see cref="StackInstruction.JumpOffset"/>.
     /// </summary>
     Jump_Const,
@@ -672,6 +678,15 @@ public record StackInstruction(
             StackInstructionKind.Jump_If_Equal_Const,
             JumpOffset: offset,
             Literal: PineValueInProcess.CreateFullyRepresented(literal));
+
+    /// <summary>
+    /// Jumps to the given offset if the length of the top stack value equals the given integer.
+    /// </summary>
+    public static StackInstruction Length_Jump_If_Equal(int offset, BigInteger length) =>
+        new(
+            StackInstructionKind.Length_Jump_If_Equal_Const,
+            JumpOffset: offset,
+            IntegerLiteral: length);
 
     /// <summary>
     /// Creates a new instruction to jump to the specified offset if the top value on the stack is true.
@@ -1346,7 +1361,10 @@ public record StackInstruction(
         if (instructionIndex is not { } currentIndex)
             return display;
 
-        if (instruction.Kind is StackInstructionKind.Jump_Const or StackInstructionKind.Jump_If_Equal_Const)
+        if (instruction.Kind is
+            StackInstructionKind.Jump_Const or
+            StackInstructionKind.Jump_If_Equal_Const or
+            StackInstructionKind.Length_Jump_If_Equal_Const)
         {
             var jumpOffset =
                 instruction.JumpOffset
@@ -1945,6 +1963,20 @@ public record StackInstruction(
                     instruction.JumpOffset?.ToString()
                     ?? throw new Exception(
                         "Missing JumpOffset for Jump_If_Equal_Const instruction")
+                    ])),
+
+            StackInstructionKind.Length_Jump_If_Equal_Const =>
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 0,
+                Display: () => InstructionDisplay.WithoutDetailLines(
+                    [
+                    instruction.IntegerLiteral?.ToString()
+                    ?? throw new Exception(
+                        "Missing IntegerLiteral for Length_Jump_If_Equal_Const instruction"),
+                    instruction.JumpOffset?.ToString()
+                    ?? throw new Exception(
+                        "Missing JumpOffset for Length_Jump_If_Equal_Const instruction")
                     ])),
 
             StackInstructionKind.Jump_Const =>

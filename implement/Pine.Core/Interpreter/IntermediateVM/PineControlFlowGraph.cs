@@ -1,3 +1,4 @@
+using Pine.Core.CommonEncodings;
 using Pine.Core.Internal;
 using Pine.Core.PineVM;
 using System;
@@ -1013,20 +1014,46 @@ public sealed partial record PineControlFlowGraph(
     {
         Validate();
 
+        static BigInteger? FusedLengthComparison(PineBasicBlock block)
+        {
+            if (block.Terminator is not PineControlFlowTerminator.ConditionalJump conditional ||
+                block.Operations is not { Length: > 0 } operations ||
+                operations[^1] is not
+                {
+                    Instruction.Kind: StackInstructionKind.Length,
+                    Inputs.Length: 1,
+                    Results.Length: 1
+                } lengthOperation ||
+                conditional.FallThroughArguments.Contains(lengthOperation.Results[0]) ||
+                conditional.BranchArguments.Contains(lengthOperation.Results[0]) ||
+                IntegerEncoding.ParseSignedIntegerRelaxed(conditional.Literal).IsOkOrNullable() is not { } length ||
+                IntegerEncoding.EncodeSignedInteger(length) != conditional.Literal)
+            {
+                return null;
+            }
+
+            return length;
+        }
+
         var firstInstructionIndexByBlock = new Dictionary<PineBlockId, int>();
         var instructionCount = 0;
 
         foreach (var block in Blocks)
         {
             firstInstructionIndexByBlock.Add(block.Id, instructionCount);
-            instructionCount += block.Operations.Length + TerminatorInstructionCount(block.Terminator);
+
+            instructionCount +=
+                block.Operations.Length + TerminatorInstructionCount(block.Terminator) -
+                (FusedLengthComparison(block) is not null ? 1 : 0);
         }
 
         var result = ImmutableArray.CreateBuilder<StackInstruction>(instructionCount);
 
         foreach (var block in Blocks)
         {
-            foreach (var operation in block.Operations)
+            var fusedLength = FusedLengthComparison(block);
+
+            foreach (var operation in fusedLength is null ? block.Operations : block.Operations[..^1])
             {
                 result.Add(operation.Instruction);
             }
@@ -1054,6 +1081,12 @@ public sealed partial record PineControlFlowGraph(
 
                 case PineControlFlowTerminator.ConditionalJump conditional:
                     result.Add(
+                        fusedLength is { } length
+                        ?
+                        StackInstruction.Length_Jump_If_Equal(
+                            offset: firstInstructionIndexByBlock[conditional.Branch] - result.Count,
+                            length: length)
+                        :
                         StackInstruction.Jump_If_Equal(
                             offset: firstInstructionIndexByBlock[conditional.Branch] - result.Count,
                             literal: conditional.Literal));

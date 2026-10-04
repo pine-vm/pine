@@ -306,7 +306,9 @@ public static class StackInstructionTraceRenderer
             IEnumerable<int> jumpOffsets =
                 instruction.Kind switch
                 {
-                    StackInstructionKind.Jump_Const or StackInstructionKind.Jump_If_Equal_Const =>
+                    StackInstructionKind.Jump_Const or
+                    StackInstructionKind.Jump_If_Equal_Const or
+                    StackInstructionKind.Length_Jump_If_Equal_Const =>
                     instruction.JumpOffset is { } jumpOffset ? [jumpOffset] : [],
 
                     StackInstructionKind.Switch_Jump_If_Equal_Const or

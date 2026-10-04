@@ -55,6 +55,7 @@ public record StackFrameInstructions(
                     break;
 
                 case StackInstructionKind.Jump_If_Equal_Const:
+                case StackInstructionKind.Length_Jump_If_Equal_Const:
 
                     // fall-through
                     yield return instructionIndex + 1;

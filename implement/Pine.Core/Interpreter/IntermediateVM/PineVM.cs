@@ -2769,7 +2769,42 @@ public class PineVM : ICancellablePineVM
                             }
 
                             currentFrame.InstructionPointer++;
+                            continue;
+                        }
 
+                    case StackInstructionKind.Length_Jump_If_Equal_Const:
+                        {
+                            if (CheckCancellation() is { } cancellationError)
+                            {
+                                return cancellationError;
+                            }
+
+                            var value = currentFrame.PopTopmostFromStack();
+
+                            var length =
+                                currentInstruction.IntegerLiteral
+                                ?? throw new Exception("Invalid operation form: Missing length literal");
+
+                            if (value.GetLength() == length)
+                            {
+                                var jumpOffset =
+                                    currentInstruction.JumpOffset
+                                    ?? throw new Exception("Invalid operation form: Missing jump offset");
+
+                                currentFrame.InstructionPointer += jumpOffset;
+
+                                if (jumpOffset < 0)
+                                {
+                                    if (IncrementLoopIterationCountAndEnforceLimits(currentFrame) is { } loopLimitError)
+                                    {
+                                        return loopLimitError;
+                                    }
+                                }
+
+                                continue;
+                            }
+
+                            currentFrame.InstructionPointer++;
                             continue;
                         }
 
