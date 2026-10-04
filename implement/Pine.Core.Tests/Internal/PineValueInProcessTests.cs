@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Internal;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -765,8 +766,275 @@ public class PineValueInProcessTests
         VerifyConsistencyOfDerivedProperties(result);
     }
 
+    public static IEnumerable<object[]> ShortListConcatCases()
+    {
+        string[] representations =
+            ["structural", "evaluated", "fully-represented", "structural-slice", "evaluated-slice"];
+
+        (int leftLength, int rightLength)[] lengths = [(1, 1), (7, 8), (8, 7)];
+
+        foreach (var leftRepresentation in representations)
+        {
+            foreach (var rightRepresentation in representations)
+            {
+                foreach (var (leftLength, rightLength) in lengths)
+                {
+                    yield return [leftRepresentation, rightRepresentation, leftLength, rightLength];
+                }
+            }
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(ShortListConcatCases))]
+    public void ConcatBinary_short_lists_preserve_items_without_materialization(
+        string leftRepresentation,
+        string rightRepresentation,
+        int leftLength,
+        int rightLength)
+    {
+        static PineValueInProcess CreateOperand(string representation, int start, int length)
+        {
+            var items =
+                Enumerable.Range(start, length)
+                .Select(i => PineValueInProcess.CreateInteger(i))
+                .ToArray();
+
+            return representation switch
+            {
+                "structural" =>
+                PineValueInProcess.CreateList(items),
+
+                "evaluated" =>
+                PineValueInProcess.Create(PineValue.List([.. items.Select(item => item.Evaluate())])),
+
+                "fully-represented" =>
+                PineValueInProcess.CreateFullyRepresented(PineValue.List([.. items.Select(item => item.Evaluate())])),
+
+                "structural-slice" =>
+                PineValueInProcess.Slice(
+                    1,
+                    length,
+                    PineValueInProcess.CreateList(
+                        [PineValueInProcess.EmptyList, .. items, PineValueInProcess.EmptyList])),
+
+                "evaluated-slice" =>
+                PineValueInProcess.Slice(
+                    1,
+                    length,
+                    PineValueInProcess.Create(
+                        PineValue.List([PineValue.EmptyList, .. items.Select(item => item.Evaluate()), PineValue.EmptyList]))),
+
+                _ => throw new ArgumentOutOfRangeException(nameof(representation), representation, null),
+            };
+        }
+
+        const int start = 20_001;
+
+        var left = CreateOperand(leftRepresentation, start, leftLength);
+        var right = CreateOperand(rightRepresentation, start + leftLength, rightLength);
+        var leftEvaluatedBefore = left.EvaluatedOrNull;
+        var rightEvaluatedBefore = right.EvaluatedOrNull;
+        var leftItems = Enumerable.Range(0, leftLength).Select(left.GetElementAt).ToArray();
+        var rightItems = Enumerable.Range(0, rightLength).Select(right.GetElementAt).ToArray();
+        var leftItemsEvaluatedBefore = leftItems.Select(item => item.EvaluatedOrNull).ToArray();
+        var rightItemsEvaluatedBefore = rightItems.Select(item => item.EvaluatedOrNull).ToArray();
+
+        var result = PineValueInProcess.ConcatBinary(left, right);
+
+        result.EvaluatedOrNull.Should().BeNull();
+        result.ListItemsOrNull().Should().NotBeNull();
+        result.IsList().Should().BeTrue();
+        result.IsBlob().Should().BeFalse();
+        result.LengthOrNull.Should().Be(leftLength + rightLength);
+
+        for (var i = 0; i < leftLength; ++i)
+        {
+            result.GetElementAt(i).EvaluatedOrNull.Should().BeSameAs(leftItemsEvaluatedBefore[i]);
+
+            if (left.ListItemsOrNull() is not null)
+                result.GetElementAt(i).Should().BeSameAs(leftItems[i]);
+        }
+
+        for (var i = 0; i < rightLength; ++i)
+        {
+            result.GetElementAt(leftLength + i).EvaluatedOrNull.Should().BeSameAs(rightItemsEvaluatedBefore[i]);
+
+            if (right.ListItemsOrNull() is not null)
+                result.GetElementAt(leftLength + i).Should().BeSameAs(rightItems[i]);
+        }
+
+        var expected =
+            PineValue.List(
+                [.. Enumerable.Range(start, leftLength + rightLength).Select(i => IntegerEncoding.EncodeSignedInteger(i))]);
+
+        result.Evaluate().Should().Be(expected);
+        left.EvaluatedOrNull.Should().BeSameAs(leftEvaluatedBefore);
+        right.EvaluatedOrNull.Should().BeSameAs(rightEvaluatedBefore);
+        VerifyConsistencyOfDerivedProperties(result);
+    }
+
+    [Theory]
+    [InlineData(8, 8)]
+    [InlineData(8, 9)]
+    [InlineData(16, 1)]
+    public void ConcatBinary_lists_at_or_above_direct_threshold_keep_builder_path(int leftLength, int rightLength)
+    {
+        var left =
+            PineValueInProcess.CreateList(
+                [.. Enumerable.Range(20_001, leftLength).Select(i => PineValueInProcess.CreateInteger(i))]);
+
+        var right =
+            PineValueInProcess.CreateList(
+                [.. Enumerable.Range(20_001 + leftLength, rightLength).Select(i => PineValueInProcess.CreateInteger(i))]);
+
+        var result = PineValueInProcess.ConcatBinary(left, right);
+
+        result.EvaluatedOrNull.Should().BeNull();
+        result.ListItemsOrNull().Should().BeNull();
+
+        result.Evaluate().Should().Be(
+            PineValue.List(
+                [.. Enumerable.Range(20_001, leftLength + rightLength).Select(i => IntegerEncoding.EncodeSignedInteger(i))]));
+
+        VerifyConsistencyOfDerivedProperties(result);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    public void ConcatBinary_with_empty_list_reuses_nonempty_list_without_materialization(
+        bool emptyOnLeft,
+        bool useSlice)
+    {
+        var empty =
+            useSlice
+            ?
+            PineValueInProcess.Skip(1, PineValueInProcess.Create(PineValue.List([PineValue.EmptyList])))
+            :
+            PineValueInProcess.EmptyList;
+
+        var nonempty =
+            PineValueInProcess.CreateList([PineValueInProcess.CreateInteger(20_001)]);
+
+        var emptyEvaluatedBefore = empty.EvaluatedOrNull;
+
+        var result =
+            emptyOnLeft
+            ?
+            PineValueInProcess.ConcatBinary(empty, nonempty)
+            :
+            PineValueInProcess.ConcatBinary(nonempty, empty);
+
+        result.Should().BeSameAs(nonempty);
+        result.EvaluatedOrNull.Should().BeNull();
+        result.GetElementAt(0).EvaluatedOrNull.Should().BeNull();
+        empty.EvaluatedOrNull.Should().BeSameAs(emptyEvaluatedBefore);
+    }
+
+    [Theory]
+    [InlineData(0, 0, false)]
+    [InlineData(0, 1, false)]
+    [InlineData(1, 0, false)]
+    [InlineData(1, 1, false)]
+    [InlineData(0, 0, true)]
+    [InlineData(0, 1, true)]
+    [InlineData(1, 0, true)]
+    [InlineData(1, 1, true)]
+    public void ConcatBinary_list_and_blob_preserve_kernel_semantics(int listLength, int blobLength, bool blobOnLeft)
+    {
+        var listValue = PineValue.List([.. Enumerable.Repeat(PineValue.Blob([1]), listLength)]);
+        var blobValue = PineValue.Blob([.. Enumerable.Repeat((byte)2, blobLength)]);
+        var list =
+            PineValueInProcess.CreateList(
+                [.. Enumerable.Repeat(PineValueInProcess.Create(PineValue.Blob([1])), listLength)]);
+
+        var blob = PineValueInProcess.Create(blobValue);
+
+        var result =
+            blobOnLeft
+            ?
+            PineValueInProcess.ConcatBinary(blob, list)
+            :
+            PineValueInProcess.ConcatBinary(list, blob);
+
+        var expected =
+            blobOnLeft
+            ?
+            BuiltinFunctionSpecialized.concat(blobValue, listValue)
+            :
+            BuiltinFunctionSpecialized.concat(listValue, blobValue);
+
+        result.Evaluate().Should().Be(expected);
+        VerifyConsistencyOfDerivedProperties(result);
+    }
+
     [Fact]
-    public void Concat_two_lists_preserves_interpreter_closure()
+    public void ConcatBinary_short_lists_defer_partial_application_materialization_until_evaluation()
+    {
+        var materializationCount = 0;
+        var childValue = PineValue.List([PineValue.Blob([1])]);
+
+        var child =
+            PineValueInProcess.CreatePartialApplication(
+                callable: new object(),
+                arguments: [],
+                materialize: _ => childValue,
+                reportMaterialization: () => ++materializationCount);
+
+        var left = PineValueInProcess.CreateList([child]);
+        var right = PineValueInProcess.CreateList([PineValueInProcess.EmptyList]);
+
+        var result = PineValueInProcess.ConcatBinary(left, right);
+
+        result.GetElementAt(0).Should().BeSameAs(child);
+        result.EvaluatedOrNull.Should().BeNull();
+        left.EvaluatedOrNull.Should().BeNull();
+        right.EvaluatedOrNull.Should().BeNull();
+        child.EvaluatedOrNull.Should().BeNull();
+        materializationCount.Should().Be(0);
+
+        result.Evaluate().Should().Be(PineValue.List([childValue, PineValue.EmptyList]));
+        result.Evaluate().Should().Be(PineValue.List([childValue, PineValue.EmptyList]));
+        materializationCount.Should().Be(1);
+        left.EvaluatedOrNull.Should().BeNull();
+        right.EvaluatedOrNull.Should().BeNull();
+    }
+
+    [Fact]
+    public void ConcatBinary_short_list_chaining_preserves_shared_unevaluated_children()
+    {
+        var child = PineValueInProcess.CreateList([PineValueInProcess.CreateInteger(20_001)]);
+        var original = PineValueInProcess.CreateList([child]);
+
+        var doubled = PineValueInProcess.ConcatBinary(original, original);
+        var tripled = PineValueInProcess.ConcatBinary(doubled, original);
+
+        doubled.GetLength().Should().Be(2);
+        tripled.GetLength().Should().Be(3);
+        original.EvaluatedOrNull.Should().BeNull();
+        doubled.EvaluatedOrNull.Should().BeNull();
+        tripled.EvaluatedOrNull.Should().BeNull();
+
+        for (var i = 0; i < tripled.GetLength(); ++i)
+        {
+            tripled.GetElementAt(i).Should().BeSameAs(child);
+        }
+
+        child.EvaluatedOrNull.Should().BeNull();
+        child.GetElementAt(0).EvaluatedOrNull.Should().BeNull();
+
+        tripled.Evaluate().Should().Be(
+            PineValue.List(
+                [.. Enumerable.Repeat(PineValue.List([IntegerEncoding.EncodeSignedInteger(20_001)]), 3)]));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Concat_and_ConcatBinary_two_lists_preserve_interpreter_closure(bool useConcatBinary)
     {
         var closure =
             new ElmInterpreter.ElmClosureInProcess(
@@ -780,19 +1048,22 @@ public class PineValueInProcessTests
                 capturedBindings: ImmutableDictionary<string, PineValueInProcess>.Empty,
                 capturedTopLevel: DeclQualifiedName.Create([], "Top"));
 
-        var input =
-            PineValueInProcess.CreateList(
-                [
-                PineValueInProcess.CreateList([closure]),
-                PineValueInProcess.CreateList(
-                    [PineValueInProcess.Create(PineValue.Blob([1]))])
-                ]);
+        var left = PineValueInProcess.CreateList([closure]);
+        var right = PineValueInProcess.CreateList([PineValueInProcess.Create(PineValue.Blob([1]))]);
 
-        var result = PineValueInProcess.Concat(input);
+        var result =
+            useConcatBinary
+            ?
+            PineValueInProcess.ConcatBinary(left, right)
+            :
+            PineValueInProcess.Concat(PineValueInProcess.CreateList([left, right]));
 
         result.GetLength().Should().Be(2);
         result.GetElementAt(0).Should().BeSameAs(closure);
         result.GetElementAt(1).Evaluate().Should().Be(PineValue.Blob([1]));
+        result.EvaluatedOrNull.Should().BeNull();
+        left.EvaluatedOrNull.Should().BeNull();
+        right.EvaluatedOrNull.Should().BeNull();
     }
 
     [Fact]

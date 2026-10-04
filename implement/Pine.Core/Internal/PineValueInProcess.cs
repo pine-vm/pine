@@ -1246,12 +1246,18 @@ public class PineValueInProcess
         }
     }
 
+    private bool HasListItemsWithoutEvaluation() =>
+        _list is not null ||
+        _evaluated is PineValue.ListValue ||
+        _sliceBuilder?.IsList() is true;
+
     /// <summary>
     /// Concatenates the binary content of two PineValueInProcess instances into a single value.
     /// </summary>
     /// <remarks>This method preserves any deferred or incremental evaluation present in the input values,
     /// enabling efficient concatenation of large or lazily-evaluated data. The resulting value may not be fully
-    /// materialized until evaluated.</remarks>
+    /// materialized until evaluated. Short lists with directly accessible items are concatenated via
+    /// <see cref="CreateList"/> without evaluating the operands or their child items.</remarks>
     /// <param name="left">The first value to concatenate. Represents the left operand in the concatenation.</param>
     /// <param name="right">The second value to concatenate. Represents the right operand in the concatenation.</param>
     /// <returns>A new PineValueInProcess instance containing the concatenated binary content of the left and right values.</returns>
@@ -1269,6 +1275,31 @@ public class PineValueInProcess
             (right.IsList() || left.IsBlob()))
         {
             return left;
+        }
+
+        if (left.HasListItemsWithoutEvaluation() &&
+            right.HasListItemsWithoutEvaluation())
+        {
+            var leftLength = left.GetLength();
+            var rightLength = right.GetLength();
+
+            if (leftLength < ConcatDirectThreshold &&
+                rightLength < ConcatDirectThreshold - leftLength)
+            {
+                var items = new PineValueInProcess[leftLength + rightLength];
+
+                for (var i = 0; i < leftLength; ++i)
+                {
+                    items[i] = left.GetElementAt(i);
+                }
+
+                for (var i = 0; i < rightLength; ++i)
+                {
+                    items[leftLength + i] = right.GetElementAt(i);
+                }
+
+                return CreateList(items);
+            }
         }
 
         if (left._concatBuilder is { } leftConcatBuilder &&
@@ -1428,7 +1459,7 @@ public class PineValueInProcess
             return list[index];
         }
 
-        var evaluated = Evaluate();
+        var evaluated = _evaluated ?? Evaluate();
 
         if (evaluated is PineValue.ListValue listValue)
         {
