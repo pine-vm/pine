@@ -4,7 +4,7 @@ For semantics of the Elm programming language, consult the file 'elm-programming
 
 ## Entry Point
 
-The entry point for compilation is the declaration in one of the Elm modules in the source code that supports integration with and connection to the outside world. Compiler applications often expose an API that offers selecting a module as an entry point. In these cases, the compiler application applies a default selection to pick a declaration from that module. Traditionally, that was simply the one declaration named main.
+The entry point for compilation is the declaration in one of the Elm modules in the source code that supports integration with and connection to the outside world. Compiler applications often expose an API that offers selecting a module as an entry point. In these cases, the compiler application applies a default selection to pick a declaration from that module. Traditionally, that was simply the one declaration named `main`.
 
 ### Encoding of Elm Values at Entry Points
 
