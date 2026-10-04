@@ -1,17 +1,26 @@
 # Pine
 
-Pine is a free, open-source, cross-platform Elm runtime environment that lets developers create servers, web apps, and command line tools.
+Pine is an Elm development toolchain and runtime built on .NET. It combines editor tooling, compilation and testing tools, and hosting for Elm web services.
 
-+ Pine supports building and running Elm programs natively on .NET without JavaScript.
-+ The Elm compilation interfaces support the customization of code generation at build time.
-+ Pine comes bundled with an integrated web server and database management system, simplifying the development and operation of web services.
+At its core is the [Pine language](./guide/pine-language.md), a side-effect-free compilation target designed for meta-programming. Frontend compilers translate Elm into Pine expressions, which the .NET runtime evaluates. Hosting infrastructure manages external interactions and persistence of application state.
 
-## Web Services
+The repository includes:
 
-+ Pine integrates web server and database management system, automating the persistence and maintenance of application state and database migrations.
-+ Run reports or custom updates as Elm functions on your database via the admin interface.
++ Elm language server and [VS Code extension](https://marketplace.visualstudio.com/items?itemName=Pine.pine).
++ [Elm Editor](https://elm-editor.com) cloud IDE.
++ .NET-based virtual machine and runtime for programs without side-effects.
++ Tools to build Elm apps and compile to Pine code.
++ CLI tools to format Elm code and run Elm tests.
++ Web server, database management system and admin interface for Elm-based web services.
 
 ## Getting Started
+
++ **Develop Elm in VS Code:** install the [Pine extension](https://marketplace.visualstudio.com/items?itemName=Pine.pine).
++ **Try the browser IDE:** open [Elm Editor](https://elm-editor.com).
++ **Use the CLI or host an Elm web service:** follow the installation and server example below.
++ **Understand the runtime:** read the [Pine language guide](./guide/pine-language.md).
+
+### Installing the CLI
 
 Download the pre-built Pine binary for your platform at <https://pine.build/download>, or on the [releases page](https://github.com/pine-vm/pine/releases) on GitHub.
 
@@ -25,31 +34,48 @@ Put `~/.local/bin` before older Pine installations on `PATH` if you have one.
 On Windows, the command adds the extracted executable's directory to your user `PATH`;
 keep that directory in place after installing.
 
+### Running an Example App
+
 The command below runs a server and deploys a full-stack web app:
 
 ```txt
 pine  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/pine-vm/pine/tree/3a5c9d0052ab344984bafa5094d2debc3ad1ecb7/implement/example-apps/docker-image-default-app
 ```
 
+Once the server has started, open <http://localhost:5000/> to see the example app's landing page. Press `Ctrl+C` to stop the server.
+
+This command does not configure persistent storage. For deployment and persistence options, see [Configuring and deploying an Elm backend app](./guide/how-to-configure-and-deploy-an-elm-backend-app.md).
+
 
 ## Docker Image
 
-To deploy in a docker container, use the `pine-vm/pine` image from the [GitHub Container registry](https://github.com/pine-vm/pine/pkgs/container/pine) (`ghcr.io/pine-vm/pine`). The tags are aligned with the version IDs in the CLI executable file.
+To deploy a web service in a Docker container, use the `pine-vm/pine` image from the [GitHub Container Registry](https://github.com/pine-vm/pine/pkgs/container/pine) (`ghcr.io/pine-vm/pine`). The tags are aligned with the version IDs in the CLI executable file.
+
+For a local demonstration, bind both published ports to loopback:
 
 ```txt
-docker  run  -p 5000:80  -p 4000:4000  --env "APPSETTING_adminPassword=test"  ghcr.io/pine-vm/pine
+docker  run  -p 127.0.0.1:5000:80  -p 127.0.0.1:4000:4000  --env "APPSETTING_adminPassword=test"  ghcr.io/pine-vm/pine
 ```
+
++ <http://localhost:5000/> serves the bundled placeholder app (container port `80`).
++ <http://localhost:4000/> serves the admin interface for deployments and application management (container port `4000`).
+
+The admin password `test` is for this local demonstration only. Before exposing the service beyond your machine, use a strong admin password and restrict access to the admin interface. For persistent deployments, mount a Docker volume at `/pine-vm/process-store`.
 
 
 ## 📚 Guides
 
 A selection of guides on popular topics:
 
-+ Building full-stack web apps: [./guide/how-to-build-a-full-stack-web-app-in-elm.md](./guide/how-to-build-a-full-stack-web-app-in-elm.md)
++ [Building full-stack web apps](./guide/how-to-build-a-full-stack-web-app-in-elm.md)
 
-+ Building a backend or web service: [./guide/how-to-build-a-backend-app-in-elm.md](./guide/how-to-build-a-backend-app-in-elm.md)
++ [Building a backend or web service](./guide/how-to-build-a-backend-app-in-elm.md)
 
-+ Customizing builds with compilation interfaces: [./guide/customizing-elm-app-builds-with-compilation-interfaces.md](./guide/customizing-elm-app-builds-with-compilation-interfaces.md)
++ [Configuring and deploying an Elm backend app](./guide/how-to-configure-and-deploy-an-elm-backend-app.md)
+
++ [Persistence of application state](./guide/persistence-of-application-state-in-pine.md)
+
++ [Customizing builds with compilation interfaces](./guide/customizing-elm-app-builds-with-compilation-interfaces.md)
 
 For an overview of all guides and documentation, see the [`guide` directory](./guide/).
 
