@@ -40,6 +40,155 @@ public class PineControlFlowGraphTests
         .LowerToStackInstructions();
 
     [Fact]
+    public void Known_literal_projections_release_unused_descending_local_stores()
+    {
+        var elements =
+            new[]
+            {
+                PineValue.Blob([65]),
+                PineValue.Blob([66]),
+                PineValue.Blob([67])
+            };
+
+        var list = PineValue.List(elements);
+
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(list),
+                    StackInstruction.Head_Generic,
+                    StackInstruction.Push_Literal(list),
+                    StackInstruction.Skip_Head_Const(1),
+                    StackInstruction.Push_Literal(list),
+                    StackInstruction.Skip_Head_Const(2),
+                    StackInstruction.Local_Set_Descending(3, 3),
+                    StackInstruction.PopMultiple(3),
+                    StackInstruction.Local_Get(2)));
+
+        var folded = original.FoldKnownLiteralValues(parameterCount: 0);
+
+        folded.LowerToStackInstructions().Should().Equal(
+            StackInstruction.Push_Literal(elements[0]),
+            StackInstruction.Push_Literal(elements[1]),
+            StackInstruction.Push_Literal(elements[2]),
+            StackInstruction.Local_Set_Descending(3, 3),
+            StackInstruction.PopMultiple(3),
+            StackInstruction.Push_Literal(elements[1]),
+            StackInstruction.Return);
+
+        var cleaned =
+            folded.EliminateDeadLocalStores()
+            .EliminateDiscardedStackValues(parameterCount: 0);
+
+        cleaned.LowerToStackInstructions().Should().Equal(
+            StackInstruction.Push_Literal(elements[1]),
+            StackInstruction.Return);
+
+        Evaluate(cleaned, PineValue.EmptyList).Should().Be(Evaluate(original, PineValue.EmptyList));
+    }
+
+    [Fact]
+    public void Literal_local_stores_omit_dead_interior_slots_and_preserve_unstored_stack_values()
+    {
+        var marker = PineValue.Blob([70]);
+        var first = PineValue.Blob([71]);
+        var unused = PineValue.Blob([72]);
+        var last = PineValue.Blob([73]);
+
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(marker),
+                    StackInstruction.Push_Literal(first),
+                    StackInstruction.Push_Literal(unused),
+                    StackInstruction.Push_Literal(last),
+                    StackInstruction.Local_Set_Descending(3, 3),
+                    StackInstruction.PopMultiple(4),
+                    StackInstruction.Local_Get(1),
+                    StackInstruction.Local_Get(3),
+                    StackInstruction.Build_List(2)));
+
+        var optimized =
+            original.FuseLiteralLocalStores()
+            .EliminateDeadLocalStores()
+            .EliminateDiscardedStackValues(parameterCount: 0);
+
+        optimized.LowerToStackInstructions().Should().Equal(
+            StackInstruction.Local_Set_Literal(1, first),
+            StackInstruction.Local_Set_Literal(3, last),
+            StackInstruction.Local_Get(1),
+            StackInstruction.Local_Get(3),
+            StackInstruction.Build_List(2),
+            StackInstruction.Return);
+
+        var details = StackInstruction.GetDetails(StackInstruction.Local_Set_Literal(3, last));
+        details.PopCount.Should().Be(0);
+        details.PushCount.Should().Be(0);
+
+        StackFrameInstructions.ComputeLocalsCount(
+            [StackInstruction.Local_Set_Literal(3, last)],
+            StaticFunctionInterface.Generic).Should().BeGreaterThan(3);
+
+        Evaluate(optimized, PineValue.EmptyList).Should().Be(Evaluate(original, PineValue.EmptyList));
+    }
+
+    [Fact]
+    public void Known_literal_projections_match_blob_and_out_of_bounds_semantics()
+    {
+        var blob = PineValue.Blob([10, 20]);
+
+        foreach (var (index, expected) in new[]
+        {
+            (-1, PineValue.Blob([10])),
+            (1, PineValue.Blob([20])),
+            (5, PineValue.EmptyBlob)
+        })
+        {
+            var original =
+                PineControlFlowGraph.FromFragment(
+                    Ops(
+                        StackInstruction.Push_Literal(blob),
+                        StackInstruction.Skip_Head_Const(index)));
+
+            var folded = original.FoldKnownLiteralValues(parameterCount: 0);
+
+            folded.LowerToStackInstructions().Should().Equal(
+                StackInstruction.Push_Literal(expected),
+                StackInstruction.Return);
+
+            Evaluate(folded, PineValue.EmptyList).Should().Be(Evaluate(original, PineValue.EmptyList));
+        }
+    }
+
+    [Fact]
+    public void Unknown_or_uninitialized_locals_are_not_replaced_by_literals()
+    {
+        var first = PineValue.Blob([12]);
+        var second = PineValue.Blob([13]);
+
+        var original =
+            PineControlFlowGraph.FromFragment(
+                Ops(StackInstruction.Local_Get(0))
+                .Append(
+                    Conditional(
+                        first,
+                        Ops(StackInstruction.Push_Literal(first), StackInstruction.Local_Set(1)),
+                        Ops(StackInstruction.Push_Literal(second), StackInstruction.Local_Set(1))))
+                .AppendOperation(StackInstruction.Pop)
+                .AppendOperation(StackInstruction.Local_Get(1)));
+
+        var folded = original.FoldKnownLiteralValues(parameterCount: 1);
+
+        folded.LowerToStackInstructions().Should().Contain(StackInstruction.Local_Get(1));
+        folded.LowerToStackInstructions().Should().Contain(StackInstruction.Local_Get(0));
+
+        foreach (var input in new[] { first, second })
+        {
+            Evaluate(folded, input).Should().Be(Evaluate(original, input));
+        }
+    }
+
+    [Fact]
     public void Descending_store_fuses_independent_local_increments_without_stack_values()
     {
         var values =

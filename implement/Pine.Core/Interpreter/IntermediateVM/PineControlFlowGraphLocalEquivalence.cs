@@ -182,7 +182,8 @@ public sealed partial record PineControlFlowGraph
 
                 equalLocals = StoreEqualLocals(equalLocals, values, assignments);
             }
-            else if (instruction.Kind is StackInstructionKind.Local_Int_Add_Const &&
+            else if (instruction.Kind is
+                StackInstructionKind.Local_Int_Add_Const or StackInstructionKind.Local_Set_Literal &&
                 instruction.LocalIndex is >= 0 and var incrementedLocal)
             {
                 equalLocals =

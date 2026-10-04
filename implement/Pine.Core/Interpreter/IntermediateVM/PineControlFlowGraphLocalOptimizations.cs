@@ -122,7 +122,8 @@ public sealed partial record PineControlFlowGraph
     }
 
     private static bool WritesLocal(StackInstruction instruction, int index) =>
-        instruction.Kind is StackInstructionKind.Local_Set or StackInstructionKind.Local_Int_Add_Const &&
+        instruction.Kind is StackInstructionKind.Local_Set or StackInstructionKind.Local_Set_Literal or
+            StackInstructionKind.Local_Int_Add_Const &&
         instruction.LocalIndex == index ||
         instruction.Kind is StackInstructionKind.Local_Set_Descending &&
         instruction.LocalIndex is { } highest &&
@@ -170,6 +171,98 @@ public sealed partial record PineControlFlowGraph
 
                     return block with { Operations = operations.ToImmutable() };
                 }).ToImmutableArray();
+
+        var result = this with { Blocks = blocks };
+        result.Validate();
+        return result;
+    }
+
+    /// <summary>
+    /// Stores a discarded sequence of literal stack values directly in the corresponding
+    /// locals, so ordinary local liveness can remove individual unused destinations.
+    /// </summary>
+    public PineControlFlowGraph FuseLiteralLocalStores()
+    {
+        Validate();
+
+        var changed = false;
+
+        var blocks =
+            Blocks.Select(
+                block =>
+                {
+                    var operations = ImmutableArray.CreateBuilder<PineControlFlowOperation>();
+
+                    for (var index = 0; index < block.Operations.Length; index++)
+                    {
+                        var store = block.Operations[index];
+
+                        if (store.Instruction.Kind is StackInstructionKind.Local_Set_Descending &&
+                            store.Instruction.LocalIndex is { } highest &&
+                            store.Instruction.TakeCount is > 0 and var count &&
+                            highest >= count - 1 &&
+                            store.Inputs.IsEmpty && store.Results.IsEmpty &&
+                            index + 1 < block.Operations.Length &&
+                            block.Operations[index + 1] is { } pop &&
+                            pop.Instruction.Kind is StackInstructionKind.Pop &&
+                            pop.Instruction.SkipCount is { } popCount &&
+                            popCount >= count &&
+                            pop.Inputs.Length == popCount &&
+                            pop.Results.IsEmpty &&
+                            operations.Count >= count)
+                        {
+                            var literalProducers =
+                                operations.Skip(operations.Count - count).ToArray();
+
+                            if (literalProducers.Select(
+                                (producer, position) =>
+                                producer.Instruction.Kind is StackInstructionKind.Push_Literal &&
+                                producer.Instruction.Literal is not null &&
+                                producer.Inputs.IsEmpty &&
+                                producer.Results.Length is 1 &&
+                                producer.Results[0] == pop.Inputs[popCount - count + position])
+                                .All(matches => matches))
+                            {
+                                operations.RemoveRange(operations.Count - count, count);
+
+                                if (popCount > count)
+                                {
+                                    operations.Add(
+                                        pop with
+                                        {
+                                            Instruction = StackInstruction.PopMultiple(popCount - count),
+                                            Inputs = pop.Inputs[..(popCount - count)]
+                                        });
+                                }
+
+                                for (var position = 0; position < count; position++)
+                                {
+                                    operations.Add(
+                                        new PineControlFlowOperation(
+                                            StackInstruction.Local_Set_Literal(
+                                                highest - count + position + 1,
+                                                literalProducers[position].Instruction.Literal!.Evaluate()),
+                                            [],
+                                            []));
+                                }
+
+                                index++;
+                                changed = true;
+                                continue;
+                            }
+                        }
+
+                        operations.Add(store);
+                    }
+
+                    return block with { Operations = operations.ToImmutable() };
+                })
+            .ToImmutableArray();
+
+        if (!changed)
+        {
+            return this;
+        }
 
         var result = this with { Blocks = blocks };
         result.Validate();

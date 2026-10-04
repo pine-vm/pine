@@ -353,7 +353,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 4
             BuildListCount: 4
             LoopIterationCount: 0
-            InstructionCount: 31
+            InstructionCount: 27
             """);
     }
 
@@ -411,7 +411,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 7
             BuildListCount: 3
             LoopIterationCount: 0
-            InstructionCount: 72
+            InstructionCount: 66
             """);
     }
 
@@ -747,7 +747,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 2
             BuildListCount: 0
             LoopIterationCount: 0
-            InstructionCount: 12
+            InstructionCount: 8
             """);
     }
 
@@ -819,7 +819,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 41
             BuildListCount: 21
             LoopIterationCount: 0
-            InstructionCount: 424
+            InstructionCount: 412
             """);
     }
 
@@ -857,7 +857,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 7
             BuildListCount: 3
             LoopIterationCount: 0
-            InstructionCount: 74
+            InstructionCount: 68
             """);
     }
 
@@ -902,7 +902,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 41
             BuildListCount: 21
             LoopIterationCount: 0
-            InstructionCount: 436
+            InstructionCount: 424
             """);
     }
 
@@ -935,7 +935,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 7
             BuildListCount: 3
             LoopIterationCount: 0
-            InstructionCount: 72
+            InstructionCount: 66
             """);
     }
 
@@ -976,7 +976,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 41
             BuildListCount: 21
             LoopIterationCount: 0
-            InstructionCount: 424
+            InstructionCount: 412
             """);
     }
 }

@@ -485,6 +485,12 @@ public enum StackInstructionKind
     Local_Set_Descending,
 
     /// <summary>
+    /// Store <see cref="StackInstruction.Literal"/> directly in <see cref="StackInstruction.LocalIndex"/>
+    /// without changing the evaluation stack.
+    /// </summary>
+    Local_Set_Literal,
+
+    /// <summary>
     /// Evaluates the expression encoded in <see cref="StackInstruction.Literal"/>
     /// using the environment from the top of the stack.
     /// </summary>
@@ -688,6 +694,15 @@ public record StackInstruction(
     /// </summary>
     public static StackInstruction Local_Set(int index) =>
         new(StackInstructionKind.Local_Set, LocalIndex: index);
+
+    /// <summary>
+    /// Creates an instruction to store a literal directly in a local without using the stack.
+    /// </summary>
+    public static StackInstruction Local_Set_Literal(int index, PineValue literal) =>
+        new(
+            StackInstructionKind.Local_Set_Literal,
+            Literal: PineValueInProcess.CreateFullyRepresented(literal),
+            LocalIndex: index);
 
     /// <summary>
     /// Creates a <see cref="StackInstructionKind.Local_Set_Descending"/> instruction that copies
@@ -1497,6 +1512,19 @@ public record StackInstruction(
                     instruction.LocalIndex?.ToString()
                     ?? throw new Exception(
                         "Missing LocalIndex for LocalSet instruction")
+                    ])),
+
+            StackInstructionKind.Local_Set_Literal =>
+            new InstructionDetails(
+                PopCount: 0,
+                PushCount: 0,
+                Display: () => InstructionDisplay.WithoutDetailLines(
+                    [
+                    instruction.LocalIndex?.ToString()
+                    ?? throw new Exception("Missing LocalIndex for LocalSetLiteral instruction"),
+                    literalDisplayString(
+                        instruction.Literal?.Evaluate()
+                        ?? throw new Exception("Missing Literal for LocalSetLiteral instruction"))
                     ])),
 
             StackInstructionKind.Local_Set_Descending =>

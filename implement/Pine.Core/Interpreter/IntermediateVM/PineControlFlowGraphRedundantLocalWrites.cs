@@ -98,7 +98,8 @@ public sealed partial record PineControlFlowGraph
                         .Any(
                             otherIndex =>
                             block.Operations[otherIndex].Instruction.Kind is
-                            StackInstructionKind.Local_Set or StackInstructionKind.Local_Set_Descending ||
+                            StackInstructionKind.Local_Set or StackInstructionKind.Local_Set_Literal or
+                            StackInstructionKind.Local_Set_Descending ||
                             block.Operations[otherIndex].Inputs.Contains(producer.Results[0])))
                     {
                         break;

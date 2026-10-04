@@ -254,7 +254,9 @@ public sealed partial record PineControlFlowGraph
         StackInstructionKind.Local_Get or
         StackInstructionKind.Local_Get_Skip_Head_Const or
         StackInstructionKind.Local_Set or
-        StackInstructionKind.Local_Set_Descending;
+        StackInstructionKind.Local_Set_Literal or
+        StackInstructionKind.Local_Set_Descending or
+        StackInstructionKind.Local_Int_Add_Const;
 
     private static StackInstruction ShiftLocal(StackInstruction instruction, int offset) =>
         IsLocalInstruction(instruction.Kind)

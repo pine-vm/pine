@@ -1935,6 +1935,18 @@ public class PineVM : ICancellablePineVM
                             continue;
                         }
 
+                    case StackInstructionKind.Local_Set_Literal:
+                        {
+                            currentFrame.LocalSet(
+                                currentInstruction.LocalIndex
+                                ?? throw new Exception("Invalid operation form: Missing local index"),
+                                currentInstruction.Literal
+                                ?? throw new Exception("Invalid operation form: Missing literal value"));
+
+                            currentFrame.InstructionPointer++;
+                            continue;
+                        }
+
                     case StackInstructionKind.Local_Set_Descending:
                         {
                             var localIndex =

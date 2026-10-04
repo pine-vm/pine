@@ -361,6 +361,11 @@ public record ExpressionCompilation(
             .RemoveUnreachableBlocks()
             .FuseDescendingLocalIntegerAdditions(parametersAsLocals.ParamsPaths.Count)
             .FuseLocalIntegerAdditions()
+            .FoldKnownLiteralValues(parametersAsLocals.ParamsPaths.Count)
+            .FuseLiteralLocalStores()
+            .EliminateDeadLocalStores()
+            .EliminateRedundantLocalWrites(parametersAsLocals.ParamsPaths.Count)
+            .EliminateDiscardedStackValues(parametersAsLocals.ParamsPaths.Count)
             .LowerToStackInstructions();
     }
 

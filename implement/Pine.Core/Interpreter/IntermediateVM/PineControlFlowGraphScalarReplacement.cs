@@ -248,6 +248,7 @@ public sealed partial record PineControlFlowGraph
                         }
 
                         if (kind is StackInstructionKind.Local_Set or
+                        StackInstructionKind.Local_Set_Literal or
                         StackInstructionKind.Local_Set_Descending or
                         StackInstructionKind.Local_Get or
                         StackInstructionKind.Local_Get_Skip_Head_Const or
@@ -815,6 +816,11 @@ public sealed partial record PineControlFlowGraph
             if (instruction.Kind is StackInstructionKind.Local_Set && instruction.LocalIndex is { } local)
             {
                 locals[local] = values.GetValueOrDefault(stack[^1], ListOrigin.Other);
+            }
+            else if (instruction.Kind is StackInstructionKind.Local_Set_Literal &&
+                instruction.LocalIndex is { } literalLocal)
+            {
+                locals[literalLocal] = ListOrigin.Other;
             }
             else if (instruction.Kind is StackInstructionKind.Local_Set_Descending &&
                 instruction.LocalIndex is { } highest &&

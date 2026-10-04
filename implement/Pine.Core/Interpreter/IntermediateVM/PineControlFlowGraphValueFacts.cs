@@ -166,6 +166,11 @@ public sealed partial record PineControlFlowGraph
     {
         Validate();
 
+        return ForwardProvenEqualityBranches(AnalyzeValueFlow());
+    }
+
+    private ValueFlowState?[] AnalyzeValueFlow()
+    {
         var states = new ValueFlowState?[Blocks.Length];
         states[Entry.Value] = new ValueFlowState([], []);
 
@@ -231,6 +236,113 @@ public sealed partial record PineControlFlowGraph
             }
         }
 
+        return states;
+    }
+
+    /// <summary>
+    /// Uses the same stack and local value facts as branch forwarding to evaluate projections
+    /// of known values and replace initialized local reads with their proven literals.
+    /// </summary>
+    public PineControlFlowGraph FoldKnownLiteralValues(int parameterCount)
+    {
+        Validate();
+
+        var states = AnalyzeValueFlow();
+        var initializedAtEntry = DefinitelyInitializedLocals(parameterCount);
+        var changed = false;
+
+        var blocks =
+            Blocks.Select(
+                block =>
+                {
+                    if (states[block.Id.Value] is not { } state)
+                    {
+                        return block;
+                    }
+
+                    var initialized = new HashSet<int>(initializedAtEntry[block.Id.Value] ?? []);
+                    var operations = ImmutableArray.CreateBuilder<PineControlFlowOperation>();
+
+                    TraceValueFacts(
+                        block,
+                        state,
+                        (operation, values, locals) =>
+                        {
+                            var instruction = operation.Instruction;
+                            PineValue? literal = null;
+
+                            if (instruction.Kind is StackInstructionKind.Local_Get &&
+                                instruction.LocalIndex is { } local &&
+                                initialized.Contains(local))
+                            {
+                                literal = locals.GetValueOrDefault(local, ValueFacts.Unknown).ExactValue;
+                            }
+                            else if (instruction.Kind is StackInstructionKind.Local_Get_Skip_Head_Const &&
+                                instruction.LocalIndex is { } projectedLocal &&
+                                initialized.Contains(projectedLocal) &&
+                                instruction.SkipCount is { } skip)
+                            {
+                                literal =
+                                    locals.GetValueOrDefault(projectedLocal, ValueFacts.Unknown)
+                                    .KnownListElement(Math.Max(0, skip));
+                            }
+                            else if (instruction.Kind is StackInstructionKind.Head_Generic ||
+                                instruction.Kind is StackInstructionKind.Skip_Head_Const &&
+                                instruction.SkipCount is not null)
+                            {
+                                if (operation.Inputs.Length is 1 &&
+                                    operations.Count > 0 &&
+                                    operations[^1] is { } previous &&
+                                    previous.Instruction.Kind is StackInstructionKind.Push_Literal &&
+                                    previous.Results.Length is 1 &&
+                                    previous.Results[0] == operation.Inputs[0])
+                                {
+                                    literal =
+                                        values.GetValueOrDefault(operation.Inputs[0], ValueFacts.Unknown)
+                                        .KnownListElement(Math.Max(0, instruction.SkipCount ?? 0));
+
+                                    if (literal is not null)
+                                    {
+                                        operations.RemoveAt(operations.Count - 1);
+                                    }
+                                }
+                            }
+
+                            if (literal is not null)
+                            {
+                                operations.Add(
+                                    operation with
+                                    {
+                                        Instruction = StackInstruction.Push_Literal(literal),
+                                        Inputs = []
+                                    });
+
+                                changed = true;
+                            }
+                            else
+                            {
+                                operations.Add(operation);
+                            }
+
+                            AddWrittenLocals(instruction, initialized);
+                        });
+
+                    return block with { Operations = operations.ToImmutable() };
+                })
+            .ToImmutableArray();
+
+        if (!changed)
+        {
+            return this;
+        }
+
+        var result = this with { Blocks = blocks };
+        result.Validate();
+        return result;
+    }
+
+    private PineControlFlowGraph ForwardProvenEqualityBranches(ValueFlowState?[] states)
+    {
         var changed = false;
 
         var blocks =
@@ -390,7 +502,11 @@ public sealed partial record PineControlFlowGraph
         Dictionary<PineVirtualValueId, ValueFacts> Values,
         Dictionary<int, ValueFacts> Locals,
         List<PineVirtualValueId> Stack)
-        TraceValueFacts(PineBasicBlock block, ValueFlowState state)
+        TraceValueFacts(
+        PineBasicBlock block,
+        ValueFlowState state,
+        Action<PineControlFlowOperation, IReadOnlyDictionary<PineVirtualValueId, ValueFacts>,
+                IReadOnlyDictionary<int, ValueFacts>>? beforeOperation = null)
     {
         var values = new Dictionary<PineVirtualValueId, ValueFacts>();
         var locals = new Dictionary<int, ValueFacts>(state.Locals);
@@ -405,10 +521,18 @@ public sealed partial record PineControlFlowGraph
         {
             var instruction = operation.Instruction;
 
+            beforeOperation?.Invoke(operation, values, locals);
+
             if (instruction.Kind is StackInstructionKind.Local_Set &&
                 instruction.LocalIndex is { } local)
             {
                 locals[local] = values.GetValueOrDefault(stack[^1], ValueFacts.Unknown);
+            }
+            else if (instruction.Kind is StackInstructionKind.Local_Set_Literal &&
+                instruction.LocalIndex is { } literalLocal &&
+                instruction.Literal is { } localLiteral)
+            {
+                locals[literalLocal] = ValueFacts.ForLiteral(localLiteral.Evaluate());
             }
             else if (instruction.Kind is StackInstructionKind.Local_Int_Add_Const &&
                 instruction.LocalIndex is { } incrementedLocal)
