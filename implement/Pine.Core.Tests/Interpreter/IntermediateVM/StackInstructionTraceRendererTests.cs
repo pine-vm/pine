@@ -13,6 +13,21 @@ namespace Pine.Core.Tests.Interpreter.IntermediateVM;
 
 public class StackInstructionTraceRendererTests
 {
+    [Fact]
+    public void Environment_expression_omits_invariant_stats_in_instruction_description()
+    {
+        var instruction =
+            StackInstruction.Invoke_StackFrame_Const(
+                expression: Expression.EnvironmentInstance,
+                invocationInterface: StaticFunctionInterface.FromPathsSorted([]));
+
+        StackInstructionTraceRenderer.RenderStackFrameInstructions(
+            new StackFrameInstructions(
+                Parameters: StaticFunctionInterface.FromPathsSorted([]),
+                Instructions: [instruction, StackInstruction.Return]))
+            .Should().Contain("Invoke_StackFrame_Const (Environment, 0)");
+    }
+
     [Theory]
     [InlineData(-1, "Int_Sub_Binary")]
     [InlineData(0, "Int_Mul_Const_Add_Binary (0)")]

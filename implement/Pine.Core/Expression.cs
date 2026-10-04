@@ -893,6 +893,9 @@ public abstract record Expression
     public record Environment : Expression
     {
         /// <inheritdoc/>
+        public override string ToString() => nameof(Environment);
+
+        /// <inheritdoc/>
         public override long SubexpressionCount { get; } = 0;
 
         /// <inheritdoc/>
