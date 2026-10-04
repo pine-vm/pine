@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Numerics;
 
 namespace Pine.Core.Interpreter.IntermediateVM;
 
@@ -172,6 +174,166 @@ public sealed partial record PineControlFlowGraph
         var result = this with { Blocks = blocks };
         result.Validate();
         return result;
+    }
+
+    private readonly record struct LocalUpdateSource(int LocalIndex, BigInteger? Increment);
+
+    /// <summary>
+    /// Replaces a discarded descending store of unchanged locals and independent constant
+    /// increments with updates to just the affected locals.
+    /// </summary>
+    public PineControlFlowGraph FuseDescendingLocalIntegerAdditions(int parameterCount)
+    {
+        Validate();
+
+        var initializedAtEntry = DefinitelyInitializedLocals(parameterCount);
+        var changed = false;
+        var blocks = Blocks.ToBuilder();
+
+        foreach (var block in Blocks)
+        {
+            var initialized = new HashSet<int>(initializedAtEntry[block.Id.Value] ?? []);
+            var operations = ImmutableArray.CreateBuilder<PineControlFlowOperation>();
+            var blockChanged = false;
+
+            for (var index = 0; index < block.Operations.Length; index++)
+            {
+                var store = block.Operations[index];
+
+                if (store.Instruction.Kind is StackInstructionKind.Local_Set_Descending &&
+                    store.Instruction.LocalIndex is { } highest &&
+                    store.Instruction.TakeCount is { } count &&
+                    count > 0 && highest >= count - 1 &&
+                    store.Inputs.IsEmpty && store.Results.IsEmpty &&
+                    index + 1 < block.Operations.Length &&
+                    block.Operations[index + 1] is { } pop &&
+                    pop.Instruction.Kind is StackInstructionKind.Pop &&
+                    pop.Instruction.SkipCount == count &&
+                    pop.Inputs.Length == count &&
+                    pop.Results.IsEmpty &&
+                    TryGetDiscardedLocalUpdates(
+                        block.Operations,
+                        index,
+                        highest,
+                        count,
+                        pop.Inputs,
+                        initialized,
+                        out var start,
+                        out var updates))
+                {
+                    // Only remove operations that are still immediately before this store.
+                    var removedCount = index - start;
+
+                    if (removedCount <= operations.Count &&
+                        Enumerable.Range(0, removedCount).All(
+                            offset =>
+                            ReferenceEquals(
+                                operations[operations.Count - removedCount + offset],
+                                block.Operations[start + offset])))
+                    {
+                        operations.RemoveRange(operations.Count - removedCount, removedCount);
+
+                        foreach (var update in updates)
+                        {
+                            var instruction =
+                                StackInstruction.Local_Int_Add_Const(
+                                    update.LocalIndex,
+                                    update.Increment!.Value);
+
+                            operations.Add(new PineControlFlowOperation(instruction, [], []));
+                            AddWrittenLocals(instruction, initialized);
+                        }
+
+                        index++;
+                        changed = true;
+                        blockChanged = true;
+                        continue;
+                    }
+                }
+
+                operations.Add(store);
+                AddWrittenLocals(store.Instruction, initialized);
+            }
+
+            if (blockChanged)
+            {
+                blocks[block.Id.Value] = block with { Operations = operations.ToImmutable() };
+            }
+        }
+
+        if (!changed)
+        {
+            return this;
+        }
+
+        var result = this with { Blocks = blocks.ToImmutable() };
+        result.Validate();
+        return result;
+    }
+
+    private static bool TryGetDiscardedLocalUpdates(
+        ImmutableArray<PineControlFlowOperation> operations,
+        int storeIndex,
+        int highest,
+        int count,
+        ImmutableArray<PineVirtualValueId> discarded,
+        HashSet<int> initialized,
+        out int start,
+        out List<LocalUpdateSource> updates)
+    {
+        start = storeIndex;
+        updates = [];
+
+        var sources = new LocalUpdateSource[count];
+
+        for (var position = count - 1; position >= 0; position--)
+        {
+            BigInteger? increment = null;
+
+            if (start > 0 &&
+                operations[start - 1] is { } add &&
+                add.Instruction.Kind is StackInstructionKind.Int_Add_Const &&
+                add.Instruction.IntegerLiteral is { } literal &&
+                add.Inputs.Length == 1 &&
+                add.Results.Length == 1 &&
+                add.Results[0] == discarded[position])
+            {
+                increment = literal;
+                start--;
+            }
+
+            var value =
+                increment is null
+                ?
+                discarded[position]
+                :
+                operations[start].Inputs[0];
+
+            var destination = highest - count + position + 1;
+
+            if (start == 0 ||
+                operations[start - 1] is not { } get ||
+                get.Instruction.Kind is not StackInstructionKind.Local_Get ||
+                get.Instruction.LocalIndex != destination ||
+                !get.Inputs.IsEmpty ||
+                get.Results.Length != 1 ||
+                get.Results[0] != value ||
+                !initialized.Contains(destination))
+            {
+                return false;
+            }
+
+            start--;
+            sources[position] = new LocalUpdateSource(destination, increment);
+        }
+
+        if (!sources.Any(source => source.Increment is not null))
+        {
+            return false;
+        }
+
+        updates.AddRange(sources.Where(source => source.Increment is not null));
+        return true;
     }
 
     /// <summary>

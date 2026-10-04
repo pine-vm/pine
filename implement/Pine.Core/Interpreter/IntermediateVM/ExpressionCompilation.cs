@@ -359,6 +359,7 @@ public record ExpressionCompilation(
             .EliminateDiscardedStackValues(parametersAsLocals.ParamsPaths.Count)
             .RemoveRedundantForwardJumps()
             .RemoveUnreachableBlocks()
+            .FuseDescendingLocalIntegerAdditions(parametersAsLocals.ParamsPaths.Count)
             .FuseLocalIntegerAdditions()
             .LowerToStackInstructions();
     }
