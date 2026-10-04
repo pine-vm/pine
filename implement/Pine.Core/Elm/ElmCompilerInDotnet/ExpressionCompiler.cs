@@ -1139,13 +1139,43 @@ public class ExpressionCompiler
         SyntaxTypes.Expression expression,
         ExpressionCompilationContext context)
     {
-        return
-            expression is SyntaxTypes.Expression.Identifier identifier &&
-            identifier.QualifiedName.Namespaces.Count is 0
-            ?
-            TryGetRecordTypeForVariable(identifier.QualifiedName.DeclName, context)
-            :
-            null;
+        if (expression is SyntaxTypes.Expression.Identifier identifier &&
+            identifier.QualifiedName.Namespaces.Count is 0)
+        {
+            return TryGetRecordTypeForVariable(identifier.QualifiedName.DeclName, context);
+        }
+
+        if (expression is SyntaxTypes.Expression.RecordExpr recordExpr)
+        {
+            var fields =
+                recordExpr.Fields
+                .OrderBy(field => field.FieldName, StringComparer.Ordinal)
+                .Select(
+                    field =>
+                    (field.FieldName,
+                    FieldType: (TypeInference.InferredType?)
+                    TryGetRecordTypeForAccess(field.Value, context)
+                        ?? new TypeInference.InferredType.UnknownType()))
+                .ToList();
+
+            return new TypeInference.InferredType.RecordType(fields);
+        }
+
+        if (expression is SyntaxTypes.Expression.RecordUpdateExpression recordUpdate)
+        {
+            return TryGetRecordTypeForVariable(recordUpdate.RecordName, context);
+        }
+
+        if (expression is SyntaxTypes.Expression.RecordAccess recordAccess &&
+            TryGetRecordTypeForAccess(recordAccess.Record, context) is { } outerRecord)
+        {
+            var fieldType =
+                outerRecord.Fields.FirstOrDefault(field => field.FieldName == recordAccess.FieldName).FieldType;
+
+            return fieldType is not null ? TryExpandDirectRecordAlias(fieldType, context) : null;
+        }
+
+        return null;
     }
 
     private static TypeInference.InferredType.RecordType? TryGetRecordTypeForVariable(
@@ -1432,6 +1462,12 @@ public class ExpressionCompiler
                                 newBindingTypes.Count > 0 ? newBindingTypes : null,
                                 context.CurrentModuleName,
                                 context.FunctionTypes);
+
+                        if (bindingType is TypeInference.InferredType.UnknownType &&
+                            TryGetRecordTypeForAccess(funcBody, letContext) is { } recordType)
+                        {
+                            bindingType = recordType;
+                        }
 
                         newBindingTypes = newBindingTypes.SetItem(funcName, bindingType);
 

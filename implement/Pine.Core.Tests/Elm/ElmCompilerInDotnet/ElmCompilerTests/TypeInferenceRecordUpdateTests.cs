@@ -110,6 +110,35 @@ public class TypeInferenceRecordUpdateTests
     }
 
     [Fact]
+    public void Record_update_prefers_shadowing_local_record_type()
+    {
+        var parameterRecord =
+            new TypeInference.InferredType.RecordType(
+                [("offset", new TypeInference.InferredType.IntType())]);
+
+        var localRecord =
+            new TypeInference.InferredType.RecordType(
+                [
+                ("column", new TypeInference.InferredType.IntType()),
+                ("offset", new TypeInference.InferredType.IntType())
+                ]);
+
+        var update =
+            new SyntaxTypes.Expression.RecordUpdateExpression(
+                Node("state"),
+                [Field("offset", new SyntaxTypes.Expression.Integer(3))]);
+
+        var inferredType =
+            TypeInference.InferExpressionType(
+                Abs(update),
+                parameterNames: new Dictionary<string, int> { ["state"] = 0 },
+                parameterTypes: new Dictionary<string, TypeInference.InferredType> { ["state"] = parameterRecord },
+                localBindingTypes: new Dictionary<string, TypeInference.InferredType> { ["state"] = localRecord });
+
+        inferredType.Should().Be(localRecord);
+    }
+
+    [Fact]
     public void Multiple_record_updates_on_same_parameter_accumulate_fields()
     {
         // alfa r = { a = { r | name = "x" }, b = { r | age = 1 } }

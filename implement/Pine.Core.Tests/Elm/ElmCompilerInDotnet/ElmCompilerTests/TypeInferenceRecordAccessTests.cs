@@ -157,6 +157,52 @@ public class TypeInferenceRecordAccessTests
     }
 
     [Fact]
+    public void Shadowed_function_application_does_not_use_module_record_layout()
+    {
+        var moduleRecord =
+            new TypeInference.InferredType.RecordType(
+                [
+                ("alpha", new TypeInference.InferredType.IntType()),
+                ("column", new TypeInference.InferredType.IntType())
+                ]);
+
+        var application =
+            new SyntaxTypes.Expression.Application(
+                [
+                Node(Param("makeState")),
+                Node<SyntaxTypes.Expression>(new SyntaxTypes.Expression.Integer(2))
+                ]);
+
+        var functionTypes =
+            new Dictionary<DeclQualifiedName, FunctionTypeInfo>
+            {
+                [DeclQualifiedName.Create(["Test"], "makeState")] =
+                new(moduleRecord, [new TypeInference.InferredType.IntType()])
+            };
+
+        TypeInference.InferExpressionType(
+            Abs(application),
+            parameterNames: new Dictionary<string, int> { ["makeState"] = 0 },
+            parameterTypes: new Dictionary<string, TypeInference.InferredType>(),
+            localBindingTypes: null,
+            currentModuleName: "Test",
+            functionTypes: functionTypes)
+            .Should().BeOfType<TypeInference.InferredType.UnknownType>();
+
+        TypeInference.InferExpressionType(
+            Abs(application),
+            parameterNames: new Dictionary<string, int>(),
+            parameterTypes: new Dictionary<string, TypeInference.InferredType>(),
+            localBindingTypes: new Dictionary<string, TypeInference.InferredType>
+            {
+                ["makeState"] = new TypeInference.InferredType.UnknownType()
+            },
+            currentModuleName: "Test",
+            functionTypes: functionTypes)
+            .Should().BeOfType<TypeInference.InferredType.UnknownType>();
+    }
+
+    [Fact]
     public void User_defined_payload_free_constructor_is_inferred_from_constructor_metadata()
     {
         var optionalType =

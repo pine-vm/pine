@@ -1601,6 +1601,13 @@ public static class TypeInference
             // Check if the first argument is a FunctionOrValue
             if (application.Function is SyntaxTypes.Expression.Identifier funcRef)
             {
+                if (funcRef.QualifiedName.Namespaces.Count is 0 &&
+                    (parameterNames.ContainsKey(funcRef.QualifiedName.DeclName) ||
+                    localBindingTypes?.ContainsKey(funcRef.QualifiedName.DeclName) is true))
+                {
+                    return s_unknownType;
+                }
+
                 if (funcRef.QualifiedName.Namespaces is ["Pine_builtin"])
                 {
                     InferredType? builtinResultType =
@@ -1945,15 +1952,15 @@ public static class TypeInference
         {
             var recordName = recordUpdate.RecordName;
 
-            if (parameterTypes.TryGetValue(recordName, out var existingParamType))
-            {
-                return existingParamType;
-            }
-
             if (localBindingTypes is not null &&
                 localBindingTypes.TryGetValue(recordName, out var existingLocalType))
             {
                 return existingLocalType;
+            }
+
+            if (parameterTypes.TryGetValue(recordName, out var existingParamType))
+            {
+                return existingParamType;
             }
 
             // Build an open record from the updated fields, inferring the field

@@ -1,6 +1,8 @@
 using AwesomeAssertions;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
+using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Interpreter.IntermediateVM;
 using System.Collections.Generic;
 using System.Linq;
@@ -292,6 +294,47 @@ public class SkipIdentifierStringSliceInliningTests
             if (source is "ab a0 _b")
                 AssertFrameSnapshot(frames, nameof(ParseThreeIdentifiers_values_and_all_stack_frame_instructions));
         }
+    }
+
+    [Fact]
+    public void Parser_state_record_accesses_use_known_field_positions()
+    {
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules([TestModuleText], disableInlining: false).parsedEnv;
+
+        var functions =
+            parsedEnv.Modules
+            .First(module => module.moduleName is "SkipIdentifierInliningTestModule")
+            .moduleContent.FunctionDeclarations;
+
+        var functionsWithGenericAccess =
+            new[]
+            {
+                "parseApplicationExpression",
+                "parseApplicationArguments",
+                "parseIdentifier",
+                "skipApplicationTrivia",
+                "skipLineComment",
+                "skipBlockComment",
+                "advanceApplicationPosition"
+            }
+            .Where(
+                name =>
+                {
+                    var parsed =
+                        FunctionRecord.ParseFunctionRecordTagged(functions[name], new PineVMParseCache())
+                        .Extract(err => throw new System.Exception(err));
+
+                    return
+                        Expression.EnumerateSelfAndDescendants(parsed.InnerFunction)
+                        .OfType<Expression.Eval>()
+                        .Any(
+                            eval =>
+                            eval.Encoded is Expression.Litral literal &&
+                            literal.Value == RecordRuntime.PineFunctionForRecordAccessAsValue);
+                });
+
+        functionsWithGenericAccess.Should().BeEmpty();
     }
 
     [Fact]
