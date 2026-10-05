@@ -18,12 +18,11 @@ Expand the Elm compiler to return a map of compiled declarations to support attr
 
 ## CLI Command Elm Test Profile
 
-+ Add a new CLI command `elm  test  profile  instrument`
-+ Has `--filter` option like the `elm  test` command.
-
 ### Limit to Single Test
 
-For now the command should reject any run that would not include exactly one Elm test, and point the user to use the `--filter` option.
+The `elm  test  profile` command currently rejects any run that would not include exactly one Elm test. If the combination of path argument and `--filter` option result in selection of multiple tests, points the user to using path argument and `--filter` option to constrain the selection.
+
++ Add a new CLI command `elm  test  profile  instrument`
 
 ### Instrument Report
 
