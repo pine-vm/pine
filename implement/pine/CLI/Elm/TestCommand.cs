@@ -38,8 +38,9 @@ public static class TestCommand
         var filterOption =
             new Option<string?>("--filter")
             {
+                Arity = ArgumentArity.ZeroOrMore,
                 Description =
-                "Only include tests whose file path, description, or name contains this value (case-insensitive)."
+                "Run tests that match the given expression."
             };
 
         var listTestsOption =
