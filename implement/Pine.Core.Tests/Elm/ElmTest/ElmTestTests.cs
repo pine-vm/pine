@@ -263,9 +263,11 @@ public class ElmTestTests
 
         var listed = testRun.Should().BeOfType<ElmTestRun.Listed>().Subject;
         listed.Tests.Should().ContainSingle().Which.Name.Should().Be("Test Title");
+
         listed.FilteredOutTests.Select(test => test.Name).Should().Equal(
             "Another Test Title",
             "Yet Another Test Title");
+
         listed.FilteredOutTests.Should().OnlyContain(
             test => test.FilePath == "tests/Tests.elm" && test.DescriptionPath.SequenceEqual(new[] { "Group Title" }));
     }
@@ -299,7 +301,10 @@ public class ElmTestTests
         noMatches.Filter.Should().Be(filter);
         noMatches.ClosestTests.Should().HaveCount(3);
         noMatches.FilteredOutTests.Should().HaveCount(3);
-        noMatches.ClosestTests.Should().OnlyContain(test => test.FullPath.StartsWith("tests/", StringComparison.Ordinal));
+
+        noMatches.ClosestTests.Should().OnlyContain(
+            test => test.FullPath.StartsWith("tests/", StringComparison.Ordinal));
+
         discoveryCallbackCalled.Should().BeFalse();
     }
 

@@ -222,12 +222,14 @@ public class ElmTestCommandTests
             var rendered = output.ToString();
 
             exitCode.Should().Be(0);
+
             rendered.Should().Contain(
                 filter is null
                 ?
                 $"Available tests ({expectedTestCount})"
                 :
                 $"Tests remaining after filtering ({expectedTestCount})");
+
             rendered.Should().Contain("tests/Tests.elm");
             rendered.Should().Contain("Root");
             rendered.Should().Contain("└──");
@@ -326,7 +328,10 @@ public class ElmTestCommandTests
                 var treeOutput = rendered[..rendered.IndexOf("No tests matched", StringComparison.Ordinal)];
                 treeOutput.Should().Contain("Tests remaining after filtering (0)");
                 treeOutput.Should().Contain("tests/Tests.elm").And.Contain("Selected Group").And.Contain("Other Group");
-                treeOutput.Should().Contain("3 tests filtered out").And.Contain("2 tests filtered out").And.Contain("1 test filtered out");
+
+                treeOutput.Should().Contain("3 tests filtered out").And.Contain("2 tests filtered out").And.Contain(
+                    "1 test filtered out");
+
                 treeOutput.Should().NotContain("First").And.NotContain("Second").And.NotContain("Unique Test");
             }
         }
@@ -451,6 +456,7 @@ public class ElmTestCommandTests
         var output = new StringWriter();
         var root = new RootCommand();
         root.Add(TestCommand.Create());
+
         var exitCode =
             root.Parse(["test", "--help"])
             .Invoke(new InvocationConfiguration { Output = output, Error = output });
@@ -469,6 +475,7 @@ public class ElmTestCommandTests
         var projectDirectory = CreateTestProject(FilterTestsModule);
         var nestedDirectory = Path.Combine(projectDirectory, "tests", "nested");
         Directory.CreateDirectory(nestedDirectory);
+
         File.WriteAllText(
             Path.Combine(nestedDirectory, "NestedTests.elm"),
             """
@@ -578,6 +585,7 @@ public class ElmTestCommandTests
     public void Filtered_listing_counts_exclusions_in_every_file_and_group()
     {
         var projectDirectory = CreateTestProject(FilterTestsModule);
+
         File.WriteAllText(
             Path.Combine(projectDirectory, "tests", "ExcludedFile.elm"),
             """
@@ -605,6 +613,7 @@ public class ElmTestCommandTests
                     listTests: true);
 
             exitCode.Should().Be(0);
+
             output.ToString().Replace("\r\n", "\n").Trim().Should().Be(
                 """
                 Tests remaining after filtering (1)
