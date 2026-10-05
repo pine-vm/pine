@@ -3,12 +3,12 @@ Frames:
 1: depth=1 body=1
 
 Instruction bodies:
-Body 0:
+Body 0 (expr-0x635c5ea9-no-constraint):
 0: Push_Literal (List [3] (3 | hash 0x05e49246))
 1: Invoke_StackFrame_Const (List { ItemsCount = 3, MaxDepth = 16, SubexpressionCount = 132, ReferencesEnvironment = True }, 1)
 2: Return
 
-Body 1:
+Body 1 (expr-0x96a523c8-no-constraint):
   0: Local_Get_Skip_Head_Const (0, 2)
   1: Local_Set (1)
   2: Take_Const (4)

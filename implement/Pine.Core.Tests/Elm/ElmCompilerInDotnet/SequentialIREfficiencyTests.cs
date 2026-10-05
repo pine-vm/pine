@@ -1,7 +1,5 @@
 using AwesomeAssertions;
-using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Interpreter.IntermediateVM;
 using System;
 using System.Linq;
@@ -99,7 +97,7 @@ public class SequentialIREfficiencyTests
 
         renderedFrame.Should().Be(
             """
-            8820d122 (8):
+            expr-0x8820d122-no-constraint (8):
             0: Local_Get (0)
             1: Take_Const (2)
             2: Jump_If_Equal_Const (List [2] (2 | hash 0xd072f1c4), 3, 5)
@@ -181,7 +179,7 @@ public class SequentialIREfficiencyTests
 
         renderedFrame.Should().Be(
             """
-            43aa790e (41):
+            expr-0x43aa790e-no-constraint (41):
              0: Local_Get (0)
              1: Int_Greater_Than_Or_Equal_Const (0)
              2: Local_Get (0)
@@ -297,7 +295,7 @@ public class SequentialIREfficiencyTests
 
         renderedFrame.Should().Be(
             """
-            658be8d6 (9):
+            expr-0x658be8d6-no-constraint (9):
             0: Local_Get_Skip_Head_Const (0, 2)
             1: Take_Const (4)
             2: Local_Set (1)
@@ -383,7 +381,7 @@ public class SequentialIREfficiencyTests
 
         renderedFrame.Should().Be(
             """
-            2386c060 (19):
+            expr-0x2386c060-no-constraint (19):
              0: Local_Get (1)
              1: Push_Literal (Blob [2] (0x0400 | int 0))
              2: Slice_Skip_Var_Equal_Const (Blob [1] (0x04 | hash 0x06db1cc6))
@@ -445,7 +443,7 @@ public class SequentialIREfficiencyTests
 
         renderedFrame.Should().Be(
             """
-            0dbec914 (8):
+            expr-0x0dbec914-no-constraint (8):
             0: Local_Get (2)
             1: Local_Get (1)
             2: Int_Mul_Const (4)
@@ -494,7 +492,7 @@ public class SequentialIREfficiencyTests
 
         renderedFrame.Should().Be(
             """
-            8f52db35 (6):
+            expr-0x8f52db35-no-constraint (6):
             0: Local_Get (1)
             1: Local_Get (0)
             2: Int_Mul_Const (4)
@@ -510,8 +508,6 @@ public class SequentialIREfficiencyTests
         Expression rootExpression,
         PineVMParseCache parseCache)
     {
-        var encodedExpression = ExpressionEncoding.EncodeExpressionAsValue(rootExpression);
-
         var frameInstructions =
             ExpressionCompilation.CompileExpression(
                 rootExpression,
@@ -521,13 +517,9 @@ public class SequentialIREfficiencyTests
                 enableTailRecursionOptimization: true,
                 skipInlining: (_, _) => false).Generic;
 
-        var idHash =
-            Convert.ToHexStringLower(PineValueHashTree.ComputeHash(encodedExpression).Span)
-            [..8];
-
         return
             string.Concat(
-                idHash,
+                StackInstructionTraceRenderer.RenderStackFrameIdentifier(rootExpression, frameInstructions),
                 " (",
                 frameInstructions.Instructions.Count.ToString(),
                 "):\n",

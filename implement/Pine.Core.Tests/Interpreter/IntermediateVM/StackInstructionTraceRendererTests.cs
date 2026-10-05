@@ -168,6 +168,36 @@ public class StackInstructionTraceRendererTests
     }
 
     [Fact]
+    public void RenderStackFrameIdentifier_uses_canonical_expression_hash_and_constraint()
+    {
+        var expression = Expression.LitralInst(PineValue.List([PineValue.Blob([255])]));
+        var expressionValue = ExpressionEncoding.EncodeExpressionAsValue(expression);
+
+        var expressionHash =
+            Convert.ToHexStringLower(PineValueHashTree.ComputeHash(expressionValue).Span)[..8];
+
+        var instructions =
+            new StackFrameInstructions(
+                Parameters: StaticFunctionInterface.FromPathsSorted([]),
+                Instructions: [StackInstruction.Push_Literal(PineValue.EmptyBlob), StackInstruction.Return]);
+
+        StackInstructionTraceRenderer.RenderStackFrameIdentifier(expression, instructions)
+            .Should().Be($"expr-0x{expressionHash}-no-constraint");
+
+        StackInstructionTraceRenderer.RenderStackFrameIdentifier(
+            expression,
+            instructions with { TrackEnvConstraint = PineValueClass.Empty })
+            .Should().Be($"expr-0x{expressionHash}-no-constraint");
+
+        var constraint = PineValueClass.CreateEquals(PineValue.Blob([1]));
+
+        StackInstructionTraceRenderer.RenderStackFrameIdentifier(
+            expression,
+            instructions with { TrackEnvConstraint = constraint })
+            .Should().Be($"expr-0x{expressionHash}-0x{constraint.HashBase16[..8]}");
+    }
+
+    [Fact]
     public void BuildBlobRepresentationBase16_limits_rendered_bytes()
     {
         var trace =

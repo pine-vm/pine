@@ -408,19 +408,25 @@ public class SkipIdentifierStringSliceInliningTests
     {
         frames.Should().NotBeEmpty();
 
-        var bodies = new List<string>();
+        var bodies = new List<(string identifier, string rendered)>();
         var frameLines = new List<string>();
 
         for (var index = 0; index < frames.Count; index++)
         {
             var frame = frames[index];
+
+            var identifier =
+                StackInstructionTraceRenderer.RenderStackFrameIdentifier(
+                    frame.FrameExpression,
+                    frame.Instructions);
+
             var rendered = StackInstructionTraceRenderer.RenderStackFrameInstructions(frame.Instructions);
-            var bodyIndex = bodies.IndexOf(rendered);
+            var bodyIndex = bodies.IndexOf((identifier, rendered));
 
             if (bodyIndex < 0)
             {
                 bodyIndex = bodies.Count;
-                bodies.Add(rendered);
+                bodies.Add((identifier, rendered));
             }
 
             frameLines.Add($"{index}: depth={frame.StackFrameDepth} body={bodyIndex}");
@@ -429,7 +435,7 @@ public class SkipIdentifierStringSliceInliningTests
         var snapshot =
             "Frames:\n" + string.Join('\n', frameLines) +
             "\n\nInstruction bodies:\n" +
-            string.Join("\n\n", bodies.Select((body, index) => $"Body {index}:\n{body}"));
+            string.Join("\n\n", bodies.Select((body, index) => $"Body {index} ({body.identifier}):\n{body.rendered}"));
 
         SnapshotRecorder.LogString(snapshot, name);
         snapshot.Should().Be(SnapshotRecorder.ReadEmbeddedTrace(name));

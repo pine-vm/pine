@@ -2,7 +2,7 @@ Frames:
 0: depth=1 body=0
 
 Instruction bodies:
-Body 0:
+Body 0 (expr-0x2c00a5c5-no-constraint):
  0: Push_Literal (Blob [32] (0x0000006100000062000000200000006100000030000000200000005f00000062 | UTF32 "ab a0 _b"))
  1: Push_Literal (Blob [32] (0x0000006100000062000000200000006100000030000000200000005f00000062 | UTF32 "ab a0 _b"))
  2: Push_Literal (Blob [2] (0x0400 | int 0))
