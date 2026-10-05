@@ -43,7 +43,7 @@ public class StackInstructionTraceRendererTests
     }
 
     [Fact]
-    public void RenderInstructionTraceWithDefaultBlobRepresentations_renders_index_depth_and_blob_mappings()
+    public void RenderInstructionTraceWithDefaultBlobRepresentations_renders_index_and_blob_mappings()
     {
         var trace =
             new List<ExecutedStackInstruction>
@@ -78,9 +78,9 @@ public class StackInstructionTraceRendererTests
 
         rendered.Should().Be(
             """
-             8. depth=1 ip=4 Build_List_With_Prefix (1, 1)
+             8. ip=4 Build_List_With_Prefix (1, 1)
               Blob [28] (0x0000004c00000069000000740000006500000072000000610000006c | UTF32 "Literal")
-            12. depth=2 ip=0 Push_Literal (Blob [2] (0x0403 | int 3))
+            12. ip=0 Push_Literal (Blob [2] (0x0403 | int 3))
             """);
     }
 
@@ -198,6 +198,128 @@ public class StackInstructionTraceRendererTests
     }
 
     [Fact]
+    public void RenderInstructionTrace_marks_frame_entries_and_returns()
+    {
+        var root = Expression.EnvironmentInstance;
+        var child = Expression.LitralInst(PineValue.EmptyBlob);
+        var otherChild = Expression.LitralInst(PineValue.Blob([1]));
+
+        var instructions =
+            new StackFrameInstructions(
+                Parameters: StaticFunctionInterface.FromPathsSorted([]),
+                Instructions: [StackInstruction.Push_Literal(PineValue.EmptyBlob), StackInstruction.Return]);
+
+        ExecutedStackInstruction Item(long index, int depth, Expression expression, long frameIndex) =>
+            new(
+                InstructionIndex: index,
+                StackFrameDepth: depth,
+                InstructionPointer: 0,
+                EvaluationStackDepth: 0,
+                Instruction: instructions.Instructions[0],
+                FrameExpression: expression,
+                LoadFrameInput: () => StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob),
+                FrameInstructions: instructions,
+                FrameIndex: frameIndex);
+
+        var rootId = StackInstructionTraceRenderer.RenderStackFrameIdentifier(root, instructions);
+        var childId = StackInstructionTraceRenderer.RenderStackFrameIdentifier(child, instructions);
+        var otherId = StackInstructionTraceRenderer.RenderStackFrameIdentifier(otherChild, instructions);
+
+        StackInstructionTraceRenderer.RenderInstructionTrace(
+            [
+            Item(0, 1, root, 0), Item(1, 2, child, 1), Item(2, 2, child, 2),
+            Item(3, 2, otherChild, 3), Item(4, 1, root, 0)
+            ])
+            .Should().Be(
+            $"""
+
+            entering frame (no-frame -> {rootId}) - depth 1
+            ip=0 Push_Literal (Blob [0])
+
+            entering frame ({rootId} -> {childId}) - depth 2
+            ip=0 Push_Literal (Blob [0])
+
+            returning frame ({childId} -> {rootId}) - depth 1
+
+            entering frame ({rootId} -> {childId}) - depth 2
+            ip=0 Push_Literal (Blob [0])
+
+            returning frame ({childId} -> {rootId}) - depth 1
+
+            entering frame ({rootId} -> {otherId}) - depth 2
+            ip=0 Push_Literal (Blob [0])
+
+            returning frame ({otherId} -> {rootId}) - depth 1
+            ip=0 Push_Literal (Blob [0])
+            """);
+
+        StackInstructionTraceRenderer.RenderInstructionTrace(
+            [
+            Item(0, 1, root, 0) with { FrameInstructions = null },
+            Item(1, 2, child, 1),
+            Item(2, 1, root, 0) with { FrameInstructions = null }
+            ])
+            .Should().Be(
+            $"""
+            ip=0 Push_Literal (Blob [0])
+
+            entering frame (unknown-frame -> {childId}) - depth 2
+            ip=0 Push_Literal (Blob [0])
+
+            returning frame ({childId} -> unknown-frame) - depth 1
+            ip=0 Push_Literal (Blob [0])
+            """);
+
+        StackInstructionTraceRenderer.RenderInstructionTrace(
+            [
+            Item(0, 1, root, 0),
+            Item(1, 1, child, 1) with { FrameInstructions = null },
+            Item(2, 2, otherChild, 2)
+            ])
+            .Should().Be(
+            $"""
+
+            entering frame (no-frame -> {rootId}) - depth 1
+            ip=0 Push_Literal (Blob [0])
+
+            returning frame ({rootId} -> no-frame) - depth 0
+            ip=0 Push_Literal (Blob [0])
+
+            entering frame (unknown-frame -> {otherId}) - depth 2
+            ip=0 Push_Literal (Blob [0])
+            """);
+
+        StackInstructionTraceRenderer.RenderInstructionTraceWithDefaultBlobRepresentations(
+            [Item(0, 1, root, 0), Item(1, 2, child, 1), Item(2, 1, root, 0)],
+            maxBase16ByteCount: 32,
+            maxUtf32StringCharCount: 32,
+            renderEnteringFrame:
+            transition =>
+            [
+                $"enter {transition.PreviousFrameIdentifier} -> {transition.CurrentFrameIdentifier}",
+                $"at depth {transition.Depth}, frame {transition.CurrentFrameIndex}, instruction {transition.TraceItem.InstructionIndex}"
+            ],
+            renderReturningFrame:
+            transition =>
+            [
+                $"return {transition.PreviousFrameIdentifier} -> {transition.CurrentFrameIdentifier}",
+                $"at depth {transition.Depth}, frame {transition.PreviousFrameIndex} -> {transition.CurrentFrameIndex}"
+            ])
+            .Should().Be(
+            $"""
+            enter no-frame -> {rootId}
+            at depth 1, frame 0, instruction 0
+            ip=0 Push_Literal (Blob [0])
+            enter {rootId} -> {childId}
+            at depth 2, frame 1, instruction 1
+            ip=0 Push_Literal (Blob [0])
+            return {childId} -> {rootId}
+            at depth 1, frame 1 -> 0
+            ip=0 Push_Literal (Blob [0])
+            """);
+    }
+
+    [Fact]
     public void BuildBlobRepresentationBase16_limits_rendered_bytes()
     {
         var trace =
@@ -222,7 +344,7 @@ public class StackInstructionTraceRendererTests
                 ]);
 
         rendered.Should().Be(
-            "depth=1 ip=0 Push_Literal (Blob [4] (0x0001...))");
+            "ip=0 Push_Literal (Blob [4] (0x0001...))");
     }
 
     [Fact]
@@ -248,7 +370,7 @@ public class StackInstructionTraceRendererTests
                 blobRepresentations: [blobRepresentation]);
 
         rendered.Should().Be(
-            "depth=1 ip=0 Push_Literal (Blob [2] (no UTF32 string))");
+            "ip=0 Push_Literal (Blob [2] (no UTF32 string))");
     }
 
     [Fact]
@@ -273,7 +395,7 @@ public class StackInstructionTraceRendererTests
                 blobRepresentations: [blobRepresentation]);
 
         rendered.Should().Be(
-            "depth=1 ip=0 Push_Literal (Blob [28] (no int))");
+            "ip=0 Push_Literal (Blob [28] (no int))");
     }
 
     [Fact]
@@ -300,7 +422,7 @@ public class StackInstructionTraceRendererTests
 
         rendered.Should().Be(
             """
-            8. depth=1 ip=1 Push_Literal (Blob [28] (tag=0x0000004c00000069000000740000006500000072000000610000006c ; UTF32 "Literal"))
+            8. ip=1 Push_Literal (Blob [28] (tag=0x0000004c00000069000000740000006500000072000000610000006c ; UTF32 "Literal"))
             """);
     }
 
@@ -338,6 +460,6 @@ public class StackInstructionTraceRendererTests
                 ]);
 
         rendered.Should().Be(
-            "depth=1 ip=1 Invoke_StackFrame_Const (increment, 1)");
+            "ip=1 Invoke_StackFrame_Const (increment, 1)");
     }
 }

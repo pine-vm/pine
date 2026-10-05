@@ -1142,6 +1142,7 @@ public class PineVM : ICancellablePineVM
             stack.Push(newFrame);
 
             ++stackFrameCount;
+            newFrame.FrameIndex = stackFrameCount - 1;
 
             if (replaceCurrentFrame &&
                 newFrame.Specialization is null &&
@@ -1167,7 +1168,7 @@ public class PineVM : ICancellablePineVM
             {
                 var enteredStackFrame =
                     new EnteredStackFrame(
-                        FrameIndex: stackFrameCount - 1,
+                        FrameIndex: newFrame.FrameIndex,
                         StackFrameDepth: stack.Count,
                         Instructions: frameInstructions,
                         FrameExpression: newFrame.Expression,
@@ -1452,7 +1453,9 @@ public class PineVM : ICancellablePineVM
                             EvaluationStackDepth: currentFrame.StackPointer,
                             Instruction: currentInstruction,
                             FrameExpression: currentFrame.Expression,
-                            LoadFrameInput: () => currentFrame.InputValues);
+                            LoadFrameInput: () => currentFrame.InputValues,
+                            FrameInstructions: currentFrame.Instructions,
+                            FrameIndex: currentFrame.FrameIndex);
 
                     reportExecutedStackInstruction(in executedStackInstruction);
                 }

@@ -20,6 +20,11 @@ public record StackFrame(
     ApplyStepwise? Specialization)
 {
     /// <summary>
+    /// Unique index assigned when this frame is pushed during an evaluation.
+    /// </summary>
+    public long FrameIndex { get; set; }
+
+    /// <summary>
     /// The index of the next instruction to execute within <see cref="StackFrameInstructions.Instructions"/>.
     /// </summary>
     public int InstructionPointer { get; set; } = 0;
