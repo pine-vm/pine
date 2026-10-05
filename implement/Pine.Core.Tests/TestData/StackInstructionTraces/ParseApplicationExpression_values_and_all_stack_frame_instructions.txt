@@ -11,12 +11,12 @@ Frames:
 9: depth=2 body=2
 
 Instruction bodies:
-Body 0:
+Body 0 (expr-0x48a6367b-no-constraint):
 0: Push_Literal (List [3] (3 | hash 0xa3bd1ddb))
 1: Invoke_StackFrame_Const (Conditional { SubexpressionCount = 146, ReferencesEnvironment = True, EvalCount = 10, ConditionCount = 2, BuiltinCount = 26, MaxDepth = 17, Condition = Conditional { SubexpressionCount = 60, ReferencesEnvironment = True, EvalCount = 4, ConditionCount = 1, BuiltinCount = 11, MaxDepth = 15, Condition = Builtin { SubexpressionCount = 29, ReferencesEnvironment = True, EvalCount = 2, ConditionCount = 0, BuiltinCount = 6, MaxDepth = 14, Function = equal, Input = List { ItemsCount = 2, MaxDepth = 13, SubexpressionCount = 28, ReferencesEnvironment = True } }, FalseBranch = Litral { Value = BlobValue { BytesCount = 1 } }, TrueBranch = Builtin { SubexpressionCount = 28, ReferencesEnvironment = True, EvalCount = 2, ConditionCount = 0, BuiltinCount = 5, MaxDepth = 13, Function = equal, Input = List { ItemsCount = 2, MaxDepth = 12, SubexpressionCount = 27, ReferencesEnvironment = True } } }, FalseBranch = Litral { Value = EmptyList }, TrueBranch = Eval { SubexpressionCount = 83, ReferencesEnvironment = True, EvalCount = 6, ConditionCount = 0, BuiltinCount = 15, MaxDepth = 16, Encoded = Litral { Value = ListValue { ItemsCount = 4, NodesCount = 1_291_526, BlobsBytesCount = 16_154_145, MaxDepth = 62 } }, Environment = List { ItemsCount = 4, MaxDepth = 15, SubexpressionCount = 81, ReferencesEnvironment = True } } }, 1)
 2: Return
 
-Body 1:
+Body 1 (expr-0x24b1ce45-no-constraint):
    0: Local_Get_Skip_Head_Const (0, 2)
    1: Local_Set (1)
    2: Take_Const (8)
@@ -2856,7 +2856,7 @@ jumps_arriving_from 1 (1795)
 1805: Pop (2)
 1806: Jump_Const (-128, 1678)
 
-Body 2:
+Body 2 (expr-0x9a9e6382-no-constraint):
   0: Local_Get_Skip_Head_Const (1, 8)
   1: Local_Set (2)
   2: Skip_Head_Const (2)

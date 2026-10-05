@@ -229,6 +229,29 @@ public static class StackInstructionTraceRenderer
             renderBlobContents: renderBlobContents);
 
     /// <summary>
+    /// Renders an identifier for the source expression and environment constraint of a compiled frame.
+    /// The expression hash uses the same canonical Pine value hash as instruction literals.
+    /// </summary>
+    public static string RenderStackFrameIdentifier(
+        Expression expression,
+        StackFrameInstructions frameInstructions)
+    {
+        var expressionValue = ExpressionEncoding.EncodeExpressionAsValue(expression);
+
+        var expressionHash =
+            Convert.ToHexStringLower(PineValueHashTree.ComputeHash(expressionValue).Span)[..8];
+
+        var constraint =
+            frameInstructions.TrackEnvConstraint is { ParsedItems.Count: > 0 } envConstraint
+            ?
+            "0x" + envConstraint.HashBase16[..8]
+            :
+            "no-constraint";
+
+        return "expr-0x" + expressionHash + "-" + constraint;
+    }
+
+    /// <summary>
     /// Renders the instructions in a <see cref="StackFrameInstructions"/> instance as a multi-line text.
     /// Each instruction is prefixed with its zero-based index and rendered using the default blob representations.
     /// Jump destinations include their absolute index and are preceded by their incoming jump locations.
