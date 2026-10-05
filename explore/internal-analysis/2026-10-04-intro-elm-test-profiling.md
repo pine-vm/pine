@@ -20,7 +20,7 @@ Expand the Elm compiler to return a map of compiled declarations to support attr
 
 ### Limit to Single Test
 
-The `elm  test  profile` command currently rejects any run that would not include exactly one Elm test. If the combination of path argument and `--filter` option result in selection of multiple tests, points the user to using path argument and `--filter` option to constrain the selection.
+The `elm  test  profile` command currently rejects any run that would not include exactly one Elm test. If the combination of the path argument and `--filter` option selects multiple tests, it tells the user to use the path argument and `--filter` option to constrain the selection.
 
 + Add a new CLI command `elm  test  profile  instrument`
 
