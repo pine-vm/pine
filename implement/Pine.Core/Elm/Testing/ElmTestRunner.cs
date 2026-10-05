@@ -237,14 +237,42 @@ public static class ElmTestRunner
             }
         }
 
-        if (filter is { } filterText)
+        var filteredOutTests = new List<ListedTest>();
+
+        if (filter is { } filterExpression)
         {
+            var parsedFilter = new ElmTestFilter(filterExpression);
+
+            var availableTests =
+                discoveredTests
+                .Where(test => test.Kind is not DiscoveredTestKind.EmptyGroup)
+                .Select(ToListedTest)
+                .ToArray();
+
             discoveredTests.RemoveAll(
                 test =>
-                !test.FilePath.Contains(filterText, StringComparison.OrdinalIgnoreCase) &&
-                !test.Path.Any(
-                    pathItem =>
-                    pathItem.Contains(filterText, StringComparison.OrdinalIgnoreCase)));
+                {
+                    var listedTest = ToListedTest(test);
+
+                    if (parsedFilter.Matches(listedTest))
+                        return false;
+
+                    if (test.Kind is not DiscoveredTestKind.EmptyGroup)
+                        filteredOutTests.Add(listedTest);
+
+                    return true;
+                });
+
+            if (!discoveredTests.Any(test => test.Kind is not DiscoveredTestKind.EmptyGroup))
+            {
+                return
+                    new ElmTestRun.NoMatchingTests(
+                        filterExpression,
+                        ElmTestFilter.FindClosestTests(availableTests, parsedFilter))
+                    {
+                        FilteredOutTests = availableTests
+                    };
+            }
         }
 
         if (listTests)
@@ -254,13 +282,9 @@ public static class ElmTestRunner
                     [
                     ..                    discoveredTests
                     .Where(test => test.Kind is not DiscoveredTestKind.EmptyGroup)
-                    .Select(
-                        test =>
-                        new ListedTest(
-                            test.FilePath,
-                            [.. test.Path.SkipLast(1)],
-                            test.Path[^1]))
-                    ]);
+                    .Select(ToListedTest)
+                    ],
+                    filteredOutTests);
         }
 
         compilationStopwatch.Stop();
@@ -339,6 +363,13 @@ public static class ElmTestRunner
                 CompilationDuration = compilationStopwatch.Elapsed
             };
     }
+
+
+    private static ListedTest ToListedTest(DiscoveredTest test) =>
+        new(
+            test.FilePath,
+            [.. test.Path.SkipLast(1)],
+            test.Path[^1]);
 
 
     internal static FileTree AddPackageSources(
@@ -1379,6 +1410,12 @@ public sealed record ListedTest
     /// </summary>
     public string Name { get; init; }
 
+    /// <summary>
+    /// Gets the project-relative file, description, and test path with portable separators.
+    /// </summary>
+    public string FullPath =>
+        string.Join('/', new[] { FilePath.Replace('\\', '/') }.Concat(DescriptionPath).Append(Name));
+
     /// <inheritdoc/>
     public bool Equals(ListedTest? other) =>
         ReferenceEquals(this, other) ||
@@ -1500,27 +1537,44 @@ public abstract record ElmTestRun
         /// <summary>
         /// Creates a result containing tests discovered without running them.
         /// </summary>
-        public Listed(IReadOnlyList<ListedTest> tests)
+        public Listed(
+            IReadOnlyList<ListedTest> tests,
+            IReadOnlyList<ListedTest>? filteredOutTests = null)
         {
             Tests = tests;
+            FilteredOutTests = filteredOutTests ?? [];
         }
 
         /// <summary>
-        /// Gets the discovered tests.
+        /// Gets the discovered tests remaining after filtering.
         /// </summary>
         public IReadOnlyList<ListedTest> Tests { get; init; }
+
+        /// <summary>
+        /// Gets individual tests excluded by the filter, preserving their file and group paths.
+        /// </summary>
+        public IReadOnlyList<ListedTest> FilteredOutTests { get; init; }
 
         /// <inheritdoc/>
         public bool Equals(Listed? other) =>
             ReferenceEquals(this, other) ||
-            (other is not null && Tests.SequenceEqual(other.Tests));
+            (other is not null &&
+            Tests.SequenceEqual(other.Tests) &&
+            FilteredOutTests.SequenceEqual(other.FilteredOutTests));
 
         /// <inheritdoc/>
         public override int GetHashCode()
         {
             var hashCode = new HashCode();
 
+            hashCode.Add(Tests.Count);
+
             foreach (var test in Tests)
+                hashCode.Add(test);
+
+            hashCode.Add(FilteredOutTests.Count);
+
+            foreach (var test in FilteredOutTests)
                 hashCode.Add(test);
 
             return hashCode.ToHashCode();
@@ -1531,4 +1585,17 @@ public abstract record ElmTestRun
     /// Represents a test run for a project without Elm test modules.
     /// </summary>
     public sealed record NoTestModules(string AppDirectory) : ElmTestRun;
+
+    /// <summary>
+    /// Represents a filter that selected no tests, with existing tests ranked by similarity.
+    /// </summary>
+    public sealed record NoMatchingTests(
+        string Filter,
+        IReadOnlyList<ListedTest> ClosestTests) : ElmTestRun
+    {
+        /// <summary>
+        /// Gets all individual tests excluded by the filter.
+        /// </summary>
+        public IReadOnlyList<ListedTest> FilteredOutTests { get; init; } = [];
+    }
 }

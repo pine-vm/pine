@@ -3,7 +3,9 @@ using Pine.CLI;
 using Pine.CLI.Elm;
 using Spectre.Console;
 using System;
+using System.CommandLine;
 using System.IO;
+using System.Linq;
 using System.Text;
 using Xunit;
 
@@ -194,6 +196,10 @@ public class ElmTestCommandTests
     [InlineData("SELECTED GROUP", 2, "First", null)]
     [InlineData("unique test", 1, null, "Unique Test")]
     [InlineData("tests/tests.elm", 3, "First", "Unique Test")]
+    [InlineData(@"tests\Tests\Root\Selected Group\First", 1, "First", null)]
+    [InlineData("Tests/**/First", 1, "First", null)]
+    [InlineData("Tests/*/Selected*/First", 1, "First", null)]
+    [InlineData("Root/Selected Group", 2, "First", null)]
     public void List_tests_includes_metadata_and_applies_filter(
         string? filter,
         int expectedTestCount,
@@ -216,7 +222,12 @@ public class ElmTestCommandTests
             var rendered = output.ToString();
 
             exitCode.Should().Be(0);
-            rendered.Should().Contain($"Available tests ({expectedTestCount})");
+            rendered.Should().Contain(
+                filter is null
+                ?
+                $"Available tests ({expectedTestCount})"
+                :
+                $"Tests remaining after filtering ({expectedTestCount})");
             rendered.Should().Contain("tests/Tests.elm");
             rendered.Should().Contain("Root");
             rendered.Should().Contain("└──");
@@ -233,6 +244,282 @@ public class ElmTestCommandTests
 
             else
                 rendered.Should().Contain(expectedUniqueName);
+        }
+        finally
+        {
+            Directory.Delete(projectDirectory, recursive: true);
+        }
+    }
+
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Path_filter_selects_individual_test_for_running_and_listing(bool listTests)
+    {
+        var projectDirectory = CreateTestProject(FilterTestsModule);
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            var exitCode =
+                TestCommand.Execute(
+                    projectDirectory,
+                    colorMode: FormatCommandColorMode.Never,
+                    console: console,
+                    filter: "tests/Tests/Root/Selected Group/*irst",
+                    listTests: listTests);
+
+            var rendered = output.ToString();
+
+            exitCode.Should().Be(0);
+            rendered.Should().NotContain("Second").And.NotContain("Unique Test");
+
+            if (listTests)
+            {
+                rendered.Should().Contain("Tests remaining after filtering (1)").And.Contain("First");
+                rendered.Should().NotContain("Running").And.NotContain("TEST RUN");
+            }
+            else
+            {
+                rendered.Should().Contain("Running 1 test.").And.Contain("Passed:   1");
+            }
+        }
+        finally
+        {
+            Directory.Delete(projectDirectory, recursive: true);
+        }
+    }
+
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void No_matches_prints_closest_paths_and_guidance_without_running(bool listTests)
+    {
+        var projectDirectory = CreateTestProject(FilterTestsModule);
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            var exitCode =
+                TestCommand.Execute(
+                    projectDirectory,
+                    colorMode: FormatCommandColorMode.Never,
+                    console: console,
+                    filter: "tests/Tests/**/Selected Group/Firstt",
+                    listTests: listTests);
+
+            var rendered = output.ToString();
+
+            exitCode.Should().Be(1);
+            rendered.Should().Contain("No tests matched the filter expression:");
+            rendered.Should().Contain("tests/Tests/**/Selected Group/Firstt");
+            rendered.Should().Contain("Closest existing test paths (not selected or run):");
+            rendered.Should().Contain("tests/Tests.elm/Root/Selected Group/First");
+            rendered.Should().Contain("broaden").And.Contain("**").And.Contain("--list-tests").And.Contain("--help");
+            rendered.Should().NotContain("Running").And.NotContain("TEST RUN PASSED");
+            rendered.Contains('\u001b').Should().BeFalse();
+
+            if (listTests)
+            {
+                var treeOutput = rendered[..rendered.IndexOf("No tests matched", StringComparison.Ordinal)];
+                treeOutput.Should().Contain("Tests remaining after filtering (0)");
+                treeOutput.Should().Contain("tests/Tests.elm").And.Contain("Selected Group").And.Contain("Other Group");
+                treeOutput.Should().Contain("3 tests filtered out").And.Contain("2 tests filtered out").And.Contain("1 test filtered out");
+                treeOutput.Should().NotContain("First").And.NotContain("Second").And.NotContain("Unique Test");
+            }
+        }
+        finally
+        {
+            Directory.Delete(projectDirectory, recursive: true);
+        }
+    }
+
+
+    [Fact]
+    public void No_match_suggestions_preserve_full_long_paths_in_redirected_output()
+    {
+        var testName = new string('a', 160);
+        var projectDirectory = CreateTestProject(PassingTestsModule.Replace("Test Title", testName));
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            var exitCode =
+                TestCommand.Execute(
+                    projectDirectory,
+                    colorMode: FormatCommandColorMode.Never,
+                    console: console,
+                    filter: "missing test");
+
+            exitCode.Should().Be(1);
+            output.ToString().Should().Contain("tests/Tests.elm/Group Title/" + testName);
+        }
+        finally
+        {
+            Directory.Delete(projectDirectory, recursive: true);
+        }
+    }
+
+
+    [Fact]
+    public void Command_accepts_one_filter_expression()
+    {
+        var projectDirectory = CreateTestProject(FilterTestsModule);
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            var arguments =
+                new[] { projectDirectory, "--color", "never", "--list-tests", "--filter", "Tests/**/First" };
+
+            var command = TestCommand.Create();
+            var option = command.Options.OfType<Option<string>>().Single();
+            var parseResult = command.Parse(arguments);
+
+            parseResult.Errors.Should().BeEmpty();
+            parseResult.GetValue(option).Should().Be("Tests/**/First");
+
+            var exitCode =
+                TestCommand.Execute(
+                    projectDirectory,
+                    colorMode: FormatCommandColorMode.Never,
+                    console: console,
+                    filter: parseResult.GetValue(option),
+                    listTests: true);
+
+            exitCode.Should().Be(0);
+            output.ToString().Should().Contain("Tests remaining after filtering (1)").And.Contain("First");
+            output.ToString().Should().NotContain("Second").And.NotContain("Unique Test");
+        }
+        finally
+        {
+            Directory.Delete(projectDirectory, recursive: true);
+        }
+    }
+
+
+    [Fact]
+    public void Filter_arity_requires_one_value()
+    {
+        var command = TestCommand.Create();
+        var option = command.Options.OfType<Option<string>>().Single();
+        var parseResult = command.Parse(["--filter"]);
+
+        option.Arity.Should().Be(ArgumentArity.ExactlyOne);
+        parseResult.Errors.Should().NotBeEmpty();
+    }
+
+
+    [Theory]
+    [InlineData("--filter", "First", "--filter", "Second")]
+    [InlineData("--filter", "First", "--filter", "First")]
+    [InlineData("--filter=First", "--filter=Second")]
+    [InlineData("--filter", "First", "--filter")]
+    public void Command_rejects_repeated_filter_options(params string[] arguments)
+    {
+        var parseResult = TestCommand.Create().Parse(arguments);
+
+        parseResult.Errors.Should().NotBeEmpty();
+    }
+
+
+    [Fact]
+    public void Command_accepts_no_filter_option()
+    {
+        var command = TestCommand.Create();
+        var option = command.Options.OfType<Option<string>>().Single();
+        var parseResult = command.Parse([]);
+
+        parseResult.Errors.Should().BeEmpty();
+        parseResult.GetValue(option).Should().BeNull();
+    }
+
+
+    [Fact]
+    public void Filter_arity_rejects_multiple_values_per_occurrence()
+    {
+        TestCommand.Create().Parse(["project", "--filter", "First", "Second"])
+            .Errors.Should().NotBeEmpty();
+    }
+
+
+    [Fact]
+    public void Help_explains_filter_paths_and_wildcards()
+    {
+        var output = new StringWriter();
+        var root = new RootCommand();
+        root.Add(TestCommand.Create());
+        var exitCode =
+            root.Parse(["test", "--help"])
+            .Invoke(new InvocationConfiguration { Output = output, Error = output });
+
+        exitCode.Should().Be(0);
+        var rendered = output.ToString();
+        rendered.Should().Contain("--filter <EXPRESSION>");
+        rendered.Should().Contain("Run tests matching the expression.").And.Contain("**").And.Contain("Examples:");
+        rendered.Should().Contain("case-insensitive").And.Contain("extension may be omitted");
+    }
+
+
+    [Fact]
+    public void Filter_matches_nested_file_paths_relative_to_discovery_root()
+    {
+        var projectDirectory = CreateTestProject(FilterTestsModule);
+        var nestedDirectory = Path.Combine(projectDirectory, "tests", "nested");
+        Directory.CreateDirectory(nestedDirectory);
+        File.WriteAllText(
+            Path.Combine(nestedDirectory, "NestedTests.elm"),
+            """
+            module Nested.NestedTests exposing (suite)
+            import Expect
+            import Test exposing (Test)
+            suite : Test
+            suite = Test.test "Nested test" <| \_ -> Expect.pass
+            """);
+
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            var exitCode =
+                TestCommand.Execute(
+                    projectDirectory,
+                    colorMode: FormatCommandColorMode.Never,
+                    console: console,
+                    filter: @"tests\nested\NestedTests\Nested test",
+                    listTests: true);
+
+            exitCode.Should().Be(0);
+            output.ToString().Should().Contain("Tests remaining after filtering (1)");
+            output.ToString().Should().Contain("tests/nested/NestedTests.elm").And.Contain("Nested test");
+        }
+        finally
+        {
+            Directory.Delete(projectDirectory, recursive: true);
+        }
+    }
+
+
+    [Fact]
+    public void Filtered_empty_groups_report_no_individual_tests()
+    {
+        var projectDirectory = CreateTestProject(EmptyGroupTestsModule);
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            var exitCode =
+                TestCommand.Execute(
+                    projectDirectory,
+                    colorMode: FormatCommandColorMode.Never,
+                    console: console,
+                    filter: "Empty group");
+
+            exitCode.Should().Be(1);
+            output.ToString().Should().Contain("No individual tests were discovered.");
+            output.ToString().Should().NotContain("Closest existing").And.NotContain("Running");
         }
         finally
         {
@@ -276,9 +563,124 @@ public class ElmTestCommandTests
                     listTests: true);
 
             exitCode.Should().Be(0);
-            output.ToString().Should().Contain("Available tests (3)");
+            output.ToString().Should().Contain("Tests remaining after filtering (3)");
             output.ToString().Should().Contain("tests/SelectedFile.elm");
             output.ToString().Should().Contain("Selected Group");
+        }
+        finally
+        {
+            Directory.Delete(projectDirectory, recursive: true);
+        }
+    }
+
+
+    [Fact]
+    public void Filtered_listing_counts_exclusions_in_every_file_and_group()
+    {
+        var projectDirectory = CreateTestProject(FilterTestsModule);
+        File.WriteAllText(
+            Path.Combine(projectDirectory, "tests", "ExcludedFile.elm"),
+            """
+            module ExcludedFile exposing (suite)
+
+            import Expect
+            import Test exposing (Test)
+
+            suite : Test
+            suite =
+                Test.describe "Excluded File Group"
+                    [ Test.test "Hidden file test" <| \_ -> Expect.pass ]
+            """);
+
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            var exitCode =
+                TestCommand.Execute(
+                    projectDirectory,
+                    colorMode: FormatCommandColorMode.Never,
+                    console: console,
+                    filter: "Tests/**/First",
+                    listTests: true);
+
+            exitCode.Should().Be(0);
+            output.ToString().Replace("\r\n", "\n").Trim().Should().Be(
+                """
+                Tests remaining after filtering (1)
+                ├── tests/ExcludedFile.elm
+                │   ├── Excluded File Group
+                │   │   └── 1 test filtered out
+                │   └── 1 test filtered out
+                └── tests/Tests.elm
+                    ├── Root
+                    │   ├── Other Group
+                    │   │   └── 1 test filtered out
+                    │   ├── Selected Group
+                    │   │   ├── First
+                    │   │   └── 1 test filtered out
+                    │   └── 2 tests filtered out
+                    └── 2 tests filtered out
+                """);
+        }
+        finally
+        {
+            Directory.Delete(projectDirectory, recursive: true);
+        }
+    }
+
+
+    [Theory]
+    [InlineData(null, "Available tests (3)")]
+    [InlineData("*", "Tests remaining after filtering (3)")]
+    public void Listing_does_not_report_exclusions_when_all_tests_are_selected(
+        string? filter,
+        string expectedHeading)
+    {
+        var projectDirectory = CreateTestProject(FilterTestsModule);
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            var exitCode =
+                TestCommand.Execute(
+                    projectDirectory,
+                    colorMode: FormatCommandColorMode.Never,
+                    console: console,
+                    filter: filter,
+                    listTests: true);
+
+            exitCode.Should().Be(0);
+            output.ToString().Should().Contain(expectedHeading).And.NotContain("filtered out");
+        }
+        finally
+        {
+            Directory.Delete(projectDirectory, recursive: true);
+        }
+    }
+
+
+    [Fact]
+    public void Filtered_listing_styles_exclusion_counts_as_dim_text()
+    {
+        var projectDirectory = CreateTestProject(FilterTestsModule);
+        var (console, output) = CreateConsole(AnsiSupport.Yes);
+
+        try
+        {
+            var exitCode =
+                TestCommand.Execute(
+                    projectDirectory,
+                    colorMode: FormatCommandColorMode.Always,
+                    console: console,
+                    filter: "Tests/**/First",
+                    listTests: true);
+
+            exitCode.Should().Be(0);
+            output.ToString().Should().Contain("\u001b[1mTests remaining after filtering (1)");
+            output.ToString().Should().Contain("\u001b[2m1 test filtered out");
+            output.ToString().Should().Contain("\u001b[2m2 tests filtered out");
+            output.ToString().Should().NotContain("Second").And.NotContain("Unique Test");
         }
         finally
         {

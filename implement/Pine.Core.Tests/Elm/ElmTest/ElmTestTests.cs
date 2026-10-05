@@ -66,6 +66,17 @@ public class ElmTestTests
         firstListing.Equals(secondListing).Should().BeTrue();
         (firstListing == secondListing).Should().BeTrue();
         firstListing.GetHashCode().Should().Be(secondListing.GetHashCode());
+
+        var firstFilteredListing =
+            new ElmTestRun.Listed([first], [first with { Name = "excluded test" }]);
+
+        var secondFilteredListing =
+            new ElmTestRun.Listed([second], [second with { Name = "excluded test" }]);
+
+        firstFilteredListing.Equals(secondFilteredListing).Should().BeTrue();
+        (firstFilteredListing == secondFilteredListing).Should().BeTrue();
+        firstFilteredListing.GetHashCode().Should().Be(secondFilteredListing.GetHashCode());
+        firstFilteredListing.Equals(firstListing).Should().BeFalse();
     }
 
 
@@ -230,6 +241,68 @@ public class ElmTestTests
         sharedCaches.Distinct(ReferenceEqualityComparer.Instance).Should().HaveCount(1);
         workersObservedDiscovery.Should().OnlyContain(observed => observed);
     }
+
+    [Fact]
+    public void Filtered_listing_preserves_excluded_test_metadata()
+    {
+        var testCasesDirectory =
+            TestResultSummary.FindTestDataDirectory(
+                Path.Combine("Elm", "CommandElmTest"));
+
+        var appDirectory =
+            Path.Combine(
+                testCasesDirectory,
+                "single-suite-three-equal-all-pass",
+                "input-app");
+
+        var testRun =
+            ElmTestRunner.CompileAndRunTests(
+                appDirectory,
+                filter: "Tests/Group Title/Test Title",
+                listTests: true);
+
+        var listed = testRun.Should().BeOfType<ElmTestRun.Listed>().Subject;
+        listed.Tests.Should().ContainSingle().Which.Name.Should().Be("Test Title");
+        listed.FilteredOutTests.Select(test => test.Name).Should().Equal(
+            "Another Test Title",
+            "Yet Another Test Title");
+        listed.FilteredOutTests.Should().OnlyContain(
+            test => test.FilePath == "tests/Tests.elm" && test.DescriptionPath.SequenceEqual(new[] { "Group Title" }));
+    }
+
+
+    [Fact]
+    public void No_matching_tests_returns_suggestions_without_starting_workers()
+    {
+        var testCasesDirectory =
+            TestResultSummary.FindTestDataDirectory(
+                Path.Combine("Elm", "CommandElmTest"));
+
+        var appDirectory =
+            Path.Combine(
+                testCasesDirectory,
+                "single-suite-three-equal-all-pass",
+                "input-app");
+
+        var discoveryCallbackCalled = false;
+        const string filter = "tests/**/missing test name";
+
+        var testRun =
+            ElmTestRunner.CompileAndRunTests(
+                appDirectory,
+                workers: 2,
+                pineVmFactory: (_, _) => throw new InvalidOperationException("No worker should be started."),
+                filter: filter,
+                onTestsDiscovered: _ => discoveryCallbackCalled = true);
+
+        var noMatches = testRun.Should().BeOfType<ElmTestRun.NoMatchingTests>().Subject;
+        noMatches.Filter.Should().Be(filter);
+        noMatches.ClosestTests.Should().HaveCount(3);
+        noMatches.FilteredOutTests.Should().HaveCount(3);
+        noMatches.ClosestTests.Should().OnlyContain(test => test.FullPath.StartsWith("tests/", StringComparison.Ordinal));
+        discoveryCallbackCalled.Should().BeFalse();
+    }
+
 
     [Fact]
     public void Evaluation_failure_fails_only_the_individual_test()
