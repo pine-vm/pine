@@ -59,8 +59,8 @@ public class ElmSyntaxConcreteParserPrecompiledLeavesEffectivenessTests
             }
 
 
-        exerciseParseFromString _ =
-            case FromString.parseExpression "{- c -}foo0123 + 0x1F + 42.5e10 + \"lit \\u{1F600} run\"" of
+        exerciseParseFile source =
+            case FromString.parseFile source of
                 Ok _ ->
                     True
 
@@ -72,8 +72,28 @@ public class ElmSyntaxConcreteParserPrecompiledLeavesEffectivenessTests
     private static readonly Lazy<PineValue> s_exerciseFunction =
         new(() => BuildFunction("exercise"));
 
-    private static readonly Lazy<PineValue> s_exerciseParseFromStringFunction =
-        new(() => BuildFunction("exerciseParseFromString"));
+    private static readonly Lazy<PineValue> s_exerciseParseFileFunction =
+        new(() => BuildFunction("exerciseParseFile"));
+
+    private const string ParsedModuleText =
+        """"
+        module LeafExercise exposing (..)
+
+        import Basics exposing (..)
+
+        {- A comment before the declarations. -}
+        number = 0x1F + 42.5e10
+
+        escaped = "lit \u{1F600} run"
+
+        hexPattern =
+            case 0x1F of
+                0x1F ->
+                    True
+
+                _ ->
+                    False
+        """";
 
     [Fact]
     public void Requested_leaves_short_circuit_parser_helpers()
@@ -145,7 +165,7 @@ public class ElmSyntaxConcreteParserPrecompiledLeavesEffectivenessTests
     }
 
     [Fact]
-    public void Shared_leaves_also_short_circuit_the_direct_source_parser()
+    public void Shared_leaves_are_reached_from_parse_file()
     {
         var enteredLeaves = new HashSet<PineValue>();
 
@@ -159,29 +179,48 @@ public class ElmSyntaxConcreteParserPrecompiledLeavesEffectivenessTests
                 IntermediateVM.SetupVM.DefaultPrecompiledLeaves,
                 (leaf, _) => enteredLeaves.Add(leaf));
 
-        var withoutLeaves = Apply(vmWithoutLeaves, s_exerciseParseFromStringFunction.Value);
-        var withLeaves = Apply(vmWithLeaves, s_exerciseParseFromStringFunction.Value);
+        var withoutLeaves = Apply(vmWithoutLeaves, s_exerciseParseFileFunction.Value, ElmValue.StringInstance(ParsedModuleText));
+        var withLeaves = Apply(vmWithLeaves, s_exerciseParseFileFunction.Value, ElmValue.StringInstance(ParsedModuleText));
 
-        ElmValue.RenderAsElmExpression(withLeaves.value).expressionString
-            .Should().Be(ElmValue.RenderAsElmExpression(withoutLeaves.value).expressionString);
+        withoutLeaves.value.Should().Be(ElmValue.TrueValue);
+        withLeaves.value.Should().Be(ElmValue.TrueValue);
 
         withLeaves.counters.InstructionCount.Should().BeLessThan(withoutLeaves.counters.InstructionCount);
 
-        enteredLeaves.Should().Contain(
-            [
-            ElmSyntaxConcreteParserPrecompiledLeaves.SkipWhitespaceAtLeafKey,
-            ElmSyntaxConcreteParserPrecompiledLeaves.SkipToIdentifierEndLeafKey,
-            ElmSyntaxConcreteParserPrecompiledLeaves.SkipToAsciiHexDigitEndLeafKey,
-            ElmSyntaxConcreteParserPrecompiledLeaves.NumberEndDecimalLeafKey,
-            ElmSyntaxConcreteParserPrecompiledLeaves.IsFloatLiteralAtLeafKey,
-            ElmSyntaxConcreteParserPrecompiledLeaves.ScanUnicodeEscapeDigitsLeafKey,
-            ElmSyntaxConcreteParserPrecompiledLeaves.FindLiteralRunEndLeafKey,
-            ElmSyntaxConcreteParserPrecompiledLeaves.SkipOperatorCharsLeafKey,
-            ],
-            because:
-            "ElmSyntax.Concrete.Parser.FromString shares the scanners in " +
-            "ElmSyntax.Concrete.Parser.StringParsing with the tokenizer, therefore the same " +
-            "precompiled leaves must accelerate the direct-source parser as well");
+        // numberEndDecimal normally short-circuits its nested exponent-digit scanner.
+        var leavesWithoutNumberEndDecimal =
+            IntermediateVM.SetupVM.DefaultPrecompiledLeaves
+            .Where(entry => !entry.Key.Equals(ElmSyntaxConcreteParserPrecompiledLeaves.NumberEndDecimalLeafKey))
+            .ToImmutableDictionary();
+
+        var vmWithNestedScanner =
+            CreateVM(
+                leavesWithoutNumberEndDecimal,
+                (leaf, _) => enteredLeaves.Add(leaf));
+
+        Apply(vmWithNestedScanner, s_exerciseParseFileFunction.Value, ElmValue.StringInstance(ParsedModuleText))
+            .value.Should().Be(ElmValue.TrueValue);
+
+        var reachableLeaves = new (string name, PineValue key)[]
+        {
+            ("skipWhitespaceAt", ElmSyntaxConcreteParserPrecompiledLeaves.SkipWhitespaceAtLeafKey),
+            ("skipToIdentifierEnd", ElmSyntaxConcreteParserPrecompiledLeaves.SkipToIdentifierEndLeafKey),
+            ("skipToAsciiDecimalDigitEnd", ElmSyntaxConcreteParserPrecompiledLeaves.SkipToAsciiDecimalDigitEndLeafKey),
+            ("skipToAsciiHexDigitEnd", ElmSyntaxConcreteParserPrecompiledLeaves.SkipToAsciiHexDigitEndLeafKey),
+            ("numberEndDecimal", ElmSyntaxConcreteParserPrecompiledLeaves.NumberEndDecimalLeafKey),
+            ("isFloatLiteralAt", ElmSyntaxConcreteParserPrecompiledLeaves.IsFloatLiteralAtLeafKey),
+            ("convert0OrMoreHexadecimalValue", ElmSyntaxConcreteParserPrecompiledLeaves.Convert0OrMoreHexadecimalValueLeafKey),
+            ("scanUnicodeEscapeDigits", ElmSyntaxConcreteParserPrecompiledLeaves.ScanUnicodeEscapeDigitsLeafKey),
+            ("findLiteralRunEnd", ElmSyntaxConcreteParserPrecompiledLeaves.FindLiteralRunEndLeafKey),
+            ("skipOperatorChars", ElmSyntaxConcreteParserPrecompiledLeaves.SkipOperatorCharsLeafKey),
+        };
+
+        foreach (var (name, key) in reachableLeaves)
+        {
+            enteredLeaves.Should().Contain(
+                key,
+                because: $"{name} must be reached through FromString.parseFile");
+        }
     }
 
     [Fact]
@@ -322,9 +361,10 @@ public class ElmSyntaxConcreteParserPrecompiledLeavesEffectivenessTests
 
     private static (ElmValue value, PerformanceCounters counters) Apply(
         Core.Interpreter.IntermediateVM.PineVM vm,
-        PineValue function) =>
+        PineValue function,
+        ElmValue? argument = null) =>
         CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
             function,
-            ElmValue.Integer(0),
+            argument ?? ElmValue.Integer(0),
             vm);
 }
