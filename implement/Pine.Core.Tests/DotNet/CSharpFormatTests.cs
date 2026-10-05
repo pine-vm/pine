@@ -2472,6 +2472,68 @@ public class CSharpFormatTests
         AssertFormattedSyntax(inputSyntaxText, expectedSyntaxText, scriptMode: true);
     }
 
+    [Fact]
+    public void Formats_object_initializer_after_multiline_constructor_arguments_stably()
+    {
+        var input =
+            """
+            var x = new C(
+                1)
+                { P = 2 };
+            """;
+
+        var expected =
+            """
+            var x =
+                new C(
+                    1)
+                {
+                    P = 2
+                };
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_implicit_object_initializer_after_multiline_constructor_arguments_stably()
+    {
+        var input =
+            """
+            C x = new(
+                1)
+                { P = 2 };
+            """;
+
+        var expected =
+            """
+            C x =
+                new(
+                    1)
+                {
+                    P = 2
+                };
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_comment_before_object_initializer_after_constructor_arguments()
+    {
+        var input =
+            """
+            var x = new C(
+                1)
+                // keep
+                { P = 2 };
+            """;
+
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
 
     [Fact]
     public void Formats_argument_list_containing_lambda_containing_try_catch_block()

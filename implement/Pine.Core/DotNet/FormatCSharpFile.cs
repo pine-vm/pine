@@ -3173,7 +3173,9 @@ public static class FormatCSharpFile
         if (node.Expressions.Count is 0)
             return node;
 
-        if (!SpansMultipleLines(node))
+        if (!SpansMultipleLines(node) &&
+            (node.Parent is not (ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax) ||
+            LineOf(node.OpenBraceToken) == LineOf(node.OpenBraceToken.GetPreviousToken())))
             return node;
 
         var ci = ctx.IndentLevel + 1;
@@ -3240,9 +3242,18 @@ public static class FormatCSharpFile
         // Multi-line initializer: always place the open brace on its own line.
         // Using FormatOpenBrace is unreliable here because GetPreviousToken()
         // reflects the original tree, which may differ between passes.
+        var openLeadingTrivia = node.OpenBraceToken.LeadingTrivia;
+
+        if (node.Parent is ObjectCreationExpressionSyntax { ArgumentList: not null } or
+            ImplicitObjectCreationExpressionSyntax)
+        {
+            openLeadingTrivia =
+                node.OpenBraceToken.GetPreviousToken().TrailingTrivia.AddRange(openLeadingTrivia);
+        }
+
         var openBrace =
             node.OpenBraceToken
-            .WithLeadingTrivia(s_lineFeed, Indent(ctx.IndentLevel))
+            .WithLeadingTrivia(RebuildLeadingTriviaPreservingBlanks(openLeadingTrivia, 0, ctx.IndentLevel))
             .WithTrailingTrivia();
 
         var closeLeadingTrivia = node.CloseBraceToken.LeadingTrivia;
@@ -4190,9 +4201,9 @@ public static class FormatCSharpFile
             r = r.WithArgumentList(fmtArgs);
         }
 
-        if (r.Initializer is not null)
+        if (node.Initializer is { } initializer)
         {
-            var fmtInitializer = FormatInitializerExpression(r.Initializer, ctx);
+            var fmtInitializer = FormatInitializerExpression(initializer, ctx);
 
             if (SpansMultipleLines(fmtInitializer))
             {
@@ -4201,8 +4212,7 @@ public static class FormatCSharpFile
                     r =
                         r.WithArgumentList(
                             r.ArgumentList.WithCloseParenToken(
-                                r.ArgumentList.CloseParenToken.WithTrailingTrivia(
-                                    StripWhitespace(r.ArgumentList.CloseParenToken.TrailingTrivia))));
+                                r.ArgumentList.CloseParenToken.WithTrailingTrivia()));
                 }
                 else
                 {
@@ -4235,9 +4245,9 @@ public static class FormatCSharpFile
                     StripWhitespace(node.NewKeyword.TrailingTrivia)))
             .WithArgumentList(fmtArgs);
 
-        if (r.Initializer is not null)
+        if (node.Initializer is { } initializer)
         {
-            var fmtInit = FormatInitializerExpression(r.Initializer, ctx);
+            var fmtInit = FormatInitializerExpression(initializer, ctx);
             r = r.WithInitializer(fmtInit);
 
             // When the initializer is multi-line and has expressions, strip the trailing
@@ -4248,8 +4258,7 @@ public static class FormatCSharpFile
                 r =
                     r.WithArgumentList(
                         r.ArgumentList.WithCloseParenToken(
-                            r.ArgumentList.CloseParenToken.WithTrailingTrivia(
-                                StripWhitespace(r.ArgumentList.CloseParenToken.TrailingTrivia))));
+                            r.ArgumentList.CloseParenToken.WithTrailingTrivia()));
             }
         }
 
