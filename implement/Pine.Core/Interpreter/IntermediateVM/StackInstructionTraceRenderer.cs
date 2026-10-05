@@ -22,6 +22,18 @@ public static class StackInstructionTraceRenderer
         Func<PineValue.BlobValue, string?> Render);
 
     /// <summary>
+    /// Context for a frame transition. Identifiers use "no-frame" at the root and "unknown-frame"
+    /// when frame instructions are unavailable. Depth is the depth after the transition.
+    /// </summary>
+    public readonly record struct FrameTransition(
+        string PreviousFrameIdentifier,
+        string CurrentFrameIdentifier,
+        int Depth,
+        long? PreviousFrameIndex,
+        long? CurrentFrameIndex,
+        ExecutedStackInstruction TraceItem);
+
+    /// <summary>
     /// Default blob rendering configuration used by this renderer.
     /// <para>
     /// The default order is Base16 first, then UTF-32 string decoding, strict Pine integer decoding,
@@ -160,14 +172,21 @@ public static class StackInstructionTraceRenderer
     /// <param name="renderBlobContents">
     /// Optional callback that receives the blob and the derived representation texts and returns the final blob-content text.
     /// </param>
+    /// <param name="renderEnteringFrame">Optional renderer for frame entries, returning lines to insert before the instruction.</param>
+    /// <param name="renderReturningFrame">Optional renderer for frame returns, returning lines to insert before the instruction.</param>
     public static string RenderInstructionTrace(
         IReadOnlyList<ExecutedStackInstruction> trace,
         bool renderInstructionIndex = false,
         IReadOnlyList<BlobRepresentation>? blobRepresentations = null,
-        Func<PineValue.BlobValue, IReadOnlyList<string>, string>? renderBlobContents = null)
+        Func<PineValue.BlobValue, IReadOnlyList<string>, string>? renderBlobContents = null,
+        Func<FrameTransition, IReadOnlyList<string>>? renderEnteringFrame = null,
+        Func<FrameTransition, IReadOnlyList<string>>? renderReturningFrame = null)
     {
         if (trace.Count is 0)
             return "";
+
+        renderEnteringFrame ??= RenderEnteringFrameDefault;
+        renderReturningFrame ??= RenderReturningFrameDefault;
 
         var indexWidth =
             renderInstructionIndex
@@ -176,30 +195,108 @@ public static class StackInstructionTraceRenderer
             :
             0;
 
-        return
-            string.Join(
-                '\n',
-                trace.Select(
-                    traceItem =>
-                    {
-                        var prefix =
-                            renderInstructionIndex
-                            ?
-                            traceItem.InstructionIndex.ToString().PadLeft(indexWidth) + ". "
-                            :
-                            "";
+        var lines = new List<string>(trace.Count);
+        var frames = new List<(string? identifier, long? frameIndex)>();
 
-                        return
-                            prefix +
-                            "depth=" + traceItem.StackFrameDepth +
-                            " ip=" + traceItem.InstructionPointer +
-                            " " +
-                            RenderInstruction(
-                                traceItem.Instruction,
-                                blobRepresentations: blobRepresentations,
-                                renderBlobContents: renderBlobContents);
-                    }));
+        foreach (var traceItem in trace)
+        {
+            var identifier =
+                traceItem.FrameInstructions is { } frameInstructions
+                ?
+                RenderStackFrameIdentifier(traceItem.FrameExpression, frameInstructions)
+                :
+                null;
+
+            while (frames.Count > traceItem.StackFrameDepth ||
+                (frames.Count == traceItem.StackFrameDepth &&
+                frames.Count > 0 &&
+                ((frames[^1].frameIndex is { } previousIndex &&
+                traceItem.FrameIndex is { } currentIndex &&
+                previousIndex != currentIndex) ||
+                (identifier is not null &&
+                frames[^1].identifier is not null &&
+                frames[^1].identifier != identifier))))
+            {
+                var previous = frames[^1];
+                frames.RemoveAt(frames.Count - 1);
+
+                var destination =
+                    frames.Count is 0 ? "no-frame" : frames[^1].identifier ?? "unknown-frame";
+
+                lines.AddRange(
+                    renderReturningFrame(
+                        new FrameTransition(
+                            previous.identifier ?? "unknown-frame",
+                            destination,
+                            frames.Count,
+                            previous.frameIndex,
+                            frames.Count is 0 ? null : frames[^1].frameIndex,
+                            traceItem)));
+            }
+
+            while (frames.Count < traceItem.StackFrameDepth - 1)
+                frames.Add((null, null));
+
+            if (frames.Count < traceItem.StackFrameDepth)
+            {
+                var previous = frames.Count is 0 ? "no-frame" : frames[^1].identifier ?? "unknown-frame";
+                var previousIndex = frames.Count is 0 ? null : frames[^1].frameIndex;
+                frames.Add((identifier, traceItem.FrameIndex));
+
+                lines.AddRange(
+                    renderEnteringFrame(
+                        new FrameTransition(
+                            previous,
+                            identifier ?? "unknown-frame",
+                            traceItem.StackFrameDepth,
+                            previousIndex,
+                            traceItem.FrameIndex,
+                            traceItem)));
+            }
+            else if (identifier is not null && frames[^1].identifier is null)
+            {
+                frames[^1] = (identifier, traceItem.FrameIndex);
+            }
+
+            var prefix =
+                renderInstructionIndex
+                ?
+                traceItem.InstructionIndex.ToString().PadLeft(indexWidth) + ". "
+                :
+                "";
+
+            lines.Add(
+                prefix +
+                "ip=" + traceItem.InstructionPointer +
+                " " +
+                RenderInstruction(
+                    traceItem.Instruction,
+                    blobRepresentations: blobRepresentations,
+                    renderBlobContents: renderBlobContents));
+        }
+
+        return string.Join('\n', lines);
     }
+
+    private static IReadOnlyList<string> RenderEnteringFrameDefault(FrameTransition transition) =>
+        transition.CurrentFrameIdentifier is "unknown-frame"
+        ?
+        []
+        :
+        [
+        "",
+        $"entering frame ({transition.PreviousFrameIdentifier} -> {transition.CurrentFrameIdentifier}) - depth {transition.Depth}"
+        ];
+
+    private static IReadOnlyList<string> RenderReturningFrameDefault(FrameTransition transition) =>
+        transition.PreviousFrameIdentifier is "unknown-frame"
+        ?
+        []
+        :
+        [
+        "",
+        $"returning frame ({transition.PreviousFrameIdentifier} -> {transition.CurrentFrameIdentifier}) - depth {transition.Depth}"
+        ];
 
     /// <summary>
     /// Renders a sequence of executed stack instructions using the default ordered blob representations.
@@ -213,12 +310,16 @@ public static class StackInstructionTraceRenderer
     /// <param name="renderBlobContents">
     /// Optional callback that receives the blob and the derived representation texts and returns the final blob-content text.
     /// </param>
+    /// <param name="renderEnteringFrame">Optional renderer for frame entries.</param>
+    /// <param name="renderReturningFrame">Optional renderer for frame returns.</param>
     public static string RenderInstructionTraceWithDefaultBlobRepresentations(
         IReadOnlyList<ExecutedStackInstruction> trace,
         int maxBase16ByteCount,
         int maxUtf32StringCharCount,
         bool renderInstructionIndex = false,
-        Func<PineValue.BlobValue, IReadOnlyList<string>, string>? renderBlobContents = null) =>
+        Func<PineValue.BlobValue, IReadOnlyList<string>, string>? renderBlobContents = null,
+        Func<FrameTransition, IReadOnlyList<string>>? renderEnteringFrame = null,
+        Func<FrameTransition, IReadOnlyList<string>>? renderReturningFrame = null) =>
         RenderInstructionTrace(
             trace,
             renderInstructionIndex: renderInstructionIndex,
@@ -226,7 +327,9 @@ public static class StackInstructionTraceRenderer
             BuildDefaultBlobRepresentations(
                 maxBase16ByteCount: maxBase16ByteCount,
                 maxUtf32StringCharCount: maxUtf32StringCharCount),
-            renderBlobContents: renderBlobContents);
+            renderBlobContents: renderBlobContents,
+            renderEnteringFrame: renderEnteringFrame,
+            renderReturningFrame: renderReturningFrame);
 
     /// <summary>
     /// Renders an identifier for the source expression and environment constraint of a compiled frame.
