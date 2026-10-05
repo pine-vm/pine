@@ -38,10 +38,34 @@ public static class TestCommand
         var filterOption =
             new Option<string?>("--filter")
             {
-                Arity = ArgumentArity.ZeroOrMore,
+                Arity = ArgumentArity.ExactlyOne,
+                AllowMultipleArgumentsPerToken = false,
+                HelpName = "EXPRESSION",
                 Description =
-                "Run tests that match the given expression."
+                """
+                Run tests matching the expression.
+                Matching is case-insensitive. A plain term matches a substring of a file, group, or test name.
+                Paths use / or \ on any OS: directories/filename/group descriptions/test name.
+                Path segments match consecutively anywhere in the test path; the filename extension may be omitted.
+                * matches zero or more characters within one segment; ** matches zero or more whole segments.
+                Quote expressions containing spaces or wildcards. Conjunctive filters are not supported.
+
+                Examples:
+                  --filter "convert concrete"
+                  --filter "tests/ConvertConcreteToAbstractTests/convert*/converts every*"
+                  --filter "ConvertConcreteToAbstractTests/**/converts every*"
+                  --filter "tests/*Tests.elm/**/converts*drops documentation"
+                No matches: show the closest existing test paths. Use --list-tests to explore tests without running them.
+                """
             };
+
+        filterOption.Validators.Add(
+            result =>
+            {
+                if (result.IdentifierTokenCount > 1)
+                    result.AddError("The --filter option can only be specified once.");
+
+            });
 
         var listTestsOption =
             new Option<bool>("--list-tests")
@@ -171,11 +195,55 @@ public static class TestCommand
             return 1;
         }
 
+        if (testRun is ElmTestRun.NoMatchingTests noMatchingTests)
+        {
+            if (listTests)
+            {
+                WriteTestList(
+                    console,
+                    tests: [],
+                    noMatchingTests.FilteredOutTests,
+                    filterApplied: true,
+                    useColor: resolvedColorMode is not FormatCommandColorMode.Never);
+            }
+
+            console.WriteLine("No tests matched the filter expression:");
+            console.WriteLine("  " + noMatchingTests.Filter);
+
+            if (noMatchingTests.ClosestTests.Count > 0)
+            {
+                console.WriteLine();
+                console.WriteLine("Closest existing test paths (not selected or run):");
+
+                foreach (var test in noMatchingTests.ClosestTests)
+                {
+                    if (console.Profile.Out.IsTerminal)
+                        console.WriteLine("  " + test.FullPath);
+
+                    else
+                        console.Profile.Out.Writer.WriteLine("  " + test.FullPath);
+                }
+            }
+            else
+            {
+                console.WriteLine("No individual tests were discovered.");
+            }
+
+            console.WriteLine();
+            console.WriteLine("Shorten the filter path or use wildcards to broaden the selection.");
+            console.WriteLine("Use / or \\ between consecutive segments, * within a segment, or ** between levels.");
+            console.WriteLine("Use --list-tests without --filter to list all tests, or --help for filter examples.");
+
+            return 1;
+        }
+
         if (testRun is ElmTestRun.Listed listed)
         {
             WriteTestList(
                 console,
                 listed.Tests,
+                listed.FilteredOutTests,
+                filterApplied: filter is not null,
                 useColor: resolvedColorMode is not FormatCommandColorMode.Never);
 
             return 0;
@@ -221,11 +289,17 @@ public static class TestCommand
     private static void WriteTestList(
         IAnsiConsole console,
         IReadOnlyList<ListedTest> tests,
+        IReadOnlyList<ListedTest> filteredOutTests,
+        bool filterApplied,
         bool useColor)
     {
         var tree =
             new Tree(
                 new Text(
+                    filterApplied
+                    ?
+                    $"Tests remaining after filtering ({tests.Count})"
+                    :
                     $"Available tests ({tests.Count})",
                     ListStyle(TestCommandTheme.ListHeading)))
             {
@@ -234,8 +308,9 @@ public static class TestCommand
             };
 
         foreach (var testsInFile in
-            tests
-            .GroupBy(test => test.FilePath, StringComparer.Ordinal)
+            tests.Select(test => (test, filteredOut: false))
+            .Concat(filteredOutTests.Select(test => (test, filteredOut: true)))
+            .GroupBy(entry => entry.test.FilePath, StringComparer.Ordinal)
             .OrderBy(group => group.Key, StringComparer.Ordinal))
         {
             var fileNode =
@@ -265,13 +340,14 @@ public static class TestCommand
 
     private static void AddDescriptionNodes(
         TreeNode parent,
-        IReadOnlyList<ListedTest> tests,
+        IReadOnlyList<(ListedTest test, bool filteredOut)> tests,
         int descriptionDepth,
         bool useColor)
     {
         foreach (var test in
             tests
-            .Where(test => test.DescriptionPath.Count == descriptionDepth)
+            .Where(entry => !entry.filteredOut && entry.test.DescriptionPath.Count == descriptionDepth)
+            .Select(entry => entry.test)
             .OrderBy(test => test.Name, StringComparer.Ordinal))
         {
             parent.AddNode(
@@ -282,9 +358,9 @@ public static class TestCommand
 
         foreach (var testsInDescription in
             tests
-            .Where(test => test.DescriptionPath.Count > descriptionDepth)
+            .Where(entry => entry.test.DescriptionPath.Count > descriptionDepth)
             .GroupBy(
-                test => test.DescriptionPath[descriptionDepth],
+                entry => entry.test.DescriptionPath[descriptionDepth],
                 StringComparer.Ordinal)
             .OrderBy(group => group.Key, StringComparer.Ordinal))
         {
@@ -299,6 +375,16 @@ public static class TestCommand
                 [.. testsInDescription],
                 descriptionDepth + 1,
                 useColor);
+        }
+
+        var filteredOutCount = tests.Count(entry => entry.filteredOut);
+
+        if (filteredOutCount > 0)
+        {
+            parent.AddNode(
+                new Text(
+                    $"{filteredOutCount} test{(filteredOutCount is 1 ? "" : "s")} filtered out",
+                    ListStyle(TestCommandTheme.Dark)));
         }
 
         Style ListStyle(Style colorStyle) =>
