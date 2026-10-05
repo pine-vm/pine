@@ -1,4 +1,3 @@
-using Pine.Core;
 using Pine.Core.IO;
 using System;
 using System.Collections.Generic;
@@ -6,9 +5,10 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 
-namespace Pine.Elm;
+namespace Pine.Core.Elm;
 
 /// <summary>
 /// Provides functionality to load Elm packages by either retrieving a locally cached ZIP file
@@ -49,8 +49,13 @@ public class ElmPackageSource
     public static async Task<IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadElmPackageAsync(
         string packageName,
         string versionId,
-        IReadOnlyList<string> localCacheDirectories)
+        IReadOnlyList<string> localCacheDirectories,
+        bool offline = false,
+        CancellationToken cancellationToken = default)
     {
+        ElmDependencyResolver.ValidatePackageName(packageName);
+        _ = ElmPackageVersion.Parse(versionId);
+
         // 1) Try to load from each cache directory, in order:
         foreach (var cacheDirectory in localCacheDirectories)
         {
@@ -62,21 +67,27 @@ public class ElmPackageSource
                 try
                 {
                     // Attempt to load and parse the ZIP from disk.
-                    var data = await File.ReadAllBytesAsync(localZipPath);
+                    var data = await File.ReadAllBytesAsync(localZipPath, cancellationToken);
 
                     var fromCache = LoadElmPackageFromZipBytes(data);
 
                     return fromCache;
                 }
-                catch
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
                 {
-                    // If anything failed (e.g. file is corrupt), ignore and keep going.
+                    Console.Error.WriteLine($"Cannot use cached Elm package '{localZipPath}': {exception.Message}");
                 }
             }
         }
 
         // 2) No valid cache found — download from GitHub:
-        var zipData = await DownloadPackageZipAsync(packageName, versionId);
+        if (offline)
+        {
+            throw new FileNotFoundException(
+                $"Sources for '{packageName}@{versionId}' are not present in the local package cache (offline mode).");
+        }
+
+        var zipData = await DownloadPackageZipAsync(packageName, versionId, cancellationToken);
 
         var fromGitHub = LoadElmPackageFromZipBytes(zipData);
 
@@ -91,11 +102,22 @@ public class ElmPackageSource
 
                 Directory.CreateDirectory(Path.GetDirectoryName(localZipPath)!);
 
-                await File.WriteAllBytesAsync(localZipPath, zipData);
+                var temporaryPath = localZipPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+
+                try
+                {
+                    await File.WriteAllBytesAsync(temporaryPath, zipData, cancellationToken);
+                    File.Move(temporaryPath, localZipPath, overwrite: true);
+                }
+                finally
+                {
+                    if (File.Exists(temporaryPath))
+                        File.Delete(temporaryPath);
+                }
             }
-            catch
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
-                // Caching is non-critical. Swallow any exception here (e.g. no write permission).
+                Console.Error.WriteLine($"Cannot cache Elm package '{packageName}@{versionId}': {exception.Message}");
             }
         }
 
@@ -186,7 +208,8 @@ public class ElmPackageSource
     /// <summary>
     /// Downloads the ZIP from GitHub as a byte array.
     /// </summary>
-    private static async Task<byte[]> DownloadPackageZipAsync(string packageName, string versionId)
+    private static async Task<byte[]> DownloadPackageZipAsync(
+        string packageName, string versionId, CancellationToken cancellationToken)
     {
         // Example: "https://github.com/agu-z/elm-zip/archive/refs/tags/3.0.1.zip"
 
@@ -194,12 +217,12 @@ public class ElmPackageSource
 
         using var httpClient = new HttpClient();
 
-        using var zipStream = await httpClient.GetStreamAsync(downloadUrl);
+        using var zipStream = await httpClient.GetStreamAsync(downloadUrl, cancellationToken);
 
         // Copy to memory
         using var memoryStream = new MemoryStream();
 
-        await zipStream.CopyToAsync(memoryStream);
+        await zipStream.CopyToAsync(memoryStream, cancellationToken);
 
         return memoryStream.ToArray();
     }

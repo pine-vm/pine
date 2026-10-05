@@ -1,7 +1,6 @@
 using Pine.Core.Elm.Elm019;
 using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Files;
-using Pine.Elm;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -20,6 +19,12 @@ public record AppCompilationUnits(
     FileTree AppFiles,
     IReadOnlyList<(FileTree files, ElmJsonStructure elmJson)> Packages)
 {
+    /// <summary>The exact dependency graph and search history used to prepare these compilation units.</summary>
+    public ElmDependencyResolutionReport? Resolution { get; init; }
+
+    /// <summary>Prepared sources with package-qualified identities for private module collisions.</summary>
+    public ElmResolvedBuild? ResolvedBuild { get; init; }
+
     /// <summary>
     /// Creates an <see cref="AppCompilationUnits"/> instance that contains only the given app code
     /// and no packages. Useful for tests or scenarios where no external packages are required.
@@ -50,6 +55,9 @@ public class ElmAppDependencyResolution
     /// </summary>
     /// <param name="sourceFiles">The complete source file tree of the app.</param>
     /// <param name="entryPointFilePath">The path to the entry point .elm file (segments, not OS path).</param>
+    /// <param name="configuration">Optional build policy, defaulting to Pine's bundled kernel substitutions.</param>
+    /// <param name="provider">Optional package registry/source provider.</param>
+    /// <param name="additionalRootFilePaths">Other entry modules that must remain in the same prepared environment.</param>
     /// <returns>
     /// A tuple containing:
     /// - files: The filtered <see cref="AppCompilationUnits"/>
@@ -59,7 +67,10 @@ public class ElmAppDependencyResolution
     public static (AppCompilationUnits files, IReadOnlyList<string> entryModuleName)
         AppCompilationUnitsForEntryPoint(
         FileTree sourceFiles,
-        IReadOnlyList<string> entryPointFilePath)
+        IReadOnlyList<string> entryPointFilePath,
+        ElmDependencyResolutionConfiguration? configuration = null,
+        IElmPackageProvider? provider = null,
+        IReadOnlyList<IReadOnlyList<string>>? additionalRootFilePaths = null)
     {
         if (sourceFiles.GetNodeAtPath(entryPointFilePath) is not { } entryFileNode)
         {
@@ -81,260 +92,114 @@ public class ElmAppDependencyResolution
                 "Failed to parse module name from entry file: " + string.Join("/", entryPointFilePath));
         }
 
-        var sourceFilesDict =
-            FileTreeExtensions.ToFlatDictionaryWithPathComparer(sourceFiles);
+        var manifest =
+            FindElmJsonForEntryPoint(sourceFiles, entryPointFilePath)
+            ?? throw new ArgumentException(
+                "No governing elm.json was found for entry point: " + string.Join("/", entryPointFilePath));
 
-        var sourceFilesFiltered =
-            FilterTreeForCompilationRoots(
+        configuration ??= ElmPackageSubstitutions.DefaultBuild.Value;
+
+        var build =
+            ElmResolvedBuildPreparation.PrepareAsync(
                 sourceFiles,
-                ImmutableHashSet.Create(
-                    EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>(),
-                    entryPointFilePath),
-                skipFilteringForSourceDirs: false);
+                manifest.filePath,
+                [entryPointFilePath, .. additionalRootFilePaths ?? []],
+                configuration,
+                provider).GetAwaiter().GetResult();
 
-        IReadOnlyList<KeyValuePair<IReadOnlyList<string>, IReadOnlyList<IReadOnlyList<string>>>>
-            remainingElmModulesNameAndImports =
-            [
-            .. sourceFilesFiltered
-            .EnumerateFilesTransitive()
-            .Where(blob => blob.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
+        var appFiles =
+            ElmResolvedBuildPreparation.SelectProjectSources(
+                sourceFiles,
+                manifest.filePath,
+                manifest.elmJsonParsed,
+                configuration.IncludeTests);
+
+        var packages =
+            build.Resolution.Packages.Values.OrderBy(package => package.Identity.Name, StringComparer.Ordinal)
             .Select(
-                blob =>
+                package =>
                 {
-                    var moduleText = Encoding.UTF8.GetString(blob.fileContent.Span);
+                    var files =
+                        ElmResolvedBuildPreparation.AddPackageSources(
+                            FileTree.EmptyTree,
+                            package.Identity.Name,
+                            build.PackageSources[package.Identity.Name]);
 
-                    if (ElmModule.ParseModuleName(moduleText).IsOkOrNull() is not { } moduleName)
-                    {
-                        throw new Exception("Failed to parse module name from file: " + string.Join("/", blob.path));
-                    }
+                    return (files, ManifestForResolvedPackage(package, configuration));
+                }).ToImmutableArray();
 
-                    return
-                        new KeyValuePair<IReadOnlyList<string>, IReadOnlyList<IReadOnlyList<string>>>(
-                            moduleName,
-                            [.. ElmModule.ParseModuleImportedModulesNames(moduleText)]);
-                })
-            ];
-
-        var remainingElmModulesImports =
-            remainingElmModulesNameAndImports
-            .SelectMany(kv => kv.Value)
-            .Where(
-                importedModuleName =>
-                !remainingElmModulesNameAndImports.Any(kv => kv.Key.SequenceEqual(importedModuleName)))
-            .ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
-
-        var packages = LoadPackagesForElmApp(sourceFilesDict);
-
-        /*
-         * We filter packages to include only those needed for the current compilation entry point.
-         * 
-         * Referencing two packages that expose modules with the same name is
-         * no problem as long as the app does not reference that module name.
-         * */
-
-        IReadOnlySet<string> aggregateExposedModuleNames =
-            packages
-            .SelectMany(package => package.Value.elmJson.ExposedModules)
-            .ToImmutableHashSet();
-
-        var packagesFromExposedModuleName =
-            aggregateExposedModuleNames
-            .Select(
-                moduleName =>
-                {
-                    return
-                        new KeyValuePair<string, IReadOnlySet<string>>(
-                            moduleName,
-                            packages
-                            .Where(package => package.Value.elmJson.ExposedModules.Contains(moduleName))
-                            .Select(package => package.Key)
-                            .ToImmutableHashSet());
-                })
-            .ToImmutableDictionary();
-
-        var packagesToIncludeRootsNames =
-            remainingElmModulesImports
-            .Select(
-                importedModuleName =>
-                {
-                    var importedModuleNameFlat = string.Join(".", importedModuleName);
-
-                    if (!packagesFromExposedModuleName.TryGetValue(importedModuleNameFlat, out var packages))
-                    {
-                        throw new Exception("Failed to find package for imported module: " + importedModuleNameFlat);
-                    }
-
-                    if (packages.Count is not 1)
-                    {
-                        throw new Exception(
-                            "Imported module " + importedModuleNameFlat +
-                            " is exposed by multiple packages: " + string.Join(", ", packages));
-                    }
-
-                    return packages.First();
-                })
-            .ToImmutableHashSet();
-
-        IEnumerable<string> EnumeratePackageDependenciesTransitive(string packageName)
-        {
-            if (!packages.TryGetValue(packageName, out var package))
-            {
-                yield break;
-            }
-
-            var dependencies =
-                package.elmJson.Dependencies.Direct.EmptyIfNull()
-                .Concat(package.elmJson.Dependencies.Indirect.EmptyIfNull())
-                .Concat(package.elmJson.Dependencies.Flat.EmptyIfNull());
-
-            foreach (var dependency in dependencies)
-            {
-                yield return dependency.Key;
-
-                foreach (var transitiveDependency in EnumeratePackageDependenciesTransitive(dependency.Key))
-                {
-                    yield return transitiveDependency;
-                }
-            }
-        }
-
-        var packagesToIncludeNames =
-            packagesToIncludeRootsNames
-            .Concat(packagesToIncludeRootsNames.SelectMany(EnumeratePackageDependenciesTransitive))
-            .ToImmutableHashSet();
-
-        var packagesToInclude =
-            packages
-            .Where(kv => packagesToIncludeNames.Contains(kv.Key))
-            .ToImmutableDictionary();
-
-        var packagesOrdered =
-            packagesToInclude
-            .OrderBy(kv => EnumeratePackageDependenciesTransitive(kv.Key).Count())
-            .ThenBy(kv => kv.Key)
-            .ToImmutableList();
-
-        return
-            (new AppCompilationUnits(
-                sourceFilesFiltered,
-                Packages: [.. packagesOrdered.Select(pkg => pkg.Value)]),
-            moduleName);
+        return (new AppCompilationUnits(appFiles, packages) { Resolution = build.Resolution, ResolvedBuild = build }, moduleName);
     }
 
     /// <summary>
-    /// Loads all packages referenced by any elm.json files found in the given app source tree.
-    /// Returns a dictionary from package name to its file tree and parsed elm.json. If multiple elm.json files
-    /// exist, their dependencies are merged. Package content is fetched based on the versions declared in elm.json.
+    /// Resolves packages for one selected elm.json. Nested projects do not contribute requirements.
     /// </summary>
     /// <param name="appSourceFiles">Flat dictionary representation of the app source tree.</param>
-    /// <param name="includePackage">Optional filter applied before loading package contents.</param>
-    /// <param name="loadPackage">Optional package loader.</param>
+    /// <param name="includePackage">Legacy filters are rejected; use whole-package substitutions instead.</param>
+    /// <param name="loadPackage">Optional exact-version source loader; ranges require a provider with version listings.</param>
+    /// <param name="manifestPath">Selected manifest, defaulting to the tree's root elm.json.</param>
+    /// <param name="configuration">Optional build policy, defaulting to bundled substitutions.</param>
+    /// <param name="provider">Optional version/metadata/source provider, mutually exclusive with loadPackage.</param>
     /// <returns>A map of package name to its files and parsed elm.json.</returns>
     public static IReadOnlyDictionary<string, (FileTree files, ElmJsonStructure elmJson)>
         LoadPackagesForElmApp(
         IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> appSourceFiles,
         Func<string, bool>? includePackage = null,
-        Func<string, string, IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>? loadPackage = null)
+        Func<string, string, IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>? loadPackage = null,
+        IReadOnlyList<string>? manifestPath = null,
+        ElmDependencyResolutionConfiguration? configuration = null,
+        IElmPackageProvider? provider = null)
     {
-        /*
-        * TODO: select elm.json for the given entry point
-        * */
-
-        var elmJsonFiles =
-            appSourceFiles
-            .Where(entry => entry.Key.Last() is "elm.json")
-            .ToImmutableDictionary();
-
-        var elmJsonAggregateDependenciesVersions =
-            ImmutableDictionary.CreateBuilder<string, string>();
-
-        var declaredDependencies =
-            elmJsonFiles
-            .SelectMany(
-                elmJsonFile =>
-                {
-                    try
-                    {
-                        var elmJsonParsed =
-                            System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile.Value.Span);
-
-                        return
-                            new[]
-                            {
-                                elmJsonParsed?.Dependencies.Direct,
-                                elmJsonParsed?.Dependencies.Indirect,
-                                elmJsonParsed?.Dependencies.Flat
-                            }
-                            .WhereNotNull();
-                    }
-                    catch (Exception e)
-                    {
-                        Console.WriteLine("Failed to parse elm.json file: " + e);
-
-                        return [];
-                    }
-                })
-            .SelectMany(dependency => dependency);
-
-        foreach (var dependency in declaredDependencies)
+        if (includePackage is not null)
         {
-            if (elmJsonAggregateDependenciesVersions.TryGetValue(dependency.Key, out var existingVersion) &&
-                existingVersion != dependency.Value)
-            {
-                throw new ArgumentException(
-                    $"Conflicting versions for package '{dependency.Key}': " +
-                    $"existing value '{existingVersion}', new value '{dependency.Value}'.");
-            }
-
-            elmJsonAggregateDependenciesVersions[dependency.Key] = dependency.Value;
+            throw new ArgumentException(
+                "Package filters cannot safely resolve dependencies. Supply explicit package substitutions instead.",
+                nameof(includePackage));
         }
 
-        var elmJsonAggregateDependencies =
-            elmJsonAggregateDependenciesVersions
-            .Where(dependency => includePackage?.Invoke(dependency.Key) is not false)
-            .ToImmutableDictionary(
-                keySelector: dependency => dependency.Key,
-                elementSelector:
-                dependency =>
-                {
-                    var packageFiles =
-                        loadPackage?.Invoke(dependency.Key, dependency.Value)
-                        ??
-                        ElmPackageSource.LoadElmPackageAsync(dependency.Key, dependency.Value).Result;
+        configuration ??= ElmPackageSubstitutions.DefaultBuild.Value;
 
-                    return packageFiles;
-                });
+        if (loadPackage is not null)
+        {
+            if (provider is not null)
+                throw new ArgumentException("Supply either loadPackage or provider, not both.");
+
+            provider = new ElmDelegatePackageProvider(loadPackage);
+        }
+
+        var tree = FileTree.FromSetOfFilesWithStringPath(appSourceFiles);
+
+        var build =
+            ElmResolvedBuildPreparation.PrepareAsync(
+                tree,
+                manifestPath ?? ["elm.json"],
+                [],
+                configuration,
+                provider).GetAwaiter().GetResult();
 
         return
-            elmJsonAggregateDependencies
-            .ToImmutableDictionary(
-                keySelector:
-                kv => kv.Key,
-                elementSelector:
-                kv =>
-                {
-                    try
-                    {
-                        if (!kv.Value.TryGetValue(["elm.json"], out var elmJsonFile))
-                        {
-                            throw new Exception("Did not find elm.json file");
-                        }
-
-                        var elmJsonParsed =
-                            System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile.Span)
-                            ??
-                            throw new Exception("Parsing elm.json returned null");
-
-                        return (FileTree.FromSetOfFilesWithStringPath(kv.Value), elmJsonParsed);
-                    }
-                    catch (Exception e)
-                    {
-                        throw new Exception(
-                            "Failed to load package: " + kv.Key + ": " + e.Message,
-                            e);
-                    }
-                });
+            build.Resolution.Packages.ToImmutableDictionary(
+                item => item.Key,
+                item => (build.PackageSources[item.Key], ManifestForResolvedPackage(item.Value, configuration)));
     }
+
+    internal static ElmJsonStructure ManifestForResolvedPackage(
+        ElmResolvedPackage package, ElmDependencyResolutionConfiguration configuration) =>
+        package.Manifest ??
+        new ElmJsonStructure(
+            "package",
+            package.Identity.Name,
+            "Pine package substitution",
+            "",
+            package.Identity.Version.ToString(),
+            package.ExposedModules,
+            ["src"],
+            configuration.CompilerVersion.ToString(),
+            new(
+                null,
+                null,
+                package.Dependencies.ToImmutableDictionary(item => item.PackageName, item => item.DeclaredVersion)),
+            new(null, null, ImmutableDictionary<string, string>.Empty));
 
     /// <summary>
     /// Filters a tree of files to include only the Elm files needed to compile from the given root files,
@@ -486,6 +351,10 @@ public class ElmAppDependencyResolution
         }
 
         IReadOnlyList<ElmJsonStructure.RelativeDirectory> sourceDirectories =
+            elmJsonForEntryPoint.elmJsonParsed.Type == "package"
+            ?
+            [new(0, ["src"])]
+            :
             [.. elmJsonForEntryPoint.elmJsonParsed.ParsedSourceDirectories];
 
         IReadOnlyList<string> elmJsonDirectoryPath =
@@ -551,55 +420,16 @@ public class ElmAppDependencyResolution
         FileTree sourceFiles,
         IReadOnlyList<string> entryPointFilePath)
     {
-        // Collect all elm.json files from the tree, storing each parsed ElmJsonStructure along with its path:
-        var elmJsonFiles =
-            sourceFiles
-            .EnumerateFilesTransitive()
-            .SelectMany(
-                pathAndContent =>
-                {
-                    if (!pathAndContent.path.Last().EndsWith("elm.json", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return [];
-                    }
-
-                    var elmJsonContent = pathAndContent.fileContent;
-
-                    try
-                    {
-                        var elmJsonParsed =
-                            System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonContent.Span);
-
-                        return
-                            new[]
-                            {
-                                (filePath: (IReadOnlyList<string>)pathAndContent.path, elmJsonParsed)
-                            };
-                    }
-                    catch (Exception)
-                    {
-                        return [];
-                    }
-                })
-            .ToImmutableDictionary(
-                keySelector: entry => entry.filePath,
-                elementSelector: entry => entry.elmJsonParsed,
-                keyComparer: EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
-
-        // Walk upwards from the directory of entryPointFilePath to find the "closest" elm.json
-        // that includes the entryPointFilePath in one of its source-directories:
         var currentDirectory = DirectoryOf(entryPointFilePath);
 
         while (true)
         {
-            // See if there is an elm.json directly in this directory:
-
             IReadOnlyList<string> elmJsonFilePath = [.. currentDirectory, "elm.json"];
 
-            if (elmJsonFiles.TryGetValue(elmJsonFilePath, out var elmJsonParsed) && elmJsonParsed is not null)
+            if (sourceFiles.GetNodeAtPath(elmJsonFilePath) is not null)
             {
-                // We found an elm.json in the current directory; now check if it includes the entry point
-                // by verifying that entryPointFilePath is under one of its source-directories:
+                var elmJsonParsed = ElmDependencyResolver.ReadManifest(sourceFiles, elmJsonFilePath);
+
                 if (ElmJsonIncludesEntryPoint(
                     currentDirectory,
                     elmJsonParsed,
@@ -609,13 +439,11 @@ public class ElmAppDependencyResolution
                 }
             }
 
-            // If we are at the root (no parent to move up to), stop:
             if (currentDirectory.Count is 0)
             {
                 return null;
             }
 
-            // Move up one level:
             currentDirectory = [.. currentDirectory.Take(currentDirectory.Count - 1)];
         }
     }
@@ -644,12 +472,19 @@ public class ElmAppDependencyResolution
         // For each source directory in elm.json, build its absolute path (relative to elm.jsonDirectory),
         // and check whether entryPointFilePath starts with that path.
 
-        foreach (var sourceDir in elmJson.ParsedSourceDirectories)
+        var sourceDirectories =
+            elmJson.Type == "package"
+            ?
+            [new ElmJsonStructure.RelativeDirectory(0, ["src"])]
+            :
+            elmJson.ParsedSourceDirectories;
+
+        foreach (var sourceDir in sourceDirectories)
         {
             // Combine the elmJsonDirectory with the subdirectories from sourceDir
             // to get the absolute path to the "source directory":
             IReadOnlyList<string> absSourceDir =
-                [.. elmJsonDirectory, .. sourceDir.Subdirectories];
+                ElmResolvedBuildPreparation.MapSourceDirectory(elmJsonDirectory, sourceDir);
 
             // Check if entryPointFilePath is "under" absSourceDir:
             if (entryPointFilePath.Count >= absSourceDir.Count &&

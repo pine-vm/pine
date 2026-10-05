@@ -464,10 +464,19 @@ public static class MakeCommand
 
         Result<string, Elm019Binaries.ElmMakeOk> ContinueWithBlobEntryPoint()
         {
-            var sourceFilesWithMergedPackages =
-                ElmAppDependencyResolution.AppCompilationUnitsForEntryPoint(
-                    FileTree.FromSetOfFilesWithStringPath(sourceFilesAfterLowering),
-                    entryPointFilePath: pathToFileWithElmEntryPoint);
+            (AppCompilationUnits files, IReadOnlyList<string> entryModuleName) sourceFilesWithMergedPackages;
+
+            try
+            {
+                sourceFilesWithMergedPackages =
+                    ElmAppDependencyResolution.AppCompilationUnitsForEntryPoint(
+                        FileTree.FromSetOfFilesWithStringPath(sourceFilesAfterLowering),
+                        entryPointFilePath: pathToFileWithElmEntryPoint);
+            }
+            catch (ElmDependencyResolutionException exception)
+            {
+                return exception.Message;
+            }
 
             var pineVMCache = new InvocationCache();
 

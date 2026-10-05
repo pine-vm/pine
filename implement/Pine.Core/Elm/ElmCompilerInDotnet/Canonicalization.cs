@@ -323,7 +323,7 @@ public class Canonicalization
         IReadOnlyList<File> modules,
         ImplicitImportConfig implicitImportConfig)
     {
-        modules = modules.Select(AddEffectModuleStubs).ToList();
+        modules = [.. modules.Select(AddEffectModuleStubs)];
 
         // Check for duplicate module names
         var moduleNameGroups =

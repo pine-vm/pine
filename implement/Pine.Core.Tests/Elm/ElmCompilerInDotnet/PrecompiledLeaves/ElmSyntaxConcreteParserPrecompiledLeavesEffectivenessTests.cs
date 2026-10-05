@@ -179,8 +179,11 @@ public class ElmSyntaxConcreteParserPrecompiledLeavesEffectivenessTests
                 IntermediateVM.SetupVM.DefaultPrecompiledLeaves,
                 (leaf, _) => enteredLeaves.Add(leaf));
 
-        var withoutLeaves = Apply(vmWithoutLeaves, s_exerciseParseFileFunction.Value, ElmValue.StringInstance(ParsedModuleText));
-        var withLeaves = Apply(vmWithLeaves, s_exerciseParseFileFunction.Value, ElmValue.StringInstance(ParsedModuleText));
+        var withoutLeaves =
+            Apply(vmWithoutLeaves, s_exerciseParseFileFunction.Value, ElmValue.StringInstance(ParsedModuleText));
+
+        var withLeaves =
+            Apply(vmWithLeaves, s_exerciseParseFileFunction.Value, ElmValue.StringInstance(ParsedModuleText));
 
         withoutLeaves.value.Should().Be(ElmValue.TrueValue);
         withLeaves.value.Should().Be(ElmValue.TrueValue);
@@ -201,19 +204,20 @@ public class ElmSyntaxConcreteParserPrecompiledLeavesEffectivenessTests
         Apply(vmWithNestedScanner, s_exerciseParseFileFunction.Value, ElmValue.StringInstance(ParsedModuleText))
             .value.Should().Be(ElmValue.TrueValue);
 
-        var reachableLeaves = new (string name, PineValue key)[]
-        {
-            ("skipWhitespaceAt", ElmSyntaxConcreteParserPrecompiledLeaves.SkipWhitespaceAtLeafKey),
-            ("skipToIdentifierEnd", ElmSyntaxConcreteParserPrecompiledLeaves.SkipToIdentifierEndLeafKey),
-            ("skipToAsciiDecimalDigitEnd", ElmSyntaxConcreteParserPrecompiledLeaves.SkipToAsciiDecimalDigitEndLeafKey),
-            ("skipToAsciiHexDigitEnd", ElmSyntaxConcreteParserPrecompiledLeaves.SkipToAsciiHexDigitEndLeafKey),
-            ("numberEndDecimal", ElmSyntaxConcreteParserPrecompiledLeaves.NumberEndDecimalLeafKey),
-            ("isFloatLiteralAt", ElmSyntaxConcreteParserPrecompiledLeaves.IsFloatLiteralAtLeafKey),
-            ("convert0OrMoreHexadecimalValue", ElmSyntaxConcreteParserPrecompiledLeaves.Convert0OrMoreHexadecimalValueLeafKey),
-            ("scanUnicodeEscapeDigits", ElmSyntaxConcreteParserPrecompiledLeaves.ScanUnicodeEscapeDigitsLeafKey),
-            ("findLiteralRunEnd", ElmSyntaxConcreteParserPrecompiledLeaves.FindLiteralRunEndLeafKey),
-            ("skipOperatorChars", ElmSyntaxConcreteParserPrecompiledLeaves.SkipOperatorCharsLeafKey),
-        };
+        var reachableLeaves =
+            new (string name, PineValue key)[]
+            {
+                ("skipWhitespaceAt", ElmSyntaxConcreteParserPrecompiledLeaves.SkipWhitespaceAtLeafKey),
+                ("skipToIdentifierEnd", ElmSyntaxConcreteParserPrecompiledLeaves.SkipToIdentifierEndLeafKey),
+                ("skipToAsciiDecimalDigitEnd", ElmSyntaxConcreteParserPrecompiledLeaves.SkipToAsciiDecimalDigitEndLeafKey),
+                ("skipToAsciiHexDigitEnd", ElmSyntaxConcreteParserPrecompiledLeaves.SkipToAsciiHexDigitEndLeafKey),
+                ("numberEndDecimal", ElmSyntaxConcreteParserPrecompiledLeaves.NumberEndDecimalLeafKey),
+                ("isFloatLiteralAt", ElmSyntaxConcreteParserPrecompiledLeaves.IsFloatLiteralAtLeafKey),
+                ("convert0OrMoreHexadecimalValue", ElmSyntaxConcreteParserPrecompiledLeaves.Convert0OrMoreHexadecimalValueLeafKey),
+                ("scanUnicodeEscapeDigits", ElmSyntaxConcreteParserPrecompiledLeaves.ScanUnicodeEscapeDigitsLeafKey),
+                ("findLiteralRunEnd", ElmSyntaxConcreteParserPrecompiledLeaves.FindLiteralRunEndLeafKey),
+                ("skipOperatorChars", ElmSyntaxConcreteParserPrecompiledLeaves.SkipOperatorCharsLeafKey),
+            };
 
         foreach (var (name, key) in reachableLeaves)
         {

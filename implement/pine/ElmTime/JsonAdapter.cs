@@ -1297,7 +1297,7 @@ public class ElmTimeJsonAdapter
         ElmValueEncoding.ElmValueAsPineValue(ElmValue.EmptyDict);
 
     /// <summary>
-    /// The original lowering implementation added a 'main' declaration to account for DCE.
+    /// Removes the JavaScript DCE main shim and its browser-runtime imports from the generated host root.
     /// </summary>
     public static FileTree CleanUpFromLoweredForJavaScript(
         FileTree loweredForJavaScript)
@@ -1354,6 +1354,25 @@ public class ElmTimeJsonAdapter
         }
 
         var newRootFileText = string.Join("\n", linesFiltered());
+
+        var parsed =
+            ElmSyntaxParser.ParseModuleText(newRootFileText)
+            .Extract(
+                error => throw new System.InvalidOperationException(
+                    "Cannot parse the generated host interface after removing the JavaScript main shim: " + error));
+
+        var cleaned =
+            parsed with
+            {
+                Imports =
+                [
+                .. parsed.Imports.Where(
+                    import =>
+                    string.Join(".", import.Value.ModuleName.Value) is not ("Platform" or "Platform.Cmd" or "Platform.Sub"))
+                ],
+            };
+
+        newRootFileText = Avh4Format.FormatToString(cleaned);
 
         return
             loweredForJavaScript

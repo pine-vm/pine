@@ -269,6 +269,7 @@ public class InteractiveSessionPine : IInteractiveSession
             ?
             FileTree.EmptyTree
             :
+            appCodeTree.ResolvedBuild?.Sources ??
             appCodeTree.Packages.Aggregate(
                 seed: appCodeTree.AppFiles,
                 func: (files, pkg) => FileTree.MergeFiles(files, pkg.files));
@@ -279,6 +280,10 @@ public class InteractiveSessionPine : IInteractiveSession
             .ToImmutableArray();
 
         var compileResult =
+            appCodeTree?.ResolvedBuild is { } resolvedBuild
+            ?
+            ElmCompiler.CompileResolvedEnvironment(resolvedBuild)
+            :
             ElmCompiler.CompileInteractiveEnvironment(
                 appSourceFilesTree,
                 rootFilePaths: entryPointsFilePaths,

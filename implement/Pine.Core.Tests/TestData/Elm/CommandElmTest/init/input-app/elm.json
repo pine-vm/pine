@@ -17,7 +17,8 @@
         "indirect": {
             "elm/bytes": "1.0.8",
             "elm/json": "1.1.4",
-            "elm/random": "1.0.0"
+            "elm/random": "1.0.0",
+            "elm/time": "1.0.0"
         }
     }
 }

@@ -228,7 +228,7 @@ public class PineValueInProcessTests
 
         PineValueInProcess.ValueFromPathOrNull(
             CreatePartial(),
-            (IReadOnlyList<int>)new[] { 1, 1 })!
+            (IReadOnlyList<int>)[1, 1])!
             .Evaluate()
             .Should().Be(PineValue.Blob([3]));
 

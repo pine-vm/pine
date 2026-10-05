@@ -70,14 +70,15 @@ public sealed class ElmTestFilter
         ArgumentOutOfRangeException.ThrowIfNegative(count);
 
         return
-            tests
+            [
+            .. tests
             .Distinct()
             .Select(test => (test, distance: filter.Distance(test)))
             .OrderBy(item => item.distance)
             .ThenBy(item => item.test.FullPath, StringComparer.Ordinal)
             .Take(count)
             .Select(item => item.test)
-            .ToArray();
+            ];
     }
 
     private double Distance(ListedTest test)

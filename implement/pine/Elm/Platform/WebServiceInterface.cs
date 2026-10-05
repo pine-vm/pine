@@ -2340,7 +2340,8 @@ type alias LoadDependencyStruct =
         var compilationUnitsPrepared =
             ElmAppDependencyResolution.AppCompilationUnitsForEntryPoint(
                 loweredTreeCleaned,
-                ["src", "Backend", "InterfaceToHost_Root.elm"]);
+                ["src", "Backend", "InterfaceToHost_Root.elm"],
+                additionalRootFilePaths: [entryFileName]);
 
         var pineVMAndCache =
             ElmTime.ElmInteractive.InteractiveSessionPine.BuildPineVM(

@@ -152,7 +152,10 @@ public record CommandLineAppConfig(
 
     public static CommandLineAppConfig ConfigFromSourceFilesAndModuleName(
         FileTree sourceFiles,
-        IReadOnlyList<string> moduleName)
+        IReadOnlyList<string> moduleName,
+        IReadOnlyList<string>? entryPointFilePath = null,
+        ElmDependencyResolutionConfiguration? resolutionConfiguration = null,
+        IElmPackageProvider? packageProvider = null)
     {
         var moduleNameFlattened = string.Join(".", moduleName);
 
@@ -167,11 +170,34 @@ public record CommandLineAppConfig(
         var runRootQualifiedName =
             DeclQualifiedName.Create(namespaces: moduleName, declName: "runRoot");
 
-        var (compiledModulesValue, _) =
+        entryPointFilePath ??=
+            rootFilePaths.Single(
+                path =>
+                sourceFiles.GetNodeAtPath(path) is FileTree.FileNode file &&
+                Core.Elm.ElmSyntax.ElmModule.ParseModuleName(System.Text.Encoding.UTF8.GetString(file.Bytes.Span))
+                .IsOkOrNull()?.SequenceEqual(moduleName) is true);
+
+        var manifest = ElmAppDependencyResolution.FindElmJsonForEntryPoint(sourceFiles, entryPointFilePath);
+
+        var compiled =
+            manifest is { } selectedManifest
+            ?
+            Core.Elm.ElmCompilerInDotnet.ElmCompiler.CompileResolvedEnvironment(
+                ElmResolvedBuildPreparation.PrepareAsync(
+                    sourceFiles,
+                    selectedManifest.filePath,
+                    [entryPointFilePath],
+                    resolutionConfiguration ?? ElmPackageSubstitutions.DefaultBuild.Value,
+                    packageProvider).GetAwaiter().GetResult(),
+                rootDeclarationsAsPlainValues: [runRootQualifiedName])
+            :
             Core.Elm.ElmCompilerInDotnet.ElmCompiler.CompileInteractiveEnvironment(
                 appCodeTree: sourceFiles,
                 rootFilePaths: rootFilePaths,
-                rootDeclarationsAsPlainValues: [runRootQualifiedName])
+                rootDeclarationsAsPlainValues: [runRootQualifiedName]);
+
+        var (compiledModulesValue, _) =
+            compiled
             .Extract(
                 err => throw new Exception(
                     "Failed compiling Elm modules for module " + moduleNameFlattened + ": " + err));

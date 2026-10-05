@@ -27,6 +27,30 @@ namespace Pine.Core.Elm.Testing;
 /// </summary>
 public static class ElmTestRunner
 {
+    /// <summary>Test-scoped bundled substitutions, including the terminal Pine Test/Expect implementation.</summary>
+    public static readonly Lazy<ElmDependencyResolutionConfiguration> DefaultResolutionConfiguration =
+        new(
+            () => ElmPackageSubstitutions.DefaultBuild.Value with
+            {
+                IncludeTests = true,
+                Substitutions =
+                ElmPackageSubstitutions.DefaultBuild.Value.Substitutions.Add(
+                    ElmPackageSubstitution.Create(
+                        "elm-explorations/test",
+                        "pine-unit-test-runner-v1",
+                        ["2.2.0", "2.2.1"],
+                        FileTree.FromSetOfFilesWithStringPath(
+                        [
+                            (new[] { "src", "Expect.elm" }, (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(ExpectModuleText)),
+                            (new[] { "src", "Test.elm" }, (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(TestModuleText)),
+                        ]),
+                        ["Expect", "Test"]) with
+                    {
+                        ImplementationDependencies =
+                        ImmutableDictionary<string, string>.Empty.Add("elm/core", "1.0.0 <= v < 2.0.0"),
+                    }),
+            });
+
     /// <summary>
     /// Computes the default worker count for the available logical processor count.
     /// </summary>
@@ -46,7 +70,10 @@ public static class ElmTestRunner
         IPineVM? pineVm = null,
         string? filter = null,
         bool listTests = false,
-        Action<int>? onTestsDiscovered = null) =>
+        Action<int>? onTestsDiscovered = null,
+        ElmDependencyResolutionConfiguration? resolutionConfiguration = null,
+        IElmPackageProvider? packageProvider = null,
+        Action<ElmDependencyResolutionReport>? onDependenciesResolved = null) =>
         CompileAndRunTests(
             appDirectory,
             pineVm,
@@ -54,7 +81,10 @@ public static class ElmTestRunner
             listTests,
             workers: 1,
             pineVmFactory: null,
-            onTestsDiscovered);
+            onTestsDiscovered,
+            resolutionConfiguration,
+            packageProvider,
+            onDependenciesResolved);
 
 
     /// <summary>
@@ -66,7 +96,10 @@ public static class ElmTestRunner
         Func<IInvocationCacheAccess, PineVMSharedCaches, IPineVM> pineVmFactory,
         string? filter = null,
         bool listTests = false,
-        Action<int>? onTestsDiscovered = null)
+        Action<int>? onTestsDiscovered = null,
+        ElmDependencyResolutionConfiguration? resolutionConfiguration = null,
+        IElmPackageProvider? packageProvider = null,
+        Action<ElmDependencyResolutionReport>? onDependenciesResolved = null)
     {
         ArgumentNullException.ThrowIfNull(pineVmFactory);
 
@@ -78,7 +111,10 @@ public static class ElmTestRunner
                 listTests,
                 workers,
                 pineVmFactory,
-                onTestsDiscovered);
+                onTestsDiscovered,
+                resolutionConfiguration,
+                packageProvider,
+                onDependenciesResolved);
     }
 
 
@@ -89,7 +125,10 @@ public static class ElmTestRunner
         bool listTests,
         int workers,
         Func<IInvocationCacheAccess, PineVMSharedCaches, IPineVM>? pineVmFactory,
-        Action<int>? onTestsDiscovered)
+        Action<int>? onTestsDiscovered,
+        ElmDependencyResolutionConfiguration? resolutionConfiguration,
+        IElmPackageProvider? packageProvider,
+        Action<ElmDependencyResolutionReport>? onDependenciesResolved)
     {
         if (workers < 1)
             throw new ArgumentOutOfRangeException(nameof(workers), "Worker count must be at least one.");
@@ -112,23 +151,11 @@ public static class ElmTestRunner
             .Select(file => (file.path, file.content))
             .ToList();
 
-        appFiles.Add(
-            (["elm-test-support", "Expect.elm"],
-            Encoding.UTF8.GetBytes(ExpectModuleText)));
-
-        appFiles.Add(
-            (["elm-test-support", "Test.elm"],
-            Encoding.UTF8.GetBytes(TestModuleText)));
-
         var appCodeTreeWithoutPackages = FileTree.FromSetOfFilesWithStringPath(appFiles);
 
-        var packages =
-            LoadPackagesForTestCompilation(appCodeTreeWithoutPackages);
-
-        var appCodeTree =
-            AddPackageSources(
-                appCodeTreeWithoutPackages,
-                packages.Select(package => (package.Key, package.Value.files)));
+        var nestedProjects =
+            appFiles.Where(file => file.path.Count > 1 && file.path[^1] == "elm.json")
+            .Select(file => file.path.Take(file.path.Count - 1).ToArray()).ToArray();
 
         var testModules =
             appFiles
@@ -136,6 +163,7 @@ public static class ElmTestRunner
                 file =>
                 file.path.Count > 1 &&
                 file.path[0] is "tests" &&
+                !nestedProjects.Any(project => file.path.Take(project.Length).SequenceEqual(project)) &&
                 file.path[^1].EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
             .Select(
                 file =>
@@ -181,6 +209,26 @@ public static class ElmTestRunner
         if (testModules.Length is 0)
             return new ElmTestRun.NoTestModules(appDirectory);
 
+        resolutionConfiguration ??= DefaultResolutionConfiguration.Value;
+
+        if (!resolutionConfiguration.IncludeTests)
+        {
+            throw new ArgumentException(
+                "Elm test compilation requires a configuration with IncludeTests = true.",
+                nameof(resolutionConfiguration));
+        }
+
+        var build =
+            ElmResolvedBuildPreparation.PrepareAsync(
+                appCodeTreeWithoutPackages,
+                ["elm.json"],
+                [.. testModules.Select(testModule => testModule.path)],
+                resolutionConfiguration,
+                packageProvider,
+                projectDirectory: appDirectory).GetAwaiter().GetResult();
+
+        onDependenciesResolved?.Invoke(build.Resolution);
+
         var testDeclarationNames =
             testModules
             .SelectMany(
@@ -191,9 +239,8 @@ public static class ElmTestRunner
             .ToImmutableArray();
 
         var (compiledEnvironment, _) =
-            ElmCompiler.CompileInteractiveEnvironment(
-                appCodeTree,
-                rootFilePaths: [.. testModules.Select(testModule => testModule.path)],
+            ElmCompiler.CompileResolvedEnvironment(
+                build,
                 rootDeclarationsAsPlainValues: testDeclarationNames)
             .Extract(error => throw new InvalidOperationException("Failed compiling Elm tests: " + error));
 
@@ -300,9 +347,7 @@ public static class ElmTestRunner
             var parseCache = new PineVMParseCache();
 
             completedTests =
-                discoveredTests
-                .Select(test => RunTest(test, pineVm, parseCache))
-                .ToImmutableArray();
+                [.. discoveredTests.Select(test => RunTest(test, pineVm, parseCache))];
         }
         else
         {
@@ -377,23 +422,7 @@ public static class ElmTestRunner
         IEnumerable<(string packageName, FileTree files)> packages)
     {
         foreach (var (packageName, packageFiles) in packages)
-        {
-            var packagePath =
-                new[] { "elm-packages" }
-                .Concat(packageName.Split('/'))
-                .ToArray();
-
-            foreach (var packageFile in packageFiles.EnumerateFilesTransitive())
-            {
-                if (packageFile.path.Count < 2 || packageFile.path[0] is not "src")
-                    continue;
-
-                appCodeTree =
-                    appCodeTree.SetNodeAtPathSorted(
-                        [.. packagePath, .. packageFile.path],
-                        FileTree.File(packageFile.fileContent));
-            }
-        }
+            appCodeTree = ElmResolvedBuildPreparation.AddPackageSources(appCodeTree, packageName, packageFiles);
 
         return appCodeTree;
     }
@@ -404,7 +433,8 @@ public static class ElmTestRunner
         Func<string, string, IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>? loadPackage = null) =>
         ElmAppDependencyResolution.LoadPackagesForElmApp(
             FileTreeExtensions.ToFlatDictionaryWithPathComparer(appCodeTree),
-            loadPackage: loadPackage);
+            loadPackage: loadPackage,
+            configuration: DefaultResolutionConfiguration.Value);
 
 
     private static CompletedTest RunTest(

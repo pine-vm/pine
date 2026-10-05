@@ -14,6 +14,85 @@ namespace Pine.IntegrationTests.CLI;
 public class ElmTestCommandTests
 {
     [Fact]
+    public void Declared_parent_source_directories_are_loaded_without_merging_parent_projects()
+    {
+        var root =
+            CreateTestProject(
+                PassingTestsModule
+                .Replace("import Expect", "import Expect\nimport Shared")
+                .Replace("71 |> Expect.equal 71", "Shared.value |> Expect.equal 71"));
+
+        var projectDirectory = Path.Combine(root, "nested");
+        var (console, output) = CreateConsole(AnsiSupport.No);
+        var (errorConsole, errorOutput) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            Directory.CreateDirectory(projectDirectory);
+            Directory.CreateDirectory(Path.Combine(root, "src"));
+            File.WriteAllText(Path.Combine(root, "src", "Shared.elm"), "module Shared exposing (value)\nvalue = 71\n");
+            File.Move(Path.Combine(root, "elm.json"), Path.Combine(projectDirectory, "elm.json"));
+            Directory.Move(Path.Combine(root, "tests"), Path.Combine(projectDirectory, "tests"));
+            var manifest = Path.Combine(projectDirectory, "elm.json");
+            File.WriteAllText(manifest, File.ReadAllText(manifest).Replace("[\"src\"]", "[\"../src\"]"));
+            File.WriteAllText(Path.Combine(root, "elm.json"), "{\"this is not the selected project\": true}");
+
+            var exitCode =
+                TestCommand.Execute(
+                    projectDirectory,
+                    colorMode: FormatCommandColorMode.Never,
+                    console: console,
+                    errorConsole: errorConsole);
+
+            exitCode.Should().Be(0, errorOutput.ToString());
+            output.ToString().Should().Contain("TEST RUN PASSED");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("2.0.0", "ConstraintConflict", "empty intersection")]
+    [InlineData("1.0.4", "UnsupportedSubstitutionVersion", "supports only")]
+    public void Dependency_conflicts_are_reported_without_unhandled_exceptions_and_preserve_json_details(
+        string version, string failureKind, string message)
+    {
+        var projectDirectory = CreateTestProject(PassingTestsModule);
+        var reportPath = Path.Combine(projectDirectory, "dependencies.json");
+        var (errorConsole, errorOutput) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            var manifestPath = Path.Combine(projectDirectory, "elm.json");
+
+            File.WriteAllText(
+                manifestPath,
+                File.ReadAllText(manifestPath).Replace("\"elm/core\": \"1.0.5\"", $"\"elm/core\": \"{version}\""));
+
+            var exitCode =
+                TestCommand.Execute(
+                    projectDirectory,
+                    colorMode: FormatCommandColorMode.Never,
+                    errorConsole: errorConsole,
+                    offline: true,
+                    dependencyReportPath: reportPath);
+
+            exitCode.Should().Be(1);
+
+            errorOutput.ToString().Should().Contain("elm/core").And.Contain(version).And.Contain(message).And.Contain(
+                "elm.json");
+
+            File.ReadAllText(reportPath).Should().Contain(failureKind).And.Contain("Substitutions").And.Contain("Trace");
+        }
+        finally
+        {
+            Directory.Delete(projectDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Success_output_uses_elm_test_rs_colors()
     {
         var projectDirectory = CreateTestProject(PassingTestsModule);
@@ -380,7 +459,7 @@ public class ElmTestCommandTests
                 new[] { projectDirectory, "--color", "never", "--list-tests", "--filter", "Tests/**/First" };
 
             var command = TestCommand.Create();
-            var option = command.Options.OfType<Option<string>>().Single();
+            var option = command.Options.OfType<Option<string>>().Single(option => option.Name == "--filter");
             var parseResult = command.Parse(arguments);
 
             parseResult.Errors.Should().BeEmpty();
@@ -409,7 +488,7 @@ public class ElmTestCommandTests
     public void Filter_arity_requires_one_value()
     {
         var command = TestCommand.Create();
-        var option = command.Options.OfType<Option<string>>().Single();
+        var option = command.Options.OfType<Option<string>>().Single(option => option.Name == "--filter");
         var parseResult = command.Parse(["--filter"]);
 
         option.Arity.Should().Be(ArgumentArity.ExactlyOne);
@@ -434,7 +513,7 @@ public class ElmTestCommandTests
     public void Command_accepts_no_filter_option()
     {
         var command = TestCommand.Create();
-        var option = command.Options.OfType<Option<string>>().Single();
+        var option = command.Options.OfType<Option<string>>().Single(option => option.Name == "--filter");
         var parseResult = command.Parse([]);
 
         parseResult.Errors.Should().BeEmpty();
@@ -871,7 +950,8 @@ public class ElmTestCommandTests
                 "indirect": {
                     "elm/bytes": "1.0.8",
                     "elm/json": "1.1.4",
-                    "elm/random": "1.0.0"
+                    "elm/random": "1.0.0",
+                    "elm/time": "1.0.0"
                 }
             }
         }

@@ -1,3 +1,4 @@
+using Pine.Core.Elm;
 using Pine.Core.Elm.Testing;
 using Spectre.Console;
 using System;
@@ -86,12 +87,28 @@ public static class TestCommand
                 Description = "Show detailed durations, including compilation and test execution."
             };
 
+        var offlineOption =
+            new Option<bool>("--offline")
+            {
+                Description =
+                "Resolve packages using only local registry metadata and sources; make no network requests.",
+            };
+
+        var dependencyReportOption =
+            new Option<string?>("--dependency-report")
+            {
+                Description =
+                "Write the full dependency resolution report as JSON, including rejected branches and conflicts.",
+            };
+
         command.Add(sourceArgument);
         command.Add(colorOption);
         command.Add(filterOption);
         command.Add(listTestsOption);
         command.Add(workersOption);
         command.Add(reportDurationsOption);
+        command.Add(offlineOption);
+        command.Add(dependencyReportOption);
 
         command.SetAction(
             parseResult =>
@@ -101,7 +118,9 @@ public static class TestCommand
                 filter: parseResult.GetValue(filterOption),
                 listTests: parseResult.GetValue(listTestsOption),
                 workers: parseResult.GetValue(workersOption),
-                reportDurations: parseResult.GetValue(reportDurationsOption)));
+                reportDurations: parseResult.GetValue(reportDurationsOption),
+                offline: parseResult.GetValue(offlineOption),
+                dependencyReportPath: parseResult.GetValue(dependencyReportOption)));
 
         return command;
     }
@@ -115,7 +134,11 @@ public static class TestCommand
         string? filter = null,
         bool listTests = false,
         int? workers = null,
-        bool reportDurations = false)
+        bool reportDurations = false,
+        bool offline = false,
+        string? dependencyReportPath = null,
+        ElmDependencyResolutionConfiguration? resolutionConfiguration = null,
+        IElmPackageProvider? packageProvider = null)
     {
         FormatCommandColorMode resolvedColorMode;
 
@@ -153,30 +176,75 @@ public static class TestCommand
             return 1;
         }
 
-        var testRun =
-            ElmTestRunner.CompileAndRunTests(
-                source,
-                workers: resolvedWorkers,
-                pineVmFactory:
-                (invocationCache, sharedCaches) =>
-                IntermediateVM.SetupVM.Create(
-                    evaluationConfigDefault: s_testEvaluationConfigDefault,
-                    invocationCache: invocationCache,
-                    parseCache: sharedCaches.ParsedExpressions,
-                    tryGetExpressionCompilation: sharedCaches.ExpressionCompilations.TryGet,
-                    getOrAddExpressionCompilation: sharedCaches.ExpressionCompilations.GetOrAdd,
-                    expressionEncodingCache: sharedCaches.EncodedExpressions,
-                    reducedExpressionCache: sharedCaches.ReducedExpressions),
-                filter: filter,
-                listTests: listTests,
-                onTestsDiscovered:
-                testCount =>
+        ElmTestRun testRun;
+
+        try
+        {
+            resolutionConfiguration ??= ElmTestRunner.DefaultResolutionConfiguration.Value;
+
+            if (offline)
+                resolutionConfiguration = resolutionConfiguration with { Offline = true };
+
+            testRun =
+                ElmTestRunner.CompileAndRunTests(
+                    source,
+                    workers: resolvedWorkers,
+                    resolutionConfiguration: resolutionConfiguration,
+                    packageProvider: packageProvider,
+                    onDependenciesResolved: report =>
+                    {
+                        if (dependencyReportPath is not null)
+                            File.WriteAllText(dependencyReportPath, report.ToJson());
+                    },
+                    pineVmFactory:
+                    (invocationCache, sharedCaches) =>
+                    IntermediateVM.SetupVM.Create(
+                        evaluationConfigDefault: s_testEvaluationConfigDefault,
+                        invocationCache: invocationCache,
+                        parseCache: sharedCaches.ParsedExpressions,
+                        tryGetExpressionCompilation: sharedCaches.ExpressionCompilations.TryGet,
+                        getOrAddExpressionCompilation: sharedCaches.ExpressionCompilations.GetOrAdd,
+                        expressionEncodingCache: sharedCaches.EncodedExpressions,
+                        reducedExpressionCache: sharedCaches.ReducedExpressions),
+                    filter: filter,
+                    listTests: listTests,
+                    onTestsDiscovered:
+                    testCount =>
+                    {
+                        console.Write(
+                            new Text(
+                                "Running " + testCount + " test" +
+                                (testCount is 1 ? "." : "s.") + "\n\n"));
+                    });
+        }
+        catch (ElmDependencyResolutionException exception)
+        {
+            errorConsole ??= CreateSystemConsole(Console.Error, resolvedColorMode);
+            errorConsole.Write(new Text("Error: ", TestCommandTheme.Failure));
+            errorConsole.Profile.Out.Writer.WriteLine(exception.Message);
+
+            if (dependencyReportPath is not null)
+            {
+                try
                 {
-                    console.Write(
-                        new Text(
-                            "Running " + testCount + " test" +
-                            (testCount is 1 ? "." : "s.") + "\n\n"));
-                });
+                    File.WriteAllText(dependencyReportPath, exception.Report.ToJson());
+                }
+                catch (Exception reportException) when (reportException is IOException or UnauthorizedAccessException)
+                {
+                    errorConsole.Profile.Out.Writer.WriteLine(
+                        $"Cannot write dependency report '{dependencyReportPath}': {reportException.Message}");
+                }
+            }
+
+            return 1;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            errorConsole ??= CreateSystemConsole(Console.Error, resolvedColorMode);
+            errorConsole.Write(new Text("Error: ", TestCommandTheme.Failure));
+            errorConsole.Profile.Out.Writer.WriteLine(exception.Message);
+            return 1;
+        }
 
         if (testRun is ElmTestRun.NoTestModules noTestModules)
         {

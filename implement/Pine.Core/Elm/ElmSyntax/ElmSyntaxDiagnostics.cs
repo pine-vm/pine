@@ -96,7 +96,7 @@ internal static class ElmSyntaxDiagnostics
                 ReadDeclaration,
                 tokens.Length);
 
-        return module.Diagnostics.Reverse().ToImmutableArray();
+        return [.. module.Diagnostics.Reverse()];
     }
 
     private static ModuleState ReadDeclaration(ModuleState module)

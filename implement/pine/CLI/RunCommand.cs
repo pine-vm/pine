@@ -137,10 +137,20 @@ public static class RunCommand
             "Starting Elm app from " + string.Join("/", entryPointFilePath) +
             " using runtime version " + PineCliCommand.AppVersionId + " ...");
 
-        var appConfig =
-            CommandLineAppConfig.ConfigFromSourceFilesAndModuleName(
-                sourceFiles,
-                elmModuleName);
+        CommandLineAppConfig appConfig;
+
+        try
+        {
+            appConfig =
+                CommandLineAppConfig.ConfigFromSourceFilesAndModuleName(
+                    sourceFiles,
+                    elmModuleName,
+                    entryPointFilePath);
+        }
+        catch (global::Pine.Core.Elm.ElmDependencyResolutionException exception)
+        {
+            return exception.Message;
+        }
 
         var mutatingCliApp =
             new MutatingCommandLineApp(

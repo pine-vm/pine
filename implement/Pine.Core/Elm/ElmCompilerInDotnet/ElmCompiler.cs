@@ -129,7 +129,8 @@ public class ElmCompiler
     public static Result<string, CompilationPipelineStageResults<DefaultLoweredResults>> LowerToElmSyntaxForCompilation(
         FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
-        ElmSyntaxOptimizationConfig? syntaxOptimization = null)
+        ElmSyntaxOptimizationConfig? syntaxOptimization = null,
+        bool includeBundledKernelModules = true)
     {
         syntaxOptimization ??= new ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled();
         // Capture per-round optimization snapshots and the post-lambda-lift module list
@@ -172,7 +173,8 @@ public class ElmCompiler
 
                     return stdOk;
                 },
-                extractFilteredDeclarations: lowered => lowered.FilteredDeclarations);
+                extractFilteredDeclarations: lowered => lowered.FilteredDeclarations,
+                includeBundledKernelModules: includeBundledKernelModules);
 
         if (genericResult.IsErrOrNull() is { } genericErr)
             return genericErr;
@@ -239,6 +241,7 @@ public class ElmCompiler
     /// dictionary that should be reconstructed into the per-module shape handed to
     /// the compilation backend.
     /// </param>
+    /// <param name="includeBundledKernelModules">False for resolved builds whose replacement sources are already explicit.</param>
     public static Result<string, CompilationPipelineStageResults<LoweredT>> LowerToElmSyntaxForCompilation<LoweredT>(
         FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
@@ -246,9 +249,11 @@ public class ElmCompiler
             ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>,
             IReadOnlySet<DeclQualifiedName>,
             Result<string, LoweredT>> lower,
-        Func<LoweredT, ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>> extractFilteredDeclarations)
+        Func<LoweredT, ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>> extractFilteredDeclarations,
+        bool includeBundledKernelModules = true)
     {
-        var canonicalizationResult = ParseAndCanonicalizeForLowering(appCodeTree, rootFilePaths);
+        var canonicalizationResult =
+            ParseAndCanonicalizeForLowering(appCodeTree, rootFilePaths, includeBundledKernelModules);
 
         if (canonicalizationResult.IsErrOrNull() is { } canonErr)
             return canonErr.ToString();
@@ -326,14 +331,18 @@ public class ElmCompiler
     private static Result<CompilationError, CanonicalizationBoundaryResult>
         ParseAndCanonicalizeForLowering(
         FileTree appCodeTree,
-        IReadOnlyList<IReadOnlyList<string>> rootFilePaths)
+        IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
+        bool includeBundledKernelModules)
     {
-        // Centralize the hardcoded elm/core kernel module addition here so consumers of
-        // ElmCompilerInDotnet pass only app/package sources and do not duplicate this merge.
+        // Resolved builds already supply the replacement sources selected by their configuration.
         var appCodeTreeWithKernelModules =
             FileTree.MergeFiles(
                 left: appCodeTree,
-                right: ElmInElm.BundledFiles.ElmKernelModulesDefault.Value);
+                right: includeBundledKernelModules
+                ?
+                ElmInElm.BundledFiles.ElmKernelModulesDefault.Value
+                :
+                FileTree.EmptyTree);
 
         var elmModuleFiles =
             appCodeTreeWithKernelModules.EnumerateFilesTransitive()
@@ -509,13 +518,13 @@ public class ElmCompiler
                 }
 
                 dependencyChains[importedName] =
-                    dependencyChains[moduleName]
-                    .Append(
+                    [
+                        .. dependencyChains[moduleName],
                         new CompilationError.ModuleDependencyChainItem(
                             importedName,
                             moduleNameToFilePath[importedName],
-                            dependency.Origin))
-                    .ToList();
+                            dependency.Origin),
+                    ];
 
                 pendingModules.Enqueue(importedName);
             }
@@ -690,7 +699,8 @@ public class ElmCompiler
         ElmSyntaxOptimizationConfig? syntaxOptimization = null,
         bool disableGenericApplicationChainConsolidation = false,
         IReadOnlyList<DeclQualifiedName>? rootDeclarationsAsPlainValues = null,
-        IDictionary<Interpreter.DirectInterpreter.EvalCacheEntryKey, PineValue>? directInterpreterEvalCache = null)
+        IDictionary<Interpreter.DirectInterpreter.EvalCacheEntryKey, PineValue>? directInterpreterEvalCache = null,
+        bool includeBundledKernelModules = true)
     {
         syntaxOptimization ??= SyntaxOptimizationConfigDefault;
 
@@ -698,7 +708,8 @@ public class ElmCompiler
             LowerToElmSyntaxForCompilation(
                 appCodeTree,
                 rootFilePaths,
-                syntaxOptimization);
+                syntaxOptimization,
+                includeBundledKernelModules);
 
         if (loweringResult.IsErrOrNull() is { } loweringErr)
             return loweringErr;
@@ -713,6 +724,16 @@ public class ElmCompiler
                 rootDeclarationsAsPlainValues: rootDeclarationsAsPlainValues,
                 directInterpreterEvalCache: directInterpreterEvalCache);
     }
+
+    /// <summary>Compiles sources prepared with project-scoped resolution and import visibility validation.</summary>
+    public static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults<DefaultLoweredResults> pipelineStageResults)> CompileResolvedEnvironment(
+        ElmResolvedBuild build,
+        IReadOnlyList<DeclQualifiedName>? rootDeclarationsAsPlainValues = null) =>
+        CompileInteractiveEnvironment(
+            build.Sources,
+            [.. build.RootFilePaths.Select(path => (IReadOnlyList<string>)path)],
+            rootDeclarationsAsPlainValues: rootDeclarationsAsPlainValues,
+            includeBundledKernelModules: false);
 
     /// <summary>
     /// Shared emission helper: takes the post-lowering
@@ -1169,14 +1190,15 @@ public class ElmCompiler
         names.Reverse();
 
         return
-            names
+            [
+            .. names
             .Select(
                 (name, index) =>
                 new CompilationError.DeclarationDependencyChainItem(
                     name,
                     ReferencedBy: index is 0 ? null : names[index - 1],
                     IsCompilationRoot: index is 0))
-            .ToList();
+            ];
     }
 
     /// <summary>

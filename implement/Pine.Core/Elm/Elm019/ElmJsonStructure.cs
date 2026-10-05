@@ -178,8 +178,9 @@ public record ElmJsonStructure(
     /// <summary>
     /// Enumerates source directories parsed into a relative-directory structure with parent traversal depth.
     /// </summary>
+    [JsonIgnore]
     public IEnumerable<RelativeDirectory> ParsedSourceDirectories =>
-        SourceDirectories.Select(ParseSourceDirectory);
+        (SourceDirectories ?? []).Select(ParseSourceDirectory);
 
     /// <summary>
     /// Parses a source directory string from <c>elm.json</c> into a <see cref="RelativeDirectory"/>.
@@ -285,6 +286,9 @@ public class ExposedModulesConverter : JsonConverter<IReadOnlyList<string>>
             var sections =
                 JsonSerializer.Deserialize<Dictionary<string, List<string>>>(ref reader, options);
 
+            if (sections?.Values.Any(value => value is null) is true)
+                throw new JsonException("Each exposed-modules section must be an array of module-name strings, not null.");
+
             return sections?.Values.SelectMany(v => v).ToList() ?? [];
         }
 
@@ -333,12 +337,18 @@ public class DependenciesConverter : JsonConverter<ElmJsonStructure.Dependencies
         {
             if (hasDirect)
             {
+                if (directElement.ValueKind != JsonValueKind.Object)
+                    throw new JsonException("Dependency section 'direct' must be an object, not null or a version string.");
+
                 direct =
                     JsonSerializer.Deserialize<Dictionary<string, string>>(directElement.GetRawText(), options) ?? [];
             }
 
             if (hasIndirect)
             {
+                if (indirectElement.ValueKind != JsonValueKind.Object)
+                    throw new JsonException("Dependency section 'indirect' must be an object, not null or a version string.");
+
                 indirect =
                     JsonSerializer.Deserialize<Dictionary<string, string>>(indirectElement.GetRawText(), options) ?? [];
             }
@@ -347,7 +357,12 @@ public class DependenciesConverter : JsonConverter<ElmJsonStructure.Dependencies
             foreach (var property in root.EnumerateObject())
             {
                 if (property.Name is not "direct" and not "indirect")
+                {
+                    if (property.Value.ValueKind != JsonValueKind.String)
+                        throw new JsonException($"Dependency declaration '{property.Name}' must be a version string.");
+
                     flat[property.Name] = property.Value.GetString() ?? "";
+                }
             }
         }
         else
@@ -356,7 +371,11 @@ public class DependenciesConverter : JsonConverter<ElmJsonStructure.Dependencies
             flat = JsonSerializer.Deserialize<Dictionary<string, string>>(root.GetRawText(), options) ?? [];
         }
 
-        return new ElmJsonStructure.DependenciesStruct(direct, indirect, flat);
+        return
+            new ElmJsonStructure.DependenciesStruct(
+                hasDirect ? direct : null,
+                hasIndirect ? indirect : null,
+                flat);
     }
 
     /// <summary>

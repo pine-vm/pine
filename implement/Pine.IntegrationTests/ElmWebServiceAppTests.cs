@@ -1,13 +1,49 @@
 using AwesomeAssertions;
 using MoreLinq;
 using Pine.Core;
+using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Files;
+using System;
 using System.Linq;
+using System.Text;
 using Xunit;
 
 namespace Pine.IntegrationTests;
 
 public class ElmWebServiceAppTests
 {
+    [Fact]
+    public void Cleaning_generated_JavaScript_main_removes_runtime_imports_without_changing_strings()
+    {
+        var source =
+            """
+            module Backend.InterfaceToHost_Root exposing (config)
+            import Platform
+            import Platform.Cmd
+            import Platform.Sub
+            import Json.Decode
+            config = "import Platform"
+
+            main : Program Int () String
+            main = Platform.worker { init = always ( (), Cmd.none ), update = always ( (), Cmd.none ), subscriptions = always Sub.none }
+            """;
+
+        var tree =
+            FileTree.EmptyTree.SetNodeAtPathSorted(
+                ElmTime.ElmTimeJsonAdapter.RootFilePath,
+                FileTree.File(Encoding.UTF8.GetBytes(source)));
+
+        var cleaned = ElmTime.ElmTimeJsonAdapter.CleanUpFromLoweredForJavaScript(tree);
+        var text = Encoding.UTF8.GetString(cleaned.EnumerateFilesTransitive().Single().fileContent.Span);
+
+        var parsed =
+            ElmSyntaxParser.ParseModuleText(text).Extract(
+                error => throw new InvalidOperationException(error.ToString()));
+
+        parsed.Imports.Select(import => string.Join(".", import.Value.ModuleName.Value)).Should().Equal("Json.Decode");
+        text.Should().Contain("\"import Platform\"").And.NotContain("Platform.worker");
+    }
+
     public static PineValue CounterWebApp =>
         TestSetup.AppConfigComponentFromFiles(TestSetup.CounterElmWebApp);
 
