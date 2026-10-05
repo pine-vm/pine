@@ -823,9 +823,15 @@ public class PineValueInProcessTests
                     1,
                     length,
                     PineValueInProcess.Create(
-                        PineValue.List([PineValue.EmptyList, .. items.Select(item => item.Evaluate()), PineValue.EmptyList]))),
+                        PineValue.List(
+                            [
+                            PineValue.EmptyList,
+                            .. items.Select(item => item.Evaluate()),
+                            PineValue.EmptyList
+                            ]))),
 
-                _ => throw new ArgumentOutOfRangeException(nameof(representation), representation, null),
+                _ =>
+                throw new ArgumentOutOfRangeException(nameof(representation), representation, null),
             };
         }
 
@@ -866,7 +872,9 @@ public class PineValueInProcessTests
 
         var expected =
             PineValue.List(
-                [.. Enumerable.Range(start, leftLength + rightLength).Select(i => IntegerEncoding.EncodeSignedInteger(i))]);
+                [
+                .. Enumerable.Range(start, leftLength + rightLength).Select(i => IntegerEncoding.EncodeSignedInteger(i))
+                ]);
 
         result.Evaluate().Should().Be(expected);
         left.EvaluatedOrNull.Should().BeSameAs(leftEvaluatedBefore);
@@ -886,7 +894,9 @@ public class PineValueInProcessTests
 
         var right =
             PineValueInProcess.CreateList(
-                [.. Enumerable.Range(20_001 + leftLength, rightLength).Select(i => PineValueInProcess.CreateInteger(i))]);
+                [
+                .. Enumerable.Range(20_001 + leftLength, rightLength).Select(i => PineValueInProcess.CreateInteger(i))
+                ]);
 
         var result = PineValueInProcess.ConcatBinary(left, right);
 
@@ -895,7 +905,9 @@ public class PineValueInProcessTests
 
         result.Evaluate().Should().Be(
             PineValue.List(
-                [.. Enumerable.Range(20_001, leftLength + rightLength).Select(i => IntegerEncoding.EncodeSignedInteger(i))]));
+                [
+                .. Enumerable.Range(20_001, leftLength + rightLength).Select(i => IntegerEncoding.EncodeSignedInteger(i))
+                ]));
 
         VerifyConsistencyOfDerivedProperties(result);
     }
@@ -947,6 +959,7 @@ public class PineValueInProcessTests
     {
         var listValue = PineValue.List([.. Enumerable.Repeat(PineValue.Blob([1]), listLength)]);
         var blobValue = PineValue.Blob([.. Enumerable.Repeat((byte)2, blobLength)]);
+
         var list =
             PineValueInProcess.CreateList(
                 [.. Enumerable.Repeat(PineValueInProcess.Create(PineValue.Blob([1])), listLength)]);
