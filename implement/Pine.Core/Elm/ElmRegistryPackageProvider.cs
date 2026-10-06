@@ -273,8 +273,8 @@ public sealed class ElmRegistryPackageProvider : IElmPackageProvider
         {
             return await s_httpClient.GetByteArrayAsync(url, cancellationToken);
         }
-        catch (HttpRequestException exception) when (exception.StatusCode == HttpStatusCode.NotFound &&
-            notFoundKind == ElmResolutionFailureKind.NoMatchingVersion)
+        catch (HttpRequestException exception) when (exception.StatusCode is HttpStatusCode.NotFound &&
+            notFoundKind is ElmResolutionFailureKind.NoMatchingVersion)
         {
             throw new ElmPackageProviderException(
                 notFoundKind,

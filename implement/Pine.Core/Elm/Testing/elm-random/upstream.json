@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/elm/random",
+  "tag": "1.0.0",
+  "commit": "3e0df334b8d38b89a40d9408921b3a9044343f1f",
+  "license": "BSD-3-Clause",
+  "scope": "Pure Generator/Seed APIs only.",
+  "adaptations": [
+    "Convert the effect module to a normal module and remove Random.generate and the browser effect manager.",
+    "Preserve PCG generation and seed stepping."
+  ]
+}

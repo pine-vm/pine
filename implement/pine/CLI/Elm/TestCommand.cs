@@ -87,6 +87,39 @@ public static class TestCommand
                 Description = "Show detailed durations, including compilation and test execution."
             };
 
+        var seedOption =
+            new Option<uint?>("--seed") { Description = "Initial unsigned 32-bit random seed for fuzz tests. Defaults to a new random seed." };
+
+        var fuzzOption =
+            new Option<uint>("--fuzz")
+            {
+                Description = "Number of iterations per fuzz test. Must be positive. Defaults to 100.",
+                DefaultValueFactory = _ => 100,
+            };
+
+        fuzzOption.Validators.Add(
+            result =>
+            {
+                if (result.IdentifierTokenCount > 1)
+                    result.AddError("The --fuzz option can only be specified once.");
+
+                if (result.Tokens.Count is 1 &&
+                    uint.TryParse(
+                        result.Tokens[0].Value,
+                        System.Globalization.NumberStyles.Integer,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out var count) &&
+                    count is 0)
+                    result.AddError("The --fuzz value must be a positive unsigned 32-bit integer.");
+            });
+
+        seedOption.Validators.Add(
+            result =>
+            {
+                if (result.IdentifierTokenCount > 1)
+                    result.AddError("The --seed option can only be specified once.");
+            });
+
         var offlineOption =
             new Option<bool>("--offline")
             {
@@ -107,6 +140,8 @@ public static class TestCommand
         command.Add(listTestsOption);
         command.Add(workersOption);
         command.Add(reportDurationsOption);
+        command.Add(seedOption);
+        command.Add(fuzzOption);
         command.Add(offlineOption);
         command.Add(dependencyReportOption);
 
@@ -120,7 +155,9 @@ public static class TestCommand
                 workers: parseResult.GetValue(workersOption),
                 reportDurations: parseResult.GetValue(reportDurationsOption),
                 offline: parseResult.GetValue(offlineOption),
-                dependencyReportPath: parseResult.GetValue(dependencyReportOption)));
+                dependencyReportPath: parseResult.GetValue(dependencyReportOption),
+                seed: parseResult.GetValue(seedOption),
+                fuzz: parseResult.GetValue(fuzzOption)));
 
         return command;
     }
@@ -138,7 +175,9 @@ public static class TestCommand
         bool offline = false,
         string? dependencyReportPath = null,
         ElmDependencyResolutionConfiguration? resolutionConfiguration = null,
-        IElmPackageProvider? packageProvider = null)
+        IElmPackageProvider? packageProvider = null,
+        uint? seed = null,
+        uint fuzz = 100)
     {
         FormatCommandColorMode resolvedColorMode;
 
@@ -176,6 +215,13 @@ public static class TestCommand
             return 1;
         }
 
+        if (fuzz is 0)
+        {
+            errorConsole ??= CreateSystemConsole(Console.Error, resolvedColorMode);
+            errorConsole.WriteLine("Error: The --fuzz value must be a positive unsigned 32-bit integer.");
+            return 1;
+        }
+
         ElmTestRun testRun;
 
         try
@@ -191,6 +237,7 @@ public static class TestCommand
                     workers: resolvedWorkers,
                     resolutionConfiguration: resolutionConfiguration,
                     packageProvider: packageProvider,
+                    fuzzOptions: new() { Seed = seed, Runs = fuzz },
                     onDependenciesResolved: report =>
                     {
                         if (dependencyReportPath is not null)
@@ -331,7 +378,8 @@ public static class TestCommand
                 completed.CompilationDuration
                 :
                 null,
-                includeRunningMessage: false);
+                includeRunningMessage: false,
+                incompleteReason: completed.IncompleteReason);
 
         if (resolvedColorMode is FormatCommandColorMode.Never)
         {
@@ -345,7 +393,20 @@ public static class TestCommand
 
         console.WriteLine();
 
+        if (completed.Tests.Any(test => test.Fuzz is not null) && completed.ExecutionSettings is { } settings)
+        {
+            var reproductionCommand =
+                $"To reproduce these results, run pine elm test \"{Path.GetFullPath(source)}\" --seed {settings.Seed} --fuzz {settings.FuzzRuns}";
+
+            if (console.Profile.Out.IsTerminal)
+                console.WriteLine(reproductionCommand);
+
+            else
+                console.Profile.Out.Writer.WriteLine(reproductionCommand);
+        }
+
         return
+            completed.IncompleteReason is null && completed.Tests.Count > 0 &&
             completed.Tests.All(test => test.Kind is CompletedTestKind.Passed)
             ?
             0

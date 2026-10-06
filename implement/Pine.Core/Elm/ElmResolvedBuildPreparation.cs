@@ -336,7 +336,7 @@ public static class ElmResolvedBuildPreparation
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (file.path[^1].EndsWith(".elm", StringComparison.OrdinalIgnoreCase) || file.path[^1] == "elm.json")
+                if (file.path[^1].EndsWith(".elm", StringComparison.OrdinalIgnoreCase) || file.path[^1] is "elm.json")
                     combined = combined.SetNodeAtPathSorted([.. relative, .. file.path], FileTree.File(file.content));
             }
         }
@@ -449,7 +449,7 @@ public static class ElmResolvedBuildPreparation
         // Implicit compiler imports also need a validated source closure, including non-substituted core packages.
         foreach (var module in byPath.Values)
             if (module.Owner is not null &&
-                (module.Owner == "elm/core" ||
+                (module.Owner is "elm/core" ||
                 build.Resolution.Packages[module.Owner].SubstitutionImplementationId is not null))
                 queue.Enqueue((module, [module.Path]));
 

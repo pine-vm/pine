@@ -74,11 +74,56 @@ the replacement's semantics and supported API must actually match.
 
 The bundled build defaults currently support `elm/core` 1.0.5, `elm/bytes` 1.0.8,
 `elm/json` 1.1.3 and 1.1.4, `elm/parser` 1.1.0, `elm/time` 1.0.0 and `elm/url` 1.0.0.
-Test builds additionally substitute `elm-explorations/test` 2.2.0 and 2.2.1. Its Pine implementation
-exposes `Test` and `Expect`, with `Test`, `describe`, `test` and `todo` in the `Test` module.
-Fuzzing and `Test.Runner`/`Test.RunnerV2` are not implemented. Unsupported modules/APIs are errors,
-not an invitation to load the upstream JavaScript implementation. `Basics` and `Debug` are provided
+Test builds additionally substitute `elm-explorations/test` 2.2.0 and 2.2.1 using the pinned 2.2.1
+non-HTML Elm implementation, and `elm/random` 1.0.0 using its pure generator/seed APIs.
+The test replacement exposes `Test`, `Expect`, `Fuzz`, `Test.Runner`, `Test.Runner.Failure` and
+`Test.Distribution`. HTML testing, `Test.RunnerV2` and browser effects such as `Random.generate`
+are not implemented. Unsupported modules/APIs are errors, not an invitation to load upstream
+JavaScript. `Basics` and `Debug` are provided
 by Pine's native compiler implementations, not by replacement Elm source files.
+
+## Fuzz testing
+
+`Test.fuzz`, `fuzz2`, `fuzz3` and `fuzzWith` run using the bundled Elm generation and shrinking
+engine, including dependent fuzzers such as `Fuzz.andThen`. A failing generated example is simplified
+by replaying and reducing its random-choice tape, which preserves the generator's constraints.
+The output includes the final counterexample in Elm notation.
+
+The controls match `elm-test-rs`:
+
+```console
+pine elm test . --seed 597517184 --fuzz 100
+```
+
+`--fuzz` defaults to 100 and accepts a positive unsigned 32-bit integer. `--seed` accepts an
+unsigned 32-bit integer, including zero; omitting it selects a new seed once per invocation.
+`Test.fuzzWith` can override the run count for one property. Distribution expectations may need
+additional examples beyond the configured count.
+
+Seed distribution happens before filtering or worker scheduling, so changing `--workers` or
+isolating a property with `--filter` does not change its generated examples. Fuzz runs print a
+reproduction command with the effective seed and count. Reproduction assumes unchanged source
+ordering, package implementations and compiler; identical CLI flags do not promise identical
+inputs between Pine and JavaScript runners.
+
+`--list-tests` includes fuzz properties without running them. `Test.only` and `Test.skip` follow
+upstream selection semantics and make a run incomplete, even when the selected properties pass.
+Invalid generators and exhausted rejection filters produce explicit failures. VM evaluation errors,
+including execution-budget exhaustion, fail the individual test; an interrupted engine is not
+reported as having successfully completed shrinking.
+
+The API accepts `ElmFuzzOptions` separately from dependency configuration. Completed runs retain
+the effective settings and resolution report; each fuzz result includes the assigned seed state,
+actual/requested counts, failing iteration, original and simplified inputs, random-choice tapes,
+distribution metadata and any evaluation error. `completed.ToDebugJson()` exports these diagnostics.
+Choice tapes are retained for failed examples; the full unsuccessful shrink-attempt history is not collected.
+
+Test-root values are materialized with the stack-safe Pine VM. The float generator's fixed exponent
+permutation uses an equivalent closed-form mapping rather than allocating and sorting a lookup table.
+
+Bundled sources, licenses, upstream commit identities and documented adaptations are under
+`implement/Pine.Core/Elm/Testing/elm-test` and `elm-random`. No network access or Node process is
+needed to load or execute the test/fuzz replacements.
 
 ## Resolution and build APIs
 

@@ -2,6 +2,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.CodeGen;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Files;
+using Pine.Core.PineVM;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
@@ -700,7 +701,8 @@ public class ElmCompiler
         bool disableGenericApplicationChainConsolidation = false,
         IReadOnlyList<DeclQualifiedName>? rootDeclarationsAsPlainValues = null,
         IDictionary<Interpreter.DirectInterpreter.EvalCacheEntryKey, PineValue>? directInterpreterEvalCache = null,
-        bool includeBundledKernelModules = true)
+        bool includeBundledKernelModules = true,
+        IPineVM? plainValueVm = null)
     {
         syntaxOptimization ??= SyntaxOptimizationConfigDefault;
 
@@ -722,18 +724,21 @@ public class ElmCompiler
                 pipelineStageResults,
                 disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation,
                 rootDeclarationsAsPlainValues: rootDeclarationsAsPlainValues,
-                directInterpreterEvalCache: directInterpreterEvalCache);
+                directInterpreterEvalCache: directInterpreterEvalCache,
+                plainValueVm: plainValueVm);
     }
 
     /// <summary>Compiles sources prepared with project-scoped resolution and import visibility validation.</summary>
     public static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults<DefaultLoweredResults> pipelineStageResults)> CompileResolvedEnvironment(
         ElmResolvedBuild build,
-        IReadOnlyList<DeclQualifiedName>? rootDeclarationsAsPlainValues = null) =>
+        IReadOnlyList<DeclQualifiedName>? rootDeclarationsAsPlainValues = null,
+        IPineVM? plainValueVm = null) =>
         CompileInteractiveEnvironment(
             build.Sources,
             [.. build.RootFilePaths.Select(path => (IReadOnlyList<string>)path)],
             rootDeclarationsAsPlainValues: rootDeclarationsAsPlainValues,
-            includeBundledKernelModules: false);
+            includeBundledKernelModules: false,
+            plainValueVm: plainValueVm);
 
     /// <summary>
     /// Shared emission helper: takes the post-lowering
@@ -747,7 +752,8 @@ public class ElmCompiler
         CompilationPipelineStageResults<LoweredT> pipelineStageResults,
         bool disableGenericApplicationChainConsolidation,
         IReadOnlyList<DeclQualifiedName>? rootDeclarationsAsPlainValues,
-        IDictionary<Interpreter.DirectInterpreter.EvalCacheEntryKey, PineValue>? directInterpreterEvalCache)
+        IDictionary<Interpreter.DirectInterpreter.EvalCacheEntryKey, PineValue>? directInterpreterEvalCache,
+        IPineVM? plainValueVm)
     {
         var modulesForCompilation = pipelineStageResults.ModulesForCompilation;
 
@@ -1012,6 +1018,7 @@ public class ElmCompiler
             var plainValueParseCache = new PineVMParseCache();
 
             var plainValueInterpreter =
+                plainValueVm ??
                 Interpreter.DirectInterpreter.WithSharedEvalCache(
                     plainValueParseCache,
                     directInterpreterEvalCache);

@@ -30,6 +30,8 @@
     <None Include="README.md" Pack="true" PackagePath="\" />
     <None Include="./../../License.txt" Pack="true" PackagePath="\" />
     <None Include="package-icon.png" Pack="true" PackagePath="" />
+    <None Update="Elm\Testing\elm-test\LICENSE" Pack="true" PackagePath="licenses\elm-explorations-test-LICENSE.txt" />
+    <None Update="Elm\Testing\elm-random\LICENSE" Pack="true" PackagePath="licenses\elm-random-LICENSE.txt" />
   </ItemGroup>
 
   <ItemGroup>
@@ -46,6 +48,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Elm\elm-in-elm\**\*.elm;Elm\elm-in-elm\**\*.json;" />
+    <EmbeddedResource Include="Elm\Testing\elm-test\**;Elm\Testing\elm-random\**" />
   </ItemGroup>
 
   <ItemGroup>
