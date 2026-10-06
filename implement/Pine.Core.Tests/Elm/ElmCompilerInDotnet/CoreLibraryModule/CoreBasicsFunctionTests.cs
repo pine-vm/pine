@@ -9,6 +9,68 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 
 public class CoreBasicsFunctionTests
 {
+    [Theory]
+    [InlineData(1.5, 2)]
+    [InlineData(-1.5, -1)]
+    [InlineData(-0.5, 0)]
+    [InlineData(2.49, 2)]
+    public void Round_resolves_ties_toward_positive_infinity(double number, long expected)
+    {
+        ApplyGeneric(CoreBasics.Round_FunctionValue(), [ElmValue.ElmFloat.Convert(number)])
+            .Should().Be(ElmValue.Integer(expected));
+    }
+
+    [Theory]
+    [InlineData(0, 0, true, false)]
+    [InlineData(1, 0, false, true)]
+    [InlineData(-1, 0, false, true)]
+    [InlineData(0, 1, false, false)]
+    [InlineData(1, 2, false, false)]
+    public void Nonfinite_float_predicates_distinguish_infinities_and_nan(
+        long numerator, long denominator, bool nan, bool infinite)
+    {
+        var input = ElmValue.ElmFloat.NotNormalized(numerator, denominator);
+
+        ApplyGeneric(CoreBasics.IsNaN_FunctionValue(), [input]).Should().Be(
+            nan ? ElmValue.TrueValue : ElmValue.FalseValue);
+
+        ApplyGeneric(CoreBasics.IsInfinite_FunctionValue(), [input]).Should().Be(
+            infinite ? ElmValue.TrueValue : ElmValue.FalseValue);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(4)]
+    [InlineData(2)]
+    [InlineData(1e-100)]
+    [InlineData(1e100)]
+    public void Square_root_preserves_relative_precision_across_magnitudes(double number)
+    {
+        var input =
+            number == 1e-100
+            ?
+            ElmValue.ElmFloat.Normalized(1, System.Numerics.BigInteger.Pow(10, 100))
+            :
+            ElmValue.ElmFloat.Convert(number);
+
+        var result = ApplyGeneric(CoreBasics.Sqrt_FunctionValue(), [input]);
+
+        var value =
+            result is ElmValue.ElmInteger integer
+            ?
+            (double)integer.Value
+            :
+            result is ElmValue.ElmFloat floating
+            ?
+            (double)floating.Numerator / (double)floating.Denominator
+            :
+            throw new System.NotImplementedException("Unexpected square root result: " + result.GetType().Name);
+
+        value.Should().BeApproximately(
+            System.Math.Sqrt(number),
+            System.Math.Max(1e-150, System.Math.Sqrt(number) * 1e-15));
+    }
+
     [Fact]
     public void Int_sub_zero()
     {
