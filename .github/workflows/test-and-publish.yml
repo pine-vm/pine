@@ -115,7 +115,7 @@ jobs:
         path: ./publish
 
     - name: dotnet publish with separate assemblies
-      run: dotnet publish -c Debug ./implement/pine --output ./publish-separate-assemblies
+      run: dotnet publish -c Debug -r ${{ matrix.publish-runtime-id }} --self-contained false ./implement/pine --output ./publish-separate-assemblies
 
     - name: Publish artifacts with separate assemblies
       uses: actions/upload-artifact@v7
