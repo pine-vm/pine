@@ -997,54 +997,79 @@ public record ExpressionCompilation(
     /// self-calls and other environment-dispatched calls. Static IR size is gated
     /// separately by the <c>SubexpressionCount</c> threshold.
     /// </para>
+    /// <para>Shared subexpressions are memoized while each executed edge still contributes its cost.
+    /// Saturation prevents integer overflow from turning an expensive path into an eligible negative cost.</para>
     /// </summary>
     internal static int ComputeEvalPathMax(
         Expression expression,
         Func<Expression.Eval, bool> isExpansionCandidate)
     {
-        switch (expression)
+        var costs = new Dictionary<Expression, int>(ReferenceEqualityComparer.Instance);
+        var pending = new Stack<(Expression expression, bool childrenReady)>();
+        pending.Push((expression, false));
+
+        while (pending.TryPop(out var next))
         {
-            case Expression.Conditional conditional:
+            if (costs.ContainsKey(next.expression))
+                continue;
+
+            if (!next.childrenReady)
+            {
+                pending.Push((next.expression, true));
+
+                foreach (var child in Children(next.expression))
+                    if (!costs.ContainsKey(child))
+                        pending.Push((child, false));
+
+                continue;
+            }
+
+            costs.Add(
+                next.expression,
+                next.expression switch
                 {
-                    var condP = ComputeEvalPathMax(conditional.Condition, isExpansionCandidate);
-                    var trueP = ComputeEvalPathMax(conditional.TrueBranch, isExpansionCandidate);
-                    var falseP = ComputeEvalPathMax(conditional.FalseBranch, isExpansionCandidate);
+                    Expression.Conditional conditional =>
+                    Add(
+                        costs[conditional.Condition],
+                        Math.Max(costs[conditional.TrueBranch], costs[conditional.FalseBranch])),
 
-                    return condP + Math.Max(trueP, falseP);
-                }
+                    Expression.Eval eval =>
+                    Add(isExpansionCandidate(eval) ? 1 : 0, Add(costs[eval.Encoded], costs[eval.Environment])),
 
-            case Expression.Eval evalExpr:
-                {
-                    var encP = ComputeEvalPathMax(evalExpr.Encoded, isExpansionCandidate);
-                    var envP = ComputeEvalPathMax(evalExpr.Environment, isExpansionCandidate);
+                    Expression.List list => list.Items.Aggregate(0, (sum, item) => Add(sum, costs[item])),
+                    Expression.Builtin builtin => costs[builtin.Input],
+                    Expression.Label label => costs[label.Tagged],
+                    Expression.Litral => 0,
+                    Expression.Environment => 0,
 
-                    var selfContribution =
-                        isExpansionCandidate(evalExpr) ? 1 : 0;
-
-                    return selfContribution + encP + envP;
-                }
-
-            case Expression.List list:
-                {
-                    var sumP = 0;
-
-                    for (var i = 0; i < list.Items.Count; i++)
-                    {
-                        sumP += ComputeEvalPathMax(list.Items[i], isExpansionCandidate);
-                    }
-
-                    return sumP;
-                }
-
-            case Expression.Builtin kernelApp:
-                return ComputeEvalPathMax(kernelApp.Input, isExpansionCandidate);
-
-            case Expression.Label stringTag:
-                return ComputeEvalPathMax(stringTag.Tagged, isExpansionCandidate);
-
-            default:
-                return 0;
+                    _ =>
+                    throw new NotImplementedException(
+                        nameof(ComputeEvalPathMax) + " does not handle expression variant: " +
+                        next.expression.GetType().Name),
+                });
         }
+
+        return costs[expression];
+
+        static int Add(int left, int right) => (int)Math.Min(int.MaxValue, (long)left + right);
+
+        static IEnumerable<Expression> Children(Expression node) =>
+            node switch
+            {
+                Expression.Conditional conditional =>
+                [conditional.Condition, conditional.TrueBranch, conditional.FalseBranch],
+
+                Expression.Eval eval => [eval.Encoded, eval.Environment],
+                Expression.List list => list.Items,
+                Expression.Builtin builtin => [builtin.Input],
+                Expression.Label label => [label.Tagged],
+                Expression.Litral => [],
+                Expression.Environment => [],
+
+                _ =>
+                throw new NotImplementedException(
+                    nameof(ComputeEvalPathMax) + " does not handle expression variant: " + node.GetType().Name),
+            };
     }
 
     /// <summary>
