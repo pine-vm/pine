@@ -2001,7 +2001,7 @@ public static class OptimizationOpportunityFinder
                                 SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatterns(
                                     letFunc.Function.Declaration.Arguments);
 
-                            IReadOnlyList<TypeInference.InferredType> letParameterTypes =
+                            var letParameterTypes =
                                 letFunc.Function.Signature is { } letSignature
                                 ?
                                 TypeInference.ExtractArgumentTypesFromFunctionType(

@@ -3079,7 +3079,7 @@ public static class TypeInference
                 return bindings;
 
             case SyntaxTypes.Pattern.UnConsPattern unConsPattern:
-                InferredType? elementType =
+                var elementType =
                     inferredType switch
                     {
                         InferredType.ListType listType =>
@@ -3115,7 +3115,7 @@ public static class TypeInference
                         resolveConstructorArgumentTypes);
 
             case SyntaxTypes.Pattern.ListPattern listPattern:
-                InferredType? listElementType =
+                var listElementType =
                     inferredType switch
                     {
                         InferredType.ListType listType =>

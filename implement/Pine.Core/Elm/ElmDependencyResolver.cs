@@ -518,7 +518,9 @@ public static class ElmDependencyResolver
                     $"{exception.Message}\nPackage data source: {exception.Origin}",
                     last?.Requirements ?? roots,
                     last?.Selection ?? [])
-                { ExceptionDetail = exception.ToString() };
+                {
+                    ExceptionDetail = exception.ToString()
+                };
 
             return Report(roots, [], [failure]);
         }
@@ -533,7 +535,9 @@ public static class ElmDependencyResolver
                     exception.Message,
                     last?.Requirements ?? roots,
                     last?.Selection ?? [])
-                { ExceptionDetail = exception.ToString() };
+                {
+                    ExceptionDetail = exception.ToString()
+                };
 
             return Report(roots, [], [failure]);
         }

@@ -193,10 +193,10 @@ public class ExpressionTests
             return current;
         }
 
-        const int depth = 100_000;
+        const int Depth = 100_000;
 
-        var exprA = BuildDeeplyNestedList(depth);
-        var exprB = BuildDeeplyNestedList(depth);
+        var exprA = BuildDeeplyNestedList(Depth);
+        var exprB = BuildDeeplyNestedList(Depth);
 
         exprA.Equals(exprB).Should().BeTrue();
         exprA.GetHashCode().Should().Be(exprB.GetHashCode());
@@ -216,7 +216,7 @@ public class ExpressionTests
             return current;
         }
 
-        var exprC = BuildDeeplyNestedListWithInnerValue(depth, 41);
+        var exprC = BuildDeeplyNestedListWithInnerValue(Depth, 41);
 
         exprA.Equals(exprC).Should().BeFalse();
     }

@@ -209,7 +209,7 @@ public sealed partial record PineControlFlowGraph(
             PineControlFlowFragment fragment,
             BlockUnderConstruction current)
         {
-            BlockUnderConstruction? open = current;
+            var open = current;
 
             foreach (var node in fragment.Nodes)
             {

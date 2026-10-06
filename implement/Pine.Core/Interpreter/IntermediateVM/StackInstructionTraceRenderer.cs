@@ -429,7 +429,7 @@ public static class StackInstructionTraceRenderer
         {
             var instruction = instructions[sourceIndex];
 
-            IEnumerable<int> jumpOffsets =
+            var jumpOffsets =
                 instruction.Kind switch
                 {
                     StackInstructionKind.Jump_Const or
