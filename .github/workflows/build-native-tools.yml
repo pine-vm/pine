@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        environment: [ubuntu-24.04, windows-2022, macos-14]
+        environment: [ubuntu-24.04, windows-2022, macos-15]
         isManualRun:
           - ${{ github.event_name == 'workflow_dispatch' }}
         include:
@@ -21,12 +21,12 @@ jobs:
             publish-runtime-id: linux-x64
           - environment: windows-2022
             publish-runtime-id: win-x64
-          - environment: macos-14
+          - environment: macos-15
             publish-runtime-id: osx-x64
         # Exclude macOS on automatic triggers (push). On manual workflow_dispatch, all environments run.
         exclude:
           - isManualRun: false
-            environment: macos-14
+            environment: macos-15
 
     runs-on: ${{ matrix.environment }}
 

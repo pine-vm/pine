@@ -26,7 +26,7 @@ jobs:
         include='{"environment":"ubuntu-24.04","publish-runtime-id":"linux-x64"},{"environment":"windows-2022","publish-runtime-id":"win-x64"}'
         # Add macOS only on manual workflow_dispatch runs.
         if [ "$IS_MANUAL_RUN" = "true" ]; then
-          include="$include,{\"environment\":\"macos-14\",\"publish-runtime-id\":\"osx-x64\"}"
+          include="$include,{\"environment\":\"macos-15\",\"publish-runtime-id\":\"osx-x64\"}"
         fi
         echo "matrix={\"include\":[$include]}" >> "$GITHUB_OUTPUT"
 
