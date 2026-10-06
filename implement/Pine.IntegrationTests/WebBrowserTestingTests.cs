@@ -352,17 +352,44 @@ public class WebBrowserTestingTests
         artifacts.Diagnostics.CollectionErrors.Should().NotBeEmpty();
     }
 
+    [Theory]
+    [InlineData(false, false, false, WebBrowserExecutionMode.Container)]
+    [InlineData(false, true, false, WebBrowserExecutionMode.Container)]
+    [InlineData(false, false, true, WebBrowserExecutionMode.Container)]
+    [InlineData(true, false, false, WebBrowserExecutionMode.Container)]
+    [InlineData(true, true, false, WebBrowserExecutionMode.Host)]
+    [InlineData(true, false, true, WebBrowserExecutionMode.Host)]
+    public void Web_browser_execution_mode_uses_host_only_on_Windows_and_macOS_in_GitHub_Actions(
+        bool isGitHubActions,
+        bool isWindows,
+        bool isMacOS,
+        WebBrowserExecutionMode expectedMode)
+    {
+        SelectTestWebBrowserExecutionMode(isGitHubActions, isWindows, isMacOS)
+            .Should().Be(expectedMode);
+    }
+
     internal static WebBrowserExecutionMode TestWebBrowserExecutionMode()
     {
-        if (string.Equals(
-            Environment.GetEnvironmentVariable("GITHUB_ACTIONS"),
-            "true",
-            StringComparison.OrdinalIgnoreCase))
+        return
+            SelectTestWebBrowserExecutionMode(
+                isGitHubActions:
+                string.Equals(
+                    Environment.GetEnvironmentVariable("GITHUB_ACTIONS"),
+                    "true",
+                    StringComparison.OrdinalIgnoreCase),
+                isWindows: OperatingSystem.IsWindows(),
+                isMacOS: OperatingSystem.IsMacOS());
+    }
+
+    private static WebBrowserExecutionMode SelectTestWebBrowserExecutionMode(
+        bool isGitHubActions,
+        bool isWindows,
+        bool isMacOS)
+    {
+        if (isGitHubActions && (isWindows || isMacOS))
         {
-            if (Environment.OSVersion.Platform is not PlatformID.Unix)
-            {
-                return WebBrowserExecutionMode.Host;
-            }
+            return WebBrowserExecutionMode.Host;
         }
 
         return WebBrowserExecutionMode.Container;
