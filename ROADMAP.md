@@ -33,6 +33,11 @@ The runtime performance items are not related to the Pine language, but are impl
 - [ ] Introduce specialized representation for `Int32` for cheaper integer arithmetic.
 - [ ] Sound and garbage free memory management in WASM-based representations including opportunistic mutation (perhaps Perceus reference counting (<https://www.microsoft.com/en-us/research/wp-content/uploads/2020/11/perceus-tr-v1.pdf>))
 
+## Language Semantics
+
++ Lenient evaluation (should we remove/change failures to simplify this?)
++ Lazy observation (e.g. all GitHub repos as input to declarative modelled build).
+
 ## Language Elm
 
 + [ ] Expand the Elm compiler to instantiate higher-order functions so that downstream code analysis only needs to parse first-order functions.
