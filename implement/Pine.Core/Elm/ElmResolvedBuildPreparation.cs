@@ -79,7 +79,9 @@ public static class ElmResolvedBuildPreparation
                     [
                     .. report.Packages.Values.Select(package => package.Identity)
                     ])
-                { ExceptionDetail = exception.ToString() };
+                {
+                    ExceptionDetail = exception.ToString()
+                };
 
             throw new ElmDependencyResolutionException(report with { Failures = [failure], Fingerprint = null }, exception);
         }
@@ -164,7 +166,9 @@ public static class ElmResolvedBuildPreparation
                         [
                         .. report.Packages.Values.Select(item => item.Identity)
                         ])
-                    { ExceptionDetail = exception.ToString() };
+                    {
+                        ExceptionDetail = exception.ToString()
+                    };
 
                 throw new ElmDependencyResolutionException(
                     report with { Failures = [failure], Trace = traces.ToImmutable(), Fingerprint = null },

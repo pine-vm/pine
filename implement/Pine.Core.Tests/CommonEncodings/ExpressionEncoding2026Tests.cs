@@ -19,7 +19,7 @@ public class ExpressionEncoding2026Tests
         Expression falseBranch = Expression.LitralInst(StringEncoding.ValueFromString("false"));
         Expression trueBranch = Expression.LitralInst(StringEncoding.ValueFromString("true"));
         Expression encoded = Expression.LitralInst(StringEncoding.ValueFromString("encoded"));
-        Expression environment = Expression.EnvironmentInstance;
+        var environment = Expression.EnvironmentInstance;
         Expression labeled = Expression.LitralInst(StringEncoding.ValueFromString("labeled"));
 
         var testCases =
@@ -276,7 +276,7 @@ public class ExpressionEncoding2026Tests
     {
         const int depth = 100_000;
 
-        Expression nested = s_literal;
+        var nested = s_literal;
 
         for (var i = 0; i < depth; ++i)
             nested = Expression.BuiltinInst(nameof(BuiltinFunction.length), nested);

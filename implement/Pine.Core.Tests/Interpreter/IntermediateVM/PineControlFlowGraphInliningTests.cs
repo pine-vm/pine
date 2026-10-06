@@ -166,7 +166,7 @@ public class PineControlFlowGraphInliningTests
     [Fact]
     public void Large_callee_is_not_inlined_even_when_expression_has_a_static_target()
     {
-        Expression body = Expression.EnvironmentInstance;
+        var body = Expression.EnvironmentInstance;
 
         for (var i = 0; i < 270; i++)
         {
@@ -185,7 +185,7 @@ public class PineControlFlowGraphInliningTests
     [Fact]
     public void Large_expression_with_many_shared_case_arms_is_inlined_by_instruction_size()
     {
-        Expression body = Number(0);
+        var body = Number(0);
 
         for (var i = 0; i < 140; i++)
         {

@@ -365,7 +365,7 @@ public static class BuiltinOperatorLowering
         RewriteContext context,
         TypeInference.InferredType? expectedType)
     {
-        TypeInference.InferredType functionExpectedType =
+        var functionExpectedType =
             expectedType ?? new TypeInference.InferredType.UnknownType();
 
         for (var argumentIndex = application.Arguments.Count - 1; argumentIndex >= 0; argumentIndex--)
@@ -1709,7 +1709,7 @@ public static class BuiltinOperatorLowering
                 InferExpressionType(argument, context))
             .ToList();
 
-        IReadOnlyList<TypeInference.InferredType> specializedParameterTypes =
+        var specializedParameterTypes =
             TypeInference.SpecializeTypesFromArguments(
                 parameterTypes,
                 actualArgumentTypes);
