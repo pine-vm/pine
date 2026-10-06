@@ -13,6 +13,51 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
 public class CanonicalizationTests
 {
+    [Fact]
+    public void Module_extensions_share_qualifiers_without_hiding_core_exports()
+    {
+        var baseModule = ParseModuleText("module List exposing (take)\ntake n xs = xs\n");
+        var extraModule = ParseModuleText("module Extra exposing (extra)\nextra x = x\n");
+
+        var root =
+            ParseModuleText(
+                """
+                module Main exposing (value)
+                import Extra as List
+                value = List.extra (List.take 1 [])
+                """);
+
+        var result = Canonicalization.CanonicalizeOrThrow([baseModule, extraModule, root]);
+        var module = ElmCompilerTestHelper.GetCanonicalizedModule(result, ["Main"]);
+        var rendered = Avh4Format.FormatToString(ToFullSyntaxModel.Convert(module));
+        rendered.Should().Contain("Extra.extra").And.Contain("List.take");
+    }
+
+    [Fact]
+    public void Nested_wildcard_let_bindings_do_not_shadow_named_declarations()
+    {
+        var module =
+            ParseModuleText(
+                """
+                module Main exposing (value)
+                value =
+                    let
+                        _ = 1
+                    in
+                    let
+                        _ = 2
+                    in
+                    3
+                """);
+
+        var result = Canonicalization.CanonicalizeOrThrow([module]);
+        var canonicalized = ElmCompilerTestHelper.GetCanonicalizedModule(result, ["Main"]);
+
+        NamingErrorDetection.DetectNamingErrorsInModule(
+            ToFullSyntaxModel.Convert(canonicalized).Declarations.Select(node => node.Value).ToArray(),
+            ["value"]).Errors.Should().BeEmpty();
+    }
+
     private static ConcreteSyntaxTypes.File ParseModuleText(string moduleTex)
     {
         return

@@ -54,7 +54,9 @@ public class Canonicalization
         public CanonicalizationContext WithLocalDeclarations(ImmutableHashSet<string> additionalDeclarations) =>
             this with { LocalDeclarations = LocalDeclarations.Union(additionalDeclarations) };
 
-        public CanonicalizationContext WithDefaults(ImplicitImportConfig implicitImportConfig)
+        public CanonicalizationContext WithDefaults(
+            ImplicitImportConfig implicitImportConfig,
+            IReadOnlyDictionary<string, ModuleExports>? moduleExports = null)
         {
             // Merge implicit type imports into the type import map
             // Skip names that are already declared locally in this module
@@ -115,6 +117,15 @@ public class Canonicalization
                 if (importedModule.Alias is { } alias && !mergedAliasMap.ContainsKey(alias))
                 {
                     mergedAliasMap = mergedAliasMap.Add(alias, importedModule.ModuleName);
+                }
+
+                if (moduleExports?.TryGetValue(string.Join(".", importedModule.ModuleName), out var exports) is true)
+                {
+                    var qualifier = importedModule.Alias ?? string.Join(".", importedModule.ModuleName);
+
+                    foreach (var name in exports.ValueExports.Union(exports.TypeExports))
+                        if (!mergedAliasMap.ContainsKey(qualifier + "." + name))
+                            mergedAliasMap = mergedAliasMap.Add(qualifier + "." + name, importedModule.ModuleName);
                 }
             }
 
@@ -385,7 +396,7 @@ public class Canonicalization
                     LocalDeclarations: [],
                     OperatorToFunction: operatorToFunction,
                     DeclarationPath: [])
-                .WithDefaults(implicitImportConfig);
+                .WithDefaults(implicitImportConfig, moduleExportsMap);
 
             // Detect module-level declarations that shadow imported names
             var moduleLevelShadowings =
@@ -845,6 +856,19 @@ public class Canonicalization
             {
                 var alias = string.Join(".", importModuleAlias.Alias.Value);
                 aliasMap[alias] = moduleName;
+            }
+
+            if (moduleExportsMap.TryGetValue(moduleNameStr, out var qualifiedExports))
+            {
+                var qualifier =
+                    import.ModuleAlias is { } explicitAlias
+                    ?
+                    string.Join(".", explicitAlias.Alias.Value)
+                    :
+                    moduleNameStr;
+
+                foreach (var exportedName in qualifiedExports.ValueExports.Union(qualifiedExports.TypeExports))
+                    aliasMap[qualifier + "." + exportedName] = moduleName;
             }
 
             // Get exposed items
@@ -2133,6 +2157,9 @@ public class Canonicalization
         {
             var moduleNameStr = string.Join(".", qualifiedModuleName);
 
+            if (aliasMap.TryGetValue(moduleNameStr + "." + name, out var exportedModule))
+                return new CanonicalizationResult<ModuleName>(exportedModule, []);
+
             if (aliasMap.TryGetValue(moduleNameStr, out var resolvedModuleName))
             {
                 return new CanonicalizationResult<ModuleName>(resolvedModuleName, []);
@@ -2291,6 +2318,9 @@ public class Canonicalization
             {
                 var funcName = letFunc.Function.Declaration.Value.Name.Value;
                 var funcNameRange = letFunc.Function.Declaration.Value.Name.Range;
+
+                if (funcName is "_")
+                    continue;
 
                 // Check if let function name shadows existing declarations
                 if (existingScope.Contains(funcName))
