@@ -1,4 +1,5 @@
 using Pine.Core.CodeAnalysis;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.Elm019;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmSyntax;
@@ -13,6 +14,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -27,28 +30,15 @@ namespace Pine.Core.Elm.Testing;
 /// </summary>
 public static class ElmTestRunner
 {
-    /// <summary>Test-scoped bundled substitutions, including the terminal Pine Test/Expect implementation.</summary>
+    /// <summary>Test-scoped terminal substitutions for the pinned Elm test/fuzz engine and pure PCG generator.</summary>
     public static readonly Lazy<ElmDependencyResolutionConfiguration> DefaultResolutionConfiguration =
         new(
             () => ElmPackageSubstitutions.DefaultBuild.Value with
             {
                 IncludeTests = true,
                 Substitutions =
-                ElmPackageSubstitutions.DefaultBuild.Value.Substitutions.Add(
-                    ElmPackageSubstitution.Create(
-                        "elm-explorations/test",
-                        "pine-unit-test-runner-v1",
-                        ["2.2.0", "2.2.1"],
-                        FileTree.FromSetOfFilesWithStringPath(
-                        [
-                            (new[] { "src", "Expect.elm" }, (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(ExpectModuleText)),
-                            (new[] { "src", "Test.elm" }, (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(TestModuleText)),
-                        ]),
-                        ["Expect", "Test"]) with
-                    {
-                        ImplementationDependencies =
-                        ImmutableDictionary<string, string>.Empty.Add("elm/core", "1.0.0 <= v < 2.0.0"),
-                    }),
+                ElmPackageSubstitutions.DefaultBuild.Value.Substitutions
+                .Add(ElmFuzzPackageSources.Test()).Add(ElmFuzzPackageSources.Random()),
             });
 
     /// <summary>
@@ -73,7 +63,8 @@ public static class ElmTestRunner
         Action<int>? onTestsDiscovered = null,
         ElmDependencyResolutionConfiguration? resolutionConfiguration = null,
         IElmPackageProvider? packageProvider = null,
-        Action<ElmDependencyResolutionReport>? onDependenciesResolved = null) =>
+        Action<ElmDependencyResolutionReport>? onDependenciesResolved = null,
+        ElmFuzzOptions? fuzzOptions = null) =>
         CompileAndRunTests(
             appDirectory,
             pineVm,
@@ -84,7 +75,8 @@ public static class ElmTestRunner
             onTestsDiscovered,
             resolutionConfiguration,
             packageProvider,
-            onDependenciesResolved);
+            onDependenciesResolved,
+            fuzzOptions);
 
 
     /// <summary>
@@ -99,7 +91,8 @@ public static class ElmTestRunner
         Action<int>? onTestsDiscovered = null,
         ElmDependencyResolutionConfiguration? resolutionConfiguration = null,
         IElmPackageProvider? packageProvider = null,
-        Action<ElmDependencyResolutionReport>? onDependenciesResolved = null)
+        Action<ElmDependencyResolutionReport>? onDependenciesResolved = null,
+        ElmFuzzOptions? fuzzOptions = null)
     {
         ArgumentNullException.ThrowIfNull(pineVmFactory);
 
@@ -114,7 +107,8 @@ public static class ElmTestRunner
                 onTestsDiscovered,
                 resolutionConfiguration,
                 packageProvider,
-                onDependenciesResolved);
+                onDependenciesResolved,
+                fuzzOptions);
     }
 
 
@@ -128,10 +122,13 @@ public static class ElmTestRunner
         Action<int>? onTestsDiscovered,
         ElmDependencyResolutionConfiguration? resolutionConfiguration,
         IElmPackageProvider? packageProvider,
-        Action<ElmDependencyResolutionReport>? onDependenciesResolved)
+        Action<ElmDependencyResolutionReport>? onDependenciesResolved,
+        ElmFuzzOptions? fuzzOptions)
     {
         if (workers < 1)
             throw new ArgumentOutOfRangeException(nameof(workers), "Worker count must be at least one.");
+
+        var executionSettings = (fuzzOptions ?? new()).Resolve();
 
         appDirectory = Path.GetFullPath(appDirectory);
 
@@ -154,7 +151,7 @@ public static class ElmTestRunner
         var appCodeTreeWithoutPackages = FileTree.FromSetOfFilesWithStringPath(appFiles);
 
         var nestedProjects =
-            appFiles.Where(file => file.path.Count > 1 && file.path[^1] == "elm.json")
+            appFiles.Where(file => file.path.Count > 1 && file.path[^1] is "elm.json")
             .Select(file => file.path.Take(file.path.Count - 1).ToArray()).ToArray();
 
         var testModules =
@@ -238,10 +235,32 @@ public static class ElmTestRunner
                     DeclQualifiedName.Create(testModule.moduleName, declarationName)))
             .ToImmutableArray();
 
+        string[] bridgePath = ["elm-packages", "elm-explorations", "test", "src", "PineTestBridge.elm"];
+
+        if (build.Sources.GetNodeAtPath(bridgePath) is null)
+        {
+            throw new InvalidOperationException(
+                "The configured test substitution does not implement Pine's fuzz execution bridge.");
+        }
+
+        var bridgeName = build.CompilerModuleNames[string.Join("/", bridgePath)];
+        build = build with { RootFilePaths = build.RootFilePaths.Add([.. bridgePath]) };
+        var preparationCaches = new PineVMSharedCaches();
+
+        var preparationVm =
+            CreatePineVm(
+                new ConcurrentInvocationCache(),
+                preparationCaches,
+                new IntermediatePineVM.EvaluationConfig(
+                    InvocationCountLimit: 10_000_000,
+                    LoopIterationCountLimit: 10_000_000,
+                    StackDepthLimit: 100_000));
+
         var (compiledEnvironment, _) =
             ElmCompiler.CompileResolvedEnvironment(
                 build,
-                rootDeclarationsAsPlainValues: testDeclarationNames)
+                rootDeclarationsAsPlainValues: testDeclarationNames,
+                plainValueVm: preparationVm)
             .Extract(error => throw new InvalidOperationException("Failed compiling Elm tests: " + error));
 
         var parsedEnvironment =
@@ -249,6 +268,14 @@ public static class ElmTestRunner
             .Extract(error => throw new InvalidOperationException("Failed parsing compiled Elm tests: " + error));
 
         var discoveredTests = new List<DiscoveredTest>();
+
+        var prepareFunction =
+            FunctionRecord.ParseFunctionRecordTagged(
+                parsedEnvironment.Modules.Single(module => module.moduleName == bridgeName).moduleContent.FunctionDeclarations["prepare"],
+                preparationCaches.ParsedExpressions).Extract(error => throw new InvalidOperationException(error));
+
+        var hasOnly = false;
+        var hasSkipped = false;
 
         foreach (var testModule in testModules)
         {
@@ -276,13 +303,74 @@ public static class ElmTestRunner
                 if (!IsTestValue(declarationValue))
                     continue;
 
-                DiscoverTests(
-                    declarationValue,
-                    filePath: testModule.filePathText,
-                    descriptionPath: [],
-                    discoveredTests);
+                var prepared =
+                    ElmInteractiveEnvironment.ApplyFunction(
+                        preparationVm,
+                        prepareFunction,
+                        [
+                        IntegerEncoding.EncodeSignedInteger(executionSettings.FuzzRuns),
+                        IntegerEncoding.EncodeSignedInteger(executionSettings.Seed), declarationValue
+                        ])
+                    .Extract(error => throw new InvalidOperationException("Failed preparing Elm tests: " + error));
+
+                var (preparedTag, preparedArguments) = ParseTaggedValue(prepared);
+
+                if (preparedTag is "Invalid")
+                {
+                    discoveredTests.Add(
+                        new(testModule.filePathText, [declarationName], DiscoveredTestKind.Invalid, null)
+                        {
+                            PreparationError = ParseElmString(preparedArguments.Span[0])
+                        });
+
+                    continue;
+                }
+
+                if (preparedTag is not ("Plain" or "Only" or "Skipping") ||
+                    preparedArguments.Span[0] is not PineValue.ListValue runners)
+                    throw new InvalidOperationException("Invalid seeded test runners: " + preparedTag);
+
+                hasOnly |= preparedTag is "Only";
+                hasSkipped |= preparedTag is "Skipping";
+
+                foreach (var runner in runners.Items.Span)
+                {
+                    var labels = ParseList(Field(runner, "labels")).Select(ParseElmString).Reverse().ToArray();
+                    var kind = ParseElmString(Field(runner, "kind"));
+                    var path = labels.Length is 0 ? [declarationName] : labels;
+
+                    discoveredTests.Add(
+                        new(
+                            testModule.filePathText,
+                            path,
+                            kind switch
+                            {
+                                "todo" => DiscoveredTestKind.Todo,
+                                "empty" => DiscoveredTestKind.EmptyGroup,
+                                "unit" or "fuzz" => DiscoveredTestKind.Runnable,
+
+                                _ =>
+                                throw new InvalidOperationException("Unknown runner kind: " + kind),
+                            },
+                            Field(runner, "run"))
+                        {
+                            Only = preparedTag is "Only",
+                            Fuzz =
+                            kind is "fuzz"
+                            ?
+                            new(
+                                executionSettings,
+                                ParseElmString(Field(runner, "seedState")),
+                                (uint)ParseInteger(Field(runner, "runs")))
+                            :
+                            null,
+                        });
+                }
             }
         }
+
+        if (hasOnly)
+            discoveredTests.RemoveAll(test => !test.Only && test.Kind != DiscoveredTestKind.Invalid);
 
         var filteredOutTests = new List<ListedTest>();
 
@@ -405,7 +493,16 @@ public static class ElmTestRunner
                 completedTests,
                 compilationStopwatch.Elapsed + stopwatch.Elapsed)
             {
-                CompilationDuration = compilationStopwatch.Elapsed
+                CompilationDuration = compilationStopwatch.Elapsed,
+                ExecutionSettings = executionSettings,
+                IncompleteReason =
+                hasOnly
+                ?
+                "Test.only was used; the complete suite was not run."
+                :
+                hasSkipped ? "Test.skip was used; the complete suite was not run." : null,
+                ResolutionFingerprint = build.Resolution.Fingerprint,
+                Resolution = build.Resolution,
             };
     }
 
@@ -442,6 +539,15 @@ public static class ElmTestRunner
         IPineVM pineVm,
         PineVMParseCache parseCache)
     {
+        if (discoveredTest.Kind is DiscoveredTestKind.Invalid)
+        {
+            return
+                new(
+                    discoveredTest.Path,
+                    CompletedTestKind.Failed,
+                    new MessageFailure(discoveredTest.PreparationError!));
+        }
+
         if (discoveredTest.Kind is DiscoveredTestKind.Todo)
         {
             return
@@ -480,7 +586,10 @@ public static class ElmTestRunner
                     discoveredTest.Path,
                     CompletedTestKind.Failed,
                     new MessageFailure(
-                        message: "Failed evaluating test: " + evaluationError));
+                        message: "Failed evaluating test: " + evaluationError))
+                {
+                    Fuzz = discoveredTest.Fuzz is { } fuzz ? fuzz with { EvaluationError = evaluationError } : null,
+                };
         }
 
         if (expectationResult.IsOkOrNull() is not { } expectationValue)
@@ -489,47 +598,87 @@ public static class ElmTestRunner
                 "Unexpected result type: " + expectationResult.GetType().FullName);
         }
 
-        var (expectationTag, expectationArguments) = ParseTaggedValue(expectationValue);
+        var expectations = ParseList(expectationValue);
+
+        if (expectations.Count is 0)
+            throw new InvalidOperationException("A runnable test returned no expectations.");
+
+        var expectation =
+            expectations.FirstOrDefault(value => ParseTaggedValue(value).tag is "Fail") ?? expectations[0];
+
+        var (expectationTag, expectationArguments) = ParseTaggedValue(expectation);
+        var record = expectationArguments.Span[0];
+        var fuzzResult = discoveredTest.Fuzz;
+
+        if (fuzzResult is not null)
+        {
+            fuzzResult = fuzzResult with { DistributionReport = RenderElm(Field(record, "distributionReport")) };
+            var (detailsTag, detailsArguments) = ParseTaggedValue(Field(record, "fuzzDetails"));
+
+            if (detailsTag is "Just")
+            {
+                var details = detailsArguments.Span[0];
+                var iteration = (uint)ParseInteger(Field(details, "failingIteration"));
+
+                fuzzResult =
+                    fuzzResult with
+                    {
+                        RunsRequested = (uint)ParseInteger(Field(details, "runsRequested")),
+                        RunsElapsed = (uint)ParseInteger(Field(details, "runsElapsed")),
+                        FailingIteration = iteration is 0 ? null : iteration,
+                        OriginalInput = iteration is 0 ? null : ParseElmString(Field(details, "originalInput")),
+                        ShrunkInput = iteration is 0 ? null : ParseElmString(Field(details, "shrunkInput")),
+                        OriginalChoices = ParseList(Field(details, "originalChoices")).Select(ParseInteger).ToArray(),
+                        ShrunkChoices = ParseList(Field(details, "shrunkChoices")).Select(ParseInteger).ToArray(),
+                        ShrinkingCompleted = iteration is not 0,
+                    };
+            }
+        }
 
         if (expectationTag is "Pass")
-        {
-            return
-                new CompletedTest(
-                    discoveredTest.Path,
-                    CompletedTestKind.Passed,
-                    failure: null);
-        }
+            return new(discoveredTest.Path, CompletedTestKind.Passed, null) { Fuzz = fuzzResult };
 
-        if (expectationTag is "ComparisonFailure")
-        {
-            if (expectationArguments.Length is not 3)
-                throw new InvalidOperationException("ComparisonFailure must contain three arguments");
+        if (expectationTag is not "Fail")
+            throw new InvalidOperationException("Unsupported expectation tag: " + expectationTag);
 
-            return
-                new CompletedTest(
-                    discoveredTest.Path,
-                    CompletedTestKind.Failed,
-                    new EqualityFailure(
-                        description: ParseElmString(expectationArguments.Span[0]),
-                        actual: ParseElmString(expectationArguments.Span[1]),
-                        expected: ParseElmString(expectationArguments.Span[2])));
-        }
+        var description = ParseElmString(Field(record, "description"));
+        var (reason, reasonArguments) = ParseTaggedValue(Field(record, "reason"));
 
-        if (expectationTag is "Fail")
-        {
-            if (expectationArguments.Length is not 1)
-                throw new InvalidOperationException("Fail must contain one argument");
+        if (fuzzResult is not null)
+            fuzzResult = fuzzResult with { FailureReason = RenderElm(Field(record, "reason")) };
 
-            return
-                new CompletedTest(
-                    discoveredTest.Path,
-                    CompletedTestKind.Failed,
-                    new MessageFailure(
-                        message: ParseElmString(expectationArguments.Span[0])));
-        }
+        TestFailure failure =
+            reason switch
+            {
+                "Equality" or "Comparison" =>
+                new EqualityFailure(
+                    description,
+                    ParseElmString(reasonArguments.Span[1]),
+                    ParseElmString(reasonArguments.Span[0])),
 
-        throw new InvalidOperationException(
-            "Unsupported expectation tag: " + expectationTag);
+                "ListDiff" =>
+                new EqualityFailure(
+                    description,
+                    "[ " + string.Join(", ", ParseList(reasonArguments.Span[1]).Select(ParseElmString)) + " ]",
+                    "[ " + string.Join(", ", ParseList(reasonArguments.Span[0]).Select(ParseElmString)) + " ]"),
+
+                "CollectionDiff" =>
+                new EqualityFailure(
+                    description,
+                    ParseElmString(Field(reasonArguments.Span[0], "actual")),
+                    ParseElmString(Field(reasonArguments.Span[0], "expected"))),
+
+                "Custom" or "TODO" or "Invalid" => new MessageFailure(description),
+
+                _ =>
+                throw new InvalidOperationException("Unsupported test failure reason: " + reason),
+            };
+
+        return
+            new(discoveredTest.Path, reason is "TODO" ? CompletedTestKind.Todo : CompletedTestKind.Failed, failure)
+            {
+                Fuzz = fuzzResult
+            };
     }
 
     private static bool IsDeclarationExposed(
@@ -581,7 +730,9 @@ public static class ElmTestRunner
         if (parseResult.IsOkOrNullable() is not { } tagged)
             return false;
 
-        return tagged.tagName is "Describe" or "TestCase" or "TodoCase";
+        return
+            tagged.tagName.StartsWith("ElmTestVariant__", StringComparison.Ordinal) ||
+            tagged.tagName is "PineTodo" or "PineEmptyGroup";
     }
 
 
@@ -593,7 +744,8 @@ public static class ElmTestRunner
         bool includeTestDetails,
         TimeSpan? duration = null,
         TimeSpan? compilationDuration = null,
-        bool includeRunningMessage = true)
+        bool includeRunningMessage = true,
+        string? incompleteReason = null)
     {
         var fragments = new List<TestOutputFragment>();
         var passedCount = tests.Count(test => test.Kind is CompletedTestKind.Passed);
@@ -641,6 +793,9 @@ public static class ElmTestRunner
                     Append("↓ " + groupName + "\n", TestOutputStyle.Dark);
 
                 Append("✗ " + failedTest.Path[^1] + "\n", TestOutputStyle.Failure);
+
+                if (failedTest.Fuzz is { ShrunkInput: { } given })
+                    Append("\n    Given: " + given + "\n", TestOutputStyle.Default);
 
                 if (failedTest.Failure is { } failure)
                 {
@@ -702,6 +857,10 @@ public static class ElmTestRunner
                 " because there " + (todoCount is 1 ? "is " : "are ") + todoCount +
                 " TODO" + (todoCount is 1 ? "" : "s") + " remaining\n\n",
                 TestOutputStyle.Todo);
+        }
+        else if (incompleteReason is not null)
+        {
+            Append("\nTEST RUN INCOMPLETE\n" + incompleteReason + "\n\n", TestOutputStyle.TodoHeadline);
         }
         else
         {
@@ -782,10 +941,15 @@ public static class ElmTestRunner
 
     private static IntermediatePineVM CreatePineVm(
         IInvocationCacheAccess invocationCache,
-        PineVMSharedCaches sharedCaches) =>
+        PineVMSharedCaches sharedCaches) => CreatePineVm(invocationCache, sharedCaches, null);
+
+    private static IntermediatePineVM CreatePineVm(
+        IInvocationCacheAccess invocationCache,
+        PineVMSharedCaches sharedCaches,
+        IntermediatePineVM.EvaluationConfig? evaluationConfig) =>
         IntermediatePineVM.CreateCustom(
             evalCache: null,
-            evaluationConfigDefault: null,
+            evaluationConfigDefault: evaluationConfig,
             reportFunctionApplication: null,
             compilationEnvClasses: null,
             disableReductionInCompilation: false,
@@ -803,77 +967,6 @@ public static class ElmTestRunner
             getOrAddExpressionCompilation: sharedCaches.ExpressionCompilations.GetOrAdd,
             expressionEncodingCache: sharedCaches.EncodedExpressions,
             reducedExpressionCache: sharedCaches.ReducedExpressions);
-
-
-    private static void DiscoverTests(
-        PineValue testValue,
-        string filePath,
-        IReadOnlyList<string> descriptionPath,
-        List<DiscoveredTest> discoveredTests)
-    {
-        var (tag, arguments) = ParseTaggedValue(testValue);
-
-        if (tag is "Describe")
-        {
-            if (arguments.Length is not 2)
-                throw new InvalidOperationException("Describe must contain two arguments");
-
-            var groupName = ParseElmString(arguments.Span[0]);
-            var groupPath = descriptionPath.Append(groupName).ToImmutableArray();
-
-            if (arguments.Span[1] is not PineValue.ListValue children)
-                throw new InvalidOperationException("Describe children must be a list");
-
-            if (children.Items.Length is 0)
-            {
-                discoveredTests.Add(
-                    new DiscoveredTest(
-                        filePath,
-                        groupPath,
-                        DiscoveredTestKind.EmptyGroup,
-                        Thunk: null));
-
-                return;
-            }
-
-            foreach (var child in children.Items.Span)
-                DiscoverTests(child, filePath, groupPath, discoveredTests);
-
-            return;
-        }
-
-        if (tag is "TestCase")
-        {
-            if (arguments.Length is not 2)
-                throw new InvalidOperationException("TestCase must contain two arguments");
-
-            discoveredTests.Add(
-                new DiscoveredTest(
-                    filePath,
-                    [.. descriptionPath, ParseElmString(arguments.Span[0])],
-                    DiscoveredTestKind.Runnable,
-                    arguments.Span[1]));
-
-            return;
-        }
-
-        if (tag is "TodoCase")
-        {
-            if (arguments.Length is not 1)
-                throw new InvalidOperationException("TodoCase must contain one argument");
-
-            discoveredTests.Add(
-                new DiscoveredTest(
-                    filePath,
-                    [.. descriptionPath, ParseElmString(arguments.Span[0])],
-                    DiscoveredTestKind.Todo,
-                    Thunk: null));
-
-            return;
-        }
-
-        throw new InvalidOperationException("Unsupported test tag: " + tag);
-    }
 
 
     private static (string tag, ReadOnlyMemory<PineValue> arguments) ParseTaggedValue(PineValue value)
@@ -898,12 +991,31 @@ public static class ElmTestRunner
                 "Expected Elm string, got " + elmValue.GetType().Name))
         .Extract(error => throw new InvalidOperationException("Failed parsing Elm string: " + error));
 
+    private static PineValue Field(PineValue value, string name) =>
+        ElmValueEncoding.ParsePineValueAsRecordTagged(value)
+        .Extract(error => throw new InvalidOperationException("Invalid test runner record: " + error))
+        .Single(field => field.fieldName == name).fieldValue;
+
+    private static IReadOnlyList<PineValue> ParseList(PineValue value) =>
+        value is PineValue.ListValue list
+        ?
+        list.Items.ToArray()
+        :
+        throw new InvalidOperationException("Expected an Elm list in test runner protocol.");
+
+    private static long ParseInteger(PineValue value) =>
+        (long)IntegerEncoding.ParseSignedIntegerStrict(value).Extract(error => throw new InvalidOperationException(error));
+
+    private static string RenderElm(PineValue value) =>
+        ElmValueEncoding.PineValueAsElmValue(value, null, null)
+        .Extract(error => throw new InvalidOperationException(error)).ToString();
 
     private enum DiscoveredTestKind
     {
         Runnable,
         Todo,
         EmptyGroup,
+        Invalid,
     }
 
 
@@ -911,289 +1023,16 @@ public static class ElmTestRunner
         string FilePath,
         IReadOnlyList<string> Path,
         DiscoveredTestKind Kind,
-        PineValue? Thunk);
+        PineValue? Thunk)
+    {
+        public bool Only { get; init; }
 
+        public ElmFuzzResult? Fuzz { get; init; }
 
-    private const string ExpectModuleText =
-        """
-        module Expect exposing
-            ( Expectation
-            , all
-            , err
-            , atLeast
-            , atMost
-            , equal
-            , equalDicts
-            , equalLists
-            , equalSets
-            , fail
-            , FloatingPointTolerance(..)
-            , greaterThan
-            , lessThan
-            , notEqual
-            , notWithin
-            , ok
-            , onFail
-            , pass
-            , within
-            )
+        public string? PreparationError { get; init; }
+    }
 
-        import Dict exposing (Dict)
-        import Debug
-        import Set exposing (Set)
 
-
-        type Expectation
-            = Pass
-            | ComparisonFailure String String String
-            | Fail String
-
-
-        type FloatingPointTolerance
-            = Absolute Float
-            | Relative Float
-            | AbsoluteOrRelative Float Float
-
-
-        pass : Expectation
-        pass =
-            Pass
-
-
-        fail : String -> Expectation
-        fail message =
-            Fail message
-
-
-        equal : a -> a -> Expectation
-        equal expected actual =
-            equateWith "Expect.equal" (==) expected actual
-
-
-        notEqual : a -> a -> Expectation
-        notEqual expected actual =
-            equateWith "Expect.notEqual" (/=) expected actual
-
-
-        lessThan : comparable -> comparable -> Expectation
-        lessThan expected actual =
-            compareWith "Expect.lessThan" (<) expected actual
-
-
-        atMost : comparable -> comparable -> Expectation
-        atMost expected actual =
-            compareWith "Expect.atMost" (<=) expected actual
-
-
-        greaterThan : comparable -> comparable -> Expectation
-        greaterThan expected actual =
-            compareWith "Expect.greaterThan" (>) expected actual
-
-
-        atLeast : comparable -> comparable -> Expectation
-        atLeast expected actual =
-            compareWith "Expect.atLeast" (>=) expected actual
-
-
-        within : FloatingPointTolerance -> Float -> Float -> Expectation
-        within tolerance expected actual =
-            validateTolerance tolerance "within" <|
-                compareWith
-                    ("Expect.within " ++ Debug.toString tolerance)
-                    (withinTolerance tolerance)
-                    expected
-                    actual
-
-
-        notWithin : FloatingPointTolerance -> Float -> Float -> Expectation
-        notWithin tolerance expected actual =
-            validateTolerance tolerance "notWithin" <|
-                compareWith
-                    ("Expect.notWithin " ++ Debug.toString tolerance)
-                    (\left right -> not (withinTolerance tolerance left right))
-                    expected
-                    actual
-
-
-        ok : Result error value -> Expectation
-        ok result =
-            case result of
-                Ok _ ->
-                    Pass
-
-                Err _ ->
-                    ComparisonFailure "Expect.ok" (Debug.toString result) "Ok _"
-
-
-        err : Result error value -> Expectation
-        err result =
-            case result of
-                Ok _ ->
-                    ComparisonFailure "Expect.err" (Debug.toString result) "Err _"
-
-                Err _ ->
-                    Pass
-
-
-        equalLists : List a -> List a -> Expectation
-        equalLists expected actual =
-            compareWith "Expect.equalLists" (==) expected actual
-
-
-        equalDicts : Dict comparable a -> Dict comparable a -> Expectation
-        equalDicts expected actual =
-            compareWith "Expect.equalDicts" (\left right -> Dict.toList left == Dict.toList right) expected actual
-
-
-        equalSets : Set comparable -> Set comparable -> Expectation
-        equalSets expected actual =
-            compareWith "Expect.equalSets" (\left right -> Set.toList left == Set.toList right) expected actual
-
-
-        onFail : String -> Expectation -> Expectation
-        onFail message expectation =
-            case expectation of
-                Pass ->
-                    Pass
-
-                _ ->
-                    Fail message
-
-
-        all : List (subject -> Expectation) -> subject -> Expectation
-        all expectations subject =
-            case expectations of
-                [] ->
-                    Fail "Expect.all was given an empty list. You must make at least one expectation to have a valid test!"
-
-                first :: remaining ->
-                    allHelp first remaining subject
-
-
-        allHelp : (subject -> Expectation) -> List (subject -> Expectation) -> subject -> Expectation
-        allHelp current remaining subject =
-            case current subject of
-                Pass ->
-                    case remaining of
-                        [] ->
-                            Pass
-
-                        next :: rest ->
-                            allHelp next rest subject
-
-                failure ->
-                    failure
-
-
-        validateTolerance : FloatingPointTolerance -> String -> Expectation -> Expectation
-        validateTolerance tolerance name expectation =
-            let
-                absoluteTolerance =
-                    case tolerance of
-                        Absolute value ->
-                            value
-
-                        AbsoluteOrRelative value _ ->
-                            value
-
-                        Relative _ ->
-                            0
-
-                relativeTolerance =
-                    case tolerance of
-                        Relative value ->
-                            value
-
-                        AbsoluteOrRelative _ value ->
-                            value
-
-                        Absolute _ ->
-                            0
-            in
-            if absoluteTolerance < 0 && relativeTolerance < 0 then
-                Fail ("Expect." ++ name ++ " was given negative absolute and relative tolerances")
-
-            else if absoluteTolerance < 0 then
-                Fail ("Expect." ++ name ++ " was given a negative absolute tolerance")
-
-            else if relativeTolerance < 0 then
-                Fail ("Expect." ++ name ++ " was given a negative relative tolerance")
-
-            else
-                expectation
-
-
-        withinTolerance : FloatingPointTolerance -> Float -> Float -> Bool
-        withinTolerance tolerance left right =
-            case tolerance of
-                Absolute value ->
-                    abs (left - right) <= value
-
-                Relative value ->
-                    abs (left - right) <= max (abs left) (abs right) * value
-
-                AbsoluteOrRelative absoluteValue relativeValue ->
-                    abs (left - right) <= absoluteValue
-                        || abs (left - right) <= max (abs left) (abs right) * relativeValue
-
-
-        equateWith : String -> (a -> a -> Bool) -> a -> a -> Expectation
-        equateWith description comparison expected actual =
-            let
-                isFloat value =
-                    String.toFloat value /= Nothing && String.toInt value == Nothing
-
-                usesFloats =
-                    isFloat (Debug.toString actual) || isFloat (Debug.toString expected)
-            in
-            if usesFloats then
-                if description == "Expect.notEqual" then
-                    Fail "Do not use Expect.notEqual with floats. Use Expect.notWithin instead."
-
-                else
-                    Fail "Do not use Expect.equal with floats. Use Expect.within instead."
-
-            else
-                compareWith description comparison expected actual
-
-
-        compareWith : String -> (a -> a -> Bool) -> a -> a -> Expectation
-        compareWith description comparison expected actual =
-            if comparison actual expected then
-                Pass
-
-            else
-                ComparisonFailure description (Debug.toString actual) (Debug.toString expected)
-        """;
-
-
-    private const string TestModuleText =
-        """
-        module Test exposing (Test, describe, test, todo)
-
-        import Expect exposing (Expectation)
-
-
-        type Test
-            = Describe String (List Test)
-            | TestCase String (() -> Expectation)
-            | TodoCase String
-
-
-        describe : String -> List Test -> Test
-        describe name children =
-            Describe name children
-
-
-        test : String -> (() -> Expectation) -> Test
-        test name thunk =
-            TestCase name thunk
-
-
-        todo : String -> Test
-        todo name =
-            TodoCase name
-        """;
 }
 
 
@@ -1392,6 +1231,9 @@ public sealed record CompletedTest
     /// </summary>
     public TestFailure? Failure { get; init; }
 
+    /// <summary>Generation, replay and shrinking metadata, present only for a fuzz property.</summary>
+    public ElmFuzzResult? Fuzz { get; init; }
+
     /// <summary>
     /// Deconstructs the completed Elm test.
     /// </summary>
@@ -1557,6 +1399,45 @@ public abstract record ElmTestRun
         /// Gets the portion of <see cref="Duration"/> spent compiling and discovering tests.
         /// </summary>
         public TimeSpan CompilationDuration { get; init; }
+
+        /// <summary>The seed and default run count selected once for this invocation.</summary>
+        public ElmTestExecutionSettings? ExecutionSettings { get; init; }
+
+        /// <summary>Reason the suite is incomplete despite any passing selected tests, such as only/skip.</summary>
+        public string? IncompleteReason { get; init; }
+
+        /// <summary>Identifies the exact compiler, substituted sources and resolved packages used.</summary>
+        public string? ResolutionFingerprint { get; init; }
+
+        /// <summary>Full dependency report, including pinned replacement source identities.</summary>
+        public ElmDependencyResolutionReport? Resolution { get; init; }
+
+        /// <summary>Exports replay settings, all property diagnostics and the dependency report without compiled functions.</summary>
+        public string ToDebugJson() =>
+            JsonSerializer.Serialize(
+                new
+                {
+                    ExecutionSettings,
+                    ResolutionFingerprint,
+                    Resolution,
+                    IncompleteReason,
+                    Tests =
+                    Tests.Select(
+                        test => new
+                        {
+                            test.Path,
+                            test.Kind,
+                            test.Fuzz,
+                            FailureKind = test.Failure?.GetType().Name,
+                            Failure =
+                            test.Failure is null
+                            ?
+                            (JsonElement?)null
+                            :
+                            JsonSerializer.SerializeToElement(test.Failure, test.Failure.GetType()),
+                        }),
+                },
+                new JsonSerializerOptions { WriteIndented = true, Converters = { new JsonStringEnumConverter() } });
     }
 
     /// <summary>

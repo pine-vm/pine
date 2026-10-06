@@ -438,7 +438,19 @@ public class ElmTestTests
             if (Interlocked.Increment(ref evaluationCount) is 1)
                 return "Invocation count limit exceeded: 10_000_000";
 
-            return ElmValueEncoding.TagAsPineValue("Pass", []);
+            return
+                PineValue.List(
+                    [
+                    ElmValueEncoding.TagAsPineValue(
+                        "Pass",
+                        [
+                        ElmValueEncoding.ElmRecordAsPineValue(
+                            [
+                            ("distributionReport", ElmValueEncoding.TagAsPineValue("NoDistribution", [])),
+                            ("fuzzDetails", ElmValueEncoding.TagAsPineValue("Nothing", [])),
+                            ])
+                        ])
+                    ]);
         }
     }
 }

@@ -1,0 +1,18 @@
+{
+  "repository": "https://github.com/elm-explorations/test",
+  "tag": "2.2.1",
+  "commit": "81dc48ee4edcc48661b0dfa969cf44a79318a321",
+  "license": "BSD-3-Clause",
+  "scope": "Non-HTML Elm source closure; no JavaScript kernels.",
+  "adaptations": [
+    "Use native Debug.toString and handle evaluation errors at the Pine VM boundary.",
+    "Preserve listing metadata for todo and empty groups without evaluating properties.",
+    "Expose assigned seed states and explicit fuzzWith run counts in runner records.",
+    "Retain generated-example counts, original/shrunk inputs and random-choice tapes in expectations.",
+    "Inline the mutually recursive list generator helper without changing random choices.",
+    "Decode IEEE-754 bit patterns with pure Elm arithmetic instead of JavaScript byte kernels.",
+    "Replace the sorted 2048-entry exponent lookup table with its exact closed-form permutation.",
+    "Replace the byte-reversal lookup table with the equivalent bounded eight-step bit reversal.",
+    "Correct fuzzWithHelp handling of skipped tests."
+  ]
+}

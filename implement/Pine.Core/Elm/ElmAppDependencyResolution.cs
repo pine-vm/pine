@@ -351,7 +351,7 @@ public class ElmAppDependencyResolution
         }
 
         IReadOnlyList<ElmJsonStructure.RelativeDirectory> sourceDirectories =
-            elmJsonForEntryPoint.elmJsonParsed.Type == "package"
+            elmJsonForEntryPoint.elmJsonParsed.Type is "package"
             ?
             [new(0, ["src"])]
             :
@@ -473,7 +473,7 @@ public class ElmAppDependencyResolution
         // and check whether entryPointFilePath starts with that path.
 
         var sourceDirectories =
-            elmJson.Type == "package"
+            elmJson.Type is "package"
             ?
             [new ElmJsonStructure.RelativeDirectory(0, ["src"])]
             :

@@ -163,7 +163,7 @@ public static class ElmDependencyResolver
 
             foreach (var name in requirements.Select(item => item.PackageName).Distinct(StringComparer.Ordinal).ToArray())
                 if (configuration.LockedVersions.TryGetValue(name, out var lockedVersion) &&
-                    !requirements.Any(item => item.PackageName == name && item.Scope == ElmDependencyScope.ResolutionLock))
+                    !requirements.Any(item => item.PackageName == name && item.Scope is ElmDependencyScope.ResolutionLock))
                 {
                     requirements =
                         requirements.Add(
@@ -249,7 +249,7 @@ public static class ElmDependencyResolver
 
             var relevant = requirements.Where(item => item.PackageName == nextName).ToImmutableArray();
 
-            if (manifest!.Type == "application" && !pinnedNames.Contains(nextName))
+            if (manifest!.Type is "application" && !pinnedNames.Contains(nextName))
             {
                 return
                     Reject(
@@ -432,7 +432,7 @@ public static class ElmDependencyResolver
                             relevant[0].DependencyPath.Add(identity),
                             includeTests: false);
 
-                    if (manifest!.Type == "application" &&
+                    if (manifest!.Type is "application" &&
                         dependencies.FirstOrDefault(item => !pinnedNames.Contains(item.PackageName)) is { } missingPin)
                     {
                         var missing =
@@ -571,7 +571,7 @@ public static class ElmDependencyResolver
 
     private static void ValidateJsonProperties(JsonElement element, string path)
     {
-        if (element.ValueKind == JsonValueKind.Object)
+        if (element.ValueKind is JsonValueKind.Object)
         {
             var names = new HashSet<string>(StringComparer.Ordinal);
 
@@ -586,7 +586,7 @@ public static class ElmDependencyResolver
                 ValidateJsonProperties(property.Value, path + "/" + property.Name);
             }
         }
-        else if (element.ValueKind == JsonValueKind.Array)
+        else if (element.ValueKind is JsonValueKind.Array)
         {
             foreach (var item in element.EnumerateArray())
                 ValidateJsonProperties(item, path);
@@ -608,9 +608,9 @@ public static class ElmDependencyResolver
                 .OrderBy(kv => kv.Key, StringComparer.Ordinal))
             {
                 ValidatePackageName(name);
-                var constraint = ParseRequirement(text, manifestPath, name, manifest.Type == "application");
+                var constraint = ParseRequirement(text, manifestPath, name, manifest.Type is "application");
 
-                if (manifest.Type == "package" && constraint.IsExact)
+                if (manifest.Type is "package" && constraint.IsExact)
                 {
                     throw new FormatException(
                         $"Package dependency '{name}' in '{manifestPath}' must be an Elm range, not exact version '{text}'.");
@@ -628,7 +628,7 @@ public static class ElmDependencyResolver
             }
         }
 
-        if (manifest.Type == "application")
+        if (manifest.Type is "application")
         {
             Add(manifest.Dependencies.Direct, ElmDependencyScope.Direct);
             Add(manifest.Dependencies.Indirect, ElmDependencyScope.Indirect);
@@ -684,7 +684,7 @@ public static class ElmDependencyResolver
         if (string.IsNullOrEmpty(manifest.ElmVersion))
             throw new FormatException($"Manifest '{path}' is missing 'elm-version'.");
 
-        var constraint = ParseRequirement(manifest.ElmVersion, path, "elm-version", manifest.Type == "application");
+        var constraint = ParseRequirement(manifest.ElmVersion, path, "elm-version", manifest.Type is "application");
 
         if (!constraint.Contains(configuration.CompilerVersion))
         {
@@ -702,11 +702,11 @@ public static class ElmDependencyResolver
                 $"Manifest '{path}' must declare type 'application' or 'package' and a dependencies object.");
         }
 
-        if (manifest.Type == "application" &&
-            (manifest.SourceDirectories is null || manifest.SourceDirectories.Count == 0))
+        if (manifest.Type is "application" &&
+            (manifest.SourceDirectories is null || manifest.SourceDirectories.Count is 0))
             throw new JsonException($"Application manifest '{path}' requires a nonempty 'source-directories' array.");
 
-        if (manifest.Type == "application" &&
+        if (manifest.Type is "application" &&
             manifest.SourceDirectories!.Any(
                 directory =>
                 string.IsNullOrWhiteSpace(directory) || Path.IsPathRooted(directory) || directory.Contains('\0')))
@@ -715,7 +715,7 @@ public static class ElmDependencyResolver
                 $"Application manifest '{path}' requires nonempty relative paths in 'source-directories', not null or absolute paths.");
         }
 
-        if (manifest.Type == "package")
+        if (manifest.Type is "package")
         {
             if (string.IsNullOrEmpty(manifest.Name) || string.IsNullOrEmpty(manifest.Version))
                 throw new JsonException($"Package manifest '{path}' must declare its 'name' and 'version'.");
@@ -732,14 +732,14 @@ public static class ElmDependencyResolver
 
         foreach (var dependencies in new[] { manifest.Dependencies, manifest.TestDependencies }.Where(item => item is not null))
         {
-            if (manifest.Type == "application" &&
+            if (manifest.Type is "application" &&
                 (dependencies.Direct is null || dependencies.Indirect is null || dependencies.Flat?.Count > 0))
             {
                 throw new JsonException(
                     $"Application manifest '{path}' requires direct/indirect dependency objects, not a flat package table.");
             }
 
-            if (manifest.Type == "package" && (dependencies.Direct is not null || dependencies.Indirect is not null))
+            if (manifest.Type is "package" && (dependencies.Direct is not null || dependencies.Indirect is not null))
             {
                 throw new JsonException(
                     $"Package manifest '{path}' requires flat dependency ranges, not application direct/indirect objects.");
@@ -757,9 +757,9 @@ public static class ElmDependencyResolver
             if (duplicates.Length <= 1)
                 continue;
 
-            if (type == "application" && duplicates.Length == 2 &&
-                duplicates.Any(item => item.Scope == ElmDependencyScope.Indirect) &&
-                duplicates.Any(item => item.Scope == ElmDependencyScope.TestDirect))
+            if (type is "application" && duplicates.Length is 2 &&
+                duplicates.Any(item => item.Scope is ElmDependencyScope.Indirect) &&
+                duplicates.Any(item => item.Scope is ElmDependencyScope.TestDirect))
                 continue;
 
             throw new JsonException(
@@ -788,7 +788,7 @@ public static class ElmDependencyResolver
 
         if (segments.Length != 2 ||
             segments.Any(
-                segment => segment.Length == 0 ||
+                segment => segment.Length is 0 ||
                     segment is "." or ".." ||
                     segment.Any(character => !char.IsAsciiLetterOrDigit(character) && character != '-')))
             throw new FormatException($"Invalid Elm package name '{name}'. Expected 'author/package' without path traversal.");
@@ -889,7 +889,7 @@ public static class ElmDependencyResolver
         {
             void Write(JsonElement element)
             {
-                if (element.ValueKind == JsonValueKind.Object)
+                if (element.ValueKind is JsonValueKind.Object)
                 {
                     writer.WriteStartObject();
 
@@ -901,7 +901,7 @@ public static class ElmDependencyResolver
 
                     writer.WriteEndObject();
                 }
-                else if (element.ValueKind == JsonValueKind.Array)
+                else if (element.ValueKind is JsonValueKind.Array)
                 {
                     writer.WriteStartArray();
 

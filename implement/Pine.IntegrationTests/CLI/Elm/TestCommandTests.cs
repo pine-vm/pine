@@ -9,10 +9,114 @@ using System.Linq;
 using System.Text;
 using Xunit;
 
-namespace Pine.IntegrationTests.CLI;
+namespace Pine.IntegrationTests.CLI.Elm;
 
-public class ElmTestCommandTests
+public class TestCommandTests
 {
+    [Theory]
+    [InlineData("--seed", "-1")]
+    [InlineData("--seed", "4294967296")]
+    [InlineData("--seed", "not-a-number")]
+    [InlineData("--fuzz", "0")]
+    [InlineData("--fuzz", "-1")]
+    [InlineData("--fuzz", "4294967296")]
+    [InlineData("--fuzz", "not-a-number")]
+    public void Fuzz_options_reject_values_outside_elm_test_rs_ranges(string option, string value) =>
+        TestCommand.Create().Parse([option, value]).Errors.Should().NotBeEmpty();
+
+    [Fact]
+    public void Fuzz_options_match_elm_test_rs_defaults_and_unsigned_boundaries()
+    {
+        var command = TestCommand.Create();
+        var fuzz = command.Options.OfType<Option<uint>>().Single(option => option.Name is "--fuzz");
+        var seed = command.Options.OfType<Option<uint?>>().Single(option => option.Name is "--seed");
+        var defaults = command.Parse([]);
+        defaults.Errors.Should().BeEmpty();
+        defaults.GetValue(fuzz).Should().Be(100);
+        defaults.GetValue(seed).Should().BeNull();
+        var boundaries = command.Parse(["--seed", "4294967295", "--fuzz", "4294967295"]);
+        boundaries.Errors.Should().BeEmpty();
+        boundaries.GetValue(fuzz).Should().Be(uint.MaxValue);
+        boundaries.GetValue(seed).Should().Be(uint.MaxValue);
+    }
+
+    [Fact]
+    public void Fuzz_failure_displays_counterexample_and_reproduction_flags()
+    {
+        var directory =
+            CreateTestProject(
+                """
+                module Tests exposing (suite)
+                import Test
+                import Fuzz
+                import Expect
+                suite = Test.fuzz (Fuzz.intRange 1 100) "failing property" (\n -> Expect.equal 0 n)
+                """);
+
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            var result =
+                TestCommand.Execute(
+                    directory,
+                    FormatCommandColorMode.Never,
+                    console: console,
+                    seed: uint.MaxValue,
+                    fuzz: 1,
+                    offline: true);
+
+            result.Should().Be(1);
+            output.ToString().Should().Contain("Given: 1").And.Contain("--seed 4294967295 --fuzz 1");
+            output.ToString().Should().Contain("failing property").And.Contain("TEST RUN FAILED");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Default_fuzz_count_executes_string_properties_with_the_cli_vm_budget()
+    {
+        var directory =
+            CreateTestProject(
+                """
+                module Tests exposing (suite)
+                import Test
+                import Fuzz
+                import Expect
+                suite = Test.fuzz Fuzz.string "split join" (\s -> Expect.equal s (String.join "." (String.split "." s)))
+                """);
+
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            TestCommand.Execute(
+                directory,
+                FormatCommandColorMode.Never,
+                console: console,
+                seed: 0,
+                offline: true)
+                .Should().Be(0);
+
+            output.ToString().Should().Contain("TEST RUN PASSED").And.Contain("--seed 0 --fuzz 100");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Direct_execution_rejects_zero_fuzz_count_before_loading_sources()
+    {
+        var (errorConsole, output) = CreateConsole(AnsiSupport.No);
+        TestCommand.Execute("does-not-exist", errorConsole: errorConsole, fuzz: 0).Should().Be(1);
+        output.ToString().Should().Contain("--fuzz").And.Contain("positive");
+    }
+
     [Fact]
     public void Declared_parent_source_directories_are_loaded_without_merging_parent_projects()
     {
@@ -459,7 +563,7 @@ public class ElmTestCommandTests
                 new[] { projectDirectory, "--color", "never", "--list-tests", "--filter", "Tests/**/First" };
 
             var command = TestCommand.Create();
-            var option = command.Options.OfType<Option<string>>().Single(option => option.Name == "--filter");
+            var option = command.Options.OfType<Option<string>>().Single(option => option.Name is "--filter");
             var parseResult = command.Parse(arguments);
 
             parseResult.Errors.Should().BeEmpty();
@@ -488,7 +592,7 @@ public class ElmTestCommandTests
     public void Filter_arity_requires_one_value()
     {
         var command = TestCommand.Create();
-        var option = command.Options.OfType<Option<string>>().Single(option => option.Name == "--filter");
+        var option = command.Options.OfType<Option<string>>().Single(option => option.Name is "--filter");
         var parseResult = command.Parse(["--filter"]);
 
         option.Arity.Should().Be(ArgumentArity.ExactlyOne);
@@ -513,7 +617,7 @@ public class ElmTestCommandTests
     public void Command_accepts_no_filter_option()
     {
         var command = TestCommand.Create();
-        var option = command.Options.OfType<Option<string>>().Single(option => option.Name == "--filter");
+        var option = command.Options.OfType<Option<string>>().Single(option => option.Name is "--filter");
         var parseResult = command.Parse([]);
 
         parseResult.Errors.Should().BeEmpty();
@@ -533,8 +637,12 @@ public class ElmTestCommandTests
     public void Help_explains_filter_paths_and_wildcards()
     {
         var output = new StringWriter();
-        var root = new RootCommand();
-        root.Add(TestCommand.Create());
+
+        var root =
+            new RootCommand
+            {
+                TestCommand.Create()
+            };
 
         var exitCode =
             root.Parse(["test", "--help"])
