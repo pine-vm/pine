@@ -5,6 +5,7 @@ using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 
 namespace Pine.Core;
@@ -19,7 +20,7 @@ public delegate Result<string, PineValue> EvalExprDelegate(Expression expression
 /// An expression in the Pine language.
 /// 
 /// For a listing of expression types in the Pine language,
-/// see <see href="https://github.com/pine-vm/pine/blob/1f6e378ff376d809e7029a376b3a562d990fde7f/implement/pine/Elm/elm-compiler/src/Pine.elm#L53-L70"/>>
+/// see guide\pine-language.md
 /// </summary>
 [JsonConverter(typeof(JsonConverterForChoiceType))]
 public abstract record Expression
@@ -310,7 +311,7 @@ public abstract record Expression
         /// <inheritdoc/>
         public override int MaxDepth { get; } = 0;
 
-        private int _subtreeListItemsCount = 1;
+        private readonly int _subtreeListItemsCount = 1;
 
         /// <summary>
         /// The list of subexpressions.
@@ -375,6 +376,9 @@ public abstract record Expression
 
             if (right is null)
                 return false;
+
+            if (left.SubexpressionCount > 10_000)
+                return EqualExpressionGraphs(left, right);
 
             if (10 < left._subtreeListItemsCount)
             {
@@ -1273,5 +1277,94 @@ public abstract record Expression
                 yield return concatPrependPlusSign;
             }
         }
+    }
+
+    private static bool EqualExpressionGraphs(Expression left, Expression right)
+    {
+        // A shared DAG must compare each pair once, not unfold it into an exponential tree.
+        var visited = new HashSet<(Expression left, Expression right)>(ExpressionPairReferenceComparer.Instance);
+        var pending = new Stack<(Expression left, Expression right)>();
+        pending.Push((left, right));
+
+        while (pending.TryPop(out var pair))
+        {
+            if (ReferenceEquals(pair.left, pair.right) || !visited.Add(pair))
+                continue;
+
+            if (pair.left.GetType() != pair.right.GetType() || pair.left.GetHashCode() != pair.right.GetHashCode())
+                return false;
+
+            switch (pair.left)
+            {
+                case Litral literal:
+                    if (!literal.Value.Equals(((Litral)pair.right).Value))
+                        return false;
+
+                    break;
+
+                case Environment:
+                    break;
+
+                case List list:
+                    var otherList = (List)pair.right;
+
+                    if (list.Items.Count != otherList.Items.Count)
+                        return false;
+
+                    for (var index = 0; index < list.Items.Count; ++index)
+                        pending.Push((list.Items[index], otherList.Items[index]));
+
+                    break;
+
+                case Eval eval:
+                    var otherEval = (Eval)pair.right;
+                    pending.Push((eval.Encoded, otherEval.Encoded));
+                    pending.Push((eval.Environment, otherEval.Environment));
+                    break;
+
+                case Conditional conditional:
+                    var otherConditional = (Conditional)pair.right;
+                    pending.Push((conditional.Condition, otherConditional.Condition));
+                    pending.Push((conditional.TrueBranch, otherConditional.TrueBranch));
+                    pending.Push((conditional.FalseBranch, otherConditional.FalseBranch));
+                    break;
+
+                case Builtin builtin:
+                    var otherBuiltin = (Builtin)pair.right;
+
+                    if (builtin.Function != otherBuiltin.Function)
+                        return false;
+
+                    pending.Push((builtin.Input, otherBuiltin.Input));
+                    break;
+
+                case Label label:
+                    var otherLabel = (Label)pair.right;
+
+                    if (!label.LabelValue.Equals(otherLabel.LabelValue))
+                        return false;
+
+                    pending.Push((label.Tagged, otherLabel.Tagged));
+                    break;
+
+                default:
+                    throw new NotImplementedException(
+                        nameof(EqualExpressionGraphs) + " does not handle expression variant: " +
+                        pair.left.GetType().Name);
+            }
+        }
+
+        return true;
+    }
+
+    private sealed class ExpressionPairReferenceComparer : IEqualityComparer<(Expression left, Expression right)>
+    {
+        public static readonly ExpressionPairReferenceComparer Instance = new();
+
+        public bool Equals((Expression left, Expression right) x, (Expression left, Expression right) y) =>
+            ReferenceEquals(x.left, y.left) && ReferenceEquals(x.right, y.right);
+
+        public int GetHashCode((Expression left, Expression right) pair) =>
+            HashCode.Combine(RuntimeHelpers.GetHashCode(pair.left), RuntimeHelpers.GetHashCode(pair.right));
     }
 }
