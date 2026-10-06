@@ -63,10 +63,14 @@ jobs:
         run: dotnet script --version
 
       - name: Install dotnet-trace tool
-        run: dotnet  tool  install --global dotnet-trace
+        run: |
+          dotnet tool install --global dotnet-trace
+          dotnet-trace --version
 
-      - name: Check dotnet-trace installation
-        run: dotnet trace --version
+      - name: Install dotnet-stack tool
+        run: |
+          dotnet tool install --global dotnet-stack
+          dotnet-stack --version
 
       - name: Install Pine to $RUNNER_TEMP and expose it
         run: |
