@@ -175,7 +175,7 @@ public class CanonicalizationErrorReportingTests
             module Constants exposing (maxDigitValue)
 
             maxDigitValue =
-                Basics.sqrt 8
+                Basics.sin 8
             """;
 
         var appCodeTree =
@@ -194,13 +194,13 @@ public class CanonicalizationErrorReportingTests
 
         error.Should().NotBeNull();
         error.Should().Contain("Failed to compile declaration 'Constants.maxDigitValue'");
-        error.Should().Contain("Reason: Function 'Basics.sqrt' not found in dependency layout");
+        error.Should().Contain("Reason: Function 'Basics.sin' not found in dependency layout");
         error.Should().Contain("Declaration dependency chain from a compilation root:");
         error.Should().Contain("1. Root.main (compilation root)");
         error.Should().Contain("2. Intermediate.value — referenced by Root.main");
         error.Should().Contain("3. Constants.maxDigitValue — referenced by Intermediate.value");
 
         error.Should().Contain(
-            "searched for 'Basics.sqrt' while compiling 'Constants.maxDigitValue' because that declaration is reachable from compilation root 'Root.main'");
+            "searched for 'Basics.sin' while compiling 'Constants.maxDigitValue' because that declaration is reachable from compilation root 'Root.main'");
     }
 }

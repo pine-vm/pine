@@ -22,7 +22,7 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 /// Does not contain addition or multiplication for integers, as those are translated directly to Pine_builtin functions.
 /// </para>
 /// </summary>
-public class CoreBasics
+public partial class CoreBasics
 {
     /// <summary>
     /// Identifies a complete binary function application expression.
@@ -77,6 +77,18 @@ public class CoreBasics
     /// </remarks>
     public static string? IdentifyFunctionValue(PineValue functionValue)
     {
+        if (functionValue == Round_FunctionValue())
+            return "round";
+
+        if (functionValue == Sqrt_FunctionValue())
+            return "sqrt";
+
+        if (functionValue == IsNaN_FunctionValue())
+            return "isNaN";
+
+        if (functionValue == IsInfinite_FunctionValue())
+            return "isInfinite";
+
         if (functionValue == Add_FunctionValue())
         {
             return "add";
@@ -425,6 +437,26 @@ public class CoreBasics
                 [TypeInference.InferredType.Number(), TypeInference.InferredType.Int()],
                 args => Generic_Ceiling(args[0])),
 
+            "round" =>
+            new CoreFunctionInfo(
+                [TypeInference.InferredType.Number(), TypeInference.InferredType.Int()],
+                args => UnaryApplication(Round_FunctionValue(), args[0])),
+
+            "sqrt" =>
+            new CoreFunctionInfo(
+                [TypeInference.InferredType.Number(), TypeInference.InferredType.Number()],
+                args => UnaryApplication(Sqrt_FunctionValue(), args[0])),
+
+            "isNaN" =>
+            new CoreFunctionInfo(
+                [TypeInference.InferredType.Number(), TypeInference.InferredType.Bool()],
+                args => UnaryApplication(IsNaN_FunctionValue(), args[0])),
+
+            "isInfinite" =>
+            new CoreFunctionInfo(
+                [TypeInference.InferredType.Number(), TypeInference.InferredType.Bool()],
+                args => UnaryApplication(IsInfinite_FunctionValue(), args[0])),
+
             // clamp : number -> number -> number -> number
             "clamp" =>
             new CoreFunctionInfo(
@@ -640,6 +672,12 @@ public class CoreBasics
             "ceiling" =>
             Ceiling_FunctionValue(),
 
+            "round" => Round_FunctionValue(),
+            "sqrt" => Sqrt_FunctionValue(),
+            "isNaN" => IsNaN_FunctionValue(),
+            "isInfinite" => IsInfinite_FunctionValue(),
+            "e" => ElmValueEncoding.ElmValueAsPineValue(ElmValue.ElmFloat.Convert(System.Math.E)),
+
             "clamp" =>
             Clamp_FunctionValue(),
 
@@ -698,7 +736,7 @@ public class CoreBasics
             "lt", "gt", "le", "ge",
             "not", "negate",
             "abs", "clamp",
-            "floor", "ceiling",
+            "floor", "ceiling", "round", "sqrt", "isNaN", "isInfinite",
             "min", "max",
             "identity",
             "always",
