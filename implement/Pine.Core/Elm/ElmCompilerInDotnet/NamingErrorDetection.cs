@@ -497,6 +497,9 @@ public static class NamingErrorDetection
                 var funcName = letFunc.Function.Declaration.Value.Name.Value;
                 var funcNameRange = letFunc.Function.Declaration.Value.Name.Range;
 
+                if (funcName is "_")
+                    continue;
+
                 // Check if let function name shadows existing declarations
                 if (existingScope.Contains(funcName))
                 {
