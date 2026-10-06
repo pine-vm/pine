@@ -1,6 +1,7 @@
 name: Publish to Release
 
 on:
+  # Manual runs must target a tag, not a branch.
   workflow_dispatch:
   release:
     types: [published, unpublished]
@@ -26,6 +27,16 @@ jobs:
 
     - uses: olegtarasov/get-tag@v2.1.2
       id: tagName
+
+    - name: Validate release tag
+      shell: pwsh
+      env:
+        RELEASE_TAG: ${{ steps.tagName.outputs.tag }}
+      run: |
+        if ([string]::IsNullOrWhiteSpace($env:RELEASE_TAG)) {
+          Write-Output "::error::A release tag is required. For manual runs, select a tag as the workflow ref."
+          exit 1
+        }
 
     - name: Avoid git mutating files on checkout
       run: |
@@ -60,4 +71,3 @@ jobs:
       with:
         name: pine-bin-${{ steps.tagName.outputs.tag }}-${{ matrix.publish-runtime-id }}
         path: ./publish
-
