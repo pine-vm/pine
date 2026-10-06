@@ -2,7 +2,7 @@ Push_Literal (Blob [2] (int 13))
 Eval_Const (Blob [2] (int 11))
 Push_Literal (Blob [2] (int 17))
 Build_List (2)
-Local_Get (0)
+Local_Get ([ 0 ])
 Eval_Binary
 Push_Literal (Blob [0] (0x))
 Build_List (2)

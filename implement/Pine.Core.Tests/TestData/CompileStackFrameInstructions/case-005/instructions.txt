@@ -1,5 +1,4 @@
-Local_Get (0)
-Local_Get (0)
+Local_Get ([ 0, 0 ])
 Eval_Binary
 Push_Literal (Blob [0] (0x))
 Build_List (2)

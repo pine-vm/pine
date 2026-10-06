@@ -233,7 +233,8 @@ public sealed partial record PineControlFlowGraph
                             StackInstructionKind.Length_Equal_Const;
 
                         if (kind is StackInstructionKind.Local_Get_Skip_Head_Const &&
-                            operation.Instruction.LocalIndex is { } localIndex)
+                            operation.Instruction.LocalIndices.Length is 1 &&
+                            operation.Instruction.SingleLocalIndex is var localIndex)
                         {
                             var origin = locals.GetValueOrDefault(localIndex, ListOrigin.Other);
 
@@ -249,7 +250,6 @@ public sealed partial record PineControlFlowGraph
 
                         if (kind is StackInstructionKind.Local_Set or
                         StackInstructionKind.Local_Set_Literal or
-                        StackInstructionKind.Local_Set_Descending or
                         StackInstructionKind.Local_Get or
                         StackInstructionKind.Local_Get_Skip_Head_Const or
                         StackInstructionKind.Pop)
@@ -432,7 +432,7 @@ public sealed partial record PineControlFlowGraph
                 {
                     var instruction = current.Operations[index].Instruction;
 
-                    if (ReadLocal(instruction) == local)
+                    if (ReadLocals(instruction).Contains(local))
                     {
                         return true;
                     }
@@ -546,7 +546,8 @@ public sealed partial record PineControlFlowGraph
                 parameterCount,
                 Blocks.SelectMany(block => block.Operations)
                 .Where(operation => IsLocalInstruction(operation.Instruction.Kind))
-                .Select(operation => operation.Instruction.LocalIndex!.Value + 1)
+                .SelectMany(operation => operation.Instruction.LocalIndices)
+                .Select(index => index + 1)
                 .DefaultIfEmpty(0).Max());
 
         var layouts = new ListSlotLayout?[candidates.Count];
@@ -634,7 +635,8 @@ public sealed partial record PineControlFlowGraph
                             {
                                 operations.Add(
                                     new(
-                                        StackInstruction.Local_Set_Descending(firstItemLocal + count - 1, count),
+                                        StackInstruction.Local_Set(
+                                            [.. Enumerable.Range(firstItemLocal, count).Reverse()]),
                                         [],
                                         []));
 
@@ -645,7 +647,7 @@ public sealed partial record PineControlFlowGraph
                             {
                                 var temporary = new PineVirtualValueId(nextValue++);
                                 operations.Add(new(StackInstruction.Push_Literal(value), [], [temporary]));
-                                operations.Add(new(StackInstruction.Local_Set(local), [], []));
+                                operations.Add(new(StackInstruction.Local_Set([local]), [], []));
                                 operations.Add(new(StackInstruction.Pop, [temporary], []));
                             }
 
@@ -813,23 +815,21 @@ public sealed partial record PineControlFlowGraph
 
             onOperation?.Invoke(index, operation, inputs, locals);
 
-            if (instruction.Kind is StackInstructionKind.Local_Set && instruction.LocalIndex is { } local)
+            if (instruction.Kind is StackInstructionKind.Local_Set)
             {
-                locals[local] = values.GetValueOrDefault(stack[^1], ListOrigin.Other);
+                for (var depth = 0; depth < instruction.LocalIndices.Length; depth++)
+                    locals[instruction.LocalIndices[depth]] =
+                        values.GetValueOrDefault(stack[^(depth + 1)], ListOrigin.Other);
             }
             else if (instruction.Kind is StackInstructionKind.Local_Set_Literal &&
-                instruction.LocalIndex is { } literalLocal)
+                instruction.SingleLocalIndex is { } literalLocal)
             {
                 locals[literalLocal] = ListOrigin.Other;
             }
-            else if (instruction.Kind is StackInstructionKind.Local_Set_Descending &&
-                instruction.LocalIndex is { } highest &&
-                instruction.TakeCount is { } count)
+            else if (instruction.Kind is StackInstructionKind.Local_Int_Add_Const)
             {
-                for (var depth = 0; depth < count; depth++)
-                {
-                    locals[highest - depth] = values.GetValueOrDefault(stack[^(depth + 1)], ListOrigin.Other);
-                }
+                foreach (var local in instruction.LocalIndices)
+                    locals[local] = ListOrigin.Other;
             }
 
             var origin =
@@ -839,7 +839,8 @@ public sealed partial record PineControlFlowGraph
                 ListOrigin.FromCandidate(candidate)
                 :
                 instruction.Kind is StackInstructionKind.Local_Get &&
-                instruction.LocalIndex is { } sourceLocal
+                instruction.LocalIndices.Length is 1 &&
+                instruction.SingleLocalIndex is { } sourceLocal
                 ?
                 locals.GetValueOrDefault(sourceLocal, ListOrigin.Other)
                 :

@@ -1,4 +1,4 @@
-Local_Get (0)
+Local_Get ([ 0 ])
 Push_Literal (Blob [2] (int 0))
 Slice_Skip_Var_Equal_Const (Blob [1] (0x04))
 Return

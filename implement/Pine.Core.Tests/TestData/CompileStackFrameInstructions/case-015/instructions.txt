@@ -1,4 +1,4 @@
-Local_Get (0)
+Local_Get ([ 0 ])
 Negate
 Pop (1)
 Push_Literal (List [0] (0))

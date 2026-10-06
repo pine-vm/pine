@@ -1,9 +1,8 @@
-Local_Get (0)
+Local_Get ([ 0 ])
 Jump_If_Equal_Const (Blob [1] (0x04), 3)
 Push_Literal (Blob [2] (int 17))
-Jump_Const (5)
-Local_Get (0)
-Local_Get (0)
+Jump_Const (4)
+Local_Get ([ 0, 0 ])
 Skip_Const (13)
 Eval_Binary
 Build_List_With_Prefix (1, 1)

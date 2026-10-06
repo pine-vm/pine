@@ -348,37 +348,37 @@ public class InlineSmallNonRecursiveCalleeRegressionTests
 
             helperGenericIR.Should().Be(
                 """
-                 0: Local_Get (1)
-                 1: Local_Get (2)
+                 0: Local_Get ([ 1 ])
+                 1: Local_Get ([ 2 ])
                  2: Slice_Skip_Var_Take_Const (1)
-                 3: Local_Set (3)
+                 3: Local_Set ([ 3 ])
                  4: Length
                  5: Jump_If_Equal_Const (Blob [2] (0x0400 | int 0) , 25)
-                 6: Local_Get (3)
+                 6: Local_Get ([ 3 ])
                  7: Int_Unsigned_Greater_Than_Or_Equal_Const (65)
-                 8: Local_Get (3)
+                 8: Local_Get ([ 3 ])
                  9: Int_Unsigned_Less_Than_Or_Equal_Const (90)
                 10: Logical_And_Binary
                 11: Jump_If_Equal_Const (Blob [1] (0x04) , 7)
-                12: Local_Get (3)
+                12: Local_Get ([ 3 ])
                 13: Int_Unsigned_Greater_Than_Or_Equal_Const (97)
-                14: Local_Get (3)
+                14: Local_Get ([ 3 ])
                 15: Int_Unsigned_Less_Than_Or_Equal_Const (122)
                 16: Logical_And_Binary
                 17: Jump_Const (2)
                 18: Push_Literal (Blob [1] (0x04))
                 19: Jump_If_Equal_Const (Blob [1] (0x04) , 3)
-                20: Local_Get (2)
+                20: Local_Get ([ 2 ])
                 21: Return
-                22: Local_Get (0)
-                23: Local_Get (1)
-                24: Local_Get (2)
+                22: Local_Get ([ 0 ])
+                23: Local_Get ([ 1 ])
+                24: Local_Get ([ 2 ])
                 25: Int_Add_Const (1)
                 26: Build_List (3)
-                27: Local_Get (0)
+                27: Local_Get ([ 0 ])
                 28: Eval_Binary
                 29: Return
-                30: Local_Get (2)
+                30: Local_Get ([ 2 ])
                 31: Return
                 """);
         }

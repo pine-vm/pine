@@ -325,7 +325,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 2
             BuildListCount: 0
             LoopIterationCount: 0
-            InstructionCount: 14
+            InstructionCount: 12
             """);
     }
 
@@ -353,7 +353,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 4
             BuildListCount: 4
             LoopIterationCount: 0
-            InstructionCount: 27
+            InstructionCount: 23
             """);
     }
 
@@ -379,7 +379,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 3
             BuildListCount: 0
             LoopIterationCount: 0
-            InstructionCount: 22
+            InstructionCount: 20
             """);
     }
 
@@ -411,7 +411,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 7
             BuildListCount: 3
             LoopIterationCount: 0
-            InstructionCount: 62
+            InstructionCount: 58
             """);
     }
 
@@ -539,14 +539,14 @@ public class FunctionApplicationOverheadTests
 
         frame1.Should().Be(
             """
-             0: Local_Get (1)
+             0: Local_Get ([ 1 ])
              1: Skip_Const (1)
-             2: Local_Set (2)
+             2: Local_Set ([ 2 ])
              3: Skip_Const (1)
-             4: Local_Set (3)
+             4: Local_Set ([ 3 ])
              5: Length
              6: Jump_If_Equal_Const (Blob [2] (0x0400 | int 0) , 5)
-             7: Local_Get (2)
+             7: Local_Get ([ 2 ])
              8: Length_Equal_Const (0)
              9: Equal_Binary_Const (Blob [1] (0x02))
             10: Jump_Const (2)
@@ -554,25 +554,25 @@ public class FunctionApplicationOverheadTests
             12: Jump_If_Equal_Const (Blob [1] (0x04) , 3)
             13: Push_Literal (Blob [1] (0x02))
             14: Jump_Const (4)
-            15: Local_Get (1)
+            15: Local_Get ([ 1 ])
             16: Length_Equal_Const (0)
             17: Equal_Binary_Const (Blob [1] (0x02))
             18: Jump_If_Equal_Const (Blob [1] (0x04) , 3)
             19: Push_Literal (List [0] (0))
             20: Return
-            21: Local_Get (1)
+            21: Local_Get ([ 1 ])
             22: Head_Generic
-            23: Local_Get (1)
+            23: Local_Get ([ 1 ])
             24: Skip_Head_Const (1)
             25: Int_Add_Binary
-            26: Local_Get (2)
+            26: Local_Get ([ 2 ])
             27: Skip_Head_Const (1)
             28: Int_Add_Binary
-            29: Local_Get (0)
-            30: Local_Get (3)
+            29: Local_Get ([ 0 ])
+            30: Local_Get ([ 3 ])
             31: Skip_Const (1)
             32: Build_List (2)
-            33: Local_Get (0)
+            33: Local_Get ([ 0 ])
             34: Head_Generic
             35: Eval_Binary
             36: Prepend_List_Items (1)
@@ -587,14 +587,14 @@ public class FunctionApplicationOverheadTests
 
         frame2.Should().Be(
             """
-             0: Local_Get (1)
+             0: Local_Get ([ 1 ])
              1: Skip_Const (1)
-             2: Local_Set (2)
+             2: Local_Set ([ 2 ])
              3: Skip_Const (1)
-             4: Local_Set (3)
+             4: Local_Set ([ 3 ])
              5: Length
              6: Jump_If_Equal_Const (Blob [2] (0x0400 | int 0) , 5)
-             7: Local_Get (2)
+             7: Local_Get ([ 2 ])
              8: Length_Equal_Const (0)
              9: Equal_Binary_Const (Blob [1] (0x02))
             10: Jump_Const (2)
@@ -602,25 +602,25 @@ public class FunctionApplicationOverheadTests
             12: Jump_If_Equal_Const (Blob [1] (0x04) , 3)
             13: Push_Literal (Blob [1] (0x02))
             14: Jump_Const (4)
-            15: Local_Get (1)
+            15: Local_Get ([ 1 ])
             16: Length_Equal_Const (0)
             17: Equal_Binary_Const (Blob [1] (0x02))
             18: Jump_If_Equal_Const (Blob [1] (0x04) , 3)
             19: Push_Literal (List [0] (0))
             20: Return
-            21: Local_Get (1)
+            21: Local_Get ([ 1 ])
             22: Head_Generic
-            23: Local_Get (1)
+            23: Local_Get ([ 1 ])
             24: Skip_Head_Const (1)
             25: Int_Add_Binary
-            26: Local_Get (2)
+            26: Local_Get ([ 2 ])
             27: Skip_Head_Const (1)
             28: Int_Add_Binary
-            29: Local_Get (0)
-            30: Local_Get (3)
+            29: Local_Get ([ 0 ])
+            30: Local_Get ([ 3 ])
             31: Skip_Const (1)
             32: Build_List (2)
-            33: Local_Get (0)
+            33: Local_Get ([ 0 ])
             34: Head_Generic
             35: Eval_Binary
             36: Prepend_List_Items (1)
@@ -635,14 +635,14 @@ public class FunctionApplicationOverheadTests
 
         frame3.Should().Be(
             """
-             0: Local_Get (1)
+             0: Local_Get ([ 1 ])
              1: Skip_Const (1)
-             2: Local_Set (2)
+             2: Local_Set ([ 2 ])
              3: Skip_Const (1)
-             4: Local_Set (3)
+             4: Local_Set ([ 3 ])
              5: Length
              6: Jump_If_Equal_Const (Blob [2] (0x0400 | int 0) , 5)
-             7: Local_Get (2)
+             7: Local_Get ([ 2 ])
              8: Length_Equal_Const (0)
              9: Equal_Binary_Const (Blob [1] (0x02))
             10: Jump_Const (2)
@@ -650,25 +650,25 @@ public class FunctionApplicationOverheadTests
             12: Jump_If_Equal_Const (Blob [1] (0x04) , 3)
             13: Push_Literal (Blob [1] (0x02))
             14: Jump_Const (4)
-            15: Local_Get (1)
+            15: Local_Get ([ 1 ])
             16: Length_Equal_Const (0)
             17: Equal_Binary_Const (Blob [1] (0x02))
             18: Jump_If_Equal_Const (Blob [1] (0x04) , 3)
             19: Push_Literal (List [0] (0))
             20: Return
-            21: Local_Get (1)
+            21: Local_Get ([ 1 ])
             22: Head_Generic
-            23: Local_Get (1)
+            23: Local_Get ([ 1 ])
             24: Skip_Head_Const (1)
             25: Int_Add_Binary
-            26: Local_Get (2)
+            26: Local_Get ([ 2 ])
             27: Skip_Head_Const (1)
             28: Int_Add_Binary
-            29: Local_Get (0)
-            30: Local_Get (3)
+            29: Local_Get ([ 0 ])
+            30: Local_Get ([ 3 ])
             31: Skip_Const (1)
             32: Build_List (2)
-            33: Local_Get (0)
+            33: Local_Get ([ 0 ])
             34: Head_Generic
             35: Eval_Binary
             36: Prepend_List_Items (1)
@@ -683,14 +683,14 @@ public class FunctionApplicationOverheadTests
 
         frame4.Should().Be(
             """
-             0: Local_Get (1)
+             0: Local_Get ([ 1 ])
              1: Skip_Const (1)
-             2: Local_Set (2)
+             2: Local_Set ([ 2 ])
              3: Skip_Const (1)
-             4: Local_Set (3)
+             4: Local_Set ([ 3 ])
              5: Length
              6: Jump_If_Equal_Const (Blob [2] (0x0400 | int 0) , 5)
-             7: Local_Get (2)
+             7: Local_Get ([ 2 ])
              8: Length_Equal_Const (0)
              9: Equal_Binary_Const (Blob [1] (0x02))
             10: Jump_Const (2)
@@ -698,25 +698,25 @@ public class FunctionApplicationOverheadTests
             12: Jump_If_Equal_Const (Blob [1] (0x04) , 3)
             13: Push_Literal (Blob [1] (0x02))
             14: Jump_Const (4)
-            15: Local_Get (1)
+            15: Local_Get ([ 1 ])
             16: Length_Equal_Const (0)
             17: Equal_Binary_Const (Blob [1] (0x02))
             18: Jump_If_Equal_Const (Blob [1] (0x04) , 3)
             19: Push_Literal (List [0] (0))
             20: Return
-            21: Local_Get (1)
+            21: Local_Get ([ 1 ])
             22: Head_Generic
-            23: Local_Get (1)
+            23: Local_Get ([ 1 ])
             24: Skip_Head_Const (1)
             25: Int_Add_Binary
-            26: Local_Get (2)
+            26: Local_Get ([ 2 ])
             27: Skip_Head_Const (1)
             28: Int_Add_Binary
-            29: Local_Get (0)
-            30: Local_Get (3)
+            29: Local_Get ([ 0 ])
+            30: Local_Get ([ 3 ])
             31: Skip_Const (1)
             32: Build_List (2)
-            33: Local_Get (0)
+            33: Local_Get ([ 0 ])
             34: Head_Generic
             35: Eval_Binary
             36: Prepend_List_Items (1)
@@ -776,7 +776,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 3
             BuildListCount: 0
             LoopIterationCount: 0
-            InstructionCount: 28
+            InstructionCount: 22
             """);
     }
 
@@ -819,7 +819,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 41
             BuildListCount: 21
             LoopIterationCount: 0
-            InstructionCount: 390
+            InstructionCount: 354
             """);
     }
 
@@ -857,7 +857,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 7
             BuildListCount: 3
             LoopIterationCount: 0
-            InstructionCount: 64
+            InstructionCount: 58
             """);
     }
 
@@ -902,7 +902,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 41
             BuildListCount: 21
             LoopIterationCount: 0
-            InstructionCount: 402
+            InstructionCount: 348
             """);
     }
 
@@ -935,7 +935,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 7
             BuildListCount: 3
             LoopIterationCount: 0
-            InstructionCount: 62
+            InstructionCount: 58
             """);
     }
 
@@ -976,7 +976,7 @@ public class FunctionApplicationOverheadTests
             InvocationCount: 41
             BuildListCount: 21
             LoopIterationCount: 0
-            InstructionCount: 390
+            InstructionCount: 354
             """);
     }
 }

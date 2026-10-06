@@ -95,10 +95,7 @@ public sealed partial record PineControlFlowGraph
                                 operations[index] with
                                 {
                                     Instruction =
-                                    operations[index].Instruction with
-                                    {
-                                        LocalIndex = replacement
-                                    }
+                                    operations[index].Instruction.WithLocalIndex(replacement)
                                 };
 
                             changed = true;
@@ -142,7 +139,8 @@ public sealed partial record PineControlFlowGraph
 
             if (instruction.Kind is
                 StackInstructionKind.Local_Get or StackInstructionKind.Local_Get_Skip_Head_Const &&
-                instruction.LocalIndex is >= 0 and var local)
+                instruction.LocalIndices.Length is 1 &&
+                instruction.SingleLocalIndex is >= 0 and var local)
             {
                 var equivalents = EquivalentLocals(equalLocals, local);
                 var replacement = equivalents.Min();
@@ -160,38 +158,29 @@ public sealed partial record PineControlFlowGraph
             }
 
             if (instruction.Kind is StackInstructionKind.Local_Set &&
-                instruction.LocalIndex is >= 0 and var destination &&
-                stack.Count > 0)
-            {
-                equalLocals =
-                    StoreEqualLocals(
-                        equalLocals,
-                        values,
-                        [(destination, stack[^1])]);
-            }
-            else if (instruction.Kind is StackInstructionKind.Local_Set_Descending &&
-                instruction.LocalIndex is >= 0 and var highest &&
-                instruction.TakeCount is >= 0 and var count &&
-                highest >= count - 1 &&
-                stack.Count >= count)
+                stack.Count >= instruction.LocalIndices.Length)
             {
                 var assignments =
-                    Enumerable.Range(0, count)
-                    .Select(depth => (highest - depth, stack[^(depth + 1)]))
+                    instruction.LocalIndices
+                    .Select((local, depth) => (local, stack[^(depth + 1)]))
                     .ToArray();
 
                 equalLocals = StoreEqualLocals(equalLocals, values, assignments);
             }
             else if (instruction.Kind is
-                StackInstructionKind.Local_Int_Add_Const or StackInstructionKind.Local_Set_Literal &&
-                instruction.LocalIndex is >= 0 and var incrementedLocal)
+                StackInstructionKind.Local_Int_Add_Const or StackInstructionKind.Local_Set_Literal)
             {
                 equalLocals =
-                    [.. equalLocals.Where(pair => pair.Lower != incrementedLocal && pair.Higher != incrementedLocal)];
+                    [
+                    .. equalLocals.Where(
+                        pair =>
+                        !instruction.LocalIndices.Contains(pair.Lower) &&
+                        !instruction.LocalIndices.Contains(pair.Higher))
+                    ];
 
                 foreach (var value in values.Keys.ToArray())
                 {
-                    values[value] = values[value].Remove(incrementedLocal);
+                    values[value] = values[value].Except(instruction.LocalIndices);
                 }
             }
 
@@ -226,10 +215,15 @@ public sealed partial record PineControlFlowGraph
         Dictionary<PineVirtualValueId, ImmutableHashSet<int>> values,
         IReadOnlyList<(int Destination, PineVirtualValueId Value)> assignments)
     {
-        var written = assignments.Select(assignment => assignment.Destination).ToHashSet();
+        var finalAssignments =
+            assignments.GroupBy(assignment => assignment.Destination)
+            .Select(group => group.Last())
+            .ToArray();
+
+        var written = finalAssignments.Select(assignment => assignment.Destination).ToHashSet();
 
         var sources =
-            assignments.Select(
+            finalAssignments.Select(
                 assignment => (assignment.Destination,
                 assignment.Value,
                 Equivalents: values.GetValueOrDefault(assignment.Value) ?? [])).ToArray();

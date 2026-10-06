@@ -26,9 +26,10 @@ public sealed partial record PineControlFlowGraph
             {
                 var instruction = operation.Instruction;
 
-                if (ReadLocal(instruction) is { } read && !written.Contains(read))
+                foreach (var read in ReadLocals(instruction))
                 {
-                    readBeforeWrite.Add(read);
+                    if (!written.Contains(read))
+                        readBeforeWrite.Add(read);
                 }
 
                 AddWrittenLocals(instruction, written);
@@ -95,25 +96,31 @@ public sealed partial record PineControlFlowGraph
 
                         if (instruction.Kind is
                             StackInstructionKind.Local_Set or StackInstructionKind.Local_Set_Literal &&
-                            instruction.LocalIndex is { } local &&
-                            !live.Contains(local))
+                            !instruction.LocalIndices.Any(live.Contains))
                         {
-                            operations.RemoveAt(index);
+                            if (instruction.PopCount is > 0)
+                            {
+                                instruction = StackInstruction.PopMultiple(instruction.PopCount.Value);
+                                operations[index] = operations[index] with { Instruction = instruction };
+                            }
+                            else
+                            {
+                                operations.RemoveAt(index);
+                                changed = true;
+                                continue;
+                            }
+
                             changed = true;
-                            continue;
                         }
 
-                        if (instruction.Kind is StackInstructionKind.Local_Set_Descending &&
-                            instruction.LocalIndex is { } highest &&
-                            instruction.TakeCount is { } count &&
-                            count >= 0 &&
-                            highest >= count - 1)
+                        if (instruction.Kind is StackInstructionKind.Local_Set &&
+                            instruction.LocalIndices.Length > 1)
                         {
                             var lastLiveDepth = -1;
 
-                            for (var depth = 0; depth < count; depth++)
+                            for (var depth = 0; depth < instruction.LocalIndices.Length; depth++)
                             {
-                                if (live.Contains(highest - depth))
+                                if (live.Contains(instruction.LocalIndices[depth]))
                                 {
                                     lastLiveDepth = depth;
                                 }
@@ -121,20 +128,33 @@ public sealed partial record PineControlFlowGraph
 
                             if (lastLiveDepth < 0)
                             {
-                                operations.RemoveAt(index);
+                                if (instruction.PopCount is > 0)
+                                {
+                                    instruction = StackInstruction.PopMultiple(instruction.PopCount.Value);
+                                    operations[index] = operations[index] with { Instruction = instruction };
+                                }
+                                else
+                                {
+                                    operations.RemoveAt(index);
+                                    changed = true;
+                                    continue;
+                                }
+
                                 changed = true;
-                                continue;
                             }
 
-                            if (lastLiveDepth + 1 < count)
+                            if (lastLiveDepth + 1 < instruction.LocalIndices.Length)
                             {
+                                instruction =
+                                    instruction with
+                                    {
+                                        LocalIndices = instruction.LocalIndices[..(lastLiveDepth + 1)]
+                                    };
+
                                 operations[index] =
                                     operations[index] with
                                     {
-                                        Instruction =
-                                        StackInstruction.Local_Set_Descending(
-                                            highest,
-                                            lastLiveDepth + 1)
+                                        Instruction = instruction
                                     };
 
                                 changed = true;
@@ -145,10 +165,8 @@ public sealed partial record PineControlFlowGraph
                         AddWrittenLocals(instruction, written);
                         live.ExceptWith(written);
 
-                        if (ReadLocal(instruction) is { } read)
-                        {
+                        foreach (var read in ReadLocals(instruction))
                             live.Add(read);
-                        }
                     }
 
                     return block with { Operations = operations.ToImmutable() };
@@ -164,32 +182,21 @@ public sealed partial record PineControlFlowGraph
         return result;
     }
 
-    private static int? ReadLocal(StackInstruction instruction) =>
-        instruction.Kind is
-        StackInstructionKind.Local_Get or
-        StackInstructionKind.Local_Get_Skip_Head_Const or
-        StackInstructionKind.Local_Int_Add_Const
+    private static IEnumerable<int> ReadLocals(StackInstruction instruction) =>
+        instruction.Kind is StackInstructionKind.Local_Get or
+            StackInstructionKind.Local_Get_Skip_Head_Const or StackInstructionKind.Local_Int_Add_Const
         ?
-        instruction.LocalIndex
+        instruction.LocalIndices
         :
-        null;
+        [];
 
     private static void AddWrittenLocals(StackInstruction instruction, HashSet<int> written)
     {
         if (instruction.Kind is StackInstructionKind.Local_Set or
-            StackInstructionKind.Local_Set_Literal or StackInstructionKind.Local_Int_Add_Const &&
-            instruction.LocalIndex is { } local)
+            StackInstructionKind.Local_Set_Literal or StackInstructionKind.Local_Int_Add_Const)
         {
-            written.Add(local);
-        }
-        else if (instruction.Kind is StackInstructionKind.Local_Set_Descending &&
-            instruction.LocalIndex is { } highest &&
-            instruction.TakeCount is { } count)
-        {
-            for (var slot = highest - count + 1; slot <= highest; slot++)
-            {
+            foreach (var slot in instruction.LocalIndices)
                 written.Add(slot);
-            }
         }
     }
 }

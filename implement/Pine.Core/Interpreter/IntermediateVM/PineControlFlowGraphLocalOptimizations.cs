@@ -26,16 +26,16 @@ public sealed partial record PineControlFlowGraph
                 var pop = block.Operations[index + 2];
 
                 if (get.Instruction.Kind is not StackInstructionKind.Local_Get ||
-                    get.Instruction.LocalIndex is not { } source ||
+                    get.Instruction.LocalIndices is not [var source] ||
                     get.Results.Length is not 1 ||
-                    set.Instruction.Kind is not StackInstructionKind.Local_Set_Descending ||
-                    set.Instruction.TakeCount is not 1 ||
-                    set.Instruction.LocalIndex is not { } destination ||
+                    set.Instruction.Kind is not StackInstructionKind.Local_Set ||
+                    !IsDescendingLocalStore(set.Instruction) ||
+                    set.Instruction.LocalIndices is not [var destination] ||
                     !set.Inputs.IsEmpty ||
                     !set.Results.IsEmpty ||
                     source == destination ||
                     pop.Instruction.Kind is not StackInstructionKind.Pop ||
-                    pop.Instruction.SkipCount is not 1 ||
+                    pop.Instruction.PopCount is not 1 ||
                     pop.Inputs.Length is not 1 ||
                     pop.Inputs[0] != get.Results[0] ||
                     !pop.Results.IsEmpty)
@@ -58,10 +58,10 @@ public sealed partial record PineControlFlowGraph
                             safe = false;
                         }
 
-                        if (instruction.LocalIndex != destination ||
-                            instruction.Kind is not
+                        if (instruction.Kind is not
                             (StackInstructionKind.Local_Get or
-                             StackInstructionKind.Local_Get_Skip_Head_Const))
+                             StackInstructionKind.Local_Get_Skip_Head_Const) ||
+                            !instruction.LocalIndices.Contains(destination))
                         {
                             continue;
                         }
@@ -95,15 +95,23 @@ public sealed partial record PineControlFlowGraph
 
                     if (operationIndex > index + 2 &&
                         operationIndex <= lastRead &&
-                        operation.Instruction.LocalIndex == destination &&
                         operation.Instruction.Kind is
-                        StackInstructionKind.Local_Get or
-                        StackInstructionKind.Local_Get_Skip_Head_Const)
+                        (StackInstructionKind.Local_Get or
+                        StackInstructionKind.Local_Get_Skip_Head_Const) &&
+                        operation.Instruction.LocalIndices.Contains(destination))
                     {
                         operation =
                             operation with
                             {
-                                Instruction = operation.Instruction with { LocalIndex = source }
+                                Instruction =
+                                operation.Instruction with
+                                {
+                                    LocalIndices =
+                                    [
+                                    .. operation.Instruction.LocalIndices.Select(
+                                        local => local == destination ? source : local)
+                                    ]
+                                }
                             };
                     }
 
@@ -124,12 +132,7 @@ public sealed partial record PineControlFlowGraph
     private static bool WritesLocal(StackInstruction instruction, int index) =>
         instruction.Kind is StackInstructionKind.Local_Set or StackInstructionKind.Local_Set_Literal or
             StackInstructionKind.Local_Int_Add_Const &&
-        instruction.LocalIndex == index ||
-        instruction.Kind is StackInstructionKind.Local_Set_Descending &&
-        instruction.LocalIndex is { } highest &&
-        instruction.TakeCount is { } count &&
-        index <= highest &&
-        index > highest - count;
+        instruction.LocalIndices.Contains(index);
 
     /// <summary>
     /// Fuses local reads followed by a constant list projection before assigning jump offsets.
@@ -148,7 +151,8 @@ public sealed partial record PineControlFlowGraph
 
                         if (index + 1 < block.Operations.Length &&
                             get.Instruction.Kind is StackInstructionKind.Local_Get &&
-                            get.Instruction.LocalIndex is { } local &&
+                            get.Instruction.LocalIndices.Length is 1 &&
+                            get.Instruction.SingleLocalIndex is var local &&
                             get.Results.Length is 1 &&
                             block.Operations[index + 1] is { } projection &&
                             projection.Instruction.Kind is StackInstructionKind.Skip_Head_Const &&
@@ -197,15 +201,14 @@ public sealed partial record PineControlFlowGraph
                     {
                         var store = block.Operations[index];
 
-                        if (store.Instruction.Kind is StackInstructionKind.Local_Set_Descending &&
-                            store.Instruction.LocalIndex is { } highest &&
-                            store.Instruction.TakeCount is > 0 and var count &&
-                            highest >= count - 1 &&
+                        if (IsDescendingLocalStore(store.Instruction) &&
+                            store.Instruction.LocalIndices[0] is var highest &&
+                            store.Instruction.LocalIndices.Length is > 0 and var count &&
                             store.Inputs.IsEmpty && store.Results.IsEmpty &&
                             index + 1 < block.Operations.Length &&
                             block.Operations[index + 1] is { } pop &&
                             pop.Instruction.Kind is StackInstructionKind.Pop &&
-                            pop.Instruction.SkipCount is { } popCount &&
+                            pop.Instruction.PopCount is { } popCount &&
                             popCount >= count &&
                             pop.Inputs.Length == popCount &&
                             pop.Results.IsEmpty &&
@@ -293,15 +296,14 @@ public sealed partial record PineControlFlowGraph
             {
                 var store = block.Operations[index];
 
-                if (store.Instruction.Kind is StackInstructionKind.Local_Set_Descending &&
-                    store.Instruction.LocalIndex is { } highest &&
-                    store.Instruction.TakeCount is { } count &&
-                    count > 0 && highest >= count - 1 &&
+                if (IsDescendingLocalStore(store.Instruction) &&
+                    store.Instruction.LocalIndices[0] is var highest &&
+                    store.Instruction.LocalIndices.Length is > 0 and var count &&
                     store.Inputs.IsEmpty && store.Results.IsEmpty &&
                     index + 1 < block.Operations.Length &&
                     block.Operations[index + 1] is { } pop &&
                     pop.Instruction.Kind is StackInstructionKind.Pop &&
-                    pop.Instruction.SkipCount == count &&
+                    pop.Instruction.PopCount == count &&
                     pop.Inputs.Length == count &&
                     pop.Results.IsEmpty &&
                     TryGetDiscardedLocalUpdates(
@@ -407,7 +409,8 @@ public sealed partial record PineControlFlowGraph
             if (start == 0 ||
                 operations[start - 1] is not { } get ||
                 get.Instruction.Kind is not StackInstructionKind.Local_Get ||
-                get.Instruction.LocalIndex != destination ||
+                get.Instruction.LocalIndices.Length is not 1 ||
+                get.Instruction.SingleLocalIndex != destination ||
                 !get.Inputs.IsEmpty ||
                 get.Results.Length != 1 ||
                 get.Results[0] != value ||
@@ -445,7 +448,8 @@ public sealed partial record PineControlFlowGraph
                         if (index + 3 < block.Operations.Length &&
                             block.Operations[index] is { } get &&
                             get.Instruction.Kind is StackInstructionKind.Local_Get &&
-                            get.Instruction.LocalIndex is >= 0 and var local &&
+                            get.Instruction.LocalIndices.Length is 1 &&
+                            get.Instruction.SingleLocalIndex is >= 0 and var local &&
                             get.Inputs.IsEmpty &&
                             get.Results.Length is 1 &&
                             block.Operations[index + 1] is { } add &&
@@ -455,14 +459,14 @@ public sealed partial record PineControlFlowGraph
                             add.Inputs[0] == get.Results[0] &&
                             add.Results.Length is 1 &&
                             block.Operations[index + 2] is { } set &&
-                            set.Instruction.Kind is StackInstructionKind.Local_Set_Descending &&
-                            set.Instruction.LocalIndex == local &&
-                            set.Instruction.TakeCount is 1 &&
+                            set.Instruction.Kind is StackInstructionKind.Local_Set &&
+                            set.Instruction.LocalIndices.Length is 1 &&
+                            set.Instruction.SingleLocalIndex == local &&
                             set.Inputs.IsEmpty &&
                             set.Results.IsEmpty &&
                             block.Operations[index + 3] is { } pop &&
                             pop.Instruction.Kind is StackInstructionKind.Pop &&
-                            pop.Instruction.SkipCount is 1 &&
+                            pop.Instruction.PopCount is 1 &&
                             pop.Inputs.Length is 1 &&
                             pop.Inputs[0] == add.Results[0] &&
                             pop.Results.IsEmpty)
@@ -487,4 +491,10 @@ public sealed partial record PineControlFlowGraph
         result.Validate();
         return result;
     }
+
+    private static bool IsDescendingLocalStore(StackInstruction instruction) =>
+        instruction.Kind is StackInstructionKind.Local_Set &&
+        !instruction.LocalIndices.IsDefaultOrEmpty &&
+        instruction.LocalIndices.Select((local, depth) => local == instruction.LocalIndices[0] - depth).All(
+            equal => equal);
 }

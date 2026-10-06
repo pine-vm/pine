@@ -14,6 +14,39 @@ namespace Pine.Core.Tests.Interpreter.IntermediateVM;
 public class StackInstructionTraceRendererTests
 {
     [Fact]
+    public void Local_instructions_render_indices_as_lists_and_use_unified_kinds()
+    {
+        var examples =
+            new (StackInstruction Instruction, string Expected)[]
+            {
+                (StackInstruction.Local_Get(2), "Local_Get ([ 2 ])"),
+                (StackInstruction.Local_Get([0, 3]), "Local_Get ([ 0, 3 ])"),
+                (StackInstruction.Local_Get([2, 1, 2]), "Local_Get ([ 2, 1, 2 ])"),
+                (StackInstruction.Local_Set(3), "Local_Set ([ 3 ])"),
+                (StackInstruction.Local_Set([3, 1]), "Local_Set ([ 3, 1 ])"),
+                (StackInstruction.Local_Set([3, 1], popCount: 2), "Local_Set ([ 3, 1 ]), Pop(2)"),
+                (StackInstruction.Local_Set([1], popCount: 1), "Local_Set ([ 1 ]), Pop(1)"),
+                (StackInstruction.Local_Get_Skip_Head_Const([2, 1, 2], 0), "Local_Get_Skip_Head_Const ([ 2, 1, 2 ], 0)"),
+                (StackInstruction.Local_Set_Literal(3, IntegerEncoding.EncodeSignedInteger(3)), "Local_Set_Literal ([ 3 ], Blob [2] (int 3))"),
+                (StackInstruction.Local_Int_Add_Const([2, 1], 4), "Local_Int_Add_Const ([ 2, 1 ], 4)")
+            };
+
+        foreach (var (instruction, expected) in examples)
+            instruction.ToString().Should().Be(expected);
+
+        StackInstructionTraceRenderer.RenderStackFrameInstructions(
+            new StackFrameInstructions(
+                Parameters: StaticFunctionInterface.FromPathsSorted([]),
+                Instructions: [.. examples.Select(example => example.Instruction)]))
+            .Should().Be(
+            string.Join(
+                "\n",
+                examples.Select(
+                    (example, index) =>
+                    $"{index}: {example.Expected.Replace("Blob [2] (int 3)", "Blob [2] (0x0403 | int 3)")}")));
+    }
+
+    [Fact]
     public void Environment_expression_omits_invariant_stats_in_instruction_description()
     {
         var instruction =

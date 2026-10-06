@@ -1,4 +1,4 @@
-Local_Get (0)
+Local_Get ([ 0 ])
 Switch_Jump_If_Equal_Const (10)
   case Blob [2] (int 0): jump 3
   case Blob [2] (int 1): jump 5

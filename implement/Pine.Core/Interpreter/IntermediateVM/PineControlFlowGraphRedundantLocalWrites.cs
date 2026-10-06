@@ -46,19 +46,19 @@ public sealed partial record PineControlFlowGraph
                 var store = block.Operations[index];
                 var pop = block.Operations[index + 1];
 
-                if (store.Instruction.Kind is not StackInstructionKind.Local_Set_Descending ||
-                    store.Instruction.LocalIndex is not { } highest ||
-                    store.Instruction.TakeCount is not { } count ||
-                    count < 0 || highest < count - 1 ||
+                if (!IsDescendingLocalStore(store.Instruction) ||
+                    store.Instruction.LocalIndices is not [var highest, ..] ||
+                    highest < store.Instruction.LocalIndices.Length - 1 ||
                     !store.Inputs.IsEmpty || !store.Results.IsEmpty ||
                     pop.Instruction.Kind is not StackInstructionKind.Pop ||
-                    pop.Instruction.SkipCount is not { } popCount ||
-                    popCount < count || popCount != pop.Inputs.Length ||
+                    pop.Instruction.PopCount is not { } popCount ||
+                    popCount < store.Instruction.LocalIndices.Length || popCount != pop.Inputs.Length ||
                     !pop.Results.IsEmpty)
                 {
                     continue;
                 }
 
+                var count = store.Instruction.LocalIndices.Length;
                 var unstored = popCount - count;
                 var removable = new List<int>();
 
@@ -80,7 +80,8 @@ public sealed partial record PineControlFlowGraph
                         (local is { } destination
                         ?
                         instruction.Kind is not StackInstructionKind.Local_Get ||
-                        instruction.LocalIndex != destination ||
+                        instruction.LocalIndices.Length is not 1 ||
+                        instruction.SingleLocalIndex != destination ||
                         !initializedBefore[producerIndex].Contains(destination)
                         :
                         instruction.Kind switch
@@ -88,7 +89,7 @@ public sealed partial record PineControlFlowGraph
                             StackInstructionKind.Push_Literal => instruction.Literal is null,
 
                             StackInstructionKind.Local_Get =>
-                            instruction.LocalIndex is not { } source ||
+                            instruction.LocalIndices is not [var source] ||
                             !initializedBefore[producerIndex].Contains(source),
 
                             _ =>
@@ -98,8 +99,7 @@ public sealed partial record PineControlFlowGraph
                         .Any(
                             otherIndex =>
                             block.Operations[otherIndex].Instruction.Kind is
-                            StackInstructionKind.Local_Set or StackInstructionKind.Local_Set_Literal or
-                            StackInstructionKind.Local_Set_Descending ||
+                            StackInstructionKind.Local_Set or StackInstructionKind.Local_Set_Literal ||
                             block.Operations[otherIndex].Inputs.Contains(producer.Results[0])))
                     {
                         break;
@@ -127,7 +127,11 @@ public sealed partial record PineControlFlowGraph
                     replacements[index] =
                         store with
                         {
-                            Instruction = StackInstruction.Local_Set_Descending(highest, remainingStoreCount)
+                            Instruction =
+                            store.Instruction with
+                            {
+                                LocalIndices = store.Instruction.LocalIndices[..remainingStoreCount]
+                            }
                         };
                 }
 

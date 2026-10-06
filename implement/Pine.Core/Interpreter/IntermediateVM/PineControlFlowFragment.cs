@@ -111,7 +111,7 @@ public abstract record PineControlFlowNode
         kind is
         StackInstructionKind.Jump_Const or
         StackInstructionKind.Jump_If_Equal_Const or
-        StackInstructionKind.Length_Jump_If_Equal_Const or
+        StackInstructionKind.Jump_If_Length_Equal_Const or
         StackInstructionKind.Switch_Jump_If_Equal_Const or
         StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const or
         StackInstructionKind.Return;

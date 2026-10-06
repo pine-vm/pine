@@ -1,17 +1,16 @@
-Local_Get (0)
-Local_Get (0)
+Local_Get ([ 0, 0 ])
 Int_Mul_Binary
-Local_Get (0)
+Local_Get ([ 0 ])
 Int_Mul_Binary
-Local_Set (1)
-Local_Get (1)
+Local_Set ([ 1 ])
+Local_Get ([ 1 ])
 Build_List (2)
-Local_Get (0)
+Local_Get ([ 0 ])
 Build_List_With_Prefix (1, 1)
   Blob [2] (int 1)
 Equal_Binary
 Jump_If_Equal_Const (Blob [1] (0x04), 7)
-Local_Get (1)
+Local_Get ([ 1 ])
 Jump_If_Equal_Const (Blob [1] (0x04), 3)
 Push_Literal (Blob [2] (int 27))
 Return

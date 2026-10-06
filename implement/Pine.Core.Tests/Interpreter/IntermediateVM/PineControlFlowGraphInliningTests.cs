@@ -39,6 +39,38 @@ public class PineControlFlowGraphInliningTests
         PineControlFlowFragment.FromOperations(instructions);
 
     [Fact]
+    public void Inlining_shifts_all_indices_in_multi_local_gets()
+    {
+        var invocation =
+            StackInstruction.Invoke_StackFrame_Const(
+                Expression.EnvironmentInstance,
+                StaticFunctionInterface.Generic);
+
+        var caller =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Get([0, 2]),
+                    StackInstruction.PopMultiple(2),
+                    StackInstruction.Local_Get(0),
+                    invocation));
+
+        var callee =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Set(1),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Get([0, 1]),
+                    StackInstruction.Build_List(2)));
+
+        var inlined =
+            caller.InlineInvocation(caller.Entry, callee, callerParameterCount: 3, calleeParameterCount: 1);
+
+        inlined.LowerToStackInstructions()
+            .Should().Contain(StackInstruction.Local_Get([3, 4]));
+    }
+
+    [Fact]
     public void Splicing_twice_preserves_live_caller_stack_and_two_independent_local_loops()
     {
         var loopBody =
@@ -84,7 +116,9 @@ public class PineControlFlowGraphInliningTests
             instruction => instruction.Kind is StackInstructionKind.Jump_Const &&
                 instruction.JumpOffset < 0).Should().Be(2);
 
-        instructions.Count(instruction => instruction.Kind is StackInstructionKind.Local_Set_Descending).Should().Be(2);
+        instructions.Count(
+            instruction => instruction.Kind is StackInstructionKind.Local_Set &&
+                instruction.PopCount is > 0).Should().Be(2);
 
         new StackFrameInstructions(StaticFunctionInterface.Generic, instructions).MaxStackUsage.Should().BeGreaterThan(
             1);

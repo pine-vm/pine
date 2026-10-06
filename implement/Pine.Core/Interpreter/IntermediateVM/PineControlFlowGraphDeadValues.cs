@@ -27,7 +27,7 @@ public sealed partial record PineControlFlowGraph
             {
                 var instruction = operation.Instruction;
 
-                if (instruction.Kind is StackInstructionKind.Pop && instruction.SkipCount is > 0)
+                if (instruction.Kind is StackInstructionKind.Pop && instruction.PopCount is > 0)
                 {
                     var discarded = operation.Inputs;
 
@@ -90,12 +90,12 @@ public sealed partial record PineControlFlowGraph
 
             // A missing local raises an error in the VM, so an uninitialized read cannot disappear.
             StackInstructionKind.Local_Get =>
-            instruction.LocalIndex is { } local && initialized.Contains(local),
+            instruction.LocalIndices.All(initialized.Contains),
 
             StackInstructionKind.Local_Get_Skip_Head_Const =>
-            instruction.LocalIndex is { } projectedLocal &&
+            instruction.LocalIndices.All(initialized.Contains) &&
             instruction.SkipCount is not null &&
-            initialized.Contains(projectedLocal),
+            !instruction.LocalIndices.IsDefaultOrEmpty,
 
             _ =>
             false

@@ -446,7 +446,7 @@ public class PineIRCompiler
             return
                 lessCSE
                 .AppendInstruction(
-                    StackInstruction.Local_Set(newLocalIndex)) with
+                    StackInstruction.Local_Set([newLocalIndex])) with
                 {
                     LocalsSet = lessCSE.LocalsSet.Add(expression, newLocalIndex)
                 };
@@ -1132,9 +1132,8 @@ public class PineIRCompiler
             result =
                 result
                 .AppendInstruction(
-                    StackInstruction.Local_Set_Descending(
-                        index: parameterCount - 1,
-                        takeCount: parameterCount))
+                    StackInstruction.Local_Set(
+                        [.. Enumerable.Range(0, parameterCount).Reverse()]))
                 .AppendInstruction(StackInstruction.PopMultiple(parameterCount));
         }
 
@@ -1603,7 +1602,7 @@ public class PineIRCompiler
                 if (afterSource.Fragment.LastOperationOrNull is
                     {
                         Kind: StackInstructionKind.Local_Get,
-                        LocalIndex: { } localIndex
+                        LocalIndices: { Length: 1 } localIndices
                     })
                 {
                     return
@@ -1612,7 +1611,7 @@ public class PineIRCompiler
                             Fragment =
                             afterSource.Fragment.ReplaceLastOperation(
                                 StackInstruction.Local_Get_Skip_Head_Const(
-                                    localIndex,
+                                    localIndices[0],
                                     (int)skipCountConst))
                         };
                 }

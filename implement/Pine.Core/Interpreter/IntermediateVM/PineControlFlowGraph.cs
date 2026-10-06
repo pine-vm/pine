@@ -1035,6 +1035,117 @@ public sealed partial record PineControlFlowGraph(
             return length;
         }
 
+        static ImmutableArray<StackInstruction> FuseLocalGets(
+            IEnumerable<StackInstruction> instructions)
+        {
+            var result = ImmutableArray.CreateBuilder<StackInstruction>();
+            var indices = ImmutableArray.CreateBuilder<int>();
+
+            void Flush()
+            {
+                if (indices.Count > 0)
+                {
+                    result.Add(StackInstruction.Local_Get(indices.ToImmutable()));
+                    indices = ImmutableArray.CreateBuilder<int>();
+                }
+            }
+
+            foreach (var instruction in instructions)
+            {
+                if (instruction.Kind is StackInstructionKind.Local_Get)
+                {
+                    if (instruction.LocalIndices.IsDefaultOrEmpty)
+                        throw new InvalidOperationException("Local get without indices.");
+
+                    indices.AddRange(instruction.LocalIndices);
+                }
+                else
+                {
+                    Flush();
+                    result.Add(instruction);
+                }
+            }
+
+            Flush();
+            return result.ToImmutable();
+        }
+
+        static ImmutableArray<StackInstruction> FuseLocalStoresAndUpdates(
+            IEnumerable<StackInstruction> instructions)
+        {
+            var result = ImmutableArray.CreateBuilder<StackInstruction>();
+
+            foreach (var instruction in instructions)
+            {
+                if (result.Count > 0)
+                {
+                    var previous = result[^1];
+
+                    if (previous.Kind is StackInstructionKind.Local_Set &&
+                        instruction.Kind is StackInstructionKind.Pop)
+                    {
+                        result[^1] =
+                            previous with
+                            {
+                                PopCount = checked((previous.PopCount ?? 0) + (instruction.PopCount ?? 0))
+                            };
+
+                        continue;
+                    }
+
+                    if (previous.Kind is StackInstructionKind.Local_Set &&
+                        instruction.Kind is StackInstructionKind.Local_Set &&
+                        previous.PopCount == previous.LocalIndices.Length)
+                    {
+                        result[^1] =
+                            StackInstruction.Local_Set(
+                                [.. previous.LocalIndices, .. instruction.LocalIndices],
+                                previous.PopCount.Value + (instruction.PopCount ?? 0));
+
+                        continue;
+                    }
+
+                    if (previous.Kind is StackInstructionKind.Local_Get_Skip_Head_Const &&
+                        instruction.Kind is StackInstructionKind.Local_Get_Skip_Head_Const &&
+                        previous.SkipCount == instruction.SkipCount)
+                    {
+                        result[^1] =
+                            previous with
+                            {
+                                LocalIndices = [.. previous.LocalIndices, .. instruction.LocalIndices]
+                            };
+
+                        continue;
+                    }
+
+                    if (previous.Kind is StackInstructionKind.Local_Int_Add_Const &&
+                        instruction.Kind is StackInstructionKind.Local_Int_Add_Const &&
+                        previous.IntegerLiteral == instruction.IntegerLiteral)
+                    {
+                        result[^1] =
+                            previous with
+                            {
+                                LocalIndices = [.. previous.LocalIndices, .. instruction.LocalIndices]
+                            };
+
+                        continue;
+                    }
+                }
+
+                result.Add(instruction);
+            }
+
+            return result.ToImmutable();
+        }
+
+        var loweredOperationsByBlock =
+            Blocks.ToDictionary(
+                block => block.Id,
+                block => FuseLocalStoresAndUpdates(
+                    FuseLocalGets(
+                        (FusedLengthComparison(block) is null ? block.Operations : block.Operations[..^1])
+                        .Select(operation => operation.Instruction))));
+
         var firstInstructionIndexByBlock = new Dictionary<PineBlockId, int>();
         var instructionCount = 0;
 
@@ -1043,8 +1154,7 @@ public sealed partial record PineControlFlowGraph(
             firstInstructionIndexByBlock.Add(block.Id, instructionCount);
 
             instructionCount +=
-                block.Operations.Length + TerminatorInstructionCount(block.Terminator) -
-                (FusedLengthComparison(block) is not null ? 1 : 0);
+                loweredOperationsByBlock[block.Id].Length + TerminatorInstructionCount(block.Terminator);
         }
 
         var result = ImmutableArray.CreateBuilder<StackInstruction>(instructionCount);
@@ -1053,9 +1163,9 @@ public sealed partial record PineControlFlowGraph(
         {
             var fusedLength = FusedLengthComparison(block);
 
-            foreach (var operation in fusedLength is null ? block.Operations : block.Operations[..^1])
+            foreach (var operation in loweredOperationsByBlock[block.Id])
             {
-                result.Add(operation.Instruction);
+                result.Add(operation);
             }
 
             switch (block.Terminator)
@@ -1083,7 +1193,7 @@ public sealed partial record PineControlFlowGraph(
                     result.Add(
                         fusedLength is { } length
                         ?
-                        StackInstruction.Length_Jump_If_Equal(
+                        StackInstruction.Jump_If_Length_Equal(
                             offset: firstInstructionIndexByBlock[conditional.Branch] - result.Count,
                             length: length)
                         :

@@ -46,15 +46,7 @@ public class SequentialIREfficiencyTests
                 functionRecord.InnerFunction,
                 parseCache);
 
-        renderedFrame.Should().Contain(
-            """
-            Local_Set_Descending (3, 4)
-            """);
-
-        renderedFrame.Should().Contain(
-            """
-            Pop (4)
-            """);
+        renderedFrame.Should().Contain("Local_Set ([ 3, 2, 1, 0 ]), Pop(4)");
     }
 
     [Fact]
@@ -98,13 +90,13 @@ public class SequentialIREfficiencyTests
         renderedFrame.Should().Be(
             """
             expr-0x8820d122-no-constraint (8):
-            0: Local_Get (0)
+            0: Local_Get ([ 0 ])
             1: Take_Const (2)
             2: Jump_If_Equal_Const (List [2] (2 | hash 0xd072f1c4), 3, 5)
-            3: Local_Get (0)
+            3: Local_Get ([ 0 ])
             4: Return
             jumps_arriving_from 1 (2)
-            5: Local_Get (0)
+            5: Local_Get ([ 0 ])
             6: Skip_Const (2)
             7: Return
             """);
@@ -180,17 +172,17 @@ public class SequentialIREfficiencyTests
         renderedFrame.Should().Be(
             """
             expr-0x43aa790e-no-constraint (41):
-             0: Local_Get (0)
+             0: Local_Get ([ 0 ])
              1: Int_Greater_Than_Or_Equal_Const (0)
-             2: Local_Get (0)
+             2: Local_Get ([ 0 ])
              3: Int_Less_Than_Or_Equal_Const (13)
              4: Logical_And_Binary
              5: Jump_If_Equal_Const (Blob [1] (0x04 | hash 0x06db1cc6), 20, 25)
-             6: Local_Get_Skip_Head_Const (1, 2)
-             7: Local_Set (2)
-             8: Local_Get (0)
+             6: Local_Get_Skip_Head_Const ([ 1 ], 2)
+             7: Local_Set ([ 2 ])
+             8: Local_Get ([ 0 ])
              9: Int_Mul_Const (4)
-            10: Local_Get (2)
+            10: Local_Get ([ 2 ])
             11: Build_List_With_Prefix (1, 1)
               Blob [24] (0x0000004c000000690000007400000072000000610000006c | UTF32 "Litral")
             12: Push_Literal (List [1] (1 | hash 0xcb2c8951))
@@ -200,21 +192,21 @@ public class SequentialIREfficiencyTests
             14: Build_List_With_Prefix (2, 1)
               Blob [16] (0x0000004500000076000000610000006c | UTF32 "Eval")
               List [2] (79 | hash 0x28d30c5c)
-            15: Local_Set (3)
+            15: Local_Set ([ 3 ])
             16: Eval_Binary
-            17: Local_Set (4)
+            17: Local_Set ([ 4 ])
             18: Push_Literal (Blob [2] (0x0434 | int 52))
-            19: Local_Get (3)
+            19: Local_Get ([ 3 ])
             20: Eval_Binary
-            21: Local_Get (4)
+            21: Local_Get ([ 4 ])
             22: Int_Sub_Binary
             23: Slice_Skip_Var_Take_Var
             24: Jump_Const (10, 34)
             jumps_arriving_from 1 (5)
-            25: Local_Get_Skip_Head_Const (1, 2)
-            26: Local_Get (0)
+            25: Local_Get_Skip_Head_Const ([ 1 ], 2)
+            26: Local_Get ([ 0 ])
             27: Int_Mul_Const (4)
-            28: Local_Get (0)
+            28: Local_Get ([ 0 ])
             29: Int_Mul_Const (-1)
             30: Build_List_With_Prefix (1, 1)
               Blob [2] (0x040d | int 13)
@@ -296,13 +288,13 @@ public class SequentialIREfficiencyTests
         renderedFrame.Should().Be(
             """
             expr-0x658be8d6-no-constraint (9):
-            0: Local_Get_Skip_Head_Const (0, 2)
+            0: Local_Get_Skip_Head_Const ([ 0 ], 2)
             1: Take_Const (4)
-            2: Local_Set (1)
+            2: Local_Set ([ 1 ])
             3: Switch_Jump_If_Equal_Const (2)
               case Blob [4] (0x00000041 | UTF32 "A"): jump (4, 7)
               case Blob [4] (0x00000042 | UTF32 "B"): jump (4, 7)
-            4: Local_Get (1)
+            4: Local_Get ([ 1 ])
             5: Build_List_With_Prefix (2, 1)
               Blob [32] (0x0000003c00000043000000680000006f0000006900000063000000650000003e | UTF32 "\u003CChoice\u003E")
               Blob [24] (0x000000530000007400000072000000690000006e00000067 | UTF32 "String")
@@ -382,17 +374,17 @@ public class SequentialIREfficiencyTests
         renderedFrame.Should().Be(
             """
             expr-0x2386c060-no-constraint (19):
-             0: Local_Get (1)
+             0: Local_Get ([ 1 ])
              1: Push_Literal (Blob [2] (0x0400 | int 0))
              2: Slice_Skip_Var_Equal_Const (Blob [1] (0x04 | hash 0x06db1cc6))
              3: Jump_If_Equal_Const (Blob [1] (0x04 | hash 0x06db1cc6), 3, 6)
              4: Push_Literal (Blob [1] (0x02 | hash 0xf0989139))
              5: Return
             jumps_arriving_from 1 (3)
-             6: Local_Get_Skip_Head_Const (0, 2)
-             7: Local_Get (1)
+             6: Local_Get_Skip_Head_Const ([ 0 ], 2)
+             7: Local_Get ([ 1 ])
              8: Int_Mul_Const (4)
-             9: Local_Get (1)
+             9: Local_Get ([ 1 ])
             10: Int_Mul_Const (0)
             11: Int_Add_Const (1)
             12: Int_Mul_Const (4)
@@ -443,17 +435,16 @@ public class SequentialIREfficiencyTests
 
         renderedFrame.Should().Be(
             """
-            expr-0x0dbec914-no-constraint (8):
-            0: Local_Get (2)
-            1: Local_Get (1)
-            2: Int_Mul_Const (4)
-            3: Local_Get (0)
-            4: Int_Mul_Const (4)
-            5: Slice_Skip_Var_Take_Var
-            6: Build_List_With_Prefix (2, 1)
+            expr-0x0dbec914-no-constraint (7):
+            0: Local_Get ([ 2, 1 ])
+            1: Int_Mul_Const (4)
+            2: Local_Get ([ 0 ])
+            3: Int_Mul_Const (4)
+            4: Slice_Skip_Var_Take_Var
+            5: Build_List_With_Prefix (2, 1)
               Blob [32] (0x0000003c00000043000000680000006f0000006900000063000000650000003e | UTF32 "\u003CChoice\u003E")
               Blob [24] (0x000000530000007400000072000000690000006e00000067 | UTF32 "String")
-            7: Return
+            6: Return
             """);
     }
 
@@ -492,15 +483,14 @@ public class SequentialIREfficiencyTests
 
         renderedFrame.Should().Be(
             """
-            expr-0x8f52db35-no-constraint (6):
-            0: Local_Get (1)
-            1: Local_Get (0)
-            2: Int_Mul_Const (4)
-            3: Slice_Skip_Var_Take_Const (12)
-            4: Build_List_With_Prefix (2, 1)
+            expr-0x8f52db35-no-constraint (5):
+            0: Local_Get ([ 1, 0 ])
+            1: Int_Mul_Const (4)
+            2: Slice_Skip_Var_Take_Const (12)
+            3: Build_List_With_Prefix (2, 1)
               Blob [32] (0x0000003c00000043000000680000006f0000006900000063000000650000003e | UTF32 "\u003CChoice\u003E")
               Blob [24] (0x000000530000007400000072000000690000006e00000067 | UTF32 "String")
-            5: Return
+            4: Return
             """);
     }
 

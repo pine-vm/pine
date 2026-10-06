@@ -1,4 +1,4 @@
-Local_Get (0)
+Local_Get ([ 0 ])
 Length
 Jump_If_Equal_Const (Blob [1] (0x00), 3)
 Push_Literal (Blob [2] (int 41))

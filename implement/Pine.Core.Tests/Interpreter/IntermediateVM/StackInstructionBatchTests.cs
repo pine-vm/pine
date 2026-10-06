@@ -47,7 +47,7 @@ public class StackInstructionBatchTests
     }
 
     [Fact]
-    public void Local_set_descending_and_counted_pop_preserve_value_order()
+    public void Local_set_multiple_and_counted_pop_preserve_ordered_indices()
     {
         var targetExpression = Expression.EnvironmentInstance;
 
@@ -63,11 +63,10 @@ public class StackInstructionBatchTests
                 StackInstruction.Push_Literal(first),
                 StackInstruction.Push_Literal(second),
                 StackInstruction.Push_Literal(third),
-                StackInstruction.Local_Set_Descending(index: 2, takeCount: 3),
-                StackInstruction.PopMultiple(3),
+                StackInstruction.Local_Set([2, 0, 4], popCount: 3),
                 StackInstruction.Local_Get(0),
-                StackInstruction.Local_Get(1),
                 StackInstruction.Local_Get(2),
+                StackInstruction.Local_Get(4),
                 StackInstruction.Build_List(3),
                 StackInstruction.Return,
                 ]);
@@ -128,8 +127,29 @@ public class StackInstructionBatchTests
                     StackDepthLimit: null))
             .Extract(error => throw new InvalidOperationException(error.ToString()));
 
-        report.ReturnValue.Evaluate().Should().Be(PineValue.List([first, second, third]));
-        report.InstructionCount.Should().Be(12);
+        report.ReturnValue.Evaluate().Should().Be(PineValue.List([second, third, first]));
+        report.InstructionCount.Should().Be(11);
+    }
+
+    [Fact]
+    public void Empty_local_indices_cannot_be_executed_in_a_stack_frame()
+    {
+        foreach (var kind in new[]
+        {
+            StackInstructionKind.Local_Set,
+            StackInstructionKind.Local_Get,
+            StackInstructionKind.Local_Get_Skip_Head_Const,
+            StackInstructionKind.Local_Int_Add_Const
+        })
+        {
+            Action createFrame =
+                () => _ =
+                    new StackFrameInstructions(
+                        StaticFunctionInterface.Generic,
+                        [new StackInstruction(kind, LocalIndices: []), StackInstruction.Return]);
+
+            createFrame.Should().Throw<InvalidOperationException>();
+        }
     }
 
     private static PineValue ExecuteIntMulConstAddBinary(

@@ -41,6 +41,258 @@ public class PineControlFlowGraphTests
         .LowerToStackInstructions();
 
     [Fact]
+    public void Sequential_local_stores_and_pops_fuse_in_stack_order()
+    {
+        var first = PineValue.Blob([11]);
+        var second = PineValue.Blob([22]);
+
+        var graph =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(first),
+                    StackInstruction.Push_Literal(second),
+                    StackInstruction.Local_Set(13),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Set(17),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Get(13),
+                    StackInstruction.Local_Get(17),
+                    StackInstruction.Build_List(2)));
+
+        var lowered = graph.LowerToStackInstructions();
+        var store = StackInstruction.Local_Set([13, 17], popCount: 2);
+
+        lowered.Count(instruction => instruction.Kind is StackInstructionKind.Local_Set)
+            .Should().Be(1);
+
+        lowered.Should().Contain(store);
+
+        StackInstruction.RenderInstructionDisplay(store, StackInstruction.LiteralDisplayStringDefault)
+            .Should().Be("Local_Set ([ 13, 17 ]), Pop(2)");
+
+        StackInstruction.RenderInstructionDisplay(
+            StackInstruction.Local_Set([13, 17]),
+            StackInstruction.LiteralDisplayStringDefault)
+            .Should().Be("Local_Set ([ 13, 17 ])");
+
+        StackInstruction.RenderInstructionDisplay(
+            StackInstruction.Local_Set(13),
+            StackInstruction.LiteralDisplayStringDefault)
+            .Should().Be("Local_Set ([ 13 ])");
+
+        StackInstruction.GetDetails(store).PopCount.Should().Be(2);
+        StackInstruction.GetDetails(StackInstruction.PopMultiple(2)).PopCount.Should().Be(2);
+        Evaluate(graph, PineValue.EmptyList).Should().Be(PineValue.List([second, first]));
+    }
+
+    [Fact]
+    public void Dead_fused_store_retains_its_stack_pop()
+    {
+        var graph =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(PineValue.Blob([1])),
+                    StackInstruction.Push_Literal(PineValue.Blob([2])),
+                    StackInstruction.Local_Set([4, 2], popCount: 2),
+                    StackInstruction.Push_Literal(PineValue.Blob([3]))));
+
+        var optimized = graph.EliminateDeadLocalStores();
+
+        optimized.LowerToStackInstructions().Should()
+            .Contain(StackInstruction.PopMultiple(2));
+
+        optimized.LowerToStackInstructions().Should()
+            .NotContain(instruction => instruction.Kind == StackInstructionKind.Local_Set);
+
+        Evaluate(optimized, PineValue.EmptyList).Should()
+            .Be(Evaluate(graph, PineValue.EmptyList));
+    }
+
+    [Fact]
+    public void Repeated_local_store_indices_keep_the_last_value_for_equivalence()
+    {
+        var first = PineValue.Blob([11]);
+        var second = PineValue.Blob([22]);
+
+        var graph =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(first),
+                    StackInstruction.Local_Set([0], popCount: 1),
+                    StackInstruction.Push_Literal(second),
+                    StackInstruction.Local_Set([1], popCount: 1),
+                    StackInstruction.Local_Get(1),
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Set([2, 2], popCount: 2),
+                    StackInstruction.Local_Get(2)));
+
+        Evaluate(graph.ForwardEquivalentLocalReads(), PineValue.EmptyList)
+            .Should().Be(second);
+    }
+
+    [Fact]
+    public void Local_copy_elimination_rewrites_every_multi_local_read()
+    {
+        var first = PineValue.Blob([11]);
+        var second = PineValue.Blob([22]);
+
+        var graph =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(second),
+                    StackInstruction.Local_Set(1),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Set(2),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Get([2, 1, 2]),
+                    StackInstruction.Build_List(3)));
+
+        var optimized = graph.EliminateLocalCopies();
+
+        optimized.LowerToStackInstructions().Should()
+            .Contain(StackInstruction.Local_Get([0, 1, 0]));
+
+        Evaluate(optimized, first).Should().Be(PineValue.List([first, second, first]));
+
+        var projected =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(PineValue.List([second])),
+                    StackInstruction.Local_Set(1),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Set(2),
+                    StackInstruction.Pop,
+                    StackInstruction.Local_Get_Skip_Head_Const([2, 1, 2], 0),
+                    StackInstruction.Build_List(3)));
+
+        var optimizedProjection = projected.EliminateLocalCopies();
+
+        optimizedProjection.LowerToStackInstructions().Should()
+            .Contain(StackInstruction.Local_Get_Skip_Head_Const([0, 1, 0], 0));
+
+        Evaluate(optimizedProjection, PineValue.List([first]))
+            .Should().Be(PineValue.List([first, second, first]));
+    }
+
+    [Fact]
+    public void Multiple_local_projections_and_updates_apply_to_every_index()
+    {
+        var first = PineValue.List([PineValue.Blob([11])]);
+        var second = PineValue.List([PineValue.Blob([22])]);
+
+        var projections =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(first),
+                    StackInstruction.Local_Set([2], popCount: 1),
+                    StackInstruction.Push_Literal(second),
+                    StackInstruction.Local_Set([4], popCount: 1),
+                    StackInstruction.Local_Get_Skip_Head_Const([2, 4], 0),
+                    StackInstruction.Build_List(2)));
+
+        Evaluate(projections, PineValue.EmptyList)
+            .Should().Be(PineValue.List([PineValue.Blob([11]), PineValue.Blob([22])]));
+
+        var incremented =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(IntegerEncoding.EncodeSignedInteger(2)),
+                    StackInstruction.Local_Set([2], popCount: 1),
+                    StackInstruction.Push_Literal(IntegerEncoding.EncodeSignedInteger(3)),
+                    StackInstruction.Local_Set([4], popCount: 1),
+                    StackInstruction.Local_Int_Add_Const([2, 4], 5),
+                    StackInstruction.Local_Get([2, 4]),
+                    StackInstruction.Build_List(2)));
+
+        Evaluate(incremented, PineValue.EmptyList)
+            .Should().Be(
+            PineValue.List(
+                [
+                IntegerEncoding.EncodeSignedInteger(7),
+                IntegerEncoding.EncodeSignedInteger(8)
+                ]));
+
+        Action multipleIndexAccess = () => _ = StackInstruction.Local_Set([2, 4]).SingleLocalIndex;
+        multipleIndexAccess.Should().Throw<InvalidOperationException>();
+
+        Action emptyStore = () => StackInstruction.Local_Set([]);
+        Action emptyProjection = () => StackInstruction.Local_Get_Skip_Head_Const([], 0);
+        Action emptyUpdate = () => StackInstruction.Local_Int_Add_Const([], 1);
+        emptyStore.Should().Throw<ArgumentException>();
+        emptyProjection.Should().Throw<ArgumentException>();
+        emptyUpdate.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void Adjacent_local_gets_fuse_in_order_and_preserve_stack_and_branch_offsets()
+    {
+        var first = PineValue.Blob([11]);
+        var second = PineValue.Blob([22]);
+
+        var graph =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Push_Literal(first),
+                    StackInstruction.Local_Set(1),
+                    StackInstruction.Push_Literal(second),
+                    StackInstruction.Local_Set(2),
+                    StackInstruction.PopMultiple(2),
+                    StackInstruction.Local_Get(1),
+                    StackInstruction.Local_Get(1),
+                    StackInstruction.Local_Get(2),
+                    StackInstruction.Build_List(3))
+                .Append(
+                    Conditional(
+                        PineValue.List([first, first, second]),
+                        Ops(StackInstruction.Push_Literal(PineValue.EmptyBlob)),
+                        Ops(StackInstruction.Push_Literal(first)))));
+
+        var instructions = graph.LowerToStackInstructions();
+        var loads = instructions.Where(instruction => instruction.Kind is StackInstructionKind.Local_Get).ToArray();
+
+        loads.Should().ContainSingle();
+        loads[0].LocalIndices.Should().Equal(1, 1, 2);
+        loads[0].ToString().Should().Be("Local_Get ([ 1, 1, 2 ])");
+
+        StackFrameInstructions.ComputeMaxStackUsage(instructions).Should().Be(3);
+        StackFrameInstructions.ComputeLocalsCount(instructions, StaticFunctionInterface.Generic).Should().Be(3);
+        Evaluate(graph, PineValue.EmptyList).Should().Be(first);
+    }
+
+    [Fact]
+    public void Single_local_get_retains_its_trace_rendering()
+    {
+        var instruction = StackInstruction.Local_Get(1);
+
+        instruction.Kind.Should().Be(StackInstructionKind.Local_Get);
+        instruction.LocalIndices.Should().Equal(1);
+        instruction.ToString().Should().Be("Local_Get ([ 1 ])");
+    }
+
+    [Fact]
+    public void Multi_local_get_keeps_every_read_local_live()
+    {
+        var first = PineValue.Blob([11]);
+        var second = PineValue.Blob([22]);
+
+        var graph =
+            PineControlFlowGraph.FromFragment(
+                Ops(
+                    StackInstruction.Local_Set_Literal(1, first),
+                    StackInstruction.Local_Set_Literal(2, second),
+                    StackInstruction.Local_Get([1, 2]),
+                    StackInstruction.Build_List(2)));
+
+        var optimized = graph.EliminateDeadLocalStores();
+
+        optimized.LowerToStackInstructions().Should().Contain(StackInstruction.Local_Set_Literal(1, first));
+        optimized.LowerToStackInstructions().Should().Contain(StackInstruction.Local_Set_Literal(2, second));
+        Evaluate(optimized, PineValue.EmptyList).Should().Be(PineValue.List([first, second]));
+    }
+
+    [Fact]
     public void Length_jump_fusion_preserves_branches_for_lists_and_blobs()
     {
         var trueValue = PineValue.Blob([41]);
@@ -59,7 +311,7 @@ public class PineControlFlowGraphTests
 
         instructions.Should().ContainSingle(
             instruction =>
-            instruction.Kind == StackInstructionKind.Length_Jump_If_Equal_Const &&
+            instruction.Kind == StackInstructionKind.Jump_If_Length_Equal_Const &&
             instruction.IntegerLiteral == 2);
 
         instructions.Should().NotContain(instruction => instruction.Kind == StackInstructionKind.Length);
@@ -102,8 +354,7 @@ public class PineControlFlowGraphTests
             StackInstruction.Push_Literal(elements[0]),
             StackInstruction.Push_Literal(elements[1]),
             StackInstruction.Push_Literal(elements[2]),
-            StackInstruction.Local_Set_Descending(3, 3),
-            StackInstruction.PopMultiple(3),
+            StackInstruction.Local_Set([3, 2, 1], popCount: 3),
             StackInstruction.Push_Literal(elements[1]),
             StackInstruction.Return);
 
@@ -147,8 +398,7 @@ public class PineControlFlowGraphTests
         optimized.LowerToStackInstructions().Should().Equal(
             StackInstruction.Local_Set_Literal(1, first),
             StackInstruction.Local_Set_Literal(3, last),
-            StackInstruction.Local_Get(1),
-            StackInstruction.Local_Get(3),
+            StackInstruction.Local_Get([1, 3]),
             StackInstruction.Build_List(2),
             StackInstruction.Return);
 
@@ -258,11 +508,10 @@ public class PineControlFlowGraphTests
         fused.LowerToStackInstructions().Should().Equal(
             [
                 .. values.Select(StackInstruction.Push_Literal),
-                StackInstruction.Local_Set_Descending(9, 5),
-                StackInstruction.PopMultiple(5),
+                StackInstruction.Local_Set([9, 8, 7, 6, 5], popCount: 5),
                 StackInstruction.Local_Int_Add_Const(5, 4),
                 StackInstruction.Local_Int_Add_Const(7, 1),
-                .. Enumerable.Range(5, 5).Select(StackInstruction.Local_Get),
+                StackInstruction.Local_Get([5, 6, 7, 8, 9]),
                 StackInstruction.Build_List(5),
                 StackInstruction.Return
             ]);
@@ -292,8 +541,7 @@ public class PineControlFlowGraphTests
                     StackInstruction.Local_Get(0),
                     StackInstruction.Int_Add_Const(1),
                     StackInstruction.Local_Get(0),
-                    StackInstruction.Local_Set_Descending(1, 2),
-                    StackInstruction.PopMultiple(2),
+                    StackInstruction.Local_Set([1, 0], popCount: 2),
                     StackInstruction.Local_Get(1)));
 
         differentSource.FuseDescendingLocalIntegerAdditions(parameterCount: 2)
@@ -332,12 +580,10 @@ public class PineControlFlowGraphTests
         fused.LowerToStackInstructions().Should().Equal(
             StackInstruction.Push_Literal(zero),
             StackInstruction.Push_Literal(one),
-            StackInstruction.Local_Set_Descending(1, 2),
-            StackInstruction.PopMultiple(2),
+            StackInstruction.Local_Set([1, 0], popCount: 2),
             StackInstruction.Local_Int_Add_Const(0, 1),
             StackInstruction.Local_Int_Add_Const(1, 2),
-            StackInstruction.Local_Get(0),
-            StackInstruction.Local_Get(1),
+            StackInstruction.Local_Get([0, 1]),
             StackInstruction.Build_List(2),
             StackInstruction.Return);
 
@@ -376,7 +622,7 @@ public class PineControlFlowGraphTests
         details.PushCount.Should().Be(0);
 
         StackInstruction.Local_Int_Add_Const(0, increment).ToString().Should()
-            .Contain($"Local_Int_Add_Const (0, {increment})");
+            .Contain($"Local_Int_Add_Const ([ 0 ], {increment})");
 
         StackFrameInstructions.ComputeLocalsCount(
             [StackInstruction.Local_Int_Add_Const(4, increment)],
@@ -476,7 +722,7 @@ public class PineControlFlowGraphTests
         var withDeadStoresRemoved = fused.EliminateDeadLocalStores();
 
         withDeadStoresRemoved.LowerToStackInstructions()
-            .Should().Contain(StackInstruction.Local_Set(1));
+            .Should().Contain(StackInstruction.Local_Set([1], popCount: 1));
 
         Evaluate(withDeadStoresRemoved, PineValue.EmptyList)
             .Should().Be(Evaluate(original, PineValue.EmptyList));
@@ -513,18 +759,14 @@ public class PineControlFlowGraphTests
 
         optimized.LowerToStackInstructions().Should().Equal(
             StackInstruction.Push_Literal(first),
-            StackInstruction.Local_Set(0),
-            StackInstruction.Pop,
+            StackInstruction.Local_Set([0], popCount: 1),
             StackInstruction.Push_Literal(second),
-            StackInstruction.Local_Set(1),
-            StackInstruction.Pop,
+            StackInstruction.Local_Set([1], popCount: 1),
             StackInstruction.Push_Literal(number),
-            StackInstruction.Local_Set(2),
-            StackInstruction.Pop,
+            StackInstruction.Local_Set([2], popCount: 1),
             StackInstruction.Local_Get(2),
             StackInstruction.Int_Add_Const(1),
-            StackInstruction.Local_Set_Descending(2, 1),
-            StackInstruction.Pop,
+            StackInstruction.Local_Set([2], popCount: 1),
             StackInstruction.Local_Get(2),
             StackInstruction.Return);
 
@@ -583,8 +825,7 @@ public class PineControlFlowGraphTests
 
         optimized.LowerToStackInstructions().Should().Equal(
             StackInstruction.Push_Literal(second),
-            StackInstruction.Local_Set_Descending(2, 1),
-            StackInstruction.Pop,
+            StackInstruction.Local_Set([2], popCount: 1),
             StackInstruction.Local_Get(2),
             StackInstruction.Return);
 
@@ -616,7 +857,7 @@ public class PineControlFlowGraphTests
             .EliminateDiscardedStackValues(parameterCount: 1);
 
         optimized.LowerToStackInstructions().Should()
-            .NotContain(instruction => instruction.LocalIndex == 2);
+            .NotContain(instruction => !instruction.LocalIndices.IsDefault && instruction.LocalIndices.Contains(2));
 
         foreach (var input in new PineValue[] { first, PineValue.EmptyList })
         {
@@ -774,7 +1015,7 @@ public class PineControlFlowGraphTests
             .EliminateDiscardedStackValues(parameterCount: 1);
 
         optimized.LowerToStackInstructions().Should()
-            .NotContain(instruction => instruction.LocalIndex == 2);
+            .NotContain(instruction => !instruction.LocalIndices.IsDefault && instruction.LocalIndices.Contains(2));
 
         var input = PineValue.List([PineValue.Blob([76])]);
         Evaluate(optimized, input).Should().Be(Evaluate(original, input));
@@ -1486,11 +1727,11 @@ public class PineControlFlowGraphTests
 
         optimized.LowerToStackInstructions().Should().NotContain(
             instruction => instruction.Kind == StackInstructionKind.Local_Set &&
-                instruction.LocalIndex == 3);
+                instruction.LocalIndices.Contains(3));
 
         optimized.LowerToStackInstructions().Count(
             instruction => instruction.Kind == StackInstructionKind.Local_Set &&
-                instruction.LocalIndex == 2).Should().Be(2);
+                instruction.LocalIndices.Contains(2)).Should().Be(2);
 
         Evaluate(optimized, PineValue.Blob([1])).Should()
             .Be(Evaluate(original, PineValue.Blob([1])));
@@ -1511,7 +1752,7 @@ public class PineControlFlowGraphTests
         var optimized = original.EliminateDeadLocalStores();
 
         optimized.LowerToStackInstructions().Should().NotContain(
-            instruction => instruction.Kind == StackInstructionKind.Local_Set_Descending);
+            instruction => instruction.Kind == StackInstructionKind.Local_Set);
 
         Evaluate(optimized, PineValue.Blob([11])).Should()
             .Be(Evaluate(original, PineValue.Blob([11])));
@@ -1526,7 +1767,7 @@ public class PineControlFlowGraphTests
                     StackInstruction.Local_Get(2)));
 
         partiallyLive.EliminateDeadLocalStores().LowerToStackInstructions()
-            .Should().Contain(StackInstruction.Local_Set_Descending(3, 2));
+            .Should().Contain(StackInstruction.Local_Set([3, 2], popCount: 2));
     }
 
     [Theory]
@@ -1549,9 +1790,11 @@ public class PineControlFlowGraphTests
         var optimized = original.EliminateDeadLocalStores();
 
         optimized.LowerToStackInstructions().Should()
-            .Contain(StackInstruction.Local_Set_Descending(5, expectedCount));
+            .Contain(
+            StackInstruction.Local_Set(
+                [.. Enumerable.Range(0, expectedCount).Select(depth => 5 - depth)],
+                popCount: 3));
 
-        optimized.LowerToStackInstructions().Should().Contain(StackInstruction.PopMultiple(3));
         Evaluate(optimized, PineValue.EmptyList).Should().Be(Evaluate(original, PineValue.EmptyList));
     }
 
@@ -1568,7 +1811,7 @@ public class PineControlFlowGraphTests
                     StackInstruction.Local_Get(4)));
 
         original.EliminateDeadLocalStores().LowerToStackInstructions().Should()
-            .Contain(StackInstruction.Local_Set_Descending(5, 2));
+            .Contain(StackInstruction.Local_Set([5, 4], popCount: 2));
     }
 
     [Fact]
@@ -1592,7 +1835,7 @@ public class PineControlFlowGraphTests
 
         var optimized = original.EliminateDeadLocalStores().LowerToStackInstructions();
 
-        optimized.Should().Contain(StackInstruction.Local_Set(2));
+        optimized.Should().Contain(StackInstruction.Local_Set([2], popCount: 1));
         optimized.Should().NotContain(StackInstruction.Local_Set(3));
     }
 
@@ -1812,7 +2055,7 @@ public class PineControlFlowGraphTests
         optimized.LowerToStackInstructions().Should().NotContain(
             instruction =>
             instruction.Kind == StackInstructionKind.Build_List ||
-            instruction.Kind == StackInstructionKind.Local_Set_Descending);
+            instruction.Kind == StackInstructionKind.Local_Set);
 
         Evaluate(optimized, item).Should().Be(Evaluate(original, item));
     }
@@ -1858,8 +2101,7 @@ public class PineControlFlowGraphTests
         graph.Blocks[1].Terminator.Should().BeOfType<PineControlFlowTerminator.Return>();
 
         graph.LowerToStackInstructions().Should().Equal(
-            StackInstruction.Local_Get(0),
-            StackInstruction.Local_Get(1),
+            StackInstruction.Local_Get([0, 1]),
             StackInstruction.Eval_Binary,
             StackInstruction.Return);
     }
@@ -1946,8 +2188,7 @@ public class PineControlFlowGraphTests
         graph.Blocks[3].Parameters.Should().HaveCount(2);
 
         graph.LowerToStackInstructions().Should().Equal(
-            StackInstruction.Local_Get(1),
-            StackInstruction.Local_Get(0),
+            StackInstruction.Local_Get([1, 0]),
             StackInstruction.Jump_If_Equal(3, conditionLiteral),
             StackInstruction.Push_Literal(PineValue.EmptyList),
             StackInstruction.Jump_Unconditional(2),
@@ -2155,7 +2396,7 @@ public class PineControlFlowGraphTests
             .Should().BeOfType<PineControlFlowTerminator.Switch>()
             .Which.Arguments.Should().BeEmpty();
 
-        graph.ForwardJumpsToReturn().LowerToStackInstructions()[2]
+        graph.ForwardJumpsToReturn().LowerToStackInstructions()[1]
             .SliceSwitchCases.Should().Equal(
             new SliceSwitchCase(second, 5),
             new SliceSwitchCase(first, 3));
@@ -2369,8 +2610,7 @@ public class PineControlFlowGraphTests
 
         Optimize(fragment).Select(instruction => instruction.ToString()).Should().Equal(
             [
-                StackInstruction.Local_Get(0).ToString(),
-                StackInstruction.Local_Get(1).ToString(),
+                StackInstruction.Local_Get([0, 1]).ToString(),
                 new StackInstruction(
                     StackInstructionKind.Switch_Jump_If_Equal_Const,
                     SwitchJumpTable:

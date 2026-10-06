@@ -1925,13 +1925,17 @@ public class PineVM : ICancellablePineVM
 
                     case StackInstructionKind.Local_Set:
                         {
-                            var fromStack = currentFrame.PeekTopmostFromStack();
+                            if (currentInstruction.LocalIndices.IsDefaultOrEmpty)
+                                throw new Exception("Invalid operation form: Missing local indices");
 
-                            currentFrame.LocalSet(
-                                currentInstruction.LocalIndex
-                                ??
-                                throw new Exception("Invalid operation form: Missing local index"),
-                                fromStack);
+                            for (var depth = 0; depth < currentInstruction.LocalIndices.Length; depth++)
+                            {
+                                currentFrame.LocalSet(
+                                    currentInstruction.LocalIndices[depth],
+                                    currentFrame.PeekFromStack(depth));
+                            }
+
+                            currentFrame.PopFromStack(currentInstruction.PopCount ?? 0);
 
                             currentFrame.InstructionPointer++;
 
@@ -1941,8 +1945,7 @@ public class PineVM : ICancellablePineVM
                     case StackInstructionKind.Local_Set_Literal:
                         {
                             currentFrame.LocalSet(
-                                currentInstruction.LocalIndex
-                                ?? throw new Exception("Invalid operation form: Missing local index"),
+                                currentInstruction.SingleLocalIndex,
                                 currentInstruction.Literal
                                 ?? throw new Exception("Invalid operation form: Missing literal value"));
 
@@ -1950,26 +1953,15 @@ public class PineVM : ICancellablePineVM
                             continue;
                         }
 
-                    case StackInstructionKind.Local_Set_Descending:
+                    case StackInstructionKind.Local_Get:
                         {
-                            var localIndex =
-                                currentInstruction.LocalIndex
-                                ??
-                                throw new Exception("Invalid operation form: Missing local index");
+                            if (currentInstruction.LocalIndices.IsDefaultOrEmpty)
+                                throw new Exception("Invalid operation form: Missing local indices");
 
-                            var takeCount =
-                                currentInstruction.TakeCount
-                                ??
-                                throw new Exception("Invalid operation form: Missing take count");
-
-                            if (takeCount < 0 || takeCount > localIndex + 1)
-                                throw new Exception("Invalid operation form: Local range extends below index zero");
-
-                            for (var depth = 0; depth < takeCount; depth++)
+                            foreach (var localIndex in currentInstruction.LocalIndices)
                             {
-                                currentFrame.LocalSet(
-                                    localIndex - depth,
-                                    currentFrame.PeekFromStack(depth));
+                                currentFrame.PushInstructionResult(currentFrame.LocalGet(localIndex));
+                                currentFrame.InstructionPointer--;
                             }
 
                             currentFrame.InstructionPointer++;
@@ -1977,37 +1969,25 @@ public class PineVM : ICancellablePineVM
                             continue;
                         }
 
-                    case StackInstructionKind.Local_Get:
-                        {
-                            var value =
-                                currentFrame.LocalGet(
-                                    currentInstruction.LocalIndex
-                                    ??
-                                    throw new Exception("Invalid operation form: Missing local index"));
-
-                            currentFrame.PushInstructionResult(value);
-
-                            continue;
-                        }
-
                     case StackInstructionKind.Local_Get_Skip_Head_Const:
                         {
-                            var localIndex =
-                                currentInstruction.LocalIndex
-                                ??
-                                throw new Exception("Invalid operation form: Missing local index");
+                            if (currentInstruction.LocalIndices.IsDefaultOrEmpty)
+                                throw new Exception("Invalid operation form: Missing local indices");
 
                             var skipCount =
                                 currentInstruction.SkipCount
                                 ??
                                 throw new Exception("Invalid operation form: Missing skip count");
 
-                            var value =
-                                currentFrame.LocalGet(localIndex)
-                                .GetElementAt(skipCount);
+                            foreach (var localIndex in currentInstruction.LocalIndices)
+                            {
+                                var value = currentFrame.LocalGet(localIndex).GetElementAt(skipCount);
 
-                            currentFrame.PushInstructionResult(value);
+                                currentFrame.PushInstructionResult(value);
+                                currentFrame.InstructionPointer--;
+                            }
 
+                            currentFrame.InstructionPointer++;
                             continue;
                         }
 
@@ -2056,22 +2036,23 @@ public class PineVM : ICancellablePineVM
 
                     case StackInstructionKind.Local_Int_Add_Const:
                         {
-                            var localIndex =
-                                currentInstruction.LocalIndex
-                                ?? throw new Exception("Invalid operation form: Missing local index");
+                            if (currentInstruction.LocalIndices.IsDefaultOrEmpty)
+                                throw new Exception("Invalid operation form: Missing local indices");
 
                             var increment =
                                 currentInstruction.IntegerLiteral
                                 ?? throw new Exception("Invalid operation form: Missing literal value");
 
-                            var resultValue = PineValueInProcess.EmptyList;
-
-                            if (currentFrame.LocalGet(localIndex).AsInteger() is { } currentValue)
+                            foreach (var localIndex in currentInstruction.LocalIndices)
                             {
-                                resultValue = PineValueInProcess.CreateInteger(currentValue + increment);
+                                var resultValue = PineValueInProcess.EmptyList;
+
+                                if (currentFrame.LocalGet(localIndex).AsInteger() is { } currentValue)
+                                    resultValue = PineValueInProcess.CreateInteger(currentValue + increment);
+
+                                currentFrame.LocalSet(localIndex, resultValue);
                             }
 
-                            currentFrame.LocalSet(localIndex, resultValue);
                             currentFrame.InstructionPointer++;
                             continue;
                         }
@@ -2775,7 +2756,7 @@ public class PineVM : ICancellablePineVM
                             continue;
                         }
 
-                    case StackInstructionKind.Length_Jump_If_Equal_Const:
+                    case StackInstructionKind.Jump_If_Length_Equal_Const:
                         {
                             if (CheckCancellation() is { } cancellationError)
                             {
@@ -3112,9 +3093,9 @@ public class PineVM : ICancellablePineVM
                     case StackInstructionKind.Pop:
                         {
                             currentFrame.PopFromStack(
-                                currentInstruction.SkipCount
+                                currentInstruction.PopCount
                                 ??
-                                throw new Exception("Invalid operation form: Missing skip count"));
+                                throw new Exception("Invalid operation form: Missing pop count"));
 
                             currentFrame.InstructionPointer++;
 

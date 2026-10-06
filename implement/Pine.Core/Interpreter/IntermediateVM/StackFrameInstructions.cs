@@ -55,7 +55,7 @@ public record StackFrameInstructions(
                     break;
 
                 case StackInstructionKind.Jump_If_Equal_Const:
-                case StackInstructionKind.Length_Jump_If_Equal_Const:
+                case StackInstructionKind.Jump_If_Length_Equal_Const:
 
                     // fall-through
                     yield return instructionIndex + 1;
@@ -157,28 +157,17 @@ public record StackFrameInstructions(
         {
             var inst = instructions[i];
 
-            if (inst.Kind is
-                StackInstructionKind.Local_Get or
+            if (inst.Kind is StackInstructionKind.Local_Get or
                 StackInstructionKind.Local_Get_Skip_Head_Const or
                 StackInstructionKind.Local_Set or
                 StackInstructionKind.Local_Set_Literal or
-                StackInstructionKind.Local_Int_Add_Const or
-                StackInstructionKind.Local_Set_Descending)
+                StackInstructionKind.Local_Int_Add_Const)
             {
-                if (inst.LocalIndex is null)
-                {
-                    throw new InvalidOperationException(
-                        $"Local instruction without index at {i}.");
-                }
+                if (inst.LocalIndices.IsDefaultOrEmpty)
+                    throw new InvalidOperationException($"Local instruction without indices at {i}.");
 
-                var instrMax = inst.LocalIndex.Value + 1;
-
-                aggregateMax =
-                    aggregateMax < instrMax
-                    ?
-                    instrMax
-                    :
-                    aggregateMax;
+                foreach (var index in inst.LocalIndices)
+                    aggregateMax = Math.Max(aggregateMax, index + 1);
             }
         }
 

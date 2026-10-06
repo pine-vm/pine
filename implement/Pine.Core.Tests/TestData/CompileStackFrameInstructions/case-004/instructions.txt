@@ -1,4 +1,3 @@
-Local_Get (0)
-Local_Get (0)
+Local_Get ([ 0, 0 ])
 Eval_Binary
 Return

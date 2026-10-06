@@ -272,13 +272,15 @@ public sealed partial record PineControlFlowGraph
                             PineValue? literal = null;
 
                             if (instruction.Kind is StackInstructionKind.Local_Get &&
-                                instruction.LocalIndex is { } local &&
+                                instruction.LocalIndices.Length is 1 &&
+                                instruction.SingleLocalIndex is { } local &&
                                 initialized.Contains(local))
                             {
                                 literal = locals.GetValueOrDefault(local, ValueFacts.Unknown).ExactValue;
                             }
                             else if (instruction.Kind is StackInstructionKind.Local_Get_Skip_Head_Const &&
-                                instruction.LocalIndex is { } projectedLocal &&
+                                instruction.LocalIndices.Length is 1 &&
+                                instruction.SingleLocalIndex is { } projectedLocal &&
                                 initialized.Contains(projectedLocal) &&
                                 instruction.SkipCount is { } skip)
                             {
@@ -523,30 +525,22 @@ public sealed partial record PineControlFlowGraph
 
             beforeOperation?.Invoke(operation, values, locals);
 
-            if (instruction.Kind is StackInstructionKind.Local_Set &&
-                instruction.LocalIndex is { } local)
+            if (instruction.Kind is StackInstructionKind.Local_Set)
             {
-                locals[local] = values.GetValueOrDefault(stack[^1], ValueFacts.Unknown);
+                for (var depth = 0; depth < instruction.LocalIndices.Length; depth++)
+                    locals[instruction.LocalIndices[depth]] =
+                        values.GetValueOrDefault(stack[^(depth + 1)], ValueFacts.Unknown);
             }
             else if (instruction.Kind is StackInstructionKind.Local_Set_Literal &&
-                instruction.LocalIndex is { } literalLocal &&
+                instruction.SingleLocalIndex is { } literalLocal &&
                 instruction.Literal is { } localLiteral)
             {
                 locals[literalLocal] = ValueFacts.ForLiteral(localLiteral.Evaluate());
             }
-            else if (instruction.Kind is StackInstructionKind.Local_Int_Add_Const &&
-                instruction.LocalIndex is { } incrementedLocal)
+            else if (instruction.Kind is StackInstructionKind.Local_Int_Add_Const)
             {
-                locals.Remove(incrementedLocal);
-            }
-            else if (instruction.Kind is StackInstructionKind.Local_Set_Descending &&
-                instruction.LocalIndex is { } highest &&
-                instruction.TakeCount is { } count)
-            {
-                for (var depth = 0; depth < count; depth++)
-                {
-                    locals[highest - depth] = values.GetValueOrDefault(stack[^(depth + 1)], ValueFacts.Unknown);
-                }
+                foreach (var local in instruction.LocalIndices)
+                    locals.Remove(local);
             }
 
             var facts = ValueFacts.Unknown;
@@ -557,7 +551,8 @@ public sealed partial record PineControlFlowGraph
                     facts = ValueFacts.ForLiteral(literal.Evaluate());
                     break;
 
-                case StackInstructionKind.Local_Get when instruction.LocalIndex is { } index:
+                case StackInstructionKind.Local_Get when instruction.LocalIndices.Length is 1:
+                    var index = instruction.SingleLocalIndex;
                     facts = locals.GetValueOrDefault(index, ValueFacts.Unknown);
                     break;
 
@@ -574,11 +569,13 @@ public sealed partial record PineControlFlowGraph
                     break;
 
                 case StackInstructionKind.Head_Generic or StackInstructionKind.Skip_Head_Const or
-                    StackInstructionKind.Local_Get_Skip_Head_Const:
+                    StackInstructionKind.Local_Get_Skip_Head_Const
+                when instruction.Kind is not StackInstructionKind.Local_Get_Skip_Head_Const ||
+                        instruction.LocalIndices.Length is 1:
                     var source =
                         instruction.Kind is StackInstructionKind.Local_Get_Skip_Head_Const
                         ?
-                        locals.GetValueOrDefault(instruction.LocalIndex!.Value, ValueFacts.Unknown)
+                        locals.GetValueOrDefault(instruction.SingleLocalIndex, ValueFacts.Unknown)
                         :
                         values.GetValueOrDefault(operation.Inputs[0], ValueFacts.Unknown);
 

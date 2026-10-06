@@ -55,8 +55,7 @@ public sealed partial record PineControlFlowGraph
             Blocks
             .SelectMany(block => block.Operations.Select(operation => operation.Instruction))
             .Where(instruction => IsLocalInstruction(instruction.Kind))
-            .Select(
-                instruction => instruction.LocalIndex ?? throw new InvalidOperationException("Missing local index."))
+            .SelectMany(instruction => instruction.LocalIndices)
             .DefaultIfEmpty(callerParameterCount - 1)
             .Max() + 1;
 
@@ -207,7 +206,8 @@ public sealed partial record PineControlFlowGraph
         {
             setup.Add(
                 new PineControlFlowOperation(
-                    StackInstruction.Local_Set_Descending(localBase + calleeParameterCount - 1, calleeParameterCount),
+                    StackInstruction.Local_Set(
+                        [.. Enumerable.Range(localBase, calleeParameterCount).Reverse()]),
                     [],
                     []));
 
@@ -255,17 +255,12 @@ public sealed partial record PineControlFlowGraph
         StackInstructionKind.Local_Get_Skip_Head_Const or
         StackInstructionKind.Local_Set or
         StackInstructionKind.Local_Set_Literal or
-        StackInstructionKind.Local_Set_Descending or
         StackInstructionKind.Local_Int_Add_Const;
 
     private static StackInstruction ShiftLocal(StackInstruction instruction, int offset) =>
         IsLocalInstruction(instruction.Kind)
         ?
-        instruction with
-        {
-            LocalIndex =
-            (instruction.LocalIndex ?? throw new InvalidOperationException("Missing local index.")) + offset
-        }
+        instruction with { LocalIndices = [.. instruction.LocalIndices.Select(index => index + offset)] }
         :
         instruction;
 }

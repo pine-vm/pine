@@ -30,24 +30,24 @@ public enum StackInstructionKind
     Push_Literal,
 
     /// <summary>
-    /// Copy the top value from the stack into the local at index <see cref="StackInstruction.LocalIndex"/>.
-    /// The value is not popped from the stack.
+    /// Copy the topmost stack values into <see cref="StackInstruction.LocalIndices"/> in order,
+    /// then pop <see cref="StackInstruction.PopCount"/> stack values.
     /// </summary>
     Local_Set,
 
     /// <summary>
-    /// Load the local at index <see cref="StackInstruction.LocalIndex"/> and push it to the stack.
+    /// Load the locals at <see cref="StackInstruction.LocalIndices"/> in order and push them to the stack.
     /// </summary>
     Local_Get,
 
     /// <summary>
-    /// Load the local at index <see cref="StackInstruction.LocalIndex"/>, get its element at
-    /// <see cref="StackInstruction.SkipCount"/>, and push that element to the stack.
+    /// Get the element at <see cref="StackInstruction.SkipCount"/> from each local in
+    /// <see cref="StackInstruction.LocalIndices"/> and push the elements to the stack.
     /// </summary>
     Local_Get_Skip_Head_Const,
 
     /// <summary>
-    /// Drop <see cref="StackInstruction.SkipCount"/> values from the top of the stack.
+    /// Drop <see cref="StackInstruction.PopCount"/> values from the top of the stack.
     /// </summary>
     Pop,
 
@@ -287,7 +287,7 @@ public enum StackInstructionKind
     /// Pops the top value and jumps by <see cref="StackInstruction.JumpOffset"/> if its length
     /// equals <see cref="StackInstruction.IntegerLiteral"/>.
     /// </summary>
-    Length_Jump_If_Equal_Const,
+    Jump_If_Length_Equal_Const,
 
     /// <summary>
     /// Unconditional jump to the offset from <see cref="StackInstruction.JumpOffset"/>.
@@ -484,14 +484,7 @@ public enum StackInstructionKind
     Switch_Jump_If_Slice_Skip_Var_Equal_Const,
 
     /// <summary>
-    /// Copy <see cref="StackInstruction.TakeCount"/> values from the stack into locals,
-    /// starting at <see cref="StackInstruction.LocalIndex"/> and descending.
-    /// The values are not popped from the stack.
-    /// </summary>
-    Local_Set_Descending,
-
-    /// <summary>
-    /// Store <see cref="StackInstruction.Literal"/> directly in <see cref="StackInstruction.LocalIndex"/>
+    /// Store <see cref="StackInstruction.Literal"/> directly in the single <see cref="StackInstruction.LocalIndices"/> index
     /// without changing the evaluation stack.
     /// </summary>
     Local_Set_Literal,
@@ -504,7 +497,7 @@ public enum StackInstructionKind
 
     /// <summary>
     /// Add <see cref="StackInstruction.IntegerLiteral"/> to the integer in
-    /// <see cref="StackInstruction.LocalIndex"/> and store the result in that local.
+    /// each of <see cref="StackInstruction.LocalIndices"/> and store the results in those locals.
     /// Leaves the evaluation stack unchanged.
     /// </summary>
     Local_Int_Add_Const,
@@ -558,17 +551,18 @@ public readonly record struct SliceSwitchCase(
 /// or manipulate local variables and control flow.
 /// </summary>
 /// <remarks>
-/// The fields <see cref="Literal"/>, <see cref="LocalIndex"/>, <see cref="SkipCount"/>, 
+/// The fields <see cref="Literal"/>, <see cref="LocalIndices"/>, <see cref="SkipCount"/>,
 /// <see cref="TakeCount"/>, <see cref="JumpOffset"/>, and <see cref="ShiftCount"/> may or may not 
 /// be relevant depending on the specific <see cref="Kind"/>. For instance, 
 /// <see cref="StackInstructionKind.Push_Literal"/> uses <see cref="Literal"/>, 
-/// <see cref="StackInstructionKind.Local_Set"/> uses <see cref="LocalIndex"/>, 
+/// <see cref="StackInstructionKind.Local_Set"/> uses <see cref="LocalIndices"/>,
 /// and jump instructions use <see cref="JumpOffset"/>. 
 /// Refer to the documentation on each <see cref="StackInstructionKind"/> value for more details.
 /// </remarks>
 /// <param name="Kind">The enum value specifying which operation to perform.</param>
 /// <param name="Literal">An optional literal value (used by push or parse instructions).</param>
-/// <param name="LocalIndex">An optional index for reading/writing to a local variable.</param>
+/// <param name="LocalIndices">Ordered local indices for local reads and writes.</param>
+/// <param name="PopCount">Number of stack entries to remove for Pop or after Local_Set.</param>
 /// <param name="SkipCount">An optional skip count used in slice/skip operations.</param>
 /// <param name="TakeCount">An optional take count used in slice/build/direct invocation operations.</param>
 /// <param name="JumpOffset">An optional offset for conditional or unconditional jumps.</param>
@@ -592,15 +586,26 @@ public record StackInstruction(
     StackInstructionKind Kind,
     PineValueInProcess? Literal = null,
     BigInteger? IntegerLiteral = null,
-    int? LocalIndex = null,
     int? SkipCount = null,
     int? TakeCount = null,
     int? JumpOffset = null,
     int? ShiftCount = null,
     DirectInvocation? OptimizedInvocation = null,
     ImmutableDictionary<PineValue, int>? SwitchJumpTable = null,
-    ImmutableArray<SliceSwitchCase> SliceSwitchCases = default)
+    ImmutableArray<SliceSwitchCase> SliceSwitchCases = default,
+    ImmutableArray<int> LocalIndices = default,
+    int? PopCount = null)
 {
+    /// <summary>
+    /// Gets the only local index, throwing if this instruction does not have exactly one.
+    /// </summary>
+    public int SingleLocalIndex =>
+        !LocalIndices.IsDefault && LocalIndices.Length is 1
+        ?
+        LocalIndices[0]
+        :
+        throw new InvalidOperationException($"Expected exactly one local index for {Kind}.");
+
     /// <summary>
     /// The linked target stack-frame instructions, delegated from <see cref="OptimizedInvocation"/>.
     /// </summary>
@@ -616,7 +621,8 @@ public record StackInstruction(
         if (other is null ||
             Kind != other.Kind ||
             IntegerLiteral != other.IntegerLiteral ||
-            LocalIndex != other.LocalIndex ||
+            !LocalIndices.AsSpan().SequenceEqual(other.LocalIndices.AsSpan()) ||
+            PopCount != other.PopCount ||
             SkipCount != other.SkipCount ||
             TakeCount != other.TakeCount ||
             JumpOffset != other.JumpOffset ||
@@ -644,7 +650,14 @@ public record StackInstruction(
         hashCode.Add(Kind);
         hashCode.Add(Literal?.Evaluate());
         hashCode.Add(IntegerLiteral);
-        hashCode.Add(LocalIndex);
+        hashCode.Add(PopCount);
+
+        if (!LocalIndices.IsDefault)
+        {
+            foreach (var localIndex in LocalIndices)
+                hashCode.Add(localIndex);
+        }
+
         hashCode.Add(SkipCount);
         hashCode.Add(TakeCount);
         hashCode.Add(JumpOffset);
@@ -682,9 +695,9 @@ public record StackInstruction(
     /// <summary>
     /// Jumps to the given offset if the length of the top stack value equals the given integer.
     /// </summary>
-    public static StackInstruction Length_Jump_If_Equal(int offset, BigInteger length) =>
+    public static StackInstruction Jump_If_Length_Equal(int offset, BigInteger length) =>
         new(
-            StackInstructionKind.Length_Jump_If_Equal_Const,
+            StackInstructionKind.Jump_If_Length_Equal_Const,
             JumpOffset: offset,
             IntegerLiteral: length);
 
@@ -708,7 +721,17 @@ public record StackInstruction(
     /// into the local variable at the given index.
     /// </summary>
     public static StackInstruction Local_Set(int index) =>
-        new(StackInstructionKind.Local_Set, LocalIndex: index);
+        Local_Set([index]);
+
+    /// <summary>
+    /// Creates a multi-local store, reading stack entries starting at the top in index order.
+    /// </summary>
+    public static StackInstruction Local_Set(ImmutableArray<int> indices, int popCount = 0) =>
+        indices.IsDefaultOrEmpty || popCount < 0
+        ?
+        throw new ArgumentException("Local indices must not be empty and pop count must not be negative.")
+        :
+        new(StackInstructionKind.Local_Set, LocalIndices: indices, PopCount: popCount);
 
     /// <summary>
     /// Creates an instruction to store a literal directly in a local without using the stack.
@@ -717,27 +740,61 @@ public record StackInstruction(
         new(
             StackInstructionKind.Local_Set_Literal,
             Literal: PineValueInProcess.CreateFullyRepresented(literal),
-            LocalIndex: index);
+            LocalIndices: [index]);
 
     /// <summary>
-    /// Creates a <see cref="StackInstructionKind.Local_Set_Descending"/> instruction that copies
+    /// Creates a <see cref="StackInstructionKind.Local_Set"/> instruction that copies
     /// values from the stack into descending local indexes.
     /// </summary>
     public static StackInstruction Local_Set_Descending(int index, int takeCount) =>
-        new(StackInstructionKind.Local_Set_Descending, LocalIndex: index, TakeCount: takeCount);
+        takeCount < 1 || takeCount > index + 1
+        ?
+        throw new ArgumentOutOfRangeException(nameof(takeCount))
+        :
+        Local_Set([.. Enumerable.Range(0, takeCount).Select(depth => index - depth)]);
 
     /// <summary>
     /// Creates a <see cref="StackInstructionKind.Local_Get"/> instruction that loads the local variable
     /// at the given index and pushes it onto the stack.
     /// </summary>
     public static StackInstruction Local_Get(int index) =>
-        new(StackInstructionKind.Local_Get, LocalIndex: index);
+        new(StackInstructionKind.Local_Get, LocalIndices: [index]);
+
+    /// <summary>
+    /// Creates an instruction that loads the given locals in order.
+    /// </summary>
+    public static StackInstruction Local_Get(ImmutableArray<int> indices) =>
+        indices.IsDefaultOrEmpty
+        ?
+        throw new ArgumentException("At least one local index is required.", nameof(indices))
+        :
+        new(StackInstructionKind.Local_Get, LocalIndices: indices);
+
+    /// <summary>
+    /// Updates the local index of a single-local operation.
+    /// </summary>
+    public StackInstruction WithLocalIndex(int index) =>
+        LocalIndices.IsDefault || LocalIndices.Length != 1
+        ?
+        throw new InvalidOperationException("Cannot replace the index of an instruction without exactly one local.")
+        :
+        this with { LocalIndices = [index] };
 
     /// <summary>
     /// Creates an instruction to add an integer constant to a local without using the stack.
     /// </summary>
     public static StackInstruction Local_Int_Add_Const(int localIndex, BigInteger integerLiteral) =>
-        new(StackInstructionKind.Local_Int_Add_Const, LocalIndex: localIndex, IntegerLiteral: integerLiteral);
+        Local_Int_Add_Const([localIndex], integerLiteral);
+
+    /// <summary>
+    /// Adds the same constant to each selected local.
+    /// </summary>
+    public static StackInstruction Local_Int_Add_Const(ImmutableArray<int> localIndices, BigInteger integerLiteral) =>
+        localIndices.IsDefaultOrEmpty
+        ?
+        throw new ArgumentException("At least one local index is required.", nameof(localIndices))
+        :
+        new(StackInstructionKind.Local_Int_Add_Const, LocalIndices: localIndices, IntegerLiteral: integerLiteral);
 
     /// <summary>
     /// Creates a <see cref="StackInstructionKind.Local_Get_Skip_Head_Const"/> instruction.
@@ -745,10 +802,17 @@ public record StackInstruction(
     public static StackInstruction Local_Get_Skip_Head_Const(
         int localIndex,
         int skipCount) =>
-        new(
-            StackInstructionKind.Local_Get_Skip_Head_Const,
-            LocalIndex: localIndex,
-            SkipCount: skipCount);
+        Local_Get_Skip_Head_Const([localIndex], skipCount);
+
+    /// <summary>
+    /// Loads the element at the same position from each selected local.
+    /// </summary>
+    public static StackInstruction Local_Get_Skip_Head_Const(ImmutableArray<int> localIndices, int skipCount) =>
+        localIndices.IsDefaultOrEmpty
+        ?
+        throw new ArgumentException("At least one local index is required.", nameof(localIndices))
+        :
+        new(StackInstructionKind.Local_Get_Skip_Head_Const, LocalIndices: localIndices, SkipCount: skipCount);
 
     /// <summary>
     /// Creates a <see cref="StackInstructionKind.Build_List"/> instruction that builds a list
@@ -771,14 +835,14 @@ public record StackInstruction(
     /// A pre-built <see cref="StackInstructionKind.Pop"/> instruction that drops one value.
     /// </summary>
     public static readonly StackInstruction Pop =
-        new(StackInstructionKind.Pop, SkipCount: 1);
+        new(StackInstructionKind.Pop, PopCount: 1);
 
     /// <summary>
     /// Creates a <see cref="StackInstructionKind.Pop"/> instruction that drops the given number
     /// of values from the top of the stack.
     /// </summary>
-    public static StackInstruction PopMultiple(int skipCount) =>
-        new(StackInstructionKind.Pop, SkipCount: skipCount);
+    public static StackInstruction PopMultiple(int popCount) =>
+        new(StackInstructionKind.Pop, PopCount: popCount);
 
     /// <summary>
     /// A pre-built <see cref="StackInstructionKind.Length"/> instruction.
@@ -1295,6 +1359,9 @@ public record StackInstruction(
                 LiteralDisplayStringDefault);
     }
 
+    private static string RenderLocalIndices(ImmutableArray<int> indices) =>
+        indices.IsDefaultOrEmpty ? "[ ]" : "[ " + string.Join(", ", indices) + " ]";
+
     /// <summary>
     /// Renders a human-readable display string for a single instruction,
     /// </summary>
@@ -1326,14 +1393,15 @@ public record StackInstruction(
             instruction.Kind is StackInstructionKind.Int_Mul_Const_Add_Binary &&
             instruction.IntegerLiteral == BigInteger.MinusOne;
 
-        var instructionName =
-            renderAsSubtraction
-            ?
-            "Int_Sub_Binary"
-            :
-            instruction.Kind.ToString();
+        var instructionName = renderAsSubtraction ? "Int_Sub_Binary" : instruction.Kind.ToString();
 
-        var headerText = instructionName + argumentsText;
+        var headerText =
+            instructionName + argumentsText +
+            (instruction.Kind is StackInstructionKind.Local_Set && instruction.PopCount is > 0
+            ?
+            ", Pop(" + instruction.PopCount + ")"
+            :
+            "");
 
         if (rendered.DetailLines.Count is 0 || !detailLinesIndent.HasValue)
             return headerText;
@@ -1364,7 +1432,7 @@ public record StackInstruction(
         if (instruction.Kind is
             StackInstructionKind.Jump_Const or
             StackInstructionKind.Jump_If_Equal_Const or
-            StackInstructionKind.Length_Jump_If_Equal_Const)
+            StackInstructionKind.Jump_If_Length_Equal_Const)
         {
             var jumpOffset =
                 instruction.JumpOffset
@@ -1522,15 +1590,11 @@ public record StackInstruction(
 
             StackInstructionKind.Local_Set =>
             new InstructionDetails(
-                PopCount: 0,
+                PopCount: instruction.PopCount ?? 0,
                 PushCount: 0,
                 Display:
                 () => InstructionDisplay.WithoutDetailLines(
-                    [
-                    instruction.LocalIndex?.ToString()
-                    ?? throw new Exception(
-                        "Missing LocalIndex for LocalSet instruction")
-                    ])),
+                    [RenderLocalIndices(instruction.LocalIndices)])),
 
             StackInstructionKind.Local_Set_Literal =>
             new InstructionDetails(
@@ -1538,39 +1602,23 @@ public record StackInstruction(
                 PushCount: 0,
                 Display: () => InstructionDisplay.WithoutDetailLines(
                     [
-                    instruction.LocalIndex?.ToString()
-                    ?? throw new Exception("Missing LocalIndex for LocalSetLiteral instruction"),
+                    RenderLocalIndices(instruction.LocalIndices),
                     literalDisplayString(
                         instruction.Literal?.Evaluate()
                         ?? throw new Exception("Missing Literal for LocalSetLiteral instruction"))
                     ])),
 
-            StackInstructionKind.Local_Set_Descending =>
-            new InstructionDetails(
-                PopCount: 0,
-                PushCount: 0,
-                Display:
-                () => InstructionDisplay.WithoutDetailLines(
-                    [
-                    instruction.LocalIndex?.ToString()
-                    ?? throw new Exception(
-                        "Missing LocalIndex for LocalSetDescending instruction"),
-                    instruction.TakeCount?.ToString()
-                    ?? throw new Exception(
-                        "Missing TakeCount for LocalSetDescending instruction")
-                    ])),
-
             StackInstructionKind.Local_Get =>
             new InstructionDetails(
                 PopCount: 0,
-                PushCount: 1,
+                PushCount: instruction.LocalIndices.IsDefaultOrEmpty
+                ?
+                throw new Exception("Missing LocalIndices for Local_Get instruction")
+                :
+                instruction.LocalIndices.Length,
                 Display:
                 () => InstructionDisplay.WithoutDetailLines(
-                    [
-                    instruction.LocalIndex?.ToString()
-                    ?? throw new Exception(
-                        "Missing LocalIndex for LocalGet instruction")
-                    ])),
+                    [RenderLocalIndices(instruction.LocalIndices)])),
 
             StackInstructionKind.Local_Int_Add_Const =>
             new InstructionDetails(
@@ -1578,8 +1626,7 @@ public record StackInstruction(
                 PushCount: 0,
                 Display: () => InstructionDisplay.WithoutDetailLines(
                     [
-                    instruction.LocalIndex?.ToString()
-                    ?? throw new Exception("Missing LocalIndex for LocalIntAddConst instruction"),
+                    RenderLocalIndices(instruction.LocalIndices),
                     instruction.IntegerLiteral?.ToString()
                     ?? throw new Exception("Missing IntegerLiteral for LocalIntAddConst instruction")
                     ])),
@@ -1587,13 +1634,11 @@ public record StackInstruction(
             StackInstructionKind.Local_Get_Skip_Head_Const =>
             new InstructionDetails(
                 PopCount: 0,
-                PushCount: 1,
+                PushCount: instruction.LocalIndices.Length,
                 Display:
                 () => InstructionDisplay.WithoutDetailLines(
                     [
-                    instruction.LocalIndex?.ToString()
-                    ?? throw new Exception(
-                        "Missing LocalIndex for LocalGetSkipHeadConst instruction"),
+                    RenderLocalIndices(instruction.LocalIndices),
                     instruction.SkipCount?.ToString()
                     ?? throw new Exception(
                         "Missing SkipCount for LocalGetSkipHeadConst instruction")
@@ -1602,16 +1647,16 @@ public record StackInstruction(
             StackInstructionKind.Pop =>
             new InstructionDetails(
                 PopCount:
-                instruction.SkipCount
+                instruction.PopCount
                 ?? throw new Exception(
-                    "Missing SkipCount for Pop instruction"),
+                    "Missing PopCount for Pop instruction"),
                 PushCount: 0,
                 Display:
                 () => InstructionDisplay.WithoutDetailLines(
                     [
-                    instruction.SkipCount?.ToString()
+                    instruction.PopCount?.ToString()
                     ?? throw new Exception(
-                        "Missing SkipCount for Pop instruction")
+                        "Missing PopCount for Pop instruction")
                     ])),
 
             StackInstructionKind.Length =>
@@ -1965,7 +2010,7 @@ public record StackInstruction(
                         "Missing JumpOffset for Jump_If_Equal_Const instruction")
                     ])),
 
-            StackInstructionKind.Length_Jump_If_Equal_Const =>
+            StackInstructionKind.Jump_If_Length_Equal_Const =>
             new InstructionDetails(
                 PopCount: 1,
                 PushCount: 0,
@@ -1973,10 +2018,10 @@ public record StackInstruction(
                     [
                     instruction.IntegerLiteral?.ToString()
                     ?? throw new Exception(
-                        "Missing IntegerLiteral for Length_Jump_If_Equal_Const instruction"),
+                        "Missing IntegerLiteral for Jump_If_Length_Equal_Const instruction"),
                     instruction.JumpOffset?.ToString()
                     ?? throw new Exception(
-                        "Missing JumpOffset for Length_Jump_If_Equal_Const instruction")
+                        "Missing JumpOffset for Jump_If_Length_Equal_Const instruction")
                     ])),
 
             StackInstructionKind.Jump_Const =>

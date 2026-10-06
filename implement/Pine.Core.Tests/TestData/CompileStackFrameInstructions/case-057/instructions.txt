@@ -1,4 +1,3 @@
-Local_Get (0)
-Local_Get (0)
+Local_Get ([ 0, 0 ])
 Build_List (2)
 Return
