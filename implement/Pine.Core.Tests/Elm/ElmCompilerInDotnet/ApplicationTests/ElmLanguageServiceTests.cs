@@ -339,7 +339,9 @@ public class ElmLanguageServiceTests
     /// </summary>
     private static PineValue EvaluateZeroArgTestDeclaration(
         ElmInteractiveEnvironment.ParsedInteractiveEnvironment env,
-        string name)
+        string name,
+        ReportEnteredStackFrame? reportEnteredStackFrame = null,
+        Core.Interpreter.IntermediateVM.PineVM? vm = null)
     {
         var declarationValue = GetTestFunction(env, name);
 
@@ -365,18 +367,22 @@ public class ElmLanguageServiceTests
                     "Failed to compose eval args for '" + name + "': " + err));
 
         return
-            s_vm.EvaluateExpressionOnCustomStack(
+            (vm ?? s_vm).EvaluateExpressionOnCustomStack(
                 evalArgs.expression,
                 evalArgs.environment,
-                config: ElmCompilerTestHelper.DefaultTestEvaluationConfig)
+                config: ElmCompilerTestHelper.DefaultTestEvaluationConfig,
+                reportEnteredStackFrame: reportEnteredStackFrame)
             .Extract(
                 err => throw new Exception(
                     "Failed to evaluate 0-arg declaration '" + name + "': " + err))
             .ReturnValue.Evaluate();
     }
 
-    private static PineValue EvaluateZeroArgTestDeclaration(string name) =>
-        EvaluateZeroArgTestDeclaration(s_env.Value, name);
+    private static PineValue EvaluateZeroArgTestDeclaration(
+        string name,
+        ReportEnteredStackFrame? reportEnteredStackFrame = null,
+        Core.Interpreter.IntermediateVM.PineVM? vm = null) =>
+        EvaluateZeroArgTestDeclaration(s_env.Value, name, reportEnteredStackFrame, vm);
 
     private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
         ElmCompilerTestHelper.PineVMForProfiling(
@@ -450,7 +456,9 @@ public class ElmLanguageServiceTests
     private static (PineValue result, EvaluationReport report, InvocationCountReport invocationCounts)
         ApplyWithProfilingAndInvocationCounts(
         string functionName,
-        PineValue[] arguments)
+        PineValue[] arguments,
+        ReportEnteredStackFrame? reportGenericRecordInvocation = null,
+        Core.Interpreter.IntermediateVM.PineVM? vm = null)
     {
         var env = s_env.Value;
 
@@ -469,14 +477,51 @@ public class ElmLanguageServiceTests
         var invocationCountsBuilder = new InvocationCountReportBuilder();
 
         var report =
-            s_vm.EvaluateExpressionOnCustomStack(
+            (vm ?? s_vm).EvaluateExpressionOnCustomStack(
                 evalArgs.expression,
                 evalArgs.environment,
                 config: ElmCompilerTestHelper.DefaultTestEvaluationConfig,
-                reportEnteredStackFrame: invocationCountsBuilder.Add)
+                reportEnteredStackFrame: (in EnteredStackFrame frame) =>
+                {
+                    invocationCountsBuilder.Add(in frame);
+                    reportGenericRecordInvocation?.Invoke(in frame);
+                })
             .Extract(err => throw new Exception("Failed eval for '" + functionName + "': " + err));
 
         return (report.ReturnValue.Evaluate(), report, invocationCountsBuilder.ToReport());
+    }
+
+    private sealed class GenericRecordInvocationCounter
+    {
+        private static readonly PineVMParseCache s_parseCache = new();
+
+        private static readonly Expression s_accessExpression =
+            s_parseCache.ParseExpression(RecordRuntime.PineFunctionForRecordAccessAsValue)
+            .Extract(err => throw new Exception("Failed to parse generic record access: " + err));
+
+        private static readonly Expression s_updateExpression =
+            s_parseCache.ParseExpression(RecordRuntime.PineFunctionForRecordUpdateAsValue)
+            .Extract(err => throw new Exception("Failed to parse generic record update: " + err));
+
+        public int AccessCount { get; private set; }
+
+        public int UpdateCount { get; private set; }
+
+        public static Core.Interpreter.IntermediateVM.PineVM CreateTrackingVM() =>
+            ElmCompilerTestHelper.PineVMForProfiling(
+                _ => { },
+                enableTailRecursionOptimization: true,
+                skipInlineForExpression: expression =>
+                expression == s_accessExpression || expression == s_updateExpression);
+
+        public void Record(in EnteredStackFrame frame)
+        {
+            if (frame.FrameExpression == s_accessExpression)
+                AccessCount++;
+
+            if (frame.FrameExpression == s_updateExpression)
+                UpdateCount++;
+        }
     }
 
     /// <summary>
@@ -848,6 +893,98 @@ public class ElmLanguageServiceTests
             InvocationCountMedian: 3
             InvocationCountPercentile90: 16
             """);
+    }
+
+    [Fact(Skip = "TODO: Develop the Elm compilation to reliably report any remaining instances of generic record operations, and expand type inference to prove closedness for the source codes from this scenario.")]
+    public void References_request_does_not_invoke_generic_record_operations()
+    {
+        var invocations = new GenericRecordInvocationCounter();
+        var vm = GenericRecordInvocationCounter.CreateTrackingVM();
+        var initialState = EvaluateZeroArgTestDeclaration("initState", invocations.Record, vm);
+
+        var (addedModuleA, _, _) =
+            ApplyWithProfilingAndInvocationCounts(
+                "addWorkspaceFile",
+                [
+                    ElmValueEncoding.ElmValueAsPineValue(ElmString("src/ModuleA.elm")),
+                    ElmValueEncoding.ElmValueAsPineValue(ElmString(ReferencesScenario_ModuleAText)),
+                    initialState
+                ],
+                invocations.Record,
+                vm);
+
+        var (addedModuleB, _, _) =
+            ApplyWithProfilingAndInvocationCounts(
+                "addWorkspaceFile",
+                [
+                    ElmValueEncoding.ElmValueAsPineValue(ElmString("src/ModuleB.elm")),
+                    ElmValueEncoding.ElmValueAsPineValue(ElmString(ReferencesScenario_ModuleBText)),
+                    ((PineValue.ListValue)addedModuleA).Items.Span[1]
+                ],
+                invocations.Record,
+                vm);
+
+        var (references, _, _) =
+            ApplyWithProfilingAndInvocationCounts(
+                "textDocumentReferences",
+                [
+                    ElmValueEncoding.ElmValueAsPineValue(ElmString(ReferencesScenario_QueryFilePath)),
+                    ElmValueEncoding.ElmValueAsPineValue(Integer(ReferencesScenario_PositionLineNumber)),
+                    ElmValueEncoding.ElmValueAsPineValue(Integer(ReferencesScenario_PositionColumn)),
+                    ((PineValue.ListValue)addedModuleB).Items.Span[1]
+                ],
+                invocations.Record,
+                vm);
+
+        RenderResponseFromResult(references).Should().Be(ReferencesScenario_ExpectedResponse);
+        (invocations.AccessCount, invocations.UpdateCount).Should().Be((0, 0));
+    }
+
+    [Fact]
+    public void Generic_record_invocation_detection_finds_open_record_access_and_update()
+    {
+        const string moduleText =
+            """
+            module OpenRecordOperations exposing (..)
+
+            accessField : { r | m : Int } -> Int
+            accessField record =
+                record.m
+
+            updateField : { r | m : Int } -> { r | m : Int }
+            updateField record =
+                { record | m = 999 }
+            """;
+
+        var declarations =
+            ElmCompilerTestHelper.CompileElmModules([moduleText], disableInlining: false)
+            .parsedEnv.Modules.Single(module => module.moduleName is "OpenRecordOperations")
+            .moduleContent.FunctionDeclarations;
+
+        var vm = GenericRecordInvocationCounter.CreateTrackingVM();
+        var invocations = new GenericRecordInvocationCounter();
+        var record = new ElmValue.ElmRecord([("m", Integer(1)), ("n", Integer(2))]);
+
+        var (accessed, _) =
+            CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
+                declarations["accessField"],
+                record,
+                vm,
+                reportEnteredStackFrame: invocations.Record);
+
+        accessed.Should().Be(Integer(1));
+        invocations.AccessCount.Should().BeGreaterThan(0);
+        invocations.UpdateCount.Should().Be(0);
+
+        var (updated, _) =
+            CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
+                declarations["updateField"],
+                record,
+                vm,
+                reportEnteredStackFrame: invocations.Record);
+
+        updated.Should().Be(new ElmValue.ElmRecord([("m", Integer(999)), ("n", Integer(2))]));
+        invocations.UpdateCount.Should().BeGreaterThan(0);
     }
 
     /// <summary>

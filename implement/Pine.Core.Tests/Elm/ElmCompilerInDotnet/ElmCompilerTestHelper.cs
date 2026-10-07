@@ -354,7 +354,8 @@ public class ElmCompilerTestHelper
     public static Core.Interpreter.IntermediateVM.PineVM PineVMForProfiling(
         Action<EvaluationReport> reportFunctionApplication,
         bool enableTailRecursionOptimization = false,
-        ReportExecutedStackInstruction? reportExecutedStackInstruction = null)
+        ReportExecutedStackInstruction? reportExecutedStackInstruction = null,
+        Func<Expression, bool>? skipInlineForExpression = null)
     {
         var vm =
             Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
@@ -364,7 +365,7 @@ public class ElmCompilerTestHelper
                 compilationEnvClasses: null,
                 disableReductionInCompilation: false,
                 selectPrecompiled: null,
-                skipInlineForExpression: _ => false,
+                skipInlineForExpression: skipInlineForExpression ?? (_ => false),
                 enableTailRecursionOptimization: enableTailRecursionOptimization,
                 parseCache: null,
                 precompiledLeaves: ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty,
