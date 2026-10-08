@@ -12,33 +12,6 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 public partial class ElmSyntaxOptimization
 {
     /// <summary>
-    /// Applies the wrap/unwrap cancellation rewrite when enabled.
-    /// </summary>
-    public static OptimizedElmSyntaxDeclarations ApplyWrapUnwrapCancellation(
-        OptimizedElmSyntaxDeclarations declarations,
-        Config config)
-    {
-        if (!config.WrapUnwrapCancellationEnabled)
-            return declarations;
-
-        return WrapUnwrapCancellation.RewriteDeclarationDictionary(declarations);
-    }
-
-    /// <summary>
-    /// Applies the sibling-aware wrap/unwrap cancellation rewrite when enabled.
-    /// </summary>
-    internal static OptimizedElmSyntaxDeclarations ApplyWrapUnwrapCancellation(
-        OptimizedElmSyntaxDeclarations declarations,
-        Config config,
-        ImmutableDictionary<DeclQualifiedName, GeneratedSiblingDecl> siblingsByOriginal)
-    {
-        if (!config.WrapUnwrapCancellationEnabled)
-            return declarations;
-
-        return WrapUnwrapCancellation.RewriteDeclarationDictionary(declarations, siblingsByOriginal);
-    }
-
-    /// <summary>
     /// Returns the functions that participate in a recursive call cycle.
     /// </summary>
     internal static ImmutableHashSet<DeclQualifiedName> MarkRecursiveFunctions(
