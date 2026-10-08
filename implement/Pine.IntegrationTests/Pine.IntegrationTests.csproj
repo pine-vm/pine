@@ -30,7 +30,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="SharpCompress" Version="0.50.4" />
-    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="4.1.2" />
     <PackageReference Include="StreamJsonRpc" Version="2.25.29" />
     <PackageReference Include="xunit.v3.core" Version="3.2.2" />
   </ItemGroup>
