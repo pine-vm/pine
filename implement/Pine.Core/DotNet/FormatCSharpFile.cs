@@ -1877,17 +1877,15 @@ public static class FormatCSharpFile
     /// <summary>Formats a lock statement with correct keyword and body placement.</summary>
     private static LockStatementSyntax FormatLockStatement(LockStatementSyntax node, FormatContext ctx)
     {
-        var body =
-            node.Statement is BlockSyntax block
-            ?
-            EnsureBraceNewline(FormatBlock(block, ctx), ctx.IndentLevel)
-            :
-            (StatementSyntax)FormatNode(node.Statement, ctx.Indented());
+        var block = node.Statement as BlockSyntax ?? SyntaxFactory.Block(node.Statement);
+        var body = EnsureBraceNewline(FormatBlock(block, ctx), ctx.IndentLevel);
 
         return
             node
             .WithLockKeyword(node.LockKeyword.WithTrailingTrivia(s_space))
-            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia())
+            .WithCloseParenToken(
+                node.CloseParenToken.WithLeadingTrivia()
+                .WithTrailingTrivia(EnsureSpaceBeforeComments(StripWhitespace(node.CloseParenToken.TrailingTrivia))))
             .WithStatement(body);
     }
 

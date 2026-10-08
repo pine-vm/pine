@@ -218,6 +218,10 @@ else
 }
 ```
 
+### Braces for Lock Statements
+
+The body of a `lock` statement must always be a block in braces, even when it contains only a single-line statement.
+
 ### Comments Before Content on a Line
 
 If a comment appears before other content on the same line, the comment must be moved to a separate line above that content.
@@ -259,4 +263,3 @@ Indentation must only depend on the content. That means, existing indent before 
 ### File
 
 A file must end with one empty line.
-

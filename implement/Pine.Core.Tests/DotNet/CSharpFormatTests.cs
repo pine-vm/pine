@@ -5993,6 +5993,152 @@ public class CSharpFormatTests
         AssertFormattedSyntax(input, input, scriptMode: true);
     }
 
+    [Theory]
+    [InlineData("lock (_budgetLock) _lastScope = _scope.Value;")]
+    [InlineData("lock (_budgetLock)_lastScope = _scope.Value;")]
+    [InlineData("lock (_budgetLock)\n    _lastScope = _scope.Value;")]
+    [InlineData("lock (_budgetLock) { _lastScope = _scope.Value; }")]
+    public void Formats_lock_with_single_line_body_as_block(string input)
+    {
+        var expected =
+            """"
+            lock (_budgetLock)
+            {
+                _lastScope = _scope.Value;
+            }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_lock_with_multiline_return_as_block()
+    {
+        var input =
+            """"
+            lock (_budgetLock) return
+                new(
+                    _stopReason,
+                    _lastScope.Phase,
+                    _lastScope.Context);
+            """";
+
+        var expected =
+            """"
+            lock (_budgetLock)
+            {
+                return
+                    new(
+                        _stopReason,
+                        _lastScope.Phase,
+                        _lastScope.Context);
+            }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_nested_lock_statements_as_blocks()
+    {
+        var input =
+            """"
+            lock (outerLock)
+                lock (innerLock)
+                    Update();
+            """";
+
+        var expected =
+            """"
+            lock (outerLock)
+            {
+                lock (innerLock)
+                {
+                    Update();
+                }
+            }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_lock_with_empty_statement_as_block()
+    {
+        var input = "lock (gate);";
+
+        var expected =
+            """"
+            lock (gate)
+            {
+                ;
+            }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_lock_as_block_preserving_comments()
+    {
+        var input =
+            """"
+            // Enter the scope
+            lock (_budgetLock) // Synchronize access
+                // Remember the scope
+                _lastScope = _scope.Value; // Updated
+            """";
+
+        var expected =
+            """"
+            // Enter the scope
+            lock (_budgetLock) // Synchronize access
+            {
+                // Remember the scope
+                _lastScope = _scope.Value; // Updated
+            }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_lock_in_regular_file_as_block()
+    {
+        var input =
+            """"
+            class C
+            {
+                void EnterScope()
+                {
+                    var previous = _scope.Value;
+                    lock (_budgetLock) _lastScope = _scope.Value;
+                    OnProgress?.Invoke(GetSummary());
+                }
+            }
+            """";
+
+        var expected =
+            """"
+            class C
+            {
+                void EnterScope()
+                {
+                    var previous = _scope.Value;
+
+                    lock (_budgetLock)
+                    {
+                        _lastScope = _scope.Value;
+                    }
+
+                    OnProgress?.Invoke(GetSummary());
+                }
+            }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: false);
+    }
+
     [Fact]
     public void Preserves_using_block()
     {
