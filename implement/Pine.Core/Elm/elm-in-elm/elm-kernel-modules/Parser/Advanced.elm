@@ -845,7 +845,7 @@ finalizeFloat invalid expecting intSettings floatSettings intPair s =
                                     ]
                                 ]
                     in
-                    case String.toFloat (String.String sliceBytes) of
+                    case String.toFloat (String sliceBytes) of
                         Nothing ->
                             Bad True (fromState s invalid)
 

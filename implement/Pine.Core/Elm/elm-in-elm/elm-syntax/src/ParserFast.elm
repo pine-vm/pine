@@ -1,5 +1,5 @@
 module ParserFast exposing
-    ( Parser, run
+    ( Parser(..), State(..), PStep(..), Problem(..), run
     , symbol, symbolWithEndLocation, symbolWithRange, symbolFollowedBy, symbolBacktrackableFollowedBy, followedBySymbol
     , keyword, keywordFollowedBy
     , anyChar, while, whileWithoutLinebreak, whileMapWithRange, ifFollowedByWhileWithoutLinebreak, ifFollowedByWhileMapWithoutLinebreak, ifFollowedByWhileMapWithRangeWithoutLinebreak, ifFollowedByWhileValidateWithoutLinebreak, ifFollowedByWhileValidateMapWithRangeWithoutLinebreak, whileWithoutLinebreakAnd2PartUtf16ToResultAndThen, whileWithoutLinebreakAnd2PartUtf16ValidateMapWithRangeBacktrackableFollowedBySymbol
@@ -16,7 +16,10 @@ module ParserFast exposing
 
 {-|
 
-@docs Parser, run
+@docs Parser, State, PStep, Problem, run
+
+`Parser`, `State`, `PStep`, and `Problem` expose the constructors used by the cooperating
+`Elm.Parser` modules.
 
 
 ### a note about backtracking and committing

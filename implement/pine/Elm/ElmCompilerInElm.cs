@@ -134,11 +134,26 @@ public class ElmCompilerInElm
             ElmCompilerFileTreeFromBundledFileTree(compilerSourceFiles);
 
         return
-            LoadOrCompileInteractiveEnvironment(
+            Core.Elm.ElmCompilerInDotnet.ElmCompiler.CompileInteractiveEnvironment(
                 compilerWithPackagesTree,
-                rootFilePaths: DefaultCompilerTreeRootModuleFilePaths,
-                skipLowering: true,
-                overrideElmCompiler: overrideElmCompiler)
+                rootDeclarations:
+                [
+                    Core.CodeAnalysis.DeclQualifiedName.Create(["ElmCompiler"], "compileParsedInteractiveSubmission"),
+                    Core.CodeAnalysis.DeclQualifiedName.Create(
+                        [
+                        "ElmCompiler"
+                        ],
+                        "expandElmInteractiveEnvironmentWithModules"),
+                    Core.CodeAnalysis.DeclQualifiedName.Create(["Elm", "Parser"], "parseToFile"),
+                    Core.CodeAnalysis.DeclQualifiedName.Create(
+                        [
+                        "ElmInteractiveSubmissionParser"
+                        ],
+                        "parseInteractiveSubmissionFromString"),
+                    Core.CodeAnalysis.DeclQualifiedName.Create(["LanguageService"], "initLanguageServiceState"),
+                    Core.CodeAnalysis.DeclQualifiedName.Create(["LanguageService"], "handleRequestInCurrentWorkspace")
+                ])
+            .Map(compilation => compilation.compiledEnvValue)
             .AndThen(
                 compiledEnv =>
                 {

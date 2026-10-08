@@ -16,8 +16,7 @@ namespace Pine.Core.Elm.LanguageServer;
 /// elm-in-elm sources) and compiles it via
 /// <see cref="ElmCompilerInDotnet.ElmCompiler.CompileInteractiveEnvironment"/>.
 /// <para>
-/// Compiling the language service from scratch is expensive (hundreds of
-/// modules through the full optimization pipeline). To recover the
+/// Compiling the language service from scratch is expensive. To recover the
 /// performance previously provided by the precompiled environment shipped
 /// in <see cref="BundledElmEnvironments"/>, the result is
 /// optionally cached through a caller-supplied file store, keyed by a hash of
@@ -76,10 +75,7 @@ internal static class LanguageServiceCompilation
     }
 
     /// <summary>
-    /// Root file path used for the compilation closure.
-    /// <c>LanguageService.elm</c> transitively imports
-    /// <c>LanguageServiceInterface</c>, <c>ElmSyntax.Abstract.*</c>, the
-    /// <c>ElmSyntax.Concrete.*</c> modules, <c>Frontend.MonacoEditor</c>, etc.
+    /// Source path checked before selecting the language service's two host API declarations.
     /// </summary>
     public static System.Collections.Generic.IReadOnlyList<string> LanguageServiceRootFilePath { get; } =
         ["LanguageService.elm"];
@@ -89,7 +85,12 @@ internal static class LanguageServiceCompilation
     /// </summary>
     public static string CacheKeyFromSourceTree(FileTree sourceTree)
     {
-        var encoded = FileTreeEncoding.Encode(sourceTree);
+        var encoded =
+            PineValue.List(
+                [
+                    CommonEncodings.StringEncoding.ValueFromString("language-service-explicit-roots-v1"),
+                    FileTreeEncoding.Encode(sourceTree)
+                ]);
 
         var hash = PineValueHashTree.ComputeHash(encoded);
 
@@ -168,7 +169,11 @@ internal static class LanguageServiceCompilation
         var compileResult =
             ElmCompilerInDotnet.ElmCompiler.CompileInteractiveEnvironment(
                 appCodeTree: sourceTree,
-                rootFilePaths: rootFilePaths);
+                rootDeclarations:
+                [
+                    CodeAnalysis.DeclQualifiedName.Create(["LanguageService"], "initLanguageServiceState"),
+                    CodeAnalysis.DeclQualifiedName.Create(["LanguageService"], "handleRequestInCurrentWorkspace")
+                ]);
 
         if (compileResult.IsErrOrNull() is { } compileErr)
         {

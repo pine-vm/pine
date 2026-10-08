@@ -19,7 +19,7 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// Provides canonicalization services for Elm modules, resolving references to their fully qualified forms
 /// and detecting errors such as undefined references.
 /// </summary>
-public class Canonicalization
+public partial class Canonicalization
 {
     /// <summary>
     /// Tracks module exports including type-to-constructor relationships for proper name resolution.
@@ -43,7 +43,11 @@ public class Canonicalization
         ImmutableHashSet<string> ModuleLevelDeclarations,
         ImmutableHashSet<string> LocalDeclarations,
         IImmutableDictionary<string, (ModuleName ModuleName, string FunctionName)> OperatorToFunction,
-        ImmutableList<string> DeclarationPath)
+        ImmutableList<string> DeclarationPath,
+        Func<ModuleName, string, bool, Range, IReadOnlyList<CanonicalizationError>>? ResolveReference = null,
+        ImmutableHashSet<string>? ModuleLevelTypes = null,
+        ImmutableHashSet<string>? ModuleLevelValues = null,
+        Func<ModuleName, string, bool, string>? DescribeUnavailableReference = null)
     {
         /// <summary>
         /// Creates a new context with additional local declarations added.
@@ -64,7 +68,8 @@ public class Canonicalization
 
             foreach (var (typeName, moduleName) in implicitImportConfig.TypeImports)
             {
-                if (!mergedTypeImportMap.ContainsKey(typeName) && !ModuleLevelDeclarations.Contains(typeName))
+                if (!mergedTypeImportMap.ContainsKey(typeName) &&
+                    !(ModuleLevelTypes ?? ModuleLevelDeclarations).Contains(typeName))
                 {
                     mergedTypeImportMap = mergedTypeImportMap.Add(typeName, [moduleName]);
                 }
@@ -76,7 +81,8 @@ public class Canonicalization
 
             foreach (var (valueName, moduleName) in implicitImportConfig.ValueImports)
             {
-                if (!mergedValueImportMap.ContainsKey(valueName) && !ModuleLevelDeclarations.Contains(valueName))
+                if (!mergedValueImportMap.ContainsKey(valueName) &&
+                    !(ModuleLevelValues ?? ModuleLevelDeclarations).Contains(valueName))
                 {
                     mergedValueImportMap = mergedValueImportMap.Add(valueName, [moduleName]);
                 }
@@ -87,7 +93,8 @@ public class Canonicalization
             // Skip names that are already declared locally in this module
             foreach (var (typeName, moduleName) in implicitImportConfig.TypeImports)
             {
-                if (!mergedValueImportMap.ContainsKey(typeName) && !ModuleLevelDeclarations.Contains(typeName))
+                if (!mergedValueImportMap.ContainsKey(typeName) &&
+                    !(ModuleLevelValues ?? ModuleLevelDeclarations).Contains(typeName))
                 {
                     mergedValueImportMap = mergedValueImportMap.Add(typeName, [moduleName]);
                 }
@@ -114,6 +121,11 @@ public class Canonicalization
 
             foreach (var importedModule in implicitImportConfig.ModuleImports)
             {
+                mergedAliasMap =
+                    mergedAliasMap.SetItem(
+                        "module:" + (importedModule.Alias ?? string.Join(".", importedModule.ModuleName)),
+                        importedModule.ModuleName);
+
                 if (importedModule.Alias is { } alias && !mergedAliasMap.ContainsKey(alias))
                 {
                     mergedAliasMap = mergedAliasMap.Add(alias, importedModule.ModuleName);
@@ -126,6 +138,14 @@ public class Canonicalization
                     foreach (var name in exports.ValueExports.Union(exports.TypeExports))
                         if (!mergedAliasMap.ContainsKey(qualifier + "." + name))
                             mergedAliasMap = mergedAliasMap.Add(qualifier + "." + name, importedModule.ModuleName);
+
+                    foreach (var name in exports.TypeExports)
+                        mergedAliasMap =
+                            mergedAliasMap.SetItem("type:" + qualifier + "." + name, importedModule.ModuleName);
+
+                    foreach (var name in exports.ValueExports)
+                        mergedAliasMap =
+                            mergedAliasMap.SetItem("value:" + qualifier + "." + name, importedModule.ModuleName);
                 }
             }
 
@@ -374,29 +394,7 @@ public class Canonicalization
             var currentModuleName =
                 Module.GetModuleName(module.ModuleDefinition.Value).Value;
 
-            // Build import maps and alias map for this module
-            var (typeImportMap, valueImportMap, aliasMap) =
-                BuildImportMaps(module.Imports, moduleExportsMap);
-
-            // Build set of module-level declarations (top-level names declared in this module)
-            var moduleLevelDeclarations = BuildLocalDeclarations(module);
-
-            // Collect infix operators from imported modules
-            var operatorToFunction =
-                CollectImportedInfixOperators(module.Imports, moduleExportsMap, moduleInfixMap);
-
-            // Create canonicalization context for this module
-            var context =
-                new CanonicalizationContext(
-                    CurrentModuleName: currentModuleName,
-                    TypeImportMap: typeImportMap,
-                    ValueImportMap: valueImportMap,
-                    AliasMap: aliasMap,
-                    ModuleLevelDeclarations: moduleLevelDeclarations,
-                    LocalDeclarations: [],
-                    OperatorToFunction: operatorToFunction,
-                    DeclarationPath: [])
-                .WithDefaults(implicitImportConfig, moduleExportsMap);
+            var context = BuildContext(module, moduleExportsMap, moduleInfixMap, implicitImportConfig);
 
             // Detect module-level declarations that shadow imported names
             var moduleLevelShadowings =
@@ -449,6 +447,72 @@ public class Canonicalization
         return resultDictionary;
     }
 
+    private static CanonicalizationContext BuildContext(
+        File module,
+        ImmutableDictionary<string, ModuleExports> exports,
+        ImmutableDictionary<string, ImmutableList<(string Operator, string FunctionName)>> infixes,
+        ImplicitImportConfig implicitImports)
+    {
+        var (types, values, aliases) = BuildImportMaps(module.Imports, exports);
+        var moduleName = Module.GetModuleName(module.ModuleDefinition.Value).Value;
+        var operators = CollectImportedInfixOperators(module.Imports, exports, infixes);
+
+        foreach (var declaration in module.Declarations)
+            if (declaration.Value is Declaration.InfixDeclaration infix)
+                operators = operators.SetItem(infix.Infix.Operator.Value, (moduleName, infix.Infix.FunctionName.Value));
+
+        var typeNames = ImmutableHashSet.CreateBuilder<string>();
+        var valueNames = ImmutableHashSet.CreateBuilder<string>();
+
+        foreach (var declaration in module.Declarations)
+        {
+            var name = GetDeclarationName(declaration.Value);
+
+            switch (declaration.Value)
+            {
+                case Declaration.FunctionDeclaration:
+                case Declaration.PortDeclaration:
+                case Declaration.InfixDeclaration:
+                    valueNames.Add(name);
+                    break;
+
+                case Declaration.AliasDeclaration alias:
+                    typeNames.Add(name);
+
+                    if (alias.TypeAlias.TypeAnnotation.Value is TypeAnnotation.Record)
+                        valueNames.Add(name);
+
+                    break;
+
+                case Declaration.ChoiceTypeDeclaration choice:
+                    typeNames.Add(name);
+
+                    valueNames.UnionWith(
+                        choice.TypeDeclaration.Constructors.Select(constructor => constructor.Value.Name.Value));
+
+                    break;
+
+                default:
+                    throw new NotImplementedException(
+                        $"{nameof(BuildContext)} does not handle declaration variant: {declaration.Value.GetType().Name}");
+            }
+        }
+
+        return
+            new CanonicalizationContext(
+                moduleName,
+                types,
+                values,
+                aliases,
+                BuildLocalDeclarations(module),
+                [],
+                operators,
+                [],
+                ModuleLevelTypes: typeNames.ToImmutable(),
+                ModuleLevelValues: valueNames.ToImmutable())
+            .WithDefaults(implicitImports, exports);
+    }
+
     private static File AddEffectModuleStubs(File module)
     {
         if (module.ModuleDefinition.Value is not Module.EffectModule effectModule)
@@ -483,8 +547,8 @@ public class Canonicalization
                                 [ElmSyntaxAbstract.Expression.Identifier.Create([], "stubArgument")]))));
 
             declarations.Add(
-                new SyntaxTypes.Node<SyntaxTypes.Declaration>(
-                    new Range(new SyntaxTypes.Location(0, 0), new SyntaxTypes.Location(0, 0)),
+                new Node<Declaration>(
+                    new Range(new Location(0, 0), new Location(0, 0)),
                     ElmSyntaxAbstract.ConvertToConcrete.ToDeclaration(stubDeclaration)));
         }
 
@@ -829,6 +893,15 @@ public class Canonicalization
                     typeConstructorsBuilder.ToImmutable());
         }
 
+        if (!exportsMapBuilder.ContainsKey("Debug"))
+        {
+            exportsMapBuilder["Debug"] =
+                new ModuleExports(
+                    [],
+                    ["todo", "log", "toString"],
+                    []);
+        }
+
         return exportsMapBuilder.ToImmutable();
     }
 
@@ -851,6 +924,15 @@ public class Canonicalization
             var moduleName = import.ModuleName.Value;
             var moduleNameStr = string.Join(".", moduleName);
 
+            var moduleQualifier =
+                import.ModuleAlias is { } moduleAlias
+                ?
+                string.Join(".", moduleAlias.Alias.Value)
+                :
+                moduleNameStr;
+
+            aliasMap["module:" + moduleQualifier] = moduleName;
+
             // Handle module alias
             if (import.ModuleAlias is { } importModuleAlias)
             {
@@ -869,6 +951,12 @@ public class Canonicalization
 
                 foreach (var exportedName in qualifiedExports.ValueExports.Union(qualifiedExports.TypeExports))
                     aliasMap[qualifier + "." + exportedName] = moduleName;
+
+                foreach (var exportedName in qualifiedExports.TypeExports)
+                    aliasMap["type:" + qualifier + "." + exportedName] = moduleName;
+
+                foreach (var exportedName in qualifiedExports.ValueExports)
+                    aliasMap["value:" + qualifier + "." + exportedName] = moduleName;
             }
 
             // Get exposed items
@@ -914,6 +1002,9 @@ public class Canonicalization
 
             if (exposing is Exposing.Explicit explicitExposing)
             {
+                if (!moduleExportsMap.ContainsKey(moduleNameStr))
+                    continue;
+
                 foreach (var exposeNode in explicitExposing.Nodes)
                 {
                     var expose = exposeNode.Value;
@@ -1707,7 +1798,10 @@ public class Canonicalization
                 context.TypeImportMap,
                 context.AliasMap,
                 localVariables,
-                context.ModuleLevelDeclarations);
+                context.ModuleLevelTypes ?? context.ModuleLevelDeclarations,
+                context.ResolveReference,
+                typeReference: true,
+                describeUnavailableReference: context.DescribeUnavailableReference);
 
         var canonicalizedTypeName =
             new Node<(ModuleName, string)>(
@@ -1862,7 +1956,7 @@ public class Canonicalization
                         elseBlock)),
 
                 SyntaxTypes.Expression.PrefixOperator prefixOperator =>
-                NoErrors((SyntaxTypes.Expression)prefixOperator),
+                CanonicalizePrefixOperator(prefixOperator, exprNode.Range, context),
 
                 SyntaxTypes.Expression.Parenthesized parenExpr =>
                 CanonicalizeExpressionNode(parenExpr.Expression, context)
@@ -1947,6 +2041,24 @@ public class Canonicalization
         // Look up the operator in the operator-to-function mapping
         if (context.OperatorToFunction.TryGetValue(opApp.Operator.Value, out var funcMapping))
         {
+            if (context.ResolveReference is not null &&
+                !context.ModuleLevelDeclarations.Contains(opApp.Operator.Value) &&
+                context.ValueImportMap.TryGetValue(opApp.Operator.Value, out var importingModules) &&
+                importingModules.Count > 1)
+            {
+                return
+                    new(
+                        opApp,
+                        [
+                        .. leftResult.Errors,
+                        .. rightResult.Errors,
+                        new CanonicalizationError.AmbiguousImport(
+                            opApp.Operator.Range,
+                            opApp.Operator.Value,
+                            [.. importingModules.Select(name => string.Join(".", name))])
+                        ]);
+            }
+
             // Convert operator application to function application: func left right
             var funcOrValue =
                 new SyntaxTypes.Expression.Identifier(
@@ -1955,11 +2067,22 @@ public class Canonicalization
 
             var funcNode = new Node<SyntaxTypes.Expression>(range, funcOrValue);
 
-            return
+            var result =
                 CanonicalizationResultExtensions.Map2(
                     leftResult,
                     rightResult,
                     (left, right) => (SyntaxTypes.Expression)new SyntaxTypes.Expression.Application(funcNode, [left, right]));
+
+            return
+                result with
+                {
+                    Errors =
+                    [
+                    .. result.Errors,
+                    .. (context.ResolveReference?.Invoke(funcMapping.ModuleName, funcMapping.FunctionName, false, opApp.Operator.Range) ??
+                        [])
+                    ]
+                };
         }
 
         // Also check if the current module declares this operator via its own infix declarations
@@ -1980,6 +2103,23 @@ public class Canonicalization
                 leftResult,
                 rightResult,
                 (left, right) => (SyntaxTypes.Expression)new SyntaxTypes.Expression.OperatorApplication(opApp.Operator, opApp.Direction, left, right));
+    }
+
+    private static CanonicalizationResult<SyntaxTypes.Expression> CanonicalizePrefixOperator(
+        SyntaxTypes.Expression.PrefixOperator prefix,
+        Range range,
+        CanonicalizationContext context)
+    {
+        if (context.ResolveReference is null)
+            return NoErrors((SyntaxTypes.Expression)prefix);
+
+        if (!context.OperatorToFunction.TryGetValue(prefix.Operator, out var function))
+            return new(prefix, [new CanonicalizationError.UnresolvedReference(range, prefix.Operator)]);
+
+        return
+            new(
+                new SyntaxTypes.Expression.Identifier(function.ModuleName, function.FunctionName),
+                context.ResolveReference(function.ModuleName, function.FunctionName, false, range));
     }
 
     /// <summary>
@@ -2043,9 +2183,9 @@ public class Canonicalization
                             range,
                             new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
                                 Pattern:
-                                new Node<SyntaxTypes.Pattern>(
+                                new Node<Pattern>(
                                     recordUpdate.RecordName.Range,
-                                    new SyntaxTypes.Pattern.VarPattern(freshName)),
+                                    new Pattern.VarPattern(freshName)),
                                 EqualsTokenLocation: recordUpdate.RecordName.Range.End,
                                 Expression:
                                 new Node<SyntaxTypes.Expression>(
@@ -2087,7 +2227,9 @@ public class Canonicalization
                 context.ValueImportMap,
                 context.AliasMap,
                 context.LocalDeclarations,
-                context.ModuleLevelDeclarations);
+                context.ModuleLevelValues ?? context.ModuleLevelDeclarations,
+                context.ResolveReference,
+                describeUnavailableReference: context.DescribeUnavailableReference);
 
         var canonicalizedFuncOrValue =
             new SyntaxTypes.Expression.Identifier(
@@ -2150,26 +2292,94 @@ public class Canonicalization
         ImmutableDictionary<string, ImmutableList<ModuleName>> importMap,
         ImmutableDictionary<string, ModuleName> aliasMap,
         ImmutableHashSet<string> localVariables,
-        ImmutableHashSet<string> localDeclarations)
+        ImmutableHashSet<string> localDeclarations,
+        Func<ModuleName, string, bool, Range, IReadOnlyList<CanonicalizationError>>? resolveReference = null,
+        bool typeReference = false,
+        Func<ModuleName, string, bool, string>? describeUnavailableReference = null)
     {
-        // If the module name is already specified, check if it's an alias
-        if (qualifiedModuleName.Count > 0)
+        var resolved = Resolve();
+
+        if (resolved.Errors.Count > 0)
         {
-            var moduleNameStr = string.Join(".", qualifiedModuleName);
-
-            if (aliasMap.TryGetValue(moduleNameStr + "." + name, out var exportedModule))
-                return new CanonicalizationResult<ModuleName>(exportedModule, []);
-
-            if (aliasMap.TryGetValue(moduleNameStr, out var resolvedModuleName))
-            {
-                return new CanonicalizationResult<ModuleName>(resolvedModuleName, []);
-            }
-
-            return new CanonicalizationResult<ModuleName>(qualifiedModuleName, []);
+            return
+                resolved with
+                {
+                    Errors =
+                    [
+                    .. resolved.Errors.Select(
+                        error => error is CanonicalizationError.UnresolvedReference unresolved &&
+                            unresolved.ResolutionDetail is null
+                        ?
+                        unresolved with
+                        {
+                            IsTypeReference = typeReference,
+                            ResolutionDetail =
+                            $"No local binding, {(typeReference ? "type" : "value")} declaration, or exposed import provides '{name}'."
+                        }
+                        :
+                        error)
+                    ]
+                };
         }
 
-        // Resolve unqualified name
-        return ResolveModuleName(name, range, currentModuleName, importMap, localVariables, localDeclarations);
+        if (resolved.Value.Count is 0 || resolveReference is null)
+            return resolved;
+
+        return resolved with { Errors = resolveReference(resolved.Value, name, typeReference, range) };
+
+        CanonicalizationResult<ModuleName> Resolve()
+        {
+            // If the module name is already specified, check if it's an alias
+            if (qualifiedModuleName.Count > 0)
+            {
+                var moduleNameStr = string.Join(".", qualifiedModuleName);
+
+                if (aliasMap.TryGetValue(
+                    (typeReference ? "type:" : "value:") + moduleNameStr + "." + name,
+                    out var exportedModule))
+                    return new CanonicalizationResult<ModuleName>(exportedModule, []);
+
+                if (resolveReference is null && aliasMap.TryGetValue(moduleNameStr + "." + name, out var legacyExport))
+                    return new CanonicalizationResult<ModuleName>(legacyExport, []);
+
+                if (resolveReference is not null &&
+                    !qualifiedModuleName.SequenceEqual(currentModuleName) &&
+                    moduleNameStr is not ("Basics" or "Debug" or "Pine_kernel" or "Pine_builtin") &&
+                    !(moduleNameStr is "List" && name is "List"))
+                {
+                    var imported = aliasMap.TryGetValue("module:" + moduleNameStr, out var targetModule);
+                    var target = imported ? targetModule! : qualifiedModuleName;
+
+                    return
+                        new(
+                            qualifiedModuleName,
+                            [
+                            new CanonicalizationError.UnresolvedReference(range, moduleNameStr + "." + name)
+                            {
+                                Target = CodeAnalysis.DeclQualifiedName.Create(target, name),
+                                IsTypeReference = typeReference,
+                                ResolutionDetail =
+                                imported
+                                ?
+                                describeUnavailableReference?.Invoke(target, name, typeReference) ??
+                                $"The imported module does not expose a {(typeReference ? "type" : "value")} named '{name}'."
+                                :
+                                $"Qualifier '{moduleNameStr}' is not an explicit or implicit import in this source scope. Add the required import or correct the qualifier."
+                            }
+                            ]);
+                }
+
+                if (aliasMap.TryGetValue(moduleNameStr, out var resolvedModuleName))
+                {
+                    return new CanonicalizationResult<ModuleName>(resolvedModuleName, []);
+                }
+
+                return new CanonicalizationResult<ModuleName>(qualifiedModuleName, []);
+            }
+
+            // Resolve unqualified name
+            return ResolveModuleName(name, range, currentModuleName, importMap, localVariables, localDeclarations);
+        }
     }
 
     private static CanonicalizationResult<RecordExprField>
@@ -2562,7 +2772,9 @@ public class Canonicalization
                 context.ValueImportMap,
                 context.AliasMap,
                 context.LocalDeclarations,
-                context.ModuleLevelDeclarations);
+                context.ModuleLevelValues ?? context.ModuleLevelDeclarations,
+                context.ResolveReference,
+                describeUnavailableReference: context.DescribeUnavailableReference);
 
         var argumentResults =
             namedPattern.Arguments

@@ -125,7 +125,7 @@ public class DebugLogRemovalTests
         var loweringResult =
             ElmCompiler.LowerToElmSyntaxForCompilation(
                 testCase.AsFileTree(),
-                rootFilePaths: [["src", "Test.elm"]],
+                rootDeclarations: [Pine.Core.CodeAnalysis.DeclQualifiedName.Create(["Test"], "logged")],
                 syntaxOptimization:
                 new ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled
                 {

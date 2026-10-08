@@ -99,19 +99,14 @@ public static class Base64PrecompiledLeaves
         if (base64EncodeFile is not null)
             treeWithBase64 = treeWithBase64.SetNodeAtPathSorted(["Base64", "Encode.elm"], base64EncodeFile);
 
-        var rootFilePaths =
-            treeWithBase64.EnumerateFilesTransitive()
-            .Where(
-                b =>
-                (b.path.Count is 1 && b.path[^1].Equals("Base64.elm", StringComparison.OrdinalIgnoreCase)) ||
-                (b.path.Count is 2 && b.path[0].Equals("Base64", StringComparison.OrdinalIgnoreCase)))
-            .Select(b => (IReadOnlyList<string>)b.path)
-            .ToList();
-
         var compiledEnv =
             ElmCompiler.CompileInteractiveEnvironment(
                 treeWithBase64,
-                rootFilePaths: rootFilePaths)
+                rootDeclarations:
+                [
+                    DeclQualifiedName.Create(["Base64", "Encode"], "toBytes"),
+                    DeclQualifiedName.Create(["Base64", "Decode"], "fromBytes")
+                ])
             .Map(r => r.compiledEnvValue)
             .Extract(
                 err => throw new Exception("Failed compiling Base64 modules to derive leaf info: " + err));

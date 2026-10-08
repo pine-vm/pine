@@ -416,8 +416,8 @@ public record ExpressionCompilationContext(
     IReadOnlyDictionary<string, TypeInference.InferredType>? LocalBindingTypes,
     IReadOnlyList<string> DependencyLayout,
     ModuleCompilationContext ModuleCompilationContext,
-    CodeAnalysis.PineVMParseCache ParseCache,
-    IDictionary<(Expression, CodeAnalysis.ReductionConfig), Expression>? ReducedExpressionCache,
+    PineVMParseCache ParseCache,
+    IDictionary<(Expression, ReductionConfig), Expression>? ReducedExpressionCache,
     IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? FunctionTypes = null)
 {
 

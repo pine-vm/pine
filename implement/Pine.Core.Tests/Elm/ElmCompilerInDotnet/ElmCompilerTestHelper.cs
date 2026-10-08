@@ -4,6 +4,8 @@ using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using Pine.Core.Files;
+using Pine.Core.Interpreter;
 using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 using Pine.Core.Tests.Elm.ElmCompilerTests;
@@ -21,6 +23,37 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
 public class ElmCompilerTestHelper
 {
+    /// <summary>
+    /// Preserves value-oriented test fixtures by explicitly selecting source declarations
+    /// and executing their zero-parameter exports after compilation.
+    /// </summary>
+    public static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults<DefaultLoweredResults> pipelineStageResults)>
+        CompileInteractiveEnvironmentFromFiles(
+        FileTree appCodeTree,
+        IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
+        ElmSyntaxOptimizationConfig? syntaxOptimization = null,
+        bool disableGenericApplicationChainConsolidation = false,
+        IDictionary<DirectInterpreter.EvalCacheEntryKey, PineValue>? directInterpreterEvalCache = null,
+        bool includeBundledKernelModules = true,
+        PineVM.IPineVM? evaluationVm = null) =>
+        ElmSourceCompilation.CompileInteractiveEnvironmentFromFiles(
+            appCodeTree,
+            rootFilePaths,
+            syntaxOptimization,
+            disableGenericApplicationChainConsolidation,
+            includeBundledKernelModules)
+        .AndThen(
+            compilation =>
+            ElmSourceCompilation.EvaluateZeroParameterRoots(
+                compilation.compiledEnvValue,
+                evaluationVm ??
+                (directInterpreterEvalCache is null
+                ?
+                DirectInterpreter.WithLocalEvalCache(new PineVMParseCache())
+                :
+                DirectInterpreter.WithSharedEvalCache(new PineVMParseCache(), directInterpreterEvalCache)))
+            .Map(environment => (environment, compilation.pipelineStageResults)));
+
     private static readonly FrozenSet<string> s_pineBuiltinModuleNamesDefault =
         FrozenSet.Create(["Pine_builtin", "Pine_kernel"]);
 
@@ -139,7 +172,7 @@ public class ElmCompilerTestHelper
             .ToList();
 
         var (compiledEnv, pipelineStageResults) =
-            ElmCompiler.CompileInteractiveEnvironment(
+            CompileInteractiveEnvironmentFromFiles(
                 appCodeTree,
                 rootFilePaths: rootFilePaths,
                 syntaxOptimization:
@@ -212,7 +245,7 @@ public class ElmCompilerTestHelper
             .ToList();
 
         var (compiledEnv, pipelineStageResults) =
-            ElmCompiler.CompileInteractiveEnvironment(
+            CompileInteractiveEnvironmentFromFiles(
                 appCodeTree,
                 rootFilePaths: rootFilePaths,
                 syntaxOptimization:

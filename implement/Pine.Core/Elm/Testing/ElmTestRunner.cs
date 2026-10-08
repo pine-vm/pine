@@ -216,7 +216,7 @@ public static class ElmTestRunner
         }
 
         var build =
-            ElmResolvedBuildPreparation.PrepareAsync(
+            ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(
                 appCodeTreeWithoutPackages,
                 ["elm.json"],
                 [.. testModules.Select(testModule => testModule.path)],
@@ -244,7 +244,10 @@ public static class ElmTestRunner
         }
 
         var bridgeName = build.CompilerModuleNames[string.Join("/", bridgePath)];
-        build = build with { RootFilePaths = build.RootFilePaths.Add([.. bridgePath]) };
+
+        var compilationRoots =
+            testDeclarationNames.Add(DeclQualifiedName.Create(bridgeName.Split('.'), "prepare"));
+
         var preparationCaches = new PineVMSharedCaches();
 
         var preparationVm =
@@ -259,9 +262,8 @@ public static class ElmTestRunner
         var (compiledEnvironment, _) =
             ElmCompiler.CompileResolvedEnvironment(
                 build,
-                rootDeclarationsAsPlainValues: testDeclarationNames,
-                plainValueVm: preparationVm)
-            .Extract(error => throw new InvalidOperationException("Failed compiling Elm tests: " + error));
+                rootDeclarations: compilationRoots)
+            .Extract(error => throw new ElmCompilationException("Failed compiling Elm tests: " + error));
 
         var parsedEnvironment =
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnvironment)
@@ -293,12 +295,20 @@ public static class ElmTestRunner
             {
                 if (!compiledTestModule.moduleContent.FunctionDeclarations.TryGetValue(
                     declarationName,
-                    out var declarationValue))
+                    out var declarationWrapper))
                 {
                     throw new InvalidOperationException(
                         "Did not find declaration '" +
                         testModule.moduleNameText + "." + declarationName + "'");
                 }
+
+                var declarationValue =
+                    ElmSourceCompilation.EvaluateZeroParameterRoot(
+                        declarationWrapper,
+                        preparationVm,
+                        preparationCaches.ParsedExpressions)
+                    .Extract(
+                        error => throw new InvalidOperationException("Failed constructing Elm test value: " + error));
 
                 if (!IsTestValue(declarationValue))
                     continue;

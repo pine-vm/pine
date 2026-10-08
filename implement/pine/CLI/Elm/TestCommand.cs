@@ -264,6 +264,13 @@ public static class TestCommand
                                 (testCount is 1 ? "." : "s.") + "\n\n"));
                     });
         }
+        catch (Core.Elm.ElmCompilerInDotnet.ElmCompilationException exception)
+        {
+            errorConsole ??= CreateSystemConsole(Console.Error, resolvedColorMode);
+            errorConsole.Write(new Text("Error: ", TestCommandTheme.Failure));
+            errorConsole.Profile.Out.Writer.WriteLine(exception.Message);
+            return 1;
+        }
         catch (ElmDependencyResolutionException exception)
         {
             errorConsole ??= CreateSystemConsole(Console.Error, resolvedColorMode);

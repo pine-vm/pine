@@ -13,6 +13,40 @@ namespace Pine.IntegrationTests.CLI.Elm;
 
 public class TestCommandTests
 {
+    [Fact]
+    public void Compilation_errors_are_rendered_with_declaration_context_without_unhandled_exceptions()
+    {
+        var project =
+            CreateTestProject(
+                "module Tests exposing (suite)\nsuite = helper\nhelper = missing");
+
+        var (errorConsole, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            var exitCode =
+                TestCommand.Execute(
+                    project,
+                    FormatCommandColorMode.Never,
+                    errorConsole: errorConsole,
+                    offline: true);
+
+            exitCode.Should().Be(1);
+
+            output.ToString().Should().Contain("Error:").And.Contain("Failed compiling Elm tests:")
+                .And.Contain("Tests.suite (compilation root)")
+                .And.Contain("Tests.helper — referenced by Tests.suite")
+                .And.Contain("No local binding, value declaration, or exposed import provides 'missing'")
+                .And.NotContain("Unhandled exception")
+                .And.NotContain("System.InvalidOperationException")
+                .And.NotContain(" at Pine.");
+        }
+        finally
+        {
+            Directory.Delete(project, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("--seed", "-1")]
     [InlineData("--seed", "4294967296")]

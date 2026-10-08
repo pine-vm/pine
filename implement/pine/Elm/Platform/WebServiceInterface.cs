@@ -2348,13 +2348,98 @@ type alias LoadDependencyStruct =
                 caching: true,
                 autoPGO: null);
 
-        return
+        var hostRoots =
+            new List<DeclQualifiedName>
+            {
+                DeclQualifiedName.Create(
+                    Core.Elm.ElmSyntax.ElmModule.ParseModuleName(
+                        System.Text.Encoding.UTF8.GetString(
+                            ((FileTree.FileNode)loweredTreeCleaned.GetNodeAtPath(entryFileName)!).Bytes.Span))
+                    .Extract(error => throw new Exception("Failed parsing web service module name: " + error)),
+                    "webServiceMain"),
+                DeclQualifiedName.Create(["Backend", "InterfaceToHost_Root"], "jsonEncodeAppState"),
+                DeclQualifiedName.Create(["Backend", "InterfaceToHost_Root"], "jsonDecodeAppState"),
+                DeclQualifiedName.Create(["Backend", "InterfaceToHost_Root"], "config_exposedFunctions"),
+                DeclQualifiedName.Create(["Json", "Encode"], "encode"),
+                DeclQualifiedName.Create(["Json", "Decode"], "value"),
+                DeclQualifiedName.Create(["Json", "Decode"], "decodeValue"),
+                DeclQualifiedName.Create(["Json", "Decode"], "decodeString")
+            };
+
+        var jsonExportNames = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        if (compilationUnitsPrepared.files.ResolvedBuild is { } resolvedBuild)
+        {
+            foreach (var publicModuleName in new[] { "Json.Encode", "Json.Decode" })
+            {
+                var packagePath = "elm-packages/elm/json/src/" + publicModuleName.Replace('.', '/') + ".elm";
+
+                if (!resolvedBuild.CompilerModuleNames.TryGetValue(packagePath, out var compilerModuleName))
+                {
+                    throw new Exception(
+                        "The selected elm/json implementation does not provide host module '" + publicModuleName + "'.");
+                }
+
+                jsonExportNames.Add(compilerModuleName, publicModuleName);
+
+                for (var index = 0; index < hostRoots.Count; index++)
+                    if (string.Join(".", hostRoots[index].Namespaces) == publicModuleName)
+                    {
+                        hostRoots[index] =
+                            DeclQualifiedName.Create(
+                                compilerModuleName.Split('.'),
+                                hostRoots[index].DeclName);
+                    }
+            }
+        }
+
+        var availableDeclarations =
+            ElmSourceCompilation.EnumerateRootDeclarations(
+                loweredTreeCleaned,
+                [.. loweredTreeCleaned.EnumerateFilesTransitive().Select(file => (IReadOnlyList<string>)file.path)]);
+
+        foreach (var optionalRoot in new[]
+        {
+            DeclQualifiedName.Create(["Backend", "MigrateState"], "migrate"),
+            DeclQualifiedName.Create(["Backend", "InterfaceToHost_Root"], "jsonDecodeMigratePreviousState")
+        })
+        {
+            if (availableDeclarations.Contains(optionalRoot))
+                hostRoots.Add(optionalRoot);
+        }
+
+        var compiled =
             ElmTime.ElmInteractive.InteractiveSessionPine.CompileInteractiveEnvironment(
                 appCodeTree: compilationUnitsPrepared.files,
                 overrideSkipLowering: true,
                 entryPointsFilePaths: [["src", "Backend", "InterfaceToHost_Root.elm"], entryFileName],
-                skipFilteringForSourceDirs: false)
+                skipFilteringForSourceDirs: false,
+                rootDeclarations: hostRoots)
             .Extract(err => throw new Exception("Failed to compile interactive environment: " + err));
+
+        if (jsonExportNames.Count is 0)
+            return compiled;
+
+        var exports =
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiled)
+            .Extract(error => throw new Exception("Failed parsing web-service exports: " + error));
+
+        var exportedModules = new HashSet<string>(StringComparer.Ordinal);
+
+        return
+            PineValue.List(
+                [
+                .. exports.Modules.Select(
+                    module =>
+                    {
+                        var exportName = jsonExportNames.GetValueOrDefault(module.moduleName) ?? module.moduleName;
+
+                        if (!exportedModules.Add(exportName))
+                            throw new Exception("Duplicate host module export '" + exportName + "'.");
+
+                        return PineValue.List([StringEncoding.ValueFromString(exportName), module.moduleValue]);
+                    })
+                ]);
     }
 
     public static Result<string, WebServiceConfig> ConfigFromCompiledModules(
@@ -2390,21 +2475,12 @@ type alias LoadDependencyStruct =
 
         var entryPointValue = parseDeclOk.declValue;
 
-        if (s_parseCache.ParseExpression(entryPointValue).IsOkOrNull() is { } entryPointValueExpr)
-        {
-            if (entryPointValueExpr.ReferencesEnvironment)
-            {
-                throw new Exception(
-                    "Entry point declaration value expression should not reference the environment");
-            }
-
-            var interpreter =
-                DirectInterpreter.WithLocalEvalCache(s_parseCache);
-
-            entryPointValue =
-                interpreter.EvaluateExpression(entryPointValueExpr, PineValue.EmptyList)
-                .Extract(err => throw new Exception("Failed to evaluate exposed functions declaration: " + err));
-        }
+        entryPointValue =
+            ElmSourceCompilation.EvaluateZeroParameterRoot(
+                entryPointValue,
+                DirectInterpreter.WithLocalEvalCache(s_parseCache),
+                s_parseCache)
+            .Extract(err => throw new Exception("Failed evaluating web service entry point: " + err));
 
         return ConfigFromDeclarationValue(entryPointValue, parsedJsonAdapter);
     }

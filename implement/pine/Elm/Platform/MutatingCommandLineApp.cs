@@ -183,18 +183,17 @@ public record CommandLineAppConfig(
             manifest is { } selectedManifest
             ?
             Core.Elm.ElmCompilerInDotnet.ElmCompiler.CompileResolvedEnvironment(
-                ElmResolvedBuildPreparation.PrepareAsync(
+                ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(
                     sourceFiles,
                     selectedManifest.filePath,
                     [entryPointFilePath],
                     resolutionConfiguration ?? ElmPackageSubstitutions.DefaultBuild.Value,
                     packageProvider).GetAwaiter().GetResult(),
-                rootDeclarationsAsPlainValues: [runRootQualifiedName])
+                rootDeclarations: [runRootQualifiedName])
             :
             Core.Elm.ElmCompilerInDotnet.ElmCompiler.CompileInteractiveEnvironment(
                 appCodeTree: sourceFiles,
-                rootFilePaths: rootFilePaths,
-                rootDeclarationsAsPlainValues: [runRootQualifiedName]);
+                rootDeclarations: [runRootQualifiedName]);
 
         var (compiledModulesValue, _) =
             compiled
@@ -212,7 +211,14 @@ public record CommandLineAppConfig(
                 err => throw new Exception(
                     "Failed parsing runRoot declaration from module " + moduleNameFlattened + ": " + err));
 
-        return ConfigFromDeclarationValue(declValue);
+        var runRootValue =
+            ElmSourceCompilation.EvaluateZeroParameterRoot(
+                declValue,
+                Core.Interpreter.DirectInterpreter.WithLocalEvalCache(s_parseCache),
+                s_parseCache)
+            .Extract(err => throw new Exception("Failed evaluating runRoot: " + err));
+
+        return ConfigFromDeclarationValue(runRootValue);
     }
 
     public static CommandLineAppConfig ConfigFromDeclarationValue(PineValue runRootDeclValue)

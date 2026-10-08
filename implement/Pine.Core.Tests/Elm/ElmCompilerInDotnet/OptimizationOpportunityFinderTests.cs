@@ -2183,7 +2183,7 @@ public class OptimizationOpportunityFinderTests
         var pipelineResults =
             ElmCompiler.LowerToElmSyntaxForCompilation(
                 sourceTree,
-                rootFilePaths)
+                Pine.Core.Elm.ElmSourceCompilation.EnumerateRootDeclarations(sourceTree, rootFilePaths))
             .Extract(error => throw new System.Exception("Failed lowering: " + error));
 
         var opportunities =

@@ -44,7 +44,7 @@ public class RecordDestructureLetBindingRegressionTests
                 FileTree.File(Encoding.UTF8.GetBytes(moduleText)));
 
         var compiledEnv =
-            ElmCompiler.CompileInteractiveEnvironment(
+            ElmCompilerTestHelper.CompileInteractiveEnvironmentFromFiles(
                 tree,
                 rootFilePaths: [["M.elm"]])
             .Map(r => r.compiledEnvValue)

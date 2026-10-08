@@ -1,5 +1,27 @@
 # Language Server Design and Implementation
 
+## Compiler-Backed Analysis and Queries
+
+The [2026-10-07 frontend design contract](../explore/internal-analysis/2026-10-07-frontend-compiler-design.md#agreed-implementation-contract) defines compiler integration. The default host now uses `ElmCompilerDiagnosticsProvider` rather than invoking `elm make` for source diagnostics; the external adapter remains available to callers that explicitly select it.
+
+`IApplicationDiagnosticsProvider` supplies a project URI to the host scheduler. This is needed to replace one application's previous diagnostics regardless of which document triggered analysis, preventing stale contributions from other documents. It is not an entry point, compilation unit, or compiler state identity.
+
+Application analysis selects no entry points and emits or executes no code. It returns source-located diagnostics across application declarations, including unused declarations, unused missing imports, and disconnected source modules. Independent declarations must still be analyzed after errors. Unrelated package declarations need not be diagnosed, but unavailable dependencies required by application code must be reported.
+
+This change retains today's type-checking coverage and regression behavior. Complete Elm-compatible type checking is a future project; an empty diagnostic list must not be advertised as proof that all types were checked.
+
+Definitions, inferred types, and other requested source information come from source queries rather than an application-analysis payload containing all semantic facts. The compiler's `QueryDeclaration` demands the information needed to answer a declaration query and returns reliable definition information despite analysis errors, with relevant diagnostics. Existing language-service query implementations remain available; this change does not replace all of them. Explain when an answer cannot be established rather than presenting an unavailable answer as "not found".
+
+Modules are source-level resolution contexts, not compilation units. Explorer markings aggregate source diagnostics; they do not require module compilation. The compiler processes complete demanded top-level declaration bodies, including unused local bindings.
+
+The language server supplies current source contents, including unsaved editor text, and handles document version tracking, supersession, dependent-file updates, and publication. When diagnostics disappear, it clears prior markings; incomplete or failed analysis must not be presented as a clean result. None of this introduces a "frontend snapshot" or "program revision" abstraction, API field, or result identity into the compiler.
+
+Project diagnostics run when a workspace root contains `elm.json`, after accepted document updates, when a document closes, and after backing-file changes. Each successful result covers selected project files, including empty diagnostic lists for files whose errors disappeared. Package preparation supplies original import locations and rewritten syntax retaining source ranges. Document formatting retains the independent syntax diagnostics provider.
+
+Compiler diagnostics name the failing declaration and explain the resolution failure. Related information links source declarations, reference sites, relevant imports, and private-member definitions when the workspace provides real document URIs. Logical package-source paths remain visible in the diagnostic text; the server does not fabricate local file links for bundled or virtual package sources. Errors that prevent checking a dependent application declaration identify the failing dependency and its location. Application-wide diagnostics do not display a compilation-root chain, because no entry points were selected.
+
+Compilation is a separate operation with explicit declaration roots and only those roots exported. Callers evaluate compiled code separately when needed. Compilation, application analysis, and queries share compiler logic and can reuse unchanged work, but application-wide diagnostics must not block compilation of unrelated roots.
+
 ## Optimizations for Response Times
 
 The Pine language server implements various optimizations for response times. For one, it benefits from the general memoization infrastructure available in Pine, which helps both efficiency and response times. Beyond that, the language server optimizes response times specifically by distributing work across multiple threads.

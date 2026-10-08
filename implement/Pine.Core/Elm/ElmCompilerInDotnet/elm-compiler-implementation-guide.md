@@ -305,6 +305,8 @@ map__lifted__lambda1 f x acc =
 
 This Elm compiler implements only partial type inference. Since it is not sufficient to detect all type mismatches, users also want to use an additional type checker to verify that a given Elm program is valid.
 
+The [2026-10-07 frontend design](../../../../explore/internal-analysis/2026-10-07-frontend-compiler-design.md) retains today's type-checking coverage and existing regression behavior for the planned frontend change. Complete type checking remains a future project. Rootless application analysis must report the naming and type errors supported by that implementation, not claim that an absence of diagnostics proves type correctness.
+
 Another implication of this partial type inference is that adding type annotations can yield more efficient code.
 
 The limited type inference here supports:
@@ -337,6 +339,8 @@ The limited type inference here supports:
 
 The Elm core library offers arithmetic operations that are polymorphic and work on the `number` type class. The core library exposes these only as operator symbols.
 For example, it [exposes `Basics.add` as an infix operator `+`](https://github.com/elm/core/blob/84f38891468e8e153fc85a9b63bdafd81b24664e/src/Basics.elm#L82), which also implies the availability as a function named `(+)`.
+
+Implicit operator resolution supports both infix and prefix forms. Floating-point division `/` and `(/)` resolve to the compiler-native `Basics.fdiv`; integer division `//` resolves to `Basics.idiv`.
 
 For operations where we prove the type must be `Int`, we emit specialized code accordingly. In cases where the type is `Float` or an unconstrained `number`, we emit a function that works with any `number` values.
 
@@ -376,6 +380,8 @@ The order of arguments is the same as the order in which the fields appear in th
 
 The compiler interface offers functions that return module values, or a composition comprising multiple named modules, such as `CompileInteractiveEnvironment`
 
+This grouping describes current output packaging, not semantic compilation units. In the planned declaration-demanded interface, only explicitly requested roots are externally callable exports; dependencies and generated helpers remain internal. Inspection names need not expose additional callable values.
+
 Each module value in turn encodes a list of named values. The declarations included here fall into two categories:
 
 1. Declarations the caller selected as entry points to be compiled.
@@ -391,18 +397,40 @@ Examples for specializations that can result in varied forms of a function:
 
 ## Compilation Stages
 
+### Declaration-Demanded Frontend
+
+The [frontend design contract](../../../../explore/internal-analysis/2026-10-07-frontend-compiler-design.md#agreed-implementation-contract) is authoritative. `CompileInteractiveEnvironment`, `CompileResolvedEnvironment`, and the lowering overloads accept explicit declaration roots. `ElmSourceCompilation` provides caller conveniences for enumerating roots from selected files and separately evaluating zero-parameter root code; file selections are not compiler roots.
+
++ Callers explicitly select declaration roots, including host bridge functions. Dependency discovery and generated helpers do not add implicit roots.
++ A missing root fails the entire request. Empty roots produce no compiled declarations and require no declaration analysis.
++ Canonicalize only demanded top-level declarations and their semantic dependencies, including type and scope dependencies. Canonicalize the complete body of each demanded declaration, including unused local bindings.
++ Resolve demanded names using available, visible declarations. Do not treat hypothetical exports of missing imports as ambiguity candidates. Application analysis still reports those missing imports.
++ Modules supply source-level resolution context. After canonicalization their boundaries are dissolved; source metadata may remain available for diagnostics. Package ownership and import visibility must remain enforced.
++ Share resolution and semantic-analysis logic with rootless application diagnostics and source queries. Analysis returns source-located diagnostics; queries return reliable answers with relevant diagnostics or explain why an answer cannot be established.
++ Compilation does not materialize root values by executing them; callers perform evaluation separately. Ordinary compile-time optimization remains allowed.
++ Reuse unchanged work based on the consulted inputs, including scope changes and failed lookups, while preserving cross-declaration optimization.
++ Do not introduce compiler-level snapshots or program revisions. Editor coordination and Interactive history belong to callers.
+
+`Canonicalization.CanonicalizeDeclarations` indexes source scopes, resolves references in demanded bodies, and demands their owning declarations. Its distinct type/value indexes handle shared spellings without false naming clashes. Caller-owned parse dictionaries reuse unchanged source texts; canonicalization dictionaries reuse source declarations against consulted scope metadata and retain their dependency names. No cache key is a program revision.
+
+`AnalyzeApplication` checks application declarations and import/exposing diagnostics without lowering or emission. `QueryDeclaration` uses the same demand logic for definition and partial type information. These operations return source-located diagnostics, including unavailable dependencies rather than treating incomplete analysis as clean.
+
+Retain the concrete-to-abstract syntax boundary. A future typed representation can follow canonical abstract syntax before binding-changing transformations; complete type checking is outside this migration.
+
 ### Overall Pipeline
 
-At a high level, the compiler processes Elm modules in the following order:
+At a high level, the compiler processes demanded declarations in the following order:
 
 1. Parse Elm source into Elm syntax trees.
-2. Canonicalize names across the application and its dependencies.
+2. Canonicalize explicit roots and their semantic dependencies, using source scopes for resolution.
 3. Lambda-lift closures into top-level helper functions.
 4. Run the specialization stage, unless the caller disables the syntax-optimization pipeline.
-5. Run the inlining stage on the already-specialized modules.
+5. Run the inlining stage on the already-specialized declarations.
 6. Run lambda lifting again on code introduced or exposed by specialization and inlining.
 7. Run builtin-operator lowering on the optimized Elm syntax.
 8. Compile the resulting Elm expressions and declarations to Pine values.
+
+Some transformations still accept source-shaped files or synthesized namespace groupings as adapters. These do not select compilation units or demand every declaration in a source module. Emission groups the requested exports by namespace for existing environment consumers, but does not export dependency declarations.
 
 The specialization and inlining stages therefore work on already-canonicalized, already-lambda-lifted Elm syntax. They are still operating on Elm syntax trees at this point; they do not work on Pine expressions yet.
 
@@ -410,21 +438,29 @@ The specialization and inlining stages therefore work on already-canonicalized, 
 
 #### Input to Canonicalization
 
-The input to canonicalization is a tree of ‘package units’ where the root unit is the application, and the next level of units are the packages directly imported by the application. Each of these units contains a set of Elm modules.
-
-We could not input all modules in a flat set, because that could lead to name clashes when module namespaces are used by multiple different modules in the dependency tree.
-
-The module contents are modeled as the parsed Elm syntax.
+Inputs are source syntax with resolved package ownership and an explicit set of declaration names. `PrepareForDeclarationDemandAsync` isolates package namespaces and inaccessible imports, while preserving direct-dependency visibility and authoritative substitutions. Reading import/export metadata does not demand all declaration bodies. Unused missing imports are recorded for application analysis rather than rejected before declaration demand is known.
 
 #### Output from Canonicalization
 
-The module contents returned from canonicalization use the same Elm module syntax model as the input. Also, despite exchanging names within the syntax nodes, canonicalization returns the same locations and ranges, so that the following compilation stages can produce error messages aligned with the source layout.
+Demanded declarations retain concrete syntax locations and ranges. `CompilerModuleSyntax` supplies rewritten syntax with original ranges for resolved builds, avoiding diagnostic drift caused by formatting rewritten sources.
 
-The module syntax models returned by canonicalization do not contain any import statements or exposing lists, since these are no longer necessary after this stage.
+The declaration result contains resolved references, diagnostics, and dependency relationships. Source-shaped debug output can retain imports and exposing lists as provenance; abstract lowering does not use them for resolution or compilation boundaries.
 
-Where necessary to avoid name clashes between transitively imported packages, canonicalization adds prefixes to module namespaces. To optimize readability during inspection, prefixes are added only where necessary. Different versions of packages in a dependency diamond do not force prefixing, since the contents of the actually used modules can still be the same.
+Preparation assigns compiler-qualified package identities independently of demanded roots, so adding roots does not change the identity of previously resolved declarations.
+
+Callers selecting host-facing package functions must use these owner-qualified identities as roots. The web-service caller resolves its explicit JSON codec roots through the selected `elm/json` source paths, then labels those exports `Json.Encode` and `Json.Decode` for the existing host adapter. These are output-interface labels only: they do not change source name resolution, expose additional dependencies, or bypass package visibility.
+
+Namespace rewriting preserves explicit import qualifiers even when an alias matches the source module's own name. For example, `module Encode` with `import Bytes.Encode as Encode` must resolve `Encode.encode` through that import, not rewrite it as a private self-reference.
 
 Besides canonicalizing references in module contents, the canonicalization stage also produces errors like ‘Name Error’ and ‘Name Clash’, including the source ranges to render error messages in the right places.
+
+#### Diagnostic presentation
+
+Canonicalization diagnostics identify the owning declaration rather than merely its source module. The terminal displays every declaration in the demand chain, each declaration location, the exact reference in its predecessor, and relevant import/alias/exposing context. Same-module hops are not collapsed. Type and constructor references retain both the referenced symbol and the owning declaration. Backend errors use the same declaration-chain display and report unavailable executable implementations without presenting dependency-layout internals as a user remedy.
+
+`DeclarationReference` records this source provenance; cached declaration results retain it so warm and cold diagnostic output agree. Imports remain source-scope metadata, not dependency edges. Unresolved-reference details distinguish missing sources or APIs from export and scope violations, and point to the supplied target source when available. Resolved compilation failures also list authoritative package replacement identities.
+
+`AnalyzeApplication` and `QueryDeclaration` reuse the resolution explanations and expose related source locations. Rootless analysis does not label its declarations as compilation roots. The CLI treats `ElmCompilationException` as an expected diagnostic failure, prints the message to the error console and returns a failing exit status; unexpected implementation exceptions are not hidden by a broad catch.
 
 ### Specialization
 

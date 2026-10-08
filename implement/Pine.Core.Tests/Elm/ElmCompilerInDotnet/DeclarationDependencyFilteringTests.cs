@@ -12,7 +12,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 public class DeclarationDependencyFilteringTests
 {
     [Fact]
-    public void Lowering_input_excludes_declarations_not_reachable_from_root_modules()
+    public void Lowering_input_excludes_declarations_not_reachable_from_root_declarations()
     {
         var appCodeTree =
             TestCase.DefaultAppWithoutPackages(
@@ -41,7 +41,7 @@ public class DeclarationDependencyFilteringTests
             ElmCompiler.LowerToElmSyntaxForCompilation<
                 ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>>(
                 appCodeTree,
-                rootFilePaths: [["src", "Main.elm"]],
+                rootDeclarations: [DeclQualifiedName.Create(["Main"], "main")],
                 lower: (declarations, _) => declarations,
                 extractFilteredDeclarations: declarations => declarations)
             .Extract(error => throw new System.Exception(error));

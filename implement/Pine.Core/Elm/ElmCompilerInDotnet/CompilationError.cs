@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 
 using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
@@ -13,9 +12,9 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 public abstract record CompilationError
 {
     /// <summary>
-    /// Identifies how one module became a dependency of another module.
+    /// Identifies whether a source import is explicit or supplied by the Elm language.
     /// </summary>
-    public enum ModuleDependencyKind
+    public enum ImportKind
     {
         /// <summary>The importing module contains an import declaration.</summary>
         ExplicitImport,
@@ -25,22 +24,13 @@ public abstract record CompilationError
     }
 
     /// <summary>
-    /// Describes the import edge from the preceding module in a dependency chain.
+    /// Describes an import that makes a referenced declaration visible in a source scope.
     /// </summary>
-    public sealed record ModuleDependencyOrigin(
-        ModuleDependencyKind Kind,
+    public sealed record ImportOrigin(
+        ImportKind Kind,
         Range? Range,
         string? Alias,
         string? Exposing);
-
-    /// <summary>
-    /// One module in a root-to-error dependency chain. The root has no
-    /// <see cref="Origin"/>; every subsequent item describes the import from its predecessor.
-    /// </summary>
-    public sealed record ModuleDependencyChainItem(
-        string ModuleName,
-        string FilePath,
-        ModuleDependencyOrigin? Origin);
 
     /// <summary>
     /// One declaration in a root-to-failure dependency chain.
@@ -48,20 +38,49 @@ public abstract record CompilationError
     public sealed record DeclarationDependencyChainItem(
         string DeclarationName,
         string? ReferencedBy,
-        bool IsCompilationRoot);
+        bool IsCompilationRoot)
+    {
+        /// <summary>Original source location, if this is a source declaration rather than a generated helper.</summary>
+        public string? FilePath { get; init; }
+
+        /// <summary>The complete source declaration range.</summary>
+        public Range? DeclarationRange { get; init; }
+
+        /// <summary>The reference in the preceding declaration that demands this declaration.</summary>
+        public Range? ReferenceRange { get; init; }
+
+        /// <summary>The actual referenced symbol, which can be a constructor rather than its owning type.</summary>
+        public string? ReferencedName { get; init; }
+
+        /// <summary>True for references in signatures and type definitions.</summary>
+        public bool IsTypeReference { get; init; }
+
+        /// <summary>Import metadata explains scope visibility; imports are not dependency edges.</summary>
+        public ImportOrigin? Import { get; init; }
+    }
 
     /// <summary>
     /// A canonicalization error together with the source file and complete chain that
-    /// caused the module to participate in this compilation.
+    /// caused the declaration to be demanded by this compilation.
     /// </summary>
     public sealed record CanonicalizationDiagnostic(
-        string ModuleName,
+        string DeclarationName,
         string FilePath,
         CanonicalizationError Error,
-        IReadOnlyList<ModuleDependencyChainItem> DependencyChain);
+        IReadOnlyList<DeclarationDependencyChainItem> DependencyChain)
+    {
+        /// <summary>The supplied source scope searched for an unresolved member.</summary>
+        public string? TargetSourcePath { get; init; }
+
+        /// <summary>Declaration location for a private member, otherwise the target module header.</summary>
+        public Range? TargetSourceRange { get; init; }
+
+        /// <summary>The import relevant to the failing reference, not an additional demand edge.</summary>
+        public ImportOrigin? ReferenceImport { get; init; }
+    }
 
     /// <summary>
-    /// One or more errors encountered while canonicalizing the reachable Elm modules.
+    /// One or more errors encountered while canonicalizing demanded declarations.
     /// </summary>
     public sealed record CanonicalizationErrors(
         IReadOnlyList<CanonicalizationDiagnostic> Diagnostics)
@@ -86,9 +105,10 @@ public abstract record CompilationError
             return builder.ToString();
         }
 
-        private static void AppendDiagnostic(
+        internal static void AppendDiagnostic(
             StringBuilder builder,
-            CanonicalizationDiagnostic diagnostic)
+            CanonicalizationDiagnostic diagnostic,
+            bool includeDependencyChain = true)
         {
             var range = diagnostic.Error.Range;
 
@@ -103,63 +123,60 @@ public abstract record CompilationError
             builder.Append(range.End.Row);
             builder.Append(':');
             builder.Append(range.End.Column);
-            builder.Append(" in module '");
-            builder.Append(diagnostic.ModuleName);
+            builder.Append(" in declaration '");
+            builder.Append(diagnostic.DeclarationName);
             builder.AppendLine("'.");
 
-            AppendDependencyChain(
-                builder,
-                "Dependency chain from a compilation root:",
-                diagnostic.DependencyChain,
-                static (chainBuilder, item, _) =>
-                {
-                    chainBuilder.Append(item.ModuleName);
-                    chainBuilder.Append(" (");
-                    chainBuilder.Append(item.FilePath);
-                    chainBuilder.Append(')');
-
-                    if (item.Origin is not { } origin)
-                        return;
-
-                    chainBuilder.Append(
-                        origin.Kind is ModuleDependencyKind.ExplicitImport
-                        ?
-                        " — explicit import"
-                        :
-                        " — implicit Elm import");
-
-                    if (origin.Range is { } importRange)
-                    {
-                        chainBuilder.Append(" at ");
-                        chainBuilder.Append(importRange.Start.Row);
-                        chainBuilder.Append(':');
-                        chainBuilder.Append(importRange.Start.Column);
-                    }
-
-                    if (origin.Alias is { } alias)
-                    {
-                        chainBuilder.Append(" as ");
-                        chainBuilder.Append(alias);
-                    }
-
-                    if (origin.Exposing is { } exposing)
-                    {
-                        chainBuilder.Append(" exposing ");
-                        chainBuilder.Append(exposing);
-                    }
-                });
-
             if (diagnostic.Error is CanonicalizationError.UnresolvedReference unresolved &&
-                diagnostic.DependencyChain.FirstOrDefault() is { } root)
+                unresolved.ResolutionDetail is { } detail)
             {
-                builder.Append("The compiler searched for '");
-                builder.Append(unresolved.Name);
-                builder.Append("' while canonicalizing '");
-                builder.Append(diagnostic.ModuleName);
-                builder.Append("' because that module is reachable from root '");
-                builder.Append(root.ModuleName);
-                builder.Append("'.");
+                builder.Append("Resolution: ");
+                builder.AppendLine(detail);
             }
+
+            if (diagnostic.TargetSourcePath is { } targetPath)
+            {
+                builder.Append("Target source: ");
+                AppendSourceLocation(builder, targetPath, diagnostic.TargetSourceRange);
+                builder.AppendLine();
+            }
+
+            if (diagnostic.ReferenceImport is { } referenceImport)
+            {
+                builder.Append(
+                    referenceImport.Kind is ImportKind.ExplicitImport
+                    ?
+                    "Reference scope: import"
+                    :
+                    "Reference scope: implicit Elm import");
+
+                if (referenceImport.Range is { } importRange)
+                {
+                    builder.Append(" at ");
+                    AppendSourceLocation(builder, diagnostic.FilePath, importRange);
+                }
+
+                if (referenceImport.Alias is { } alias)
+                    builder.Append(" as ").Append(alias);
+
+                if (referenceImport.Exposing is { } exposing)
+                    builder.Append(" exposing ").Append(exposing);
+
+                builder.AppendLine();
+            }
+
+            if (includeDependencyChain)
+                AppendDeclarationDependencyChain(builder, diagnostic.DependencyChain);
+        }
+
+        /// <summary>Renders one complete declaration diagnostic without a compilation-wide summary.</summary>
+        public static string RenderDiagnostic(
+            CanonicalizationDiagnostic diagnostic,
+            bool includeDependencyChain = true)
+        {
+            var builder = new StringBuilder();
+            AppendDiagnostic(builder, diagnostic, includeDependencyChain);
+            return builder.ToString().TrimEnd();
         }
 
     }
@@ -182,44 +199,22 @@ public abstract record CompilationError
 
             builder.Append("Failed to compile declaration '");
             builder.Append(DeclarationName);
-            builder.Append("' in SCC [");
-            builder.Append(string.Join(", ", SccMembers));
-            builder.AppendLine("].");
+            builder.AppendLine("'.");
+
+            if (SccMembers.Count > 1)
+            {
+                builder.Append("Recursive declaration group: ");
+                builder.AppendLine(string.Join(", ", SccMembers));
+            }
+
             builder.Append("Reason: ");
             builder.AppendLine(Error.ToString());
 
             if (DependencyChain.Count is not 0)
             {
-                AppendDependencyChain(
+                AppendDeclarationDependencyChain(
                     builder,
-                    "Declaration dependency chain from a compilation root:",
-                    DependencyChain,
-                    static (chainBuilder, item, _) =>
-                    {
-                        chainBuilder.Append(item.DeclarationName);
-
-                        if (item.IsCompilationRoot)
-                        {
-                            chainBuilder.Append(" (compilation root)");
-                        }
-                        else if (item.ReferencedBy is { } referencedBy)
-                        {
-                            chainBuilder.Append(" — referenced by ");
-                            chainBuilder.Append(referencedBy);
-                        }
-                    });
-            }
-
-            if (Error is FunctionNotInDependencyLayout missingFunction &&
-                DependencyChain.FirstOrDefault() is { IsCompilationRoot: true } root)
-            {
-                builder.Append("The compiler searched for '");
-                builder.Append(missingFunction.FunctionName);
-                builder.Append("' while compiling '");
-                builder.Append(DeclarationName);
-                builder.Append("' because that declaration is reachable from compilation root '");
-                builder.Append(root.DeclarationName);
-                builder.Append("'.");
+                    DependencyChain);
             }
 
             return builder.ToString();
@@ -340,7 +335,7 @@ public abstract record CompilationError
     {
         /// <inheritdoc/>
         public override string ToString() =>
-            $"Function '{FunctionName}' not found in dependency layout";
+            $"Cannot compile reference '{FunctionName}': no executable implementation is available in the selected compiler environment.";
     }
 
     /// <summary>
@@ -387,6 +382,104 @@ public abstract record CompilationError
     /// Convert the error to a human-readable string.
     /// </summary>
     public abstract override string ToString();
+
+    private static void AppendDeclarationDependencyChain(
+        StringBuilder builder,
+        IReadOnlyList<DeclarationDependencyChainItem> items) =>
+        AppendDependencyChain(
+            builder,
+            "Declaration dependency chain from a compilation root (references, not module imports):",
+            items,
+            (text, item, index) =>
+            {
+                text.Append(item.DeclarationName);
+
+                if (item.IsCompilationRoot)
+                    text.Append(" (compilation root)");
+
+                else if (item.ReferencedBy is { } parent)
+                {
+                    text.Append(" — referenced by ");
+                    text.Append(parent);
+                }
+
+                if (item.FilePath is { } path)
+                {
+                    text.AppendLine();
+
+                    text.Append(
+                        item.DeclarationRange is not null
+                        ?
+                        "     declaration at "
+                        :
+                        "     source namespace file ");
+
+                    AppendSourceLocation(text, path, item.DeclarationRange);
+
+                    if (item.DeclarationRange is null)
+                        text.Append(" (original declaration location unavailable for generated or transformed code)");
+                }
+
+                if (item.ReferenceRange is { } reference && index > 0)
+                {
+                    text.AppendLine();
+                    text.Append(item.IsTypeReference ? "     type reference" : "     value reference");
+
+                    if (item.ReferencedName is { } symbol)
+                    {
+                        text.Append(" '");
+                        text.Append(symbol);
+                        text.Append('\'');
+                    }
+
+                    text.Append(" at ");
+                    AppendSourceLocation(text, items[index - 1].FilePath, reference);
+
+                    if (item.ReferencedName is { } referencedName && referencedName != item.DeclarationName)
+                        text.Append(" (the referenced symbol belongs to this declaration)");
+                }
+
+                if (item.Import is { } import)
+                {
+                    text.AppendLine();
+
+                    text.Append(
+                        import.Kind is ImportKind.ExplicitImport
+                        ?
+                        "     scope provided by import"
+                        :
+                        "     scope provided by implicit Elm import");
+
+                    if (import.Range is { } range && index > 0)
+                    {
+                        text.Append(" at ");
+                        AppendSourceLocation(text, items[index - 1].FilePath, range);
+                    }
+
+                    if (import.Alias is { } alias)
+                    {
+                        text.Append(" as ");
+                        text.Append(alias);
+                    }
+
+                    if (import.Exposing is { } exposing)
+                    {
+                        text.Append(" exposing ");
+                        text.Append(exposing);
+                    }
+                }
+            });
+
+    internal static void AppendSourceLocation(StringBuilder builder, string? path, Range? range)
+    {
+        builder.Append(path ?? "(source path unavailable)");
+
+        if (range is not { } location)
+            return;
+
+        builder.Append(':').Append(location.Start.Row).Append(':').Append(location.Start.Column);
+        builder.Append('-').Append(location.End.Row).Append(':').Append(location.End.Column);
+    }
 
     private static void AppendDependencyChain<T>(
         StringBuilder builder,

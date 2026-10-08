@@ -12,6 +12,17 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
 public class BuiltinOperatorLoweringTests
 {
+    private const string DictTypeModule =
+        """
+        module Dict exposing (Dict)
+
+        type NColor = Red | Black
+
+        type Dict key value
+            = RBNode_elm_builtin NColor key value (Dict key value) (Dict key value)
+            | RBEmpty_elm_builtin
+        """;
+
     [Fact]
     public void Lowers_int_add_operator_application()
     {
@@ -988,7 +999,8 @@ public class BuiltinOperatorLoweringTests
                 equal : Recursive Int -> Recursive Int -> Bool
                 equal left right =
                     left == right
-                """);
+                """,
+                DictTypeModule);
 
         var rendered = RenderCanonicalized(loweredModule);
 
@@ -1036,7 +1048,8 @@ public class BuiltinOperatorLoweringTests
                 equal : OnlySecond (Dict Int Int) Int -> OnlySecond (Dict Int Int) Int -> Bool
                 equal left right =
                     left == right
-                """);
+                """,
+                DictTypeModule);
 
         RenderCanonicalized(loweredModule).Should().Contain("Pine_builtin.equal");
     }

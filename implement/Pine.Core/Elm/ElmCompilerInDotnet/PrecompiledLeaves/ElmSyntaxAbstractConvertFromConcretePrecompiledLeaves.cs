@@ -43,15 +43,10 @@ public static class ElmSyntaxAbstractConvertFromConcretePrecompiledLeaves
             mergedTree = mergedTree.SetNodeAtPathSorted(path, FileTree.File(file));
         }
 
-        var rootFilePath =
-            mergedTree.EnumerateFilesTransitive()
-            .Single(
-                file =>
-                file.path[^1].Equals("ConvertFromConcrete.elm", StringComparison.OrdinalIgnoreCase) &&
-                file.path.Contains("Abstract"));
-
         var compiledEnv =
-            ElmCompiler.CompileInteractiveEnvironment(mergedTree, rootFilePaths: [rootFilePath.path])
+            ElmCompiler.CompileInteractiveEnvironment(
+                mergedTree,
+                rootDeclarations: [DeclQualifiedName.Create(ModuleName.Split('.'), MergeRecordSettersFunctionName)])
             .Map(result => result.compiledEnvValue)
             .Extract(
                 error => throw new Exception(

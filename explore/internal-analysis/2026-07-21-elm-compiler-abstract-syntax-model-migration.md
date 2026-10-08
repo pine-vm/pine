@@ -11,6 +11,8 @@ The .NET Elm compiler should use only the two syntax models whose semantics matc
 
 This document describes the current state, the target boundary, the expected costs and benefits, and a phased implementation plan.
 
+The later [2026-10-07 frontend design contract](2026-10-07-frontend-compiler-design.md#agreed-implementation-contract) supersedes module-shaped compilation assumptions in this historical migration plan: modules supply resolution context, not compilation units, and their boundaries dissolve after canonicalization. The concrete-to-abstract boundary and possible future typed-model placement remain applicable. Complete type checking remains a future project; compiler-level snapshots and program revisions are not part of the design.
+
 ## The three models today
 
 ### Concrete syntax model

@@ -179,6 +179,7 @@ public record ImplicitImportConfig(
             .Add("+", (["Basics"], "add"))
             .Add("-", (["Basics"], "sub"))
             .Add("*", (["Basics"], "mul"))
+            .Add("/", (["Basics"], "fdiv"))
             .Add("//", (["Basics"], "idiv"))
             .Add("^", (["Basics"], "pow"))
             .Add("++", (["Basics"], "append"))

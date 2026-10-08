@@ -77,7 +77,7 @@ public class CodeAnalysisTestHelper
             .ToList();
 
         var compiledEnv =
-            ElmCompiler.CompileInteractiveEnvironment(
+            Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTestHelper.CompileInteractiveEnvironmentFromFiles(
                 appCodeTree,
                 rootFilePaths: rootFilePaths,
                 new ElmSyntaxOptimizationConfig.SyntaxOptimizationDisabled())
@@ -112,7 +112,7 @@ public class CodeAnalysisTestHelper
             .ToList();
 
         var compiledEnv =
-            ElmCompiler.CompileInteractiveEnvironment(
+            Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTestHelper.CompileInteractiveEnvironmentFromFiles(
                 appCodeTree,
                 rootFilePaths: rootFilePaths,
                 new ElmSyntaxOptimizationConfig.SyntaxOptimizationDisabled())

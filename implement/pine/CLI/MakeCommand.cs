@@ -483,7 +483,7 @@ public static class MakeCommand
             var pineVM =
                 SetupVM.Create(evalCache: pineVMCache);
 
-            var parseCache = new global::Pine.Core.CodeAnalysis.PineVMParseCache();
+            var parseCache = new Core.CodeAnalysis.PineVMParseCache();
 
             var elmCompilerCache = new ElmCompilerCache();
 
@@ -492,7 +492,8 @@ public static class MakeCommand
                     appCodeTree: sourceFilesWithMergedPackages.files,
                     overrideSkipLowering: true,
                     entryPointsFilePaths: [pathToFileWithElmEntryPoint],
-                    skipFilteringForSourceDirs: false);
+                    skipFilteringForSourceDirs: false,
+                    rootDeclarations: [Core.CodeAnalysis.DeclQualifiedName.Create(entryPointModuleNameOk, "blobMain")]);
 
             if (compileResult.IsErrOrNull() is { } compileErr)
             {
@@ -525,6 +526,13 @@ public static class MakeCommand
             }
 
             var elmBytesValue = parseFromEnvOk.declValue;
+
+            if (parseFromEnvOk.functionRecord.ParameterCount is 0)
+            {
+                elmBytesValue =
+                    Core.Elm.ElmSourceCompilation.EvaluateZeroParameterRoot(elmBytesValue, pineVM, parseCache)
+                    .Extract(error => throw new Exception("Failed evaluating blobMain: " + error));
+            }
 
             if (parseFromEnvOk.functionRecord.ParameterCount is 1)
             {

@@ -50,10 +50,18 @@ public class CompilationWithIncompleteModules
 
         var parseCache = new PineVMParseCache();
 
-        var (parsedEnv, _) =
-            ElmCompilerTestHelper.CompileElmModules(
-                [mainModuleText, alfaModuleText, betaModuleText],
-                disableInlining: false);
+        var sourceTree =
+            TestCase.FileTreeFromElmModulesWithoutPackages([mainModuleText, alfaModuleText, betaModuleText]);
+
+        var compiledEnvironment =
+            ElmCompiler.CompileInteractiveEnvironment(
+                sourceTree,
+                rootDeclarations: [DeclQualifiedName.Create(["Test"], "decl")])
+            .Extract(error => throw new Exception(error)).compiledEnvValue;
+
+        var parsedEnv =
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnvironment)
+            .Extract(error => throw new Exception(error));
 
         var testModule =
             parsedEnv.Modules.FirstOrDefault(c => c.moduleName is "Test");
@@ -149,7 +157,7 @@ public class CompilationWithIncompleteModules
         var parseCache = new PineVMParseCache();
 
         var compiledEnv =
-            ElmCompiler.CompileInteractiveEnvironment(
+            ElmCompilerTestHelper.CompileInteractiveEnvironmentFromFiles(
                 appCodeTree,
                 rootFilePaths: rootFilePaths)
             .Map(r => r.compiledEnvValue)

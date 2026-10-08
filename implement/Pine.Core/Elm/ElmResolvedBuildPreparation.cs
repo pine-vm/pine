@@ -22,7 +22,7 @@ public static class ElmResolvedBuildPreparation
     /// <summary>Resolves, fetches and verifies sources, then validates and isolates package imports.</summary>
     /// <param name="projectTree">A tree containing the selected manifest and project sources.</param>
     /// <param name="manifestPath">The one selected elm.json, relative to the supplied tree.</param>
-    /// <param name="rootFilePaths">Compilation roots relative to the supplied tree.</param>
+    /// <param name="rootFilePaths">Selected source paths relative to the supplied tree, whose import closure is validated.</param>
     /// <param name="configuration">Compiler, test scope, locks and authoritative package replacements.</param>
     /// <param name="provider">Package data provider; defaults to the registry with the configured offline policy.</param>
     /// <param name="cancellationToken">Cancels resolution and source acquisition without reporting a constraint conflict.</param>
@@ -30,14 +30,62 @@ public static class ElmResolvedBuildPreparation
     /// Optional filesystem project root for loading declared parent sources. Requires a project-rooted tree and manifest path ["elm.json"].
     /// </param>
     /// <exception cref="ElmDependencyResolutionException">Retains the report when resolution or source validation fails.</exception>
-    public static async Task<ElmResolvedBuild> PrepareAsync(
+    public static Task<ElmResolvedBuild> PrepareAsync(
         FileTree projectTree,
         IReadOnlyList<string> manifestPath,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
         ElmDependencyResolutionConfiguration configuration,
         IElmPackageProvider? provider = null,
         CancellationToken cancellationToken = default,
-        string? projectDirectory = null)
+        string? projectDirectory = null) =>
+        PrepareSourcesAsync(
+            projectTree,
+            manifestPath,
+            rootFilePaths,
+            configuration,
+            provider,
+            cancellationToken,
+            projectDirectory,
+            declarationDemand: false);
+
+    /// <summary>
+    /// Resolves and verifies all available sources without requiring their module-import closure.
+    /// Unavailable imports are isolated and retained as diagnostics; declaration demand determines their relevance.
+    /// </summary>
+    /// <param name="projectTree">A tree containing the selected manifest and project sources.</param>
+    /// <param name="manifestPath">The one selected elm.json, relative to the supplied tree.</param>
+    /// <param name="rootFilePaths">Caller-selected source paths, not compilation units or declaration roots. May be empty.</param>
+    /// <param name="configuration">Compiler, test scope, locks and authoritative package replacements.</param>
+    /// <param name="provider">Package data provider; defaults to the registry with the configured offline policy.</param>
+    /// <param name="cancellationToken">Cancels resolution and source acquisition.</param>
+    /// <param name="projectDirectory">Optional filesystem project root for loading declared parent sources.</param>
+    public static Task<ElmResolvedBuild> PrepareForDeclarationDemandAsync(
+        FileTree projectTree,
+        IReadOnlyList<string> manifestPath,
+        IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
+        ElmDependencyResolutionConfiguration configuration,
+        IElmPackageProvider? provider = null,
+        CancellationToken cancellationToken = default,
+        string? projectDirectory = null) =>
+        PrepareSourcesAsync(
+            projectTree,
+            manifestPath,
+            rootFilePaths,
+            configuration,
+            provider,
+            cancellationToken,
+            projectDirectory,
+            declarationDemand: true);
+
+    private static async Task<ElmResolvedBuild> PrepareSourcesAsync(
+        FileTree projectTree,
+        IReadOnlyList<string> manifestPath,
+        IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
+        ElmDependencyResolutionConfiguration configuration,
+        IElmPackageProvider? provider,
+        CancellationToken cancellationToken,
+        string? projectDirectory,
+        bool declarationDemand)
     {
         provider ??=
             new ElmRegistryPackageProvider(configuration.Offline, compilerVersion: configuration.CompilerVersion);
@@ -220,7 +268,12 @@ public static class ElmResolvedBuildPreparation
                 ProjectSourceFingerprint = ElmDependencyResolver.SourceFingerprint(appSources),
             };
 
-        return ValidateImports(build, appSources);
+        return
+            declarationDemand
+            ?
+            PrepareDeclarationSources(build, appSources)
+            :
+            ValidateImports(build, appSources);
     }
 
     /// <summary>Adds package-relative Elm sources under an owner-specific elm-packages directory.</summary>
@@ -361,6 +414,521 @@ public static class ElmResolvedBuildPreparation
                     item => item.Key,
                     StringComparer.Ordinal),
             });
+
+    private static ElmResolvedBuild PrepareDeclarationSources(ElmResolvedBuild build, FileTree appSources)
+    {
+        var byPath = new Dictionary<string, PreparedModule>(StringComparer.Ordinal);
+
+        void Add(FileTree sources, string? owner)
+        {
+            foreach (var file in sources.EnumerateFilesTransitive())
+            {
+                if (!file.path[^1].EndsWith(".elm", StringComparison.OrdinalIgnoreCase) ||
+                    owner is not null && (file.path.Count < 2 || file.path[0] != "src"))
+                    continue;
+
+                var path =
+                    (owner is null ? "" : "elm-packages/" + owner + "/") + string.Join("/", file.path);
+
+                var parsed =
+                    ElmSyntaxParser.ParseModuleText(Encoding.UTF8.GetString(file.fileContent.Span))
+                    .Extract(
+                        error => throw new InvalidOperationException($"Cannot parse Elm source '{path}': {error}"));
+
+                var name = string.Join(".", Syntax.Module.GetModuleName(parsed.ModuleDefinition.Value).Value);
+
+                if (!byPath.TryAdd(path, new(name, path, owner, parsed)))
+                {
+                    Fail(
+                        name,
+                        $"Source path '{path}' is owned by both '{byPath[path].Owner ?? "the selected project"}' " +
+                        $"and '{owner ?? "the selected project"}'. Package sources must not overwrite project sources.");
+                }
+            }
+        }
+
+        Add(appSources, null);
+
+        foreach (var package in build.PackageSources.OrderBy(item => item.Key, StringComparer.Ordinal))
+            Add(package.Value, package.Key);
+
+        var modules =
+            byPath.Values.GroupBy(module => module.Name).ToDictionary(
+                group => group.Key,
+                group => group.OrderBy(module => module.Path, StringComparer.Ordinal).ToArray(),
+                StringComparer.Ordinal);
+
+        var coreNames =
+            ElmCompilerInDotnet.ImplicitImportConfig.Default.ModuleImports
+            .Select(import => string.Join(".", import.ModuleName)).ToHashSet(StringComparer.Ordinal);
+
+        if (build.Resolution.Packages.TryGetValue("elm/core", out var core))
+            coreNames.UnionWith(core.ExposedModules);
+
+        coreNames.UnionWith(byPath.Values.Where(module => module.Owner is "elm/core").Select(module => module.Name));
+
+        foreach (var module in byPath.Values.OrderBy(module => module.Path, StringComparer.Ordinal))
+        {
+            if (modules[module.Name].Count(other => other.Owner == module.Owner) != 1)
+            {
+                Fail(
+                    module.Name,
+                    $"Module '{module.Name}' is declared more than once in '{module.Owner ?? "the selected project"}': " +
+                    string.Join(
+                        ", ",
+                        modules[module.Name].Where(other => other.Owner == module.Owner).Select(other => other.Path)));
+            }
+
+            if (module.Owner is null && coreNames.Contains(module.Name))
+            {
+                Fail(
+                    module.Name,
+                    $"Project module '{module.Name}' in '{module.Path}' conflicts with an elm/core compiler module. " +
+                    "Rename the project module to preserve the compiler's implicit core imports.");
+            }
+        }
+
+        foreach (var selectedPath in build.RootFilePaths)
+        {
+            var path = string.Join("/", selectedPath);
+
+            if (!byPath.TryGetValue(path, out var module) || module.Owner is not null)
+            {
+                Fail(
+                    "",
+                    $"Selected source '{path}' is not an Elm source in the selected project's source directories or tests directory.");
+            }
+        }
+
+        // Reserve every source spelling, not just demanded modules, to keep identities stable across root selection.
+        var reservedNames = modules.Keys.Concat(coreNames).ToHashSet(StringComparer.Ordinal);
+        var compilerNames = ImmutableDictionary.CreateBuilder<string, string>(StringComparer.Ordinal);
+
+        foreach (var module in byPath.Values.OrderBy(module => module.Path, StringComparer.Ordinal))
+            compilerNames.Add(
+                module.Path,
+                module.Owner is null or "elm/core"
+                ?
+                module.Name
+                :
+                ReserveName("PinePackage.P" + ElmDependencyResolver.Fingerprint(module.Owner) + "." + module.Name));
+
+        var directPackages =
+            build.Resolution.Requirements
+            .Where(
+                item =>
+                item.DeclaringPackage is null &&
+                item.Scope is ElmDependencyScope.Direct or ElmDependencyScope.TestDirect)
+            .Select(item => item.PackageName).ToHashSet(StringComparer.Ordinal);
+
+        var importNames = new Dictionary<(string path, string name), string>();
+        var diagnostics = ImmutableArray.CreateBuilder<ElmResolvedBuild.ImportDiagnostic>();
+
+        var exportedApi =
+            byPath.ToDictionary(item => item.Key, item => GetExposedApi(item.Value.Parsed), StringComparer.Ordinal);
+
+        // List's type is compiler-native even though the replacement source only declares its functions.
+        foreach (var module in byPath.Values.Where(module => module.Owner is "elm/core" && module.Name is "List"))
+            exportedApi[module.Path].Add(("List", true, false));
+
+        foreach (var module in byPath.Values.Where(module => module.Owner is "elm/core" && module.Name is "Basics"))
+            exportedApi[module.Path].UnionWith(NativeExposedApi("Basics").Where(api => api.type));
+
+        foreach (var module in byPath.Values.OrderBy(module => module.Path, StringComparer.Ordinal))
+        {
+            var visiblePackages =
+                module.Owner is null
+                ?
+                directPackages
+                :
+                build.Resolution.Packages[module.Owner].Dependencies.Select(item => item.PackageName).ToHashSet(
+                    StringComparer.Ordinal);
+
+            foreach (var import in module.Parsed.Imports)
+            {
+                var name = string.Join(".", import.Value.ModuleName.Value);
+                var candidates = modules.GetValueOrDefault(name) ?? [];
+
+                var visible =
+                    candidates.Where(
+                        candidate =>
+                        candidate.Owner == module.Owner ||
+                        candidate.Owner is not null && visiblePackages.Contains(candidate.Owner) &&
+                        build.Resolution.Packages[candidate.Owner].ExposedModules.Contains(name)).ToArray();
+
+                if (name is "Basics" or "Debug" && visible.Length is 0 &&
+                    (visiblePackages.Contains("elm/core") || module.Owner is "elm/core"))
+                {
+                    ValidateExposing(
+                        import,
+                        module,
+                        name,
+                        NativeExposedApi(name),
+                        "the elm/core compiler-native module");
+
+                    continue;
+                }
+
+                if (visible.Length is not 1)
+                {
+                    var reason =
+                        visible.Length > 1
+                        ?
+                        "is ambiguous between " + string.Join(", ", visible.Select(candidate => candidate.Path))
+                        :
+                        candidates.Length > 0
+                        ?
+                        "exists only in private modules or indirect/undeclared dependencies: " +
+                        string.Join(", ", candidates.Select(candidate => candidate.Path))
+                        :
+                        "has no implementation in the resolved environment";
+
+                    var substitutions =
+                        string.Join(
+                            ", ",
+                            build.Resolution.Packages.Values
+                            .Where(package => package.SubstitutionImplementationId is not null)
+                            .OrderBy(package => package.Identity.Name, StringComparer.Ordinal)
+                            .Select(package => package.Identity + "=" + package.SubstitutionImplementationId));
+
+                    diagnostics.Add(
+                        new(
+                            module.Path,
+                            module.Name,
+                            name,
+                            import.Range,
+                            $"Import '{name}' in '{module.Path}' {reason}. " +
+                            $"Active substitutions: [{substitutions}]. Add the exposing package as a direct dependency " +
+                            "or supply a substitution implementing the required module/API; substituted packages are not searched upstream."));
+
+                    if (!importNames.ContainsKey((module.Path, name)))
+                    {
+                        importNames.Add(
+                            (module.Path, name),
+                            ReserveName("PineUnavailable.P" + ElmDependencyResolver.Fingerprint(module.Path + "\n" + name) + "." + name));
+                    }
+
+                    continue;
+                }
+
+                var target = visible[0];
+                importNames[(module.Path, name)] = compilerNames[target.Path];
+
+                ValidateExposing(import, module, name, exportedApi[target.Path], target.Path);
+            }
+        }
+
+        var compilerSyntax =
+            byPath.Values.ToImmutableDictionary(
+                module => compilerNames[module.Path],
+                module => RewriteModuleSyntax(
+                    module.Parsed,
+                    module.Name,
+                    compilerNames[module.Path],
+                    name => importNames.GetValueOrDefault((module.Path, name))),
+                StringComparer.Ordinal);
+
+        var prepared =
+            FileTree.FromSetOfFilesWithStringPath(
+                build.Sources.EnumerateFilesTransitive().Select(
+                    file =>
+                    {
+                        var path = string.Join("/", file.path);
+
+                        return
+                            ((IReadOnlyList<string>)file.path,
+                            byPath.TryGetValue(path, out var module) &&
+                            (compilerNames[path] != module.Name ||
+                            module.Parsed.Imports.Any(
+                                import =>
+                                importNames.TryGetValue(
+                                    (path, string.Join(".", import.Value.ModuleName.Value)),
+                                    out var target) &&
+                                target != string.Join(".", import.Value.ModuleName.Value)))
+                            ?
+                            (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(
+                                Avh4Format.FormatToString(compilerSyntax[compilerNames[path]]))
+                            :
+                            file.fileContent);
+                    }));
+
+        return
+            build with
+            {
+                Sources = prepared,
+                CompilerModuleNames = compilerNames.ToImmutable(),
+                CompilerModuleSourcePaths =
+                compilerNames.ToImmutableDictionary(item => item.Value, item => item.Key, StringComparer.Ordinal),
+                CompilerModuleSyntax = compilerSyntax,
+                ImportDiagnostics = diagnostics.ToImmutable(),
+            };
+
+        string ReserveName(string proposed)
+        {
+            var name = proposed;
+
+            for (var index = 1; !reservedNames.Add(name); ++index)
+                name = proposed + ".PineIdentity" + index;
+
+            return name;
+        }
+
+        void ValidateExposing(
+            Syntax.Node<Syntax.Import> import,
+            PreparedModule module,
+            string name,
+            HashSet<(string name, bool type, bool constructors)> api,
+            string targetPath)
+        {
+            if (import.Value.ExposingList?.ExposingList.Value is Syntax.Exposing.Explicit exposing)
+            {
+                foreach (var exposed in exposing.Nodes)
+                {
+                    var requested = ExposedApi(exposed.Value);
+
+                    if (!api.Contains(requested))
+                    {
+                        diagnostics.Add(
+                            new(
+                                module.Path,
+                                module.Name,
+                                name,
+                                import.Range,
+                                $"Import '{name}' in '{module.Path}' requests '{requested.name}" +
+                                (requested.constructors ? "(..)" : "") +
+                                $"' but '{targetPath}' does not expose that API. " +
+                                "Check the module's exposing list and the replacement implementation's supported API."));
+                    }
+                }
+            }
+        }
+
+        void Fail(string name, string message) =>
+            throw new ElmDependencyResolutionException(
+                build.Resolution with
+                {
+                    Failures =
+                    [
+                    new(
+                        ElmResolutionFailureKind.InvalidModuleImport,
+                        name,
+                        message,
+                        build.Resolution.Requirements,
+                        [
+                        .. build.Resolution.Packages.Values.Select(package => package.Identity)
+                        ])
+                    ],
+                    Fingerprint = null,
+                });
+    }
+
+    private static HashSet<(string name, bool type, bool constructors)> NativeExposedApi(string moduleName)
+    {
+        if (moduleName is "Debug")
+            return [("log", false, false), ("toString", false, false), ("todo", false, false)];
+
+        var implicitImports = ElmCompilerInDotnet.ImplicitImportConfig.Default;
+
+        var api =
+            implicitImports.ValueImports
+            .Where(item => item.Value.SequenceEqual(["Basics"]))
+            .Select(item => (name: item.Key, type: false, constructors: false)).ToHashSet();
+
+        api.UnionWith(
+            implicitImports.OperatorToFunction.Where(item => item.Value.ModuleName.SequenceEqual(["Basics"]))
+            .Select(item => (item.Key, false, false)));
+
+        api.UnionWith(
+            [
+            ("Int", true, false), ("Float", true, false), ("Bool", true, false), ("Never", true, false), ("Order", true, false),
+            ("Bool", true, true), ("Order", true, true),
+            ("True", false, false), ("False", false, false), ("LT", false, false), ("EQ", false, false), ("GT", false, false)
+            ]);
+
+        return api;
+    }
+
+    private static HashSet<(string name, bool type, bool constructors)> GetExposedApi(Syntax.File file)
+    {
+        var declarations = new HashSet<(string name, bool type, bool constructors)>();
+
+        foreach (var declaration in file.Declarations)
+            switch (declaration.Value)
+            {
+                case Syntax.Declaration.FunctionDeclaration function:
+                    declarations.Add((function.Function.Declaration.Value.Name.Value, false, false));
+                    break;
+
+                case Syntax.Declaration.ChoiceTypeDeclaration choice:
+                    declarations.Add((choice.TypeDeclaration.Name.Value, true, false));
+                    declarations.Add((choice.TypeDeclaration.Name.Value, true, true));
+                    break;
+
+                case Syntax.Declaration.AliasDeclaration alias:
+                    declarations.Add((alias.TypeAlias.Name.Value, true, false));
+                    break;
+
+                case Syntax.Declaration.InfixDeclaration infix:
+                    declarations.Add((infix.Infix.Operator.Value, false, false));
+                    break;
+
+                case Syntax.Declaration.PortDeclaration port:
+                    declarations.Add((port.Signature.Name.Value, false, false));
+                    break;
+
+                default:
+                    throw new NotImplementedException(
+                        $"{nameof(GetExposedApi)} does not handle declaration variant: {declaration.Value.GetType().Name}");
+            }
+
+        var exposing =
+            file.ModuleDefinition.Value switch
+            {
+                Syntax.Module.NormalModule normal => normal.ModuleData.ExposingList.Value,
+                Syntax.Module.PortModule port => port.ModuleData.ExposingList.Value,
+                Syntax.Module.EffectModule effect => effect.ModuleData.ExposingList.Value,
+
+                _ =>
+                throw new NotImplementedException(
+                    $"{nameof(GetExposedApi)} does not handle module variant: {file.ModuleDefinition.Value.GetType().Name}"),
+            };
+
+        switch (exposing)
+        {
+            case Syntax.Exposing.All:
+                return declarations;
+
+            case Syntax.Exposing.Explicit explicitExposing:
+                var api =
+                    explicitExposing.Nodes
+                    .Select(node => ExposedApi(node.Value)).Where(declarations.Contains).ToHashSet();
+
+                api.UnionWith(
+                    api.Where(item => item.constructors).Select(item => (item.name, item.type, false)).ToArray());
+
+                return api;
+
+            default:
+                throw new NotImplementedException(
+                    $"{nameof(GetExposedApi)} does not handle exposing variant: {exposing.GetType().Name}");
+        }
+    }
+
+    private static (string name, bool type, bool constructors) ExposedApi(Syntax.TopLevelExpose expose) =>
+        expose switch
+        {
+            Syntax.TopLevelExpose.FunctionExpose function => (function.Name, false, false),
+            Syntax.TopLevelExpose.InfixExpose infix => (infix.Name, false, false),
+            Syntax.TopLevelExpose.TypeOrAliasExpose type => (type.Name, true, false),
+            Syntax.TopLevelExpose.TypeExpose type => (type.ExposedType.Name, true, type.ExposedType.Open is not null),
+
+            _ =>
+            throw new NotImplementedException(
+                $"{nameof(ExposedApi)} does not handle expose variant: {expose.GetType().Name}"),
+        };
+
+    private static ReadOnlyMemory<byte> RewriteModule(
+        Syntax.File parsed, string originalModuleName, string compilerModuleName, Func<string, string?> importedCompilerName) =>
+        Encoding.UTF8.GetBytes(
+            Avh4Format.FormatToString(
+                RewriteModuleSyntax(parsed, originalModuleName, compilerModuleName, importedCompilerName)));
+
+    private static Syntax.File RewriteModuleSyntax(
+        Syntax.File parsed, string originalModuleName, string compilerModuleName, Func<string, string?> importedCompilerName)
+    {
+        var originalName = Syntax.Module.GetModuleName(parsed.ModuleDefinition.Value);
+        var renamed = originalName with { Value = compilerModuleName.Split('.') };
+        var qualifierAliases = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        var usedAliases =
+            parsed.Imports.Select(
+                import => string.Join(".", import.Value.ModuleAlias?.Alias.Value ?? import.Value.ModuleName.Value))
+            .Append(originalModuleName).ToHashSet(StringComparer.Ordinal);
+
+        Syntax.Module definition =
+            parsed.ModuleDefinition.Value switch
+            {
+                Syntax.Module.NormalModule normal =>
+                normal with { ModuleData = normal.ModuleData with { ModuleName = renamed } },
+
+                Syntax.Module.PortModule port =>
+                port with { ModuleData = port.ModuleData with { ModuleName = renamed } },
+
+                Syntax.Module.EffectModule effect =>
+                effect with { ModuleData = effect.ModuleData with { ModuleName = renamed } },
+
+                _ =>
+                throw new NotImplementedException(
+                    $"{nameof(RewriteModuleSyntax)} does not handle module variant: {parsed.ModuleDefinition.Value.GetType().Name}"),
+            };
+
+        var rewritten =
+            parsed with
+            {
+                ModuleDefinition = parsed.ModuleDefinition with { Value = definition },
+                Imports =
+                [
+                .. parsed.Imports.Select(
+                    import =>
+                    {
+                        var name = string.Join(".", import.Value.ModuleName.Value);
+                        var target = importedCompilerName(name);
+
+                        if (target is null || target == name)
+                            return import;
+
+                        var alias = import.Value.ModuleAlias;
+
+                        if (alias is null)
+                        {
+                            var aliasName = name;
+
+                            if (import.Value.ModuleName.Value.Count > 1)
+                            {
+                                if (!qualifierAliases.TryGetValue(name, out aliasName))
+                                {
+                                    var index = 1;
+
+                                    do
+                                    {
+                                        aliasName = "PineDependency" + index++;
+                                    }
+                                    while (!usedAliases.Add(aliasName));
+
+                                    qualifierAliases.Add(name, aliasName);
+                                }
+                            }
+
+                            alias =
+                                (import.Value.ImportTokenLocation, import.Value.ModuleName with { Value = [aliasName] });
+                        }
+
+                        return
+                            import with
+                            {
+                                Value =
+                                import.Value with
+                                {
+                                    ModuleName = import.Value.ModuleName with { Value = target.Split('.') },
+                                    ModuleAlias = alias,
+                                },
+                            };
+                    })
+                ],
+            };
+
+        if (originalModuleName != compilerModuleName &&
+            !parsed.Imports.Any(import =>
+                string.Join(".", import.Value.ModuleAlias?.Alias.Value ?? import.Value.ModuleName.Value) == originalModuleName))
+            qualifierAliases[originalModuleName] = compilerModuleName;
+
+        return
+            qualifierAliases.Count is 0
+            ?
+            rewritten
+            :
+            new ElmModuleQualifierRewriting(qualifierAliases).Rewrite(rewritten);
+    }
 
     private static ElmResolvedBuild ValidateImports(ElmResolvedBuild build, FileTree appSources)
     {
@@ -576,95 +1144,28 @@ public static class ElmResolvedBuildPreparation
                                 error => throw new InvalidOperationException(
                                     $"Cannot disambiguate module '{module.Name}' in '{path}': {error}"));
 
-                        var originalName = Syntax.Module.GetModuleName(parsed.ModuleDefinition.Value);
-                        var renamed = originalName with { Value = newName.Split('.') };
-                        var qualifierAliases = new Dictionary<string, string>(StringComparer.Ordinal);
-
-                        var usedAliases =
-                            parsed.Imports.Select(
-                                import =>
-                                string.Join(".", import.Value.ModuleAlias?.Alias.Value ?? import.Value.ModuleName.Value))
-                            .Append(module.Name).ToHashSet(StringComparer.Ordinal);
-
-                        Syntax.Module definition =
-                            parsed.ModuleDefinition.Value switch
-                            {
-                                Syntax.Module.NormalModule normal =>
-                                normal with { ModuleData = normal.ModuleData with { ModuleName = renamed } },
-
-                                Syntax.Module.PortModule port =>
-                                port with { ModuleData = port.ModuleData with { ModuleName = renamed } },
-
-                                Syntax.Module.EffectModule effect =>
-                                effect with { ModuleData = effect.ModuleData with { ModuleName = renamed } },
-
-                                _ =>
-                                throw new NotImplementedException(
-                                    $"{nameof(ValidateImports)} does not handle module variant: {parsed.ModuleDefinition.Value.GetType().Name}"),
-                            };
-
-                        var rewritten =
-                            parsed with
-                            {
-                                ModuleDefinition = parsed.ModuleDefinition with { Value = definition },
-                                Imports =
-                                [
-                                .. parsed.Imports.Select(
-                                    import =>
-                                    {
-                                        var name = string.Join(".", import.Value.ModuleName.Value);
-
-                                        if (!resolvedImports.TryGetValue((path, name), out var target) ||
-                                            compilerNames[target.Path] == name)
-                                            return import;
-
-                                        var alias = import.Value.ModuleAlias;
-
-                                        if (alias is null)
-                                        {
-                                            var aliasName = name;
-
-                                            if (import.Value.ModuleName.Value.Count > 1)
-                                            {
-                                                var index = 1;
-
-                                                do
-                                                {
-                                                    aliasName = "PineDependency" + index++;
-                                                }
-                                                while (!usedAliases.Add(aliasName));
-
-                                                qualifierAliases.Add(name, aliasName);
-                                            }
-
-                                            alias =
-                                                (import.Value.ImportTokenLocation,
-                                                import.Value.ModuleName with { Value = [aliasName] });
-                                        }
-
-                                        return
-                                            import with
-                                            {
-                                                Value =
-                                                import.Value with
-                                                {
-                                                    ModuleName =
-                                                    import.Value.ModuleName with { Value = compilerNames[target.Path].Split('.') },
-                                                    ModuleAlias = alias,
-                                                },
-                                            };
-                                    })
-                                ],
-                            };
-
-                        rewritten = new ElmModuleQualifierRewriting(qualifierAliases).Rewrite(rewritten);
-
                         return
                             ((IReadOnlyList<string>)file.path,
-                            (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(Avh4Format.FormatToString(rewritten)));
+                            RewriteModule(
+                                parsed,
+                                module.Name,
+                                newName,
+                                name =>
+                                resolvedImports.TryGetValue((path, name), out var target)
+                                ?
+                                compilerNames[target.Path]
+                                :
+                                null));
                     }));
 
-        return build with { Sources = prepared, CompilerModuleNames = compilerNames };
+        return
+            build with
+            {
+                Sources = prepared,
+                CompilerModuleNames = compilerNames,
+                CompilerModuleSourcePaths =
+                compilerNames.ToImmutableDictionary(item => item.Value, item => item.Key, StringComparer.Ordinal),
+            };
 
         void Fail(string name, string message)
         {
@@ -681,4 +1182,6 @@ public static class ElmResolvedBuildPreparation
     }
 
     private sealed record Module(string Name, string Path, string? Owner, ImmutableArray<string> Imports);
+
+    private sealed record PreparedModule(string Name, string Path, string? Owner, Syntax.File Parsed);
 }

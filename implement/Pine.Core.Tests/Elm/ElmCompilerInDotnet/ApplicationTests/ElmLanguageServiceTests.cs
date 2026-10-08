@@ -303,7 +303,7 @@ public class ElmLanguageServiceTests
             new ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled();
 
         var compiledEnv =
-            ElmCompiler.CompileInteractiveEnvironment(
+            ElmCompilerTestHelper.CompileInteractiveEnvironmentFromFiles(
                 treeWithTest,
                 rootFilePaths: rootFilePaths,
                 syntaxOptimization: syntaxOptimization)

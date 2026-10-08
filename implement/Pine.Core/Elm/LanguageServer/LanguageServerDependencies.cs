@@ -18,6 +18,13 @@ public interface IDiagnosticsProvider
         CancellationToken cancellationToken);
 }
 
+/// <summary>Project-wide diagnostics use an application URI for scheduling and replacing prior results.</summary>
+public interface IApplicationDiagnosticsProvider : IDiagnosticsProvider
+{
+    /// <summary>Identifies the application containing a document; it does not select a compilation root.</summary>
+    Result<DiagnosticsProviderError, string> GetApplicationUri(string documentUri);
+}
+
 /// <summary>
 /// Diagnostics produced for one target document.
 /// </summary>

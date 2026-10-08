@@ -33,7 +33,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 /// </para>
 /// <para>
 /// The <see cref="MaxOptimizationRounds"/> setting affects both paths: it is forwarded to
-/// <see cref="ElmCompiler.CompileInteractiveEnvironment(FileTree, IReadOnlyList{IReadOnlyList{string}}, bool, int)"/>
+/// <see cref="ElmCompilerTestHelper.CompileInteractiveEnvironmentFromFiles"/>
 /// (so the VM path runs against the bytecode emitted from that round count) and
 /// <see cref="CompilationPipelineStageResults.ModulesForCompilation"/> from the same
 /// invocation is fed into the syntax interpreter (so both paths see the same post-optimization
@@ -79,7 +79,7 @@ public sealed class CompareInterpreterWithIntermediateVM
     /// <see cref="ElmSyntaxInterpreter"/> path (declaration dictionary keyed by
     /// fully-qualified name) for the given <paramref name="entryPoints"/>. Both paths are
     /// produced from a single
-    /// <see cref="ElmCompiler.CompileInteractiveEnvironment(FileTree, IReadOnlyList{IReadOnlyList{string}}, bool, int)"/>
+    /// <see cref="ElmCompilerTestHelper.CompileInteractiveEnvironmentFromFiles"/>
     /// invocation so they observe the same <paramref name="maxOptimizationRounds"/>.
     /// </summary>
     /// <param name="appCodeTree">
@@ -94,7 +94,7 @@ public sealed class CompareInterpreterWithIntermediateVM
     /// </param>
     /// <param name="maxOptimizationRounds">
     /// Number of inlining/specialization rounds the optimization pipeline runs. Forwarded to
-    /// <see cref="ElmCompiler.CompileInteractiveEnvironment(FileTree, IReadOnlyList{IReadOnlyList{string}}, bool, int)"/>
+    /// <see cref="ElmCompilerTestHelper.CompileInteractiveEnvironmentFromFiles"/>
     /// and reflected in the syntax-interpreter declaration dictionary
     /// (<see cref="CompilationPipelineStageResults.ModulesForCompilation"/>).
     /// </param>
@@ -111,7 +111,7 @@ public sealed class CompareInterpreterWithIntermediateVM
         }
 
         var (compiledEnvValue, pipelineStageResults) =
-            ElmCompiler.CompileInteractiveEnvironment(
+            ElmCompilerTestHelper.CompileInteractiveEnvironmentFromFiles(
                 appCodeTree,
                 rootFilePaths: rootFilePaths,
                 syntaxOptimization:

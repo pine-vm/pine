@@ -1,7 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
-using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
 using Pine.Core.Interpreter.IntermediateVM;
@@ -113,7 +112,7 @@ public class Base64PrecompiledLeavesEffectivenessTests
                     .ToList();
 
                 var compiledEnv =
-                    ElmCompiler.CompileInteractiveEnvironment(
+                    ElmCompilerTestHelper.CompileInteractiveEnvironmentFromFiles(
                         treeWithTest,
                         rootFilePaths: rootFilePaths)
                     .Map(r => r.compiledEnvValue)

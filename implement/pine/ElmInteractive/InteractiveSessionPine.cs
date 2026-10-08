@@ -21,6 +21,12 @@ using static ElmTime.ElmInteractive.IInteractiveSession;
 
 namespace ElmTime.ElmInteractive;
 
+/// <summary>Interactive runtime backed by the legacy Elm-in-Elm submission compiler.</summary>
+/// <remarks>
+/// Seed loading still uses explicit source-selection enumeration. Demand-loading seed bindings
+/// requires adapting the legacy submission compiler's runtime environment protocol; this class
+/// does not yet implement lazy seed indexing or source-backed submission history.
+/// </remarks>
 public class InteractiveSessionPine : IInteractiveSession
 {
     private readonly System.Threading.Lock _submissionLock = new();
@@ -178,92 +184,9 @@ public class InteractiveSessionPine : IInteractiveSession
         AppCompilationUnits? appCodeTree,
         bool? overrideSkipLowering,
         IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
-        bool skipFilteringForSourceDirs)
+        bool skipFilteringForSourceDirs,
+        IReadOnlyList<Pine.Core.CodeAnalysis.DeclQualifiedName>? rootDeclarations = null)
     {
-        var skipLowering =
-            overrideSkipLowering ??
-            !ElmCompilerInElm.CheckIfAppUsesLowering(appCodeTree?.AppFiles ?? FileTree.EmptyTree);
-
-        var appSourceFiles =
-            appCodeTree ?? AppCompilationUnits.WithoutPackages(FileTree.EmptyTree);
-
-        var defaultKernelModulesTree =
-            ElmCompilerInElm.ElmCoreAndKernelModuleFilesDefault.Value;
-
-        var appCodeModules =
-            appSourceFiles.AppFiles
-            .EnumerateFilesTransitive()
-            .Where(blob => blob.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
-            .Select(
-                blob =>
-                {
-                    var moduleText = System.Text.Encoding.UTF8.GetString(blob.fileContent.Span);
-
-                    var moduleName =
-                        ElmModule.ParseModuleName(moduleText)
-                        .Extract(err => throw new Exception("Failed parsing module name: " + err));
-
-                    return new KeyValuePair<IReadOnlyList<string>, ReadOnlyMemory<byte>>(moduleName, blob.fileContent);
-                })
-            .ToImmutableDictionary(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
-
-        ReadOnlyMemory<byte>? replaceKernelModule(
-            IImmutableList<string> path,
-            ReadOnlyMemory<byte> blobContent)
-        {
-            if (!path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            if (ModuleNameFromFileContent(blobContent.Span) is not { } moduleName)
-            {
-                return null;
-            }
-
-            if (appCodeModules.TryGetValue(moduleName, out var appCodeModule) && 0 < appCodeModule.Length)
-            {
-                return appCodeModule;
-            }
-
-            return null;
-        }
-
-        var mergedKernelModulesTree =
-            FileTree.FromSetOfFilesWithStringPath(
-                defaultKernelModulesTree.EnumerateFilesTransitive()
-                .Select(
-                    blob =>
-                    (blob.path,
-                    replaceKernelModule(blob.path, blob.fileContent) is { } overrideContent
-                    ?
-                    overrideContent
-                    :
-                    blob.fileContent)));
-
-        var mergedKernelModulesTreeBlobs =
-            mergedKernelModulesTree
-            .EnumerateFilesTransitive()
-            .ToImmutableArray();
-
-        var appFilesAfterKernelModules =
-            FileTree.FromSetOfFilesWithStringPath(
-                appSourceFiles.AppFiles.EnumerateFilesTransitive()
-                .Where(
-                    blob =>
-                    !mergedKernelModulesTreeBlobs.Any(
-                    kernelBlob =>
-                    kernelBlob.fileContent.Span.SequenceEqual(blob.fileContent.Span))));
-
-        var orderedModules =
-            AppSourceFileTreesForIncrementalCompilation(
-                appFilesAfterKernelModules,
-                skipLowering: skipLowering,
-                entryPointsFilePaths:
-                entryPointsFilePaths?.ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>()),
-                skipFilteringForSourceDirs: skipFilteringForSourceDirs)
-            .ToImmutableArray();
-
         var appSourceFilesTree =
             appCodeTree is null
             ?
@@ -274,19 +197,30 @@ public class InteractiveSessionPine : IInteractiveSession
                 seed: appCodeTree.AppFiles,
                 func: (files, pkg) => FileTree.MergeFiles(files, pkg.files));
 
-        entryPointsFilePaths ??=
+        entryPointsFilePaths =
+            entryPointsFilePaths is { Count: > 0 }
+            ?
+            entryPointsFilePaths
+            :
             appSourceFilesTree.EnumerateFilesTransitive()
             .Select(blob => blob.path)
             .ToImmutableArray();
 
+        rootDeclarations ??=
+            appCodeTree?.ResolvedBuild is { } preparedBuild
+            ?
+            ElmSourceCompilation.EnumerateRootDeclarations(preparedBuild, entryPointsFilePaths)
+            :
+            ElmSourceCompilation.EnumerateRootDeclarations(appSourceFilesTree, entryPointsFilePaths);
+
         var compileResult =
             appCodeTree?.ResolvedBuild is { } resolvedBuild
             ?
-            ElmCompiler.CompileResolvedEnvironment(resolvedBuild)
+            ElmCompiler.CompileResolvedEnvironment(resolvedBuild, rootDeclarations)
             :
             ElmCompiler.CompileInteractiveEnvironment(
                 appSourceFilesTree,
-                rootFilePaths: entryPointsFilePaths,
+                rootDeclarations: rootDeclarations,
                 syntaxOptimization: null);
 
         {

@@ -1,7 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
-using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
 using System;
@@ -43,9 +42,11 @@ public class SizeBasedInliningRegressionTests
         module SizeInlineTestModule exposing (..)
 
         import Elm.Parser
+        import Elm.Syntax.File
+        import Parser
 
 
-        callParseToFile : String -> Result (List Elm.Parser.DeadEnd) Elm.Syntax.File.File
+        callParseToFile : String -> Result (List Parser.DeadEnd) Elm.Syntax.File.File
         callParseToFile input =
             Elm.Parser.parseToFile input
         """;
@@ -153,7 +154,7 @@ public class SizeBasedInliningRegressionTests
             .ToList();
 
         return
-            ElmCompiler.CompileInteractiveEnvironment(
+            ElmCompilerTestHelper.CompileInteractiveEnvironmentFromFiles(
                 treeWithTest,
                 rootFilePaths: rootFilePaths,
                 syntaxOptimization:

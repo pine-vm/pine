@@ -146,10 +146,16 @@ public static class LanguageServerComposition
             new ElmSyntaxDiagnosticsProvider(documentTextSource);
 
         var diagnosticsProvider =
-            new CompositeDiagnosticsProvider(
-                syntaxDiagnosticsProvider,
-                new ElmMakeDiagnosticsProvider(),
-                logDelegate);
+            new ElmCompilerDiagnosticsProvider(
+                workspace,
+                documentTextSource,
+                (sources, manifestPath, cancellationToken) =>
+                Core.Elm.ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(
+                    sources,
+                    manifestPath,
+                    [],
+                    Core.Elm.ElmPackageSubstitutions.DefaultBuild.Value,
+                    cancellationToken: cancellationToken));
 
         var languageServer =
             new Core.Elm.LanguageServer.LanguageServer(

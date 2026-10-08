@@ -54,21 +54,14 @@ public static class KernelBytesPrecompiledLeaves
     {
         var kernelModulesTree = BundledFiles.ElmKernelModulesDefault.Value;
 
-        var rootFilePaths =
-            kernelModulesTree.EnumerateFilesTransitive()
-            .Where(
-                file =>
-                file.path.Count is 2 &&
-                file.path[0].Equals("Bytes", StringComparison.OrdinalIgnoreCase) &&
-                (file.path[1].Equals("Decode.elm", StringComparison.OrdinalIgnoreCase) ||
-                file.path[1].Equals("Encode.elm", StringComparison.OrdinalIgnoreCase)))
-            .Select(file => (IReadOnlyList<string>)file.path)
-            .ToList();
-
         var compiledEnv =
             ElmCompiler.CompileInteractiveEnvironment(
                 kernelModulesTree,
-                rootFilePaths: rootFilePaths)
+                rootDeclarations:
+                [
+                    DeclQualifiedName.Create(["Bytes", "Decode"], "decodeBlobAsCharsRec"),
+                    DeclQualifiedName.Create(["Bytes", "Encode"], "encodeCharsAsBlobHelp")
+                ])
             .Map(result => result.compiledEnvValue)
             .Extract(
                 error => throw new Exception(

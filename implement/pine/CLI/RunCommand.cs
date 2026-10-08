@@ -147,7 +147,7 @@ public static class RunCommand
                     elmModuleName,
                     entryPointFilePath);
         }
-        catch (global::Pine.Core.Elm.ElmDependencyResolutionException exception)
+        catch (Core.Elm.ElmDependencyResolutionException exception)
         {
             return exception.Message;
         }

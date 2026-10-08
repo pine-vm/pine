@@ -27,19 +27,10 @@ public static class KernelJsonDecodePrecompiledLeaves
     {
         var kernelModulesTree = BundledFiles.ElmKernelModulesDefault.Value;
 
-        var rootFilePaths =
-            kernelModulesTree.EnumerateFilesTransitive()
-            .Where(
-                file =>
-                file.path[^1].Equals("Decode.elm", StringComparison.OrdinalIgnoreCase) &&
-                file.path.Contains("Json"))
-            .Select(file => (IReadOnlyList<string>)file.path)
-            .ToList();
-
         var compiledEnv =
             ElmCompiler.CompileInteractiveEnvironment(
                 kernelModulesTree,
-                rootFilePaths: rootFilePaths)
+                rootDeclarations: [DeclQualifiedName.Create(["Json", "Decode"], "parseValue")])
             .Map(result => result.compiledEnvValue)
             .Extract(
                 error => throw new Exception(

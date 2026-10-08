@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Files;
@@ -257,6 +258,36 @@ public class ExampleAppsTests
     private static string NormalizeStringTestingElmFormat(string originalString) =>
         originalString.Trim().Replace("\n\r", "\n").Replace("\r\n", "\n");
 
+
+    [Fact]
+    public void Compiled_web_service_exports_keep_json_host_names_after_package_isolation()
+    {
+        var source =
+            FileTree.FromSetOfFilesWithStringPath(TestSetup.CounterElmWebApp);
+
+        var compiled =
+            WebServiceInterface.CompiledModulesFromSourceFilesAndEntryFileName(
+                source,
+                ["src", "Backend", "Main.elm"]);
+
+        var exports =
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiled)
+            .Extract(error => throw new Exception(error));
+
+        var decode = exports.Modules.Should().ContainSingle(module => module.moduleName == "Json.Decode").Which;
+
+        decode.moduleContent.FunctionDeclarations.Keys.Should().BeEquivalentTo(
+            ["value", "decodeValue", "decodeString"]);
+
+        var encode = exports.Modules.Should().ContainSingle(module => module.moduleName == "Json.Encode").Which;
+        encode.moduleContent.FunctionDeclarations.Keys.Should().Equal("encode");
+
+        exports.Modules.Should().NotContain(
+            module => module.moduleName.StartsWith("PinePackage.", StringComparison.Ordinal));
+
+        WebServiceInterface.ConfigFromCompiledModules(compiled, "Backend.Main", "webServiceMain")
+            .IsOkOrNull().Should().NotBeNull();
+    }
 
     [Fact]
     public void Counter_webapp_Json_adapter()

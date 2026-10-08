@@ -84,16 +84,12 @@ public static class CoreDictPrecompiledLeaves
     {
         var kernelModulesTree = BundledFiles.ElmKernelModulesDefault.Value;
 
-        var rootFilePaths =
-            kernelModulesTree.EnumerateFilesTransitive()
-            .Where(b => b.path[^1].Equals("Dict.elm", StringComparison.OrdinalIgnoreCase))
-            .Select(b => (IReadOnlyList<string>)b.path)
-            .ToList();
+        string[] functionNames = ["get", "toList", "size", "keys", "values", "insert"];
 
         var compiledEnv =
             ElmCompiler.CompileInteractiveEnvironment(
                 kernelModulesTree,
-                rootFilePaths: rootFilePaths)
+                rootDeclarations: [.. functionNames.Select(name => DeclQualifiedName.Create(["Dict"], name))])
             .Map(r => r.compiledEnvValue)
             .Extract(
                 err => throw new Exception(
@@ -113,7 +109,7 @@ public static class CoreDictPrecompiledLeaves
         var parseCache = new PineVMParseCache();
         var infos = new Dictionary<string, (PineValue leafKey, PineValue envFunctionsValue)>();
 
-        foreach (var functionName in new[] { "get", "toList", "size", "keys", "values", "insert" })
+        foreach (var functionName in functionNames)
         {
             var record =
                 FunctionRecord.ParseFunctionRecordTagged(

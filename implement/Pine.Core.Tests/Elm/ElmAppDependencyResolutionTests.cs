@@ -3,6 +3,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Files;
 using System;
 using System.Collections.Generic;
@@ -14,6 +15,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
+
+using Syntax = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 namespace Pine.Core.Tests.Elm;
 
@@ -367,6 +370,519 @@ public class ElmAppDependencyResolutionTests
     }
 
     [Fact]
+    public async Task Declaration_demand_preparation_retains_sources_with_unused_missing_Platform_import()
+    {
+        var tree =
+            FileTree.MergeFiles(
+                FileTree.MergeFiles(
+                    Tree(Application(Deps(("elm/core", "1.0.5")))),
+                    Source("Main", "import Platform\nvalue = 42\nunused = Platform.worker {}")),
+                Source("Disconnected", "import Missing exposing (..)\nvalue = 1"));
+
+        var configuration = ElmPackageSubstitutions.DefaultBuild.Value;
+        var provider = new Provider { RejectRequests = true };
+
+        var build =
+            await ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(
+                tree,
+                ["elm.json"],
+                [["src", "Main.elm"]],
+                configuration,
+                provider);
+
+        build.Resolution.Succeeded.Should().BeTrue();
+        build.ProjectSources.Should().Be(tree);
+        build.Sources.GetNodeAtPath(["src", "Disconnected.elm"]).Should().NotBeNull();
+        build.CompilerModuleNames.Should().ContainKey("src/Disconnected.elm");
+        build.CompilerModuleNames.Should().ContainKey("elm-packages/elm/core/src/List.elm");
+        build.ImportDiagnostics.Should().Contain(diagnostic => diagnostic.ImportedModuleName == "Missing");
+
+        var platform = build.ImportDiagnostics.Single(diagnostic => diagnostic.ImportedModuleName == "Platform");
+        platform.FilePath.Should().Be("src/Main.elm");
+        platform.ModuleName.Should().Be("Main");
+        platform.ImportRange.Start.Row.Should().Be(2);
+        platform.ImportRange.Start.Column.Should().Be(1);
+        platform.Message.Should().Contain("has no implementation").And.Contain("not searched upstream");
+        provider.SourceQueries.Should().BeEmpty();
+
+        Func<Task> strict =
+            () => ElmResolvedBuildPreparation.PrepareAsync(
+                tree,
+                ["elm.json"],
+                [["src", "Main.elm"]],
+                configuration,
+                provider);
+
+        await strict.Should().ThrowAsync<ElmDependencyResolutionException>().WithMessage("*Import 'Platform'*");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Declaration_demand_preparation_isolates_private_and_indirect_imports(bool indirect)
+    {
+        var provider =
+            new Provider().Add(
+                "author/a",
+                "1.0.0",
+                sources: Source("Internal.Hidden", "value = 42"),
+                exposedModules: indirect ? ["Internal.Hidden"] : []);
+
+        var dependencies = Deps(("author/a", "1.0.0"));
+
+        var tree =
+            FileTree.MergeFiles(
+                Tree(Application(indirect ? Deps() : dependencies, indirect ? dependencies : Deps())),
+                Source("Main", "import Internal.Hidden exposing (value)\nroot = 1\nunused = Internal.Hidden.value"));
+
+        var build =
+            await ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(
+                tree,
+                ["elm.json"],
+                [["src", "Main.elm"]],
+                new(),
+                provider);
+
+        var parsed = PreparedSource(build, ["src", "Main.elm"]);
+        var importedName = string.Join(".", parsed.Imports.Single().Value.ModuleName.Value);
+        importedName.Should().StartWith("PineUnavailable.");
+        build.CompilerModuleNames.Values.Should().NotContain(importedName);
+
+        string.Join(".", parsed.Imports.Single().Value.ModuleAlias!.Value.Alias.Value)
+            .Should().StartWith("PineDependency");
+
+        build.ImportDiagnostics.Should().ContainSingle();
+        build.ImportDiagnostics[0].Message.Should().Contain("private modules or indirect/undeclared");
+        build.CompilerModuleNames["elm-packages/author/a/src/Internal.Hidden.elm"].Should().StartWith("PinePackage.");
+    }
+
+    [Fact]
+    public async Task Declaration_demand_preparation_uses_root_independent_owner_identities()
+    {
+        var provider =
+            new Provider()
+            .Add(
+                "author/a",
+                "1.0.0",
+                sources: FileTree.MergeFiles(Source("Shared", "value = 1"), Source("Internal.Unused", "value = 10")),
+                exposedModules: ["Shared"])
+            .Add(
+                "author/b",
+                "1.0.0",
+                sources: FileTree.MergeFiles(Source("Shared", "value = 2"), Source("Internal.Unused", "value = 20")),
+                exposedModules: ["Shared"]);
+
+        var tree =
+            FileTree.MergeFiles(
+                FileTree.MergeFiles(
+                    Tree(Application(Deps(("author/a", "1.0.0"), ("author/b", "1.0.0")))),
+                    Source("Main", "import Shared\nvalue = 1")),
+                Source("Other", "value = 2"));
+
+        var build =
+            await ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(
+                tree,
+                ["elm.json"],
+                [["src", "Main.elm"]],
+                new(),
+                provider);
+
+        var rootless =
+            await ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(
+                tree,
+                ["elm.json"],
+                [],
+                new(),
+                provider);
+
+        var other =
+            await ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(
+                tree,
+                ["elm.json"],
+                [["src", "Other.elm"]],
+                new(),
+                provider);
+
+        build.CompilerModuleNames.Should().BeEquivalentTo(rootless.CompilerModuleNames).And.BeEquivalentTo(
+            other.CompilerModuleNames);
+
+        build.Sources.Should().Be(rootless.Sources).And.Be(other.Sources);
+
+        build.ImportDiagnostics.Should().BeEquivalentTo(rootless.ImportDiagnostics).And.BeEquivalentTo(
+            other.ImportDiagnostics);
+
+        build.Resolution.Fingerprint.Should().Be(rootless.Resolution.Fingerprint).And.Be(other.Resolution.Fingerprint);
+        build.CompilerModuleNames.Values.Should().OnlyHaveUniqueItems();
+        build.CompilerModuleNames.Should().HaveCount(6);
+        build.CompilerModuleSourcePaths.Should().HaveCount(6);
+
+        foreach (var (path, name) in build.CompilerModuleNames)
+            build.CompilerModuleSourcePaths[name].Should().Be(path);
+
+        build.ImportDiagnostics.Should().ContainSingle();
+        build.ImportDiagnostics[0].Message.Should().Contain("ambiguous").And.Contain("author/a").And.Contain("author/b");
+
+        var importedName =
+            string.Join(".", PreparedSource(build, ["src", "Main.elm"]).Imports.Single().Value.ModuleName.Value);
+
+        build.CompilerModuleNames.Values.Should().NotContain(importedName);
+    }
+
+    [Fact]
+    public async Task Declaration_demand_preparation_reports_rootless_invalid_imported_APIs()
+    {
+        var apiSources =
+            FileTree.FromSetOfFilesWithStringPath(
+                [
+                (new[] { "src", "Api.elm" },
+                (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(
+                    "module Api exposing (value, Closed, Open(..))\nvalue = 1\nprivate = 2\ntype Closed = Closed\ntype Open = Open\n"))
+                ]);
+
+        var provider = new Provider().Add("author/a", "1.0.0", sources: apiSources, exposedModules: ["Api"]);
+
+        var tree =
+            FileTree.MergeFiles(
+                Tree(Application(Deps(("author/a", "1.0.0")))),
+                Source(
+                    "Disconnected",
+                    "import Api exposing (value, private, absent, Closed(..), Open(..))\nvalue = 1"));
+
+        var build =
+            await ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(tree, ["elm.json"], [], new(), provider);
+
+        build.Resolution.Succeeded.Should().BeTrue();
+        build.ImportDiagnostics.Should().HaveCount(3);
+
+        build.ImportDiagnostics.Select(diagnostic => diagnostic.Message)
+            .Should().Contain(message => message.Contains("'private'"))
+            .And.Contain(message => message.Contains("'absent'"))
+            .And.Contain(message => message.Contains("'Closed(..)'"));
+
+        build.ImportDiagnostics.Should().OnlyContain(
+            diagnostic => diagnostic.FilePath == "src/Disconnected.elm" &&
+                diagnostic.ImportRange.Start.Row == 2 && diagnostic.ModuleName == "Disconnected");
+
+        var importedName =
+            string.Join(
+                ".",
+                PreparedSource(build, ["src", "Disconnected.elm"]).Imports.Single().Value.ModuleName.Value);
+
+        importedName.Should().Be(build.CompilerModuleNames["elm-packages/author/a/src/Api.elm"]);
+    }
+
+    [Fact]
+    public async Task Declaration_demand_preparation_accepts_compiler_native_List_type_import()
+    {
+        var tree =
+            FileTree.MergeFiles(
+                Tree(Application(Deps(("elm/core", "1.0.5")))),
+                Source("Main", "import List exposing (List)\nvalue : List Int\nvalue = []"));
+
+        var build =
+            await ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(
+                tree,
+                [
+                "elm.json"
+                ],
+                [],
+                ElmPackageSubstitutions.DefaultBuild.Value,
+                new Provider { RejectRequests = true });
+
+        build.ImportDiagnostics.Should().NotContain(diagnostic => diagnostic.FilePath == "src/Main.elm");
+    }
+
+    [Fact]
+    public async Task Declaration_demand_preparation_reports_invalid_native_imported_APIs_without_inventing_sources()
+    {
+        var tree =
+            FileTree.MergeFiles(
+                Tree(Application(Deps(("elm/core", "1.0.5")))),
+                Source(
+                    "Main",
+                    "import Basics exposing (Int, Bool(..), identity, missing)\nimport Debug exposing (log, absent)\nvalue = 1"));
+
+        var build =
+            await ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(
+                tree,
+                [
+                "elm.json"
+                ],
+                [],
+                ElmPackageSubstitutions.DefaultBuild.Value,
+                new Provider { RejectRequests = true });
+
+        build.ImportDiagnostics.Should().HaveCount(2);
+
+        build.ImportDiagnostics.Select(diagnostic => diagnostic.Message)
+            .Should().Contain(message => message.Contains("'missing'")).And.Contain(message => message.Contains("'absent'"));
+
+        build.CompilerModuleNames.Values.Should().NotContain("Debug");
+        build.CompilerModuleSyntax.Keys.Should().NotContain("Debug");
+    }
+
+    [Fact]
+    public async Task Declaration_demand_preparation_preserves_original_ranges_in_rewritten_syntax()
+    {
+        var original =
+            """
+            module Main exposing (value)
+            import Internal.Missing
+
+
+            value=Internal.Missing.value
+            """;
+
+        var tree =
+            Tree(Application(Deps()))
+            .SetNodeAtPathSorted(["src", "Main.elm"], FileTree.File(Encoding.UTF8.GetBytes(original)));
+
+        var build =
+            await ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(tree, ["elm.json"], [], new(), new Provider());
+
+        var parsedOriginal =
+            ElmSyntaxParser.ParseModuleText(original).Extract(
+                error => throw new InvalidOperationException(error.ToString()));
+
+        var syntax = build.CompilerModuleSyntax["Main"];
+
+        syntax.Declarations.Single().Range.Should().Be(parsedOriginal.Declarations.Single().Range);
+        syntax.Imports.Single().Range.Should().Be(parsedOriginal.Imports.Single().Range);
+
+        syntax.Imports.Single().Value.ModuleName.Range.Should().Be(
+            parsedOriginal.Imports.Single().Value.ModuleName.Range);
+
+        string.Join(".", syntax.Imports.Single().Value.ModuleName.Value).Should().StartWith("PineUnavailable.");
+        build.CompilerModuleSourcePaths["Main"].Should().Be("src/Main.elm");
+        build.ProjectSources.GetNodeAtPath(["src", "Main.elm"]).Should().Be(tree.GetNodeAtPath(["src", "Main.elm"]));
+    }
+
+    [Theory]
+    [InlineData("Fuzz")]
+    [InlineData("Internal.Fuzz")]
+    public async Task Declaration_demand_preparation_rewrites_private_self_qualified_references_preserving_ranges(
+        string moduleName)
+    {
+        var original =
+            $$"""
+            module {{moduleName}} exposing (root)
+
+            type Fuzzer = Fuzzer Int
+            type Nested = Nested {{moduleName}}.Fuzzer
+
+            root : {{moduleName}}.Fuzzer
+            root =
+                case {{moduleName}}.make of
+                    {{moduleName}}.Fuzzer _ ->
+                        {{moduleName}}.make
+
+            make = {{moduleName}}.Fuzzer 1
+            message = "{{moduleName}}.Fuzzer"
+            -- {{moduleName}}.Fuzzer stays literal in comments.
+            """;
+
+        var sourcePath = new[] { "src", moduleName + ".elm" };
+
+        var packageSources =
+            FileTree.FromSetOfFilesWithStringPath(
+                [(sourcePath, (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(original))]);
+
+        var provider =
+            new Provider().Add("author/fuzz", "1.0.0", sources: packageSources, exposedModules: [moduleName]);
+
+        var tree =
+            FileTree.MergeFiles(
+                Tree(Application(Deps(("author/fuzz", "1.0.0")))),
+                Source("Main", $"import {moduleName} exposing (Fuzzer(..))\nvalue = 1"));
+
+        var build =
+            await ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(tree, ["elm.json"], [], new(), provider);
+
+        var compilerName = build.CompilerModuleNames["elm-packages/author/fuzz/" + string.Join("/", sourcePath)];
+        var compilerNamespace = compilerName.Split('.');
+        var syntax = build.CompilerModuleSyntax[compilerName];
+
+        var parsedOriginal =
+            ElmSyntaxParser.ParseModuleText(original).Extract(
+                error => throw new InvalidOperationException(error.ToString()));
+
+        var root = Function(syntax, "root");
+        var originalRoot = Function(parsedOriginal, "root");
+        var signature = (Syntax.TypeAnnotation.Typed)root.Signature!.Value.TypeAnnotation.Value;
+        signature.TypeName.Value.ModuleName.Should().Equal(compilerNamespace);
+        root.Signature.Value.TypeAnnotation.Range.Should().Be(originalRoot.Signature!.Value.TypeAnnotation.Range);
+
+        signature.TypeName.Range.Should().Be(
+            ((Syntax.TypeAnnotation.Typed)originalRoot.Signature.Value.TypeAnnotation.Value).TypeName.Range);
+
+        var body = (Syntax.Expression.CaseExpression)root.Declaration.Value.Expression.Value;
+        var originalBody = (Syntax.Expression.CaseExpression)originalRoot.Declaration.Value.Expression.Value;
+        ((Syntax.Expression.Identifier)body.CaseBlock.Expression.Value).ModuleName.Should().Equal(compilerNamespace);
+        body.CaseBlock.Expression.Range.Should().Be(originalBody.CaseBlock.Expression.Range);
+        var branch = body.CaseBlock.Cases.Single();
+        ((Syntax.Pattern.NamedPattern)branch.Pattern.Value).Name.ModuleName.Should().Equal(compilerNamespace);
+        ((Syntax.Expression.Identifier)branch.Expression.Value).ModuleName.Should().Equal(compilerNamespace);
+        branch.Pattern.Range.Should().Be(originalBody.CaseBlock.Cases.Single().Pattern.Range);
+        branch.Expression.Range.Should().Be(originalBody.CaseBlock.Cases.Single().Expression.Range);
+
+        var make = (Syntax.Expression.Application)Function(syntax, "make").Declaration.Value.Expression.Value;
+        ((Syntax.Expression.Identifier)make.Function.Value).ModuleName.Should().Equal(compilerNamespace);
+
+        var nested =
+            syntax.Declarations.Select(node => node.Value).OfType<Syntax.Declaration.ChoiceTypeDeclaration>()
+            .Single(declaration => declaration.TypeDeclaration.Name.Value == "Nested");
+
+        ((Syntax.TypeAnnotation.Typed)nested.TypeDeclaration.Constructors.Single().Value.Arguments.Single().Value)
+            .TypeName.Value.ModuleName.Should().Equal(compilerNamespace);
+
+        syntax.Declarations.Select(declaration => declaration.Range)
+            .Should().Equal(parsedOriginal.Declarations.Select(declaration => declaration.Range));
+
+        ((Syntax.Module.NormalModule)syntax.ModuleDefinition.Value).ModuleData.ExposingList
+            .Should().Be(((Syntax.Module.NormalModule)parsedOriginal.ModuleDefinition.Value).ModuleData.ExposingList);
+
+        Function(syntax, "message").Should().Be(Function(parsedOriginal, "message"));
+        syntax.Comments.Should().Equal(parsedOriginal.Comments);
+        build.ImportDiagnostics.Should().ContainSingle();
+        build.ImportDiagnostics[0].Message.Should().Contain("'Fuzzer(..)'").And.Contain("does not expose");
+
+        static Syntax.FunctionStruct Function(Syntax.File file, string name) =>
+            file.Declarations.Select(declaration => declaration.Value).OfType<Syntax.Declaration.FunctionDeclaration>()
+            .Single(declaration => declaration.Function.Declaration.Value.Name.Value == name).Function;
+    }
+
+    [Fact]
+    public async Task Declaration_demand_preparation_preserves_import_alias_matching_the_current_module_name()
+    {
+        var codec =
+            """
+            module Encode exposing (read)
+            import Bytes.Encode as Encode
+            type Encoder = Encoder String
+            value : Encode.Encoder
+            value = Encode.Encoder 7
+            read = Encode.encode value
+            """;
+
+        var bytes =
+            """
+            module Bytes.Encode exposing (Encoder(..), encode)
+            type Encoder = Encoder Int
+            encode (Encoder value) = value
+            """;
+
+        var provider =
+            new Provider()
+            .Add(
+                "author/codec",
+                "1.0.0",
+                dependencies: Deps(("author/bytes", "1.0.0 <= v < 2.0.0")),
+                exposedModules: ["Encode"],
+                sources: FileTree.FromSetOfFilesWithStringPath(
+                    [(new[] { "src", "Encode.elm" }, (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(codec))]))
+            .Add(
+                "author/bytes",
+                "1.0.0",
+                exposedModules: ["Bytes.Encode"],
+                sources: FileTree.FromSetOfFilesWithStringPath(
+                    [
+                    (new[] { "src", "Bytes", "Encode.elm" }, (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(bytes))
+                    ]));
+
+        var tree =
+            FileTree.MergeFiles(
+                Tree(Application(Deps(("author/codec", "1.0.0")), Deps(("author/bytes", "1.0.0")))),
+                Source("Main", "import Encode\nresult = Encode.read"));
+
+        var build =
+            await ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(
+                tree,
+                ["elm.json"],
+                [],
+                new(),
+                provider);
+
+        var compilerName = build.CompilerModuleNames["elm-packages/author/codec/src/Encode.elm"];
+        var syntax = build.CompilerModuleSyntax[compilerName];
+
+        var functions =
+            syntax.Declarations.Select(node => node.Value)
+            .OfType<Syntax.Declaration.FunctionDeclaration>()
+            .ToDictionary(function => function.Function.Declaration.Value.Name.Value, function => function.Function);
+
+        var signature = (Syntax.TypeAnnotation.Typed)functions["value"].Signature!.Value.TypeAnnotation.Value;
+        signature.TypeName.Value.ModuleName.Should().Equal("Encode");
+        var expression = (Syntax.Expression.Application)functions["read"].Declaration.Value.Expression.Value;
+        ((Syntax.Expression.Identifier)expression.Function.Value).ModuleName.Should().Equal("Encode");
+        syntax.Imports.Single().Value.ModuleAlias!.Value.Alias.Value.Should().Equal("Encode");
+
+        syntax.Imports.Single().Value.ModuleName.Value.Should().Equal(
+            build.CompilerModuleNames["elm-packages/author/bytes/src/Bytes/Encode.elm"].Split('.'));
+
+        ElmCompiler.CompileResolvedEnvironment(build, [DeclQualifiedName.Create(["Main"], "result")])
+            .IsOkOrNullable().Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Declaration_demand_preparation_rejects_duplicate_ownership_in_disconnected_sources()
+    {
+        var tree =
+            FileTree.MergeFiles(
+                FileTree.MergeFiles(Tree(Application(Deps())), Source("Same", "value = 1")),
+                Source("Same", "value = 2").SetNodeAtPathSorted(
+                    ["src", "Other.elm"],
+                    FileTree.File("module Same exposing (..)\nvalue = 3\n"u8.ToArray())));
+
+        Func<Task> prepare =
+            () => ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(tree, ["elm.json"], [], new(), new Provider());
+
+        await prepare.Should().ThrowAsync<ElmDependencyResolutionException>().WithMessage("*declared more than once*");
+    }
+
+    [Fact]
+    public async Task Declaration_demand_preparation_rejects_package_source_path_ownership_collisions()
+    {
+        var provider =
+            new Provider().Add("author/a", "1.0.0", sources: Source("Api", "value = 1"), exposedModules: ["Api"]);
+
+        var tree =
+            Tree(Application(Deps(("author/a", "1.0.0")), sourceDirectories: ["."]))
+            .SetNodeAtPathSorted(
+                ["elm-packages", "author", "a", "src", "Api.elm"],
+                FileTree.File("module ProjectApi exposing (..)\nvalue = 2\n"u8.ToArray()));
+
+        Func<Task> prepare =
+            () => ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(tree, ["elm.json"], [], new(), provider);
+
+        await prepare.Should().ThrowAsync<ElmDependencyResolutionException>()
+        .WithMessage("*owned by both*must not overwrite project sources*");
+    }
+
+    [Theory]
+    [InlineData("Basics")]
+    [InlineData("Debug")]
+    [InlineData("List")]
+    [InlineData("Platform")]
+    [InlineData("Platform.Cmd")]
+    public async Task Declaration_demand_preparation_prevents_project_core_shadowing(string name)
+    {
+        var tree =
+            FileTree.MergeFiles(Tree(Application(Deps(("elm/core", "1.0.5")))), Source(name, "value = 1"));
+
+        Func<Task> prepare =
+            () => ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(
+                tree,
+                [
+                "elm.json"
+                ],
+                [],
+                ElmPackageSubstitutions.DefaultBuild.Value,
+                new Provider { RejectRequests = true });
+
+        await prepare.Should().ThrowAsync<ElmDependencyResolutionException>().WithMessage("*conflicts with an elm/core*");
+    }
+
+    [Fact]
     public void Shared_parent_sources_use_the_selected_application_manifest()
     {
         var tree =
@@ -552,11 +1068,14 @@ public class ElmAppDependencyResolutionTests
         var compilation =
             ElmCompiler.CompileResolvedEnvironment(
                 build,
-                rootDeclarationsAsPlainValues: [DeclQualifiedName.Create(["Main"], "value")]);
+                rootDeclarations: [DeclQualifiedName.Create(["Main"], "value")]);
 
         var environment =
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(
-                compilation.Extract(error => throw new InvalidOperationException(error)).compiledEnvValue)
+                ElmSourceCompilation.EvaluateZeroParameterRoots(
+                    compilation.Extract(error => throw new InvalidOperationException(error)).compiledEnvValue,
+                    Pine.Core.Interpreter.DirectInterpreter.WithLocalEvalCache(new PineVMParseCache()))
+                .Extract(error => throw new InvalidOperationException(error)))
             .Extract(error => throw new InvalidOperationException(error));
 
         environment.Modules.Single(module => module.moduleName == "Main")
@@ -716,11 +1235,14 @@ public class ElmAppDependencyResolutionTests
         var compilation =
             ElmCompiler.CompileResolvedEnvironment(
                 build,
-                rootDeclarationsAsPlainValues: [DeclQualifiedName.Create(["Main"], "value")]);
+                rootDeclarations: [DeclQualifiedName.Create(["Main"], "value")]);
 
         var environment =
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(
-                compilation.Extract(error => throw new InvalidOperationException(error)).compiledEnvValue)
+                ElmSourceCompilation.EvaluateZeroParameterRoots(
+                    compilation.Extract(error => throw new InvalidOperationException(error)).compiledEnvValue,
+                    Pine.Core.Interpreter.DirectInterpreter.WithLocalEvalCache(new PineVMParseCache()))
+                .Extract(error => throw new InvalidOperationException(error)))
             .Extract(error => throw new InvalidOperationException(error));
 
         environment.Modules.Single(module => module.moduleName == "Main")
@@ -733,6 +1255,11 @@ public class ElmAppDependencyResolutionTests
     private static Task<ElmDependencyResolutionReport> Resolve(
         string manifest, Provider provider, ElmDependencyResolutionConfiguration? configuration = null) =>
         ElmDependencyResolver.ResolveAsync(Tree(manifest), ["elm.json"], configuration ?? new(), provider);
+
+    private static Syntax.File PreparedSource(ElmResolvedBuild build, string[] path) =>
+        ElmSyntaxParser.ParseModuleText(
+            Encoding.UTF8.GetString(((FileTree.FileNode)build.Sources.GetNodeAtPath(path)!).Bytes.Span))
+        .Extract(error => throw new InvalidOperationException(error.ToString()));
 
     private static ImmutableDictionary<string, string> Deps(params (string name, string requirement)[] dependencies) =>
         dependencies.ToImmutableDictionary(item => item.name, item => item.requirement);

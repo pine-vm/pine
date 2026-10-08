@@ -1,7 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
-using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
 using System;
@@ -116,7 +115,7 @@ public class CoreDictFunctionTests
                     .ToList();
 
                 var compiledEnv =
-                    ElmCompiler.CompileInteractiveEnvironment(
+                    ElmCompilerTestHelper.CompileInteractiveEnvironmentFromFiles(
                         treeWithTest,
                         rootFilePaths: rootFilePaths)
                     .Map(r => r.compiledEnvValue)
@@ -155,7 +154,7 @@ public class CoreDictFunctionTests
                     .ToList();
 
                 var compiledEnv =
-                    ElmCompiler.CompileInteractiveEnvironment(
+                    ElmCompilerTestHelper.CompileInteractiveEnvironmentFromFiles(
                         kernelModulesTree,
                         rootFilePaths: rootFilePaths)
                     .Map(r => r.compiledEnvValue)

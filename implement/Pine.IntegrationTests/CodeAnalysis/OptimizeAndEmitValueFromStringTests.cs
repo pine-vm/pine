@@ -209,7 +209,7 @@ public class OptimizeAndEmitValueFromStringTests
                     }
                 }
 
-                public static PineValue computeValueFromString()
+                public static PineValue computeValueFromString(PineValue param_1_2)
                 {
                     return
                         PineValue.List(
@@ -220,7 +220,10 @@ public class OptimizeAndEmitValueFromStringTests
                                 Test.blobBytesFromChars(
                                     PineValue.EmptyList,
                                     PineValueExtension.ValueFromPathOrEmptyList(
-                                        String.toList(PineValueExtension.ValueFromPathOrEmptyList(PineValue.EmptyList, [2])),
+                                        Global_Anonymous.zzz_anon_b22b52dd_1237bf50(
+                                            CommonReusedValues.Blob_Int_0,
+                                            PineValue.EmptyList,
+                                            param_1_2),
                                         [
                                         0
                                         ])))
@@ -284,6 +287,32 @@ public class OptimizeAndEmitValueFromStringTests
                     }
                 }
 
+                public static PineValue zzz_anon_b22b52dd_1237bf50(PineValue param_1, PineValue param_2, PineValue param_3)
+                {
+                    PineValue local_param_1 = param_1;
+                    ImmutableConcatBuilder local_param_2 = ImmutableConcatBuilder.Create([param_2]);
+                    PineValue local_param_3 = param_3;
+
+                    while (true)
+                    {
+                        PineValue local_000 =
+                            BuiltinFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_1, argument: local_param_3);
+
+                        if (BuiltinFunctionSpecialized.length_as_int(local_000) == 0)
+                        {
+                            return local_param_2.Evaluate();
+                        }
+
+                        {
+                            PineValue local_param_1_temp = BuiltinFunctionSpecialized.int_add(4, local_param_1);
+                            local_param_2 = local_param_2.AppendItems([PineValue.List([local_000])]);
+                            local_param_1 = local_param_1_temp;
+                        }
+
+                        continue;
+                    }
+                }
+
                 public static PineValue zzz_anon_e8c66032_dda26649(PineValue param_1, PineValue param_2)
                 {
                     if (param_2 == CommonReusedValues.Blob_Int_0)
@@ -327,5 +356,7 @@ public class OptimizeAndEmitValueFromStringTests
 
         var compiledDictionary =
             compileToAssemblyResult.BuildCompiledExpressionsDictionary();
+
+        compiledDictionary.Should().NotBeEmpty();
     }
 }

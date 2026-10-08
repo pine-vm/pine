@@ -2,7 +2,6 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.CodeGen;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Files;
-using Pine.Core.PineVM;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
@@ -54,6 +53,14 @@ public record CompilationPipelineStageResults<LoweredT>(
     /// </summary>
     public IReadOnlySet<DeclQualifiedName> RootDeclarationNames { get; init; } =
         ImmutableHashSet<DeclQualifiedName>.Empty;
+
+    /// <summary>Original source references used to explain dependencies after lowering.</summary>
+    public IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<DeclarationReference>> SourceReferences { get; init; } =
+        ImmutableDictionary<DeclQualifiedName, IReadOnlyList<DeclarationReference>>.Empty;
+
+    /// <summary>Compiler-qualified source namespaces mapped to their original file paths.</summary>
+    public IReadOnlyDictionary<string, string> SourceFilePaths { get; init; } =
+        ImmutableDictionary<string, string>.Empty;
 }
 
 /// <summary>
@@ -91,12 +98,18 @@ public record OptimizationIterationStageResults(
 /// For an overview of the compiler implementation, see the file `elm-compiler-implementation-guide.md`
 /// </para>
 /// </summary>
-public class ElmCompiler
+public partial class ElmCompiler
 {
     private sealed record CanonicalizationBoundaryResult(
         IReadOnlyList<SyntaxModelTypes.File> ConcreteModules,
         IReadOnlyList<ElmSyntaxAbstract.File> LoweringModules,
-        HashSet<string> RootModuleNames);
+        IReadOnlySet<DeclQualifiedName> RootDeclarations)
+    {
+        public IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<DeclarationReference>> References { get; init; } =
+            ImmutableDictionary<DeclQualifiedName, IReadOnlyList<DeclarationReference>>.Empty;
+
+        public IReadOnlyDictionary<string, string> FilePaths { get; init; } = ImmutableDictionary<string, string>.Empty;
+    }
 
     /// <summary>
     /// Default configuration for the Elm syntax transformations run as part of the standard compilation pipeline.
@@ -129,9 +142,13 @@ public class ElmCompiler
     /// </summary>
     public static Result<string, CompilationPipelineStageResults<DefaultLoweredResults>> LowerToElmSyntaxForCompilation(
         FileTree appCodeTree,
-        IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
+        IReadOnlyList<DeclQualifiedName> rootDeclarations,
         ElmSyntaxOptimizationConfig? syntaxOptimization = null,
-        bool includeBundledKernelModules = true)
+        bool includeBundledKernelModules = true,
+        IDictionary<string, Result<ElmSyntax.ElmSyntaxParseError, SyntaxModelTypes.File>>? sourceParseCache = null,
+        IDictionary<(SyntaxModelTypes.Node<SyntaxModelTypes.Declaration> Declaration, string Scope),
+            DeclarationCanonicalizationCacheEntry>? canonicalizationCache = null,
+        IReadOnlyDictionary<string, SyntaxModelTypes.File>? parsedSources = null)
     {
         syntaxOptimization ??= new ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled();
         // Capture per-round optimization snapshots and the post-lambda-lift module list
@@ -144,21 +161,15 @@ public class ElmCompiler
         var genericResult =
             LowerToElmSyntaxForCompilation<DefaultLoweredResults>(
                 appCodeTree,
-                rootFilePaths,
+                rootDeclarations,
                 lower: (flatCanonicalized, rootDeclarationNames) =>
                 {
-                    var rootModuleNames =
-                        rootDeclarationNames
-                        .Select(name => string.Join('.', name.Namespaces))
-                        .ToHashSet();
-
                     var canonicalizedModulesForLowering =
                         BuildModuleShellsFromFlatDeclarations(flatCanonicalized);
 
                     var standardResult =
                         RunStandardLoweringPipeline(
                             canonicalizedModulesForLowering,
-                            rootModuleNames,
                             syntaxOptimization);
 
                     if (standardResult.IsErrOrNull() is { } stdErr)
@@ -175,7 +186,10 @@ public class ElmCompiler
                     return stdOk;
                 },
                 extractFilteredDeclarations: lowered => lowered.FilteredDeclarations,
-                includeBundledKernelModules: includeBundledKernelModules);
+                includeBundledKernelModules: includeBundledKernelModules,
+                sourceParseCache: sourceParseCache,
+                canonicalizationCache: canonicalizationCache,
+                parsedSources: parsedSources);
 
         if (genericResult.IsErrOrNull() is { } genericErr)
             return genericErr;
@@ -226,14 +240,13 @@ public class ElmCompiler
     /// Source tree containing the application's Elm files. The bundled elm-core
     /// kernel modules are merged in automatically.
     /// </param>
-    /// <param name="rootFilePaths">
-    /// Entry-point file paths used as roots of the compilation closure. Only modules
-    /// transitively reachable from these are compiled.
+    /// <param name="rootDeclarations">
+    /// Explicit declaration roots. Only their semantic dependencies are canonicalized.
     /// </param>
     /// <param name="lower">
     /// Delegate that lowers the canonicalized declaration dictionary into a
     /// caller-defined <typeparamref name="LoweredT"/>. Receives the set of
-    /// fully-qualified names of declarations that belong to the root modules, so
+    /// fully-qualified names of the requested root declarations, so
     /// the lowering can decide which specializations need to be created for the
     /// applications appearing in the root declarations.
     /// </param>
@@ -243,18 +256,31 @@ public class ElmCompiler
     /// the compilation backend.
     /// </param>
     /// <param name="includeBundledKernelModules">False for resolved builds whose replacement sources are already explicit.</param>
+    /// <param name="sourceParseCache">Caller-owned source-text parsing memoization.</param>
+    /// <param name="canonicalizationCache">Caller-owned memoization of declaration bodies and their consulted scopes.</param>
+    /// <param name="parsedSources">Optional compiler-qualified source syntax retaining original source ranges.</param>
     public static Result<string, CompilationPipelineStageResults<LoweredT>> LowerToElmSyntaxForCompilation<LoweredT>(
         FileTree appCodeTree,
-        IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
+        IReadOnlyList<DeclQualifiedName> rootDeclarations,
         Func<
             ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>,
             IReadOnlySet<DeclQualifiedName>,
             Result<string, LoweredT>> lower,
         Func<LoweredT, ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>> extractFilteredDeclarations,
-        bool includeBundledKernelModules = true)
+        bool includeBundledKernelModules = true,
+        IDictionary<string, Result<ElmSyntax.ElmSyntaxParseError, SyntaxModelTypes.File>>? sourceParseCache = null,
+        IDictionary<(SyntaxModelTypes.Node<SyntaxModelTypes.Declaration> Declaration, string Scope),
+            DeclarationCanonicalizationCacheEntry>? canonicalizationCache = null,
+        IReadOnlyDictionary<string, SyntaxModelTypes.File>? parsedSources = null)
     {
         var canonicalizationResult =
-            ParseAndCanonicalizeForLowering(appCodeTree, rootFilePaths, includeBundledKernelModules);
+            ParseAndCanonicalizeForLowering(
+                appCodeTree,
+                rootDeclarations,
+                includeBundledKernelModules,
+                sourceParseCache,
+                canonicalizationCache,
+                parsedSources);
 
         if (canonicalizationResult.IsErrOrNull() is { } canonErr)
             return canonErr.ToString();
@@ -267,31 +293,13 @@ public class ElmCompiler
 
         var canonicalizedModules = canonicalizationOk.ConcreteModules;
         var modulesForLowering = canonicalizationOk.LoweringModules;
-        var rootModuleNames = canonicalizationOk.RootModuleNames;
 
         var flatCanonicalized =
             FlattenModulesToDeclarationDictionary(modulesForLowering);
 
-        bool IncludeDeclarationAsRoot(DeclQualifiedName declQualifiedName)
-        {
-            // Temp addition to account for some platform interfaces depending on additional function declarations.
-            if (TempIncludedRootDeclarations.Contains(declQualifiedName))
-                return true;
+        var rootDeclarationNames = canonicalizationOk.RootDeclarations;
 
-            return rootModuleNames.Contains(string.Join('.', declQualifiedName.Namespaces));
-        }
-
-        IReadOnlySet<DeclQualifiedName> rootDeclarationNames =
-            flatCanonicalized.Keys
-            .Where(IncludeDeclarationAsRoot)
-            .ToHashSet();
-
-        var declarationsToLower =
-            FilterFunctionDeclarationsToRootDependencies(
-                flatCanonicalized,
-                rootDeclarationNames);
-
-        var lowerResult = lower(declarationsToLower, rootDeclarationNames);
+        var lowerResult = lower(flatCanonicalized, rootDeclarationNames);
 
         if (lowerResult.IsErrOrNull() is { } lowerErr)
         {
@@ -319,22 +327,30 @@ public class ElmCompiler
                 Lowered: loweredValue,
                 ModulesForCompilation: modulesForCompilation)
             {
-                RootDeclarationNames = rootDeclarationNames
+                RootDeclarationNames = rootDeclarationNames,
+                SourceReferences = canonicalizationOk.References,
+                SourceFilePaths = canonicalizationOk.FilePaths
             };
     }
 
     /// <summary>
-    /// Parses the Elm source files reachable from <paramref name="rootFilePaths"/>,
-    /// computes the transitive dependency closure and canonicalizes the result.
+    /// Parses source scopes and canonicalizes the semantic closure of explicit declarations.
     /// Shared between the back-compat and generic overloads of
     /// <see cref="LowerToElmSyntaxForCompilation"/>.
     /// </summary>
     private static Result<CompilationError, CanonicalizationBoundaryResult>
         ParseAndCanonicalizeForLowering(
         FileTree appCodeTree,
-        IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
-        bool includeBundledKernelModules)
+        IReadOnlyList<DeclQualifiedName> rootDeclarations,
+        bool includeBundledKernelModules,
+        IDictionary<string, Result<ElmSyntax.ElmSyntaxParseError, SyntaxModelTypes.File>>? sourceParseCache,
+        IDictionary<(SyntaxModelTypes.Node<SyntaxModelTypes.Declaration> Declaration, string Scope),
+            DeclarationCanonicalizationCacheEntry>? canonicalizationCache,
+        IReadOnlyDictionary<string, SyntaxModelTypes.File>? parsedSources)
     {
+        if (rootDeclarations.Count is 0)
+            return new CanonicalizationBoundaryResult([], [], ImmutableHashSet<DeclQualifiedName>.Empty);
+
         // Resolved builds already supply the replacement sources selected by their configuration.
         var appCodeTreeWithKernelModules =
             FileTree.MergeFiles(
@@ -351,13 +367,9 @@ public class ElmCompiler
             .ToImmutableArray();
 
         // Step 1: Parse all modules, building a map from file path to module name.
-        var successfullyParsedModules = new Dictionary<string, SyntaxModelTypes.File>();
+        var successfullyParsedModules = new List<SyntaxModelTypes.File>();
 
         var parseFailures = new Dictionary<string, string>();
-
-        var filePathToModuleName =
-            new Dictionary<IReadOnlyList<string>, string>(
-                EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         var moduleNameToFilePath = new Dictionary<string, string>();
 
@@ -385,17 +397,15 @@ public class ElmCompiler
             var moduleNameFlattened = string.Join(".", header.ModuleName);
 
             // Record the path→name mapping before any module-level filtering.
-            filePathToModuleName[moduleFile.path] = moduleNameFlattened;
             moduleNameToFilePath[moduleNameFlattened] = string.Join('/', moduleFile.path);
-
-            // Natively-implemented modules (e.g. "Basics") are superseded by C# code.
-            // Do not parse or compile them from Elm source.
-            if (s_nativelyImplementedModuleNames.Contains(moduleNameFlattened))
-                continue;
 
             // Now try full parsing
             var parseResult =
-                ElmSyntax.ElmSyntaxParser.ParseModuleText(moduleText);
+                parsedSources is not null && parsedSources.TryGetValue(moduleNameFlattened, out var supplied)
+                ?
+                Result<ElmSyntax.ElmSyntaxParseError, SyntaxModelTypes.File>.ok(supplied)
+                :
+                ParseSource(moduleText, sourceParseCache);
 
             if (parseResult.IsErrOrNullable() is { } parseErr)
             {
@@ -420,157 +430,83 @@ public class ElmCompiler
                 continue;
             }
 
-            successfullyParsedModules[moduleNameFlattened] = parseModuleOk;
+            successfullyParsedModules.Add(parseModuleOk);
         }
 
-        // Step 2: Compute the transitive dependency closure of the root modules.
-        // Only modules reachable from roots that parsed successfully are compiled.
-        // Modules outside the dependency graph (unreachable from the selected roots)
-        // are completely ignored — their parse failures or other issues are irrelevant.
-        // If a reachable module has an import that failed to parse, that is an error:
-        // a required dependency is broken.
-        var rootModuleNames =
-            rootFilePaths
-            .Select(
-                path =>
-                filePathToModuleName.TryGetValue(path, out var name) ? name : null)
-            .OfType<string>()
-            .ToHashSet();
-
-        // Start the closure with roots that parsed successfully.
-        // Roots that failed to parse are silently skipped (they were never needed).
-        var modulesToCompile = new HashSet<string>();
-
-        var dependencyChains =
-            new Dictionary<string, IReadOnlyList<CompilationError.ModuleDependencyChainItem>>();
-
-        var pendingModules = new Queue<string>();
-
-        foreach (var rootModuleName in
-            rootModuleNames.Where(successfullyParsedModules.ContainsKey).Order())
+        foreach (var root in rootDeclarations)
         {
-            modulesToCompile.Add(rootModuleName);
+            var sourceNamespace = string.Join(".", root.Namespaces);
 
-            dependencyChains[rootModuleName] =
-                [
-                    new(
-                        rootModuleName,
-                        moduleNameToFilePath[rootModuleName],
-                        Origin: null)
-                ];
-
-            pendingModules.Enqueue(rootModuleName);
-        }
-
-        while (pendingModules.TryDequeue(out var moduleName))
-        {
-            if (!successfullyParsedModules.TryGetValue(moduleName, out var parsedModule))
-                continue;
-
-            var explicitDependencies =
-                parsedModule.Imports
-                .Select(
-                    import =>
-                    (ModuleName: string.Join(".", import.Value.ModuleName.Value),
-                    Origin: new CompilationError.ModuleDependencyOrigin(
-                        CompilationError.ModuleDependencyKind.ExplicitImport,
-                        import.Range,
-                        import.Value.ModuleAlias is { } alias
-                        ?
-                        string.Join(".", alias.Alias.Value)
-                        :
-                        null,
-                        RenderExposing(import.Value.ExposingList))));
-
-            var implicitDependencies =
-                ImplicitImportConfig.Default.ModuleImports
-                .OrderBy(imported => string.Join(".", imported.ModuleName))
-                .Select(
-                    imported =>
-                    (ModuleName: string.Join(".", imported.ModuleName),
-                    Origin: new CompilationError.ModuleDependencyOrigin(
-                        CompilationError.ModuleDependencyKind.ImplicitImport,
-                        Range: null,
-                        imported.Alias,
-                        Exposing: null)));
-
-            foreach (var dependency in
-                explicitDependencies.Concat(implicitDependencies)
-                .DistinctBy(item => item.ModuleName))
+            if (parseFailures.TryGetValue(sourceNamespace, out var parseFailure))
             {
-                var importedName = dependency.ModuleName;
-
-                if (s_nativelyImplementedModuleNames.Contains(importedName))
-                    continue;
-
-                if (parseFailures.TryGetValue(importedName, out var parseErr))
-                {
-                    return
-                        new CompilationError.Message(
-                            "Module '" + importedName +
-                            "' is required by '" + moduleName +
-                            "' but failed to parse: " + parseErr);
-                }
-
-                if (!successfullyParsedModules.ContainsKey(importedName) ||
-                    !modulesToCompile.Add(importedName))
-                {
-                    continue;
-                }
-
-                dependencyChains[importedName] =
-                    [
-                        .. dependencyChains[moduleName],
-                        new CompilationError.ModuleDependencyChainItem(
-                            importedName,
-                            moduleNameToFilePath[importedName],
-                            dependency.Origin),
-                    ];
-
-                pendingModules.Enqueue(importedName);
+                return
+                    new CompilationError.Message(
+                        $"Cannot canonicalize root declaration '{root.FullName}': source '{moduleNameToFilePath[sourceNamespace]}' failed to parse.\n{parseFailure}");
             }
         }
 
-        // Step 3: Canonicalize the dependency modules and surface any errors.
-        var modulesForCanonicalization =
-            modulesToCompile
-            .Where(successfullyParsedModules.ContainsKey)
-            .Select(name => successfullyParsedModules[name])
-            .ToList();
-
         var canonicalizationResult =
-            Canonicalization.Canonicalize(modulesForCanonicalization);
+            Canonicalization.CanonicalizeDeclarations(
+                successfullyParsedModules,
+                rootDeclarations,
+                cache: canonicalizationCache);
 
         if (canonicalizationResult.IsErrOrNull() is { } canonErr)
         {
             return new CompilationError.Message(canonErr);
         }
 
-        if (canonicalizationResult.IsOkOrNull() is not { } canonicalizedModulesDict)
+        if (canonicalizationResult.IsOkOrNull() is not { } canonicalizedDeclarations)
         {
             throw new NotImplementedException(
                 "Unexpected result type: " + canonicalizationResult.GetType().Name);
         }
 
-        // Surface canonicalization errors for any module in the dependency set.
+        foreach (var root in rootDeclarations)
+            if (canonicalizedDeclarations.Declarations[root].Value.Value is not SyntaxModelTypes.Declaration.FunctionDeclaration)
+            {
+                return
+                    new CompilationError.Message(
+                        $"Root declaration '{root.FullName}' is not an executable function or value definition.");
+            }
+
         var moduleErrors = new List<CompilationError.CanonicalizationDiagnostic>();
 
-        foreach (var (moduleName, (_, errors, _)) in canonicalizedModulesDict)
+        foreach (var (declarationName, (_, errors, _)) in canonicalizedDeclarations.Declarations)
         {
             if (errors.Count > 0)
             {
-                var moduleNameStr = string.Join(".", moduleName);
+                var moduleNameStr = string.Join(".", declarationName.Namespaces);
                 var filePath = moduleNameToFilePath[moduleNameStr];
-                var dependencyChain = dependencyChains[moduleNameStr];
+
+                var dependencyChain =
+                    BuildSourceDependencyChain(
+                        canonicalizedDeclarations.DependencyChains[declarationName],
+                        successfullyParsedModules,
+                        moduleNameToFilePath,
+                        canonicalizedDeclarations.References);
 
                 moduleErrors.AddRange(
                     errors.Select(
                         error =>
-                        new CompilationError.CanonicalizationDiagnostic(
-                            moduleNameStr,
-                            filePath,
-                            error,
-                            dependencyChain)));
+                        CompleteCanonicalizationDiagnostic(
+                            new CompilationError.CanonicalizationDiagnostic(
+                                declarationName.FullName,
+                                filePath,
+                                error is CanonicalizationError.UnresolvedReference { Target: { } target } unresolved &&
+                                parseFailures.TryGetValue(string.Join(".", target.Namespaces), out var parseFailure)
+                                ?
+                                unresolved with
+                                {
+                                    ResolutionDetail =
+                                    $"The supplied source '{moduleNameToFilePath[string.Join(".", target.Namespaces)]}' " +
+                                    $"for '{string.Join(".", target.Namespaces)}' failed to parse:\n{parseFailure}"
+                                }
+                                :
+                                error,
+                                dependencyChain),
+                            successfullyParsedModules,
+                            moduleNameToFilePath)));
             }
         }
 
@@ -579,9 +515,24 @@ public class ElmCompiler
             return new CompilationError.CanonicalizationErrors(moduleErrors);
         }
 
-        // All dependency modules canonicalized successfully.
         var canonicalizedModules =
-            canonicalizedModulesDict.Values.Select(v => v.File).ToList();
+            successfullyParsedModules
+            .Select(
+                source => source with
+                {
+                    Declarations =
+                    [
+                    .. canonicalizedDeclarations.Declarations
+                    .Where(
+                        entry => entry.Key.Namespaces.SequenceEqual(
+                            SyntaxModelTypes.Module.GetModuleName(source.ModuleDefinition.Value).Value))
+                    .OrderBy(entry => entry.Value.Value.Range.Start.Row)
+                    .Select(entry => entry.Value.Value)
+                    .Distinct()
+                    ]
+                })
+            .Where(source => source.Declarations.Count > 0)
+            .ToList();
 
         var modulesForLowering =
             canonicalizedModules
@@ -592,7 +543,157 @@ public class ElmCompiler
             new CanonicalizationBoundaryResult(
                 ConcreteModules: canonicalizedModules,
                 LoweringModules: modulesForLowering,
-                RootModuleNames: rootModuleNames);
+                RootDeclarations: rootDeclarations.ToImmutableHashSet())
+            {
+                References = canonicalizedDeclarations.References,
+                FilePaths = moduleNameToFilePath
+            };
+    }
+
+    private static IReadOnlyList<CompilationError.DeclarationDependencyChainItem> BuildSourceDependencyChain(
+        IReadOnlyList<DeclQualifiedName> declarations,
+        IReadOnlyList<SyntaxModelTypes.File> sources,
+        IReadOnlyDictionary<string, string> paths,
+        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<DeclarationReference>> references)
+    {
+        var chain = new List<CompilationError.DeclarationDependencyChainItem>();
+
+        for (var index = 0; index < declarations.Count; index++)
+        {
+            var declaration = declarations[index];
+            var moduleName = string.Join(".", declaration.Namespaces);
+
+            var source =
+                sources.FirstOrDefault(
+                    file =>
+                    SyntaxModelTypes.Module.GetModuleName(file.ModuleDefinition.Value).Value.SequenceEqual(
+                        declaration.Namespaces));
+
+            var definition =
+                source?.Declarations.FirstOrDefault(node =>
+                Canonicalization.GetDeclarationName(node.Value) == declaration.DeclName);
+
+            CompilationError.ImportOrigin? origin = null;
+            DeclarationReference? reference = null;
+
+            if (index > 0)
+            {
+                var previous = declarations[index - 1];
+
+                reference =
+                    (references.GetValueOrDefault(previous) ?? [])
+                    .Where(item => item.Declaration.Equals(declaration))
+                    .OrderBy(item => item.Range.Start.Row).ThenBy(item => item.Range.Start.Column)
+                    .FirstOrDefault();
+
+                if (!previous.Namespaces.SequenceEqual(declaration.Namespaces))
+                {
+                    var previousSource =
+                        sources.FirstOrDefault(
+                            file =>
+                            SyntaxModelTypes.Module.GetModuleName(file.ModuleDefinition.Value).Value.SequenceEqual(
+                                previous.Namespaces));
+
+                    var import =
+                        previousSource?.Imports.FirstOrDefault(node =>
+                        string.Join(".", node.Value.ModuleName.Value) == moduleName);
+
+                    if (import is not null)
+                    {
+                        origin =
+                            new(
+                                CompilationError.ImportKind.ExplicitImport,
+                                import.Range,
+                                import.Value.ModuleAlias is { } alias ? string.Join(".", alias.Alias.Value) : null,
+                                RenderExposing(import.Value.ExposingList));
+                    }
+                    else if (ImplicitImportConfig.Default.ModuleImports.Any(
+                        module => module.ModuleName.SequenceEqual(declaration.Namespaces)))
+                        origin = new(CompilationError.ImportKind.ImplicitImport, null, null, null);
+                }
+            }
+
+            chain.Add(
+                new(
+                    declaration.FullName,
+                    index is 0 ? null : declarations[index - 1].FullName,
+                    index is 0)
+                {
+                    FilePath = paths.GetValueOrDefault(moduleName),
+                    DeclarationRange = definition is { Range.Start.Row: > 0 } ? definition.Range : null,
+                    ReferenceRange = reference?.Range,
+                    ReferencedName = reference?.ReferencedName.FullName,
+                    IsTypeReference = reference?.IsTypeReference ?? false,
+                    Import = origin
+                });
+        }
+
+        return chain;
+    }
+
+    private static CompilationError.CanonicalizationDiagnostic CompleteCanonicalizationDiagnostic(
+        CompilationError.CanonicalizationDiagnostic diagnostic,
+        IReadOnlyList<SyntaxModelTypes.File> sources,
+        IReadOnlyDictionary<string, string> paths)
+    {
+        if (diagnostic.Error is not CanonicalizationError.UnresolvedReference { Target: { } target } unresolved)
+            return diagnostic;
+
+        var targetSource =
+            sources.FirstOrDefault(
+                source =>
+                SyntaxModelTypes.Module.GetModuleName(source.ModuleDefinition.Value).Value.SequenceEqual(
+                    target.Namespaces));
+
+        var owningName = QualifiedNameHelper.FromQualifiedNameString(diagnostic.DeclarationName);
+
+        var declaringSource =
+            sources.FirstOrDefault(
+                source =>
+                SyntaxModelTypes.Module.GetModuleName(source.ModuleDefinition.Value).Value.SequenceEqual(
+                    owningName.Namespaces));
+
+        var import =
+            declaringSource?.Imports.FirstOrDefault(node => node.Value.ModuleName.Value.SequenceEqual(target.Namespaces));
+
+        var targetDefinition =
+            targetSource?.Declarations.FirstOrDefault(node =>
+            unresolved.IsTypeReference
+            ? node.Value is SyntaxModelTypes.Declaration.ChoiceTypeDeclaration or SyntaxModelTypes.Declaration.AliasDeclaration &&
+                Canonicalization.GetDeclarationName(node.Value) == target.DeclName
+            : node.Value switch
+            {
+                SyntaxModelTypes.Declaration.FunctionDeclaration function => function.Function.Declaration.Value.Name.Value == target.DeclName,
+                SyntaxModelTypes.Declaration.PortDeclaration port => port.Signature.Name.Value == target.DeclName,
+                SyntaxModelTypes.Declaration.InfixDeclaration infix => infix.Infix.Operator.Value == target.DeclName,
+                SyntaxModelTypes.Declaration.AliasDeclaration alias => alias.TypeAlias.Name.Value == target.DeclName &&
+                    alias.TypeAlias.TypeAnnotation.Value is SyntaxModelTypes.TypeAnnotation.Record,
+                SyntaxModelTypes.Declaration.ChoiceTypeDeclaration choice => choice.TypeDeclaration.Constructors.Any(constructor =>
+                    constructor.Value.Name.Value == target.DeclName),
+                _ => throw new NotImplementedException(
+                    $"{nameof(CompleteCanonicalizationDiagnostic)} does not handle declaration variant: {node.Value.GetType().Name}")
+            });
+
+        return
+            diagnostic with
+            {
+                TargetSourcePath = paths.GetValueOrDefault(string.Join(".", target.Namespaces)),
+                TargetSourceRange = targetDefinition?.Range ?? targetSource?.ModuleDefinition.Range,
+                ReferenceImport =
+                import is not null
+                ?
+                new(
+                    CompilationError.ImportKind.ExplicitImport,
+                    import.Range,
+                    import.Value.ModuleAlias is { } alias ? string.Join(".", alias.Alias.Value) : null,
+                    RenderExposing(import.Value.ExposingList))
+                :
+                ImplicitImportConfig.Default.ModuleImports.FirstOrDefault(module => module.ModuleName.SequenceEqual(target.Namespaces)) is { } implicitImport
+                ?
+                new(CompilationError.ImportKind.ImplicitImport, null, implicitImport.Alias, null)
+                :
+                null
+            };
     }
 
     /// <summary>
@@ -607,7 +708,6 @@ public class ElmCompiler
     private static Result<string, DefaultLoweredResults>
         RunStandardLoweringPipeline(
         List<ElmSyntaxAbstract.File> canonicalizedModules,
-        IReadOnlySet<string> rootModuleNames,
         ElmSyntaxOptimizationConfig syntaxOptimization)
     {
         // Lambda lifting stage: Transform closures into top-level functions.
@@ -679,39 +779,33 @@ public class ElmCompiler
                 FilteredDeclarations: declarationsAfterLowering);
     }
 
-    internal static readonly ImmutableHashSet<DeclQualifiedName> TempIncludedRootDeclarations =
-        ImmutableHashSet<DeclQualifiedName>.Empty
-        .Add(DeclQualifiedName.Create(["Backend", "MigrateState"], "migrate"))
-        .Add(DeclQualifiedName.Create(["Json", "Encode"], "encode"))
-        .Add(DeclQualifiedName.Create(["Json", "Decode"], "value"))
-        .Add(DeclQualifiedName.Create(["Json", "Decode"], "decodeValue"))
-        .Add(DeclQualifiedName.Create(["Json", "Decode"], "decodeString"));
-
     /// <summary>
-    /// Compiles the selected Elm source files into an interactive environment and returns both the encoded environment and the lowering stages used to produce it.
-    /// <para>
-    /// Reuse <c>directInterpreterEvalCache</c> across compilations to expand its scope.
-    /// The caller must synchronize access when sharing it across concurrent compilations.
-    /// </para>
+    /// Compiles explicit declaration roots without evaluating their values.
+    /// Caller-owned parsing and canonicalization dictionaries can reuse unchanged work.
+    /// Callers must synchronize access when sharing dictionaries across concurrent operations.
     /// </summary>
     public static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults<DefaultLoweredResults> pipelineStageResults)> CompileInteractiveEnvironment(
         FileTree appCodeTree,
-        IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
+        IReadOnlyList<DeclQualifiedName> rootDeclarations,
         ElmSyntaxOptimizationConfig? syntaxOptimization = null,
         bool disableGenericApplicationChainConsolidation = false,
-        IReadOnlyList<DeclQualifiedName>? rootDeclarationsAsPlainValues = null,
-        IDictionary<Interpreter.DirectInterpreter.EvalCacheEntryKey, PineValue>? directInterpreterEvalCache = null,
         bool includeBundledKernelModules = true,
-        IPineVM? plainValueVm = null)
+        IDictionary<string, Result<ElmSyntax.ElmSyntaxParseError, SyntaxModelTypes.File>>? sourceParseCache = null,
+        IDictionary<(SyntaxModelTypes.Node<SyntaxModelTypes.Declaration> Declaration, string Scope),
+            DeclarationCanonicalizationCacheEntry>? canonicalizationCache = null,
+        IReadOnlyDictionary<string, SyntaxModelTypes.File>? parsedSources = null)
     {
         syntaxOptimization ??= SyntaxOptimizationConfigDefault;
 
         var loweringResult =
             LowerToElmSyntaxForCompilation(
                 appCodeTree,
-                rootFilePaths,
+                rootDeclarations,
                 syntaxOptimization,
-                includeBundledKernelModules);
+                includeBundledKernelModules,
+                sourceParseCache,
+                canonicalizationCache,
+                parsedSources);
 
         if (loweringResult.IsErrOrNull() is { } loweringErr)
             return loweringErr;
@@ -722,23 +816,47 @@ public class ElmCompiler
         return
             EmitCompiledEnvironmentFromPipelineResults(
                 pipelineStageResults,
-                disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation,
-                rootDeclarationsAsPlainValues: rootDeclarationsAsPlainValues,
-                directInterpreterEvalCache: directInterpreterEvalCache,
-                plainValueVm: plainValueVm);
+                disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
     }
 
     /// <summary>Compiles sources prepared with project-scoped resolution and import visibility validation.</summary>
     public static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults<DefaultLoweredResults> pipelineStageResults)> CompileResolvedEnvironment(
         ElmResolvedBuild build,
-        IReadOnlyList<DeclQualifiedName>? rootDeclarationsAsPlainValues = null,
-        IPineVM? plainValueVm = null) =>
-        CompileInteractiveEnvironment(
-            build.Sources,
-            [.. build.RootFilePaths.Select(path => (IReadOnlyList<string>)path)],
-            rootDeclarationsAsPlainValues: rootDeclarationsAsPlainValues,
-            includeBundledKernelModules: false,
-            plainValueVm: plainValueVm);
+        IReadOnlyList<DeclQualifiedName> rootDeclarations,
+        IDictionary<string, Result<ElmSyntax.ElmSyntaxParseError, SyntaxModelTypes.File>>? sourceParseCache = null,
+        IDictionary<(SyntaxModelTypes.Node<SyntaxModelTypes.Declaration> Declaration, string Scope),
+            DeclarationCanonicalizationCacheEntry>? canonicalizationCache = null)
+    {
+        var result =
+            CompileInteractiveEnvironment(
+                build.Sources,
+                rootDeclarations,
+                includeBundledKernelModules: false,
+                sourceParseCache: sourceParseCache,
+                canonicalizationCache: canonicalizationCache,
+                parsedSources: build.CompilerModuleSyntax);
+
+        if (result.IsErrOrNull() is not { } error)
+            return result;
+
+        var replacements =
+            build.Resolution.Packages.Values
+            .Where(package => package.SubstitutionImplementationId is not null)
+            .OrderBy(package => package.Identity.Name, StringComparer.Ordinal)
+            .ToArray();
+
+        if (replacements.Length is 0)
+            return error;
+
+        return
+            error + "\n\nSelected package replacements (authoritative source/API providers):\n" +
+            string.Join(
+                "\n",
+                replacements.Select(
+                    package =>
+                    "  " + package.Identity + " -> " + package.SubstitutionImplementationId)) +
+            "\nMissing replacement APIs are not automatically searched upstream.";
+    }
 
     /// <summary>
     /// Shared emission helper: takes the post-lowering
@@ -750,10 +868,7 @@ public class ElmCompiler
     private static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults<LoweredT> pipelineStageResults)>
         EmitCompiledEnvironmentFromPipelineResults<LoweredT>(
         CompilationPipelineStageResults<LoweredT> pipelineStageResults,
-        bool disableGenericApplicationChainConsolidation,
-        IReadOnlyList<DeclQualifiedName>? rootDeclarationsAsPlainValues,
-        IDictionary<Interpreter.DirectInterpreter.EvalCacheEntryKey, PineValue>? directInterpreterEvalCache,
-        IPineVM? plainValueVm)
+        bool disableGenericApplicationChainConsolidation)
     {
         var modulesForCompilation = pipelineStageResults.ModulesForCompilation;
 
@@ -925,9 +1040,6 @@ public class ElmCompiler
 
         var expressionEncodingCache = new PineExpressionEncodingCache();
 
-        directInterpreterEvalCache ??=
-            new Dictionary<Interpreter.DirectInterpreter.EvalCacheEntryKey, PineValue>();
-
         // Second pass: Compile all SCCs in dependency order
         // This ensures all dependencies are compiled before they are needed
         foreach (var scc in sccsInDependencyOrder)
@@ -963,7 +1075,6 @@ public class ElmCompiler
                 {
                     var rootDeclarationNames =
                         pipelineStageResults.RootDeclarationNames
-                        .Concat(TempIncludedRootDeclarations)
                         .Select(QualifiedNameHelper.ToQualifiedNameString)
                         .ToHashSet(StringComparer.Ordinal);
 
@@ -972,6 +1083,16 @@ public class ElmCompiler
                             rootDeclarationNames,
                             inDeclaration.DeclarationName,
                             directDependencies);
+
+                    dependencyChain =
+                        BuildSourceDependencyChain(
+                            [
+                            .. dependencyChain.Select(
+                                item => QualifiedNameHelper.FromQualifiedNameString(item.DeclarationName))
+                            ],
+                            pipelineStageResults.Canonicalized,
+                            pipelineStageResults.SourceFilePaths,
+                            pipelineStageResults.SourceReferences);
 
                     return
                         new CompilationError.DeclarationCompilationDiagnostic(
@@ -995,101 +1116,6 @@ public class ElmCompiler
             compilationContext = compileSccOk;
         }
 
-        // Zero-parameter declarations represent Elm values, so the module value embeds
-        // their evaluated results directly instead of a function-record wrapper.
-        // This lets consumers read the declaration value without first evaluating it.
-        var declarationsAsPlainValues =
-            compilationContext.CompiledFunctionsCache
-            .Where(entry => entry.Value.ParameterCount is 0)
-            .Select(entry => entry.Key)
-            .ToHashSet();
-
-        if (rootDeclarationsAsPlainValues is { Count: > 0 } rootDeclsAsPlainValues)
-        {
-            foreach (var rootDecl in rootDeclsAsPlainValues)
-            {
-                declarationsAsPlainValues.Add(
-                    QualifiedNameHelper.FromQualifiedNameString(rootDecl.FullName));
-            }
-        }
-
-        if (declarationsAsPlainValues.Count > 0)
-        {
-            var plainValueParseCache = new PineVMParseCache();
-
-            var plainValueInterpreter =
-                plainValueVm ??
-                Interpreter.DirectInterpreter.WithSharedEvalCache(
-                    plainValueParseCache,
-                    directInterpreterEvalCache);
-
-            foreach (var qualifiedName in declarationsAsPlainValues)
-            {
-                var qualifiedNameStr = qualifiedName.ToString();
-
-                var compiledInfo = compilationContext.TryGetCompiledFunctionInfo(qualifiedName);
-
-                if (compiledInfo is null)
-                {
-                    return
-                        "Root declaration '" + qualifiedNameStr +
-                        "' requested as plain value was not compiled.";
-                }
-
-                if (compiledInfo.ParameterCount is not 0)
-                {
-                    return
-                        "Root declaration '" + qualifiedNameStr +
-                        "' has " + compiledInfo.ParameterCount +
-                        " parameters; only zero-parameter declarations can be emitted as plain values.";
-                }
-
-                var wrapperValue = compiledInfo.CompiledValue;
-
-                var parseWrapperResult = plainValueParseCache.ParseExpression(wrapperValue);
-
-                if (parseWrapperResult.IsErrOrNull() is { } parseWrapperErr)
-                {
-                    return
-                        "Failed parsing wrapper expression for root declaration '" +
-                        qualifiedNameStr + "': " + parseWrapperErr;
-                }
-
-                if (parseWrapperResult.IsOkOrNull() is not { } wrapperExpression)
-                {
-                    throw new NotImplementedException(
-                        "Unexpected result type: " + parseWrapperResult.GetType());
-                }
-
-                var evalResult =
-                    plainValueInterpreter.EvaluateExpression(
-                        wrapperExpression,
-                        PineValue.EmptyList);
-
-                if (evalResult.IsErrOrNull() is { } evalErr)
-                {
-                    return
-                        "Failed evaluating root declaration '" + qualifiedNameStr +
-                        "' as plain value: " + evalErr;
-                }
-
-                if (evalResult.IsOkOrNull() is not { } plainValue)
-                {
-                    throw new NotImplementedException(
-                        "Unexpected result type: " + evalResult.GetType());
-                }
-
-                compilationContext =
-                    compilationContext.WithCompiledFunction(
-                        qualifiedNameStr,
-                        plainValue,
-                        compiledInfo.EncodedBody,
-                        compiledInfo.DependencyLayout,
-                        parameterCount: compiledInfo.ParameterCount,
-                        envFunctions: compiledInfo.EnvFunctions);
-            }
-        }
-
         // Third pass: Build module values from compiled functions
         var compiledModuleEntries = new List<PineValue>();
 
@@ -1098,7 +1124,25 @@ public class ElmCompiler
             var moduleNameFlattened =
                 string.Join('.', ElmSyntaxAbstract.Module.GetModuleName(parsedModule.ModuleDefinition));
 
-            var moduleValue = BuildModuleValue(parsedModule, moduleNameFlattened, compilationContext);
+            var exportedDeclarations =
+                parsedModule with
+                {
+                    Declarations =
+                    [
+                    .. parsedModule.Declarations.Where(
+                        declaration =>
+                        GetDeclarationName(declaration) is { } name &&
+                        pipelineStageResults.RootDeclarationNames.Contains(
+                            DeclQualifiedName.Create(
+                                ElmSyntaxAbstract.Module.GetModuleName(parsedModule.ModuleDefinition),
+                                name)))
+                    ]
+                };
+
+            if (exportedDeclarations.Declarations.Count is 0)
+                continue;
+
+            var moduleValue = BuildModuleValue(exportedDeclarations, moduleNameFlattened, compilationContext);
 
             var namedModuleEntry =
                 PineValue.List(
@@ -2326,7 +2370,7 @@ public class ElmCompiler
         error switch
         {
             CanonicalizationError.UnresolvedReference unresolved =>
-            $"Cannot resolve reference '{unresolved.Name}'",
+            $"Cannot resolve {(unresolved.IsTypeReference ? "type reference" : "reference")} '{unresolved.Name}'",
 
             CanonicalizationError.NamingClash clash =>
             clash.ShadowedRange is { } shadowedRange
@@ -2426,7 +2470,6 @@ public class ElmCompiler
         var pendingFunctions =
             new Stack<DeclQualifiedName>(
                 roots
-                .Concat(TempIncludedRootDeclarations)
                 .Where(
                     name =>
                     declarations.TryGetValue(name, out var declaration) &&

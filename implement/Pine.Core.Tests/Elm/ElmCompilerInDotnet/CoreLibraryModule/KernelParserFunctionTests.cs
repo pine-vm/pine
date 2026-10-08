@@ -1,7 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
-using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
 using System;
@@ -75,6 +74,11 @@ public class KernelParserFunctionTests
 
                 Ok _ ->
                     False
+
+
+        parseFloat : String -> Result (List Parser.DeadEnd) Float
+        parseFloat source =
+            Parser.run Parser.float source
 
 
         -- ====== Parser.symbol ======
@@ -722,7 +726,7 @@ public class KernelParserFunctionTests
                     .ToList();
 
                 var compiledEnv =
-                    ElmCompiler.CompileInteractiveEnvironment(
+                    ElmCompilerTestHelper.CompileInteractiveEnvironmentFromFiles(
                         treeWithTest,
                         rootFilePaths: rootFilePaths)
                     .Map(r => r.compiledEnvValue)
@@ -820,6 +824,16 @@ public class KernelParserFunctionTests
     public void Parse_int_letters_fails()
     {
         CallThunk("parseIntLetters").Should().Be(s_true);
+    }
+
+    [Theory]
+    [InlineData("1.25", 5, 4)]
+    [InlineData("2.5e2", 250, 1)]
+    [InlineData("0.125", 1, 8)]
+    public void Parse_float_uses_local_string_constructor(string source, long numerator, long denominator)
+    {
+        ApplyUnary(GetTestFunction("parseFloat"), String(source))
+            .Should().Be(OkOf(ElmValue.ElmFloat.Normalized(numerator, denominator)));
     }
 
     // ===== Parser.symbol =====

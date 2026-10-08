@@ -18,6 +18,12 @@ namespace Pine.Core.Tests.Elm.LanguageServer;
 /// </summary>
 public class LanguageServerDiagnosticsTests
 {
+    private sealed class ApplicationDiagnosticsProvider : StubDiagnosticsProvider, IApplicationDiagnosticsProvider
+    {
+        public Result<DiagnosticsProviderError, string> GetApplicationUri(string documentUri) =>
+            VirtualWorkspace.DocumentUri("elm.json");
+    }
+
     private static Diagnostic DiagnosticWithMessage(string message, uint line = 0) =>
         new(
             Range: new Range(
@@ -102,6 +108,42 @@ public class LanguageServerDiagnosticsTests
         server.WorkspaceInitializationTask!.Wait();
 
         return (server, published);
+    }
+
+    [Fact]
+    public async Task Application_diagnostics_replace_previous_results_when_another_document_triggers_analysis()
+    {
+        var provider = new ApplicationDiagnosticsProvider();
+        var mainUri = VirtualWorkspace.DocumentUri("Main.elm");
+        var otherUri = VirtualWorkspace.DocumentUri("Other.elm");
+
+        var (server, published) =
+            CreateServer(
+                provider,
+                [
+                    (["Main.elm"], "module Main exposing (..)\nroot = 42"),
+                    (["Other.elm"], "module Other exposing (..)\nroot = 42")
+                ]);
+
+        provider.SetResult(
+            mainUri,
+            Result<DiagnosticsProviderError, IReadOnlyList<DocumentDiagnostics>>.ok(
+                [new DocumentDiagnostics(otherUri, [DiagnosticWithMessage("old error")])]));
+
+        await server.TextDocument_didSaveAsync(
+            new DidSaveTextDocumentParams(new TextDocumentIdentifier(mainUri), Text: null));
+
+        published.Messages(otherUri).Should().Equal("old error");
+
+        provider.SetResult(
+            otherUri,
+            Result<DiagnosticsProviderError, IReadOnlyList<DocumentDiagnostics>>.ok(
+                [new DocumentDiagnostics(mainUri, []), new DocumentDiagnostics(otherUri, [])]));
+
+        await server.TextDocument_didSaveAsync(
+            new DidSaveTextDocumentParams(new TextDocumentIdentifier(otherUri), Text: null));
+
+        published.Messages(otherUri).Should().BeEmpty();
     }
 
     [Fact]

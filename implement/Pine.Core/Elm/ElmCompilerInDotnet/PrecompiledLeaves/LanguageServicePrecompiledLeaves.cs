@@ -61,16 +61,15 @@ public static class LanguageServicePrecompiledLeaves
             }
         }
 
-        var rootFilePaths =
-            mergedTree.EnumerateFilesTransitive()
-            .Where(file => file.path[^1].Equals("LanguageService.elm", StringComparison.OrdinalIgnoreCase))
-            .Select(file => (IReadOnlyList<string>)file.path)
-            .ToList();
+        string[] functionNames = ["removeWrappingFromMultilineComment", "dropWhileEmpty", "sliceRangeFromTextLines"];
 
         var compiledEnv =
             ElmCompiler.CompileInteractiveEnvironment(
                 mergedTree,
-                rootFilePaths: rootFilePaths)
+                rootDeclarations:
+                [
+                    .. functionNames.Select(name => DeclQualifiedName.Create(["LanguageService"], name))
+                ])
             .Map(result => result.compiledEnvValue)
             .Extract(
                 error => throw new Exception(
@@ -90,12 +89,7 @@ public static class LanguageServicePrecompiledLeaves
         var parseCache = new PineVMParseCache();
         var infos = new Dictionary<string, (PineValue leafKey, PineValue envFunctionsValue)>();
 
-        foreach (var functionName in new[]
-        {
-            "removeWrappingFromMultilineComment",
-            "dropWhileEmpty",
-            "sliceRangeFromTextLines",
-        })
+        foreach (var functionName in functionNames)
         {
             var record =
                 FunctionRecord.ParseFunctionRecordTagged(

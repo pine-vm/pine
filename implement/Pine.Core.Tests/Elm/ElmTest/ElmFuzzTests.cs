@@ -1,7 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
-using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.Testing;
 using Pine.Core.Files;
 using Pine.Core.PineVM;
@@ -220,7 +219,8 @@ public class ElmFuzzTests
         var vm = ElmCompilerTestHelper.PineVMForProfiling(_ => { });
 
         var compiled =
-            ElmCompiler.CompileInteractiveEnvironment(tree, [floatPath, bitwisePath], plainValueVm: vm)
+            ElmCompilerInDotnet.ElmCompilerTestHelper
+            .CompileInteractiveEnvironmentFromFiles(tree, [floatPath, bitwisePath], evaluationVm: vm)
             .Extract(error => throw new InvalidOperationException(error));
 
         var environment =

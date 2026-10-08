@@ -80,7 +80,7 @@ public class PrecompiledLeavesEffectivenessTests
                     .ToList();
 
                 var compiledEnv =
-                    ElmCompiler.CompileInteractiveEnvironment(
+                    ElmCompilerTestHelper.CompileInteractiveEnvironmentFromFiles(
                         treeWithTest,
                         rootFilePaths: rootFilePaths)
                     .Map(r => r.compiledEnvValue)

@@ -1,3 +1,4 @@
+using Pine.Core.CodeAnalysis;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -30,7 +31,17 @@ public abstract record CanonicalizationError(
     public record UnresolvedReference(
         Range Range,
         string Name)
-        : CanonicalizationError(Range);
+        : CanonicalizationError(Range)
+    {
+        /// <summary>Explains whether lookup failed because of scope, missing sources, or exposure.</summary>
+        public string? ResolutionDetail { get; init; }
+
+        /// <summary>Resolved target identity, when a source alias or unqualified import identifies a target.</summary>
+        public DeclQualifiedName? Target { get; init; }
+
+        /// <summary>Distinguishes type lookup from value lookup.</summary>
+        public bool IsTypeReference { get; init; }
+    }
 
     /// <summary>
     /// A name shadows an existing binding (parameter, let-binding, or declaration).

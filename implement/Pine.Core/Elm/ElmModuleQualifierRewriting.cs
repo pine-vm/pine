@@ -19,7 +19,7 @@ internal sealed class ElmModuleQualifierRewriting(IReadOnlyDictionary<string, st
         };
 
     private IReadOnlyList<string> Qualifier(IReadOnlyList<string> name) =>
-        aliases.TryGetValue(string.Join(".", name), out var alias) ? [alias] : name;
+        aliases.TryGetValue(string.Join(".", name), out var alias) ? alias.Split('.') : name;
 
     private Declaration Declaration(Declaration declaration) =>
         declaration switch

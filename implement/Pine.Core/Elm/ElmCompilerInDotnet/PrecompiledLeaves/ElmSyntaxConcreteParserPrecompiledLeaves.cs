@@ -101,16 +101,14 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
             mergedTree = mergedTree.SetNodeAtPathSorted(path, FileTree.File(file));
         }
 
-        var rootFilePaths =
-            mergedTree.EnumerateFilesTransitive()
-            .Where(
-                file =>
-                file.path[^1].Equals("StringParsing.elm", StringComparison.OrdinalIgnoreCase))
-            .Select(file => (IReadOnlyList<string>)file.path)
-            .ToList();
-
         var compiledEnv =
-            ElmCompiler.CompileInteractiveEnvironment(mergedTree, rootFilePaths: rootFilePaths)
+            ElmCompiler.CompileInteractiveEnvironment(
+                mergedTree,
+                rootDeclarations:
+                [
+                    .. s_stringParsingFunctionNames.Select(
+                        name => DeclQualifiedName.Create(StringParsingModuleName.Split('.'), name))
+                ])
             .Map(result => result.compiledEnvValue)
             .Extract(
                 error => throw new Exception(

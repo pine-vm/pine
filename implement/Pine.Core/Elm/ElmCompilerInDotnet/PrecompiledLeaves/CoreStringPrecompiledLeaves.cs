@@ -71,16 +71,16 @@ public static class CoreStringPrecompiledLeaves
     {
         var kernelModulesTree = BundledFiles.ElmKernelModulesDefault.Value;
 
-        var rootFilePaths =
-            kernelModulesTree.EnumerateFilesTransitive()
-            .Where(file => file.path[^1].Equals("String.elm", StringComparison.OrdinalIgnoreCase))
-            .Select(file => (IReadOnlyList<string>)file.path)
-            .ToList();
+        string[] functionNames =
+            [
+                "toListRecursive", "splitHelperOnBlob", "linesHelper", "toFloat", "toInt", "fromInt",
+                "trimLeftCountBytesTrimmed", "trimRightCountBytesRemaining"
+            ];
 
         var compiledEnv =
             ElmCompiler.CompileInteractiveEnvironment(
                 kernelModulesTree,
-                rootFilePaths: rootFilePaths)
+                rootDeclarations: [.. functionNames.Select(name => DeclQualifiedName.Create(["String"], name))])
             .Map(result => result.compiledEnvValue)
             .Extract(
                 error => throw new Exception(
@@ -100,17 +100,7 @@ public static class CoreStringPrecompiledLeaves
         var parseCache = new PineVMParseCache();
         var infos = new Dictionary<string, (PineValue leafKey, PineValue envFunctionsValue)>();
 
-        foreach (var functionName in new[]
-        {
-            "toListRecursive",
-            "splitHelperOnBlob",
-            "linesHelper",
-            "toFloat",
-            "toInt",
-            "fromInt",
-            "trimLeftCountBytesTrimmed",
-            "trimRightCountBytesRemaining",
-        })
+        foreach (var functionName in functionNames)
         {
             var record =
                 FunctionRecord.ParseFunctionRecordTagged(

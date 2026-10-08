@@ -130,6 +130,16 @@ public class ElmTimeJsonAdapter
             PineValue compiledApp,
             PineVMParseCache parseCache)
         {
+            var evaluatedRoots =
+                ElmSourceCompilation.EvaluateZeroParameterRoots(
+                    compiledApp,
+                    DirectInterpreter.WithLocalEvalCache(parseCache));
+
+            if (evaluatedRoots.IsErrOrNull() is { } evaluationError)
+                return "Failed evaluating JSON adapter roots: " + evaluationError;
+
+            compiledApp = evaluatedRoots.Extract(error => throw new System.Exception(error));
+
             ElmCompilerCache elmEncodingCache = new();
 
             var parseEnvResult =

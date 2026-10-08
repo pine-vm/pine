@@ -1,7 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
-using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
@@ -324,7 +323,7 @@ public class ElmSyntaxConcreteParserPrecompiledLeavesEffectivenessTests
                 FileTree.File(Encoding.UTF8.GetBytes(TestModuleText)));
 
         var compiledEnv =
-            ElmCompiler.CompileInteractiveEnvironment(
+            ElmCompilerTestHelper.CompileInteractiveEnvironmentFromFiles(
                 mergedTree,
                 rootFilePaths: [["ElmSyntaxConcreteParserPrecompiledLeavesTestModule.elm"]])
             .Map(result => result.compiledEnvValue)

@@ -334,6 +334,33 @@ public sealed record ElmResolvedBuild(
     public ImmutableDictionary<string, string> CompilerModuleNames { get; init; } =
         [];
 
+    /// <summary>Compiler module identities mapped back to original source paths (including package ownership).</summary>
+    public ImmutableDictionary<string, string> CompilerModuleSourcePaths { get; init; } =
+        [];
+
+    /// <summary>
+    /// Compiler module identities mapped to namespace-rewritten syntax retaining original source ranges.
+    /// Demand-aware compilation, analysis and queries should use these nodes rather than reparse formatted Sources.
+    /// Empty for legacy strict preparation.
+    /// </summary>
+    public ImmutableDictionary<string, ElmSyntax.SyntaxModel.File> CompilerModuleSyntax { get; init; } =
+        [];
+
+    /// <summary>
+    /// Import errors from all available sources, including disconnected project sources.
+    /// These do not invalidate dependency resolution or an unrelated declaration compilation.
+    /// Application analysis should report project import diagnostics and relevant package diagnostics.
+    /// </summary>
+    public ImmutableArray<ImportDiagnostic> ImportDiagnostics { get; init; } = [];
+
+    /// <summary>An import diagnostic in the unmodified source, before compiler namespace rewriting.</summary>
+    public sealed record ImportDiagnostic(
+        string FilePath,
+        string ModuleName,
+        string ImportedModuleName,
+        ElmSyntax.SyntaxModel.Range ImportRange,
+        string Message);
+
     /// <summary>Serializes the resolution, source hashes, roots and compiler identity mapping without file-tree internals.</summary>
     public string ToDebugJson() =>
         JsonSerializer.Serialize(
@@ -344,6 +371,8 @@ public sealed record ElmResolvedBuild(
                 ProjectSourceFingerprint,
                 PackageSourceFingerprints,
                 CompilerModuleNames,
+                CompilerModuleSourcePaths,
+                ImportDiagnostics,
             },
             new JsonSerializerOptions { WriteIndented = true });
 }

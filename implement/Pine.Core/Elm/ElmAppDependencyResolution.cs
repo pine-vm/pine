@@ -10,10 +10,10 @@ using System.Text;
 namespace Pine.Core.Elm;
 
 /// <summary>
-/// Describes the compilation units that make up an Elm app: the app files and the selected package files
-/// needed for a specific compilation. Use this to pass a self-contained set of sources to the compiler.
+/// Describes the source and package inputs available to an Elm application.
+/// Declaration roots are selected separately by compilation callers.
 /// </summary>
-/// <param name="AppFiles">The filtered tree of app files relevant to the compilation.</param>
+/// <param name="AppFiles">The project's source tree.</param>
 /// <param name="Packages">The ordered list of packages (files and parsed elm.json) needed for the compilation.</param>
 public record AppCompilationUnits(
     FileTree AppFiles,
@@ -49,9 +49,8 @@ public record AppCompilationUnits(
 public class ElmAppDependencyResolution
 {
     /// <summary>
-    /// Builds the <see cref="AppCompilationUnits"/> and resolves the entry module name for the given entry point file.
-    /// This filters the app files down to the minimal set needed for compilation and selects the required packages
-    /// based on imports and package dependencies.
+    /// Prepares the project's available declarations and resolves the selected entry module name.
+    /// Unused unavailable imports are retained as diagnostics rather than blocking an unrelated compilation root.
     /// </summary>
     /// <param name="sourceFiles">The complete source file tree of the app.</param>
     /// <param name="entryPointFilePath">The path to the entry point .elm file (segments, not OS path).</param>
@@ -60,7 +59,7 @@ public class ElmAppDependencyResolution
     /// <param name="additionalRootFilePaths">Other entry modules that must remain in the same prepared environment.</param>
     /// <returns>
     /// A tuple containing:
-    /// - files: The filtered <see cref="AppCompilationUnits"/>
+    /// - files: The prepared <see cref="AppCompilationUnits"/>
     /// - entryModuleName: The parsed module name of the entry point file
     /// </returns>
     /// <exception cref="Exception">Thrown when the entry file is missing, not a blob, or the module name cannot be parsed.</exception>
@@ -100,7 +99,7 @@ public class ElmAppDependencyResolution
         configuration ??= ElmPackageSubstitutions.DefaultBuild.Value;
 
         var build =
-            ElmResolvedBuildPreparation.PrepareAsync(
+            ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(
                 sourceFiles,
                 manifest.filePath,
                 [entryPointFilePath, .. additionalRootFilePaths ?? []],

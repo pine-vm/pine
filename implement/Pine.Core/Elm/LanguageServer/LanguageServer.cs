@@ -605,6 +605,24 @@ public class LanguageServer(
             languageServiceState.AddFile(documentUri, content);
         }
 
+        if (diagnosticsProvider is IApplicationDiagnosticsProvider)
+        {
+            foreach (var rootUri in rootUris)
+            {
+                var manifestUri = rootUri.TrimEnd('/') + "/elm.json";
+                var manifest = workspace.ReadFile(manifestUri);
+
+                if (manifest.IsErrOrNull() is { } readError)
+                {
+                    Log("Cannot read diagnostics manifest " + manifestUri + ": " + readError.Message);
+                    continue;
+                }
+
+                if (OkFileOrNull(manifest) is not null)
+                    await RunDiagnosticsAsync(diagnosticsProvider, manifestUri, CancellationToken.None);
+            }
+        }
+
         return Result<string, ILanguageServiceSession>.ok(languageServiceState);
     }
 
@@ -959,6 +977,9 @@ public class LanguageServer(
                 " ms");
 
             QueueCodeLensRefresh();
+
+            if (diagnosticsProvider is IApplicationDiagnosticsProvider)
+                await RunDiagnosticsAsync(diagnosticsProvider, update.DocumentUri, cancellationToken);
         }
         catch (System.OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -1093,6 +1114,9 @@ public class LanguageServer(
         {
             RemoveDiagnosticsEntryPoint(decodedUri);
         }
+
+        if (diagnosticsProvider is IApplicationDiagnosticsProvider)
+            await RunDiagnosticsAsync(diagnosticsProvider, decodedUri, CancellationToken.None);
     }
 
     private bool IsDocumentOpen(string documentUri)
@@ -1388,6 +1412,28 @@ public class LanguageServer(
         if (anyChangeApplied)
         {
             QueueCodeLensRefresh();
+
+            if (diagnosticsProvider is IApplicationDiagnosticsProvider applicationProvider)
+            {
+                var applications = new HashSet<string>(System.StringComparer.Ordinal);
+
+                foreach (var change in changes)
+                {
+                    var application = applicationProvider.GetApplicationUri(change.Uri);
+
+                    if (application.IsErrOrNull() is { } error)
+                    {
+                        Log("Cannot refresh application diagnostics for " + change.Uri + ": " + error.Message);
+                        continue;
+                    }
+
+                    if (applications.Add(
+                        application.Extract(
+                            error =>
+                            throw new System.InvalidOperationException(error.Message))))
+                        await RunDiagnosticsAsync(diagnosticsProvider, change.Uri, CancellationToken.None);
+                }
+            }
         }
     }
 
@@ -2289,7 +2335,7 @@ public class LanguageServer(
     /// <summary>
     /// Provides unresolved reference-count lenses for module-level declarations in a document.
     /// </summary>
-    public IReadOnlyList<Protocol.CodeLens> TextDocument_codeLens(
+    public IReadOnlyList<CodeLens> TextDocument_codeLens(
         CodeLensParams codeLensParams,
         CancellationToken cancellationToken = default)
     {
@@ -2332,7 +2378,7 @@ public class LanguageServer(
                             CodeLensDataJsonSerializerOptions);
 
                     return
-                        new Protocol.CodeLens(
+                        new CodeLens(
                             Range: new Range(displayPosition, displayPosition),
                             Command: null,
                             Data: data);
@@ -2343,8 +2389,8 @@ public class LanguageServer(
     /// <summary>
     /// Resolves a reference-count lens by querying usage locations for its declaration.
     /// </summary>
-    public Protocol.CodeLens CodeLens_resolve(
-        Protocol.CodeLens codeLens,
+    public CodeLens CodeLens_resolve(
+        CodeLens codeLens,
         CancellationToken cancellationToken = default)
     {
         CodeLensResolveData? data;
@@ -2372,7 +2418,7 @@ public class LanguageServer(
 
         var references =
             TextDocument_references(
-                new Protocol.ReferenceParams(
+                new ReferenceParams(
                     new TextDocumentIdentifier(data.DocumentUri),
                     data.Position,
                     new ReferenceContext(IncludeDeclaration: false)),
@@ -2390,7 +2436,7 @@ public class LanguageServer(
             codeLens with
             {
                 Command =
-                new Protocol.Command(
+                new Command(
                     Title: referenceCount + (referenceCount is 1 ? " reference" : " references"),
                     Identifier: "pine.client.peekReferences",
                     Arguments: [data.DocumentUri, data.Position]),
@@ -2458,7 +2504,7 @@ public class LanguageServer(
     /// Provides reference locations for a text document position.
     /// </summary>
     public IReadOnlyList<Location> TextDocument_references(
-        Protocol.ReferenceParams referenceParams,
+        ReferenceParams referenceParams,
         CancellationToken cancellationToken = default)
     {
         var textDocumentUri = DocumentUriCleaned(referenceParams.TextDocument.Uri);
@@ -2671,15 +2717,34 @@ public class LanguageServer(
         string entryPointDocumentUri,
         CancellationToken cancellationToken)
     {
+        var diagnosticsKey = entryPointDocumentUri;
+
+        if (provider is IApplicationDiagnosticsProvider applicationProvider)
+        {
+            var application = applicationProvider.GetApplicationUri(entryPointDocumentUri);
+
+            if (application.IsErrOrNull() is { } applicationError)
+            {
+                Log("Cannot identify diagnostics application for " + entryPointDocumentUri + ": " + applicationError.Message);
+                return;
+            }
+
+            diagnosticsKey =
+                DocumentUriCleaned(
+                    application.Extract(
+                        error =>
+                        throw new System.InvalidOperationException(error.Message)));
+        }
+
         long generation;
 
         lock (_diagnosticsLock)
         {
-            _diagnosticsGenerations.TryGetValue(entryPointDocumentUri, out var previousGeneration);
+            _diagnosticsGenerations.TryGetValue(diagnosticsKey, out var previousGeneration);
 
             generation = previousGeneration + 1;
 
-            _diagnosticsGenerations[entryPointDocumentUri] = generation;
+            _diagnosticsGenerations[diagnosticsKey] = generation;
         }
 
         var revision = Interlocked.Read(ref _sourceRevision);
@@ -2738,7 +2803,7 @@ public class LanguageServer(
 
         lock (_diagnosticsLock)
         {
-            if (_diagnosticsGenerations.TryGetValue(entryPointDocumentUri, out var currentGeneration) &&
+            if (_diagnosticsGenerations.TryGetValue(diagnosticsKey, out var currentGeneration) &&
                 currentGeneration != generation)
             {
                 Log(
@@ -2763,7 +2828,7 @@ public class LanguageServer(
                     entryPointDocumentUri
                 };
 
-            if (_diagnosticsByEntryPoint.TryGetValue(entryPointDocumentUri, out var previousDiagnostics))
+            if (_diagnosticsByEntryPoint.TryGetValue(diagnosticsKey, out var previousDiagnostics))
             {
                 foreach (var previous in previousDiagnostics)
                 {
@@ -2786,7 +2851,7 @@ public class LanguageServer(
                 affectedUris.Add(documentDiagnostics.DocumentUri);
             }
 
-            _diagnosticsByEntryPoint[entryPointDocumentUri] = normalized;
+            _diagnosticsByEntryPoint[diagnosticsKey] = normalized;
 
             toPublish = AggregateDiagnostics(affectedUris);
         }
