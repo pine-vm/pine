@@ -62,11 +62,19 @@ public abstract record EvaluationErrorReason
 /// A cheap snapshot of a live evaluation frame. Values and instructions are retained
 /// by reference so callers can perform deeper analysis only when needed.
 /// </summary>
+/// <remarks>
+/// Live-query delegates must be consumed during the evaluation callback. A locals snapshot
+/// can contain null for slots that have not been initialized.
+/// </remarks>
 public sealed record EvaluationStackTraceFrame(
     Expression Expression,
     StackFrameInput? Input,
     StackFrameInstructions? Instructions,
-    int InstructionPointer);
+    int InstructionPointer,
+    Func<IReadOnlyList<PineValueInProcess?>>? LoadLocals = null,
+    long FrameInstructionCount = 0,
+    long FrameLoopIterationCount = 0,
+    long? FrameIndex = null);
 
 /// <summary>
 /// Structured information returned when intermediate-VM evaluation stops without a value.
@@ -131,14 +139,14 @@ public sealed record EvaluationError(
 
         text.Append("Stack frames: ");
         text.Append(CommandLineInterface.FormatIntegerForDisplay(error.StackTrace.Count));
-        text.Append(" - instructions: ");
-        text.Append(CommandLineInterface.FormatIntegerForDisplay(error.Counters.InstructionCount));
         text.Append(" - invocations: ");
         text.Append(CommandLineInterface.FormatIntegerForDisplay(error.Counters.InvocationCount));
-        text.Append(" - build lists: ");
-        text.Append(CommandLineInterface.FormatIntegerForDisplay(error.Counters.BuildListCount));
         text.Append(" - loop iterations: ");
         text.Append(CommandLineInterface.FormatIntegerForDisplay(error.Counters.LoopIterationCount));
+        text.Append(" - instructions: ");
+        text.Append(CommandLineInterface.FormatIntegerForDisplay(error.Counters.InstructionCount));
+        text.Append(" - build lists: ");
+        text.Append(CommandLineInterface.FormatIntegerForDisplay(error.Counters.BuildListCount));
 
         return text.ToString();
     }

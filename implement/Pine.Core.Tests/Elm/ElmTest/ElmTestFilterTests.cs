@@ -8,6 +8,24 @@ namespace Pine.Core.Tests.Elm.ElmTest;
 
 public class ElmTestFilterTests
 {
+    [Fact]
+    public void Exact_full_path_filters_treat_wildcards_and_description_separators_literally()
+    {
+        var test = new ListedTest("tests/Tests.elm", ["group/with\\separators"], "literal * name");
+        new ElmTestFilter("=" + test.FullPath).Matches(test).Should().BeTrue();
+        new ElmTestFilter("=" + test.FullPath).Matches(test with { Name = "literal other name" }).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Duplicate_paths_use_discovery_ordinals_for_exact_selection()
+    {
+        var test = new ListedTest("tests/Tests.elm", ["group"], "same");
+        var selector = ElmTestFilter.ExactSelector(test, 2, [test, test]);
+        selector.Should().Be("#2");
+        new ElmTestFilter(selector).Matches(test, 1).Should().BeFalse();
+        new ElmTestFilter(selector).Matches(test, 2).Should().BeTrue();
+    }
+
     private static readonly ListedTest s_test =
         new(
             "tests/nested/ConvertConcreteToAbstractTests.elm",

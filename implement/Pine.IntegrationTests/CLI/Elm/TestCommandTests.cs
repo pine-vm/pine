@@ -1,18 +1,870 @@
 using AwesomeAssertions;
 using Pine.CLI;
 using Pine.CLI.Elm;
+using Pine.Core;
+using Pine.Core.Elm.Testing;
 using Spectre.Console;
 using System;
+using System.Collections.Generic;
 using System.CommandLine;
+using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Xunit;
 
 namespace Pine.IntegrationTests.CLI.Elm;
 
 public class TestCommandTests
 {
+    [Fact]
+    public void Profile_rejects_sampling_intervals_that_overflow_TimeSpan_before_execution()
+    {
+        TestCommand.Create().Parse(
+            [
+            "profile", ".", "--interval",
+            TimeSpan.MaxValue.TotalSeconds.ToString("R", CultureInfo.InvariantCulture)
+            ])
+            .Errors.Should().NotBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("\0")]
+    public void Profile_invalid_output_paths_are_reported_before_execution(string path)
+    {
+        var ran = false;
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        TestProfileCommand.Execute(
+            ".",
+            null,
+            new() { OutputPath = path },
+            _ =>
+            {
+                ran = true;
+                return 0;
+            },
+            console).Should().Be(1);
+
+        ran.Should().BeFalse();
+        output.ToString().Should().Contain("Error:").And.NotContain("Effective execution limits:");
+    }
+
+    [Fact]
+    public void Profile_report_write_errors_are_not_reported_as_success()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "pine-profile-write-error-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            TestProfileCommand.Execute(".", null, new() { OutputPath = directory }, _ => 0, console)
+                .Should().Be(1);
+
+            output.ToString().Should().Contain("Error saving instrumentation report:")
+                .And.NotContain("JSON SHA256:").And.NotContain("Saved JSON report:");
+        }
+        finally
+        {
+            Directory.Delete(directory);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Profile_ranking_columns_align_headers_and_rows_for_large_formatted_counters(bool useLargestCounters)
+    {
+        ElmTestExpressionProfile[] expressions =
+            [
+                new(new string('a', 64), ["First"], 232_924, 0, 0, ""),
+                new(new string('b', 64), ["Second"], 100_590, 2_765_963, 168_829, ""),
+                new(
+                    new string('c', 64),
+                    ["Third"],
+                    useLargestCounters ? long.MaxValue : 1,
+                    useLargestCounters ? long.MaxValue - 1 : 0,
+                    useLargestCounters ? long.MaxValue - 2 : 0,
+                    ""),
+            ];
+
+        var report =
+            new ElmTestProfileReport(
+                1,
+                new(),
+                null,
+                new("completed", null, "execution", "one test", 0, default),
+                [],
+                expressions,
+                new Dictionary<string, ElmTestProfileValueNode>());
+
+        var lines = new List<string>();
+        TestProfileCommand.Render(report, new(), (line, _) => lines.Add(line));
+
+        var header = lines[1];
+        var invocationEnd = header.IndexOf("Invocations", StringComparison.Ordinal) + "Invocations".Length;
+        var loopEnd = header.IndexOf("Loops", StringComparison.Ordinal) + "Loops".Length;
+        var instructionEnd = header.IndexOf("Instructions", StringComparison.Ordinal) + "Instructions".Length;
+        var declarationStart = header.IndexOf("Declarations", StringComparison.Ordinal);
+        var sorted = expressions.OrderByDescending(row => row.Invocations).ToArray();
+        lines.Should().HaveCount(2 + sorted.Length);
+
+        for (var index = 0; index < sorted.Length; index++)
+        {
+            var row = lines[index + 2];
+            var expression = sorted[index];
+            var invocations = CommandLineInterface.FormatIntegerForDisplay(expression.Invocations);
+            var loops = CommandLineInterface.FormatIntegerForDisplay(expression.LoopIterations);
+            var instructions = CommandLineInterface.FormatIntegerForDisplay(expression.Instructions);
+            row[..16].Should().Be(expression.Hash[..16]);
+            row.Substring(invocationEnd - invocations.Length, invocations.Length).Should().Be(invocations);
+            row.Substring(loopEnd - loops.Length, loops.Length).Should().Be(loops);
+            row.Substring(instructionEnd - instructions.Length, instructions.Length).Should().Be(instructions);
+            row.Substring(invocationEnd, 2).Should().Be("  ");
+            row.Substring(loopEnd, 2).Should().Be("  ");
+            row.Substring(instructionEnd, 2).Should().Be("  ");
+            row[declarationStart..].Should().Be(string.Join(", ", expression.Declarations));
+        }
+    }
+
+    [Fact]
+    public void Profile_ranking_with_no_expressions_still_renders_its_headers()
+    {
+        var report =
+            new ElmTestProfileReport(
+                1,
+                new(),
+                null,
+                new("completed", null, "execution", "one test", 0, default),
+                [],
+                [],
+                new Dictionary<string, ElmTestProfileValueNode>());
+
+        var lines = new List<string>();
+        TestProfileCommand.Render(report, new(), (line, _) => lines.Add(line));
+        lines.Should().HaveCount(2);
+        lines[1].Should().Contain("Invocations  Loops  Instructions  Declarations");
+    }
+
+    [Fact]
+    public void Elm_test_help_places_execution_limits_after_dependency_report_and_before_help()
+    {
+        var output = new StringWriter();
+        TestCommand.Create().Parse(["--help"]).Invoke(new InvocationConfiguration { Output = output }).Should().Be(0);
+        var text = output.ToString();
+        var dependency = text.IndexOf("--dependency-report <", StringComparison.Ordinal);
+        var budget = text.IndexOf("--budget <", StringComparison.Ordinal);
+        var help = text.LastIndexOf("--help", StringComparison.Ordinal);
+        dependency.Should().BeGreaterThan(0);
+        budget.Should().BeGreaterThan(dependency);
+        var previous = dependency;
+
+        foreach (var option in new[] { "--budget <", "--invocation-budget <", "--loop-budget <", "--timeout <", "--max-stack-depth <" })
+        {
+            var index = text.IndexOf(option, StringComparison.Ordinal);
+            index.Should().BeGreaterThan(previous).And.BeLessThan(help);
+            previous = index;
+        }
+    }
+
+    [Fact]
+    public void Profile_selects_a_single_project_test_without_a_filter()
+    {
+        var project = CreateTestProject(PassingTestsModule);
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            TestProfileCommand.Execute(
+                project,
+                null,
+                new() { OutputPath = Path.Combine(project, "profile.json") },
+                profile => TestCommand.Execute(
+                    project,
+                    console: console,
+                    errorConsole: console,
+                    offline: true,
+                    instrumentation: profile),
+                console).Should().Be(0, output.ToString());
+
+            output.ToString().Should().Contain("Running 1 test").And.Contain("Effective execution limits:");
+        }
+        finally
+        {
+            Directory.Delete(project, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Profile_reports_zero_counts_when_the_project_has_no_test_modules()
+    {
+        var project = CreateTestProject(PassingTestsModule);
+        File.Delete(Path.Combine(project, "tests", "Tests.elm"));
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            TestProfileCommand.Execute(
+                project,
+                null,
+                new() { OutputPath = Path.Combine(project, "profile.json") },
+                profile => TestCommand.Execute(
+                    project,
+                    console: console,
+                    errorConsole: console,
+                    offline: true,
+                    instrumentation: profile),
+                console).Should().Be(1);
+
+            output.ToString().Should().Contain("Tests found: 0").And.Contain("Tests remaining after filter: 0")
+                .And.Contain("Add a runnable Elm test");
+        }
+        finally
+        {
+            Directory.Delete(project, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(null, 3, "first")]
+    [InlineData("chosen", 2, "first")]
+    [InlineData("missing", 0, "first")]
+    public void Profile_selection_rejection_explains_counts_and_offers_an_exact_followup(
+        string? filter, int remaining, string selectedName)
+    {
+        var project =
+            CreateTestProject(
+                """
+                module Tests exposing (suite)
+                import Test
+                import Expect
+                suite =
+                    Test.describe "root"
+                        [ Test.describe "chosen" [ Test.test "first" (\_ -> Expect.pass), Test.test "second" (\_ -> Expect.pass) ]
+                        , Test.test "other" (\_ -> Expect.pass)
+                        ]
+                """);
+
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            TestProfileCommand.Execute(
+                project,
+                filter,
+                new() { OutputPath = Path.Combine(project, "profile.json") },
+                profile => TestCommand.Execute(
+                    project,
+                    console: console,
+                    errorConsole: console,
+                    offline: true,
+                    filter: filter,
+                    instrumentation: profile),
+                console).Should().Be(1);
+
+            var text = output.ToString();
+
+            text.Should().Contain("Tests found: 3").And.Contain("Tests remaining after filter: " + remaining)
+                .And.Contain("--filter '=tests/Tests.elm/root/chosen/" + selectedName + "'");
+
+            if (filter == "chosen")
+                text.Should().NotContain("--filter '=tests/Tests.elm/root/other'");
+
+            if (remaining == 0)
+                text.Should().Contain("No tests remain");
+
+            var (nextConsole, nextOutput) = CreateConsole(AnsiSupport.No);
+
+            TestProfileCommand.Execute(
+                project,
+                "=tests/Tests.elm/root/chosen/first",
+                new() { OutputPath = Path.Combine(project, "next.json") },
+                profile => TestCommand.Execute(
+                    project,
+                    console: nextConsole,
+                    errorConsole: nextConsole,
+                    offline: true,
+                    filter: "=tests/Tests.elm/root/chosen/first",
+                    instrumentation: profile),
+                nextConsole)
+                .Should().Be(0, nextOutput.ToString());
+        }
+        finally
+        {
+            Directory.Delete(project, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Duplicate_test_paths_offer_and_accept_a_discovery_ordinal()
+    {
+        var project =
+            CreateTestProject(
+                """
+                module Tests exposing (first, second)
+                import Test
+                import Expect
+                first = Test.test "same" (\_ -> Expect.pass)
+                second = Test.test "same" (\_ -> Expect.fail "not selected")
+                """);
+
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            TestProfileCommand.Execute(
+                project,
+                null,
+                new() { OutputPath = Path.Combine(project, "profile.json") },
+                profile => TestCommand.Execute(
+                    project,
+                    console: console,
+                    errorConsole: console,
+                    offline: true,
+                    instrumentation: profile),
+                console).Should().Be(1);
+
+            output.ToString().Should().Contain("--filter '#1'").And.Contain("--filter '#2'");
+            var (selectedConsole, selectedOutput) = CreateConsole(AnsiSupport.No);
+
+            TestProfileCommand.Execute(
+                project,
+                "#1",
+                new() { OutputPath = Path.Combine(project, "selected.json") },
+                profile =>
+                TestCommand.Execute(
+                    project,
+                    console: selectedConsole,
+                    errorConsole: selectedConsole,
+                    offline: true,
+                    filter: "#1",
+                    instrumentation: profile),
+                selectedConsole).Should().Be(0, selectedOutput.ToString());
+        }
+        finally
+        {
+            Directory.Delete(project, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(FormatCommandColorMode.Always, true)]
+    [InlineData(FormatCommandColorMode.Never, false)]
+    public void Profile_report_colors_respect_the_explicit_mode(FormatCommandColorMode mode, bool expectColor)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "pine-profile-colors-" + Guid.NewGuid().ToString("N"));
+        var (console, output) = CreateConsole(AnsiSupport.Yes);
+
+        try
+        {
+            TestProfileCommand.Execute(
+                directory,
+                null,
+                new() { OutputPath = Path.Combine(directory, "profile.json") },
+                _ => 0,
+                console,
+                colorMode: mode).Should().Be(0);
+
+            output.ToString().Contains("\u001b[", StringComparison.Ordinal).Should().Be(expectColor);
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Execution_budget_failure_identifies_the_test_and_provides_a_profile_filter()
+    {
+        var project =
+            CreateTestProject(
+                """
+                module Tests exposing (suite)
+                import Test
+                import Expect
+                spin n = spin (n + 1)
+                suite = Test.test "looping test" (\_ -> spin 0)
+                """);
+
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            TestCommand.Execute(
+                project,
+                console: console,
+                errorConsole: console,
+                offline: true,
+                evaluationOptions: new() { LoopBudget = 10000 }).Should().Be(2);
+
+            var text = output.ToString();
+
+            text.Should().Contain("Elm test: tests/Tests.elm/looping test")
+                .And.Contain("pine elm test profile").And.Contain("--filter '=tests/Tests.elm/looping test'");
+
+            text.IndexOf("Invocations:", StringComparison.Ordinal).Should()
+                .BeLessThan(text.IndexOf("; loops:", StringComparison.Ordinal));
+
+            text.IndexOf("; loops:", StringComparison.Ordinal).Should()
+                .BeLessThan(text.IndexOf("; instructions:", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(project, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Numeric_help_defaults_use_integer_display_format_without_changing_parsed_values(bool profile)
+    {
+        var command = TestCommand.Create();
+        var output = new StringWriter();
+        var errors = new StringWriter();
+        var arguments = profile ? new[] { "profile", "--help" } : new[] { "--help" };
+        command.Parse(arguments).Invoke(new InvocationConfiguration { Output = output, Error = errors }).Should().Be(0);
+        output.ToString().Should().Contain("[default: 100_000]").And.NotContain("[default: 100000]");
+        errors.ToString().Should().BeEmpty();
+
+        var parsed =
+            command.Parse(
+                profile
+                ?
+                ["profile", ".", "--filter", "one"]
+                :
+                ["."]);
+
+        parsed.GetValue(command.Options.OfType<Option<int>>().Single(option => option.Name == "--max-stack-depth"))
+            .Should().Be(100_000);
+    }
+
+    [Fact]
+    public void Effective_limit_display_groups_large_numbers_and_preserves_fractional_timeouts()
+    {
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        TestCommand.Execute(
+            "does-not-exist",
+            console: console,
+            errorConsole: console,
+            evaluationOptions: new()
+            {
+                InvocationBudget = 1_234_567,
+                LoopBudget = 2_345_678,
+                StackDepthLimit = 100_000,
+                Timeout = TimeSpan.FromSeconds(1234.125),
+            }).Should().Be(1);
+
+        output.ToString().Should().Contain("Invocation budget: 1_234_567")
+            .And.Contain("Loop budget: 2_345_678").And.Contain("Stack-depth limit: 100_000")
+            .And.Contain("Timeout: 1_234.125 seconds");
+    }
+
+    [Fact]
+    public void Profile_command_is_directly_discoverable_and_accepts_optional_filters()
+    {
+        var command = TestCommand.Create();
+        command.Description.Should().Contain("elm test profile").And.Contain("--budget");
+        command.Subcommands.Single(child => child.Name == "profile").Subcommands.Should().BeEmpty();
+        command.Parse(["profile", "."]).Errors.Should().BeEmpty();
+
+        command.Parse(
+            [
+            "profile", ".", "--filter", "one", "--loop-budget", "10",
+            "--seed", "0", "--fuzz", "1", "--offline", "--sort", "Loops", "--include-locals"
+            ])
+            .Errors.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("--instruction-budget")]
+    public void Instrument_does_not_accept_removed_instruction_budget_options(string option) =>
+        TestCommand.Create().Parse(["profile", ".", "--filter", "one", option, "10"])
+        .Errors.Should().NotBeEmpty();
+
+    [Theory]
+    [InlineData("--timeout", "NaN")]
+    [InlineData("--timeout", "Infinity")]
+    [InlineData("--timeout", "-1")]
+    [InlineData("--interval", "NaN")]
+    [InlineData("--interval", "-1")]
+    public void Instrument_rejects_invalid_clock_options_before_execution(string option, string value) =>
+        TestCommand.Create().Parse(["profile", ".", "--filter", "one", option, value])
+        .Errors.Should().NotBeEmpty();
+
+    [Fact]
+    public void Instrument_stops_preparation_prints_immediate_stats_then_saves_json_and_its_sha256()
+    {
+        var project =
+            CreateTestProject(
+                """
+                module Tests exposing (suite)
+                import Test
+                import Expect
+                suite = Test.test "one" (\_ -> Expect.pass)
+                """);
+
+        var (console, output) = CreateConsole(AnsiSupport.No);
+        var path = Path.Combine(project, "profile.json");
+
+        try
+        {
+            var result =
+                TestProfileCommand.Execute(
+                    project,
+                    "one",
+                    new()
+                    {
+                        OutputPath = path,
+                        Top = 1,
+                        ShowExpressions = true,
+                        Instrumentation = new() { InvocationBudget = 1, IncludeInputs = true, IncludeLocals = true },
+                    },
+                    instrumentation => TestCommand.Execute(
+                        project,
+                        console: console,
+                        errorConsole: console,
+                        filter: "one",
+                        offline: true,
+                        seed: 0,
+                        instrumentation: instrumentation),
+                    console);
+
+            result.Should().Be(2);
+            var text = output.ToString();
+
+            text.Should().Contain("Execution stopped.").And.Contain("invocations: 2")
+                .And.Contain("Saving all recorded").And.Contain("Overall instrumentation stats.")
+                .And.Contain("Pine expression ranking").And.Contain("Last recorded stack trace");
+
+            text.IndexOf("Execution stopped.", StringComparison.Ordinal)
+                .Should().BeLessThan(text.IndexOf("Saving all recorded", StringComparison.Ordinal));
+
+            text.IndexOf("Saving all recorded", StringComparison.Ordinal)
+                .Should().BeLessThan(text.IndexOf("JSON SHA256:", StringComparison.Ordinal));
+
+            using var file = File.OpenRead(path);
+            text.Should().Contain(Convert.ToHexStringLower(SHA256.HashData(file)));
+            using var json = JsonDocument.Parse(File.ReadAllText(path));
+            json.RootElement.GetProperty("SchemaVersion").GetInt32().Should().Be(1);
+            json.RootElement.GetProperty("Summary").GetProperty("Phase").GetString().Should().Be("preparation");
+            json.RootElement.GetProperty("Expressions").GetArrayLength().Should().BeGreaterThan(0);
+            json.RootElement.GetProperty("Values").EnumerateObject().Should().NotBeEmpty();
+        }
+        finally
+        {
+            Directory.Delete(project, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Instrument_requires_exactly_one_runnable_test_before_execution()
+    {
+        var project =
+            CreateTestProject(
+                """
+                module Tests exposing (suite)
+                import Test
+                import Expect
+                suite = Test.describe "group" [ Test.test "first" (\_ -> Expect.pass), Test.test "second" (\_ -> Expect.pass) ]
+                """);
+
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            var result =
+                TestProfileCommand.Execute(
+                    project,
+                    "group",
+                    new()
+                    {
+                        OutputPath = Path.Combine(project, "profile.json"),
+                    },
+                    profile => TestCommand.Execute(
+                        project,
+                        console: console,
+                        errorConsole: console,
+                        filter: "group",
+                        offline: true,
+                        instrumentation: profile),
+                    console);
+
+            result.Should().Be(1);
+
+            output.ToString().Should().Contain("exactly one runnable Elm test")
+                .And.Contain("Tests found: 2").And.Contain("Tests remaining after filter: 2")
+                .And.Contain("pine elm test profile").And.Contain("--filter '=tests/Tests.elm/group/first'")
+                .And.NotContain("Running 2 tests");
+        }
+        finally
+        {
+            Directory.Delete(project, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Instrument_executes_one_test_and_saves_all_expressions_despite_top_limit()
+    {
+        var project =
+            CreateTestProject(
+                """
+                module Tests exposing (suite)
+                import Test
+                import Expect
+                suite = Test.describe "group" [ Test.test "first" (\_ -> Expect.equal 42 42), Test.test "second" (\_ -> Expect.fail "not selected") ]
+                """);
+
+        var (console, output) = CreateConsole(AnsiSupport.No);
+        var path = Path.Combine(project, "profile.json");
+
+        try
+        {
+            var result =
+                TestProfileCommand.Execute(
+                    project,
+                    "first",
+                    new()
+                    {
+                        OutputPath = path,
+                        Top = 1,
+                        Sort = TestProfileSort.Instructions,
+                    },
+                    profile => TestCommand.Execute(
+                        project,
+                        console: console,
+                        errorConsole: console,
+                        filter: "first",
+                        offline: true,
+                        seed: 0,
+                        instrumentation: profile),
+                    console);
+
+            result.Should().Be(0, output.ToString());
+            output.ToString().Should().Contain("Running 1 test").And.Contain("TEST RUN PASSED");
+            using var json = JsonDocument.Parse(File.ReadAllText(path));
+            json.RootElement.GetProperty("SelectedTest").GetString().Should().EndWith("/first");
+            json.RootElement.GetProperty("Expressions").GetArrayLength().Should().BeGreaterThan(1);
+
+            json.RootElement
+                .GetProperty("Summary").GetProperty("Counters").GetProperty("InstructionCount").GetInt64().Should()
+                .BeGreaterThan(0);
+
+            json.RootElement.GetProperty("Summary").GetProperty("Counters").EnumerateObject()
+                .Take(3).Select(property => property.Name)
+                .Should().Equal("InvocationCount", "LoopIterationCount", "InstructionCount");
+
+            json.RootElement.GetProperty("Expressions")[0].EnumerateObject()
+                .Where(property => property.Name is "Invocations" or "Instructions" or "LoopIterations")
+                .Select(property => property.Name)
+                .Should().Equal("Invocations", "LoopIterations", "Instructions");
+
+            var text = output.ToString();
+            text.Should().Contain("Invocations  Loops  Instructions");
+
+            text.IndexOf("invocations:", StringComparison.Ordinal).Should().BeLessThan(
+                text.IndexOf("loops:", StringComparison.Ordinal));
+
+            text.IndexOf("loops:", StringComparison.Ordinal).Should().BeLessThan(
+                text.IndexOf("instructions:", StringComparison.Ordinal));
+
+            var topExpression =
+                json.RootElement.GetProperty("Expressions").EnumerateArray()
+                .OrderByDescending(row => row.GetProperty("Instructions").GetInt64())
+                .ThenBy(row => row.GetProperty("Hash").GetString(), StringComparer.Ordinal).First();
+
+            output.ToString().Should().Contain(
+                $"{topExpression.GetProperty("Hash").GetString()![..16]}  " +
+                $"{CommandLineInterface.FormatIntegerForDisplay(topExpression.GetProperty("Invocations").GetInt64()),11}  " +
+                $"{CommandLineInterface.FormatIntegerForDisplay(topExpression.GetProperty("LoopIterations").GetInt64()),5}  " +
+                $"{CommandLineInterface.FormatIntegerForDisplay(topExpression.GetProperty("Instructions").GetInt64()),12}");
+        }
+        finally
+        {
+            Directory.Delete(project, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Shared_budget_shortcut_and_specific_overrides_are_effective_in_both_commands(bool profile)
+    {
+        var command = TestCommand.Create();
+
+        var arguments =
+            profile
+            ?
+            new[] { "profile", ".", "--filter", "one", "--budget", "20", "--loop-budget", "30", "--timeout", "2", "--max-stack-depth", "200" }
+            :
+            new[] { ".", "--budget", "20", "--loop-budget", "30", "--timeout", "2", "--max-stack-depth", "200" };
+
+        var parsed = command.Parse(arguments);
+        parsed.Errors.Should().BeEmpty();
+        var common = command.Options.OfType<Option<int?>>().Single(option => option.Name == "--budget");
+        var invocations = command.Options.OfType<Option<int?>>().Single(option => option.Name == "--invocation-budget");
+        var loops = command.Options.OfType<Option<int?>>().Single(option => option.Name == "--loop-budget");
+        (parsed.GetValue(invocations) ?? parsed.GetValue(common)).Should().Be(20);
+        (parsed.GetValue(loops) ?? parsed.GetValue(common)).Should().Be(30);
+
+        command.Parse(
+            profile
+            ?
+            ["--budget", "20", "profile", ".", "--filter", "one"]
+            :
+            ["--budget", "20", "."]).Errors.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("--budget", "0")]
+    [InlineData("--budget", "-1")]
+    [InlineData("--invocation-budget", "0")]
+    [InlineData("--loop-budget", "-1")]
+    [InlineData("--max-stack-depth", "0")]
+    [InlineData("--timeout", "Infinity")]
+    public void Both_commands_reject_invalid_shared_budget_options(string option, string value)
+    {
+        var command = TestCommand.Create();
+        command.Parse([".", option, value]).Errors.Should().NotBeEmpty();
+        command.Parse(["profile", ".", "--filter", "one", option, value]).Errors.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void Ordinary_tests_hide_default_limits_but_show_configured_limits_and_invocation_only_warning()
+    {
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        TestCommand.Execute("does-not-exist", console: console, errorConsole: console)
+            .Should().Be(1);
+
+        output.ToString().Should().NotContain("Effective execution limits:");
+
+        var (boundedConsole, boundedOutput) = CreateConsole(AnsiSupport.No);
+
+        TestCommand.Execute(
+            "does-not-exist",
+            console: boundedConsole,
+            errorConsole: boundedConsole,
+            evaluationOptions: new() { InvocationBudget = 20 })
+            .Should().Be(1);
+
+        boundedOutput.ToString().Should().Contain("Invocation budget: 20").And.Contain("Loop budget: unbounded")
+            .And.Contain("Warning: an invocation budget alone does not bound backward-jump loops");
+    }
+
+    [Fact]
+    public void Profile_prints_effective_limits_before_execution_without_warning_when_both_are_bounded()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "pine-profile-limits-" + Guid.NewGuid().ToString("N"));
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            TestProfileCommand.Execute(
+                directory,
+                "one",
+                new()
+                {
+                    OutputPath = Path.Combine(directory, "profile.json"),
+                    Instrumentation =
+                    new() { InvocationBudget = 20, LoopBudget = 30, Timeout = TimeSpan.FromSeconds(2), StackDepthLimit = 200 },
+                },
+                _ =>
+                {
+                    var before = output.ToString();
+
+                    before.Should().Contain("Invocation budget: 20").And.Contain("Loop budget: 30")
+                        .And.Contain("Timeout: 2 seconds").And.Contain("Stack-depth limit: 200")
+                        .And.NotContain("Warning:");
+
+                    return 0;
+                },
+                console).Should().Be(0);
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Ordinary_command_budget_stops_preparation_without_requiring_a_single_test_filter()
+    {
+        var project =
+            CreateTestProject(
+                """
+                module Tests exposing (suite)
+                import Test
+                import Expect
+                suite = Test.describe "group" [ Test.test "first" (\_ -> Expect.pass), Test.test "second" (\_ -> Expect.pass) ]
+                """);
+
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            TestCommand.Execute(
+                project,
+                console: console,
+                errorConsole: console,
+                offline: true,
+                evaluationOptions: new() { InvocationBudget = 1 })
+                .Should().Be(2);
+
+            output.ToString().Should().Contain("Execution stopped.").And.Contain("InvocationCount")
+                .And.Contain("Elm test preparation: tests/Tests.elm (Tests.suite)")
+                .And.Contain("The individual test has not been constructed yet")
+                .And.Contain("pine elm test profile").And.Contain("--filter 'tests/Tests.elm/**'")
+                .And.NotContain("exactly one runnable").And.NotContain("Saving all recorded");
+        }
+        finally
+        {
+            Directory.Delete(project, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Ordinary_budgeted_execution_preserves_multiple_tests_and_workers_without_recording_profiles()
+    {
+        var project =
+            CreateTestProject(
+                """
+                module Tests exposing (suite)
+                import Test
+                import Expect
+                suite = Test.describe "group" [ Test.test "first" (\_ -> Expect.pass), Test.test "second" (\_ -> Expect.pass) ]
+                """);
+
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            TestCommand.Execute(
+                project,
+                console: console,
+                errorConsole: console,
+                offline: true,
+                workers: 2,
+                evaluationOptions: new() { InvocationBudget = 100000, LoopBudget = 100000 })
+                .Should().Be(0, output.ToString());
+
+            output.ToString().Should().Contain("Running 2 tests").And.Contain("TEST RUN PASSED")
+                .And.Contain("Invocation budget: 100_000").And.Contain("Loop budget: 100_000")
+                .And.NotContain("Saving all recorded");
+        }
+        finally
+        {
+            Directory.Delete(project, recursive: true);
+        }
+    }
+
     [Fact]
     public void Compilation_errors_are_rendered_with_declaration_context_without_unhandled_exceptions()
     {
@@ -125,7 +977,7 @@ public class TestCommandTests
     }
 
     [Fact]
-    public void Default_fuzz_count_executes_string_properties_with_the_cli_vm_budget()
+    public void Default_fuzz_count_executes_string_properties_without_a_cli_work_quota()
     {
         var directory =
             CreateTestProject(

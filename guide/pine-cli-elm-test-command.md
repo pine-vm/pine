@@ -82,6 +82,36 @@ are not implemented. Unsupported modules/APIs are errors, not an invitation to l
 JavaScript. `Basics` and `Debug` are provided
 by Pine's native compiler implementations, not by replacement Elm source files.
 
+## Profiling and instrumentation
+
+Use `elm test profile` to investigate hangs, unexpected work, or expensive computations.
+Profiling executes directly on that command;
+
+Profiling requires **exactly one runnable Elm test** after the optional filter. A project
+with one test needs no filter.
+
+```console
+pine  elm  test  profile  .  --filter "tests/ExampleTests/group/one test"  --budget 1000000  --loop-budget 10000  --include-inputs  --include-locals  --sort Loops  --output profile.json
+```
+
+All ordinary test options are accepted, including source, filtering/listing, seed, fuzz count,
+offline resolution, dependency reports, color and duration reporting. A selected test executes
+on one worker. Diagnostic options include:
+
+| Option | Meaning |
+| --- | --- |
+| `--budget` | Shortcut for both invocation and loop budgets; specific options override it. Shared with ordinary execution. |
+| `--invocation-budget`, `--loop-budget` | Command-wide VM invocation and backward-jump budgets. |
+| `--timeout` | Cooperative wall-clock deadline in seconds. Resolution observes cancellation; synchronous compilation/native leaves stop at their next cancellation boundary. |
+| `--interval` | Status and stack sampling interval in seconds; `0` disables periodic sampling. |
+| `--max-stack-depth`, `--stack-depth` | VM safety limit and maximum recorded stack frames, respectively. |
+| `--top`, `--sort` | Terminal ranking size and sort metric: `Invocations`, `Instructions`, `Loops`. JSON always contains all recorded expressions. |
+| `--include-inputs`, `--include-locals` | Query and record input paths/values and VM locals in sampled or stopped frames. Lazy values are described but never forced. |
+| `--expressions`, `--no-stacks` | Show expression descriptions or hide terminal stack traces; neither discards JSON details. |
+| `--no-precompiled-leaves`, `--no-invocation-cache` | Inspect pure Pine work or uncached work. |
+| `--no-tail-recursion`, `--no-reduction` | Disable tail-call frame replacement or VM expression reduction. Compiler-generated backward jumps can still occur. |
+| `--output` | JSON report path. Default: a unique file under the project's `elm-stuff/pine/test-profiles`. |
+
 ## Fuzz testing
 
 `Test.fuzz`, `fuzz2`, `fuzz3` and `fuzzWith` run using the bundled Elm generation and shrinking

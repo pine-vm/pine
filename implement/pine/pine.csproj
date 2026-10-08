@@ -39,6 +39,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Pine.Core\Pine.Core.csproj" />
     <ProjectReference Include="..\Pine.WebBrowserTesting\Pine.WebBrowserTesting.csproj" />
+    <InternalsVisibleTo Include="Pine.IntegrationTests" />
   </ItemGroup>
 
   <ItemGroup>

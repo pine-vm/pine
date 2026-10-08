@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 
 namespace Pine.Core.Elm.Testing;
@@ -7,18 +8,43 @@ namespace Pine.Core.Elm.Testing;
 /// <summary>
 /// Matches a case-insensitive expression against a project's file and description path.
 /// Plain terms retain substring matching; path segments and wildcard terms match whole segments.
+/// An '=' prefix selects a literal, case-sensitive full path; '#N' selects a discovery ordinal.
 /// </summary>
 public sealed class ElmTestFilter
 {
     private readonly string[] _segments;
 
+    private readonly string? _exactPath;
+
+    private readonly int? _discoveryIndex;
+
     /// <summary>
     /// Parses a filter. Both slash styles separate segments, '*' matches characters within
-    /// a segment, and a standalone '**' matches zero or more segments.
+    /// a segment, and a standalone '**' matches zero or more segments, except in exact-path mode.
     /// </summary>
     public ElmTestFilter(string expression)
     {
         ArgumentNullException.ThrowIfNull(expression);
+
+        if (expression.StartsWith('='))
+        {
+            _exactPath = expression[1..];
+            _segments = [];
+            return;
+        }
+
+        if (expression.StartsWith('#') &&
+            int.TryParse(
+                expression.AsSpan(1),
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var index) &&
+            index > 0)
+        {
+            _discoveryIndex = index;
+            _segments = [];
+            return;
+        }
 
         _segments =
             expression.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries);
@@ -31,8 +57,14 @@ public sealed class ElmTestFilter
     /// Checks whether a consecutive portion of the test's path matches the expression.
     /// The final extension of the filename may be omitted.
     /// </summary>
-    public bool Matches(ListedTest test)
+    public bool Matches(ListedTest test, int? discoveryIndex = null)
     {
+        if (_exactPath is not null)
+            return string.Equals(test.FullPath, _exactPath, StringComparison.Ordinal);
+
+        if (_discoveryIndex is not null)
+            return _discoveryIndex == discoveryIndex;
+
         var (path, filenameIndex) = GetPath(test);
         var previous = Enumerable.Repeat(true, path.Length + 1).ToArray();
 
@@ -57,6 +89,16 @@ public sealed class ElmTestFilter
 
         return previous.Any(matches => matches);
     }
+
+    /// <summary>
+    /// Returns a literal full-path filter, or a stable discovery ordinal for duplicate paths.
+    /// </summary>
+    public static string ExactSelector(ListedTest test, int discoveryIndex, IEnumerable<ListedTest> discovered) =>
+        discovered.Count(item => string.Equals(item.FullPath, test.FullPath, StringComparison.Ordinal)) == 1
+        ?
+        "=" + test.FullPath
+        :
+        "#" + discoveryIndex.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>
     /// Ranks existing tests by their distance from the filter.

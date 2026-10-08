@@ -15,6 +15,35 @@ namespace Pine.Core.Tests.Interpreter.IntermediateVM;
 public class PartialApplicationRuntimeTests
 {
     [Fact]
+    public void Function_record_parsing_does_not_execute_deferred_template_computations()
+    {
+        var parseCache = new PineVMParseCache();
+        var functionValue = BuildFunctionValue(parameterCount: 2);
+        var template = (Expression.List)parseCache.ParseExpression(functionValue).IsOkOrNull()!;
+        var items = new List<Expression>(template.Items);
+
+        items[1] =
+            new Expression.Eval(
+                Expression.LitralInst(ExpressionEncoding.EncodeExpressionAsValue(items[1])),
+                Expression.EnvironmentInstance);
+
+        var deferredTemplate =
+            ExpressionEncoding.EncodeExpressionAsValue(Expression.ListInst(items));
+
+        FunctionRecord.ParseFunctionRecordTagged(deferredTemplate, parseCache)
+            .IsErrOrNull().Should().NotBeNull();
+
+        var expression =
+            Apply(
+                deferredTemplate,
+                IntegerEncoding.EncodeSignedInteger(11),
+                IntegerEncoding.EncodeSignedInteger(13));
+
+        EvaluateWithPineVm(expression).ReturnValue.Evaluate()
+            .Should().Be(EvaluateWithDirectInterpreter(expression));
+    }
+
+    [Fact]
     public void Under_application_matches_direct_interpreter_without_materializing_intermediate_value()
     {
         var functionValue = BuildFunctionValue(parameterCount: 3);

@@ -53,6 +53,14 @@ public class EvaluationQuotaTests
 
         EvaluationError.RenderDisplayString(error)
             .Should().Contain("Loop iteration count limit exceeded: 5");
+
+        var display = EvaluationError.RenderDisplayString(error);
+
+        display.IndexOf("invocations:", StringComparison.Ordinal).Should().BeGreaterThan(0)
+            .And.BeLessThan(display.IndexOf("loop iterations:", StringComparison.Ordinal));
+
+        display.IndexOf("loop iterations:", StringComparison.Ordinal)
+            .Should().BeLessThan(display.IndexOf("instructions:", StringComparison.Ordinal));
     }
 
     [Fact]

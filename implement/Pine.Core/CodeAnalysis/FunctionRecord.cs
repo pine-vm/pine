@@ -558,6 +558,10 @@ public record FunctionRecord(
             if (parseResult.IsOkOrNull() is not Expression.List templateLevel)
                 return "Curried template level must be a List or ParseAndEval expression";
 
+            // Deferred computations belong on the caller's stack-safe VM, not in a parser probe.
+            if (templateLevel.EvalCount is not 0)
+                return "Curried template level contains deferred evaluation";
+
             var probeArgument =
                 PineValue.List(
                     [

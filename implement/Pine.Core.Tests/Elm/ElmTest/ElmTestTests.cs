@@ -17,6 +17,14 @@ namespace Pine.Core.Tests.Elm.ElmTest;
 public class ElmTestTests
 {
     [Fact]
+    public void Default_Elm_test_execution_has_no_invocation_or_loop_work_quota()
+    {
+        ElmTestRunner.DefaultEvaluationConfig.InvocationCountLimit.Should().BeNull();
+        ElmTestRunner.DefaultEvaluationConfig.LoopIterationCountLimit.Should().BeNull();
+        ElmTestRunner.DefaultEvaluationConfig.StackDepthLimit.Should().Be(100_000);
+    }
+
+    [Fact]
     public void No_Elm_test_modules_is_a_test_run_result()
     {
         var projectDirectory =

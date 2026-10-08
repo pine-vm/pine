@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Pine.Core.Interpreter.IntermediateVM;
 
@@ -14,14 +15,14 @@ namespace Pine.Core.Interpreter.IntermediateVM;
 /// <param name="DirectSaturatedApplicationCount">The number of saturated applications entered without an intermediate function value.</param>
 /// <param name="PartialApplicationMaterializationCount">The number of partial applications forced to their canonical Pine value.</param>
 public readonly record struct PerformanceCounters(
-    long InvocationCount,
-    long BuildListCount,
-    long LoopIterationCount,
-    long InstructionCount,
-    long CurriedFunctionPlanParseCount = 0,
-    long PartialApplicationAllocationCount = 0,
-    long DirectSaturatedApplicationCount = 0,
-    long PartialApplicationMaterializationCount = 0)
+    [property: JsonPropertyOrder(0)] long InvocationCount,
+    [property: JsonPropertyOrder(3)] long BuildListCount,
+    [property: JsonPropertyOrder(1)] long LoopIterationCount,
+    [property: JsonPropertyOrder(2)] long InstructionCount,
+    [property: JsonPropertyOrder(4)] long CurriedFunctionPlanParseCount = 0,
+    [property: JsonPropertyOrder(5)] long PartialApplicationAllocationCount = 0,
+    [property: JsonPropertyOrder(6)] long DirectSaturatedApplicationCount = 0,
+    [property: JsonPropertyOrder(7)] long PartialApplicationMaterializationCount = 0)
 {
     /// <summary>
     /// Returns the element-wise sum of two <see cref="PerformanceCounters"/> instances.

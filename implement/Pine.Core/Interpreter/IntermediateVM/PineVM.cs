@@ -32,6 +32,8 @@ public class PineVM : ICancellablePineVM
 
     private readonly ReportExpressionCompiled? _reportExpressionCompiled;
 
+    private readonly ReportEvaluationEvent? _reportEvaluationEvent;
+
     private readonly IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? _compilationEnvClasses;
 
     private readonly bool _disableReductionInCompilation;
@@ -113,7 +115,8 @@ public class PineVM : ICancellablePineVM
         TryGetExpressionCompilation? tryGetExpressionCompilation = null,
         GetOrAddExpressionCompilation? getOrAddExpressionCompilation = null,
         PineVMExpressionEncodingCache? expressionEncodingCache = null,
-        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null)
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null,
+        ReportEvaluationEvent? reportEvaluationEvent = null)
     {
         if ((tryGetExpressionCompilation is null) != (getOrAddExpressionCompilation is null))
         {
@@ -161,6 +164,7 @@ public class PineVM : ICancellablePineVM
                 expressionEncodingCache:
                 expressionEncodingCache ??
                 new PineVMExpressionEncodingCache(),
+                reportEvaluationEvent: reportEvaluationEvent,
                 reducedExpressionCache:
                 reducedExpressionCache ??
                 new Dictionary<(Expression, ReductionConfig), Expression>());
@@ -196,7 +200,8 @@ public class PineVM : ICancellablePineVM
         ReportTailLoopIteration? reportTailLoopIteration = null,
         ReportExpressionCompiled? reportExpressionCompiled = null,
         IInvocationCacheAccess? invocationCache = null,
-        InvocationCacheConfiguration? invocationCacheConfiguration = null)
+        InvocationCacheConfiguration? invocationCacheConfiguration = null,
+        ReportEvaluationEvent? reportEvaluationEvent = null)
     {
         if (evalCache is not null && invocationCache is not null)
         {
@@ -237,6 +242,7 @@ public class PineVM : ICancellablePineVM
         _reportTailLoopIteration = reportTailLoopIteration;
 
         _reportExpressionCompiled = reportExpressionCompiled;
+        _reportEvaluationEvent = reportEvaluationEvent;
 
         _compilationEnvClasses = compilationEnvClasses;
 
@@ -559,11 +565,16 @@ public class PineVM : ICancellablePineVM
                 DirectSaturatedApplicationCount: directSaturatedApplicationCount,
                 PartialApplicationMaterializationCount: partialApplicationMaterializationCount);
 
-        EvaluationError BuildEvaluationError(EvaluationErrorReason reason) =>
-            new(
-                Reason: reason,
-                StackTrace: CompileEvaluationErrorStackTrace(100),
-                Counters: CurrentCounters());
+        EvaluationError BuildEvaluationError(EvaluationErrorReason reason)
+        {
+            ReportStopped(reason);
+
+            return
+                new(
+                    Reason: reason,
+                    StackTrace: CompileEvaluationErrorStackTrace(100),
+                    Counters: CurrentCounters());
+        }
 
         EvaluationError BuildParseExpressionError(
             string parseError,
@@ -630,12 +641,57 @@ public class PineVM : ICancellablePineVM
             loopIterationCount++;
             frame.LoopIterationCount++;
 
+            FireEvaluationEvent(EvaluationEventKind.BackwardJump, frame);
             FireTailLoopIteration(TailLoopIterationKind.BackwardJump, frame.Expression, frame.InputValues);
 
             return EnforceLoopIterationCountLimit();
         }
 
         var stack = new Stack<StackFrame>();
+
+        IEnumerable<EvaluationStackTraceFrame> EnumerateLiveStack()
+        {
+            foreach (var frame in stack)
+            {
+                yield return new EvaluationStackTraceFrame(
+                    frame.Expression, frame.InputValues, frame.Instructions, frame.InstructionPointer,
+                    () => frame.LocalsValues.ToArray(),
+                    frame.InstructionCount, frame.LoopIterationCount, frame.FrameIndex);
+            }
+        }
+
+        Func<PerformanceCounters>? loadEventCounters =
+            _reportEvaluationEvent is null ? null : CurrentCounters;
+
+        Func<IEnumerable<EvaluationStackTraceFrame>>? loadEventStack =
+            _reportEvaluationEvent is null ? null : EnumerateLiveStack;
+
+        void FireEvaluationEvent(EvaluationEventKind kind, StackFrame frame, EvaluationErrorReason? reason = null)
+        {
+            if (_reportEvaluationEvent is not { } report)
+                return;
+
+            var evaluationEvent =
+                new EvaluationEvent(
+                    kind,
+                    frame.FrameIndex,
+                    frame.Expression,
+                    frame.InstructionPointer,
+                    stack.Count,
+                    frame.InstructionCount,
+                    frame.LoopIterationCount,
+                    loadEventCounters!,
+                    loadEventStack!,
+                    reason);
+
+            report(in evaluationEvent);
+        }
+
+        void ReportStopped(EvaluationErrorReason reason)
+        {
+            if (stack.TryPeek(out var frame))
+                FireEvaluationEvent(EvaluationEventKind.EvaluationStopped, frame, reason);
+        }
 
         if (CheckCancellation() is { } initialCancellationError)
         {
@@ -1134,6 +1190,7 @@ public class PineVM : ICancellablePineVM
         {
             if (replaceCurrentFrame)
             {
+                FireEvaluationEvent(EvaluationEventKind.FrameExited, stack.Peek());
                 stack.Pop();
 
                 ++stackFrameReplaceCount;
@@ -1143,6 +1200,7 @@ public class PineVM : ICancellablePineVM
 
             ++stackFrameCount;
             newFrame.FrameIndex = stackFrameCount - 1;
+            FireEvaluationEvent(EvaluationEventKind.FrameEntered, newFrame);
 
             if (replaceCurrentFrame &&
                 newFrame.Specialization is null &&
@@ -1183,6 +1241,7 @@ public class PineVM : ICancellablePineVM
         EvaluationReport? ReturnFromStackFrame(PineValueInProcess frameReturnValue)
         {
             var currentFrame = stack.Peek();
+            FireEvaluationEvent(EvaluationEventKind.FrameExited, currentFrame);
 
             if (currentFrame.ExpressionValue is { } currentFrameExprValue)
             {

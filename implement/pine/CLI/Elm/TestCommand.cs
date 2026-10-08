@@ -1,9 +1,13 @@
+using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Core.Elm.Testing;
 using Spectre.Console;
 using System;
 using System.Collections.Generic;
 using System.CommandLine;
+using System.CommandLine.Help;
+using System.CommandLine.Invocation;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 
@@ -15,18 +19,99 @@ public static class TestCommand
 {
     // Keep these defaults at the Elm test entry point so future CLI options can override them.
     private static readonly IntermediatePineVM.EvaluationConfig s_testEvaluationConfigDefault =
-        new(
-            InvocationCountLimit: 10_000_000,
-            LoopIterationCountLimit: 10_000_000,
-            StackDepthLimit: 100_000);
+        ElmTestRunner.DefaultEvaluationConfig;
 
     public static Command Create()
     {
         var command =
             new Command(
                 "test",
-                "Compile and run Elm tests.");
+                """
+                Compile and run Elm tests.
 
+                Investigating a hang or expensive computation? Use:
+                  pine elm test profile <project> --filter "<single test path>" --budget 10000
+                """);
+
+        var budgets = TestBudgetOptions.AddTo(command);
+        ConfigureCommonCommand(command, instrumented: false, budgets);
+        budgets.MoveAfterCommonOptions(command);
+
+        var profile =
+            new Command(
+                "profile",
+                "Profile one Elm test and see where computation time is spent.");
+
+        ConfigureCommonCommand(profile, instrumented: true, budgets);
+        command.Add(profile);
+        ConfigureFormattedHelp(command, profile);
+        return command;
+    }
+
+    private static void ConfigureFormattedHelp(Command command, Command profile)
+    {
+        var helpOption = new HelpOption { Recursive = true };
+
+        var standardHelp =
+            helpOption.Action as HelpAction
+            ?? throw new InvalidOperationException("The standard help option must provide a HelpAction.");
+
+        helpOption.Action =
+            new FormattedHelpAction(
+                standardHelp,
+                [
+                .. command.Options.Concat(profile.Options).Distinct()
+                .Where(
+                    option => option is Option<int> or Option<int?> or Option<uint> or Option<double> or Option<double?>)
+                ]);
+
+        command.Add(helpOption);
+    }
+
+    private sealed class FormattedHelpAction(HelpAction standardHelp, Option[] numericOptions) : SynchronousCommandLineAction
+    {
+        public override bool ClearsParseErrors => true;
+
+        public override int Invoke(ParseResult result)
+        {
+            var writer = result.InvocationConfiguration.Output;
+            using var buffer = new StringWriter();
+            int exitCode;
+            result.InvocationConfiguration.Output = buffer;
+
+            try
+            {
+                exitCode = standardHelp.Invoke(result);
+            }
+            finally
+            {
+                result.InvocationConfiguration.Output = writer;
+            }
+
+            // System.CommandLine's default-value formatter is internal; keep its layout and customize numeric annotations.
+            var text = buffer.ToString();
+
+            foreach (var option in numericOptions.Where(option => option.HasDefaultValue))
+            {
+                var raw = option.GetDefaultValue()?.ToString();
+
+                if (long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number))
+                {
+                    text =
+                        text.Replace(
+                            "[default: " + raw + "]",
+                            "[default: " + CommandLineInterface.FormatIntegerForDisplay(number) + "]",
+                            StringComparison.Ordinal);
+                }
+            }
+
+            writer.Write(text);
+            return exitCode;
+        }
+    }
+
+    private static void ConfigureCommonCommand(Command command, bool instrumented, TestBudgetOptions budgets)
+    {
         var sourceArgument =
             new Argument<string?>("source")
             {
@@ -57,6 +142,8 @@ public static class TestCommand
                   --filter "ConvertConcreteToAbstractTests/**/converts every*"
                   --filter "tests/*Tests.elm/**/converts*drops documentation"
                 No matches: show the closest existing test paths. Use --list-tests to explore tests without running them.
+                Prefix a full path with '=' for exact, case-sensitive matching, including literal wildcard characters.
+                Use '#N' for a discovery ordinal when duplicate test paths cannot distinguish a test.
                 """
             };
 
@@ -78,7 +165,9 @@ public static class TestCommand
             new Option<int?>("--workers")
             {
                 Description =
-                "Number of worker threads. Defaults to " + DefaultWorkerCount() + "."
+                "Number of worker threads. Defaults to " +
+                CommandLineInterface.FormatIntegerForDisplay(DefaultWorkerCount()) +
+                "."
             };
 
         var reportDurationsOption =
@@ -145,8 +234,7 @@ public static class TestCommand
         command.Add(offlineOption);
         command.Add(dependencyReportOption);
 
-        command.SetAction(
-            parseResult =>
+        int Run(ParseResult parseResult, ElmTestInstrumentation? instrumentation) =>
             Execute(
                 source: parseResult.GetValue(sourceArgument) ?? Environment.CurrentDirectory,
                 colorMode: parseResult.GetValue(colorOption),
@@ -157,9 +245,26 @@ public static class TestCommand
                 offline: parseResult.GetValue(offlineOption),
                 dependencyReportPath: parseResult.GetValue(dependencyReportOption),
                 seed: parseResult.GetValue(seedOption),
-                fuzz: parseResult.GetValue(fuzzOption)));
+                fuzz: parseResult.GetValue(fuzzOption),
+                instrumentation: instrumentation,
+                evaluationOptions: budgets.Read(parseResult),
+                showEffectiveLimits: budgets.HasExplicitOptions(parseResult));
 
-        return command;
+        if (instrumented)
+        {
+            var options = TestProfileCommand.AddOptions(command, budgets);
+
+            command.SetAction(
+                parseResult => TestProfileCommand.Execute(
+                    parseResult.GetValue(sourceArgument) ?? Environment.CurrentDirectory,
+                    parseResult.GetValue(filterOption),
+                    options.Read(parseResult),
+                    instrumentation => Run(parseResult, instrumentation),
+                    colorMode: parseResult.GetValue(colorOption)));
+        }
+        else
+            command.SetAction(parseResult => Run(parseResult, null));
+
     }
 
 
@@ -177,7 +282,10 @@ public static class TestCommand
         ElmDependencyResolutionConfiguration? resolutionConfiguration = null,
         IElmPackageProvider? packageProvider = null,
         uint? seed = null,
-        uint fuzz = 100)
+        uint fuzz = 100,
+        ElmTestInstrumentation? instrumentation = null,
+        ElmTestEvaluationOptions? evaluationOptions = null,
+        bool showEffectiveLimits = false)
     {
         FormatCommandColorMode resolvedColorMode;
 
@@ -202,6 +310,40 @@ public static class TestCommand
         }
 
         console ??= CreateSystemConsole(Console.Out, resolvedColorMode);
+
+        var effectiveLimits = instrumentation?.Options ?? evaluationOptions ?? new ElmTestEvaluationOptions();
+
+        try
+        {
+            effectiveLimits.Validate();
+        }
+        catch (ArgumentException exception)
+        {
+            errorConsole ??= CreateSystemConsole(Console.Error, resolvedColorMode);
+            errorConsole.Profile.Out.Writer.WriteLine("Error: " + exception.Message);
+            return 1;
+        }
+
+        if (instrumentation is null && (effectiveLimits.HasCustomLimits || showEffectiveLimits))
+            TestBudgetOptions.PrintEffective(console.Profile.Out.Writer, effectiveLimits);
+
+        using var budgetTracker =
+            instrumentation is null && (effectiveLimits.HasCustomLimits || showEffectiveLimits)
+            ?
+            new ElmTestInstrumentation(
+                effectiveLimits.ToInstrumentationOptions(),
+                precompiledLeavesProvider: () => IntermediateVM.SetupVM.DefaultPrecompiledLeaves,
+                recordDiagnostics: false)
+            {
+                OnStopped = summary => WriteStoppedTest(console, source, summary, effectiveLimits),
+            }
+            :
+            null;
+
+        using var budgetCancellation =
+            budgetTracker is not null ? TestBudgetOptions.RegisterCancellation(budgetTracker) : null;
+
+        instrumentation ??= budgetTracker;
 
         var resolvedWorkers =
             workers ?? DefaultWorkerCount();
@@ -255,6 +397,7 @@ public static class TestCommand
                         reducedExpressionCache: sharedCaches.ReducedExpressions),
                     filter: filter,
                     listTests: listTests,
+                    instrumentation: instrumentation,
                     onTestsDiscovered:
                     testCount =>
                     {
@@ -263,6 +406,27 @@ public static class TestCommand
                                 "Running " + testCount + " test" +
                                 (testCount is 1 ? "." : "s.") + "\n\n"));
                     });
+        }
+        catch (ElmTestInstrumentationStoppedException)
+        {
+            return instrumentation?.CancelledByUser is true ? 130 : 2;
+        }
+        catch (ElmTestInstrumentationSelectionException exception)
+        {
+            errorConsole ??= CreateSystemConsole(Console.Error, resolvedColorMode);
+
+            WriteProfileSelection(
+                errorConsole,
+                source,
+                exception,
+                resolvedColorMode is not FormatCommandColorMode.Never);
+
+            return 1;
+        }
+        catch (OperationCanceledException) when (instrumentation is not null)
+        {
+            instrumentation.NotifyCancellation();
+            return instrumentation.CancelledByUser ? 130 : 2;
         }
         catch (Core.Elm.ElmCompilerInDotnet.ElmCompilationException exception)
         {
@@ -422,6 +586,117 @@ public static class TestCommand
     }
 
 
+    internal static string QuoteCommandArgument(string value) =>
+        OperatingSystem.IsWindows()
+        ?
+        "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'"
+        :
+        "'" + value.Replace("'", "'\\''", StringComparison.Ordinal) + "'";
+
+    internal static string ProfileCommandLine(string source, string selector) =>
+        "pine elm test profile " + QuoteCommandArgument(Path.GetFullPath(source)) +
+        " --filter " + QuoteCommandArgument(selector);
+
+    private static void WriteStoppedTest(
+        IAnsiConsole console,
+        string source,
+        ElmTestProfileSummary summary,
+        ElmTestEvaluationOptions limits)
+    {
+        var writer = console.Profile.Out.Writer;
+        writer.WriteLine("Execution stopped. " + summary.StopReason);
+
+        if (summary.Phase == "execution")
+            writer.WriteLine("Elm test: " + summary.Context);
+
+        else if (summary.Phase == "preparation")
+        {
+            writer.WriteLine("Elm test preparation: " + summary.Context);
+
+            writer.WriteLine(
+                "The individual test has not been constructed yet; this identifies its source declaration.");
+        }
+        else
+            writer.WriteLine("Elm test phase: " + summary.Phase + "; context: " + summary.Context);
+
+        writer.WriteLine(
+            "Invocations: " + CommandLineInterface.FormatIntegerForDisplay(summary.Counters.InvocationCount) +
+            "; loops: " + CommandLineInterface.FormatIntegerForDisplay(summary.Counters.LoopIterationCount) +
+            "; instructions: " +
+            CommandLineInterface.FormatIntegerForDisplay(summary.Counters.InstructionCount) +
+            ".");
+
+        writer.WriteLine("Investigate with the profile command:");
+
+        var command =
+            summary.ProfileFilter is { } selector
+            ?
+            ProfileCommandLine(source, selector)
+            :
+            "pine elm test profile " + QuoteCommandArgument(Path.GetFullPath(source));
+
+        if (limits.InvocationBudget is { } inv)
+            command += " --invocation-budget " + inv.ToString(CultureInfo.InvariantCulture);
+
+        if (limits.LoopBudget is { } loops)
+            command += " --loop-budget " + loops.ToString(CultureInfo.InvariantCulture);
+
+        if (limits.Timeout is { } timeout)
+            command += " --timeout " + timeout.TotalSeconds.ToString(CultureInfo.InvariantCulture);
+
+        if (limits.StackDepthLimit != 100_000)
+            command += " --max-stack-depth " + limits.StackDepthLimit.ToString(CultureInfo.InvariantCulture);
+
+        writer.WriteLine("  " + command);
+
+        if (summary.Phase == "preparation")
+            writer.WriteLine("Once preparation completes, profile will suggest an exact single-test filter if needed.");
+
+        writer.Flush();
+    }
+
+    private static void WriteProfileSelection(
+        IAnsiConsole console,
+        string source,
+        ElmTestInstrumentationSelectionException selection,
+        bool useColor)
+    {
+        console.Write(
+            new Text(
+                "Cannot profile: exactly one runnable Elm test must remain.\n",
+                useColor ? TestCommandTheme.TodoHeadline : Style.Plain));
+
+        var writer = console.Profile.Out.Writer;
+        writer.WriteLine("Tests found: " + CommandLineInterface.FormatIntegerForDisplay(selection.FoundCount));
+
+        writer.WriteLine(
+            "Tests remaining after filter: " + CommandLineInterface.FormatIntegerForDisplay(selection.RemainingCount));
+
+        writer.WriteLine("Current filter: " + (selection.Filter is null ? "(none)" : selection.Filter));
+
+        if (selection.FoundCount == 0)
+            writer.WriteLine("No runnable tests were found. Add a runnable Elm test to this project.");
+
+        else if (!selection.SuggestionsFromRemaining)
+        {
+            writer.WriteLine(
+                "No tests remain. Change or remove the current filter; these commands select discovered tests instead:");
+        }
+        else if (selection.Suggestions.Count > 0)
+            writer.WriteLine("Select one of the remaining tests with an exact filter:");
+
+        else
+            writer.WriteLine("No runnable test remains (selected entries may be TODOs). Select a runnable test.");
+
+        foreach (var suggestion in selection.Suggestions)
+        {
+            writer.WriteLine("  " + suggestion.Test.FullPath);
+            writer.WriteLine("    " + ProfileCommandLine(source, suggestion.Filter));
+        }
+
+        writer.Flush();
+    }
+
     private static void WriteTestList(
         IAnsiConsole console,
         IReadOnlyList<ListedTest> tests,
@@ -550,7 +825,7 @@ public static class TestCommand
         };
 
 
-    private static IAnsiConsole CreateSystemConsole(
+    internal static IAnsiConsole CreateSystemConsole(
         TextWriter writer,
         FormatCommandColorMode colorMode) =>
         AnsiConsole.Create(

@@ -30,6 +30,16 @@ namespace Pine.Core.Elm.Testing;
 /// </summary>
 public static class ElmTestRunner
 {
+    /// <summary>
+    /// Default configuration for test preparation and execution. Work is not limited by
+    /// invocation or loop counts; callers can cancel long-running commands.
+    /// </summary>
+    public static IntermediatePineVM.EvaluationConfig DefaultEvaluationConfig { get; } =
+        new(
+            InvocationCountLimit: null,
+            LoopIterationCountLimit: null,
+            StackDepthLimit: 100_000);
+
     /// <summary>Test-scoped terminal substitutions for the pinned Elm test/fuzz engine and pure PCG generator.</summary>
     public static readonly Lazy<ElmDependencyResolutionConfiguration> DefaultResolutionConfiguration =
         new(
@@ -64,7 +74,8 @@ public static class ElmTestRunner
         ElmDependencyResolutionConfiguration? resolutionConfiguration = null,
         IElmPackageProvider? packageProvider = null,
         Action<ElmDependencyResolutionReport>? onDependenciesResolved = null,
-        ElmFuzzOptions? fuzzOptions = null) =>
+        ElmFuzzOptions? fuzzOptions = null,
+        ElmTestInstrumentation? instrumentation = null) =>
         CompileAndRunTests(
             appDirectory,
             pineVm,
@@ -76,7 +87,8 @@ public static class ElmTestRunner
             resolutionConfiguration,
             packageProvider,
             onDependenciesResolved,
-            fuzzOptions);
+            fuzzOptions,
+            instrumentation);
 
 
     /// <summary>
@@ -92,7 +104,8 @@ public static class ElmTestRunner
         ElmDependencyResolutionConfiguration? resolutionConfiguration = null,
         IElmPackageProvider? packageProvider = null,
         Action<ElmDependencyResolutionReport>? onDependenciesResolved = null,
-        ElmFuzzOptions? fuzzOptions = null)
+        ElmFuzzOptions? fuzzOptions = null,
+        ElmTestInstrumentation? instrumentation = null)
     {
         ArgumentNullException.ThrowIfNull(pineVmFactory);
 
@@ -108,7 +121,8 @@ public static class ElmTestRunner
                 resolutionConfiguration,
                 packageProvider,
                 onDependenciesResolved,
-                fuzzOptions);
+                fuzzOptions,
+                instrumentation);
     }
 
 
@@ -123,12 +137,30 @@ public static class ElmTestRunner
         ElmDependencyResolutionConfiguration? resolutionConfiguration,
         IElmPackageProvider? packageProvider,
         Action<ElmDependencyResolutionReport>? onDependenciesResolved,
-        ElmFuzzOptions? fuzzOptions)
+        ElmFuzzOptions? fuzzOptions,
+        ElmTestInstrumentation? instrumentation)
     {
         if (workers < 1)
             throw new ArgumentOutOfRangeException(nameof(workers), "Worker count must be at least one.");
 
+        if (instrumentation is not null && pineVm is not null)
+            throw new ArgumentException("Budgeted or profiled execution uses its own VMs.", nameof(pineVm));
+
+        using var compilationScope = instrumentation?.EnterScope("compilation", appDirectory);
+
         var executionSettings = (fuzzOptions ?? new()).Resolve();
+
+        if (instrumentation is { RecordDiagnostics: true })
+        {
+            instrumentation.Metadata["ProjectDirectory"] = Path.GetFullPath(appDirectory);
+            instrumentation.Metadata["Filter"] = filter ?? "";
+
+            instrumentation.Metadata["Seed"] =
+                executionSettings.Seed.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+            instrumentation.Metadata["FuzzRuns"] =
+                executionSettings.FuzzRuns.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
 
         appDirectory = Path.GetFullPath(appDirectory);
 
@@ -204,7 +236,12 @@ public static class ElmTestRunner
             .ToImmutableArray();
 
         if (testModules.Length is 0)
+        {
+            if (instrumentation is { RecordDiagnostics: true })
+                throw new ElmTestInstrumentationSelectionException(0, 0, filter, []);
+
             return new ElmTestRun.NoTestModules(appDirectory);
+        }
 
         resolutionConfiguration ??= DefaultResolutionConfiguration.Value;
 
@@ -222,9 +259,13 @@ public static class ElmTestRunner
                 [.. testModules.Select(testModule => testModule.path)],
                 resolutionConfiguration,
                 packageProvider,
+                cancellationToken: instrumentation?.CancellationToken ?? default,
                 projectDirectory: appDirectory).GetAwaiter().GetResult();
 
         onDependenciesResolved?.Invoke(build.Resolution);
+
+        if (instrumentation is not null && build.Resolution.Fingerprint is { } fingerprint)
+            instrumentation.Metadata["ResolutionFingerprint"] = fingerprint;
 
         var testDeclarationNames =
             testModules
@@ -251,13 +292,13 @@ public static class ElmTestRunner
         var preparationCaches = new PineVMSharedCaches();
 
         var preparationVm =
+            instrumentation is not null
+            ?
+            instrumentation.CreateVm(new ConcurrentInvocationCache(), preparationCaches)
+            :
             CreatePineVm(
                 new ConcurrentInvocationCache(),
-                preparationCaches,
-                new IntermediatePineVM.EvaluationConfig(
-                    InvocationCountLimit: 10_000_000,
-                    LoopIterationCountLimit: 10_000_000,
-                    StackDepthLimit: 100_000));
+                preparationCaches);
 
         var (compiledEnvironment, _) =
             ElmCompiler.CompileResolvedEnvironment(
@@ -268,6 +309,8 @@ public static class ElmTestRunner
         var parsedEnvironment =
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnvironment)
             .Extract(error => throw new InvalidOperationException("Failed parsing compiled Elm tests: " + error));
+
+        instrumentation?.RegisterDeclarations(parsedEnvironment);
 
         var discoveredTests = new List<DiscoveredTest>();
 
@@ -293,6 +336,11 @@ public static class ElmTestRunner
 
             foreach (var declarationName in testModule.exposedZeroParameterDeclarations)
             {
+                using var preparationScope =
+                    instrumentation?.EnterScope("preparation",
+                        testModule.filePathText + " (" + testModule.moduleNameText + "." + declarationName + ")",
+                        testModule.filePathText + "/**");
+
                 if (!compiledTestModule.moduleContent.FunctionDeclarations.TryGetValue(
                     declarationName,
                     out var declarationWrapper))
@@ -379,9 +427,20 @@ public static class ElmTestRunner
             }
         }
 
+        var allFound = discoveredTests.Where(test => test.Kind is not DiscoveredTestKind.EmptyGroup).ToArray();
+
+        for (var index = 0; index < allFound.Length; index++)
+            allFound[index].DiscoveryIndex = index + 1;
+
+        var allFoundListed = allFound.Select(ToListedTest).ToArray();
+
+        string ExactFilter(DiscoveredTest test) =>
+            ElmTestFilter.ExactSelector(ToListedTest(test), test.DiscoveryIndex, allFoundListed);
+
         if (hasOnly)
             discoveredTests.RemoveAll(test => !test.Only && test.Kind != DiscoveredTestKind.Invalid);
 
+        var selectableTests = discoveredTests.Where(test => test.Kind is DiscoveredTestKind.Runnable).ToArray();
         var filteredOutTests = new List<ListedTest>();
 
         if (filter is { } filterExpression)
@@ -399,7 +458,7 @@ public static class ElmTestRunner
                 {
                     var listedTest = ToListedTest(test);
 
-                    if (parsedFilter.Matches(listedTest))
+                    if (parsedFilter.Matches(listedTest, test.DiscoveryIndex))
                         return false;
 
                     if (test.Kind is not DiscoveredTestKind.EmptyGroup)
@@ -410,6 +469,19 @@ public static class ElmTestRunner
 
             if (!discoveredTests.Any(test => test.Kind is not DiscoveredTestKind.EmptyGroup))
             {
+                if (instrumentation is { RecordDiagnostics: true })
+                {
+                    throw new ElmTestInstrumentationSelectionException(
+                        allFound.Length,
+                        0,
+                        filter,
+                        [
+                        .. selectableTests.Take(5)
+                        .Select(test => new ElmTestSelectionSuggestion(ToListedTest(test), ExactFilter(test)))
+                        ],
+                        suggestionsFromRemaining: false);
+                }
+
                 return
                     new ElmTestRun.NoMatchingTests(
                         filterExpression,
@@ -418,6 +490,26 @@ public static class ElmTestRunner
                         FilteredOutTests = availableTests
                     };
             }
+        }
+
+        if (instrumentation is { RecordDiagnostics: true })
+        {
+            var remaining = discoveredTests.Where(test => test.Kind is not DiscoveredTestKind.EmptyGroup).ToArray();
+
+            if (remaining.Length != 1 || remaining[0].Kind is not DiscoveredTestKind.Runnable)
+            {
+                throw new ElmTestInstrumentationSelectionException(
+                    allFound.Length,
+                    remaining.Length,
+                    filter,
+                    [
+                    .. remaining.Where(test => test.Kind is DiscoveredTestKind.Runnable).Take(5)
+                    .Select(test => new ElmTestSelectionSuggestion(ToListedTest(test), ExactFilter(test)))
+                    ]);
+            }
+
+            discoveredTests = [remaining[0]];
+            instrumentation.SelectTest(ToListedTest(discoveredTests[0]).FullPath);
         }
 
         if (listTests)
@@ -453,7 +545,9 @@ public static class ElmTestRunner
             var sharedPineVMCaches = new PineVMSharedCaches();
             var completedTestsByIndex = new CompletedTest[discoveredTests.Count];
             var nextTestIndex = -1;
-            var workerCount = Math.Min(workers, discoveredTests.Count);
+
+            var workerCount =
+                Math.Min(instrumentation is { RecordDiagnostics: true } ? 1 : workers, discoveredTests.Count);
 
             pineVmFactory ??= CreatePineVm;
 
@@ -472,8 +566,13 @@ public static class ElmTestRunner
                                 while (Interlocked.Increment(ref nextTestIndex) is var testIndex &&
                                     testIndex < discoveredTests.Count)
                                 {
+                                    using var executionScope =
+                                        instrumentation?.EnterScope("execution", ToListedTest(discoveredTests[testIndex]).FullPath,
+                                            ExactFilter(discoveredTests[testIndex]));
+
                                     var testPineVm =
-                                        pineVmFactory(invocationCache, sharedPineVMCaches);
+                                        instrumentation?.CreateVm(invocationCache, sharedPineVMCaches)
+                                        ?? pineVmFactory(invocationCache, sharedPineVMCaches);
 
                                     completedTestsByIndex[testIndex] =
                                         RunTest(
@@ -638,8 +737,8 @@ public static class ElmTestRunner
                         FailingIteration = iteration is 0 ? null : iteration,
                         OriginalInput = iteration is 0 ? null : ParseElmString(Field(details, "originalInput")),
                         ShrunkInput = iteration is 0 ? null : ParseElmString(Field(details, "shrunkInput")),
-                        OriginalChoices = ParseList(Field(details, "originalChoices")).Select(ParseInteger).ToArray(),
-                        ShrunkChoices = ParseList(Field(details, "shrunkChoices")).Select(ParseInteger).ToArray(),
+                        OriginalChoices = [.. ParseList(Field(details, "originalChoices")).Select(ParseInteger)],
+                        ShrunkChoices = [.. ParseList(Field(details, "shrunkChoices")).Select(ParseInteger)],
                         ShrinkingCompleted = iteration is not 0,
                     };
             }
@@ -951,15 +1050,10 @@ public static class ElmTestRunner
 
     private static IntermediatePineVM CreatePineVm(
         IInvocationCacheAccess invocationCache,
-        PineVMSharedCaches sharedCaches) => CreatePineVm(invocationCache, sharedCaches, null);
-
-    private static IntermediatePineVM CreatePineVm(
-        IInvocationCacheAccess invocationCache,
-        PineVMSharedCaches sharedCaches,
-        IntermediatePineVM.EvaluationConfig? evaluationConfig) =>
+        PineVMSharedCaches sharedCaches) =>
         IntermediatePineVM.CreateCustom(
             evalCache: null,
-            evaluationConfigDefault: evaluationConfig,
+            evaluationConfigDefault: DefaultEvaluationConfig,
             reportFunctionApplication: null,
             compilationEnvClasses: null,
             disableReductionInCompilation: false,
@@ -1035,6 +1129,8 @@ public static class ElmTestRunner
         DiscoveredTestKind Kind,
         PineValue? Thunk)
     {
+        public int DiscoveryIndex { get; set; }
+
         public bool Only { get; init; }
 
         public ElmFuzzResult? Fuzz { get; init; }
