@@ -19,7 +19,7 @@ namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 /// concrete <see cref="PineValue"/> via
 /// <see cref="InterpreterTestHelper.EvaluateInModulesToPineValue(string, ElmInterpreter.Prepared)"/>
 /// and compared against the <see cref="PineValue"/> of an expected Elm expression. Operating
-/// on the <see cref="PineValue"/> directly avoids any conversion to <see cref="Core.Elm.ElmValue"/>;
+/// on the <see cref="PineValue"/> directly avoids any conversion to <see cref="ElmValue"/>;
 /// none of these functions accepts a function argument, so plain-data operands always
 /// materialize cleanly.
 /// <para>

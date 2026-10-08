@@ -2072,9 +2072,9 @@ public class PineValueInProcessTests
 
         var instanceB = PineValueInProcess.Create(PineValue.EmptyList);
 
-        System.Func<bool> action = () => instanceA == instanceB;
+        Func<bool> action = () => instanceA == instanceB;
 
-        action.Should().Throw<System.InvalidOperationException>();
+        action.Should().Throw<InvalidOperationException>();
     }
 
     [Fact]
@@ -2533,7 +2533,7 @@ public class PineValueInProcessTests
                 break;
 
             default:
-                throw new System.NotImplementedException(
+                throw new NotImplementedException(
                     "Unexpected PineValue type: " + evaluated.GetType().FullName);
         }
 

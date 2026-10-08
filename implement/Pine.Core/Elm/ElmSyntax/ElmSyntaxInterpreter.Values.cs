@@ -32,7 +32,7 @@ public partial class ElmSyntaxInterpreter
         : PineValueInProcess
     {
         public ElmClosureInProcess(
-            ElmClosureInProcess.SourceRef source,
+            SourceRef source,
             int parameterCount,
             IReadOnlyList<PineValueInProcess> argumentsAlreadyCollected,
             IReadOnlyDictionary<string, PineValueInProcess> capturedBindings,

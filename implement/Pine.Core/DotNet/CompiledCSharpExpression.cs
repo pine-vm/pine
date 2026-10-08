@@ -16,14 +16,14 @@ public record CompiledCSharpExpression
     /// <summary>
     /// Most specific Pine value category known for the expression result.
     /// </summary>
-    public CompiledCSharpExpression.ValueType Type { get; init; }
+    public ValueType Type { get; init; }
 
     /// <summary>
     /// Constructs a compiled C# expression from its syntax and the Pine value category it evaluates to.
     /// </summary>
     public CompiledCSharpExpression(
         ExpressionSyntax ExpressionSyntax,
-        CompiledCSharpExpression.ValueType Type)
+        ValueType Type)
     {
         this.ExpressionSyntax = ExpressionSyntax;
         this.Type = Type;
@@ -34,7 +34,7 @@ public record CompiledCSharpExpression
     /// </summary>
     public void Deconstruct(
         out ExpressionSyntax ExpressionSyntax,
-        out CompiledCSharpExpression.ValueType Type)
+        out ValueType Type)
     {
         ExpressionSyntax = this.ExpressionSyntax;
         Type = this.Type;

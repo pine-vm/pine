@@ -10,7 +10,6 @@ using System.Threading.Tasks;
 using Xunit;
 
 using ElmLanguageServer = Pine.Core.Elm.LanguageServer.LanguageServer;
-using Interface = Pine.Core.Elm.LanguageServer.LanguageServiceInterface;
 
 namespace Pine.Core.Tests.Elm.LanguageServer;
 
@@ -45,7 +44,7 @@ public class LanguageServerDocumentSyncTests
         IDiagnosticsProvider? diagnosticsProvider = null,
         IDocumentFormatter? documentFormatter = null,
         IDiagnosticsProvider? formattingDiagnosticsProvider = null,
-        System.Action<string>? logDelegate = null) =>
+        Action<string>? logDelegate = null) =>
         new(
             StubLanguageServiceSessionFactory.WithSession(session),
             workspace,
@@ -239,7 +238,7 @@ public class LanguageServerDocumentSyncTests
 
         Func<Task> awaitHover = async () => await hover;
 
-        await awaitHover.Should().ThrowAsync<System.OperationCanceledException>();
+        await awaitHover.Should().ThrowAsync<OperationCanceledException>();
 
         logs.Should().Contain(
             log => log.Contains("Client cancellation observed while handling ProvideHoverRequest"));
@@ -303,7 +302,7 @@ public class LanguageServerDocumentSyncTests
                 {
                     await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
                 }
-                catch (System.OperationCanceledException)
+                catch (OperationCanceledException)
                 {
                     Interlocked.Increment(ref _canceledCount);
                     throw;
@@ -587,8 +586,8 @@ public class LanguageServerDocumentSyncTests
         var workspace =
             new WorkspaceFromFileStoreMounts(
                 [
-                    new FileStoreMount(new System.Uri("memory://workspace/"), storeWorkspace),
-                    new FileStoreMount(new System.Uri("memory://other/"), storeOther),
+                    new FileStoreMount(new Uri("memory://workspace/"), storeWorkspace),
+                    new FileStoreMount(new Uri("memory://other/"), storeOther),
                 ]);
 
         var session = new RecordingLanguageServiceSession();
@@ -650,8 +649,8 @@ public class LanguageServerDocumentSyncTests
         var workspace =
             new WorkspaceFromFileStoreMounts(
                 [
-                    new FileStoreMount(new System.Uri("memory://workspace/"), storeWorkspace),
-                    new FileStoreMount(new System.Uri("memory://packages/"), storePackages),
+                    new FileStoreMount(new Uri("memory://workspace/"), storeWorkspace),
+                    new FileStoreMount(new Uri("memory://packages/"), storePackages),
                 ]);
 
         var packageSource =
@@ -668,7 +667,7 @@ public class LanguageServerDocumentSyncTests
         var package = session.Packages.Should().ContainSingle().Which;
 
         package.PackageVersionId.Should().Be(
-            new Interface.ElmPackageVersion019Identifer("author/pkg", "1.2.3"));
+            new ElmPackageVersion019Identifer("author/pkg", "1.2.3"));
 
         package.Modules.Select(module => string.Join("/", module.Key))
             .Should().Equal("src/Exposed.elm");
@@ -681,7 +680,7 @@ public class LanguageServerDocumentSyncTests
             fileLocation.Should().BeOfType<FileLocation.ElmPackageFileLocation>().Which;
 
         packageFileLocation.ElmPackageVersionIdentifer.Should().Be(
-            new Interface.ElmPackageVersion019Identifer("author/pkg", "1.2.3"));
+            new ElmPackageVersion019Identifer("author/pkg", "1.2.3"));
 
         packageFileLocation.ModulePath.Should().Equal("src", "Exposed.elm");
 

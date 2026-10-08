@@ -18,7 +18,7 @@ namespace Pine.Core.Elm.ElmSyntax;
 /// <para>
 /// The current serialized form stores <see cref="ElmSyntaxInterpreter.PreparedDeclaration"/> values.
 /// For backward compatibility, deserialization also accepts legacy payloads whose declaration values
-/// are <see cref="Declaration"/> nodes and prepares them on load. The dictionary keys
+/// are <see cref="AbstractDeclaration"/> nodes and prepares them on load. The dictionary keys
 /// (<see cref="DeclQualifiedName"/>) are encoded as their <see cref="DeclQualifiedName.FullName"/>
 /// string (see <see cref="DeclQualifiedNameJsonConverter"/>).
 /// </para>

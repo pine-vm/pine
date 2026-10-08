@@ -301,7 +301,7 @@ public class PineVM : ICancellablePineVM
         {
             if (err.Reason is EvaluationErrorReason.CancellationRequested)
             {
-                throw new System.OperationCanceledException(cancellationToken);
+                throw new OperationCanceledException(cancellationToken);
             }
 
             return EvaluationError.RenderDisplayString(err);

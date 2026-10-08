@@ -286,7 +286,7 @@ public class LanguageServerFormattingTests
             new TextDocumentItem(documentUri, "elm", Version: 1, Text: "source"));
 
         var formattingRequests =
-            new List<Task<IReadOnlyList<Pine.Core.LanguageServerProtocol.TextEdit>>>
+            new List<Task<IReadOnlyList<LanguageServerProtocol.TextEdit>>>
             {
                 server.TextDocument_formattingAsync(
                     new TextDocumentIdentifier(documentUri),

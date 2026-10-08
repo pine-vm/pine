@@ -405,7 +405,7 @@ public class CompileExpressionTests
                     ]),
 
                 _ =>
-                throw new System.NotImplementedException()
+                throw new NotImplementedException()
             };
 
         var evaluations =

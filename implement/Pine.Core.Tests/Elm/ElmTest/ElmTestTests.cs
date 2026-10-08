@@ -427,7 +427,7 @@ public class ElmTestTests
     }
 
 
-    private sealed class FirstEvaluationFailsPineVm : Pine.Core.PineVM.IPineVM
+    private sealed class FirstEvaluationFailsPineVm : PineVM.IPineVM
     {
         private int evaluationCount;
 

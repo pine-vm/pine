@@ -345,10 +345,7 @@ public class StartupAdminInterface
     {
         var bodyControlFeature = context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpBodyControlFeature>();
 
-        if (bodyControlFeature is not null)
-        {
-            bodyControlFeature.AllowSynchronousIO = true;
-        }
+        bodyControlFeature?.AllowSynchronousIO = true;
 
         {
             context.Request.Headers.TryGetValue("Authorization", out var requestAuthorizationHeaderValue);
@@ -404,10 +401,7 @@ public class StartupAdminInterface
             var bodySizeFeature =
                 context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
 
-            if (bodySizeFeature is not null)
-            {
-                bodySizeFeature.MaxRequestBodySize = 400_000_000;
-            }
+            bodySizeFeature?.MaxRequestBodySize = 400_000_000;
         }
 
         async System.Threading.Tasks.Task deployElmApp(bool initElmAppState)

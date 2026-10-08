@@ -522,7 +522,7 @@ public class PreparedSyntaxTests
             .Should().BeOfType<ElmInterpreter.PreparedCaseDispatchSegment.PatternCase>()
             .Subject
             .Pattern
-            .Should().BeOfType<Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract.Pattern.NamedPattern>();
+            .Should().BeOfType<Core.Elm.ElmSyntax.ElmSyntaxAbstract.Pattern.NamedPattern>();
 
         caseExpression.Dispatch.Steps[2]
             .Should().BeOfType<ElmInterpreter.PreparedCaseDispatchSegment.ConstantValuePatterns>()

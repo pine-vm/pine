@@ -310,7 +310,7 @@ public partial class ElmSyntaxInterpreter
 
             foreach (var declNode in abstractFileOptimized.Declarations)
             {
-                if (declNode is ElmSyntaxAbstract.Declaration.InfixDeclaration infixDecl)
+                if (declNode is AbstractDeclaration.InfixDeclaration infixDecl)
                 {
                     declarations[DeclQualifiedName.Create(moduleNameParts, infixDecl.Infix.Operator)] =
                         declNode;
@@ -415,16 +415,16 @@ public partial class ElmSyntaxInterpreter
     /// Returns the simple top-level name of <paramref name="declaration"/>, or null when
     /// the declaration kind does not carry such a name (e.g. infix or destructuring).
     /// </summary>
-    private static string? DeclarationSimpleName(ElmSyntaxAbstract.Declaration declaration) =>
+    private static string? DeclarationSimpleName(AbstractDeclaration declaration) =>
         declaration switch
         {
-            ElmSyntaxAbstract.Declaration.FunctionDeclaration functionDeclaration =>
+            AbstractDeclaration.FunctionDeclaration functionDeclaration =>
             functionDeclaration.Function.Declaration.Name,
 
-            ElmSyntaxAbstract.Declaration.AliasDeclaration aliasDeclaration =>
+            AbstractDeclaration.AliasDeclaration aliasDeclaration =>
             aliasDeclaration.TypeAlias.Name,
 
-            ElmSyntaxAbstract.Declaration.ChoiceTypeDeclaration choiceTypeDeclaration =>
+            AbstractDeclaration.ChoiceTypeDeclaration choiceTypeDeclaration =>
             choiceTypeDeclaration.TypeDeclaration.Name,
 
             _ =>

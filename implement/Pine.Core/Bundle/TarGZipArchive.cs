@@ -90,10 +90,7 @@ public static class TarGZipArchive
 
                 using var contentStream = new MemoryStream();
 
-                if (entry.DataStream is not null)
-                {
-                    entry.DataStream.CopyTo(contentStream);
-                }
+                entry.DataStream?.CopyTo(contentStream);
 
                 files[pathSegments] = contentStream.ToArray();
             }
