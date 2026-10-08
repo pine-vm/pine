@@ -72,6 +72,11 @@ jobs:
           dotnet tool install --global dotnet-stack
           dotnet-stack --version
 
+      - name: Install dotnet-dump tool
+        run: |
+          dotnet tool install --global dotnet-dump
+          dotnet-dump --version
+
       - name: Install Pine to $RUNNER_TEMP and expose it
         run: |
           set -euo pipefail
