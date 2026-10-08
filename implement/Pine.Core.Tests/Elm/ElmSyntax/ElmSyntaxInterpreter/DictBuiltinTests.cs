@@ -225,6 +225,48 @@ public class DictBuiltinTests
         AssertEvaluatesEqual("Dict.get 3 (" + Descending + ")", "Just \"c\"");
     }
 
+    [Theory]
+    [InlineData("Dict.empty", "Dict.empty", "[ ( 0, Nothing, Nothing ) ]")]
+    [InlineData(
+        "Dict.fromList [ ( 2, 20 ), ( 1, 10 ) ]",
+        "Dict.empty",
+        "[ ( 2, Just 20, Nothing ), ( 1, Just 10, Nothing ), ( 0, Nothing, Nothing ) ]")]
+    [InlineData(
+        "Dict.empty",
+        "Dict.fromList [ ( 2, \"b\" ), ( 1, \"a\" ) ]",
+        "[ ( 2, Nothing, Just \"b\" ), ( 1, Nothing, Just \"a\" ), ( 0, Nothing, Nothing ) ]")]
+    [InlineData(
+        "Dict.fromList [ ( 4, 40 ), ( 1, 10 ), ( 2, 20 ) ]",
+        "Dict.fromList [ ( 5, \"e\" ), ( 3, \"c\" ), ( 2, \"b\" ) ]",
+        "[ ( 5, Nothing, Just \"e\" ), ( 4, Just 40, Nothing ), ( 3, Nothing, Just \"c\" ), ( 2, Just 20, Just \"b\" ), ( 1, Just 10, Nothing ), ( 0, Nothing, Nothing ) ]")]
+    public void Merge_folds_callbacks_over_sorted_keys(string left, string right, string expected)
+    {
+        AssertEvaluatesEqual(
+            """
+            Dict.merge
+                (\key value acc -> ( key, Just value, Nothing ) :: acc)
+                (\key leftValue rightValue acc -> ( key, Just leftValue, Just rightValue ) :: acc)
+                (\key value acc -> ( key, Nothing, Just value ) :: acc)
+            """ + " (" + left + ") (" + right + ") [ ( 0, Nothing, Nothing ) ]",
+            expected);
+    }
+
+    [Fact]
+    public void Merge_accepts_list_keys_and_a_non_dictionary_accumulator()
+    {
+        AssertEvaluatesEqual(
+            """
+            Dict.merge
+                (\_ value acc -> acc * 10 + value)
+                (\_ leftValue rightValue acc -> acc * 10 + leftValue + rightValue)
+                (\_ value acc -> acc * 10 + value)
+                (Dict.fromList [ ( [ 2 ], 4 ), ( [ 1, 0 ], 2 ) ])
+                (Dict.fromList [ ( [ 3 ], 6 ), ( [ 1 ], 1 ), ( [ 2 ], 1 ) ])
+                9
+            """,
+            "91256");
+    }
+
     // ============================================================
     // get — values that are closures pass through unevaluated
     // ============================================================

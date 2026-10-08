@@ -478,6 +478,47 @@ diff t1 t2 =
     foldl (\k v t -> remove k t) t1 t2
 
 
+{-| Fold over two dictionaries together, visiting keys from lowest to highest.
+The first callback handles keys found only in the left dictionary, the second
+handles keys in both dictionaries, and the third handles keys only in the right
+dictionary. Each callback receives the accumulated result.
+
+The dictionaries can contain different value types, and the result can be any
+type, not just another dictionary.
+-}
+merge : (comparable -> a -> result -> result) -> (comparable -> a -> b -> result -> result) -> (comparable -> b -> result -> result) -> Dict comparable a -> Dict comparable b -> result -> result
+merge leftStep bothStep rightStep leftDict rightDict initialResult =
+    mergeHelp leftStep bothStep rightStep (toList leftDict) (toList rightDict) initialResult
+
+
+mergeHelp : (comparable -> a -> result -> result) -> (comparable -> a -> b -> result -> result) -> (comparable -> b -> result -> result) -> List ( comparable, a ) -> List ( comparable, b ) -> result -> result
+mergeHelp leftStep bothStep rightStep leftEntries rightEntries result =
+    case leftEntries of
+        [] ->
+            case rightEntries of
+                [] ->
+                    result
+
+                ( rightKey, rightValue ) :: rightRest ->
+                    mergeHelp leftStep bothStep rightStep [] rightRest (rightStep rightKey rightValue result)
+
+        ( leftKey, leftValue ) :: leftRest ->
+            case rightEntries of
+                [] ->
+                    mergeHelp leftStep bothStep rightStep leftRest [] (leftStep leftKey leftValue result)
+
+                ( rightKey, rightValue ) :: rightRest ->
+                    case compare leftKey rightKey of
+                        LT ->
+                            mergeHelp leftStep bothStep rightStep leftRest rightEntries (leftStep leftKey leftValue result)
+
+                        EQ ->
+                            mergeHelp leftStep bothStep rightStep leftRest rightRest (bothStep leftKey leftValue rightValue result)
+
+                        GT ->
+                            mergeHelp leftStep bothStep rightStep leftEntries rightRest (rightStep rightKey rightValue result)
+
+
 {-| Apply a function to all values in a dictionary.
 -}
 map : (k -> a -> b) -> Dict k a -> Dict k b

@@ -15,7 +15,7 @@ public class CoreDictFunctionTests
 {
     /// <summary>
     /// Elm test module that imports Dict and provides test functions for
-    /// Dict equality scenarios. Elm equality on Dicts must compare by
+    /// Dict equality and merge scenarios. Elm equality on Dicts must compare by
     /// logical content (sorted key-value pairs), not by the concrete Pine
     /// value which depends on insertion order.
     /// </summary>
@@ -92,6 +92,17 @@ public class CoreDictFunctionTests
         dictEq_inside_list : Int -> Bool
         dictEq_inside_list _ =
             [ Dict.fromList [ (1, 0), (2, 0) ] ] == [ Dict.fromList [ (2, 0), (1, 0) ] ]
+
+
+        mergeTrace : Dict.Dict comparable Int -> Dict.Dict comparable String -> List ( comparable, Maybe Int, Maybe String ) -> List ( comparable, Maybe Int, Maybe String )
+        mergeTrace left right initial =
+            Dict.merge
+                (\key value acc -> ( key, Just value, Nothing ) :: acc)
+                (\key leftValue rightValue acc -> ( key, Just leftValue, Just rightValue ) :: acc)
+                (\key value acc -> ( key, Nothing, Just value ) :: acc)
+                left
+                right
+                initial
         """;
 
     private static readonly Lazy<ElmInteractiveEnvironment.ParsedInteractiveEnvironment> s_testEnv =
@@ -598,6 +609,88 @@ public class CoreDictFunctionTests
         var result = ApplyBinary(GetDictFunction("diff"), d1, d2);
         var size = ApplyUnary(GetDictFunction("size"), result);
         size.Should().Be(Integer(1));
+    }
+
+    [Fact]
+    public void Dict_public_function_declarations_are_all_implemented()
+    {
+        string[] names =
+            [
+                "empty", "singleton", "insert", "update", "remove",
+                "isEmpty", "member", "get", "size",
+                "keys", "values", "toList", "fromList",
+                "map", "foldl", "foldr", "filter", "partition",
+                "union", "intersect", "diff", "merge",
+            ];
+
+        var declarations =
+            s_kernelEnv.Value.Modules
+            .First(m => m.moduleName is "Dict")
+            .moduleContent.FunctionDeclarations;
+
+        declarations.Keys.Should().Contain(names);
+    }
+
+    [Theory]
+    [InlineData(new int[] { }, new int[] { })]
+    [InlineData(new int[] { }, new int[] { 3, 1, 2 })]
+    [InlineData(new int[] { 3, 1, 2 }, new int[] { })]
+    [InlineData(new int[] { 3, 1, 2 }, new int[] { 2, 3, 1 })]
+    [InlineData(new int[] { 1, 2 }, new int[] { 4, 3 })]
+    [InlineData(new int[] { 4, 3 }, new int[] { 1, 2 })]
+    [InlineData(new int[] { 5, 1, 3 }, new int[] { 6, 4, 2 })]
+    [InlineData(new int[] { 3, 1, 5, 7 }, new int[] { 6, 3, 0, 8 })]
+    [InlineData(new int[] { 2, 1, 2 }, new int[] { 2, 3, 2 })]
+    public void Merge_calls_each_callback_in_ascending_key_order(int[] leftKeys, int[] rightKeys)
+    {
+        var left =
+            DictFromIntPairs([.. leftKeys.Select(key => ((long)key, (long)key * 10))]);
+
+        var right =
+            ApplyUnary(
+                GetDictFunction("fromList"),
+                ElmList([.. rightKeys.Select(key => Tuple(Integer(key), String("right:" + key)))]));
+
+        var initialEntry =
+            ElmValue.ListInstance([Integer(999), s_nothing, s_nothing]);
+
+        var result =
+            ApplyTernary(GetTestFunction("mergeTrace"), left, right, ElmList(initialEntry));
+
+        var expectedEntries =
+            leftKeys.Union(rightKeys)
+            .OrderDescending()
+            .Select(
+                key =>
+                ElmValue.ListInstance(
+                    [
+                        Integer(key),
+                        leftKeys.Contains(key) ? JustOf(Integer(key * 10)) : s_nothing,
+                        rightKeys.Contains(key) ? JustOf(String("right:" + key)) : s_nothing,
+                    ]))
+            .Append(initialEntry);
+
+        result.Should().Be(ElmList([.. expectedEntries]));
+    }
+
+    [Fact]
+    public void Merge_compares_string_keys_and_preserves_both_value_types()
+    {
+        var left = DictFromStringIntPairs(("z", 26), ("a", 1));
+
+        var right =
+            ApplyUnary(
+                GetDictFunction("fromList"),
+                ElmList(Tuple(String("m"), String("middle")), Tuple(String("z"), String("last"))));
+
+        var result =
+            ApplyTernary(GetTestFunction("mergeTrace"), left, right, ElmList());
+
+        result.Should().Be(
+            ElmList(
+                ElmValue.ListInstance([String("z"), JustOf(Integer(26)), JustOf(String("last"))]),
+                ElmValue.ListInstance([String("m"), s_nothing, JustOf(String("middle"))]),
+                ElmValue.ListInstance([String("a"), JustOf(Integer(1)), s_nothing])));
     }
 
     // ========== Tests for map ==========
