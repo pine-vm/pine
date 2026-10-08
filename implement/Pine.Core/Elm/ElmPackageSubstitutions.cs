@@ -66,6 +66,7 @@ public static class ElmPackageSubstitutions
                 Package("elm/bytes", ["1.0.8"], ["Bytes", "Bytes.Encode", "Bytes.Decode"]),
                 Package("elm/json", ["1.1.3", "1.1.4"], ["Json.Encode", "Json.Decode"]),
                 Package("elm/parser", ["1.1.0"], ["Parser", "Parser.Advanced"], "Elm.Kernel.Parser"),
+                Package("elm/regex", ["1.0.0"], ["Regex"]),
                 Package("elm/time", ["1.0.0"], ["Time"]),
                 Package("elm/url", ["1.0.0"], ["Url", "Url.Parser", "Url.Parser.Query"], "Url.Parser.Internal"),
             ];

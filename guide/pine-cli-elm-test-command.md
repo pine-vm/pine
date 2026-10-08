@@ -73,7 +73,8 @@ as invalid configuration. Do not add a supported version solely because it has t
 the replacement's semantics and supported API must actually match.
 
 The bundled build defaults currently support `elm/core` 1.0.5, `elm/bytes` 1.0.8,
-`elm/json` 1.1.3 and 1.1.4, `elm/parser` 1.1.0, `elm/time` 1.0.0 and `elm/url` 1.0.0.
+`elm/json` 1.1.3 and 1.1.4, `elm/parser` 1.1.0, `elm/regex` 1.0.0,
+`elm/time` 1.0.0 and `elm/url` 1.0.0.
 Test builds additionally substitute `elm-explorations/test` 2.2.0 and 2.2.1 using the pinned 2.2.1
 non-HTML Elm implementation, and `elm/random` 1.0.0 using its pure generator/seed APIs.
 The test replacement exposes `Test`, `Expect`, `Fuzz`, `Test.Runner`, `Test.Runner.Failure` and

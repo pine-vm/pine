@@ -1252,6 +1252,56 @@ public class ElmAppDependencyResolutionTests
         build.ProjectSourceFingerprint.Should().NotBeNullOrEmpty();
     }
 
+    [Fact]
+    public async Task Regex_substitution_compiles_without_upstream_or_host_regex_dependencies()
+    {
+        var provider = new Provider { RejectRequests = true };
+
+        var sources =
+            FileTree.MergeFiles(
+                Tree(Application(Deps(("elm/core", "1.0.5"), ("elm/regex", "1.0.0")))),
+                Source(
+                    "Main",
+                    """
+                    import Regex
+                    value =
+                        Regex.fromString "a+"
+                            |> Maybe.map (\regex -> Regex.contains regex "baaa")
+                            |> Maybe.withDefault False
+                    """));
+
+        var build =
+            await ElmResolvedBuildPreparation.PrepareAsync(
+                sources,
+                ["elm.json"],
+                [["src", "Main.elm"]],
+                ElmPackageSubstitutions.DefaultBuild.Value,
+                provider);
+
+        build.Resolution.Packages["elm/regex"].SubstitutionImplementationId.Should().Be("pine-bundled:elm/regex");
+        provider.VersionQueries.Should().BeEmpty();
+        provider.MetadataQueries.Should().BeEmpty();
+        provider.SourceQueries.Should().BeEmpty();
+
+        var compiled =
+            ElmCompiler.CompileResolvedEnvironment(
+                build,
+                rootDeclarations: [DeclQualifiedName.Create(["Main"], "value")])
+            .Extract(error => throw new InvalidOperationException(error));
+
+        var environment =
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(
+                ElmSourceCompilation.EvaluateZeroParameterRoots(
+                    compiled.compiledEnvValue,
+                    Pine.Core.Interpreter.DirectInterpreter.WithLocalEvalCache(new PineVMParseCache()))
+                .Extract(error => throw new InvalidOperationException(error)))
+            .Extract(error => throw new InvalidOperationException(error));
+
+        environment.Modules.Single(module => module.moduleName == "Main")
+            .moduleContent.FunctionDeclarations["value"]
+            .Should().Be(ElmValueEncoding.ElmValueAsPineValue(ElmValue.TrueValue));
+    }
+
     private static Task<ElmDependencyResolutionReport> Resolve(
         string manifest, Provider provider, ElmDependencyResolutionConfiguration? configuration = null) =>
         ElmDependencyResolver.ResolveAsync(Tree(manifest), ["elm.json"], configuration ?? new(), provider);
