@@ -54,7 +54,7 @@ public class CanonicalizationTests
         var canonicalized = ElmCompilerTestHelper.GetCanonicalizedModule(result, ["Main"]);
 
         NamingErrorDetection.DetectNamingErrorsInModule(
-            ToFullSyntaxModel.Convert(canonicalized).Declarations.Select(node => node.Value).ToArray(),
+            [.. ToFullSyntaxModel.Convert(canonicalized).Declarations.Select(node => node.Value)],
             ["value"]).Errors.Should().BeEmpty();
     }
 

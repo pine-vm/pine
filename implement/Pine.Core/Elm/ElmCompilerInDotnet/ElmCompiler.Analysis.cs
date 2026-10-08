@@ -303,10 +303,12 @@ public partial class ElmCompiler
         diagnostics.AddRange(TypeDiagnostics(parsed, canonicalized, declarations));
 
         return
-            diagnostics.Where(diagnostic => applicationPaths.Contains(diagnostic.FilePath))
+            [
+            .. diagnostics.Where(diagnostic => applicationPaths.Contains(diagnostic.FilePath))
             .Distinct().OrderBy(diagnostic => diagnostic.FilePath, StringComparer.Ordinal)
             .ThenBy(diagnostic => diagnostic.Range.Start.Row)
-            .ThenBy(diagnostic => diagnostic.Range.Start.Column).ToArray();
+            .ThenBy(diagnostic => diagnostic.Range.Start.Column)
+            ];
     }
 
     private static IReadOnlyList<ElmCompilerDiagnostic> TypeDiagnostics(
@@ -559,7 +561,7 @@ public partial class ElmCompiler
         if (diagnostic.ReferenceImport?.Range is { } failedImport)
             related.Add(new(diagnostic.FilePath, failedImport, "Import relevant to the unresolved reference."));
 
-        return related.Distinct().ToArray();
+        return [.. related.Distinct()];
     }
 
     private static ImmutableDictionary<DeclQualifiedName, Abstract.Declaration> AbstractDeclarations(

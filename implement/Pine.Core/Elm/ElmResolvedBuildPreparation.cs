@@ -804,7 +804,7 @@ public static class ElmResolvedBuildPreparation
                     .Select(node => ExposedApi(node.Value)).Where(declarations.Contains).ToHashSet();
 
                 api.UnionWith(
-                    api.Where(item => item.constructors).Select(item => (item.name, item.type, false)).ToArray());
+                    [.. api.Where(item => item.constructors).Select(item => (item.name, item.type, false))]);
 
                 return api;
 

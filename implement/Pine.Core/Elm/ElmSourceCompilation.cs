@@ -59,7 +59,7 @@ public static class ElmSourceCompilation
                     DeclQualifiedName.Create(moduleName, declaration.Function.Declaration.Value.Name.Value)));
         }
 
-        return roots.Distinct().ToArray();
+        return [.. roots.Distinct()];
     }
 
     /// <summary>Enumerates selected prepared declarations using their owner-isolated compiler identities.</summary>
@@ -88,7 +88,7 @@ public static class ElmSourceCompilation
                     DeclQualifiedName.Create(compilerName.Split('.'), declaration.Function.Declaration.Value.Name.Value)));
         }
 
-        return roots.Distinct().ToArray();
+        return [.. roots.Distinct()];
     }
 
     /// <summary>Expands a caller's source selection into explicit roots, without evaluating any exports.</summary>

@@ -101,7 +101,7 @@ public sealed class ElmCompilerDiagnosticsProvider(
                 ?
                 new[] { new ElmJsonStructure.RelativeDirectory(0, ["src"]) }
                 :
-                manifest.ParsedSourceDirectories.ToArray();
+                [.. manifest.ParsedSourceDirectories];
 
             var parentLevels = directories.Select(directory => directory.ParentLevel).DefaultIfEmpty().Max();
             var treeUri = projectUri;
