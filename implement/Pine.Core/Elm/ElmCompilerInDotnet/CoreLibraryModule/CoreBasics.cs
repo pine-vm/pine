@@ -3863,7 +3863,27 @@ public partial class CoreBasics
 
     private static Expression Internal_Compare(
         Expression left,
-        Expression right)
+        Expression right) =>
+        Internal_Compare(
+            left,
+            right,
+            Expression.LitralInst(s_recursiveCompareBodyEncoded.Value));
+
+    // The recursive body receives its own encoding through envFunctions, avoiding
+    // recursive expression construction and re-entry into the lazy initializer.
+    private static readonly System.Lazy<PineValue> s_recursiveCompareBodyEncoded =
+        new(
+            () =>
+            ExpressionEncoding.EncodeExpressionAsValue(
+                Internal_Compare(
+                    BuiltinHelpers.BuildPathToParameter(0),
+                    BuiltinHelpers.BuildPathToParameter(1),
+                    ExpressionBuilder.BuildExpressionForPathInExpression([0, 0], Expression.EnvironmentInstance))));
+
+    private static Expression Internal_Compare(
+        Expression left,
+        Expression right,
+        Expression recursiveCompareEncoded)
     {
         /*
         compare : comparable -> comparable -> Order
@@ -3948,7 +3968,7 @@ public partial class CoreBasics
         var leftIsList = BuiltinHelpers.ApplyBuiltinEqualBinary(leftTakeZero, emptyList);
 
         // List comparison: compare element by element recursively
-        var listCompare = CompareListRecursive(left, right);
+        var listCompare = CompareListRecursive(left, right, recursiveCompareEncoded);
 
         // Default integer comparison
         var intCompare = CompareIntegers(left, right);
@@ -4142,9 +4162,12 @@ public partial class CoreBasics
 
     /// <summary>
     /// Recursive list comparison following the Elm compareList function.
-    /// Compares element by element using integer comparison.
+    /// Compares element by element using generic comparable comparison.
     /// </summary>
-    private static Expression CompareListRecursive(Expression leftList, Expression rightList)
+    private static Expression CompareListRecursive(
+        Expression leftList,
+        Expression rightList,
+        Expression recursiveCompareEncoded)
     {
         /*
         compareList : List comparable -> List comparable -> Order
@@ -4158,20 +4181,23 @@ public partial class CoreBasics
                     case listB of
                         [] -> GT
                         headB :: tailB ->
-                            let headOrder = compareIntegers headA headB
+                            let headOrder = compare headA headB
                             in if headOrder == EQ then compareList tailA tailB
                                else headOrder
         */
 
         // Build recursive function for list comparison
         // Environment structure: [envFunctions, [listA, listB]]
-        // envFunctions[0] = compareList (self)
+        // envFunctions[0] = compareList (self), envFunctions[1] = generic compare
 
         var envFunctionsExpr =
             ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance);
 
         var selfFunctionExpr =
             ExpressionBuilder.BuildExpressionForPathInExpression([0, 0], Expression.EnvironmentInstance);
+
+        var genericCompareExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0, 1], Expression.EnvironmentInstance);
 
         var listAExpr = ExpressionBuilder.BuildExpressionForPathInExpression([1, 0], Expression.EnvironmentInstance);
         var listBExpr = ExpressionBuilder.BuildExpressionForPathInExpression([1, 1], Expression.EnvironmentInstance);
@@ -4192,21 +4218,16 @@ public partial class CoreBasics
         var tailA = BuiltinHelpers.ApplyBuiltinSkip(1, listAExpr);
         var tailB = BuiltinHelpers.ApplyBuiltinSkip(1, listBExpr);
 
-        // Compare heads using simple integer comparison
-        // For head equality, check first and then compare
-        var headsEqual = BuiltinHelpers.ApplyBuiltinEqualBinary(headA, headB);
-
-        var headALessThanB = BuiltinIntIsSortedAsc(headA, headB);
-
-        // headOrder: if headsEqual then EQ, else if headA < headB then LT else GT
         var headOrder =
-            Expression.ConditionalInst(
-                condition: headsEqual,
-                trueBranch: s_orderEQ,
-                falseBranch: Expression.ConditionalInst(
-                    condition: headALessThanB,
-                    trueBranch: s_orderLT,
-                    falseBranch: s_orderGT));
+            new Expression.Eval(
+                encoded: genericCompareExpr,
+                environment:
+                Expression.ListInst(
+                    [
+                    Expression.ListInst([genericCompareExpr]),
+                    headA,
+                    headB,
+                    ]));
 
         var headOrderIsEQ = BuiltinHelpers.ApplyBuiltinEqualBinary(headOrder, s_orderEQ);
 
@@ -4264,7 +4285,8 @@ public partial class CoreBasics
         var envFunctions =
             Expression.ListInst(
                 [
-                Expression.LitralInst(encodedBody)
+                Expression.LitralInst(encodedBody),
+                recursiveCompareEncoded,
                 ]);
 
         var initialArgs = Expression.ListInst([leftList, rightList]);
@@ -4278,17 +4300,20 @@ public partial class CoreBasics
 
     private static Expression CompareIntegers(Expression left, Expression right)
     {
-        // As in Basics.elm: use Pine_kernel.int_is_sorted_asc directly
-        // The equality check is handled at the top level of Internal_Compare
-        // If left < right (int_is_sorted_asc returns true): LT
-        // Otherwise: GT
+        // Cross-products of differently encoded but equal floats can be equal
+        // even when the top-level structural equality check failed.
+        var equal = BuiltinHelpers.ApplyBuiltinEqualBinary(left, right);
         var leftLessThan = BuiltinIntIsSortedAsc(left, right);
 
         return
             Expression.ConditionalInst(
-                condition: leftLessThan,
-                trueBranch: s_orderLT,
-                falseBranch: s_orderGT);
+                condition: equal,
+                trueBranch: s_orderEQ,
+                falseBranch:
+                Expression.ConditionalInst(
+                    condition: leftLessThan,
+                    trueBranch: s_orderLT,
+                    falseBranch: s_orderGT));
     }
 
     private static readonly Expression s_compareInnerBodyEncodedLiteral =
@@ -4302,7 +4327,7 @@ public partial class CoreBasics
     /// <see cref="Expression.Eval"/> targeting <see cref="Compare_InnerBodyEncodedValue"/>.
     /// <para>
     /// Using <see cref="Expression.Eval"/> (rather than inlining
-    /// <see cref="Internal_Compare"/>) lets the intermediate VM intercept the call via a
+    /// <see cref="Internal_Compare(Expression, Expression)"/>) lets the intermediate VM intercept the call via a
     /// precompiled leaf registered under <see cref="Compare_InnerBodyEncodedValue"/>
     /// (see <c>CoreBasicsPrecompiledLeaves</c>). The wrapper environment shape
     /// <c>[envFunctions = [], arg0, arg1]</c> matches the natural shape produced by
@@ -4368,34 +4393,7 @@ public partial class CoreBasics
             if Pine_kernel.equal [ a, b ] then
                 True
             else
-                Pine_kernel.equal [ compare a b, LT ]
-        */
-
-        var directEqual = BuiltinHelpers.ApplyBuiltinEqualBinary(left, right);
-
-        var compareResult = Internal_Compare(left, right);
-
-        return
-            Expression.ConditionalInst(
-                condition: directEqual,
-                trueBranch: s_trueValue,
-                falseBranch: Expression.ConditionalInst(
-                    condition: BuiltinHelpers.ApplyBuiltinEqualBinary(compareResult, s_orderLT),
-                    trueBranch: s_trueValue,
-                    falseBranch: s_falseValue));
-    }
-
-    private static Expression Internal_Ge(
-        Expression left,
-        Expression right)
-    {
-        /*
-        ge : comparable -> comparable -> Bool
-        ge a b =
-            if Pine_kernel.equal [ a, b ] then
-                True
-            else
-                Pine_kernel.equal [ compare a b, GT ]
+                not (Pine_kernel.equal [ compare a b, GT ])
         */
 
         var directEqual = BuiltinHelpers.ApplyBuiltinEqualBinary(left, right);
@@ -4408,8 +4406,35 @@ public partial class CoreBasics
                 trueBranch: s_trueValue,
                 falseBranch: Expression.ConditionalInst(
                     condition: BuiltinHelpers.ApplyBuiltinEqualBinary(compareResult, s_orderGT),
-                    trueBranch: s_trueValue,
-                    falseBranch: s_falseValue));
+                    trueBranch: s_falseValue,
+                    falseBranch: s_trueValue));
+    }
+
+    private static Expression Internal_Ge(
+        Expression left,
+        Expression right)
+    {
+        /*
+        ge : comparable -> comparable -> Bool
+        ge a b =
+            if Pine_kernel.equal [ a, b ] then
+                True
+            else
+                not (Pine_kernel.equal [ compare a b, LT ])
+        */
+
+        var directEqual = BuiltinHelpers.ApplyBuiltinEqualBinary(left, right);
+
+        var compareResult = Internal_Compare(left, right);
+
+        return
+            Expression.ConditionalInst(
+                condition: directEqual,
+                trueBranch: s_trueValue,
+                falseBranch: Expression.ConditionalInst(
+                    condition: BuiltinHelpers.ApplyBuiltinEqualBinary(compareResult, s_orderLT),
+                    trueBranch: s_falseValue,
+                    falseBranch: s_trueValue));
     }
 
     // ========== Internal Boolean and Utility Implementations ==========
