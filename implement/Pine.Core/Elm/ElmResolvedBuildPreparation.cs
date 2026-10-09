@@ -271,9 +271,9 @@ public static class ElmResolvedBuildPreparation
         return
             declarationDemand
             ?
-            PrepareDeclarationSources(build, appSources)
+            PrepareDeclarationSources(build, appSources, string.Join("/", manifestPath))
             :
-            ValidateImports(build, appSources);
+            ValidateImports(build, appSources, string.Join("/", manifestPath));
     }
 
     /// <summary>Adds package-relative Elm sources under an owner-specific elm-packages directory.</summary>
@@ -415,7 +415,8 @@ public static class ElmResolvedBuildPreparation
                     StringComparer.Ordinal),
             });
 
-    private static ElmResolvedBuild PrepareDeclarationSources(ElmResolvedBuild build, FileTree appSources)
+    private static ElmResolvedBuild PrepareDeclarationSources(
+        ElmResolvedBuild build, FileTree appSources, string projectManifestPath)
     {
         var byPath = new Dictionary<string, PreparedModule>(StringComparer.Ordinal);
 
@@ -659,6 +660,11 @@ public static class ElmResolvedBuildPreparation
                 CompilerModuleNames = compilerNames.ToImmutable(),
                 CompilerModuleSourcePaths =
                 compilerNames.ToImmutableDictionary(item => item.Value, item => item.Key, StringComparer.Ordinal),
+                CompilerModuleOrigins =
+                byPath.Values.ToImmutableDictionary(
+                    module => compilerNames[module.Path],
+                    module => ModuleOrigin(build, module.Name, module.Path, module.Owner, projectManifestPath),
+                    StringComparer.Ordinal),
                 CompilerModuleSyntax = compilerSyntax,
                 ImportDiagnostics = diagnostics.ToImmutable(),
             };
@@ -930,7 +936,8 @@ public static class ElmResolvedBuildPreparation
             new ElmModuleQualifierRewriting(qualifierAliases).Rewrite(rewritten);
     }
 
-    private static ElmResolvedBuild ValidateImports(ElmResolvedBuild build, FileTree appSources)
+    private static ElmResolvedBuild ValidateImports(
+        ElmResolvedBuild build, FileTree appSources, string projectManifestPath)
     {
         var modules = new Dictionary<string, List<Module>>(StringComparer.Ordinal);
         var byPath = new Dictionary<string, Module>(StringComparer.Ordinal);
@@ -1165,6 +1172,16 @@ public static class ElmResolvedBuildPreparation
                 CompilerModuleNames = compilerNames,
                 CompilerModuleSourcePaths =
                 compilerNames.ToImmutableDictionary(item => item.Value, item => item.Key, StringComparer.Ordinal),
+                CompilerModuleOrigins =
+                compilerNames.ToImmutableDictionary(
+                    item => item.Value,
+                    item => ModuleOrigin(
+                        build,
+                        byPath[item.Key].Name,
+                        item.Key,
+                        byPath[item.Key].Owner,
+                        projectManifestPath),
+                    StringComparer.Ordinal),
             };
 
         void Fail(string name, string message)
@@ -1179,6 +1196,32 @@ public static class ElmResolvedBuildPreparation
 
             throw new ElmDependencyResolutionException(build.Resolution with { Failures = [failure], Fingerprint = null });
         }
+    }
+
+    private static ElmModuleOrigin ModuleOrigin(
+        ElmResolvedBuild build, string name, string path, string? owner, string projectManifestPath)
+    {
+        if (owner is null)
+        {
+            var projectDirectory = projectManifestPath[..(projectManifestPath.LastIndexOf('/') + 1)];
+
+            return
+                new ElmModuleOrigin.Project(
+                    name,
+                    path,
+                    projectManifestPath,
+                    path.StartsWith(projectDirectory + "tests/", StringComparison.Ordinal));
+        }
+
+        var package = build.Resolution.Packages[owner];
+        var manifestPath = "elm-packages/" + owner + "/elm.json";
+
+        return
+            package.SubstitutionImplementationId is { } implementationId
+            ?
+            new ElmModuleOrigin.Substitution(name, path, manifestPath, package.Identity, implementationId)
+            :
+            new ElmModuleOrigin.PublishedPackage(name, path, manifestPath, package.Identity, package.Origin);
     }
 
     private sealed record Module(string Name, string Path, string? Owner, ImmutableArray<string> Imports);

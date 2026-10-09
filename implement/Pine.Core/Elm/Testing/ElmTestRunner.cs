@@ -203,7 +203,7 @@ public static class ElmTestRunner
                         .Extract(
                             error =>
                             throw new InvalidOperationException(
-                                "Failed parsing Elm test module: " + error));
+                                "Failed parsing Elm test module '" + string.Join('/', file.path) + "': " + error));
 
                     var moduleName =
                         SyntaxTypes.Module.GetModuleName(parsedModule.ModuleDefinition.Value).Value;
@@ -267,13 +267,23 @@ public static class ElmTestRunner
         if (instrumentation is not null && build.Resolution.Fingerprint is { } fingerprint)
             instrumentation.Metadata["ResolutionFingerprint"] = fingerprint;
 
+        var projectModules =
+            build.CompilerModuleOrigins
+            .Where(module => module.Value is ElmModuleOrigin.Project)
+            .ToDictionary(
+                module => module.Value.ModuleName,
+                module => (compilerName: module.Key, origin: (ElmModuleOrigin.Project)module.Value),
+                StringComparer.Ordinal);
+
         var testDeclarationNames =
             testModules
             .SelectMany(
                 testModule =>
                 testModule.exposedZeroParameterDeclarations.Select(
                     declarationName =>
-                    DeclQualifiedName.Create(testModule.moduleName, declarationName)))
+                    DeclQualifiedName.Create(
+                        projectModules[testModule.moduleNameText].compilerName.Split('.'),
+                        declarationName)))
             .ToImmutableArray();
 
         string[] bridgePath = ["elm-packages", "elm-explorations", "test", "src", "PineTestBridge.elm"];
@@ -322,16 +332,20 @@ public static class ElmTestRunner
         var hasOnly = false;
         var hasSkipped = false;
 
-        foreach (var testModule in testModules)
+        foreach (var testModule in testModules.Where(module => !module.exposedZeroParameterDeclarations.IsEmpty))
         {
+            var (compilerModuleName, origin) = projectModules[testModule.moduleNameText];
+
             var compiledTestModule =
                 parsedEnvironment.Modules
-                .FirstOrDefault(module => module.moduleName == testModule.moduleNameText);
+                .FirstOrDefault(module => module.moduleName == compilerModuleName);
 
             if (compiledTestModule.moduleContent is null)
             {
                 throw new InvalidOperationException(
-                    "Did not find compiled Elm module '" + testModule.moduleNameText + "'");
+                    $"Did not find compiled Elm module '{compilerModuleName}' " +
+                    $"for project test module '{origin.ModuleName}' in '{origin.SourcePath}' " +
+                    $"(manifest '{origin.ManifestPath}')");
             }
 
             foreach (var declarationName in testModule.exposedZeroParameterDeclarations)
@@ -347,7 +361,7 @@ public static class ElmTestRunner
                 {
                     throw new InvalidOperationException(
                         "Did not find declaration '" +
-                        testModule.moduleNameText + "." + declarationName + "'");
+                        origin.ModuleName + "." + declarationName + "' in '" + origin.SourcePath + "'");
                 }
 
                 var declarationValue =

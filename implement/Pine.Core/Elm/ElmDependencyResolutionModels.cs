@@ -1,5 +1,6 @@
 using Pine.Core.Elm.Elm019;
 using Pine.Core.Files;
+using Pine.Core.Json;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
@@ -316,6 +317,141 @@ public sealed class ElmDependencyResolutionException(ElmDependencyResolutionRepo
         };
 }
 
+/// <summary>The unmodified module identity and source ownership, independent of compiler namespace rewriting.</summary>
+[JsonConverter(typeof(JsonConverterForChoiceType))]
+public abstract class ElmModuleOrigin : IEquatable<ElmModuleOrigin>
+{
+    private ElmModuleOrigin(string moduleName, string sourcePath, string manifestPath)
+    {
+        ArgumentNullException.ThrowIfNull(moduleName);
+        ArgumentNullException.ThrowIfNull(sourcePath);
+        ArgumentNullException.ThrowIfNull(manifestPath);
+
+        ModuleName = moduleName;
+        SourcePath = sourcePath;
+        ManifestPath = manifestPath;
+    }
+
+    /// <summary>The module name declared in the original source.</summary>
+    public string ModuleName { get; }
+
+    /// <summary>The source path in the prepared tree, including the package prefix when applicable.</summary>
+    public string SourcePath { get; }
+
+    /// <summary>The governing project or package manifest path in the prepared tree.</summary>
+    public string ManifestPath { get; }
+
+    /// <summary>A source owned by the selected project, with no dependency or replacement metadata.</summary>
+    public sealed class Project(
+        string ModuleName,
+        string SourcePath,
+        string ManifestPath,
+        bool IsTestModule)
+        : ElmModuleOrigin(ModuleName, SourcePath, ManifestPath)
+    {
+        /// <summary>Whether the source belongs to the selected project's tests directory.</summary>
+        public bool IsTestModule { get; } = IsTestModule;
+    }
+
+    /// <summary>A published package source with its exact upstream identity and provider origin.</summary>
+    public sealed class PublishedPackage(
+        string ModuleName,
+        string SourcePath,
+        string ManifestPath,
+        ElmPackageIdentity Package,
+        string ProviderOrigin)
+        : ElmModuleOrigin(ModuleName, SourcePath, ManifestPath)
+    {
+        /// <summary>The exact upstream package identity supplying this source.</summary>
+        public ElmPackageIdentity Package { get; } = Package ?? throw new ArgumentNullException(nameof(Package));
+
+        /// <summary>The provider origin supplying the upstream package.</summary>
+        public string ProviderOrigin { get; } =
+            ProviderOrigin ?? throw new ArgumentNullException(nameof(ProviderOrigin));
+    }
+
+    /// <summary>
+    /// A replacement source identified by its implementation, not an upstream package source.
+    /// ReplacedPackage records the exact dependency satisfied by this replacement.
+    /// </summary>
+    public sealed class Substitution(
+        string ModuleName,
+        string SourcePath,
+        string ManifestPath,
+        ElmPackageIdentity ReplacedPackage,
+        string ImplementationId)
+        : ElmModuleOrigin(ModuleName, SourcePath, ManifestPath)
+    {
+        /// <summary>The exact dependency satisfied by the replacement, not the source's upstream origin.</summary>
+        public ElmPackageIdentity ReplacedPackage { get; } =
+            ReplacedPackage ?? throw new ArgumentNullException(nameof(ReplacedPackage));
+
+        /// <summary>The replacement implementation supplying this source.</summary>
+        public string ImplementationId { get; } =
+            ImplementationId ?? throw new ArgumentNullException(nameof(ImplementationId));
+    }
+
+    /// <inheritdoc/>
+    public bool Equals(ElmModuleOrigin? other)
+    {
+        if (other is null || GetType() != other.GetType() ||
+            ModuleName != other.ModuleName || SourcePath != other.SourcePath || ManifestPath != other.ManifestPath)
+            return false;
+
+        return
+            this switch
+            {
+                Project project => project.IsTestModule == ((Project)other).IsTestModule,
+
+                PublishedPackage package =>
+                package.Package == ((PublishedPackage)other).Package &&
+                package.ProviderOrigin == ((PublishedPackage)other).ProviderOrigin,
+
+                Substitution substitution =>
+                substitution.ReplacedPackage == ((Substitution)other).ReplacedPackage &&
+                substitution.ImplementationId == ((Substitution)other).ImplementationId,
+
+                _ =>
+                throw new NotImplementedException(
+                    $"{nameof(Equals)} does not handle module origin variant: {GetType().Name}"),
+            };
+    }
+
+    /// <inheritdoc/>
+    public override bool Equals(object? obj) => obj is ElmModuleOrigin other && Equals(other);
+
+    /// <inheritdoc/>
+    public override int GetHashCode() =>
+        this switch
+        {
+            Project project =>
+            HashCode.Combine(GetType(), ModuleName, SourcePath, ManifestPath, project.IsTestModule),
+
+            PublishedPackage package =>
+            HashCode.Combine(GetType(), ModuleName, SourcePath, ManifestPath, package.Package, package.ProviderOrigin),
+
+            Substitution substitution =>
+            HashCode.Combine(
+                GetType(),
+                ModuleName,
+                SourcePath,
+                ManifestPath,
+                substitution.ReplacedPackage,
+                substitution.ImplementationId),
+
+            _ =>
+            throw new NotImplementedException(
+                $"{nameof(GetHashCode)} does not handle module origin variant: {GetType().Name}"),
+        };
+
+    /// <summary>Compares origins by variant and metadata.</summary>
+    public static bool operator ==(ElmModuleOrigin? left, ElmModuleOrigin? right) =>
+        ReferenceEquals(left, right) || left is not null && left.Equals(right);
+
+    /// <summary>Compares origins by variant and metadata.</summary>
+    public static bool operator !=(ElmModuleOrigin? left, ElmModuleOrigin? right) => !(left == right);
+}
+
 /// <summary>Prepared sources, ownership metadata and the exact graph used for a build.</summary>
 public sealed record ElmResolvedBuild(
     FileTree Sources,
@@ -336,6 +472,10 @@ public sealed record ElmResolvedBuild(
 
     /// <summary>Compiler module identities mapped back to original source paths (including package ownership).</summary>
     public ImmutableDictionary<string, string> CompilerModuleSourcePaths { get; init; } =
+        [];
+
+    /// <summary>Compiler identities mapped to original module names, paths, test scope and exact package provenance.</summary>
+    public ImmutableDictionary<string, ElmModuleOrigin> CompilerModuleOrigins { get; init; } =
         [];
 
     /// <summary>
@@ -372,6 +512,7 @@ public sealed record ElmResolvedBuild(
                 PackageSourceFingerprints,
                 CompilerModuleNames,
                 CompilerModuleSourcePaths,
+                CompilerModuleOrigins,
                 ImportDiagnostics,
             },
             new JsonSerializerOptions { WriteIndented = true });
