@@ -2,6 +2,31 @@
 
 Run Elm tests using the [`elm-explorations/test` package](https://github.com/elm-explorations/test)
 
+## Project sources
+
+The source argument accepts a local project directory or a GitHub/GitLab tree URL. For example,
+list the tests in this pinned project without checking out the repository:
+
+```console
+pine elm test https://github.com/pine-vm/pine/tree/cc2c94d4c96a2794806b43c416fc7716bf86ab36/implement/Pine.Core.Tests/TestData/Elm/CommandElmTest/multiple-top-level-tests/input-app --list-tests
+```
+
+This lists two tests from `tests/Tests.elm`: `first test` and `second group/second test`.
+Unexposed declarations and exposed non-test values are not included.
+
+Remote sources are loaded through GitCore. The command announces loading before making network
+requests, then reports the loaded file count and elapsed time before dependency resolution and
+compilation. Downloaded project files are temporary and removed after the command completes.
+The same source works with ordinary test execution and filtering; reproduction commands retain the
+URL rather than refer to a temporary directory. Prefer a commit-pinned URL over a mutable branch
+when sharing a reproducible invocation.
+
+Remote loading requires network access and is rejected with `--offline`; use a local project
+directory for offline operation. URLs containing credentials, query strings or fragments are not
+accepted. Only the selected project subtree is downloaded. Remote manifests must keep their source
+directories within that subtree; use a local checkout for projects that reference parent or sibling
+source directories.
+
 ## Dependency resolution
 
 `pine elm test <project-directory>` resolves only that project's `elm.json`. Manifests in benchmarks,
@@ -111,7 +136,7 @@ on one worker. Diagnostic options include:
 | `--expressions`, `--no-stacks` | Show expression descriptions or hide terminal stack traces; neither discards JSON details. |
 | `--no-precompiled-leaves`, `--no-invocation-cache` | Inspect pure Pine work or uncached work. |
 | `--no-tail-recursion`, `--no-reduction` | Disable tail-call frame replacement or VM expression reduction. Compiler-generated backward jumps can still occur. |
-| `--output` | JSON report path. Default: a unique file under the project's `elm-stuff/pine/test-profiles`. |
+| `--output` | JSON report path. Default: a unique file under `elm-stuff/pine/test-profiles` in the local project, or in the invocation's working directory for a remote project. |
 
 ## Fuzz testing
 

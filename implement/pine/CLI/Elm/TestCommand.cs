@@ -116,7 +116,7 @@ public static class TestCommand
             new Argument<string?>("source")
             {
                 Arity = ArgumentArity.ZeroOrOne,
-                Description = "Path to the Elm project. Defaults to the current directory.",
+                Description = "Elm project directory or GitHub/GitLab tree URL. Defaults to the current directory.",
             };
 
         var colorOption = FormatCommandShared.CreateColorOption();
@@ -291,7 +291,8 @@ public static class TestCommand
         uint fuzz = 100,
         ElmTestInstrumentation? instrumentation = null,
         ElmTestEvaluationOptions? evaluationOptions = null,
-        bool showEffectiveLimits = false)
+        bool showEffectiveLimits = false,
+        Func<string, IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>? remoteSourceLoader = null)
     {
         FormatCommandColorMode resolvedColorMode;
 
@@ -374,6 +375,12 @@ public static class TestCommand
 
         try
         {
+            using var projectSource =
+                ElmTestProjectSource.Resolve(source, offline, console, remoteSourceLoader);
+
+            if (instrumentation is not null && ElmTestProjectSource.IsRemote(source))
+                instrumentation.Metadata["ProjectSource"] = source;
+
             resolutionConfiguration ??= ElmTestRunner.DefaultResolutionConfiguration.Value;
 
             if (offline)
@@ -381,7 +388,7 @@ public static class TestCommand
 
             testRun =
                 ElmTestRunner.CompileAndRunTests(
-                    source,
+                    projectSource.DirectoryPath,
                     workers: resolvedWorkers,
                     resolutionConfiguration: resolutionConfiguration,
                     packageProvider: packageProvider,
@@ -476,7 +483,9 @@ public static class TestCommand
 
             errorConsole.Write(new Text("Error: ", TestCommandTheme.Failure));
 
-            var message = "Did not find Elm test modules in " + noTestModules.AppDirectory;
+            var message =
+                "Did not find Elm test modules in " +
+                (ElmTestProjectSource.IsRemote(source) ? source : noTestModules.AppDirectory);
 
             if (errorConsole.Profile.Out.IsTerminal)
                 errorConsole.WriteLine(message);
@@ -573,7 +582,7 @@ public static class TestCommand
         if (completed.Tests.Any(test => test.Fuzz is not null) && completed.ExecutionSettings is { } settings)
         {
             var reproductionCommand =
-                $"To reproduce these results, run pine elm test \"{Path.GetFullPath(source)}\" --seed {settings.Seed} --fuzz {settings.FuzzRuns}";
+                $"To reproduce these results, run pine elm test \"{ElmTestProjectSource.CommandSource(source)}\" --seed {settings.Seed} --fuzz {settings.FuzzRuns}";
 
             if (console.Profile.Out.IsTerminal)
                 console.WriteLine(reproductionCommand);
@@ -600,7 +609,7 @@ public static class TestCommand
         "'" + value.Replace("'", "'\\''", StringComparison.Ordinal) + "'";
 
     internal static string ProfileCommandLine(string source, string selector) =>
-        "pine elm test profile " + QuoteCommandArgument(Path.GetFullPath(source)) +
+        "pine elm test profile " + QuoteCommandArgument(ElmTestProjectSource.CommandSource(source)) +
         " --filter " + QuoteCommandArgument(selector);
 
     private static void WriteStoppedTest(
@@ -612,10 +621,10 @@ public static class TestCommand
         var writer = console.Profile.Out.Writer;
         writer.WriteLine("Execution stopped. " + summary.StopReason);
 
-        if (summary.Phase == "execution")
+        if (summary.Phase is "execution")
             writer.WriteLine("Elm test: " + summary.Context);
 
-        else if (summary.Phase == "preparation")
+        else if (summary.Phase is "preparation")
         {
             writer.WriteLine("Elm test preparation: " + summary.Context);
 
@@ -623,7 +632,11 @@ public static class TestCommand
                 "The individual test has not been constructed yet; this identifies its source declaration.");
         }
         else
-            writer.WriteLine("Elm test phase: " + summary.Phase + "; context: " + summary.Context);
+        {
+            writer.WriteLine(
+                "Elm test phase: " + summary.Phase + "; context: " +
+                (summary.Phase is "compilation" && ElmTestProjectSource.IsRemote(source) ? source : summary.Context));
+        }
 
         writer.WriteLine(
             "Invocations: " + CommandLineInterface.FormatIntegerForDisplay(summary.Counters.InvocationCount) +
@@ -639,7 +652,7 @@ public static class TestCommand
             ?
             ProfileCommandLine(source, selector)
             :
-            "pine elm test profile " + QuoteCommandArgument(Path.GetFullPath(source));
+            "pine elm test profile " + QuoteCommandArgument(ElmTestProjectSource.CommandSource(source));
 
         if (limits.InvocationBudget is { } inv)
             command += " --invocation-budget " + inv.ToString(CultureInfo.InvariantCulture);
@@ -655,7 +668,7 @@ public static class TestCommand
 
         writer.WriteLine("  " + command);
 
-        if (summary.Phase == "preparation")
+        if (summary.Phase is "preparation")
             writer.WriteLine("Once preparation completes, profile will suggest an exact single-test filter if needed.");
 
         writer.Flush();
@@ -680,7 +693,7 @@ public static class TestCommand
 
         writer.WriteLine("Current filter: " + (selection.Filter is null ? "(none)" : selection.Filter));
 
-        if (selection.FoundCount == 0)
+        if (selection.FoundCount is 0)
             writer.WriteLine("No runnable tests were found. Add a runnable Elm test to this project.");
 
         else if (!selection.SuggestionsFromRemaining)

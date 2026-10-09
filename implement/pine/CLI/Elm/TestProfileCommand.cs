@@ -90,7 +90,7 @@ public static class TestProfileCommand
                 new("--stack-depth") { Description = "Maximum recorded frames per stack trace.", DefaultValueFactory = _ => 20 },
                 new("--top") { Description = "Expressions displayed in the ranking; all recorded expressions are saved.", DefaultValueFactory = _ => 20 },
                 new("--sort") { Description = "Rank by Invocations, Instructions, or Loops." },
-                new("--output") { Description = "JSON report path; defaults to elm-stuff/pine/test-profiles in the project." },
+                new("--output") { Description = "JSON report path; defaults to elm-stuff/pine/test-profiles in the project (current directory for remote sources)." },
                 new("--include-inputs") { Description = "Record input paths and already materialized input values; never force lazy values." },
                 new("--include-locals") { Description = "Query and record VM locals in sampled/stopped stack frames." },
                 new("--expressions") { Description = "Display expression descriptions; complete encoded expressions are always saved." },
@@ -173,7 +173,7 @@ public static class TestProfileCommand
                 Path.GetFullPath(
                     settings.OutputPath ??
                     Path.Combine(
-                        source,
+                        ElmTestProjectSource.IsRemote(source) ? Environment.CurrentDirectory : source,
                         "elm-stuff",
                         "pine",
                         "test-profiles",
@@ -245,7 +245,7 @@ public static class TestProfileCommand
         try
         {
             var exitCode = run(instrumentation);
-            instrumentation.SetOutcome(exitCode == 0 ? "completed" : "failed");
+            instrumentation.SetOutcome(exitCode is 0 ? "completed" : "failed");
             Stats(instrumentation.GetSummary(), "Overall instrumentation stats.");
             AnnounceSave();
             var report = instrumentation.GetReport();

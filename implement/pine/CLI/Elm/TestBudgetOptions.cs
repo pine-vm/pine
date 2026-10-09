@@ -141,6 +141,6 @@ internal sealed record TestBudgetOptions(
 
         return
             CommandLineInterface.FormatIntegerForDisplay(seconds) +
-            (remainder == 0 ? "" : "." + remainder.ToString("D7", CultureInfo.InvariantCulture).TrimEnd('0'));
+            (remainder is 0 ? "" : "." + remainder.ToString("D7", CultureInfo.InvariantCulture).TrimEnd('0'));
     }
 }
