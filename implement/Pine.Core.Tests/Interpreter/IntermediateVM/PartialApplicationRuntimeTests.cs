@@ -14,6 +14,106 @@ namespace Pine.Core.Tests.Interpreter.IntermediateVM;
 
 public class PartialApplicationRuntimeTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Function_producer_with_embedded_callable_does_not_pack_arguments_as_a_pair(bool literalFunction)
+    {
+        var body =
+            ExpressionBuilder.BuildExpressionForPathInExpression(
+                [1],
+                Expression.EnvironmentInstance);
+
+        var function =
+            FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(body, parameterCount: 1)!;
+
+        // The first application builds head([argument, literal function]).
+        // The second application evaluates that expression and returns its environment.
+        var producer =
+            ExpressionEncoding.EncodeExpressionAsValue(
+                Expression.ListInst(
+                    [
+                    Expression.LitralInst(StringEncoding.ValueFromString("Builtin")),
+                    Expression.LitralInst(StringEncoding.ValueFromString("head")),
+                    Expression.ListInst(
+                        [
+                        Expression.LitralInst(StringEncoding.ValueFromString("List")),
+                        Expression.LitralInst(
+                            ExpressionEncoding.EncodeExpressionAsValue(Expression.EnvironmentInstance)),
+                        Expression.ListInst(
+                            [
+                            Expression.LitralInst(StringEncoding.ValueFromString("Litral")),
+                            Expression.LitralInst(function)
+                            ])
+                        ])
+                    ]));
+
+        var state =
+            PineValue.List(
+                [
+                StringEncoding.ValueFromString("<Record>"),
+                StringEncoding.ValueFromString("nextId"),
+                IntegerEncoding.EncodeSignedInteger(1)
+                ]);
+
+        var expression =
+            Apply(
+                literalFunction
+                ?
+                Expression.LitralInst(producer)
+                :
+                ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance),
+                IntegerEncoding.EncodeSignedInteger(11),
+                state);
+
+        var environment = PineValue.List([producer]);
+        var expected = EvaluateWithDirectInterpreter(expression, environment);
+        expected.Should().Be(state);
+
+        var result =
+            EvaluateResultWithPineVm(
+                expression,
+                environment: environment,
+                enableDirectInvocation: literalFunction,
+                config:
+                new IntermediatePineVM.EvaluationConfig(
+                    InvocationCountLimit: 100,
+                    LoopIterationCountLimit: 100,
+                    StackDepthLimit: 100));
+
+        result.IsErrOrNull().Should().BeNull();
+        result.IsOkOrNull()!.ReturnValue.Evaluate().Should().Be(expected);
+        result.IsOkOrNull()!.Counters.DirectSaturatedApplicationCount.Should().Be(0);
+    }
+
+    [Fact]
+    public void Function_producer_does_not_freeze_a_probe_dependent_body()
+    {
+        var producer =
+            FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgsFromEncodedBodyExpression(
+                innerExprEncodedExpression:
+                Expression.ListInst(
+                    [
+                    Expression.LitralInst(StringEncoding.ValueFromString("Litral")),
+                    Expression.EnvironmentInstance
+                    ]),
+                parameterCount: 2,
+                leadingArgExpressions: [Expression.EnvironmentInstance],
+                envFunctionsExpression: Expression.LitralInst(PineValue.EmptyList));
+
+        var expression =
+            Apply(
+                ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance),
+                IntegerEncoding.EncodeSignedInteger(11),
+                IntegerEncoding.EncodeSignedInteger(22));
+
+        var environment = PineValue.List([ExpressionEncoding.EncodeExpressionAsValue(producer)]);
+        var expected = EvaluateWithDirectInterpreter(expression, environment);
+        expected.Should().Be(IntegerEncoding.EncodeSignedInteger(11));
+
+        EvaluateWithPineVm(expression, environment: environment).ReturnValue.Evaluate().Should().Be(expected);
+    }
+
     [Fact]
     public void Function_record_parsing_does_not_execute_deferred_template_computations()
     {
@@ -447,7 +547,8 @@ public class PartialApplicationRuntimeTests
         Expression expression,
         List<StackInstructionKind>? executedInstructions = null,
         PineValue? environment = null,
-        IntermediatePineVM.EvaluationConfig? config = null)
+        IntermediatePineVM.EvaluationConfig? config = null,
+        bool enableDirectInvocation = false)
     {
         void ReportInstruction(in ExecutedStackInstruction executed) =>
             executedInstructions?.Add(executed.Instruction.Kind);
@@ -459,8 +560,8 @@ public class PartialApplicationRuntimeTests
                 reportFunctionApplication: null,
                 compilationEnvClasses: null,
                 disableReductionInCompilation: true,
-                selectPrecompiled: (_, _, _) => null,
-                skipInlineForExpression: _ => false,
+                selectPrecompiled: enableDirectInvocation ? null : (_, _, _) => null,
+                skipInlineForExpression: _ => enableDirectInvocation,
                 enableTailRecursionOptimization: false,
                 parseCache: null,
                 precompiledLeaves:

@@ -1,4 +1,5 @@
 using Pine.Core.CodeAnalysis;
+using Pine.Core.CodeGen;
 using Pine.Core.Internal;
 using System;
 using System.Collections.Generic;
@@ -31,7 +32,8 @@ internal sealed record CurriedFunctionPlan(
         var isTemplateProducer =
             expression is Expression.List &&
             expression.EvalCount is 0 &&
-            expression.BuiltinCount is 0;
+            expression.BuiltinCount is 0 &&
+            expression.ConditionCount is 0;
 
         var isTerminalTemplate =
             expression is Expression.Eval
@@ -51,16 +53,86 @@ internal sealed record CurriedFunctionPlan(
 
         try
         {
-            return
-                FunctionRecord.ParseFunctionRecordTagged(
+            var function =
+                FunctionRecord.ParseCurriedTemplateForm(
                     functionValue,
                     parseCache)
                 .IsOkOrNull();
+
+            if (function is null ||
+                function.ParameterCount <= function.ArgumentsAlreadyCollected.Length)
+                return null;
+
+            var canonicalValue =
+                FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(
+                    function.InnerFunction,
+                    function.ParameterCount,
+                    function.EnvFunctions.ToArray())!;
+
+            var interpreter = DirectInterpreter.WithoutEvalCaching(parseCache);
+
+            foreach (var argument in function.ArgumentsAlreadyCollected.Span)
+            {
+                canonicalValue =
+                    interpreter.EvaluateExpressionDefault(
+                        new Expression.Eval(
+                            Expression.LitralInst(canonicalValue),
+                            Expression.LitralInst(argument)),
+                        PineValue.EmptyList);
+            }
+
+            var canonicalExpression = parseCache.ParseExpression(canonicalValue).IsOkOrNull()!;
+
+            // Probing identifies a candidate, but only a canonical template can bypass evaluation.
+            return MatchesTemplate(expression, canonicalExpression, interpreter) ? function : null;
         }
         catch (ParseExpressionException)
         {
             return null;
         }
+    }
+
+    private static bool MatchesTemplate(
+        Expression expression,
+        Expression canonical,
+        DirectInterpreter interpreter)
+    {
+        var pending = new Stack<(Expression Actual, Expression Expected)>();
+        pending.Push((expression, canonical));
+
+        while (pending.TryPop(out var pair))
+        {
+            if (pair.Actual.Equals(pair.Expected))
+                continue;
+
+            if (!pair.Actual.ReferencesEnvironment && !pair.Expected.ReferencesEnvironment &&
+                pair.Actual.EvalCount is 0 && pair.Actual.BuiltinCount is 0 && pair.Actual.ConditionCount is 0 &&
+                pair.Expected.EvalCount is 0 && pair.Expected.BuiltinCount is 0 && pair.Expected.ConditionCount is 0)
+            {
+                if (interpreter.EvaluateExpressionDefault(pair.Actual, PineValue.EmptyList) !=
+                    interpreter.EvaluateExpressionDefault(pair.Expected, PineValue.EmptyList))
+                    return false;
+
+                continue;
+            }
+
+            if (pair.Actual is Expression.Eval actualEval && pair.Expected is Expression.Eval expectedEval)
+            {
+                pending.Push((actualEval.Encoded, expectedEval.Encoded));
+                pending.Push((actualEval.Environment, expectedEval.Environment));
+                continue;
+            }
+
+            if (pair.Actual is not Expression.List actualList ||
+                pair.Expected is not Expression.List expectedList ||
+                actualList.Items.Count != expectedList.Items.Count)
+                return false;
+
+            for (var index = 0; index < actualList.Items.Count; ++index)
+                pending.Push((actualList.Items[index], expectedList.Items[index]));
+        }
+
+        return true;
     }
 
     /// <summary>

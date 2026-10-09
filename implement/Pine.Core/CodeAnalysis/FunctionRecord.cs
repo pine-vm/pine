@@ -534,7 +534,7 @@ public record FunctionRecord(
                 UsesNestedArgFormat: usesNestedArgFormat);
     }
 
-    private static Result<string, FunctionRecord> ParseCurriedTemplateForm(
+    internal static Result<string, FunctionRecord> ParseCurriedTemplateForm(
         PineValue encodedWrapper,
         PineVMParseCache parseCache)
     {
@@ -559,8 +559,10 @@ public record FunctionRecord(
                 return "Curried template level must be a List or ParseAndEval expression";
 
             // Deferred computations belong on the caller's stack-safe VM, not in a parser probe.
-            if (templateLevel.EvalCount is not 0)
-                return "Curried template level contains deferred evaluation";
+            if (templateLevel.EvalCount is not 0 ||
+                templateLevel.BuiltinCount is not 0 ||
+                templateLevel.ConditionCount is not 0)
+                return "Curried template level contains computations other than lists and literals";
 
             var probeArgument =
                 PineValue.List(
