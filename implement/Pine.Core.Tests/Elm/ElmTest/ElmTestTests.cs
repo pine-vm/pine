@@ -250,6 +250,50 @@ public class ElmTestTests
         workersObservedDiscovery.Should().OnlyContain(observed => observed);
     }
 
+    [Theory]
+    [InlineData("module Tests.Elm.TypeInference.Helpers exposing (identity)\nidentity value = value")]
+    [InlineData("module Tests.Elm.TypeInference.Helpers exposing (Kind(..))\ntype Kind = Kind")]
+    [InlineData("module Tests.Elm.TypeInference.Helpers exposing (identity)\nidentity value = value\nprivateValue = 42")]
+    public void Test_helpers_without_exposed_zero_parameter_declarations_need_not_be_compiled(string helperSource)
+    {
+        using var project =
+            new ElmFuzzTests.Project(
+                "suite = Test.test \"passes\" (\\_ -> Expect.equal 1 1)");
+
+        File.WriteAllText(Path.Combine(project.Directory, "tests", "Helpers.elm"), helperSource);
+
+        var run = ElmTestRunner.CompileAndRunTests(project.Directory, listTests: true);
+
+        run.Should().BeOfType<ElmTestRun.Listed>().Which.Tests
+            .Should().ContainSingle().Which.Name.Should().Be("passes");
+    }
+
+    [Fact]
+    public void Test_discovery_keeps_helper_dependencies_and_ignores_non_test_values()
+    {
+        using var project =
+            new ElmFuzzTests.Project(
+                "suite = Test.test \"passes\" (\\_ -> Expect.equal (Helpers.identity 1) 1)");
+
+        File.WriteAllText(
+            Path.Combine(project.Directory, "tests", "Tests.elm"),
+            File.ReadAllText(Path.Combine(project.Directory, "tests", "Tests.elm"))
+            .Replace("import Test\n", "import Test\nimport Helpers\n"));
+
+        File.WriteAllText(
+            Path.Combine(project.Directory, "tests", "Helpers.elm"),
+            "module Helpers exposing (identity)\nidentity value = value");
+
+        File.WriteAllText(
+            Path.Combine(project.Directory, "tests", "Constants.elm"),
+            "module Constants exposing (answer)\nanswer = 42");
+
+        var run = ElmTestRunner.CompileAndRunTests(project.Directory);
+
+        run.Should().BeOfType<ElmTestRun.Completed>().Which.Tests
+            .Should().ContainSingle().Which.Kind.Should().Be(CompletedTestKind.Passed);
+    }
+
     [Fact]
     public void Filtered_listing_preserves_excluded_test_metadata()
     {

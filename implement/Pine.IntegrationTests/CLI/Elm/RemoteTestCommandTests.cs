@@ -72,8 +72,10 @@ public class RemoteTestCommandTests
             {
                 called = true;
                 source.Should().Be(PinnedProjectUrl);
+
                 output.ToString().ReplaceLineEndings("\n").Should().Be(
                     "Loading remote Elm project: " + PinnedProjectUrl + "\n");
+
                 output.FlushCount.Should().BeGreaterThan(0);
                 return files;
             }).Should().Be(0);

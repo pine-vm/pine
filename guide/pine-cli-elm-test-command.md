@@ -199,7 +199,16 @@ configured implementations. Raw compiler APIs retain their historical bundled-so
 Preparation failures throw `ElmDependencyResolutionException`; its `Report` retains the diagnostics
 and resolution history. `report.ToJson()` exports solver information, and `build.ToDebugJson()` adds
 roots, source fingerprints and compiler module identities. Builds retain unmodified `ProjectSources`
-and `PackageSources` alongside the rewritten compiler inputs. The default compiler identity includes
+and `PackageSources` alongside the rewritten compiler inputs. `CompilerModuleOrigins` maps compiler
+identities to original module names and source and governing manifest paths. Its `Project` variant
+contains project test scope, `PublishedPackage` contains the exact upstream identity and provider
+origin, and `Substitution` contains the implementation ID and exact dependency identity it replaces
+(`ReplacedPackage`, not an upstream source). Only the relevant variant's fields can be supplied.
+These tagged origins are also included in `build.ToDebugJson()`, without requiring callers to infer
+ownership from rewritten names.
+Test discovery inspects only exposed zero-parameter declarations; helper modules without such
+declarations need not appear in the compiled environment, but remain available as dependencies.
+The default compiler identity includes
 the assembly version and module build identity, so native compiler changes also affect fingerprints.
 `ElmTestRunner.CompileAndRunTests` accepts a
 configuration/provider and an `onDependenciesResolved` callback to capture the report.

@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -569,6 +570,210 @@ public class ElmAppDependencyResolutionTests
                 PreparedSource(build, ["src", "Disconnected.elm"]).Imports.Single().Value.ModuleName.Value);
 
         importedName.Should().Be(build.CompilerModuleNames["elm-packages/author/a/src/Api.elm"]);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Prepared_module_origins_preserve_project_test_and_package_provenance(bool declarationDemand)
+    {
+        var provider =
+            new Provider()
+            .Add(
+                "author/a",
+                "1.0.0",
+                sources: FileTree.MergeFiles(
+                    Source("A", "import Internal.Helper\nvalue = Internal.Helper.value"),
+                    Source("Internal.Helper", "value = 1")),
+                exposedModules: ["A"])
+            .Add(
+                "author/b",
+                "2.0.0",
+                sources: FileTree.MergeFiles(
+                    Source("B", "import Internal.Helper\nvalue = Internal.Helper.value"),
+                    Source("Internal.Helper", "value = 2")),
+                exposedModules: ["B"]);
+
+        var substitution =
+            ElmPackageSubstitution.Create(
+                "author/replacement",
+                "replacement-v1",
+                ["3.0.0"],
+                Source("Replacement", "value = 3"),
+                ["Replacement"]);
+
+        var manifest =
+            Application(
+                Deps(("author/a", "1.0.0"), ("author/b", "2.0.0"), ("author/replacement", "3.0.0")),
+                sourceDirectories: ["src", "../src"]);
+
+        var tree =
+            Source("Shared", "value = 4")
+            .SetNodeAtPathSorted(["example", "elm.json"], FileTree.File(Encoding.UTF8.GetBytes(manifest)))
+            .SetNodeAtPathSorted(
+                ["example", "tests", "Tests.elm"],
+                FileTree.File(
+                    """
+                    module Tests exposing (value)
+                    import A
+                    import B
+                    import Replacement
+                    import Shared
+                    value = A.value + B.value + Replacement.value + Shared.value
+                    """u8.ToArray()));
+
+        var configuration =
+            new ElmDependencyResolutionConfiguration { IncludeTests = true, Substitutions = [substitution] };
+
+        var build =
+            await (declarationDemand
+            ?
+            ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(
+                tree,
+                ["example", "elm.json"],
+                [["example", "tests", "Tests.elm"]],
+                configuration,
+                provider)
+            :
+            ElmResolvedBuildPreparation.PrepareAsync(
+                tree,
+                ["example", "elm.json"],
+                [["example", "tests", "Tests.elm"]],
+                configuration,
+                provider));
+
+        build.CompilerModuleOrigins.Keys.Should().BeEquivalentTo(build.CompilerModuleSourcePaths.Keys);
+
+        build.CompilerModuleOrigins["Tests"].Should().Be(
+            new ElmModuleOrigin.Project("Tests", "example/tests/Tests.elm", "example/elm.json", true));
+
+        build.CompilerModuleOrigins["Shared"].Should().Be(
+            new ElmModuleOrigin.Project("Shared", "src/Shared.elm", "example/elm.json", false));
+
+        foreach (var (packageName, version) in new[] { ("author/a", "1.0.0"), ("author/b", "2.0.0") })
+        {
+            var path = "elm-packages/" + packageName + "/src/Internal.Helper.elm";
+            var compilerName = build.CompilerModuleNames[path];
+
+            compilerName.Should().StartWith("PinePackage.");
+
+            build.CompilerModuleOrigins[compilerName].Should().Be(
+                new ElmModuleOrigin.PublishedPackage(
+                    "Internal.Helper",
+                    path,
+                    "elm-packages/" + packageName + "/elm.json",
+                    new ElmPackageIdentity(packageName, ElmPackageVersion.Parse(version)),
+                    "registry:" + packageName + "@" + version));
+        }
+
+        var replacementName = build.CompilerModuleNames["elm-packages/author/replacement/src/Replacement.elm"];
+
+        build.CompilerModuleOrigins[replacementName].Should().Be(
+            new ElmModuleOrigin.Substitution(
+                "Replacement",
+                "elm-packages/author/replacement/src/Replacement.elm",
+                "elm-packages/author/replacement/elm.json",
+                new ElmPackageIdentity("author/replacement", ElmPackageVersion.Parse("3.0.0")),
+                "replacement-v1"));
+
+        using var debugJson = JsonDocument.Parse(build.ToDebugJson());
+        var origins = debugJson.RootElement.GetProperty("CompilerModuleOrigins");
+
+        origins.GetProperty("Tests").GetProperty("Project")[1].GetString()
+            .Should().Be("example/tests/Tests.elm");
+
+        origins.GetProperty(replacementName).GetProperty("Substitution")[4].GetString()
+            .Should().Be("replacement-v1");
+
+        var roundTripped =
+            JsonSerializer.Deserialize<ImmutableDictionary<string, ElmModuleOrigin>>(origins.GetRawText());
+
+        roundTripped.Should().BeEquivalentTo(build.CompilerModuleOrigins);
+    }
+
+    [Fact]
+    public void Module_origin_variants_expose_only_the_metadata_valid_for_their_source()
+    {
+        var package = new ElmPackageIdentity("author/a", ElmPackageVersion.Parse("1.0.0"));
+
+        ElmModuleOrigin[] origins =
+            [
+            new ElmModuleOrigin.Project("Main", "src/Main.elm", "elm.json", false),
+            new ElmModuleOrigin.PublishedPackage(
+                "A",
+                "elm-packages/author/a/src/A.elm",
+                "elm-packages/author/a/elm.json",
+                package,
+                "registry:author/a@1.0.0"),
+            new ElmModuleOrigin.Substitution(
+                "A",
+                "elm-packages/author/a/src/A.elm",
+                "elm-packages/author/a/elm.json",
+                package,
+                "replacement-v1"),
+            ];
+
+        var json = JsonSerializer.Serialize(origins);
+        using var document = JsonDocument.Parse(json);
+
+        document.RootElement[0].GetProperty("Project").GetArrayLength().Should().Be(4);
+
+        typeof(ElmModuleOrigin.Project).GetProperties().Select(property => property.Name)
+            .Should().BeEquivalentTo(["ModuleName", "SourcePath", "ManifestPath", "IsTestModule"]);
+
+        document.RootElement[1].GetProperty("PublishedPackage").GetArrayLength().Should().Be(5);
+
+        typeof(ElmModuleOrigin.PublishedPackage).GetProperties().Select(property => property.Name)
+            .Should().BeEquivalentTo(["ModuleName", "SourcePath", "ManifestPath", "Package", "ProviderOrigin"]);
+
+        document.RootElement[2].GetProperty("Substitution").GetArrayLength().Should().Be(5);
+
+        typeof(ElmModuleOrigin.Substitution).GetProperties().Select(property => property.Name)
+            .Should().BeEquivalentTo(
+            [
+            "ModuleName",
+            "SourcePath",
+            "ManifestPath",
+            "ReplacedPackage",
+            "ImplementationId"
+            ]);
+
+        JsonSerializer.Deserialize<ElmModuleOrigin[]>(json).Should().Equal(origins);
+
+        var roundTripped = JsonSerializer.Deserialize<ElmModuleOrigin[]>(json)!;
+
+        for (var index = 0; index < origins.Length; ++index)
+        {
+            (roundTripped[index] == origins[index]).Should().BeTrue();
+            roundTripped[index].GetHashCode().Should().Be(origins[index].GetHashCode());
+        }
+
+        (origins[1] == origins[2]).Should().BeFalse();
+        (origins[0] == null).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Module_origin_hierarchy_is_closed_and_requires_variant_metadata()
+    {
+        typeof(ElmModuleOrigin).GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .Should().OnlyContain(constructor => constructor.IsPrivate);
+
+        typeof(ElmModuleOrigin).GetNestedTypes().Where(type => typeof(ElmModuleOrigin).IsAssignableFrom(type))
+            .Should().HaveCount(3).And.OnlyContain(type => type.IsSealed);
+
+        Action missingPackage =
+            () => new ElmModuleOrigin.PublishedPackage("A", "src/A.elm", "elm.json", null!, "registry");
+
+        Action missingReplacement =
+            () => new ElmModuleOrigin.Substitution(
+                "A",
+                "src/A.elm",
+                "elm.json",
+                new("author/a", ElmPackageVersion.Parse("1.0.0")),
+                null!);
+
+        missingPackage.Should().Throw<ArgumentNullException>();
+        missingReplacement.Should().Throw<ArgumentNullException>();
     }
 
     [Fact]

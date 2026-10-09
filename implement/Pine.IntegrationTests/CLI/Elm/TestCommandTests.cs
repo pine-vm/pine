@@ -2213,7 +2213,7 @@ public class TestCommandTests
                     colorMode: FormatCommandColorMode.Never);
 
             execute.Should().Throw<InvalidOperationException>()
-                .WithMessage("Failed parsing Elm test module:*");
+                .WithMessage("Failed parsing Elm test module 'tests/Tests.elm':*");
         }
         finally
         {
