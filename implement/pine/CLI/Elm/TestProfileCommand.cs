@@ -23,7 +23,7 @@ public sealed record TestProfileSettings
 
     public int Top { get; init; } = 20;
 
-    public TestProfileSort Sort { get; init; }
+    public TestProfileSort Sort { get; init; } = TestProfileSort.Loops;
 
     public bool ShowStackTraces { get; init; } = true;
 
@@ -44,10 +44,11 @@ public static class TestProfileCommand
 
     internal sealed record Options(
         TestBudgetOptions Budgets,
-        Option<double> Interval, Option<int> TraceDepth,
+        Option<double> Interval, Option<int> TraceDepth, Option<int> MaxSamples,
         Option<int> Top, Option<TestProfileSort> Sort, Option<string?> Output,
         Option<bool> Inputs, Option<bool> Locals, Option<bool> Expressions, Option<bool> NoStacks,
-        Option<bool> NoLeaves, Option<bool> NoCache, Option<bool> NoTail, Option<bool> NoReduction)
+        Option<bool> NoLeaves, Option<bool> NoCache, Option<bool> NoTail, Option<bool> NoInlining,
+        Option<bool> NoApplicationFastPaths, Option<bool> NoReduction)
     {
         public TestProfileSettings Read(ParseResult result)
         {
@@ -70,11 +71,14 @@ public static class TestProfileCommand
                         SnapshotInterval = TimeSpan.FromSeconds(result.GetValue(Interval)),
                         StackDepthLimit = limits.StackDepthLimit,
                         StackTraceDepth = result.GetValue(TraceDepth),
+                        MaxSamples = result.GetValue(MaxSamples),
                         IncludeInputs = result.GetValue(Inputs),
                         IncludeLocals = result.GetValue(Locals),
                         DisablePrecompiledLeaves = result.GetValue(NoLeaves),
                         DisableInvocationCache = result.GetValue(NoCache),
                         DisableTailRecursion = result.GetValue(NoTail),
+                        DisableInlining = result.GetValue(NoInlining),
+                        DisableApplicationFastPaths = result.GetValue(NoApplicationFastPaths),
                         DisableReduction = result.GetValue(NoReduction),
                     },
                 };
@@ -88,8 +92,9 @@ public static class TestProfileCommand
                 budgets,
                 new("--interval") { Description = "Live status/stack sampling interval in seconds; 0 disables periodic samples. Integer times accept underscores and ms/s/min/h units.", DefaultValueFactory = _ => 5 },
                 new("--stack-depth") { Description = "Maximum recorded frames per stack trace.", DefaultValueFactory = _ => 20 },
-                new("--top") { Description = "Expressions displayed in the ranking; all recorded expressions are saved.", DefaultValueFactory = _ => 20 },
-                new("--sort") { Description = "Rank by Invocations, Instructions, or Loops." },
+                new("--max-samples") { Description = "Maximum retained stack samples; older samples are dropped.", DefaultValueFactory = _ => 200 },
+                new("--top") { Description = "Expressions and hot loop sites displayed; all recorded expressions and loop sites are saved.", DefaultValueFactory = _ => 20 },
+                new("--sort") { Description = "Rank by Invocations, Instructions, or Loops. Hot loop pointers identify backward-jump destinations.", DefaultValueFactory = _ => TestProfileSort.Loops },
                 new("--output") { Description = "JSON report path; defaults to elm-stuff/pine/test-profiles in the project (current directory for remote sources)." },
                 new("--include-inputs") { Description = "Record input paths and already materialized input values; never force lazy values." },
                 new("--include-locals") { Description = "Query and record VM locals in sampled/stopped stack frames." },
@@ -98,13 +103,15 @@ public static class TestProfileCommand
                 new("--no-precompiled-leaves") { Description = "Disable native precompiled leaves to inspect pure Pine execution." },
                 new("--no-invocation-cache") { Description = "Disable invocation-result caching." },
                 new("--no-tail-recursion") { Description = "Disable tail-call frame replacement (compiler-generated backward jumps can remain)." },
+                new("--no-inlining") { Description = "Disable function inlining to retain VM call boundaries; separate from expression reduction and tail-call replacement. Backward jumps can remain." },
+                new("--no-application-fast-paths") { Description = "Disable VM direct-call instruction lowering, runtime curried-application shortcuts, generic-application chain consolidation, and simple eval/template continuation shortcuts, preserving ordinary nested eval." },
                 new("--no-reduction") { Description = "Disable expression reduction during VM compilation." });
 
         foreach (var option in new Option[]
         {
-            options.Interval, options.TraceDepth, options.Top, options.Sort, options.Output,
+            options.Interval, options.TraceDepth, options.MaxSamples, options.Top, options.Sort, options.Output,
             options.Inputs, options.Locals, options.Expressions, options.NoStacks,
-            options.NoLeaves, options.NoCache, options.NoTail, options.NoReduction,
+            options.NoLeaves, options.NoCache, options.NoTail, options.NoInlining, options.NoApplicationFastPaths, options.NoReduction,
         })
         {
             command.Add(option);
@@ -120,7 +127,7 @@ public static class TestProfileCommand
             :
             null);
 
-        foreach (var option in new[] { options.TraceDepth, options.Top })
+        foreach (var option in new[] { options.TraceDepth, options.MaxSamples, options.Top })
             NumericOptionParsing.SetIntegerParser(
                 option,
                 value => value <= 0 ? option.Name + " must be positive." : null);
@@ -190,6 +197,27 @@ public static class TestProfileCommand
 
         TestBudgetOptions.PrintEffective(console.Profile.Out.Writer, settings.Instrumentation);
 
+        Write("Profile report path: " + path, s_headingStyle);
+
+        Write(
+            "Press Ctrl+C to stop and save a partial report. Use --budget, --loop-budget, or --timeout to bound the run.",
+            s_mutedStyle);
+
+        Write(
+            "Profiling prepares all test declarations before filtering; no --filter guarantees bypassing preparation.",
+            s_mutedStyle);
+
+        if (settings.Instrumentation.InvocationBudget is null &&
+            settings.Instrumentation.LoopBudget is null &&
+            settings.Instrumentation.Timeout is null)
+        {
+            Write(
+                "Warning: invocation, loop, and timeout limits are all unbounded. An invocation budget alone will not catch compiled loops.",
+                s_warningStyle);
+        }
+
+        console.Profile.Out.Writer.Flush();
+
         var saveAnnounced = false;
 
         void AnnounceSave()
@@ -228,6 +256,16 @@ public static class TestProfileCommand
                 precompiledLeavesProvider: () => IntermediateVM.SetupVM.DefaultPrecompiledLeaves)
             {
                 OnProgress = summary => Stats(summary, "Instrumentation progress."),
+                OnSample =
+                sample =>
+                {
+                    Stats(sample.Summary, "Live instrumentation sample.");
+
+                    if (settings.ShowStackTraces)
+                        RenderStack(sample, "Sampled stack trace (current frame first):", Write);
+
+                    console.Profile.Out.Writer.Flush();
+                },
                 OnStopped =
                 summary =>
                 {
@@ -246,8 +284,42 @@ public static class TestProfileCommand
 
         try
         {
-            var exitCode = run(instrumentation);
-            instrumentation.SetOutcome(exitCode is 0 ? "completed" : "failed");
+            int exitCode;
+
+            try
+            {
+                exitCode = run(instrumentation);
+            }
+            catch (ElmTestInstrumentationStoppedException exception)
+            {
+                if (instrumentation.GetSummary().StopReason is null)
+                    Write("Execution stopped. " + exception.Message, s_warningStyle);
+
+                exitCode = instrumentation.CancelledByUser ? 130 : 2;
+            }
+            catch (OperationCanceledException)
+            {
+                instrumentation.NotifyCancellation();
+                exitCode = instrumentation.CancelledByUser ? 130 : 2;
+            }
+            catch (Exception exception)
+            {
+                Write("Execution failed. " + exception.GetType().FullName + ": " + exception.Message, s_failureStyle);
+                instrumentation.Metadata["ExceptionDetails"] = exception.ToString();
+                exitCode = 1;
+            }
+
+            instrumentation.SetOutcome(
+                exitCode switch
+                {
+                    0 => "completed",
+                    2 => "stopped",
+                    130 => "cancelled",
+
+                    _ =>
+                    "failed"
+                });
+
             Stats(instrumentation.GetSummary(), "Overall instrumentation stats.");
             AnnounceSave();
             var report = instrumentation.GetReport();
@@ -338,31 +410,75 @@ public static class TestProfileCommand
                 write("  " + row.Profile.Description, s_mutedStyle);
         }
 
-        if (settings.ShowStackTraces && report.Samples.LastOrDefault(sample => sample.StackTrace.Count > 0) is { } last)
+        if (report.LoopSites.Count > 0)
         {
-            write("Last recorded stack trace (current frame first):", s_headingStyle);
+            write("Hot loop sites (by iterations):", s_headingStyle);
 
-            foreach (var frame in last.StackTrace)
+            foreach (var site in report.LoopSites.OrderByDescending(site => site.Iterations)
+                .ThenBy(site => site.CompiledFrameId, StringComparer.Ordinal)
+                .ThenBy(site => site.InstructionPointer).Take(settings.Top))
             {
                 write(
-                    $"  {frame.ExpressionHash[..16]} at instruction {CommandLineInterface.FormatIntegerForDisplay(frame.InstructionPointer)}",
+                    $"  {site.ExpressionHash[..16]}; body: {site.CompiledFrameId}; " +
+                    $"backward-jump destination: {CommandLineInterface.FormatIntegerForDisplay(site.InstructionPointer)}; " +
+                    $"iterations: {CommandLineInterface.FormatIntegerForDisplay(site.Iterations)}",
                     null);
+            }
+        }
 
-                if (frame.Inputs is { } inputs)
-                {
-                    for (var i = 0; i < inputs.Count; i++)
-                        write(
-                            $"    input [{string.Join(",", frame.ParameterPaths![i].Select(number => CommandLineInterface.FormatIntegerForDisplay(number)))}]: {inputs[i].Preview}",
-                            s_mutedStyle);
-                }
+        if (report.DroppedSamples > 0)
+        {
+            write(
+                $"Dropped samples: {CommandLineInterface.FormatIntegerForDisplay(report.DroppedSamples)}. " +
+                $"Only the most recent {CommandLineInterface.FormatIntegerForDisplay(report.Options.MaxSamples)} " +
+                "samples are retained (--max-samples); aggregate counters still cover the entire run.",
+                s_mutedStyle);
+        }
 
-                if (frame.Locals is { } locals)
-                {
-                    for (var i = 0; i < locals.Count; i++)
-                        write(
-                            $"    local {CommandLineInterface.FormatIntegerForDisplay(i)}: {locals[i].Preview}",
-                            s_mutedStyle);
-                }
+        if (settings.ShowStackTraces && report.Samples.LastOrDefault(sample => sample.StackTrace.Count > 0) is { } last)
+            RenderStack(last, "Last recorded stack trace (current frame first):", write);
+    }
+
+    private static void RenderStack(
+        ElmTestProfileSample sample,
+        string heading,
+        Action<string, Style?> write)
+    {
+        if (sample.StackTrace.Count is 0)
+            return;
+
+        write(heading, s_headingStyle);
+
+        foreach (var frame in sample.StackTrace)
+        {
+            write(
+                $"  {frame.ExpressionHash[..16]}; declarations: " +
+                (frame.Declarations.Count > 0 ? string.Join(", ", frame.Declarations) : "(unmapped)") +
+                "; frame: " +
+                (frame.FrameIndex is { } index ? CommandLineInterface.FormatIntegerForDisplay(index) : "(unknown)") +
+                $"; body: {frame.CompiledFrameId ?? "(unavailable)"}",
+                null);
+
+            write(
+                $"    instruction pointer: {CommandLineInterface.FormatIntegerForDisplay(frame.InstructionPointer)}; " +
+                $"instructions: {CommandLineInterface.FormatIntegerForDisplay(frame.InstructionCount)}; " +
+                $"loops: {CommandLineInterface.FormatIntegerForDisplay(frame.LoopIterationCount)}",
+                null);
+
+            if (frame.Inputs is { } inputs)
+            {
+                for (var i = 0; i < inputs.Count; i++)
+                    write(
+                        $"    input [{string.Join(",", frame.ParameterPaths![i].Select(number => CommandLineInterface.FormatIntegerForDisplay(number)))}]: {inputs[i].Preview}",
+                        s_mutedStyle);
+            }
+
+            if (frame.Locals is { } locals)
+            {
+                for (var i = 0; i < locals.Count; i++)
+                    write(
+                        $"    local {CommandLineInterface.FormatIntegerForDisplay(i)}: {locals[i].Preview}",
+                        s_mutedStyle);
             }
         }
     }

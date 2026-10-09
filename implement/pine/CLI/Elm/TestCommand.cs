@@ -40,7 +40,7 @@ public static class TestCommand
         var profile =
             new Command(
                 "profile",
-                "Profile one Elm test and see where computation time is spent.");
+                "Profile one Elm test and see where computation time is spent. All test declarations are prepared before --filter is applied.");
 
         ConfigureCommonCommand(profile, instrumented: true, budgets);
         command.Add(profile);
@@ -669,7 +669,12 @@ public static class TestCommand
         writer.WriteLine("  " + command);
 
         if (summary.Phase is "preparation")
+        {
+            writer.WriteLine(
+                "All test declarations are prepared before filtering; --filter cannot guarantee bypassing preparation.");
+
             writer.WriteLine("Once preparation completes, profile will suggest an exact single-test filter if needed.");
+        }
 
         writer.Flush();
     }

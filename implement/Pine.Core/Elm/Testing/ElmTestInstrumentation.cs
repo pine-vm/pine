@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -25,6 +26,9 @@ public sealed record ElmTestInstrumentationOptions : ElmTestEvaluationOptions
 
     /// <summary>Maximum number of frames retained in each sampled stack trace.</summary>
     public int StackTraceDepth { get; init; } = 20;
+
+    /// <summary>Maximum retained samples, including the final stopped stack; older samples are discarded.</summary>
+    public int MaxSamples { get; init; } = 200;
 
     /// <summary>Records input paths and materialized values without forcing lazy values.</summary>
     public bool IncludeInputs { get; init; }
@@ -44,6 +48,12 @@ public sealed record ElmTestInstrumentationOptions : ElmTestEvaluationOptions
     /// <summary>Disables expression reduction during VM compilation.</summary>
     public bool DisableReduction { get; init; }
 
+    /// <summary>Preserves expression call boundaries for stack attribution; tail-loop lowering can still occur.</summary>
+    public bool DisableInlining { get; init; }
+
+    /// <summary>Disables direct invocation, generic application consolidation and simple eval/template shortcuts.</summary>
+    public bool DisableApplicationFastPaths { get; init; }
+
     /// <inheritdoc/>
     public override void Validate()
     {
@@ -51,6 +61,9 @@ public sealed record ElmTestInstrumentationOptions : ElmTestEvaluationOptions
 
         if (SnapshotInterval < TimeSpan.Zero || StackTraceDepth <= 0)
             throw new ArgumentException("Snapshot interval must be nonnegative; stack depths must be positive.");
+
+        if (MaxSamples <= 0)
+            throw new ArgumentException("Maximum retained samples must be positive.");
     }
 }
 
@@ -59,15 +72,38 @@ public sealed record ElmTestProfileSummary(
     string Outcome, string? StopReason, string Phase, string Context,
     double ElapsedMilliseconds, PerformanceCounters Counters, string? ProfileFilter = null);
 
-/// <summary>A captured value's DAG hash and bounded preview; null hashes identify unevaluated values.</summary>
-public sealed record ElmTestProfileValue(string? ValueHash, string Preview);
+/// <summary>A captured value's DAG hash or bounded nonmaterializing structural preview.</summary>
+public sealed record ElmTestProfileValue(string? ValueHash, string Preview)
+{
+    /// <summary>Bounded, directly available children of an unmaterialized list; never forces the parent.</summary>
+    public IReadOnlyList<ElmTestProfileValue>? Items { get; init; }
+
+    /// <summary>Full directly available child count, which can exceed the retained preview.</summary>
+    public int? ItemCount { get; init; }
+}
 
 /// <summary>A sampled VM frame with optional input paths, materialized input values and locals.</summary>
 public sealed record ElmTestProfileFrame(
     string ExpressionHash, int InstructionPointer,
     IReadOnlyList<int[]>? ParameterPaths,
     IReadOnlyList<ElmTestProfileValue>? Inputs,
-    IReadOnlyList<ElmTestProfileValue>? Locals);
+    IReadOnlyList<ElmTestProfileValue>? Locals)
+{
+    /// <summary>Elm declarations associated with this expression, if known.</summary>
+    public IReadOnlyList<string> Declarations { get; init; } = [];
+
+    /// <summary>Frame identity within one evaluation; tail replacements receive a new identity.</summary>
+    public long? FrameIndex { get; init; }
+
+    /// <summary>Exclusive instructions executed so far by this frame.</summary>
+    public long InstructionCount { get; init; }
+
+    /// <summary>Backward jumps executed so far by this frame.</summary>
+    public long LoopIterationCount { get; init; }
+
+    /// <summary>Key into the report's compiled instruction listings.</summary>
+    public string? CompiledFrameId { get; init; }
+}
 
 /// <summary>A summary and the stack captured at the same evaluation boundary, current frame first.</summary>
 public sealed record ElmTestProfileSample(ElmTestProfileSummary Summary, IReadOnlyList<ElmTestProfileFrame> StackTrace);
@@ -84,6 +120,10 @@ public sealed record ElmTestExpressionProfile(
 /// <summary>A content-addressed DAG node containing either base64 blob bytes or child node hashes.</summary>
 public sealed record ElmTestProfileValueNode(string? BlobBase64, IReadOnlyList<string>? Items);
 
+/// <summary>Exact backward-jump count at a compiled instruction offset, including nonreturning frames.</summary>
+public sealed record ElmTestLoopProfile(
+    string ExpressionHash, string CompiledFrameId, int InstructionPointer, long Iterations);
+
 /// <summary>Versioned, self-contained profile with complete expression/value graphs and captured diagnostics.</summary>
 public sealed record ElmTestProfileReport(
     int SchemaVersion, ElmTestInstrumentationOptions Options, string? SelectedTest,
@@ -93,6 +133,15 @@ public sealed record ElmTestProfileReport(
 {
     /// <summary>Project, filter, seed and resolution metadata needed to interpret the run.</summary>
     public IReadOnlyDictionary<string, string> Metadata { get; init; } = new Dictionary<string, string>();
+
+    /// <summary>Compiled body identifiers mapped to instruction listings with jump destinations.</summary>
+    public IReadOnlyDictionary<string, string> CompiledFrames { get; init; } = new Dictionary<string, string>();
+
+    /// <summary>Exact backward-jump counts grouped by compiled body and instruction offset.</summary>
+    public IReadOnlyList<ElmTestLoopProfile> LoopSites { get; init; } = [];
+
+    /// <summary>Number of older samples evicted by the retention limit; aggregate counters are unaffected.</summary>
+    public long DroppedSamples { get; init; }
 
     /// <summary>Serializes the report with readable indentation and numeric counters.</summary>
     public string ToJson() => JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
@@ -149,13 +198,36 @@ public sealed class ElmTestInstrumentation : IDisposable
 
     private sealed record Scope(string Phase, string Context, string? ProfileFilter = null);
 
-    private sealed record CapturedValue(PineValue? Value, string Preview);
+    private sealed record CapturedValue(
+        PineValue? Value, string Preview, CapturedValue[]? Items = null, int? ItemCount = null);
 
     private sealed record CapturedFrame(
         Expression Expression, int Pointer, int[][]? Paths,
-        CapturedValue[]? Inputs, CapturedValue[]? Locals);
+        CapturedValue[]? Inputs, CapturedValue[]? Locals,
+        StackFrameInstructions? Instructions, long? FrameIndex, long InstructionCount, long LoopIterationCount);
 
     private sealed record CapturedSample(ElmTestProfileSummary Summary, CapturedFrame[] Frames);
+
+    private sealed class FrameKeyComparer :
+        IEqualityComparer<(Expression Expression, StackFrameInstructions Instructions)>,
+        IEqualityComparer<(Expression Expression, StackFrameInstructions Instructions, int Pointer)>
+    {
+        public bool Equals(
+            (Expression Expression, StackFrameInstructions Instructions) x,
+            (Expression Expression, StackFrameInstructions Instructions) y) =>
+            ReferenceEquals(x.Instructions, y.Instructions) && x.Expression.Equals(y.Expression);
+
+        public int GetHashCode((Expression Expression, StackFrameInstructions Instructions) key) =>
+            HashCode.Combine(key.Expression.GetHashCode(), RuntimeHelpers.GetHashCode(key.Instructions));
+
+        public bool Equals(
+            (Expression Expression, StackFrameInstructions Instructions, int Pointer) x,
+            (Expression Expression, StackFrameInstructions Instructions, int Pointer) y) =>
+            x.Pointer == y.Pointer && Equals((x.Expression, x.Instructions), (y.Expression, y.Instructions));
+
+        public int GetHashCode((Expression Expression, StackFrameInstructions Instructions, int Pointer) key) =>
+            HashCode.Combine(GetHashCode((key.Expression, key.Instructions)), key.Pointer);
+    }
 
     private sealed class ScopeLease(Action restore) : IDisposable
     {
@@ -164,7 +236,15 @@ public sealed class ElmTestInstrumentation : IDisposable
 
     private readonly Dictionary<Expression, Entry> _entries = [];
 
-    private readonly List<CapturedSample> _samples = [];
+    private readonly Queue<CapturedSample> _samples = [];
+
+    private readonly Dictionary<(Expression Expression, StackFrameInstructions Instructions, int Pointer), long> _loopSites =
+        new(new FrameKeyComparer());
+
+    private readonly Dictionary<(Expression Expression, StackFrameInstructions Instructions), string> _compiledFrameIds =
+        new(new FrameKeyComparer());
+
+    private long _droppedSamples;
 
     private readonly CancellationTokenSource _cancellation = new();
 
@@ -210,8 +290,11 @@ public sealed class ElmTestInstrumentation : IDisposable
     /// <summary>Cooperative cancellation shared by preparation and all execution VMs.</summary>
     public CancellationToken CancellationToken => _cancellation.Token;
 
-    /// <summary>Called synchronously on scope entry and periodic samples; contains no serialized graphs.</summary>
+    /// <summary>Called on scope entry, and on periodic samples when OnSample is absent; contains no serialized graphs.</summary>
     public Action<ElmTestProfileSummary>? OnProgress { get; init; }
+
+    /// <summary>Called during evaluation with a frozen sample, without serializing complete value graphs.</summary>
+    public Action<ElmTestProfileSample>? OnSample { get; init; }
 
     /// <summary>Called once with immediately available statistics before detailed report serialization.</summary>
     public Action<ElmTestProfileSummary>? OnStopped { get; init; }
@@ -304,8 +387,14 @@ public sealed class ElmTestInstrumentation : IDisposable
 
         foreach (var module in environment.Modules)
             foreach (var (name, value) in module.moduleContent.FunctionDeclarations)
+            {
+                // Zero-parameter roots are executable expression wrappers, not necessarily tagged functions.
+                if (cache.ParseExpression(value).IsOkOrNull() is { } wrapper)
+                    GetEntry(wrapper).Names.Add(module.moduleName + "." + name);
+
                 if (FunctionRecord.ParseFunctionRecordTagged(value, cache).IsOkOrNull() is { ParameterCount: > 0 } function)
                     GetEntry(function.InnerFunction).Names.Add(module.moduleName + "." + name);
+            }
     }
 
     /// <summary>Creates a VM sharing this run's limits and optional recording; profiling VMs must execute serially.</summary>
@@ -389,12 +478,44 @@ public sealed class ElmTestInstrumentation : IDisposable
 
     private void Capture(Func<IEnumerable<EvaluationStackTraceFrame>> loadStack)
     {
-        static CapturedValue Freeze(PineValueInProcess? value) =>
-            value?.EvaluatedOrNull is { } evaluated
-            ?
-            new(evaluated, DescribeValue(evaluated))
-            :
-            new(null, value is null ? "(uninitialized)" : "(unevaluated; not forced)");
+        var remainingNodes = 4096;
+
+        CapturedValue Freeze(PineValueInProcess? value, int depth = 0)
+        {
+            if (value is null)
+                return new(null, "(uninitialized)");
+
+            if (value.EvaluatedOrNull is { } evaluated)
+                return new(evaluated, DescribeValue(evaluated));
+
+            if (value.IntegerOrNull is { } integer)
+            {
+                return
+                    new(
+                        IntegerEncoding.EncodeSignedInteger(integer),
+                        "integer " + integer + " (cached; not forced)");
+            }
+
+            if (depth < 3 && remainingNodes > 0 && value.UnevaluatedStructuralItemsOrNull() is { } items)
+            {
+                var children = new List<CapturedValue>();
+
+                for (var index = 0; index < Math.Min(16, items.Count) && remainingNodes > 0; index++)
+                {
+                    remainingNodes--;
+                    children.Add(Freeze(items[index], depth + 1));
+                }
+
+                return
+                    new(
+                        null,
+                        $"unmaterialized list ({items.Count} items; bounded structural preview)",
+                        [.. children],
+                        items.Count);
+            }
+
+            return new(null, "(unevaluated; not forced)");
+        }
         // Do not force lazy values: previews and already materialized values are enough to diagnose a loop.
         var frames =
             loadStack().Take(Options.StackTraceDepth).Select(
@@ -407,10 +528,81 @@ public sealed class ElmTestInstrumentation : IDisposable
                     [.. input.Parameters.ParamsPaths.Select(path => path.ToArray())]
                     :
                     null,
-                    Options.IncludeInputs ? frame.Input?.Arguments.Select(Freeze).ToArray() : null,
-                    Options.IncludeLocals ? frame.LoadLocals?.Invoke().Select(Freeze).ToArray() : null)).ToArray();
+                    Options.IncludeInputs ? frame.Input?.Arguments.Select(value => Freeze(value)).ToArray() : null,
+                    Options.IncludeLocals ? frame.LoadLocals?.Invoke().Select(value => Freeze(value)).ToArray() : null,
+                    frame.Instructions,
+                    frame.FrameIndex,
+                    frame.FrameInstructionCount,
+                    frame.FrameLoopIterationCount)).ToArray();
 
-        _samples.Add(new CapturedSample(GetSummary(), frames));
+        var sample = new CapturedSample(GetSummary(), frames);
+
+        if (_samples.Count >= Options.MaxSamples)
+        {
+            _samples.Dequeue();
+            _droppedSamples++;
+        }
+
+        _samples.Enqueue(sample);
+
+        if (OnSample is { } report)
+        {
+            // Do not keep a strong value-hash cache alive after samples have been evicted.
+            var hashes = new ConcurrentPineValueHashCache();
+            report(MaterializeSample(sample, value => Convert.ToHexStringLower(hashes.GetHash(value).Span)));
+        }
+    }
+
+    private string CompiledFrameId(Expression expression, StackFrameInstructions instructions)
+    {
+        var key = (expression, instructions);
+
+        if (!_compiledFrameIds.TryGetValue(key, out var id))
+        {
+            // The suffix distinguishes bodies with the same source/constraint but different compilation settings.
+            id =
+                StackInstructionTraceRenderer.RenderStackFrameIdentifier(expression, instructions) +
+                "-" + _compiledFrameIds.Count;
+
+            _compiledFrameIds.Add(key, id);
+        }
+
+        return id;
+    }
+
+    private ElmTestProfileSample MaterializeSample(CapturedSample sample, Func<PineValue, string> store)
+    {
+        ElmTestProfileValue Describe(CapturedValue value) =>
+            new(value.Value is { } evaluated ? store(evaluated) : null, value.Preview)
+            {
+                Items = value.Items?.Select(Describe).ToArray(),
+                ItemCount = value.ItemCount,
+            };
+
+        return
+            new(
+                sample.Summary,
+                [
+                .. sample.Frames.Select(
+                    frame => new ElmTestProfileFrame(
+                        store(ExpressionEncoding.EncodeExpressionAsValue(frame.Expression)),
+                        frame.Pointer,
+                        frame.Paths,
+                        frame.Inputs?.Select(Describe).ToArray(),
+                        frame.Locals?.Select(Describe).ToArray())
+                    {
+                        Declarations = [.. GetEntry(frame.Expression).Names.Order(StringComparer.Ordinal)],
+                        FrameIndex = frame.FrameIndex,
+                        InstructionCount = frame.InstructionCount,
+                        LoopIterationCount = frame.LoopIterationCount,
+                        CompiledFrameId =
+                        frame.Instructions is { } instructions
+                        ?
+                        CompiledFrameId(frame.Expression, instructions)
+                        :
+                        null,
+                    })
+                ]);
     }
 
     /// <summary>Materializes a complete content-addressed report after serial diagnostic recording has stopped.</summary>
@@ -462,9 +654,6 @@ public sealed class ElmTestInstrumentation : IDisposable
 
         string ExpressionHash(Expression expression) => Store(ExpressionEncoding.EncodeExpressionAsValue(expression));
 
-        ElmTestProfileValue Describe(CapturedValue value) =>
-            new(value.Value is { } evaluated ? Store(evaluated) : null, value.Preview);
-
         var expressions =
             _entries.Values.Where(entry => entry._invocations > 0 || entry._instructions > 0 || entry._loops > 0)
             .Select(
@@ -477,24 +666,29 @@ public sealed class ElmTestInstrumentation : IDisposable
                     DescribeExpression(entry.Expression)))
             .OrderBy(entry => entry.Hash, StringComparer.Ordinal).ToArray();
 
-        var samples =
-            _samples.Select(
-                sample => new ElmTestProfileSample(
-                    sample.Summary,
-                    [
-                    .. sample.Frames.Select(
-                        frame => new ElmTestProfileFrame(
-                            ExpressionHash(frame.Expression),
-                            frame.Pointer,
-                            frame.Paths,
-                            frame.Inputs?.Select(Describe).ToArray(),
-                            frame.Locals?.Select(Describe).ToArray()))
-                    ])).ToArray();
+        var samples = _samples.Select(sample => MaterializeSample(sample, Store)).ToArray();
+
+        var loops =
+            _loopSites.Select(
+                pair => new ElmTestLoopProfile(
+                    ExpressionHash(pair.Key.Expression),
+                    CompiledFrameId(pair.Key.Expression, pair.Key.Instructions),
+                    pair.Key.Pointer,
+                    pair.Value))
+            .OrderByDescending(site => site.Iterations).ThenBy(site => site.CompiledFrameId, StringComparer.Ordinal)
+            .ThenBy(site => site.InstructionPointer).ToArray();
 
         return
-            new(1, Options, SelectedTest, GetSummary(), samples, expressions, values)
+            new(2, Options, SelectedTest, GetSummary(), samples, expressions, values)
             {
                 Metadata = new Dictionary<string, string>(Metadata, StringComparer.Ordinal),
+                DroppedSamples = _droppedSamples,
+                LoopSites = loops,
+                CompiledFrames =
+                _compiledFrameIds.ToDictionary(
+                    pair => pair.Value,
+                    pair => StackInstructionTraceRenderer.RenderStackFrameInstructions(pair.Key.Instructions),
+                    StringComparer.Ordinal),
             };
     }
 
@@ -604,7 +798,7 @@ public sealed class ElmTestInstrumentation : IDisposable
                     compilationEnvClasses: null,
                     disableReductionInCompilation: owner.Options.DisableReduction,
                     selectPrecompiled: null,
-                    skipInlineForExpression: _ => false,
+                    skipInlineForExpression: _ => owner.Options.DisableInlining,
                     enableTailRecursionOptimization: !owner.Options.DisableTailRecursion,
                     parseCache: caches.ParsedExpressions,
                     precompiledLeaves: owner.Options.DisablePrecompiledLeaves
@@ -622,6 +816,10 @@ public sealed class ElmTestInstrumentation : IDisposable
                     getOrAddExpressionCompilation: caches.ExpressionCompilations.GetOrAdd,
                     expressionEncodingCache: caches.EncodedExpressions,
                     reducedExpressionCache: caches.ReducedExpressions,
+                    disableGenericApplicationChainConsolidation: owner.Options.DisableApplicationFastPaths,
+                    disableDirectContinueForSimpleEval: owner.Options.DisableApplicationFastPaths,
+                    disableDirectEvalForSimpleTemplate: owner.Options.DisableApplicationFastPaths,
+                    disableDirectInvocation: owner.Options.DisableApplicationFastPaths,
                     reportEvaluationEvent: Event);
         }
 
@@ -658,14 +856,28 @@ public sealed class ElmTestInstrumentation : IDisposable
                     break;
 
                 case EvaluationEventKind.FrameExited:
-                    entry._instructions += evaluationEvent.FrameInstructionCount;
-                    entry._loops += evaluationEvent.FrameLoopIterationCount;
+                    AttributeWork(
+                        evaluationEvent.FrameIndex,
+                        entry,
+                        evaluationEvent.FrameInstructionCount,
+                        evaluationEvent.FrameLoopIterationCount);
+
                     _active.Remove(evaluationEvent.FrameIndex);
                     break;
 
                 case EvaluationEventKind.BackwardJump:
-                    _active[evaluationEvent.FrameIndex] =
-                        (entry, evaluationEvent.FrameInstructionCount, evaluationEvent.FrameLoopIterationCount);
+                    AttributeWork(
+                        evaluationEvent.FrameIndex,
+                        entry,
+                        evaluationEvent.FrameInstructionCount,
+                        evaluationEvent.FrameLoopIterationCount);
+
+                    if (evaluationEvent.Instructions is { } instructions)
+                    {
+                        var site = (evaluationEvent.Expression, instructions, evaluationEvent.InstructionPointer);
+                        _owner._loopSites.TryGetValue(site, out var count);
+                        _owner._loopSites[site] = count + 1;
+                    }
 
                     break;
 
@@ -675,8 +887,11 @@ public sealed class ElmTestInstrumentation : IDisposable
                     foreach (var frame in evaluationEvent.LoadStackTrace())
                         if (frame.FrameIndex is { } index && _active.ContainsKey(index))
                         {
-                            _active[index] =
-                                (_owner.GetEntry(frame.Expression), frame.FrameInstructionCount, frame.FrameLoopIterationCount);
+                            AttributeWork(
+                                index,
+                                _owner.GetEntry(frame.Expression),
+                                frame.FrameInstructionCount,
+                                frame.FrameLoopIterationCount);
                         }
 
                     _owner.Capture(evaluationEvent.LoadStackTrace);
@@ -688,7 +903,8 @@ public sealed class ElmTestInstrumentation : IDisposable
 
             var now = _owner._elapsed.Elapsed.Ticks;
 
-            if (_owner.Options.SnapshotInterval > TimeSpan.Zero && now >= _owner._nextSampleTicks)
+            if (evaluationEvent.Kind is not EvaluationEventKind.EvaluationStopped &&
+                _owner.Options.SnapshotInterval > TimeSpan.Zero && now >= _owner._nextSampleTicks)
             {
                 _owner._nextSampleTicks =
                     now > long.MaxValue - _owner.Options.SnapshotInterval.Ticks
@@ -698,8 +914,18 @@ public sealed class ElmTestInstrumentation : IDisposable
                     now + _owner.Options.SnapshotInterval.Ticks;
 
                 _owner.Capture(evaluationEvent.LoadStackTrace);
-                _owner.OnProgress?.Invoke(_owner.GetSummary());
+
+                if (_owner.OnSample is null)
+                    _owner.OnProgress?.Invoke(_owner.GetSummary());
             }
+        }
+
+        private void AttributeWork(long frameIndex, Entry entry, long instructions, long loops)
+        {
+            _active.TryGetValue(frameIndex, out var previous);
+            entry._instructions += instructions - previous.Instructions;
+            entry._loops += loops - previous.Loops;
+            _active[frameIndex] = (entry, instructions, loops);
         }
 
         public Result<string, PineValue> EvaluateExpression(Expression expression, PineValue environment) =>
@@ -736,12 +962,6 @@ public sealed class ElmTestInstrumentation : IDisposable
                     _owner.Options.StackDepthLimit);
 
             var result = _vm.EvaluateExpressionOnCustomStack(expression, environment, config, linked.Token);
-
-            foreach (var (_, (entry, instructions, loops)) in _active)
-            {
-                entry._instructions += instructions;
-                entry._loops += loops;
-            }
 
             _active.Clear();
             var counters = result.IsOkOrNull()?.Counters ?? result.IsErrOrNull()!.Counters;

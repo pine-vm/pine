@@ -51,6 +51,8 @@ public class PineVM : ICancellablePineVM
 
     private readonly bool _disableGenericApplicationChainConsolidation;
 
+    private readonly bool _disableDirectInvocation;
+
     /// <summary>
     /// Caches parsed expressions so repeated decode-and-evaluate steps can reuse expression objects.
     /// </summary>
@@ -116,7 +118,8 @@ public class PineVM : ICancellablePineVM
         GetOrAddExpressionCompilation? getOrAddExpressionCompilation = null,
         PineVMExpressionEncodingCache? expressionEncodingCache = null,
         IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null,
-        ReportEvaluationEvent? reportEvaluationEvent = null)
+        ReportEvaluationEvent? reportEvaluationEvent = null,
+        bool disableDirectInvocation = false)
     {
         if ((tryGetExpressionCompilation is null) != (getOrAddExpressionCompilation is null))
         {
@@ -153,6 +156,7 @@ public class PineVM : ICancellablePineVM
                 pathMaxLowExclusive: pathMaxLowExclusive,
                 pathMaxHighInclusive: pathMaxHighInclusive,
                 disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation,
+                disableDirectInvocation: disableDirectInvocation,
                 disableDirectContinueForSimpleEval: disableDirectContinueForSimpleEval,
                 disableDirectEvalForSimpleTemplate: disableDirectEvalForSimpleTemplate,
                 reportTailLoopIteration: reportTailLoopIteration,
@@ -201,7 +205,8 @@ public class PineVM : ICancellablePineVM
         ReportExpressionCompiled? reportExpressionCompiled = null,
         IInvocationCacheAccess? invocationCache = null,
         InvocationCacheConfiguration? invocationCacheConfiguration = null,
-        ReportEvaluationEvent? reportEvaluationEvent = null)
+        ReportEvaluationEvent? reportEvaluationEvent = null,
+        bool disableDirectInvocation = false)
     {
         if (evalCache is not null && invocationCache is not null)
         {
@@ -277,6 +282,7 @@ public class PineVM : ICancellablePineVM
         _pathMaxHighInclusive = pathMaxHighInclusive;
 
         _disableGenericApplicationChainConsolidation = disableGenericApplicationChainConsolidation;
+        _disableDirectInvocation = disableDirectInvocation;
 
         _disableDirectContinueForSimpleEval = disableDirectContinueForSimpleEval;
         _disableDirectEvalForSimpleTemplate = disableDirectEvalForSimpleTemplate;
@@ -429,7 +435,7 @@ public class PineVM : ICancellablePineVM
                 pathMaxLowExclusive: _pathMaxLowExclusive,
                 pathMaxHighInclusive: _pathMaxHighInclusive,
                 disableGenericApplicationChainConsolidation: _disableGenericApplicationChainConsolidation,
-                enableDirectInvocation: _selectPrecompiled is null,
+                enableDirectInvocation: !_disableDirectInvocation && _selectPrecompiled is null,
                 skipDirectInvocation:
                 expressionValue =>
                 _precompiledLeaves?.ContainsKey(expressionValue) is true);
@@ -682,7 +688,8 @@ public class PineVM : ICancellablePineVM
                     frame.LoopIterationCount,
                     loadEventCounters!,
                     loadEventStack!,
-                    reason);
+                    reason,
+                    frame.Instructions);
 
             report(in evaluationEvent);
         }
@@ -941,6 +948,13 @@ public class PineVM : ICancellablePineVM
             out CurriedFunctionPlan? plan,
             out IReadOnlyList<PineValueInProcess> existingArguments)
         {
+            if (_disableDirectInvocation)
+            {
+                plan = null;
+                existingArguments = [];
+                return false;
+            }
+
             if (functionValue.PartialApplicationOrNull is { } partialApplication &&
                 partialApplication.Callable is CurriedFunctionPlan partialPlan)
             {

@@ -1,8 +1,11 @@
 using AwesomeAssertions;
 using Pine.CLI;
 using Pine.CLI.Elm;
+using Pine.Core;
 using Pine.Core.CLI;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.Testing;
+using Pine.Core.Interpreter.IntermediateVM;
 using Spectre.Console;
 using System;
 using System.Collections.Generic;
@@ -30,6 +33,12 @@ public class TestCommandTests
             .Invoke(new InvocationConfiguration { Output = output }).Should().Be(0);
 
         output.ToString().Should().Contain("underscores").And.Contain("k/M/G").And.Contain("ms/s/min/h");
+
+        if (profile)
+        {
+            output.ToString().Should().Contain("backward-jump destinations").And.Contain("--no-inlining")
+                .And.Contain("--no-application-fast-paths");
+        }
     }
 
     [Theory]
@@ -79,7 +88,10 @@ public class TestCommandTests
     {
         var command = TestCommand.Create();
         var profile = command.Subcommands.Single(child => child.Name == "profile");
-        var parsed = command.Parse(["profile", ".", "--stack-depth", "1_000", "--top", "2__000"]);
+
+        var parsed =
+            command.Parse(["profile", ".", "--stack-depth", "1_000", "--top", "2__000", "--max-samples", "3__000"]);
+
         parsed.Errors.Should().BeEmpty();
 
         parsed.GetValue(profile.Options.OfType<Option<int>>().Single(option => option.Name == "--stack-depth"))
@@ -87,12 +99,64 @@ public class TestCommandTests
 
         parsed.GetValue(profile.Options.OfType<Option<int>>().Single(option => option.Name == "--top"))
             .Should().Be(2_000);
+
+        parsed.GetValue(profile.Options.OfType<Option<int>>().Single(option => option.Name == "--max-samples"))
+            .Should().Be(3_000);
+    }
+
+    [Fact]
+    public void Profile_sample_limit_and_no_stacks_are_forwarded_to_settings()
+    {
+        var command = new Command("profile");
+        var options = TestProfileCommand.AddOptions(command, TestBudgetOptions.AddTo(command));
+        var parsed = command.Parse(["--max-samples", "3__000", "--no-stacks"]);
+        parsed.Errors.Should().BeEmpty();
+        var settings = options.Read(parsed);
+        settings.Instrumentation.MaxSamples.Should().Be(3_000);
+        settings.ShowStackTraces.Should().BeFalse();
+        settings.Sort.Should().Be(TestProfileSort.Loops);
+    }
+
+    [Theory]
+    [InlineData("--no-inlining")]
+    [InlineData("--no-application-fast-paths")]
+    [InlineData("--no-tail-recursion")]
+    [InlineData("--no-reduction")]
+    public void Profile_compiler_controls_are_independent_and_preserve_call_boundary_guidance(string optionName)
+    {
+        var command = new Command("profile");
+        var options = TestProfileCommand.AddOptions(command, TestBudgetOptions.AddTo(command));
+        var defaults = options.Read(command.Parse([])).Instrumentation;
+        defaults.DisableInlining.Should().BeFalse();
+        defaults.DisableApplicationFastPaths.Should().BeFalse();
+        defaults.DisableTailRecursion.Should().BeFalse();
+        defaults.DisableReduction.Should().BeFalse();
+
+        var parsed = command.Parse([optionName]);
+        parsed.Errors.Should().BeEmpty();
+        var settings = options.Read(parsed).Instrumentation;
+        settings.DisableInlining.Should().Be(optionName is "--no-inlining");
+        settings.DisableApplicationFastPaths.Should().Be(optionName is "--no-application-fast-paths");
+        settings.DisableTailRecursion.Should().Be(optionName is "--no-tail-recursion");
+        settings.DisableReduction.Should().Be(optionName is "--no-reduction");
+
+        options.NoInlining.Description.Should().Contain("call boundaries")
+            .And.Contain("separate from expression reduction and tail-call replacement")
+            .And.Contain("Backward jumps can remain");
+
+        options.NoApplicationFastPaths.Description.Should().Contain("generic-application chain consolidation")
+            .And.Contain("eval/template continuation shortcuts").And.Contain("preserving ordinary nested eval")
+            .And.Contain("direct-call instruction lowering").And.Contain("runtime curried-application shortcuts")
+            .And.NotContain("may remain");
+
+        TestCommand.Create().Parse(["profile", ".", optionName]).Errors.Should().BeEmpty();
     }
 
     [Theory]
     [InlineData("--workers")]
     [InlineData("--stack-depth")]
     [InlineData("--top")]
+    [InlineData("--max-samples")]
     public void Small_count_options_reject_SI_units_and_keep_simple_help(string optionName)
     {
         var command = TestCommand.Create();
@@ -156,6 +220,10 @@ public class TestCommandTests
     [InlineData("--top", "-1")]
     [InlineData("--top", "-1k")]
     [InlineData("--top", "3G")]
+    [InlineData("--max-samples", "0")]
+    [InlineData("--max-samples", "-1")]
+    [InlineData("--max-samples", "3G")]
+    [InlineData("--max-samples", "2147483648")]
     public void Profile_rejects_nonpositive_and_out_of_range_numeric_counts(string option, string value) =>
         TestCommand.Create().Parse(["profile", ".", option, value]).Errors.Should().NotBeEmpty();
 
@@ -254,6 +322,7 @@ public class TestCommandTests
     [InlineData("--interval")]
     [InlineData("--stack-depth")]
     [InlineData("--top")]
+    [InlineData("--max-samples")]
     public void Explicit_numeric_options_require_a_value_instead_of_using_defaults(string option) =>
         TestCommand.Create().Parse(["profile", ".", option]).Errors.Should().NotBeEmpty();
 
@@ -290,7 +359,12 @@ public class TestCommandTests
             .Should().Be(5);
 
         foreach (var option in profile.Options.OfType<Option<int>>())
-            parsed.GetValue(option).Should().Be(20);
+            parsed.GetValue(option).Should().Be(option.Name is "--max-samples" ? 200 : 20);
+
+        parsed.GetValue(profile.Options.OfType<Option<TestProfileSort>>().Single(option => option.Name == "--sort"))
+            .Should().Be(TestProfileSort.Loops);
+
+        new TestProfileSettings().Sort.Should().Be(TestProfileSort.Loops);
     }
 
     [Theory]
@@ -436,7 +510,11 @@ public class TestCommandTests
         var loopEnd = header.IndexOf("Loops", StringComparison.Ordinal) + "Loops".Length;
         var instructionEnd = header.IndexOf("Instructions", StringComparison.Ordinal) + "Instructions".Length;
         var declarationStart = header.IndexOf("Declarations", StringComparison.Ordinal);
-        var sorted = expressions.OrderByDescending(row => row.Invocations).ToArray();
+
+        var sorted =
+            expressions.OrderByDescending(row => row.LoopIterations)
+            .ThenBy(row => row.Hash, StringComparer.Ordinal).ToArray();
+
         lines.Should().HaveCount(2 + sorted.Length);
 
         for (var index = 0; index < sorted.Length; index++)
@@ -474,6 +552,347 @@ public class TestCommandTests
         TestProfileCommand.Render(report, new(), (line, _) => lines.Add(line));
         lines.Should().HaveCount(2);
         lines[1].Should().Contain("Invocations  Loops  Instructions  Declarations");
+    }
+
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public void Profile_live_samples_display_current_first_declarations_and_frame_counters(
+        bool showStacks,
+        bool includeValues)
+    {
+        var directory =
+            Path.Combine(Environment.CurrentDirectory, "artifacts", "profile-live-" + Guid.NewGuid().ToString("N"));
+
+        var path = Path.Combine(directory, "profile.json");
+        var (console, output) = CreateConsole(AnsiSupport.No);
+        console.Profile.Width = 240;
+
+        var sample =
+            new ElmTestProfileSample(
+                new("running", null, "execution", "one test", 12, default),
+                [
+                new(
+                    new string('a', 64),
+                    7,
+                    includeValues ? [new[] { 0, 2 }] : null,
+                    includeValues ? [new(null, "input preview")] : null,
+                    includeValues ? [new(null, "local preview")] : null)
+                {
+                    Declarations = ["Tests.spin"],
+                    FrameIndex = 3,
+                    InstructionCount = 12_345,
+                    LoopIterationCount = 2_345,
+                    CompiledFrameId = "body-current",
+                },
+                new(new string('b', 64), 1, null, null, null)
+                {
+                    Declarations = ["Tests.caller"],
+                    FrameIndex = 2,
+                    CompiledFrameId = "body-caller",
+                },
+                ]);
+
+        void AssertStack(string text)
+        {
+            if (!showStacks)
+            {
+                text.Should().NotContain("stack trace").And.NotContain("Tests.spin")
+                    .And.NotContain("body-current").And.NotContain("input preview").And.NotContain("local preview");
+
+                return;
+            }
+
+            text.Should().Contain("current frame first").And.Contain("Tests.spin").And.Contain("frame: 3")
+                .And.Contain("body: body-current").And.Contain("instruction pointer: 7")
+                .And.Contain("instructions: 12_345").And.Contain("loops: 2_345").And.Contain("Tests.caller");
+
+            text.IndexOf("Tests.spin", StringComparison.Ordinal)
+                .Should().BeLessThan(text.IndexOf("Tests.caller", StringComparison.Ordinal));
+
+            if (includeValues)
+                text.Should().Contain("input [0,2]: input preview").And.Contain("local 0: local preview");
+
+            else
+                text.Should().NotContain("input preview").And.NotContain("local preview");
+        }
+
+        var settings =
+            new TestProfileSettings
+            {
+                OutputPath = path,
+                ShowStackTraces = showStacks,
+                Instrumentation = new() { IncludeInputs = includeValues, IncludeLocals = includeValues },
+            };
+
+        try
+        {
+            TestProfileCommand.Execute(
+                ".",
+                null,
+                settings,
+                instrumentation =>
+                {
+                    instrumentation.OnSample.Should().NotBeNull();
+                    instrumentation.OnSample!(sample);
+
+                    output.ToString().Should().Contain("Live instrumentation sample.").And.NotContain(
+                        "Saved JSON report:");
+
+                    AssertStack(output.ToString());
+                    File.Exists(path).Should().BeFalse();
+                    return 0;
+                },
+                console,
+                FormatCommandColorMode.Never).Should().Be(0);
+
+            var finalLines = new List<string>();
+
+            TestProfileCommand.Render(
+                new(
+                    2,
+                    settings.Instrumentation,
+                    null,
+                    sample.Summary,
+                    [sample],
+                    [],
+                    new Dictionary<string, ElmTestProfileValueNode>()),
+                settings,
+                (line, _) => finalLines.Add(line));
+
+            AssertStack(string.Join("\n", finalLines));
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Profile_reports_hot_loop_sites_and_explains_dropped_samples()
+    {
+        var report =
+            new ElmTestProfileReport(
+                2,
+                new() { MaxSamples = 2 },
+                null,
+                new("stopped", "budget", "execution", "one test", 0, default),
+                [],
+                [],
+                new Dictionary<string, ElmTestProfileValueNode>())
+            {
+                DroppedSamples = 1_234,
+                LoopSites =
+                [
+                new(new string('a', 64), "body-cold", 3, 5),
+                new(new string('b', 64), "body-hot", 7, 9_876),
+                ],
+            };
+
+        var lines = new List<string>();
+        TestProfileCommand.Render(report, new() { Top = 1 }, (line, _) => lines.Add(line));
+        var text = string.Join("\n", lines);
+
+        text.Should().Contain("Hot loop sites (by iterations):").And.Contain("body: body-hot")
+            .And.Contain("backward-jump destination: 7").And.Contain("iterations: 9_876").And.NotContain("body-cold")
+            .And.Contain("Dropped samples: 1_234").And.Contain("most recent 2")
+            .And.Contain("--max-samples").And.Contain("aggregate counters still cover the entire run");
+    }
+
+    [Fact]
+    public void Profile_direct_budget_stop_saves_a_bounded_partial_report()
+    {
+        var directory =
+            Path.Combine(Environment.CurrentDirectory, "artifacts", "profile-partial-" + Guid.NewGuid().ToString("N"));
+
+        var path = Path.Combine(directory, "profile.json");
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            TestProfileCommand.Execute(
+                ".",
+                null,
+                new()
+                {
+                    OutputPath = path,
+                    Instrumentation =
+                    new()
+                    {
+                        InvocationBudget = 10,
+                        MaxSamples = 2,
+                        SnapshotInterval = TimeSpan.FromTicks(1),
+                        DisablePrecompiledLeaves = true,
+                    },
+                },
+                instrumentation =>
+                {
+                    using var scope = instrumentation.EnterScope("execution", "recursive eval");
+
+                    var recursive =
+                        Expression.ListInst(
+                            [
+                            new Expression.Eval(Expression.EnvironmentInstance, Expression.EnvironmentInstance),
+                            Expression.EmptyList,
+                            ]);
+
+                    instrumentation.CreateVm(
+                        new ConcurrentInvocationCache(),
+                        new PineVMSharedCaches())
+                        .EvaluateExpression(recursive, ExpressionEncoding.EncodeExpressionAsValue(recursive));
+
+                    return 0;
+                },
+                console,
+                FormatCommandColorMode.Never).Should().Be(2);
+
+            using var json = JsonDocument.Parse(File.ReadAllText(path));
+            json.RootElement.GetProperty("SchemaVersion").GetInt32().Should().Be(2);
+            json.RootElement.GetProperty("Options").GetProperty("MaxSamples").GetInt32().Should().Be(2);
+            json.RootElement.GetProperty("Samples").GetArrayLength().Should().BeInRange(1, 2);
+            json.RootElement.GetProperty("DroppedSamples").GetInt64().Should().BeGreaterThan(0);
+            json.RootElement.GetProperty("Expressions").GetArrayLength().Should().BeGreaterThan(0);
+            json.RootElement.GetProperty("Summary").GetProperty("Outcome").GetString().Should().Be("stopped");
+
+            output.ToString().Should().Contain("Live instrumentation sample.").And.Contain("Execution stopped.")
+                .And.Contain("Dropped samples:").And.Contain("Saved JSON report:");
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(false, false, 2, "stopped")]
+    [InlineData(false, true, 2, "stopped")]
+    [InlineData(true, false, 130, "cancelled")]
+    [InlineData(true, true, 130, "cancelled")]
+    public void Profile_direct_stop_exceptions_save_partial_reports_with_the_correct_exit_code(
+        bool userCancellation,
+        bool operationCanceled,
+        int expectedExitCode,
+        string expectedOutcome)
+    {
+        var directory =
+            Path.Combine(Environment.CurrentDirectory, "artifacts", "profile-stopped-" + Guid.NewGuid().ToString("N"));
+
+        var path = Path.Combine(directory, "profile.json");
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            TestProfileCommand.Execute(
+                ".",
+                null,
+                new() { OutputPath = path },
+                instrumentation =>
+                {
+                    if (userCancellation)
+                        instrumentation.Cancel();
+
+                    if (operationCanceled)
+                        throw new OperationCanceledException();
+
+                    throw new ElmTestInstrumentationStoppedException("Direct execution stop.");
+                },
+                console,
+                FormatCommandColorMode.Never).Should().Be(expectedExitCode);
+
+            using var json = JsonDocument.Parse(File.ReadAllText(path));
+            json.RootElement.GetProperty("Summary").GetProperty("Outcome").GetString().Should().Be(expectedOutcome);
+            output.ToString().Should().Contain("Saved JSON report:").And.Contain("JSON SHA256:");
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Profile_run_exceptions_save_failed_reports_with_exception_details()
+    {
+        var directory =
+            Path.Combine(Environment.CurrentDirectory, "artifacts", "profile-failed-" + Guid.NewGuid().ToString("N"));
+
+        var path = Path.Combine(directory, "profile.json");
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            TestProfileCommand.Execute(
+                ".",
+                null,
+                new() { OutputPath = path },
+                _ => throw new InvalidOperationException("Unexpected bug."),
+                console,
+                FormatCommandColorMode.Never).Should().Be(1);
+
+            using var json = JsonDocument.Parse(File.ReadAllText(path));
+            json.RootElement.GetProperty("Summary").GetProperty("Outcome").GetString().Should().Be("failed");
+
+            json.RootElement.GetProperty("Metadata").GetProperty("ExceptionDetails").GetString().Should()
+                .Contain("System.InvalidOperationException: Unexpected bug.");
+
+            output.ToString().Should().Contain("Execution failed.").And.Contain("System.InvalidOperationException")
+                .And.Contain("Unexpected bug.").And.Contain("Saved JSON report:");
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Profile_announces_report_path_stop_tips_and_preparation_before_execution(bool invocationOnly)
+    {
+        var directory =
+            Path.Combine(Environment.CurrentDirectory, "artifacts", "profile-tips-" + Guid.NewGuid().ToString("N"));
+
+        var path = Path.Combine(directory, "profile.json");
+        var (console, output) = CreateConsole(AnsiSupport.No);
+        console.Profile.Width = 240;
+
+        try
+        {
+            TestProfileCommand.Execute(
+                ".",
+                "one",
+                new() { OutputPath = path, Instrumentation = new() { InvocationBudget = invocationOnly ? 20 : null } },
+                _ =>
+                {
+                    var before = output.ToString();
+
+                    before.Should().Contain("Profile report path: " + path).And.Contain("Ctrl+C")
+                        .And.Contain("--budget").And.Contain("--loop-budget").And.Contain("--timeout")
+                        .And.Contain("prepares all test declarations before filtering")
+                        .And.Contain("no --filter guarantees bypassing preparation")
+                        .And.Contain("Warning:").And.NotContain("Saved JSON report:");
+
+                    if (invocationOnly)
+                        before.Should().Contain("invocation budget alone does not bound backward-jump loops");
+
+                    else
+                        before.Should().Contain("limits are all unbounded").And.Contain("will not catch compiled loops");
+
+                    return 0;
+                },
+                console,
+                FormatCommandColorMode.Never).Should().Be(0);
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Fact]
@@ -878,7 +1297,7 @@ public class TestCommandTests
             using var file = File.OpenRead(path);
             text.Should().Contain(Convert.ToHexStringLower(SHA256.HashData(file)));
             using var json = JsonDocument.Parse(File.ReadAllText(path));
-            json.RootElement.GetProperty("SchemaVersion").GetInt32().Should().Be(1);
+            json.RootElement.GetProperty("SchemaVersion").GetInt32().Should().Be(2);
             json.RootElement.GetProperty("Summary").GetProperty("Phase").GetString().Should().Be("preparation");
             json.RootElement.GetProperty("Expressions").GetArrayLength().Should().BeGreaterThan(0);
             json.RootElement.GetProperty("Values").EnumerateObject().Should().NotBeEmpty();
