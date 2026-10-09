@@ -1,6 +1,6 @@
 using System;
 
-namespace Pine.Core;
+namespace Pine.Core.CLI;
 
 /// <summary>
 /// Functions for displaying information in a command-line interface.

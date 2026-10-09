@@ -1,3 +1,4 @@
+using Pine.Core.CLI;
 using System.Collections.Generic;
 
 namespace Pine.Core.Interpreter.IntermediateVM;

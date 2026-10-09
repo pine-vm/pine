@@ -1,5 +1,6 @@
 using Pine.Core;
 using Pine.Core.Addressing;
+using Pine.Core.CLI;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;

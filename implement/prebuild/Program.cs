@@ -1,5 +1,6 @@
 using Pine;
 using Pine.Core;
+using Pine.Core.CLI;
 using Pine.Core.Elm;
 using Pine.Core.Files;
 using Pine.Elm;

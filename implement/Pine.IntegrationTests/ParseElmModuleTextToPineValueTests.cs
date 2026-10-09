@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using AwesomeAssertions.Execution;
 using Pine.Core;
+using Pine.Core.CLI;
 using Pine.Core.Elm;
 using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Elm;

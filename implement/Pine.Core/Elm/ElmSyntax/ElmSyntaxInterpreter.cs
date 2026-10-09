@@ -1,4 +1,5 @@
 using Microsoft.CodeAnalysis;
+using Pine.Core.CLI;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Internal;

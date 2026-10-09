@@ -19,6 +19,7 @@ public static class RunFileServerCommand
         var storeOption = new Option<string?>("--store");
 
         var portOption = new Option<int?>("--port");
+        NumericOptionParsing.SetIntegerParser(portOption);
 
         var authPasswordOption = new Option<string?>("--auth-password");
 

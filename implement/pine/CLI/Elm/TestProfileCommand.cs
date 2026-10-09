@@ -1,9 +1,8 @@
-using Pine.Core;
+using Pine.Core.CLI;
 using Pine.Core.Elm.Testing;
 using Spectre.Console;
 using System;
 using System.CommandLine;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -87,7 +86,7 @@ public static class TestProfileCommand
         var options =
             new Options(
                 budgets,
-                new("--interval") { Description = "Live status/stack sampling interval in seconds; 0 disables periodic samples.", DefaultValueFactory = _ => 5 },
+                new("--interval") { Description = "Live status/stack sampling interval in seconds; 0 disables periodic samples. Integer times accept underscores and ms/s/min/h units.", DefaultValueFactory = _ => 5 },
                 new("--stack-depth") { Description = "Maximum recorded frames per stack trace.", DefaultValueFactory = _ => 20 },
                 new("--top") { Description = "Expressions displayed in the ranking; all recorded expressions are saved.", DefaultValueFactory = _ => 20 },
                 new("--sort") { Description = "Rank by Invocations, Instructions, or Loops." },
@@ -109,18 +108,20 @@ public static class TestProfileCommand
         })
             command.Add(option);
 
-        options.Interval.Validators.Add(
-            result =>
-            {
-                if (result.Tokens.Count == 1 &&
-                    double.TryParse(
-                        result.Tokens[0].Value,
-                        NumberStyles.Float,
-                        CultureInfo.InvariantCulture,
-                        out var seconds) &&
-                    (!double.IsFinite(seconds) || seconds < 0 || seconds >= TimeSpan.MaxValue.TotalSeconds))
-                    result.AddError("--interval must be finite, nonnegative, and fit the TimeSpan range.");
-            });
+        NumericOptionParsing.SetTimeParser(
+            options.Interval,
+            TimeUnit.Seconds,
+            seconds =>
+            !double.IsFinite(seconds) || seconds < 0 || seconds >= TimeSpan.MaxValue.TotalSeconds
+            ?
+            "--interval must be finite, nonnegative, and fit the TimeSpan range."
+            :
+            null);
+
+        foreach (var option in new[] { options.TraceDepth, options.Top })
+            NumericOptionParsing.SetIntegerParser(
+                option,
+                value => value <= 0 ? option.Name + " must be positive." : null);
 
         return options;
     }

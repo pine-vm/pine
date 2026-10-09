@@ -52,6 +52,87 @@ public class CommandInputValidationTests
         command.Parse(["--env-source", "source.zip"]).Errors.Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData("8_080", 8080)]
+    [InlineData("1__234", 1234)]
+    public void File_server_port_accepts_integer_digit_separators(string input, int expected)
+    {
+        var command = RunFileServerCommand.Create();
+        var parsed = command.Parse(["--port", input]);
+
+        parsed.Errors.Should().BeEmpty();
+
+        parsed.GetValue(command.Options.OfType<Option<int?>>().Single(option => option.Name is "--port"))
+            .Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("_8080")]
+    [InlineData("8080_")]
+    [InlineData("8k")]
+    [InlineData("8 080")]
+    [InlineData("2147483648")]
+    public void File_server_port_rejects_invalid_integer_inputs(string input)
+    {
+        RunFileServerCommand.Create().Parse(["--port", input]).Errors.Should().NotBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("--quality", "1__0", 10)]
+    [InlineData("--viewport-width", "1_280", 1280)]
+    [InlineData("--viewport-height", "7_20", 720)]
+    [InlineData("--screen-width", "1_920", 1920)]
+    [InlineData("--screen-height", "1_080", 1080)]
+    [InlineData("--viewport-width", "2k", 2000)]
+    [InlineData("--screen-width", "2 k", 2000)]
+    public void Screenshot_integer_options_accept_digit_separators(string optionName, string input, int expected)
+    {
+        var command = ScreenshotCommand.Create();
+        var parsed = command.Parse(["Main.html", optionName, input]);
+
+        parsed.Errors.Should().BeEmpty();
+
+        parsed.GetValue(command.Options.OfType<Option<int?>>().Single(option => option.Name == optionName))
+            .Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("_100")]
+    [InlineData("100_")]
+    [InlineData("1.5")]
+    [InlineData("1K")]
+    [InlineData("2147483648")]
+    public void Screenshot_integer_options_reject_invalid_inputs(string input)
+    {
+        foreach (var optionName in new[] { "--quality", "--viewport-width", "--viewport-height", "--screen-width", "--screen-height" })
+            ScreenshotCommand.Create().Parse(["Main.html", optionName, input]).Errors.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void Screenshot_quality_does_not_accept_count_units()
+    {
+        ScreenshotCommand.Create().Parse(["Main.html", "--quality", "1k"]).Errors.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void Numeric_option_parsers_preserve_absent_nullable_values_and_fractional_scale()
+    {
+        var fileServer = RunFileServerCommand.Create();
+        var port = fileServer.Options.OfType<Option<int?>>().Single(option => option.Name is "--port");
+        fileServer.Parse([]).GetValue(port).Should().BeNull();
+
+        var screenshot = ScreenshotCommand.Create();
+        var parsed = screenshot.Parse(["Main.html", "--device-scale-factor", "1.5"]);
+
+        parsed.Errors.Should().BeEmpty();
+
+        foreach (var option in screenshot.Options.OfType<Option<int?>>())
+            parsed.GetValue(option).Should().BeNull();
+
+        parsed.GetValue(screenshot.Options.OfType<Option<float?>>().Single())
+            .Should().Be(1.5f);
+    }
+
     private static IEnumerable<RequiredArgumentCase> RequiredArgumentCases()
     {
         var userSecretsStoreCommand =

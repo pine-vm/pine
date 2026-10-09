@@ -3,6 +3,7 @@ using ElmTime.Elm019;
 using ElmTime.ElmInteractive;
 using Pine.Core;
 using Pine.Core.Addressing;
+using Pine.Core.CLI;
 using Pine.Core.Elm;
 using Pine.Core.Elm.Elm019;
 using Pine.Core.Elm.ElmSyntax;

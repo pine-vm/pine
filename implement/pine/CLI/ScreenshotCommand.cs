@@ -56,6 +56,15 @@ public static class ScreenshotCommand
 
         var screenWidthOption = new Option<int?>("--screen-width");
         var screenHeightOption = new Option<int?>("--screen-height");
+
+        NumericOptionParsing.SetIntegerParser(qualityOption);
+
+        foreach (var option in new[]
+        {
+            viewportWidthOption, viewportHeightOption, screenWidthOption, screenHeightOption
+        })
+            NumericOptionParsing.SetCountParser(option);
+
         var isMobileOption = new Option<bool>("--is-mobile");
         var hasTouchOption = new Option<bool>("--has-touch");
         var disableJavaScriptOption = new Option<bool>("--disable-javascript");

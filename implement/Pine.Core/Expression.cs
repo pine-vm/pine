@@ -1,3 +1,4 @@
+using Pine.Core.CLI;
 using Pine.Core.CodeGen;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Json;

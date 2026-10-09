@@ -1,4 +1,4 @@
-using Pine.Core;
+using Pine.Core.CLI;
 using Pine.Core.Elm;
 using Pine.Core.Elm.Testing;
 using Spectre.Console;
@@ -170,6 +170,10 @@ public static class TestCommand
                 "."
             };
 
+        NumericOptionParsing.SetIntegerParser(
+            workersOption,
+            value => value is <= 0 ? "The --workers value must be at least 1." : null);
+
         var reportDurationsOption =
             new Option<bool>("--report-durations")
             {
@@ -177,29 +181,31 @@ public static class TestCommand
             };
 
         var seedOption =
-            new Option<uint?>("--seed") { Description = "Initial unsigned 32-bit random seed for fuzz tests. Defaults to a new random seed." };
+            new Option<uint?>("--seed")
+            {
+                Description =
+                "Initial unsigned 32-bit random seed for fuzz tests. Defaults to a new random seed. Integers accept internal underscores."
+            };
 
         var fuzzOption =
             new Option<uint>("--fuzz")
             {
-                Description = "Number of iterations per fuzz test. Must be positive. Defaults to 100.",
+                Description =
+                "Number of iterations per fuzz test. Must be positive. Defaults to 100. Counts accept underscores and SI units k/M/G.",
                 DefaultValueFactory = _ => 100,
             };
+
+        NumericOptionParsing.SetIntegerParser(seedOption);
+
+        NumericOptionParsing.SetCountParser(
+            fuzzOption,
+            value => value is 0 ? "The --fuzz value must be a positive unsigned 32-bit integer." : null);
 
         fuzzOption.Validators.Add(
             result =>
             {
                 if (result.IdentifierTokenCount > 1)
                     result.AddError("The --fuzz option can only be specified once.");
-
-                if (result.Tokens.Count is 1 &&
-                    uint.TryParse(
-                        result.Tokens[0].Value,
-                        System.Globalization.NumberStyles.Integer,
-                        System.Globalization.CultureInfo.InvariantCulture,
-                        out var count) &&
-                    count is 0)
-                    result.AddError("The --fuzz value must be a positive unsigned 32-bit integer.");
             });
 
         seedOption.Validators.Add(

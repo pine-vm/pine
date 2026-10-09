@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Pine.Core.CLI;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using System;

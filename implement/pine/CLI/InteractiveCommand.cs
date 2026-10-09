@@ -2,6 +2,7 @@ using ElmTime;
 using ElmTime.ElmInteractive;
 using Pine.Core;
 using Pine.Core.Addressing;
+using Pine.Core.CLI;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Files;

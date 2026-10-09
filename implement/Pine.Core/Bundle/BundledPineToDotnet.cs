@@ -1,3 +1,4 @@
+using Pine.Core.CLI;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.DotNet;
 using System;
@@ -408,4 +409,3 @@ public record BundledPineToDotnet(
             " bytes) at " + absoluteArchivePath);
     }
 }
-

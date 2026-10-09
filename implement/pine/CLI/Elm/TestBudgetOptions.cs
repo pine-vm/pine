@@ -1,4 +1,4 @@
-using Pine.Core;
+using Pine.Core.CLI;
 using Pine.Core.Elm.Testing;
 using System;
 using System.CommandLine;
@@ -50,11 +50,11 @@ internal sealed record TestBudgetOptions(
     {
         var options =
             new TestBudgetOptions(
-                new("--budget") { Description = "Shortcut setting both invocation and loop budgets; explicit per-kind options override it." },
-                new("--invocation-budget") { Description = "Command-wide VM invocation budget, including preparation." },
-                new("--loop-budget") { Description = "Command-wide backward-jump iteration budget, including preparation." },
-                new("--timeout") { Description = "Cooperative wall-clock timeout in seconds, including preparation." },
-                new("--max-stack-depth") { Description = "VM stack-depth safety limit.", DefaultValueFactory = _ => 100_000 });
+                new("--budget") { Description = "Shortcut setting both invocation and loop budgets; explicit per-kind options override it. Counts accept underscores and SI units k/M/G." },
+                new("--invocation-budget") { Description = "Command-wide VM invocation budget, including preparation. Counts accept underscores and SI units k/M/G." },
+                new("--loop-budget") { Description = "Command-wide backward-jump iteration budget, including preparation. Counts accept underscores and SI units k/M/G." },
+                new("--timeout") { Description = "Cooperative wall-clock timeout in seconds, including preparation. Integer times accept underscores and ms/s/min/h units." },
+                new("--max-stack-depth") { Description = "VM stack-depth safety limit. Counts accept underscores and SI units k/M/G.", DefaultValueFactory = _ => 100_000 });
 
         foreach (var option in new Option[] { options.Budget, options.Invocations, options.Loops, options.Timeout, options.StackDepth })
         {
@@ -70,32 +70,24 @@ internal sealed record TestBudgetOptions(
         }
 
         foreach (var option in new[] { options.Budget, options.Invocations, options.Loops })
-            option.Validators.Add(
-                result =>
-                {
-                    if (result.Tokens.Count == 1 && int.TryParse(result.Tokens[0].Value, out var value) && value <= 0)
-                        result.AddError($"{option.Name} must be positive.");
-                });
+            NumericOptionParsing.SetCountParser(
+                option,
+                value => value is <= 0 ? $"{option.Name} must be positive." : null);
 
-        options.StackDepth.Validators.Add(
-            result =>
-            {
-                if (result.Tokens.Count == 1 && int.TryParse(result.Tokens[0].Value, out var value) && value <= 0)
-                    result.AddError("--max-stack-depth must be positive.");
-            });
+        NumericOptionParsing.SetCountParser(
+            options.StackDepth,
+            value => value <= 0 ? "--max-stack-depth must be positive." : null);
 
-        options.Timeout.Validators.Add(
-            result =>
-            {
-                if (result.Tokens.Count == 1 &&
-                    double.TryParse(
-                        result.Tokens[0].Value,
-                        NumberStyles.Float,
-                        CultureInfo.InvariantCulture,
-                        out var seconds) &&
-                    (!double.IsFinite(seconds) || seconds <= 0 || seconds * 1000 > uint.MaxValue - 1))
-                    result.AddError("--timeout must be finite, positive, and fit the timer range.");
-            });
+        NumericOptionParsing.SetTimeParser(
+            options.Timeout,
+            TimeUnit.Seconds,
+            value =>
+            value is { } seconds &&
+            (!double.IsFinite(seconds) || seconds <= 0 || seconds * 1000 > uint.MaxValue - 1)
+            ?
+            "--timeout must be finite, positive, and fit the timer range."
+            :
+            null);
 
         return options;
     }

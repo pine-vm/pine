@@ -1,7 +1,7 @@
 using AwesomeAssertions;
 using Pine.CLI;
 using Pine.CLI.Elm;
-using Pine.Core;
+using Pine.Core.CLI;
 using Pine.Core.Elm.Testing;
 using Spectre.Console;
 using System;
@@ -19,6 +19,332 @@ namespace Pine.IntegrationTests.CLI.Elm;
 
 public class TestCommandTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Numeric_help_documents_count_and_time_input_syntax(bool profile)
+    {
+        var output = new StringWriter();
+
+        TestCommand.Create().Parse(profile ? ["profile", "--help"] : ["--help"])
+            .Invoke(new InvocationConfiguration { Output = output }).Should().Be(0);
+
+        output.ToString().Should().Contain("underscores").And.Contain("k/M/G").And.Contain("ms/s/min/h");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Numeric_count_options_accept_underscores_and_decimal_SI_units(bool profile)
+    {
+        var command = TestCommand.Create();
+        var commonCommand = profile ? command.Subcommands.Single(child => child.Name == "profile") : command;
+
+        string[] values =
+            [
+            ".", "--workers", "1__000", "--seed", "+4_294_967_295", "--fuzz", "4 G",
+            "--budget", "2G", "--invocation-budget", "1 k", "--loop-budget", "1 M",
+            "--max-stack-depth", "100 k",
+            ];
+
+        var parsed = command.Parse(profile ? ["profile", .. values] : values);
+        parsed.Errors.Should().BeEmpty();
+
+        parsed.GetValue(commonCommand.Options.OfType<Option<int?>>().Single(option => option.Name == "--workers"))
+            .Should().Be(1_000);
+
+        parsed.GetValue(commonCommand.Options.OfType<Option<uint?>>().Single(option => option.Name == "--seed"))
+            .Should().Be(uint.MaxValue);
+
+        parsed.GetValue(commonCommand.Options.OfType<Option<uint>>().Single(option => option.Name == "--fuzz"))
+            .Should().Be(4_000_000_000);
+
+        parsed.GetValue(command.Options.OfType<Option<int?>>().Single(option => option.Name == "--budget"))
+            .Should().Be(2_000_000_000);
+
+        parsed.GetValue(command.Options.OfType<Option<int?>>().Single(option => option.Name == "--invocation-budget"))
+            .Should().Be(1_000);
+
+        parsed.GetValue(command.Options.OfType<Option<int?>>().Single(option => option.Name == "--loop-budget"))
+            .Should().Be(1_000_000);
+
+        parsed.GetValue(command.Options.OfType<Option<int>>().Single(option => option.Name == "--max-stack-depth"))
+            .Should().Be(100_000);
+
+        command.Parse(["--budget", "1 k", "profile", "."]).Errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Profile_small_count_options_accept_underscores()
+    {
+        var command = TestCommand.Create();
+        var profile = command.Subcommands.Single(child => child.Name == "profile");
+        var parsed = command.Parse(["profile", ".", "--stack-depth", "1_000", "--top", "2__000"]);
+        parsed.Errors.Should().BeEmpty();
+
+        parsed.GetValue(profile.Options.OfType<Option<int>>().Single(option => option.Name == "--stack-depth"))
+            .Should().Be(1_000);
+
+        parsed.GetValue(profile.Options.OfType<Option<int>>().Single(option => option.Name == "--top"))
+            .Should().Be(2_000);
+    }
+
+    [Theory]
+    [InlineData("--workers")]
+    [InlineData("--stack-depth")]
+    [InlineData("--top")]
+    public void Small_count_options_reject_SI_units_and_keep_simple_help(string optionName)
+    {
+        var command = TestCommand.Create();
+        var profile = command.Subcommands.Single(child => child.Name == "profile");
+        var option = profile.Options.Single(option => option.Name == optionName);
+
+        option.Description.Should().NotContain("units").And.NotContain("underscores").And.NotContain("k/M/G");
+
+        foreach (var suffix in new[] { "k", "M", "G", " k", " M", " G" })
+        {
+            command.Parse(["profile", ".", optionName, "1" + suffix]).Errors.Should().NotBeEmpty();
+
+            if (optionName is "--workers")
+                command.Parse([".", optionName, "1" + suffix]).Errors.Should().NotBeEmpty();
+        }
+
+        foreach (var input in new[] { "20", "2_0", "2__0" })
+        {
+            var parsed = command.Parse(["profile", ".", optionName, input]);
+            parsed.Errors.Should().BeEmpty();
+
+            if (option is Option<int?> nullableOption)
+                parsed.GetValue(nullableOption).Should().Be(20);
+
+            else if (option is Option<int> integerOption)
+                parsed.GetValue(integerOption).Should().Be(20);
+        }
+
+        foreach (var input in new[] { "0", "-1", "_20", "20_", "2147483648" })
+            command.Parse(["profile", ".", optionName, input]).Errors.Should().NotBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("--workers", "3G")]
+    [InlineData("--workers", "0k")]
+    [InlineData("--fuzz", "5G")]
+    [InlineData("--fuzz", "0k")]
+    [InlineData("--fuzz", "-1k")]
+    [InlineData("--seed", "1k")]
+    [InlineData("--seed", "4_294_967_296")]
+    [InlineData("--budget", "3G")]
+    [InlineData("--budget", "9223372036854775807G")]
+    [InlineData("--budget", "0 M")]
+    [InlineData("--invocation-budget", "-1k")]
+    [InlineData("--loop-budget", "1K")]
+    [InlineData("--max-stack-depth", "0k")]
+    [InlineData("--max-stack-depth", "2_147_483_648")]
+    public void Both_commands_reject_invalid_or_out_of_range_numeric_counts(string option, string value)
+    {
+        var command = TestCommand.Create();
+        command.Parse([".", option, value]).Errors.Should().NotBeEmpty();
+        command.Parse(["profile", ".", option, value]).Errors.Should().NotBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("--stack-depth", "0")]
+    [InlineData("--stack-depth", "-1")]
+    [InlineData("--stack-depth", "0k")]
+    [InlineData("--stack-depth", "3G")]
+    [InlineData("--top", "0")]
+    [InlineData("--top", "-1")]
+    [InlineData("--top", "-1k")]
+    [InlineData("--top", "3G")]
+    public void Profile_rejects_nonpositive_and_out_of_range_numeric_counts(string option, string value) =>
+        TestCommand.Create().Parse(["profile", ".", option, value]).Errors.Should().NotBeEmpty();
+
+    [Theory]
+    [InlineData("1__250ms", 1.25)]
+    [InlineData("2 seconds", 2)]
+    [InlineData("3min", 180)]
+    [InlineData("4 m", 240)]
+    [InlineData("1h", 3600)]
+    [InlineData("1 hours", 3600)]
+    [InlineData("0.001", 0.001)]
+    [InlineData("1.25", 1.25)]
+    [InlineData("+.5", 0.5)]
+    [InlineData("1e-3", 0.001)]
+    [InlineData("2E1", 20)]
+    public void Clock_options_accept_integer_units_and_legacy_fractional_seconds(string value, double seconds)
+    {
+        var command = TestCommand.Create();
+        var profile = command.Subcommands.Single(child => child.Name == "profile");
+        var timeout = command.Options.OfType<Option<double?>>().Single(option => option.Name == "--timeout");
+        var interval = profile.Options.OfType<Option<double>>().Single(option => option.Name == "--interval");
+        var ordinary = command.Parse([".", "--timeout", value]);
+        ordinary.Errors.Should().BeEmpty();
+        ordinary.GetValue(timeout).Should().Be(seconds);
+
+        var parsed = command.Parse(["profile", ".", "--timeout", value, "--interval", value]);
+        parsed.Errors.Should().BeEmpty();
+        parsed.GetValue(timeout).Should().Be(seconds);
+        parsed.GetValue(interval).Should().Be(seconds);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("0 ms")]
+    [InlineData("0.0")]
+    [InlineData("0e1")]
+    public void Zero_sampling_interval_remains_supported_but_timeout_must_be_positive(string value)
+    {
+        var command = TestCommand.Create();
+        var profile = command.Subcommands.Single(child => child.Name == "profile");
+        var interval = profile.Options.OfType<Option<double>>().Single(option => option.Name == "--interval");
+        var parsed = command.Parse(["profile", ".", "--interval", value]);
+        parsed.Errors.Should().BeEmpty();
+        parsed.GetValue(interval).Should().Be(0);
+        command.Parse(["profile", ".", "--timeout", value]).Errors.Should().NotBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("_1")]
+    [InlineData("1_")]
+    [InlineData("1__")]
+    [InlineData("1_0.5")]
+    [InlineData("1s_")]
+    [InlineData("1K")]
+    [InlineData("0.5s")]
+    [InlineData("9223372036854775808")]
+    [InlineData("1e999")]
+    [InlineData("-Infinity")]
+    [InlineData("NaN")]
+    public void Clock_options_do_not_fall_back_for_invalid_integer_syntax_or_nonfinite_values(string value)
+    {
+        var command = TestCommand.Create();
+        command.Parse([".", "--timeout", value]).Errors.Should().NotBeEmpty();
+        command.Parse(["profile", ".", "--interval", value]).Errors.Should().NotBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("--timeout", "4_294_967_295ms")]
+    [InlineData("--timeout", "1194h")]
+    [InlineData("--timeout", "1e308")]
+    [InlineData("--interval", "922_337_203_685_478ms")]
+    [InlineData("--interval", "9223372036854775807 hours")]
+    [InlineData("--interval", "1e308")]
+    public void Clock_option_range_checks_apply_after_unit_conversion(string option, string value) =>
+        TestCommand.Create().Parse(["profile", ".", option, value]).Errors.Should().NotBeEmpty();
+
+    [Fact]
+    public void Timeout_accepts_the_timer_limit_in_milliseconds()
+    {
+        var command = TestCommand.Create();
+        var timeout = command.Options.OfType<Option<double?>>().Single(option => option.Name == "--timeout");
+        var parsed = command.Parse([".", "--timeout", "4_294_967_294ms"]);
+        parsed.Errors.Should().BeEmpty();
+        parsed.GetValue(timeout).Should().Be(4_294_967.294);
+    }
+
+    [Theory]
+    [InlineData("--workers")]
+    [InlineData("--seed")]
+    [InlineData("--fuzz")]
+    [InlineData("--budget")]
+    [InlineData("--invocation-budget")]
+    [InlineData("--loop-budget")]
+    [InlineData("--max-stack-depth")]
+    [InlineData("--timeout")]
+    [InlineData("--interval")]
+    [InlineData("--stack-depth")]
+    [InlineData("--top")]
+    public void Explicit_numeric_options_require_a_value_instead_of_using_defaults(string option) =>
+        TestCommand.Create().Parse(["profile", ".", option]).Errors.Should().NotBeEmpty();
+
+    [Fact]
+    public void Shared_numeric_parsers_preserve_absent_nullable_options_and_defaults()
+    {
+        var command = TestCommand.Create();
+        var profile = command.Subcommands.Single(child => child.Name == "profile");
+        var ordinary = command.Parse([]);
+        ordinary.Errors.Should().BeEmpty();
+
+        foreach (var option in command.Options.OfType<Option<int?>>())
+            ordinary.GetValue(option).Should().BeNull();
+
+        ordinary.GetValue(command.Options.OfType<Option<uint?>>().Single(option => option.Name == "--seed"))
+            .Should().BeNull();
+
+        ordinary.GetValue(command.Options.OfType<Option<double?>>().Single(option => option.Name == "--timeout"))
+            .Should().BeNull();
+
+        ordinary.GetValue(command.Options.OfType<Option<uint>>().Single(option => option.Name == "--fuzz"))
+            .Should().Be(100);
+
+        ordinary.GetValue(command.Options.OfType<Option<int>>().Single(option => option.Name == "--max-stack-depth"))
+            .Should().Be(100_000);
+
+        var parsed = command.Parse(["profile", "."]);
+        parsed.Errors.Should().BeEmpty();
+
+        parsed.GetValue(profile.Options.OfType<Option<int?>>().Single(option => option.Name == "--workers"))
+            .Should().BeNull();
+
+        parsed.GetValue(profile.Options.OfType<Option<double>>().Single(option => option.Name == "--interval"))
+            .Should().Be(5);
+
+        foreach (var option in profile.Options.OfType<Option<int>>())
+            parsed.GetValue(option).Should().Be(20);
+    }
+
+    [Theory]
+    [InlineData("-2_147_483_648", int.MinValue)]
+    [InlineData("+2_147_483_647", int.MaxValue)]
+    public void Integer_option_helper_accepts_signed_boundaries_for_nullable_and_required_types(
+        string value,
+        int expected)
+    {
+        var required = new Option<int>("--required");
+        var nullable = new Option<int?>("--nullable");
+        NumericOptionParsing.SetIntegerParser(required);
+        NumericOptionParsing.SetIntegerParser(nullable);
+        var command = new Command("numbers") { required, nullable };
+        var parsed = command.Parse(["--required", value, "--nullable", value]);
+        parsed.Errors.Should().BeEmpty();
+        parsed.GetValue(required).Should().Be(expected);
+        parsed.GetValue(nullable).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("2_147_483_648")]
+    [InlineData("-2_147_483_649")]
+    [InlineData("1k")]
+    [InlineData("1_")]
+    public void Integer_option_helper_reports_errors_without_replacing_explicit_values_with_defaults(string value)
+    {
+        var option = new Option<int>("--number") { DefaultValueFactory = _ => 42 };
+        NumericOptionParsing.SetIntegerParser(option);
+        var command = new Command("numbers") { option };
+        command.Parse([]).GetValue(option).Should().Be(42);
+        var parsed = command.Parse(["--number", value]);
+        parsed.Errors.Should().NotBeEmpty();
+        var ran = false;
+        command.SetAction(_ => ran = true);
+
+        command.Parse(["--number", value]).Invoke(new InvocationConfiguration { Error = new StringWriter() })
+            .Should().NotBe(0);
+
+        ran.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Time_option_helper_converts_legacy_fractional_default_units_to_seconds()
+    {
+        var option = new Option<double?>("--time");
+        NumericOptionParsing.SetTimeParser(option, TimeUnit.Milliseconds);
+        var command = new Command("numbers") { option };
+        var parsed = command.Parse(["--time", "1.5"]);
+        parsed.Errors.Should().BeEmpty();
+        parsed.GetValue(option).Should().Be(0.0015);
+        command.Parse([]).GetValue(option).Should().BeNull();
+    }
+
     [Fact]
     public void Profile_rejects_sampling_intervals_that_overflow_TimeSpan_before_execution()
     {

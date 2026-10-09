@@ -1,4 +1,5 @@
 using Pine.Core.Addressing;
+using Pine.Core.CLI;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Internal;
 using System;
