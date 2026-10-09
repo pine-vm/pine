@@ -63,7 +63,9 @@ public static class ScreenshotCommand
         {
             viewportWidthOption, viewportHeightOption, screenWidthOption, screenHeightOption
         })
+        {
             NumericOptionParsing.SetCountParser(option);
+        }
 
         var isMobileOption = new Option<bool>("--is-mobile");
         var hasTouchOption = new Option<bool>("--has-touch");

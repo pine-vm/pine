@@ -2337,7 +2337,9 @@ public partial class Canonicalization
                 if (aliasMap.TryGetValue(
                     (typeReference ? "type:" : "value:") + moduleNameStr + "." + name,
                     out var exportedModule))
+                {
                     return new CanonicalizationResult<ModuleName>(exportedModule, []);
+                }
 
                 if (resolveReference is null && aliasMap.TryGetValue(moduleNameStr + "." + name, out var legacyExport))
                     return new CanonicalizationResult<ModuleName>(legacyExport, []);

@@ -100,7 +100,9 @@ public class ElmSyntaxParser
                     d => !d.PreserveTree && d.Declaration is { } range &&
                         (row > range.Start.Row || row == range.Start.Row && column >= range.Start.Column) &&
                         (row < range.End.Row || row == range.End.Row && column < range.End.Column)))
+                {
                     characters[i] = ' ';
+                }
 
                 column++;
             }
@@ -2703,7 +2705,9 @@ public class ElmSyntaxParser
                             ParseTypeAnnotationTypedArg(indentMin: constructorNameToken.Start.Column),
                             out var argumentAnnotation,
                             out var argumentAnnotationErr))
+                        {
                             return argumentAnnotationErr;
+                        }
 
                         constructorArguments.Add(argumentAnnotation);
 
@@ -2816,7 +2820,9 @@ public class ElmSyntaxParser
                     ParseTypeAnnotation(indentMin: functionFirstNameToken.Start.Column),
                     out var signatureTypeAnnotation,
                     out var signatureTypeAnnotationErr))
+                {
                     return signatureTypeAnnotationErr;
+                }
 
                 signature =
                     new Node<SyntaxTypes.Signature>(
@@ -2857,7 +2863,9 @@ public class ElmSyntaxParser
                     ParsePatternLessUncons(indentMin: functionFirstNameToken.Start.Column),
                     out var argument,
                     out var argumentErr))
+                {
                     return argumentErr;
+                }
 
                 ConsumeAllTrivia();
 
@@ -3176,7 +3184,9 @@ public class ElmSyntaxParser
                         ConsumeAnyIdentifier(IdentifierRole.RecordFieldOrTypeParameter),
                         out var firstIdentifier,
                         out var firstIdentifierErr))
+                    {
                         return firstIdentifierErr;
+                    }
 
                     ConsumeAllTrivia();
 
@@ -3203,7 +3213,9 @@ public class ElmSyntaxParser
                             ParseTypeAnnotation(indentMin),
                             out var fieldTypeAnnotation,
                             out var fieldTypeAnnotationErr))
+                        {
                             return fieldTypeAnnotationErr;
+                        }
 
                         ConsumeAllTrivia();
 
@@ -3241,7 +3253,9 @@ public class ElmSyntaxParser
                                 ParseTypeAnnotation(indentMin),
                                 out var nextFieldTypeAnnotation,
                                 out var nextFieldTypeAnnotationErr))
+                            {
                                 return nextFieldTypeAnnotationErr;
+                            }
 
                             ConsumeAllTrivia();
 
@@ -3282,7 +3296,9 @@ public class ElmSyntaxParser
                             ParseTypeAnnotation(indentMin),
                             out var fieldTypeAnnotation,
                             out var fieldTypeAnnotationErr))
+                        {
                             return fieldTypeAnnotationErr;
+                        }
 
                         ConsumeAllTrivia();
 
@@ -3321,7 +3337,9 @@ public class ElmSyntaxParser
                                 ParseTypeAnnotation(indentMin),
                                 out var nextFieldTypeAnnotation,
                                 out var nextFieldTypeAnnotationErr))
+                            {
                                 return nextFieldTypeAnnotationErr;
+                            }
 
                             ConsumeAllTrivia();
 
@@ -3529,7 +3547,9 @@ public class ElmSyntaxParser
                         minPrecedence: nextMinPrecedence),
                     out var right,
                     out var rightErr))
+                {
                     return rightErr;
+                }
 
                 // Combine the left and right expressions into an OperatorApplication node.
                 left =
@@ -3626,7 +3646,9 @@ public class ElmSyntaxParser
                 ParseBasicPrimaryExpressionLessRecordAccess(indentMin: indentMin),
                 out var lessRecordAccess,
                 out var lessRecordAccessErr))
+            {
                 return lessRecordAccessErr;
+            }
 
             if (NextTokenMatches(
                 peek =>
@@ -3886,7 +3908,9 @@ public class ElmSyntaxParser
                         ParseExpression(indentMin: firstIdentifierToken.Range.Start.Column),
                         out var caseValue,
                         out var caseValueErr))
+                    {
                         return caseValueErr;
+                    }
 
                     ConsumeAllTrivia();
 
@@ -4323,7 +4347,9 @@ public class ElmSyntaxParser
                     ParseExpression(indentMin: pattern.Range.Start.Column + 1),
                     out var expression,
                     out var expressionErr))
+                {
                     return expressionErr;
+                }
 
                 var letDeclRange =
                     MakeRange(pattern.Range.Start, expression.Range.End);
@@ -5020,7 +5046,9 @@ public class ElmSyntaxParser
                             ConsumeRecordFieldSeparator(),
                             out var nextSeparatorToken,
                             out var nextSeparatorErr))
+                        {
                             return nextSeparatorErr;
+                        }
 
                         ConsumeAllTrivia();
 
@@ -5112,7 +5140,9 @@ public class ElmSyntaxParser
                         ConsumeRecordFieldSeparator(),
                         out var nextSeparatorToken,
                         out var nextSeparatorErr))
+                    {
                         return nextSeparatorErr;
+                    }
 
                     ConsumeAllTrivia();
 

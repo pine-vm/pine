@@ -655,7 +655,9 @@ internal static class ElmSyntaxDiagnostics
 
             if (Current.Kind is FoundSyntaxKind.Literal &&
                 char.IsDigit(Current.Text[0]) && Current.Text.Contains('.', StringComparison.Ordinal))
+            {
                 return Fail(SyntaxErrorBranch.PatternFloat, end: Current.End);
+            }
 
             if (Lower || Upper || At("_"))
             {
@@ -1806,7 +1808,9 @@ internal static class ElmSyntaxDiagnostics
         {
             if (state.Delimiters.IsEmpty ||
                 (state.Delimiters.Peek(), c) is not (('(', ')') or ('[', ']') or ('{', '}')))
+            {
                 return next with { Problem = ShaderSyntaxProblem.UnexpectedDelimiter };
+            }
 
             var delimiters = state.Delimiters.Pop();
 

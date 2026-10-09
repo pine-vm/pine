@@ -106,7 +106,9 @@ public static class TestProfileCommand
             options.Inputs, options.Locals, options.Expressions, options.NoStacks,
             options.NoLeaves, options.NoCache, options.NoTail, options.NoReduction,
         })
+        {
             command.Add(option);
+        }
 
         NumericOptionParsing.SetTimeParser(
             options.Interval,

@@ -1432,7 +1432,9 @@ public class LanguageServer(
                         application.Extract(
                             error =>
                             throw new System.InvalidOperationException(error.Message))))
+                    {
                         await RunDiagnosticsAsync(diagnosticsProvider, change.Uri, CancellationToken.None);
+                    }
                 }
             }
         }

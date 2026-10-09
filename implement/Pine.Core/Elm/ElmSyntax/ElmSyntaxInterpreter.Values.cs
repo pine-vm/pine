@@ -541,7 +541,9 @@ public partial class ElmSyntaxInterpreter
                         left.ArgumentsAlreadyCollected[i],
                         right.ArgumentsAlreadyCollected[i],
                         visiting))
+                {
                     return false;
+                }
             }
 
             foreach (var binding in left.CapturedBindings)

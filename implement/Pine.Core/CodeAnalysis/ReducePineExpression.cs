@@ -660,7 +660,9 @@ public class ReducePineExpression
                                         {
                                             if (argLiteral.Value is PineValue.ListValue listValue &&
                                                 listValue.Items.Length is 0)
+                                            {
                                                 continue;
+                                            }
                                         }
 
                                         nonEmptyItems.Add(argItem);
@@ -916,7 +918,9 @@ public class ReducePineExpression
             right is null ||
             left.Value.marker != right.Value.marker ||
             left.Value.tag != right.Value.tag)
+        {
             return null;
+        }
 
         return
             Expression.BuiltinInst(
@@ -2275,7 +2279,9 @@ public class ReducePineExpression
         if (TryEvalIndependent(
             evalExpr.Encoded,
             parseCache).Value is not { } encodedExprValue)
+        {
             return null;
+        }
 
         if (parseCache.ParseExpressionWithoutResultAllocation(encodedExprValue).Expression is not { } innerExpr)
             return null;

@@ -306,7 +306,9 @@ public static class LoadFromGitHubOrGitLab
 
                                             if (currentCommitObj is null ||
                                                 currentCommitObj.Type is not GitCore.PackFile.ObjectType.Commit)
+                                            {
                                                 continue;
+                                            }
 
                                             var currentCommit = GitCore.GitObjects.ParseCommit(currentCommitObj.Data);
 

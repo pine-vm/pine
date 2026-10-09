@@ -400,7 +400,9 @@ public static class ElmTestRunner
 
                 if (preparedTag is not ("Plain" or "Only" or "Skipping") ||
                     preparedArguments.Span[0] is not PineValue.ListValue runners)
+                {
                     throw new InvalidOperationException("Invalid seeded test runners: " + preparedTag);
+                }
 
                 hasOnly |= preparedTag is "Only";
                 hasSkipped |= preparedTag is "Skipping";

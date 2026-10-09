@@ -64,7 +64,9 @@ public class VolatileProcess
 
         if (!PineValueHashTree.ComputeHash(PineValue.Blob(blob)).Span.SequenceEqual(hash) &&
             !System.Security.Cryptography.SHA256.HashData(blob).AsSpan().SequenceEqual(hash))
+        {
             return returnError("Selected blob hash does not match " + hashSha256Base16);
+        }
 
         return
             Result<string, ReadOnlyMemory<byte>>.ok(blob);

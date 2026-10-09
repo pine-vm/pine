@@ -472,7 +472,9 @@ public class ModuleParseErrorTests
             "module Input exposing (..)\n\nvalue = { x : 1 }\n",
             "module Input exposing (..)\n\nvalue = { x = 1 }\n"
         })
+        {
             ElmSyntaxErrorRenderer.CollectErrors(ElmSyntaxParser.ParseModuleText(source)).Should().BeEmpty();
+        }
     }
 
     [Theory]

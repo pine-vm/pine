@@ -287,7 +287,9 @@ public static class Elm019Binaries
 
         if (standardErrorText.Contains("I ran into a compilation error when trying to build the following package:") &&
             standardErrorText.Contains("This probably means it has package constraints that are too wide."))
+        {
             return true;
+        }
 
         return false;
     }

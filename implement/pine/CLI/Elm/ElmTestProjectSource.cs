@@ -201,7 +201,9 @@ internal sealed class ElmTestProjectSource(string directory, bool ownsDirectory,
             if (document.RootElement.ValueKind is not JsonValueKind.Object ||
                 !document.RootElement.TryGetProperty("source-directories", out var directories) ||
                 directories.ValueKind is not JsonValueKind.Array)
+            {
                 return;
+            }
 
             foreach (var directory in directories.EnumerateArray())
             {

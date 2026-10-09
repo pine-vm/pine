@@ -472,8 +472,7 @@ public sealed class CompareInterpreterWithIntermediateVM
 
         // Step 1: overlay bundled kernel-module declarations as a low-priority baseline so
         // calls to declarations stripped from the post-pipeline output still resolve.
-        foreach (var (qualifiedName, declaration)
-            in EnumerateBundledKernelModuleDeclarations(appCodeTree))
+        foreach (var (qualifiedName, declaration) in EnumerateBundledKernelModuleDeclarations(appCodeTree))
         {
             declarations[qualifiedName] = declaration;
         }

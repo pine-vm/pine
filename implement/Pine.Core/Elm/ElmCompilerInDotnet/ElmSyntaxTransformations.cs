@@ -481,14 +481,18 @@ internal static class ElmSyntaxTransformations
                         declaration.Value is Stil4mElmSyntax7.Expression.LetDeclaration.LetDestructuring letDestr &&
                         IsLocalVariableReference(letDestr.Expression.Value, parameterName) &&
                         IsConstructorPattern(letDestr.Pattern.Value)))
+                    {
                         return true;
+                    }
 
                     break;
 
                 case Stil4mElmSyntax7.Expression.CaseExpression caseExpr:
                     if (IsLocalVariableReference(caseExpr.CaseBlock.Expression.Value, parameterName) &&
                         caseExpr.CaseBlock.Cases.Any(c => IsConstructorPattern(c.Pattern.Value)))
+                    {
                         return true;
+                    }
 
                     break;
 
@@ -1723,7 +1727,9 @@ internal static class ElmSyntaxTransformations
                 onlyCase.Pattern.Value,
                 ctorApp.ConstructorName,
                 ctorApp.FieldExpressions) is not { } patternBindings)
+        {
             return null;
+        }
 
         var shadowedNames = CollectPatternNames(onlyCase.Pattern.Value);
 

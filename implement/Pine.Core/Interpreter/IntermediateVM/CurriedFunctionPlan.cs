@@ -61,7 +61,9 @@ internal sealed record CurriedFunctionPlan(
 
             if (function is null ||
                 function.ParameterCount <= function.ArgumentsAlreadyCollected.Length)
+            {
                 return null;
+            }
 
             var canonicalValue =
                 FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(
@@ -111,7 +113,9 @@ internal sealed record CurriedFunctionPlan(
             {
                 if (interpreter.EvaluateExpressionDefault(pair.Actual, PineValue.EmptyList) !=
                     interpreter.EvaluateExpressionDefault(pair.Expected, PineValue.EmptyList))
+                {
                     return false;
+                }
 
                 continue;
             }
@@ -126,7 +130,9 @@ internal sealed record CurriedFunctionPlan(
             if (pair.Actual is not Expression.List actualList ||
                 pair.Expected is not Expression.List expectedList ||
                 actualList.Items.Count != expectedList.Items.Count)
+            {
                 return false;
+            }
 
             for (var index = 0; index < actualList.Items.Count; ++index)
                 pending.Push((actualList.Items[index], expectedList.Items[index]));

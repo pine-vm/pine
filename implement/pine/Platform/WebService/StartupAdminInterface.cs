@@ -730,7 +730,9 @@ public class StartupAdminInterface
 
                                         foreach (var filePath in processStoreFileStore.ListFilesInDirectory(ImmutableList<string>.Empty)
                                             .ToImmutableList())
+                                        {
                                             processStoreFileStore.DeleteFile(filePath);
+                                        }
 
                                         foreach (var (path, content) in replacementFiles)
                                             processStoreFileStore.SetFileContent(path, content.ToArray());

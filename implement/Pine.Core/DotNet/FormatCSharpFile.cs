@@ -802,7 +802,7 @@ public static class FormatCSharpFile
                 GotoStatementSyntax => node,
                 CheckedStatementSyntax => node,
                 UnsafeStatementSyntax => node,
-                FixedStatementSyntax => node,
+                FixedStatementSyntax n => FormatFixedStatement(n, ctx),
                 GlobalStatementSyntax n => FormatGlobalStatement(n, ctx),
 
                 // Expressions
@@ -1149,11 +1149,15 @@ public static class FormatCSharpFile
         // lines between them when neither spans multiple lines.
         if (prev is GlobalStatementSyntax && !SpansMultipleLines(prev) &&
             current is FieldDeclarationSyntax && !SpansMultipleLines(current))
+        {
             return false;
+        }
 
         if (prev is FieldDeclarationSyntax && !SpansMultipleLines(prev) &&
             current is GlobalStatementSyntax && !SpansMultipleLines(current))
+        {
             return false;
+        }
 
         if (current is BaseTypeDeclarationSyntax or MethodDeclarationSyntax or
             ConstructorDeclarationSyntax or PropertyDeclarationSyntax or
@@ -1161,7 +1165,9 @@ public static class FormatCSharpFile
             OperatorDeclarationSyntax or ConversionOperatorDeclarationSyntax or
             DelegateDeclarationSyntax or EnumDeclarationSyntax or DestructorDeclarationSyntax or
             FieldDeclarationSyntax)
+        {
             return true;
+        }
 
         if (prev is BaseTypeDeclarationSyntax or MethodDeclarationSyntax or
             ConstructorDeclarationSyntax or PropertyDeclarationSyntax or
@@ -1169,7 +1175,9 @@ public static class FormatCSharpFile
             OperatorDeclarationSyntax or ConversionOperatorDeclarationSyntax or
             DelegateDeclarationSyntax or EnumDeclarationSyntax or DestructorDeclarationSyntax or
             FieldDeclarationSyntax)
+        {
             return true;
+        }
         // Global statements: check if either spans multiple lines
         if (prev is GlobalStatementSyntax && SpansMultipleLines(prev))
             return true;
@@ -1632,35 +1640,38 @@ public static class FormatCSharpFile
     // Control flow
     // ──────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Formats an embedded statement, requiring braces when its header spans multiple lines.
+    /// The header ends at the closing parenthesis, excluding body and surrounding trivia.
+    /// </summary>
+    private static StatementSyntax FormatEmbeddedStatement(
+        StatementSyntax statement,
+        SyntaxNode headerOwner,
+        SyntaxToken closeParen,
+        FormatContext ctx,
+        bool braceMultilineBody = false)
+    {
+        var headerText = headerOwner.ToString()[..(closeParen.Span.End - headerOwner.SpanStart)];
+
+        if (statement is BlockSyntax block)
+            return EnsureBraceNewline(FormatBlock(block, ctx), ctx.IndentLevel);
+
+        if (SpansMultipleLines(headerText))
+            return EnsureBraceNewline(FormatBlock(SyntaxFactory.Block(statement), ctx), ctx.IndentLevel);
+
+        var body = (StatementSyntax)FormatNode(statement, ctx.Indented());
+
+        if (braceMultilineBody && SpansMultipleLines(body.ToString().Trim()))
+            return EnsureBraceNewline(FormatBlock(SyntaxFactory.Block(body), ctx), ctx.IndentLevel);
+
+        return body.WithLeadingTrivia(EnsureLeadingBreaks(body.GetLeadingTrivia(), 1, ctx.IndentLevel + 1));
+    }
+
     /// <summary>Formats an if statement, including condition, body, and else clause.</summary>
     private static IfStatementSyntax FormatIfStatement(IfStatementSyntax node, FormatContext ctx)
     {
         var condColumn = ctx.IndentLevel * IndentSize + "if (".Length;
         var cond = (ExpressionSyntax)FormatNode(node.Condition, ctx.WithColumn(condColumn));
-        StatementSyntax body;
-
-        if (node.Statement is BlockSyntax block)
-            body = EnsureBraceNewline(FormatBlock(block, ctx), ctx.IndentLevel);
-
-        else
-        {
-            body = (StatementSyntax)FormatNode(node.Statement, ctx.Indented());
-
-            // If the formatted body spans multiple lines, wrap it in braces.
-            // Use ToString() to check the statement text without leading trivia (comments).
-            var bodyText = body.ToString().Trim();
-
-            if (SpansMultipleLines(bodyText))
-            {
-                body = body.WithLeadingTrivia().WithTrailingTrivia();
-                var wrappedBlock = SyntaxFactory.Block(SyntaxFactory.SingletonList(body));
-                body = EnsureBraceNewline(FormatBlock(wrappedBlock, ctx), ctx.IndentLevel);
-            }
-            else
-            {
-                body = body.WithLeadingTrivia(s_lineFeed, Indent(ctx.IndentLevel + 1));
-            }
-        }
 
         var r =
             node
@@ -1669,8 +1680,11 @@ public static class FormatCSharpFile
             .WithOpenParenToken(node.OpenParenToken.WithLeadingTrivia().WithTrailingTrivia())
             .WithCloseParenToken(
                 node.CloseParenToken.WithLeadingTrivia()
-                .WithTrailingTrivia(EnsureSpaceBeforeComments(StripWhitespace(node.CloseParenToken.TrailingTrivia))))
-            .WithStatement(body);
+                .WithTrailingTrivia(EnsureSpaceBeforeComments(StripWhitespace(node.CloseParenToken.TrailingTrivia))));
+
+        r =
+            r.WithStatement(
+                FormatEmbeddedStatement(node.Statement, r, r.CloseParenToken, ctx, braceMultilineBody: true));
 
         if (node.Else is not null)
             r = r.WithElse(FormatElseClause(node.Else, ctx));
@@ -1724,59 +1738,34 @@ public static class FormatCSharpFile
     /// <summary>Formats a while statement with correct keyword and brace placement.</summary>
     private static WhileStatementSyntax FormatWhileStatement(WhileStatementSyntax node, FormatContext ctx)
     {
-        var body =
-            node.Statement is BlockSyntax block
-            ?
-            EnsureBraceNewline(FormatBlock(block, ctx), ctx.IndentLevel)
-            :
-            ((StatementSyntax)FormatNode(node.Statement, ctx.Indented())).WithLeadingTrivia(
-                s_lineFeed,
-                Indent(ctx.IndentLevel + 1));
-
         var condColumn = ctx.IndentLevel * IndentSize + "while (".Length;
         var cond = (ExpressionSyntax)FormatNode(node.Condition, ctx.WithColumn(condColumn));
 
-        return
+        var r =
             node
             .WithWhileKeyword(node.WhileKeyword.WithTrailingTrivia(s_space))
             .WithOpenParenToken(node.OpenParenToken.WithLeadingTrivia().WithTrailingTrivia())
             .WithCondition(cond.WithLeadingTrivia(StripWhitespace(node.Condition.GetLeadingTrivia())))
-            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia())
-            .WithStatement(body);
+            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia());
+
+        return r.WithStatement(FormatEmbeddedStatement(node.Statement, r, r.CloseParenToken, ctx));
     }
 
     /// <summary>Formats a for statement with correct keyword and brace placement.</summary>
     private static ForStatementSyntax FormatForStatement(ForStatementSyntax node, FormatContext ctx)
     {
-        var body =
-            node.Statement is BlockSyntax block
-            ?
-            EnsureBraceNewline(FormatBlock(block, ctx), ctx.IndentLevel)
-            :
-            ((StatementSyntax)FormatNode(node.Statement, ctx.Indented())).WithLeadingTrivia(
-                s_lineFeed,
-                Indent(ctx.IndentLevel + 1));
-
-        return
+        var r =
             node
             .WithForKeyword(node.ForKeyword.WithTrailingTrivia(s_space))
             .WithOpenParenToken(node.OpenParenToken.WithLeadingTrivia().WithTrailingTrivia())
-            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia())
-            .WithStatement(body);
+            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia());
+
+        return r.WithStatement(FormatEmbeddedStatement(node.Statement, r, r.CloseParenToken, ctx));
     }
 
     /// <summary>Formats a foreach statement with correct keyword and brace placement.</summary>
     private static ForEachStatementSyntax FormatForEachStatement(ForEachStatementSyntax node, FormatContext ctx)
     {
-        var body =
-            node.Statement is BlockSyntax block
-            ?
-            EnsureBraceNewline(FormatBlock(block, ctx), ctx.IndentLevel)
-            :
-            ((StatementSyntax)FormatNode(node.Statement, ctx.Indented())).WithLeadingTrivia(
-                s_lineFeed,
-                Indent(ctx.IndentLevel + 1));
-
         // Preserve a user-introduced line break between the `in` keyword and the
         // foreach source expression (e.g. a long invocation expression placed on
         // its own line). Otherwise place the expression directly after `in `.
@@ -1801,38 +1790,64 @@ public static class FormatCSharpFile
             exprWithLeading = fmtExpr.WithLeadingTrivia(StripWhitespace(node.Expression.GetLeadingTrivia()));
         }
 
-        return
+        var r =
             node
             .WithForEachKeyword(node.ForEachKeyword.WithTrailingTrivia(s_space))
             .WithOpenParenToken(node.OpenParenToken.WithLeadingTrivia().WithTrailingTrivia())
             .WithType(node.Type.WithLeadingTrivia())
-            .WithIdentifier(node.Identifier.WithTrailingTrivia(s_space))
+            .WithIdentifier(
+                node.Identifier.WithTrailingTrivia(
+                    FormatTriviaBeforeForEachIn(node.Identifier.TrailingTrivia.AddRange(node.InKeyword.LeadingTrivia))))
             .WithInKeyword(inKeyword)
             .WithExpression(exprWithLeading)
-            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia())
-            .WithStatement(body);
+            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia());
+
+        return r.WithStatement(FormatEmbeddedStatement(node.Statement, r, r.CloseParenToken, ctx));
     }
+
+    /// <summary>Joins the foreach variable and in keyword unless comments or directives require a line break.</summary>
+    private static SyntaxTriviaList FormatTriviaBeforeForEachIn(SyntaxTriviaList trivia) =>
+        trivia.Any(t => t.IsKind(SyntaxKind.SingleLineCommentTrivia) || IsDirectiveTrivia(t))
+        ?
+        trivia
+        :
+        EnsureSpaceBeforeComments(StripWhitespace(trivia)).Add(s_space);
 
     /// <summary>Formats a foreach variable statement (deconstruction pattern).</summary>
     private static ForEachVariableStatementSyntax FormatForEachVariableStatement(
         ForEachVariableStatementSyntax node,
         FormatContext ctx)
     {
-        var body =
-            node.Statement is BlockSyntax block
-            ?
-            EnsureBraceNewline(FormatBlock(block, ctx), ctx.IndentLevel)
-            :
-            ((StatementSyntax)FormatNode(node.Statement, ctx.Indented())).WithLeadingTrivia(
-                s_lineFeed,
-                Indent(ctx.IndentLevel + 1));
+        var originalOnNewLine = LineOf(node.Expression) > LineOf(node.InKeyword);
+        var exprCtx = originalOnNewLine ? ctx.Indented() : ctx;
+        var expression = (ExpressionSyntax)FormatNode(node.Expression, exprCtx);
 
-        return
+        expression =
+            originalOnNewLine
+            ?
+            expression.WithLeadingTrivia(
+                EnsureLeadingBreaks(node.Expression.GetLeadingTrivia(), 1, ctx.IndentLevel + 1))
+            :
+            expression.WithLeadingTrivia(StripWhitespace(node.Expression.GetLeadingTrivia()));
+
+        var r =
             node
             .WithForEachKeyword(node.ForEachKeyword.WithTrailingTrivia(s_space))
             .WithOpenParenToken(node.OpenParenToken.WithLeadingTrivia().WithTrailingTrivia())
-            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia())
-            .WithStatement(body);
+            .WithVariable(
+                node.Variable.WithTrailingTrivia(
+                    FormatTriviaBeforeForEachIn(
+                        node.Variable.GetTrailingTrivia().AddRange(node.InKeyword.LeadingTrivia))))
+            .WithInKeyword(
+                originalOnNewLine
+                ?
+                node.InKeyword.WithLeadingTrivia().WithTrailingTrivia(StripWhitespace(node.InKeyword.TrailingTrivia))
+                :
+                node.InKeyword.WithLeadingTrivia())
+            .WithExpression(expression)
+            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia());
+
+        return r.WithStatement(FormatEmbeddedStatement(node.Statement, r, r.CloseParenToken, ctx));
     }
 
     /// <summary>Formats a do-while statement with correct keyword placement.</summary>
@@ -1858,20 +1873,24 @@ public static class FormatCSharpFile
     /// <summary>Formats a using statement with correct keyword and body placement.</summary>
     private static UsingStatementSyntax FormatUsingStatement(UsingStatementSyntax node, FormatContext ctx)
     {
-        var body =
-            node.Statement is BlockSyntax block
-            ?
-            EnsureBraceNewline(FormatBlock(block, ctx), ctx.IndentLevel)
-            :
-            ((StatementSyntax)FormatNode(node.Statement, ctx.Indented())).WithLeadingTrivia(
-                s_lineFeed,
-                Indent(ctx.IndentLevel + 1));
-
-        return
+        var r =
             node
             .WithUsingKeyword(node.UsingKeyword.WithTrailingTrivia(s_space))
-            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia())
-            .WithStatement(body);
+            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia());
+
+        return r.WithStatement(FormatEmbeddedStatement(node.Statement, r, r.CloseParenToken, ctx));
+    }
+
+    /// <summary>Formats a fixed statement with correct keyword and body placement.</summary>
+    private static FixedStatementSyntax FormatFixedStatement(FixedStatementSyntax node, FormatContext ctx)
+    {
+        var r =
+            node
+            .WithCloseParenToken(
+                node.CloseParenToken
+                .WithTrailingTrivia(EnsureSpaceBeforeComments(StripWhitespace(node.CloseParenToken.TrailingTrivia))));
+
+        return r.WithStatement(FormatEmbeddedStatement(node.Statement, r, r.CloseParenToken, ctx));
     }
 
     /// <summary>Formats a lock statement with correct keyword and body placement.</summary>
@@ -3174,7 +3193,9 @@ public static class FormatCSharpFile
         if (!SpansMultipleLines(node) &&
             (node.Parent is not (ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax) ||
             LineOf(node.OpenBraceToken) == LineOf(node.OpenBraceToken.GetPreviousToken())))
+        {
             return node;
+        }
 
         var ci = ctx.IndentLevel + 1;
         var exprs = new List<SyntaxNode>();
@@ -4979,13 +5000,18 @@ public static class FormatCSharpFile
         {
             result.Append('\n');
             var line = lines[i];
-            var trimmedLine = line.TrimEnd('\r');
+            var hasCarriageReturn = line.EndsWith('\r');
+            var trimmedLine = hasCarriageReturn ? line[..^1] : line;
 
-            // Empty or whitespace-only lines stay empty — don't add indentation.
+            // Blank lines with no content beyond the closing delimiter's indent stay empty.
             // But the closing delimiter line (last line) always gets re-indented.
-            if (string.IsNullOrWhiteSpace(trimmedLine) && i < lines.Length - 1)
+            if (string.IsNullOrWhiteSpace(trimmedLine) &&
+                trimmedLine.Length <= currentColumn &&
+                i < lines.Length - 1)
             {
-                result.Append(trimmedLine);
+                if (hasCarriageReturn)
+                    result.Append('\r');
+
                 continue;
             }
 
@@ -5001,6 +5027,9 @@ public static class FormatCSharpFile
                 var removeCount = Math.Min(-delta, trimmedLine.Length - trimmedLine.TrimStart().Length);
                 result.Append(trimmedLine.AsSpan(removeCount));
             }
+
+            if (hasCarriageReturn)
+                result.Append('\r');
         }
 
         return

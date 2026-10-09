@@ -1038,15 +1038,21 @@ public static class StaticExpressionExtension
 
         if (kernelApp.Input is not StaticExpression<TFunctionName>.List inputList ||
             inputList.Items.Count is not 2)
+        {
             return null;
+        }
 
         if (inputList.Items[0] is StaticExpression<TFunctionName>.Literal leftLiteral &&
             leftLiteral.Value == comparand)
+        {
             return inputList.Items[1];
+        }
 
         if (inputList.Items[1] is StaticExpression<TFunctionName>.Literal rightLiteral &&
             rightLiteral.Value == comparand)
+        {
             return inputList.Items[0];
+        }
 
         return null;
     }

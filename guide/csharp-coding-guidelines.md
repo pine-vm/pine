@@ -26,12 +26,19 @@ The only reason we have additional rules beyond `dotnet format` is that we have 
 
 ### Consistent Layout of List Items
 
-Items in lists such as argument lists, parameter lists, collection expressions, tuples, and array/object/collection initializers must be distributed in one of two ways: Either all items on the same line or each item starting a new line.
+Items in argument lists, parameter lists, and tuples must be distributed in one of two ways: Either all items on the same line or each item starting a new line.
 If the last item is not on the same line as the first, the items must be placed so that each starts on a new line.
 
 For multiline collection expressions, the closing bracket must be placed on a new line after the last item. For argument lists and parameter lists, the closing parentheses must be placed on the same line as the last item.
 
 For argument lists in the multiline form, the first argument must be separated from the opening parens with a line break.
+
+For multiline collection expressions and array, collection, and object initializers, preserve the original line grouping: items that shared a line stay grouped, including items following a multiline item on its closing line.
+When an initializer continues an expression starting on the `foreach` header line, its braces align with the `foreach` keyword, and its items are indented one level deeper, matching Visual Studio editor indentation.
+If the source expression already starts on a separate, indented line, the initializer braces align with that expression instead.
+
+In a `foreach` header, the `in` keyword stays on the same line as the end of the loop variable, including deconstruction patterns.
+When wrapping the source expression, break after `in`, not before it, unless a comment or preprocessor directive requires preserving a line break.
 
 For example, the following code:
 
@@ -57,8 +64,7 @@ Must be formatted to:
 ```csharp
 int[] alfa =
     [
-    1,
-    2,
+    1, 2,
     3
     ];
 
@@ -186,7 +192,10 @@ If a return statement spans multiple lines, the expression must start on a new l
 ### Braces for Multi-Line Statements
 
 For any statement in an `if` or `else` body that spans multiple lines, the statement must be wrapped in a block (braces `{ }`).
-Single-line statements may remain without braces.
+If the header of an `if`, `for`, `foreach`, `while`, `using`, or `fixed` statement spans multiple lines, its body must be wrapped in a block, even when the body contains only a single-line statement.
+This also applies to `else if`, `await foreach`, and `await using` statements, and to headers made multiline by formatting.
+The header extends from the statement's keyword through its closing parenthesis, excluding preceding comments and the body.
+Single-line statements may remain without braces when the header is also single-line.
 
 For example, the following code:
 

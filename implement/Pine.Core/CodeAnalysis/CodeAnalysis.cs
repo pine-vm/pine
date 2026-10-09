@@ -451,7 +451,9 @@ public class CodeAnalysis
 
             if (observedSetInitial.Any(
                 entry => entry.origExpr == current.expr && entry.constraint.Equals(current.envValueClass)))
+            {
                 continue;
+            }
 
             var currentExprInlined =
                 InlineParseAndEvalUsingLiteralFunctionRecursive(

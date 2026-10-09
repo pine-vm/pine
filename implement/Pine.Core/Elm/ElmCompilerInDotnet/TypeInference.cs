@@ -588,7 +588,9 @@ public static class TypeInference
             case TypeVariableConstraint.Comparable:
                 if (type is InferredType.IntType or InferredType.FloatType or InferredType.NumberType
                     or InferredType.CharType or InferredType.StringType)
+                {
                     return true;
+                }
 
                 if (type is InferredType.ListType cmpList)
                     return ConstraintAcceptsType(TypeVariableConstraint.Comparable, cmpList.ElementType);

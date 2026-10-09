@@ -242,7 +242,9 @@ public class CompileToAssembly
 
             if (!method.ReturnType.IsAssignableTo(targetDictionaryType) &&
                 !method.ReturnType.IsAssignableTo(legacyDictionaryType))
+            {
                 return false;
+            }
 
             return true;
         }

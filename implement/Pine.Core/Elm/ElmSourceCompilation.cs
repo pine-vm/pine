@@ -78,7 +78,9 @@ public static class ElmSourceCompilation
 
             if (!build.CompilerModuleNames.TryGetValue(sourcePath, out var compilerName) ||
                 !build.CompilerModuleSyntax.TryGetValue(compilerName, out var syntax))
+            {
                 throw new ArgumentException("Selected prepared Elm source file not found: " + sourcePath);
+            }
 
             roots.AddRange(
                 syntax.Declarations.Select(declaration => declaration.Value)
@@ -169,7 +171,9 @@ public static class ElmSourceCompilation
 
         if (ElmInteractiveEnvironment.ParseTagged(wrapper).IsOkOrNullable() is { name: "Function" } &&
             FunctionRecord.ParseFunctionRecordTagged(wrapper, parseCache).IsOkOrNull() is { } function)
+        {
             return ElmInteractiveEnvironment.ApplyFunction(vm, function, []);
+        }
 
         if (parseCache.ParseExpression(wrapper).IsOkOrNull() is { } expression)
             return vm.EvaluateExpression(expression, PineValue.EmptyList);

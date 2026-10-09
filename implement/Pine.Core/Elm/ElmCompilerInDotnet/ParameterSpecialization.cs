@@ -326,7 +326,9 @@ public abstract record ParameterSpecialization
 
         if (tailRef.QualifiedName.Namespaces.Count is not 0 ||
             tailRef.QualifiedName.DeclName != varPattern.Name)
+        {
             return expression;
+        }
 
         return destructuring.Expression;
     }

@@ -426,7 +426,9 @@ public static class ElmResolvedBuildPreparation
             {
                 if (!file.path[^1].EndsWith(".elm", StringComparison.OrdinalIgnoreCase) ||
                     owner is not null && (file.path.Count < 2 || file.path[0] != "src"))
+                {
                     continue;
+                }
 
                 var path =
                     (owner is null ? "" : "elm-packages/" + owner + "/") + string.Join("/", file.path);
@@ -926,7 +928,9 @@ public static class ElmResolvedBuildPreparation
         if (originalModuleName != compilerModuleName &&
             !parsed.Imports.Any(import =>
                 string.Join(".", import.Value.ModuleAlias?.Alias.Value ?? import.Value.ModuleName.Value) == originalModuleName))
+        {
             qualifierAliases[originalModuleName] = compilerModuleName;
+        }
 
         return
             qualifierAliases.Count is 0
@@ -948,7 +952,9 @@ public static class ElmResolvedBuildPreparation
             {
                 if (!file.path[^1].EndsWith(".elm", StringComparison.OrdinalIgnoreCase) ||
                     owner is not null && (file.path.Count < 2 || file.path[0] != "src"))
+                {
                     continue;
+                }
 
                 var text = Encoding.UTF8.GetString(file.fileContent.Span);
 
@@ -1026,7 +1032,9 @@ public static class ElmResolvedBuildPreparation
             if (module.Owner is not null &&
                 (module.Owner is "elm/core" ||
                 build.Resolution.Packages[module.Owner].SubstitutionImplementationId is not null))
+            {
                 queue.Enqueue((module, [module.Path]));
+            }
 
         while (queue.TryDequeue(out var next))
         {
@@ -1071,7 +1079,9 @@ public static class ElmResolvedBuildPreparation
                 // Basics and Debug are compiler-native modules, without corresponding package source files.
                 if (import is "Basics" or "Debug" && visible.Length is 0 &&
                     (visiblePackages.Contains("elm/core") || next.module.Owner is "elm/core"))
+                {
                     continue;
+                }
 
                 if (visible.Length is not 1)
                 {

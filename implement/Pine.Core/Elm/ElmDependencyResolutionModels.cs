@@ -396,7 +396,9 @@ public abstract class ElmModuleOrigin : IEquatable<ElmModuleOrigin>
     {
         if (other is null || GetType() != other.GetType() ||
             ModuleName != other.ModuleName || SourcePath != other.SourcePath || ManifestPath != other.ManifestPath)
+        {
             return false;
+        }
 
         return
             this switch

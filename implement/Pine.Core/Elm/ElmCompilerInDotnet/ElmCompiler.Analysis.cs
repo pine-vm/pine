@@ -232,12 +232,15 @@ public partial class ElmCompiler
             foreach (var error in Canonicalization.ValidateImports(
                 validateSourceImports ? source.File : source.File with { Imports = [] },
                 files))
+            {
                 diagnostics.Add(new(source.Path, error.Range, RenderCanonicalizationError(error), "elm-name"));
+            }
         }
 
         foreach (var candidate in candidates.Where(
             candidate =>
             applicationPaths.Contains(candidate.Path) && duplicates.Contains(candidate.Name)))
+        {
             diagnostics.Add(
                 new(
                     candidate.Path,
@@ -245,6 +248,7 @@ public partial class ElmCompiler
                     "Duplicate declaration '" + candidate.Name.FullName + "'.",
                     "elm-name",
                     candidate.Name));
+        }
 
         var roots =
             candidates.Where(
@@ -269,7 +273,9 @@ public partial class ElmCompiler
         {
             if (canonicalized.Declarations[root].Errors.Count is not 0 ||
                 FindNamingError(root, canonicalized) is not { } cause)
+            {
                 continue;
+            }
 
             var definition = candidates.Single(candidate => candidate.Name.Equals(root));
 
@@ -334,7 +340,9 @@ public partial class ElmCompiler
                 canonical.Value.Value is not Syntax.Declaration.FunctionDeclaration sourceFunction ||
                 declarations[name] is not Abstract.Declaration.FunctionDeclaration function ||
                 function.Function.Signature is null)
+            {
                 continue;
+            }
 
             var moduleName = string.Join(".", name.Namespaces);
             var parameters = function.Function.Declaration.Arguments;
@@ -460,12 +468,14 @@ public partial class ElmCompiler
 
             foreach (var recoveredError in file.AdditionalParseErrors.Concat(
                 file.IncompleteDeclarations.Select(node => node.Value.ParseError)))
+            {
                 diagnostics.Add(
                     new(
                         path,
                         recoveredError.Region,
                         ElmSyntaxErrorRenderer.RenderConcise(recoveredError),
                         "elm-syntax"));
+            }
 
             files.Add((path, file));
         }
@@ -607,7 +617,9 @@ public partial class ElmCompiler
         if (function.Function.Declaration.Arguments.Any(
             pattern =>
             pattern is not Abstract.Pattern.VarPattern parameter || !parameterTypes.ContainsKey(parameter.Name)))
+        {
             return null;
+        }
 
         var returnType =
             TypeInference.InferExpressionType(

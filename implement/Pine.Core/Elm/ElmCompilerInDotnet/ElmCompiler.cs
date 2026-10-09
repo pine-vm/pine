@@ -609,7 +609,9 @@ public partial class ElmCompiler
                     }
                     else if (ImplicitImportConfig.Default.ModuleImports.Any(
                         module => module.ModuleName.SequenceEqual(declaration.Namespaces)))
+                    {
                         origin = new(CompilationError.ImportKind.ImplicitImport, null, null, null);
+                    }
                 }
             }
 

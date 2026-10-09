@@ -55,7 +55,9 @@ public class BlobLibrary
 
             if (!(PineValueHashTree.ComputeHash(PineValue.Blob(blobCandidate.Value)).Span.SequenceEqual(sha256.Span) ||
                   System.Security.Cryptography.SHA256.HashData(blobCandidate.Value.Span).AsSpan().SequenceEqual(sha256.Span)))
+            {
                 return null;
+            }
 
             return blobCandidate;
         }

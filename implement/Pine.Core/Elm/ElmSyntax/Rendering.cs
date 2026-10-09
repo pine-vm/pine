@@ -852,7 +852,9 @@ public class Rendering
 
         if (choiceTypeDecl.TypeDeclaration.Constructors is not
             SeparatedSyntaxList<Node<ValueConstructor>>.NonEmpty constructors)
+        {
             return;
+        }
 
         context.AdvanceToLocation(constructors.First.Range.Start);
         RenderValueConstructor(constructors.First, context);

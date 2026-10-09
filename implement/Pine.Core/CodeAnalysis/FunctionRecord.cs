@@ -562,7 +562,9 @@ public record FunctionRecord(
             if (templateLevel.EvalCount is not 0 ||
                 templateLevel.BuiltinCount is not 0 ||
                 templateLevel.ConditionCount is not 0)
+            {
                 return "Curried template level contains computations other than lists and literals";
+            }
 
             var probeArgument =
                 PineValue.List(

@@ -3751,6 +3751,654 @@ public class CSharpFormatTests
         AssertFormattedSyntax(input, input, scriptMode: true);
     }
 
+    [Theory]
+    [InlineData("if (Check(\n    first,\n    second))")]
+    [InlineData("while (Check(\n    first,\n    second))")]
+    [InlineData("for (var i = 0;\n    i < count;\n    i++)")]
+    [InlineData("foreach (var item in\n    GetItems())")]
+    [InlineData("await foreach (var item in\n    GetItems())")]
+    [InlineData("foreach (var (first, second) in\n    GetPairs())")]
+    [InlineData("await foreach (var (first, second) in\n    GetPairs())")]
+    [InlineData("using (var resource = GetResource(\n    first,\n    second))")]
+    [InlineData("await using (var resource = GetResource(\n    first,\n    second))")]
+    [InlineData("fixed (int* pointer = GetPointer(\n    first,\n    second))")]
+    public void Multiline_control_flow_header_requires_braces(string header)
+    {
+        var input = header + "\n    DoSomething();";
+
+        var expected =
+            header +
+            """
+
+            {
+                DoSomething();
+            }
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+        AssertFormattedSyntax(input, expected, scriptMode: false);
+        AssertFormattedSyntax(expected, expected, scriptMode: true);
+    }
+
+    [Theory]
+    [InlineData("if (condition)")]
+    [InlineData("if (condition) // Header comment")]
+    [InlineData("while (condition)")]
+    [InlineData("for (var i = 0; i < count; i++)")]
+    [InlineData("foreach (var item in items)")]
+    [InlineData("foreach (var item in new[] { first, second })")]
+    [InlineData("foreach (var (first, second) in pairs)")]
+    [InlineData("using (var resource = GetResource())")]
+    [InlineData("fixed (int* pointer = GetPointer())")]
+    [InlineData("fixed (int* pointer = GetPointer()) // Header comment")]
+    [InlineData("fixed /* Header comment */ (int* pointer = GetPointer())")]
+    [InlineData("fixed (/* Pointer comment */ int* pointer = GetPointer())")]
+    [InlineData("fixed (int* pointer = GetPointer() /* Pointer comment */)")]
+    public void Single_line_control_flow_header_does_not_require_braces(string header)
+    {
+        var input = header + "\n    DoSomething();";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+        AssertFormattedSyntax("// Leading comment\n" + input, "// Leading comment\n" + input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Foreach_with_multiline_array_initializer_and_single_line_body_gets_braces()
+    {
+        var input =
+            """
+            foreach (var option in new[]
+            {
+                viewportWidthOption, viewportHeightOption, screenWidthOption, screenHeightOption
+            })
+                NumericOptionParsing.SetCountParser(option);
+            """;
+
+        var expected =
+            """
+            foreach (var option in new[]
+            {
+                viewportWidthOption, viewportHeightOption, screenWidthOption, screenHeightOption
+            })
+            {
+                NumericOptionParsing.SetCountParser(option);
+            }
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Theory]
+    [InlineData("foreach (var item")]
+    [InlineData("foreach (var (first, second)")]
+    [InlineData("await foreach (var (first, second)")]
+    [InlineData("foreach ((int first, int second)")]
+    public void Foreach_keeps_in_keyword_with_loop_variable(string header)
+    {
+        var input =
+            $$"""
+            {{header}}
+            in items)
+            {
+                DoSomething();
+            }
+            """;
+
+        var expected =
+            $$"""
+            {{header}} in items)
+            {
+                DoSomething();
+            }
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+        AssertFormattedSyntax(input, expected, scriptMode: false);
+    }
+
+    [Theory]
+    [InlineData("foreach (var item")]
+    [InlineData("foreach (var (first, second)")]
+    [InlineData("await foreach (var (first, second)")]
+    public void Foreach_keeps_in_keyword_before_source_on_separate_line(string header)
+    {
+        var input =
+            $$"""
+            {{header}}
+            in
+                GetItems(
+                    first,
+                    second))
+            {
+                DoSomething();
+            }
+            """;
+
+        var expected =
+            $$"""
+            {{header}} in
+                GetItems(
+                    first,
+                    second))
+            {
+                DoSomething();
+            }
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Foreach_joins_in_keyword_in_bundled_declarations_loop()
+    {
+        var input =
+            """
+            foreach (var (qualifiedName, declaration)
+            in EnumerateBundledKernelModuleDeclarations(appCodeTree))
+            {
+                declarations[qualifiedName] = declaration;
+            }
+            """;
+
+        var expected =
+            """
+            foreach (var (qualifiedName, declaration) in EnumerateBundledKernelModuleDeclarations(appCodeTree))
+            {
+                declarations[qualifiedName] = declaration;
+            }
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Foreach_keeps_in_keyword_with_end_of_multiline_deconstruction()
+    {
+        var input =
+            """
+            foreach (var (
+                first,
+                second)
+                in items)
+            {
+                DoSomething();
+            }
+            """;
+
+        var expected =
+            """
+            foreach (var (
+                first,
+                second) in items)
+            {
+                DoSomething();
+            }
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Theory]
+    [InlineData("var item")]
+    [InlineData("var (first, second)")]
+    public void Foreach_preserves_directive_requiring_break_before_in_keyword(string variable)
+    {
+        var input =
+            $$"""
+            foreach ({{variable}}
+            #if DEBUG
+            #endif
+                in items)
+            {
+                DoSomething();
+            }
+            """;
+
+        var formatted = FormatCSharpScriptOrThrow(input);
+
+        StripWhitespace(formatted).Should().Be(StripWhitespace(input));
+        SyntaxFactory.ParseSyntaxTree(formatted).GetRoot().ContainsDiagnostics.Should().BeFalse();
+        AssertFormattingIsStable(input, scriptMode: true);
+    }
+
+    [Theory]
+    [InlineData("foreach (var item")]
+    [InlineData("foreach (var (first, second)")]
+    public void Foreach_preserves_block_comment_before_in_keyword(string header)
+    {
+        var input =
+            $$"""
+            {{header}}
+                /* Keep the variable comment */
+            in items)
+            {
+                DoSomething();
+            }
+            """;
+
+        var expected =
+            $$"""
+            {{header}} /* Keep the variable comment */ in items)
+            {
+                DoSomething();
+            }
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Theory]
+    [InlineData("foreach (var item")]
+    [InlineData("foreach (var (first, second)")]
+    public void Foreach_preserves_line_comment_requiring_break_before_in_keyword(string header)
+    {
+        var input =
+            $$"""
+            {{header}} // Keep the variable comment
+                in items)
+            {
+                DoSomething();
+            }
+            """;
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Theory]
+    [InlineData("new[]")]
+    [InlineData("new Option<int?>[]")]
+    [InlineData("new List<Option<int?>>")]
+    [InlineData("new List<Option<int?>>()")]
+    public void Foreach_initializer_preserves_item_grouping_and_editor_indent(string creation)
+    {
+        var input =
+            $$"""
+            class Example
+            {
+                void Configure()
+                {
+                    foreach (var option in {{creation}}
+                    {
+                        viewportWidthOption, viewportHeightOption, // viewport options
+
+                        screenWidthOption, screenHeightOption
+                    })
+                        SetCountParser(option);
+                }
+            }
+            """;
+
+        var expected =
+            $$"""
+            class Example
+            {
+                void Configure()
+                {
+                    foreach (var option in {{creation}}
+                    {
+                        viewportWidthOption, viewportHeightOption, // viewport options
+
+                        screenWidthOption, screenHeightOption
+                    })
+                    {
+                        SetCountParser(option);
+                    }
+                }
+            }
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: false);
+    }
+
+    [Theory]
+    [InlineData("foreach")]
+    [InlineData("await foreach")]
+    public void Foreach_nested_initializers_align_with_their_creation_expressions(string keyword)
+    {
+        var input =
+            $$"""
+            class Example
+            {
+                void Process()
+                {
+                    {{keyword}} (var row in new[]
+                        {
+                            // Keep the rows comment
+                            new[]
+                            {
+                                1, 2
+                            },
+                            new[] { 3, 4 }
+                        })
+                    {
+                        ProcessRow(row);
+                    }
+                }
+            }
+            """;
+
+        var expected =
+            $$"""
+            class Example
+            {
+                void Process()
+                {
+                    {{keyword}} (var row in new[]
+                    {
+                        // Keep the rows comment
+                        new[]
+                        {
+                            1, 2
+                        },
+                        new[] { 3, 4 }
+                    })
+                    {
+                        ProcessRow(row);
+                    }
+                }
+            }
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: false);
+    }
+
+    [Theory]
+    [InlineData("foreach (var (first, second) in")]
+    [InlineData("await foreach (var (first, second) in")]
+    [InlineData("foreach (var (first, second) /* pair */ in")]
+    [InlineData("foreach (var (first, second) in /* pairs */")]
+    public void Deconstructing_foreach_initializer_preserves_item_grouping_and_editor_indent(string header)
+    {
+        var input =
+            $$"""
+            {{header}} new[]
+            {
+                (1, 2), (3, 4)
+            })
+                DoSomething();
+            """;
+
+        var expected =
+            $$"""
+            {{header}} new[]
+            {
+                (1, 2), (3, 4)
+            })
+            {
+                DoSomething();
+            }
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Theory]
+    [InlineData("foreach (var item in")]
+    [InlineData("await foreach (var item in")]
+    [InlineData("foreach (var (first, second) in")]
+    [InlineData("await foreach (var (first, second) in")]
+    public void Foreach_initializer_on_separate_line_does_not_double_indent(string header)
+    {
+        var input =
+            $$"""
+            {{header}}
+                new[]
+                {
+                    first,
+                    second
+                })
+            {
+                DoSomething();
+            }
+            """;
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Deconstructing_foreach_preserves_comments_before_source_on_separate_line()
+    {
+        var input =
+            """
+            foreach (var (first, second) in
+                // Keep this comment
+                new[]
+                {
+                    (1, 2),
+                    (3, 4)
+                })
+            {
+                DoSomething();
+            }
+            """;
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Theory]
+    [InlineData("\n", 0, 4)]
+    [InlineData("\r\n", 0, 4)]
+    [InlineData("\n", 2, 4)]
+    [InlineData("\r\n", 8, 4)]
+    [InlineData("\n", 8, 12)]
+    [InlineData("\r\n", 16, 12)]
+    public void Foreach_initializer_reindent_preserves_raw_string_value_and_line_endings(
+        string lineEnding,
+        int blankLineSpaces,
+        int originalIndent)
+    {
+        var input =
+            """"
+            foreach (var item in new[]
+            {
+                """
+                first
+
+                second
+                """
+            })
+            {
+                DoSomething();
+            }
+            """";
+
+        input =
+            input
+            .Replace("\n    ", "\n" + new string(' ', originalIndent))
+            .Replace("\n\n", "\n" + new string(' ', blankLineSpaces) + "\n")
+            .Replace("\n", lineEnding);
+
+        var originalLiteral =
+            SyntaxFactory.ParseSyntaxTree(input).GetRoot()
+            .DescendantNodes().OfType<LiteralExpressionSyntax>().Single();
+
+        var formatted = FormatCSharpScriptOrThrow(input);
+        var formattedRoot = SyntaxFactory.ParseSyntaxTree(formatted).GetRoot();
+        var formattedLiteral = formattedRoot.DescendantNodes().OfType<LiteralExpressionSyntax>().Single();
+
+        formattedRoot.ContainsDiagnostics.Should().BeFalse();
+        formattedLiteral.Token.ValueText.Should().Be(originalLiteral.Token.ValueText);
+        formattedLiteral.Token.Text.Split('\n')[^1].Should().Be("    \"\"\"");
+
+        AssertFormattingIsStable(input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Multiline_initializer_preserves_items_that_share_a_closing_line()
+    {
+        var input =
+            """
+            var items =
+                new[]
+                {
+                    Call(
+                        first,
+                        second), Other()
+                };
+            """;
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Multiline_nested_collection_initializer_preserves_its_argument_grouping()
+    {
+        var input =
+            """
+            var items =
+                new Dictionary<string, int>
+                {
+                    {
+                        GetKey(
+                            first,
+                            second), 42
+                    }
+                };
+            """;
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Theory]
+    [InlineData("new[]")]
+    [InlineData("new string[]")]
+    [InlineData("new List<string>")]
+    [InlineData("new List<string>()")]
+    public void Multiline_initializer_preserves_grouped_module_names(string creation)
+    {
+        var input =
+            $$"""
+            var coreModules =
+                {{creation}}
+                {
+                    "Basics", "List", "Maybe", "Result", "String", "Char", "Tuple",
+                    "Array", "Dict", "Set", "Bitwise",
+                };
+            """;
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Theory]
+    [InlineData("new Options")]
+    [InlineData("new Options()")]
+    [InlineData("new()")]
+    [InlineData("options with")]
+    public void Multiline_object_initializer_preserves_grouping_while_normalizing_indent(string creation)
+    {
+        var input =
+            $$"""
+            Options options =
+                {{creation}}
+            {
+            Width = 10, Height = 20, // viewport
+
+            Left = 30,
+            Top = 40, Visible = true,
+            };
+            """;
+
+        var expected =
+            $$"""
+            Options options =
+                {{creation}}
+                {
+                    Width = 10, Height = 20, // viewport
+
+                    Left = 30,
+                    Top = 40, Visible = true,
+                };
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Multiline_control_flow_header_preserves_body_comments_when_adding_braces()
+    {
+        var input =
+            """
+            if (Check(
+                first,
+                second))
+                // Before body
+                DoSomething(); // After body
+            else
+                Other();
+            """;
+
+        var expected =
+            """
+            if (Check(
+                first,
+                second))
+            {
+                // Before body
+                DoSomething(); // After body
+            }
+            else
+                Other();
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Else_if_with_multiline_header_gets_braces_without_changing_else_binding()
+    {
+        var input =
+            """
+            if (first)
+                First();
+            else if (Check(
+                second,
+                third))
+                Second();
+            else
+                Third();
+            """;
+
+        var expected =
+            """
+            if (first)
+                First();
+
+            else if (Check(
+                second,
+                third))
+            {
+                Second();
+            }
+            else
+                Third();
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Control_flow_header_wrapped_by_formatter_requires_braces()
+    {
+        var input =
+            """
+            if (Check(firstArgumentWithAVeryLongDescriptiveName, secondArgumentWithAVeryLongDescriptiveName, thirdArgumentWithAVeryLongDescriptiveName))
+                DoSomething();
+            """;
+
+        var expected =
+            """
+            if (Check(
+                firstArgumentWithAVeryLongDescriptiveName,
+                secondArgumentWithAVeryLongDescriptiveName,
+                thirdArgumentWithAVeryLongDescriptiveName))
+            {
+                DoSomething();
+            }
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
 
     [Fact]
     public void If_with_multiline_body_gets_braces()
@@ -5306,7 +5954,9 @@ public class CSharpFormatTests
             {
                 if (observedSetInitial.Any(
                     entry => entry.origExpr == current.expr && entry.constraint.Equals(current.envValueClass)))
+                {
                     continue;
+                }
             }
             """";
 
@@ -5330,7 +5980,9 @@ public class CSharpFormatTests
                 if (observedSetInitial.Any(
                     entry =>
                     entry.origExpr == current.expr && entry.constraint.Equals(current.envValueClass && and_another_condition)))
+                {
                     continue;
+                }
             }
             """";
 
@@ -5355,7 +6007,9 @@ public class CSharpFormatTests
                     entry =>
                     entry.origExpr == current.expr &&
                     entry.constraint.Equals(current.envValueClass && and_another_condition && and_yet_another)))
+                {
                     continue;
+                }
             }
             """";
 

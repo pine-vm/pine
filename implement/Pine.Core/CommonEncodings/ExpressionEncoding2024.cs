@@ -161,7 +161,9 @@ public static class ExpressionEncoding2024
     {
         if ((ReusedInstances.Instance.ExpressionEncodings?.TryGetValue(expression, out var encoded) ?? false) &&
             encoded is not null)
+        {
             return encoded;
+        }
 
         return expression switch
         {

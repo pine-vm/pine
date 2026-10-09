@@ -266,7 +266,9 @@ public partial class Canonicalization
 
                 if (!files.Any(source => Module.GetModuleName(source.ModuleDefinition.Value).Value.SequenceEqual(moduleName)) &&
                     namespaceName is not ("Basics" or "Debug" or "Pine_kernel" or "Pine_builtin"))
+                {
                     return $"Module '{namespaceName}' is unavailable in the supplied sources. Check the import, declared dependencies, and configured package replacements.";
+                }
 
                 return $"The supplied module '{namespaceName}' has no {kind} declaration named '{symbol}'. Check the spelling and the API provided by the selected package or replacement.";
             }

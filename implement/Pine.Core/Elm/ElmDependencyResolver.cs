@@ -704,7 +704,9 @@ public static class ElmDependencyResolver
 
         if (manifest.Type is "application" &&
             (manifest.SourceDirectories is null || manifest.SourceDirectories.Count is 0))
+        {
             throw new JsonException($"Application manifest '{path}' requires a nonempty 'source-directories' array.");
+        }
 
         if (manifest.Type is "application" &&
             manifest.SourceDirectories!.Any(
@@ -760,7 +762,9 @@ public static class ElmDependencyResolver
             if (type is "application" && duplicates.Length is 2 &&
                 duplicates.Any(item => item.Scope is ElmDependencyScope.Indirect) &&
                 duplicates.Any(item => item.Scope is ElmDependencyScope.TestDirect))
+            {
                 continue;
+            }
 
             throw new JsonException(
                 $"'{group.Key}' is declared in multiple dependency sections in '{path}'. " +
@@ -791,7 +795,9 @@ public static class ElmDependencyResolver
                 segment => segment.Length is 0 ||
                     segment is "." or ".." ||
                     segment.Any(character => !char.IsAsciiLetterOrDigit(character) && character != '-')))
+        {
             throw new FormatException($"Invalid Elm package name '{name}'. Expected 'author/package' without path traversal.");
+        }
     }
 
     private static void ValidateConfiguration(ElmDependencyResolutionConfiguration configuration)
