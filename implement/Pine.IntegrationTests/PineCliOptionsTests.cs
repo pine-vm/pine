@@ -133,24 +133,32 @@ public class PineCliOptionsTests
     }
 
 
-    [Fact]
-    public void Help_lists_elm_command()
+    [Theory]
+    [InlineData()]
+    [InlineData("help")]
+    public void Default_help_lists_elm_first_and_hides_phased_out_commands(params string[] arguments)
     {
-        var result = RunPine("help");
+        var result = RunPine(arguments);
 
         result.ExitCode.Should().Be(0);
         result.StandardOutput.Should().Contain("elm                            Elm development tools.");
+        result.StandardOutput.Should().MatchRegex(@"Develop and learn:\s+elm\s+Elm development tools\.");
+        result.StandardOutput.Should().Contain("interactive                    Alias for 'elm interactive'.");
+        result.StandardOutput.Should().NotContain("elm-test-rs");
+        result.StandardOutput.Should().NotContain("make");
         result.StandardOutput.Should().NotContain("elm-format");
         result.StandardError.Should().BeEmpty();
     }
 
 
     [Fact]
-    public void Elm_command_exposes_format_and_test_subcommands()
+    public void Elm_command_exposes_interactive_make_format_and_test_subcommands()
     {
         var result = RunPine("elm", "--help");
 
         result.ExitCode.Should().Be(0);
+        result.StandardOutput.Should().Contain("interactive");
+        result.StandardOutput.Should().Contain("make");
         result.StandardOutput.Should().Contain("format");
         result.StandardOutput.Should().Contain("test");
         result.StandardError.Should().BeEmpty();
@@ -158,12 +166,123 @@ public class PineCliOptionsTests
 
 
     [Fact]
-    public void Root_help_hides_backward_compatible_elm_format_command()
+    public void Root_help_hides_phased_out_and_backward_compatible_commands()
     {
         var result = RunPine("--help");
 
         result.ExitCode.Should().Be(0);
+        result.StandardOutput.Should().Contain("elm");
+        result.StandardOutput.Should().Contain("Alias for 'elm interactive'.");
+        result.StandardOutput.Should().NotContain("elm-test-rs");
+        result.StandardOutput.Should().NotContain("make");
         result.StandardOutput.Should().NotContain("elm-format");
+        result.StandardError.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("-a")]
+    [InlineData("--all")]
+    public void All_commands_help_lists_hidden_legacy_commands(string allOption)
+    {
+        var result = RunPine("help", allOption);
+
+        result.ExitCode.Should().Be(0);
+        result.StandardOutput.Should().Contain("elm-test-rs");
+        result.StandardOutput.Should().Contain("make");
+        result.StandardOutput.Should().Contain("elm-format");
+        result.StandardError.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("elm", "interactive")]
+    [InlineData("interactive")]
+    [InlineData("elm", "repl")]
+    [InlineData("repl")]
+    public void Elm_interactive_and_aliases_expose_the_same_options_and_subcommands(params string[] command)
+    {
+        var result = RunPine([.. command, "--help"]);
+
+        result.ExitCode.Should().Be(0);
+        result.StandardOutput.Should().Contain("--context-app");
+        result.StandardOutput.Should().Contain("--init-steps");
+        result.StandardOutput.Should().Contain("--submit");
+        result.StandardOutput.Should().Contain("--elm-engine");
+        result.StandardOutput.Should().Contain("--save-to-file");
+        result.StandardOutput.Should().Contain("test");
+        result.StandardError.Should().BeEmpty();
+
+        var testHelp = RunPine([.. command, "test", "--help"]);
+
+        testHelp.ExitCode.Should().Be(0);
+        testHelp.StandardOutput.Should().Contain("--scenario");
+        testHelp.StandardOutput.Should().Contain("--scenarios");
+        testHelp.StandardError.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Elm_make_exposes_arguments_and_options()
+    {
+        var result = RunPine("elm", "make", "--help");
+
+        result.ExitCode.Should().Be(0);
+        result.StandardOutput.Should().Contain("path-to-elm-file");
+        result.StandardOutput.Should().Contain("--output");
+        result.StandardOutput.Should().Contain("--input-directory");
+        result.StandardOutput.Should().Contain("--debug");
+        result.StandardOutput.Should().Contain("--optimize");
+        result.StandardError.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("elm", "make")]
+    [InlineData("make")]
+    public void Elm_make_and_legacy_command_accept_options_and_require_an_entry_point(params string[] command)
+    {
+        var result =
+            RunPine(
+                [
+                .. command,
+                "--output", "unused",
+                "--input-directory", "unused",
+                "--debug", "--optimize", "--help"
+                ]);
+
+        result.ExitCode.Should().Be(0);
+        result.StandardError.Should().BeEmpty();
+
+        var missingArgumentResult = RunPine(command);
+
+        missingArgumentResult.ExitCode.Should().Be(1);
+        missingArgumentResult.StandardError.Should().Contain("Required argument missing for command: 'make'");
+    }
+
+    [Theory]
+    [InlineData("elm", "make")]
+    [InlineData("make")]
+    public void Elm_make_and_legacy_command_execute_the_same_handler(params string[] command)
+    {
+        var directory = CreateFormatTestDirectory();
+
+        try
+        {
+            var result = RunPine([.. command, "src/Main.elm", "--input-directory", directory]);
+
+            result.ExitCode.Should().Be(10);
+            result.StandardOutput.Should().Contain("Did not find elm.json file in that directory.");
+            result.StandardError.Should().BeEmpty();
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Hidden_elm_test_rs_command_remains_available()
+    {
+        var result = RunPine("elm-test-rs", "--elm-test-rs-output", "unused", "--help");
+
+        result.ExitCode.Should().Be(0);
         result.StandardError.Should().BeEmpty();
     }
 

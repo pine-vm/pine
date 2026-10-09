@@ -54,8 +54,6 @@ public static class HelpCommand
                 ["install"] = "Install the command for the current user account.",
                 ["interactive"] = null,
                 ["compile"] = "Compile app source code.",
-                ["elm-test-rs"] = "Compile and run tests.",
-                ["make"] = "Compile Elm code.",
                 ["screenshot"] = "Render an HTML, SVG, or Elm entry point to an image.",
                 ["dotnet"] = ".NET and C# development tools.",
                 ["describe"] = "Describe a composition.",
@@ -96,11 +94,9 @@ public static class HelpCommand
         var developCommandNames =
             new List<string>
             {
+                "elm",
                 "interactive",
                 "compile",
-                "elm",
-                "elm-test-rs",
-                "make",
                 "screenshot",
                 "dotnet",
                 "describe",
@@ -141,7 +137,7 @@ public static class HelpCommand
             Console.WriteLine($"   {name,-30} {GetDisplayDescription(name)}");
         }
 
-        Console.WriteLine("\nRun apps, operate servers and maintain live systems:");
+        Console.WriteLine("\nRun apps, operate services and maintain live systems:");
 
         foreach (var name in operateCommandNames)
         {

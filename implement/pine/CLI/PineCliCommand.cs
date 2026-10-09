@@ -76,13 +76,21 @@ public class PineCliCommand
         rootCommand.Add(ListFunctionsCommand.Create());
         rootCommand.Add(ApplyFunctionCommand.Create());
         rootCommand.Add(TruncateProcessHistoryCommand.Create());
-        rootCommand.Add(InteractiveCommand.Create(dynamicPGOShare));
+        rootCommand.Add(ElmCommand.Create(dynamicPGOShare));
+
+        var interactiveAlias = InteractiveCommand.Create(dynamicPGOShare);
+        interactiveAlias.Description = "Alias for 'elm interactive'.";
+        rootCommand.Add(interactiveAlias);
+
         rootCommand.Add(CompileCommand.Create());
-        rootCommand.Add(ElmTestRsCommand.Create());
 
-        rootCommand.Add(ElmCommand.Create());
+        var elmTestRsCommand = ElmTestRsCommand.Create();
+        elmTestRsCommand.Hidden = true;
+        rootCommand.Add(elmTestRsCommand);
 
-        rootCommand.Add(MakeCommand.Create());
+        var makeAlias = MakeCommand.Create();
+        makeAlias.Hidden = true;
+        rootCommand.Add(makeAlias);
         rootCommand.Add(ScreenshotCommand.Create());
         rootCommand.Add(Elm.FormatCommand.CreateBackwardCompatible());
         rootCommand.Add(CSharp.CLI.CSharpFormatCommand.CreateCSharpFormatCommand());
