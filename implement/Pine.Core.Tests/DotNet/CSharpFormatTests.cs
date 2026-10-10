@@ -3037,11 +3037,11 @@ public class CSharpFormatTests
     [Fact]
     public void Formatting_only_changes_whitespace_in_Pine_Core_files()
     {
-        var gitDir = FindGitDirectory();
+        var repositoryPath = FindGitRepository();
 
         var pineCoreFiles =
             GitCore.LoadFromLocalFiles.LoadSubdirectoryContentsFromHead(
-                gitDir,
+                repositoryPath,
                 ["implement", "Pine.Core"]);
 
         var csFiles =
@@ -3218,10 +3218,10 @@ public class CSharpFormatTests
 
     /// <summary>
     /// Searches upward from the directory of the calling source file to find the nearest
-    /// valid Git directory (a directory named <c>.git</c> that contains at least one file).
+    /// valid Git working directory, including linked worktrees.
     /// <para>
     /// Starting from the directory containing the source file identified by <paramref name="callerFilePath"/>,
-    /// each ancestor directory is checked for a subdirectory named <c>.git</c>. A candidate
+    /// each ancestor directory is checked for a directory or worktree pointer file named <c>.git</c>. A candidate
     /// <c>.git</c> directory is considered valid only if it contains at least one file (at any depth),
     /// which distinguishes a real Git repository from an empty directory that happens to be named <c>.git</c>.
     /// </para>
@@ -3235,11 +3235,11 @@ public class CSharpFormatTests
     /// The path of the calling source file, automatically provided by the compiler via
     /// <see cref="CallerFilePathAttribute"/>. The search starts from the directory containing this file.
     /// </param>
-    /// <returns>The absolute path to the nearest valid <c>.git</c> directory.</returns>
+    /// <returns>The absolute path to the nearest repository working directory.</returns>
     /// <exception cref="Exception">
-    /// Thrown when no valid <c>.git</c> directory is found in any ancestor of the starting directory.
+    /// Thrown when no valid Git directory or worktree pointer is found in an ancestor.
     /// </exception>
-    private static string FindGitDirectory([CallerFilePath] string? callerFilePath = null)
+    private static string FindGitRepository([CallerFilePath] string? callerFilePath = null)
     {
         var startDirectory = Path.GetDirectoryName(callerFilePath)!;
 
@@ -3251,7 +3251,22 @@ public class CSharpFormatTests
 
             if (Directory.Exists(candidate) && DirectoryContainsAnyFile(candidate))
             {
-                return candidate;
+                return currentDirectory;
+            }
+
+            if (File.Exists(candidate))
+            {
+                var pointer = File.ReadAllText(candidate).Trim();
+
+                if (!pointer.StartsWith("gitdir: ", StringComparison.Ordinal))
+                    throw new InvalidDataException("Invalid Git directory pointer: " + candidate);
+
+                var gitDirectory = Path.GetFullPath(pointer["gitdir: ".Length..], currentDirectory);
+
+                if (!Directory.Exists(gitDirectory) || !DirectoryContainsAnyFile(gitDirectory))
+                    throw new DirectoryNotFoundException("Git directory pointer target is missing or empty: " + gitDirectory);
+
+                return currentDirectory;
             }
 
             var parent = Path.GetDirectoryName(currentDirectory);
@@ -3263,6 +3278,35 @@ public class CSharpFormatTests
             }
 
             currentDirectory = parent;
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Git_repository_discovery_supports_worktree_pointer_files(bool absolutePath)
+    {
+        var root =
+            Path.Combine(Environment.CurrentDirectory, "artifacts", "git-directory-" + Guid.NewGuid().ToString("N"));
+
+        var worktree = Path.Combine(root, "worktree");
+        var gitDirectory = Path.Combine(root, "metadata");
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(worktree, "src"));
+            Directory.CreateDirectory(gitDirectory);
+            File.WriteAllText(Path.Combine(gitDirectory, "HEAD"), "ref: refs/heads/test\n");
+
+            File.WriteAllText(
+                Path.Combine(worktree, ".git"),
+                "gitdir: " + (absolutePath ? gitDirectory : Path.GetRelativePath(worktree, gitDirectory)) + "\n");
+
+            FindGitRepository(Path.Combine(worktree, "src", "Test.cs")).Should().Be(worktree);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
         }
     }
 
