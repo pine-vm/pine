@@ -4,6 +4,7 @@ using Pine.Core;
 using Pine.Core.CLI;
 using Pine.Core.Elm;
 using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.Testing;
 using Pine.Elm;
 using Pine.IntermediateVM;
 using System;
@@ -2062,7 +2063,7 @@ public class ParseElmModuleTextToPineValueTests
         var fromDotnetExpression =
             ElmValue.RenderAsElmExpression(fromDotnetOk).expressionString;
 
-        if (Testing.CompareStringsChunkwiseAndReportFirstDifference(
+        if (StringDiff.CompareStringsChunkwiseAndReportFirstDifference(
             expectedChunks: [responseAsExpression],
             actual: fromDotnetExpression) is { } firstDifference)
         {
@@ -2121,7 +2122,7 @@ public class ParseElmModuleTextToPineValueTests
              * Compare chunkwise to make it easier to maintain and adapt tests.
              * */
 
-            if (Testing.CompareStringsChunkwiseAndReportFirstDifference(
+            if (StringDiff.CompareStringsChunkwiseAndReportFirstDifference(
                 expectedExpressionStringChunks,
                 responseAsExpression) is { } firstDifference)
             {
@@ -2153,7 +2154,7 @@ public class ParseElmModuleTextToPineValueTests
             var fromDotnetExpression =
                 ElmValue.RenderAsElmExpression(fromDotnetOk).expressionString;
 
-            if (Testing.CompareStringsChunkwiseAndReportFirstDifference(
+            if (StringDiff.CompareStringsChunkwiseAndReportFirstDifference(
                 expectedExpressionStringChunks,
                 fromDotnetExpression) is { } firstDifference)
             {

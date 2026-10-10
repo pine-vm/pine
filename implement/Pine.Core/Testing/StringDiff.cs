@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 
-namespace Pine.Core;
+namespace Pine.Core.Testing;
 
 /// <summary>
 /// Helper functions to compare strings and render human-readable descriptions of the
 /// first difference found, for use in test assertions and snapshot comparisons.
 /// </summary>
-public static class Testing
+public static partial class StringDiff
 {
     /// <summary>
     /// Compares <paramref name="actual"/> against the concatenation of <paramref name="expectedChunks"/>,

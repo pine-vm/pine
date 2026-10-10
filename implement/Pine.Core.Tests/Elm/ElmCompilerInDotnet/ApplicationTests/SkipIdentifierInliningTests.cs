@@ -391,6 +391,6 @@ public class SkipIdentifierInliningTests
             string.Join("\n\n", bodies.Select((body, index) => $"Body {index} ({body.identifier}):\n{body.rendered}"));
 
         SnapshotRecorder.LogString(snapshot, name);
-        snapshot.Should().Be(SnapshotRecorder.ReadEmbeddedTrace(name));
+        snapshot.ShouldBeWithDiff(SnapshotRecorder.ReadEmbeddedTrace(name));
     }
 }

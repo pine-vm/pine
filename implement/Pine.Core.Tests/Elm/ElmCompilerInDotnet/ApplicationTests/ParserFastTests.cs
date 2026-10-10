@@ -515,7 +515,7 @@ public class ParserFastTests
 
         value.Should().Be(Integer(12));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 0
             BuildListCount: 0
@@ -535,7 +535,7 @@ public class ParserFastTests
 
         value.Should().Be(Integer(16));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 0
             BuildListCount: 0
@@ -555,7 +555,7 @@ public class ParserFastTests
 
         value.Should().Be(Integer(0));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 0
             BuildListCount: 0
@@ -577,7 +577,7 @@ public class ParserFastTests
 
         value.Should().Be(Integer(5));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 4
             BuildListCount: 1
@@ -597,7 +597,7 @@ public class ParserFastTests
 
         value.Should().Be(Integer(5));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 4
             BuildListCount: 1
@@ -617,7 +617,7 @@ public class ParserFastTests
 
         value.Should().Be(Integer(3));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 8
             BuildListCount: 5
@@ -681,7 +681,7 @@ public class ParserFastTests
         report1.LoopIterationCount.Should().BeGreaterThan(0);
         report2.LoopIterationCount.Should().BeGreaterThan(report1.LoopIterationCount);
 
-        PerformanceCountersFormatting.FormatCounts(report1).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report1).ShouldBeWithDiff(
             """
             InvocationCount: 2
             BuildListCount: 3
@@ -689,7 +689,7 @@ public class ParserFastTests
             InstructionCount: 849
             """);
 
-        PerformanceCountersFormatting.FormatCounts(report2).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report2).ShouldBeWithDiff(
             """
             InvocationCount: 2
             BuildListCount: 3

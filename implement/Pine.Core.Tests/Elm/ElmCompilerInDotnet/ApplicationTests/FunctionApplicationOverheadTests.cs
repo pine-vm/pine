@@ -320,7 +320,7 @@ public class FunctionApplicationOverheadTests
 
         value.Should().Be(ElmValue.Integer(11));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 2
             BuildListCount: 0
@@ -348,7 +348,7 @@ public class FunctionApplicationOverheadTests
 
         value.Should().Be(ElmValue.Integer(7));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 4
             BuildListCount: 4
@@ -374,7 +374,7 @@ public class FunctionApplicationOverheadTests
 
         value.Should().Be(ElmValue.Integer(12));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 3
             BuildListCount: 0
@@ -406,7 +406,7 @@ public class FunctionApplicationOverheadTests
             ElmValue.ListInstance(
                 [ElmValue.Integer(2), ElmValue.Integer(3), ElmValue.Integer(4)]));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 7
             BuildListCount: 3
@@ -487,7 +487,7 @@ public class FunctionApplicationOverheadTests
                 ElmValue.Integer(51),
                 ]));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 45
             BuildListCount: 166
@@ -742,7 +742,7 @@ public class FunctionApplicationOverheadTests
 
         value.Should().Be(ElmValue.Integer(15));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 2
             BuildListCount: 0
@@ -771,7 +771,7 @@ public class FunctionApplicationOverheadTests
 
         value.Should().Be(ElmValue.Integer(20));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 3
             BuildListCount: 0
@@ -814,7 +814,7 @@ public class FunctionApplicationOverheadTests
             ElmValue.ListInstance(
                 [expectedIncrementedList, expectedDoubledList]));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 41
             BuildListCount: 21
@@ -852,7 +852,7 @@ public class FunctionApplicationOverheadTests
             ElmValue.ListInstance(
                 [ElmValue.Integer(2), ElmValue.Integer(4), ElmValue.Integer(4)]));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 7
             BuildListCount: 3
@@ -897,7 +897,7 @@ public class FunctionApplicationOverheadTests
             ElmValue.ListInstance(
                 [expectedIncDoubleList, expectedDoubleIncList]));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 41
             BuildListCount: 21
@@ -930,7 +930,7 @@ public class FunctionApplicationOverheadTests
             ElmValue.ListInstance(
                 [ElmValue.Integer(2), ElmValue.Integer(3), ElmValue.Integer(4)]));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 7
             BuildListCount: 3
@@ -971,7 +971,7 @@ public class FunctionApplicationOverheadTests
             ElmValue.ListInstance(
                 [expectedIncrementedList, expectedDoubledList]));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 41
             BuildListCount: 21

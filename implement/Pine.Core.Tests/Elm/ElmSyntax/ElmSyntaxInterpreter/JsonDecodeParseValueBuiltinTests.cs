@@ -341,7 +341,7 @@ public class JsonDecodeParseValueBuiltinTests
         AssertBuiltinMatchesElm(longString);
 
         CountersSnapshotWithBuiltin(longString)
-            .Should().Be(CountersSnapshotWithBuiltin(shortString));
+            .ShouldBeWithDiff(CountersSnapshotWithBuiltin(shortString));
     }
 
     [Fact]
@@ -354,7 +354,7 @@ public class JsonDecodeParseValueBuiltinTests
         AssertBuiltinMatchesElm(longList);
 
         CountersSnapshotWithBuiltin(longList)
-            .Should().Be(CountersSnapshotWithBuiltin(shortList));
+            .ShouldBeWithDiff(CountersSnapshotWithBuiltin(shortList));
     }
 
     [Fact]
@@ -367,6 +367,6 @@ public class JsonDecodeParseValueBuiltinTests
         AssertBuiltinMatchesElm(longInt);
 
         CountersSnapshotWithBuiltin(longInt)
-            .Should().Be(CountersSnapshotWithBuiltin(shortInt));
+            .ShouldBeWithDiff(CountersSnapshotWithBuiltin(shortInt));
     }
 }

@@ -131,7 +131,7 @@ public class ElmSyntaxInterpreterPerformanceCountersTests
 
         value.Should().Be("6");
 
-        snapshot.Should().Be(
+        snapshot.ShouldBeWithDiff(
             """
             InstructionLoopCount: 28
             DirectFunctionApplicationCount: 4
@@ -152,7 +152,7 @@ public class ElmSyntaxInterpreterPerformanceCountersTests
 
         value.Should().Be("[ 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 ]");
 
-        snapshot.Should().Be(
+        snapshot.ShouldBeWithDiff(
             """
             InstructionLoopCount: 380
             DirectFunctionApplicationCount: 43
@@ -173,7 +173,7 @@ public class ElmSyntaxInterpreterPerformanceCountersTests
 
         value.Should().Be("55");
 
-        snapshot.Should().Be(
+        snapshot.ShouldBeWithDiff(
             """
             InstructionLoopCount: 254
             DirectFunctionApplicationCount: 22
@@ -200,7 +200,7 @@ public class ElmSyntaxInterpreterPerformanceCountersTests
 
         value.Should().Be("[ 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 ]");
 
-        snapshot.Should().Be(
+        snapshot.ShouldBeWithDiff(
             """
             InstructionLoopCount: 1_241
             DirectFunctionApplicationCount: 161
@@ -223,7 +223,7 @@ public class ElmSyntaxInterpreterPerformanceCountersTests
         // for the five items that pass the runtime predicate. The other counters
         // stay close to the all-positive variant because the same number of
         // recursive calls and predicate checks are performed in both cases.
-        snapshot.Should().Be(
+        snapshot.ShouldBeWithDiff(
             """
             InstructionLoopCount: 1_136
             DirectFunctionApplicationCount: 151

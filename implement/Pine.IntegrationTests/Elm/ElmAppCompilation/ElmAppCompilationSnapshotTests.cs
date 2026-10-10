@@ -5,6 +5,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.Elm019;
 using Pine.Core.Files;
 using Pine.Core.IO;
+using Pine.Core.Testing;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -478,11 +479,11 @@ public class ElmAppCompilationSnapshotTests
         string expectedText,
         string pathText)
     {
-        var diffIndex = Testing.GetFirstStringDifferenceIndex(actualText, expectedText);
+        var diffIndex = StringDiff.GetFirstStringDifferenceIndex(actualText, expectedText);
 
         return
             "Text contents in file " + pathText + " differ at char index " + diffIndex + ":\n" +
-            Testing.RenderCoreStringDifference(
+            StringDiff.RenderCoreStringDifference(
                 actualText: actualText,
                 expectedText: expectedText,
                 diffIndex: diffIndex);

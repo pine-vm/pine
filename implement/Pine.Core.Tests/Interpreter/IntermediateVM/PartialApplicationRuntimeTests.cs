@@ -468,7 +468,7 @@ public class PartialApplicationRuntimeTests
                 DirectSaturatedApplicationCount: 7,
                 PartialApplicationMaterializationCount: 8);
 
-        PerformanceCountersFormatting.FormatCounts(counters).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(counters).ShouldBeWithDiff(
             """
             InvocationCount: 1
             BuildListCount: 2

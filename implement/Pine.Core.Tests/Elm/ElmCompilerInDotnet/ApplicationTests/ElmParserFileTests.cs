@@ -238,7 +238,7 @@ public class ElmParserFileTests
 
         result.valueAsExpression.expressionString.Should().StartWith("Ok ");
 
-        result.counts.Should().Be(
+        result.counts.ShouldBeWithDiff(
             """
             InvocationCount: 184
             BuildListCount: 328
@@ -256,7 +256,7 @@ public class ElmParserFileTests
         result.valueAsExpression.expressionString.Should().Be(
             ExpectedImportsModuleExpression);
 
-        result.counts.Should().Be(
+        result.counts.ShouldBeWithDiff(
             """
             InvocationCount: 238
             BuildListCount: 411

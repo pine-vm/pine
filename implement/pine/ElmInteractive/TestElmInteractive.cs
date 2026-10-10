@@ -5,6 +5,7 @@ using Pine.Core.CLI;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Files;
 using Pine.Core.Json;
+using Pine.Core.Testing;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -317,7 +318,7 @@ public class TestElmInteractive
                                                         "Expected response but got null as display text");
                                             }
 
-                                            if (Testing.CompareStringsChunkwiseAndReportFirstDifference(
+                                            if (StringDiff.CompareStringsChunkwiseAndReportFirstDifference(
                                         [expectedResponse], responseDisplayText) is { } firstDifference)
                                             {
                                                 var errorText =

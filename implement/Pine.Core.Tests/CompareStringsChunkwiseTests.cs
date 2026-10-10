@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Pine.Core.Testing;
 using Xunit;
 
 namespace Pine.Core.Tests;
@@ -9,7 +10,7 @@ public class CompareStringsChunkwiseTests
     public void Returns_null_when_strings_are_equal()
     {
         var result =
-            Testing.CompareStringsChunkwiseAndReportFirstDifference(
+            StringDiff.CompareStringsChunkwiseAndReportFirstDifference(
                 expectedChunks: ["hello world"],
                 actual: "hello world");
 
@@ -20,7 +21,7 @@ public class CompareStringsChunkwiseTests
     public void Returns_null_when_multiple_chunks_match()
     {
         var result =
-            Testing.CompareStringsChunkwiseAndReportFirstDifference(
+            StringDiff.CompareStringsChunkwiseAndReportFirstDifference(
                 expectedChunks: ["hello ", "world"],
                 actual: "hello world");
 
@@ -31,7 +32,7 @@ public class CompareStringsChunkwiseTests
     public void Reports_difference_at_start_of_single_chunk()
     {
         var result =
-            Testing.CompareStringsChunkwiseAndReportFirstDifference(
+            StringDiff.CompareStringsChunkwiseAndReportFirstDifference(
                 expectedChunks: ["expected text"],
                 actual: "actual text here");
 
@@ -55,7 +56,7 @@ public class CompareStringsChunkwiseTests
          */
 
         var result =
-            Testing.CompareStringsChunkwiseAndReportFirstDifference(
+            StringDiff.CompareStringsChunkwiseAndReportFirstDifference(
                 expectedChunks: ["the quick brown fox"],
                 actual: "the quick green fox");
 
@@ -79,7 +80,7 @@ public class CompareStringsChunkwiseTests
          */
 
         var result =
-            Testing.CompareStringsChunkwiseAndReportFirstDifference(
+            StringDiff.CompareStringsChunkwiseAndReportFirstDifference(
                 expectedChunks: ["hello world"],
                 actual: "hello");
 
@@ -103,7 +104,7 @@ public class CompareStringsChunkwiseTests
          */
 
         var result =
-            Testing.CompareStringsChunkwiseAndReportFirstDifference(
+            StringDiff.CompareStringsChunkwiseAndReportFirstDifference(
                 expectedChunks: ["first-", "second"],
                 actual: "first-SECOND");
 
@@ -130,7 +131,7 @@ public class CompareStringsChunkwiseTests
          */
 
         var result =
-            Testing.CompareStringsChunkwiseAndReportFirstDifference(
+            StringDiff.CompareStringsChunkwiseAndReportFirstDifference(
                 expectedChunks: ["hello"],
                 actual: "hello extra");
 

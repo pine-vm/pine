@@ -1414,7 +1414,7 @@ public class KernelJsonFunctionTests
             OkOf(
                 new ElmValue.ElmRecord([("age", Integer(42)), ("height", Integer(180)), ("name", String("tom"))])));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 38
             BuildListCount: 64
@@ -1436,7 +1436,7 @@ public class KernelJsonFunctionTests
 
         value.Should().Be(OkOf(String("v3-data")));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 13
             BuildListCount: 36
@@ -1493,7 +1493,7 @@ public class KernelJsonFunctionTests
         var formattedCounts =
             PerformanceCountersFormatting.FormatCounts(report);
 
-        formattedCounts.Should().Be(
+        formattedCounts.ShouldBeWithDiff(
             """
             InvocationCount: 20
             BuildListCount: 44
@@ -1516,7 +1516,7 @@ public class KernelJsonFunctionTests
         var formattedCounts =
             PerformanceCountersFormatting.FormatCounts(report);
 
-        formattedCounts.Should().Be(
+        formattedCounts.ShouldBeWithDiff(
             """
             InvocationCount: 46
             BuildListCount: 113
@@ -1539,7 +1539,7 @@ public class KernelJsonFunctionTests
 
         value.Should().Be(OkOf(String("tom")));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 12
             BuildListCount: 43
@@ -1560,7 +1560,7 @@ public class KernelJsonFunctionTests
 
         value.Should().Be(OkOf(Integer(42)));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 12
             BuildListCount: 43
@@ -1623,7 +1623,7 @@ public class KernelJsonFunctionTests
 
         value.Should().Be(JustOf(Integer(42)));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 20
             BuildListCount: 55
@@ -1643,7 +1643,7 @@ public class KernelJsonFunctionTests
 
         value.Should().Be(Integer(2));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 16
             BuildListCount: 46
@@ -1691,7 +1691,7 @@ public class KernelJsonFunctionTests
                     ElmList(Integer(1), Integer(2)),
                     ElmList(Integer(3), Integer(4)))));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 26
             BuildListCount: 55
@@ -1736,7 +1736,7 @@ public class KernelJsonFunctionTests
 
         value.Should().Be(OkOf(obj));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 12
             BuildListCount: 40
