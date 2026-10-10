@@ -136,6 +136,9 @@ public sealed record ElmTestProfileReport(
     IReadOnlyList<ElmTestExpressionProfile> Expressions,
     IReadOnlyDictionary<string, ElmTestProfileValueNode> Values)
 {
+    /// <summary>Full paths of all selected runnable tests in discovery order; duplicate paths are retained.</summary>
+    public IReadOnlyList<string> SelectedTests { get; init; } = [];
+
     /// <summary>Project, filter, seed and resolution metadata needed to interpret the run.</summary>
     public IReadOnlyDictionary<string, string> Metadata { get; init; } = new Dictionary<string, string>();
 
@@ -158,12 +161,12 @@ public sealed class ElmTestInstrumentationStoppedException(string message) : Exc
 /// <summary>A discovered test and a filter that unambiguously selects it.</summary>
 public sealed record ElmTestSelectionSuggestion(ListedTest Test, string Filter);
 
-/// <summary>Selection diagnostics when profiling cannot execute exactly one runnable Elm test.</summary>
+/// <summary>Selection diagnostics when profiling cannot execute any runnable Elm tests.</summary>
 public sealed class ElmTestInstrumentationSelectionException(
     int foundCount, int remainingCount, string? filter,
     IReadOnlyList<ElmTestSelectionSuggestion> suggestions,
     bool suggestionsFromRemaining = true)
-    : Exception("Profiling requires exactly one runnable Elm test.")
+    : Exception("Profiling requires at least one runnable Elm test.")
 {
     /// <summary>Number of nonempty test entries discovered before selection.</summary>
     public int FoundCount { get; } = foundCount;
@@ -284,8 +287,11 @@ public sealed class ElmTestInstrumentation : IDisposable
 
     private bool _stopAnnounced;
 
-    /// <summary>Full path of the selected test after discovery, or null before selection.</summary>
+    /// <summary>Full path when exactly one runnable test is selected, or null otherwise.</summary>
     public string? SelectedTest { get; private set; }
+
+    /// <summary>Full paths of all selected runnable tests in discovery order.</summary>
+    public IReadOnlyList<string> SelectedTests { get; private set; } = [];
 
     /// <summary>Run metadata populated during discovery and copied into the saved report.</summary>
     public IDictionary<string, string> Metadata { get; } = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -350,7 +356,14 @@ public sealed class ElmTestInstrumentation : IDisposable
     }
 
     /// <summary>Records the selected test's full path for the saved report.</summary>
-    public void SelectTest(string path) => SelectedTest = path;
+    public void SelectTest(string path) => SelectTests([path]);
+
+    /// <summary>Records the selected runnable tests' full paths for the aggregate report.</summary>
+    public void SelectTests(IReadOnlyList<string> paths)
+    {
+        SelectedTests = paths.ToArray();
+        SelectedTest = paths.Count is 1 ? paths[0] : null;
+    }
 
     /// <summary>Sets the completed run's outcome and freezes elapsed execution time.</summary>
     public void SetOutcome(string outcome)
@@ -698,6 +711,7 @@ public sealed class ElmTestInstrumentation : IDisposable
         return
             new(2, Options, SelectedTest, GetSummary(), samples, expressions, values)
             {
+                SelectedTests = SelectedTests,
                 Metadata = new Dictionary<string, string>(Metadata, StringComparer.Ordinal),
                 DroppedSamples = _droppedSamples,
                 LoopSites = loops,

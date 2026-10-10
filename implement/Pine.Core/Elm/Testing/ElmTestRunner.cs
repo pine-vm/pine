@@ -512,7 +512,7 @@ public static class ElmTestRunner
         {
             var remaining = discoveredTests.Where(test => test.Kind is not DiscoveredTestKind.EmptyGroup).ToArray();
 
-            if (remaining.Length != 1 || remaining[0].Kind is not DiscoveredTestKind.Runnable)
+            if (!listTests && !remaining.Any(test => test.Kind is DiscoveredTestKind.Runnable))
             {
                 throw new ElmTestInstrumentationSelectionException(
                     allFound.Length,
@@ -524,8 +524,11 @@ public static class ElmTestRunner
                     ]);
             }
 
-            discoveredTests = [remaining[0]];
-            instrumentation.SelectTest(ToListedTest(discoveredTests[0]).FullPath);
+            instrumentation.SelectTests(
+                [
+                .. remaining.Where(test => test.Kind is DiscoveredTestKind.Runnable).Select(
+                    test => ToListedTest(test).FullPath)
+                ]);
         }
 
         if (listTests)
@@ -555,6 +558,23 @@ public static class ElmTestRunner
             completedTests =
                 [.. discoveredTests.Select(test => RunTest(test, pineVm, parseCache))];
         }
+        else if (instrumentation is { RecordDiagnostics: true })
+        {
+            var profiledTests = new List<CompletedTest>(discoveredTests.Count);
+
+            foreach (var test in discoveredTests)
+            {
+                using var executionScope =
+                    instrumentation.EnterScope("execution", ToListedTest(test).FullPath, ExactFilter(test));
+
+                // Compiled literals and invocation results can retain evaluated state: never share execution caches between profiles.
+                var testCaches = new PineVMSharedCaches();
+                var testVm = instrumentation.CreateVm(new ConcurrentInvocationCache(), testCaches);
+                profiledTests.Add(RunTest(test, testVm, testCaches.ParsedExpressions));
+            }
+
+            completedTests = profiledTests;
+        }
         else
         {
             var sharedInvocationCache = new ConcurrentInvocationCache();
@@ -562,8 +582,7 @@ public static class ElmTestRunner
             var completedTestsByIndex = new CompletedTest[discoveredTests.Count];
             var nextTestIndex = -1;
 
-            var workerCount =
-                Math.Min(instrumentation is { RecordDiagnostics: true } ? 1 : workers, discoveredTests.Count);
+            var workerCount = Math.Min(workers, discoveredTests.Count);
 
             pineVmFactory ??= CreatePineVm;
 

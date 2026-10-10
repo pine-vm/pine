@@ -50,11 +50,11 @@ internal sealed record TestBudgetOptions(
     {
         var options =
             new TestBudgetOptions(
-                new("--budget") { Description = "Shortcut setting both invocation and loop budgets; explicit per-kind options override it. Counts accept underscores and SI units k/M/G." },
-                new("--invocation-budget") { Description = "Command-wide VM invocation budget, including preparation. Counts accept underscores and SI units k/M/G." },
-                new("--loop-budget") { Description = "Command-wide backward-jump iteration budget, including preparation. Counts accept underscores and SI units k/M/G." },
-                new("--timeout") { Description = "Cooperative wall-clock timeout in seconds, including preparation. Integer times accept underscores and ms/s/min/h units." },
-                new("--max-stack-depth") { Description = "VM stack-depth safety limit. Counts accept underscores and SI units k/M/G.", DefaultValueFactory = _ => 100_000 });
+                new("--budget") { Description = "Shortcut setting both invocation and loop budgets; explicit per-kind options override it." },
+                new("--invocation-budget") { Description = "Command-wide VM invocation budget, including preparation." },
+                new("--loop-budget") { Description = "Command-wide backward-jump iteration budget, including preparation." },
+                new("--timeout") { Description = "Cooperative wall-clock timeout in seconds, including preparation." },
+                new("--max-stack-depth") { Description = "VM stack-depth safety limit.", DefaultValueFactory = _ => 100_000 });
 
         foreach (var option in new Option[] { options.Budget, options.Invocations, options.Loops, options.Timeout, options.StackDepth })
         {

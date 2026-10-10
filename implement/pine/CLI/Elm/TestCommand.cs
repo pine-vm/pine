@@ -31,7 +31,7 @@ public static class TestCommand
                 Compile and run Elm tests.
 
                 Investigating a hang or expensive computation? Use:
-                  pine elm test profile <project> --filter "<single test path>" --budget 10000
+                  pine elm test profile <project> --filter "<test path or pattern>" --budget 10000
                 """);
 
         var budgets = TestBudgetOptions.AddTo(command);
@@ -41,7 +41,7 @@ public static class TestCommand
         var profile =
             new Command(
                 "profile",
-                "Profile one Elm test and see where computation time is spent. All test declarations are prepared before --filter is applied.");
+                "Profile selected Elm tests in isolation and see where computation time is spent.");
 
         ConfigureCommonCommand(profile, instrumented: true, budgets);
         command.Add(profile);
@@ -168,7 +168,8 @@ public static class TestCommand
                 Description =
                 "Number of worker threads. Defaults to " +
                 CommandLineInterface.FormatIntegerForDisplay(DefaultWorkerCount()) +
-                "."
+                "." +
+                (instrumented ? " Profiling always executes tests serially with fresh VM and cache state." : "")
             };
 
         NumericOptionParsing.SetIntegerParser(
@@ -185,14 +186,14 @@ public static class TestCommand
             new Option<uint?>("--seed")
             {
                 Description =
-                "Initial unsigned 32-bit random seed for fuzz tests. Defaults to a new random seed. Integers accept internal underscores."
+                "Initial unsigned 32-bit random seed for fuzz tests. Defaults to a new random seed."
             };
 
         var fuzzOption =
             new Option<uint>("--fuzz")
             {
                 Description =
-                "Number of iterations per fuzz test. Must be positive. Defaults to 100. Counts accept underscores and SI units k/M/G.",
+                "Number of iterations per fuzz test. Must be positive. Defaults to 100.",
                 DefaultValueFactory = _ => 100,
             };
 
@@ -677,7 +678,7 @@ public static class TestCommand
             writer.WriteLine(
                 "All test declarations are prepared before filtering; --filter cannot guarantee bypassing preparation.");
 
-            writer.WriteLine("Once preparation completes, profile will suggest an exact single-test filter if needed.");
+            writer.WriteLine("Once preparation completes, profile can execute any number of selected runnable tests.");
         }
 
         writer.Flush();
@@ -691,7 +692,7 @@ public static class TestCommand
     {
         console.Write(
             new Text(
-                "Cannot profile: exactly one runnable Elm test must remain.\n",
+                "Cannot profile: at least one runnable Elm test must remain.\n",
                 useColor ? TestCommandTheme.TodoHeadline : Style.Plain));
 
         var writer = console.Profile.Out.Writer;

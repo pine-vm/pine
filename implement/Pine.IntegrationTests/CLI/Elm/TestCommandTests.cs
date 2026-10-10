@@ -25,19 +25,23 @@ public class TestCommandTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Numeric_help_documents_count_and_time_input_syntax(bool profile)
+    public void Numeric_help_documents_count_and_time_options(bool profile)
     {
         var output = new StringWriter();
 
         TestCommand.Create().Parse(profile ? ["profile", "--help"] : ["--help"])
             .Invoke(new InvocationConfiguration { Output = output }).Should().Be(0);
 
-        output.ToString().Should().Contain("underscores").And.Contain("k/M/G").And.Contain("ms/s/min/h");
+        output.ToString().Should().Contain("--seed").And.Contain("unsigned 32-bit random seed")
+            .And.Contain("--fuzz").And.Contain("Number of iterations per fuzz test")
+            .And.Contain("--budget").And.Contain("--invocation-budget").And.Contain("--loop-budget")
+            .And.Contain("--timeout").And.Contain("wall-clock timeout in seconds");
 
         if (profile)
         {
             output.ToString().Should().Contain("backward-jump destinations").And.Contain("--no-inlining")
-                .And.Contain("--no-application-fast-paths");
+                .And.Contain("--no-application-fast-paths").And.Contain("--interval")
+                .And.Contain("Live status/stack sampling interval in seconds");
         }
     }
 
@@ -932,21 +936,16 @@ public class TestCommandTests
                     project,
                     console: console,
                     errorConsole: console,
+                    colorMode: FormatCommandColorMode.Never,
                     offline: true,
                     instrumentation: profile),
                 console).Should().Be(0, output.ToString());
 
             output.ToString().Should().Contain("Running 1 test").And.Contain("Effective execution limits:");
 
-            output.ToString().Should().Contain("Phase: preparation; work origin:")
-                .And.Contain("Phase: execution; work origin:")
-                .And.Contain("DirectInterpreterInvocationCount:")
-                .And.Contain("DirectInterpreterExpressionCount:")
-                .And.Contain("BuildListItemCount:")
-                .And.Contain("DeferredTemplateValueMaterializationCount:")
-                .And.Contain("ExpressionTemplatePlanParseCount:")
-                .And.Contain("DeferredTemplateValueAllocationCount:")
-                .And.Contain("TemplateDirectInvocationCount:")
+            output.ToString().Should().Contain("Phase: preparation; context:")
+                .And.Contain("Phase: execution; context:")
+                .And.Contain("Overall run stats (excluding serialization).")
                 .And.NotContain("CurriedFunction")
                 .And.NotContain("PartialApplication")
                 .And.NotContain("DirectSaturatedApplication");
@@ -961,8 +960,17 @@ public class TestCommandTests
             var summary = json.RootElement.GetProperty("Summary");
             var phases = summary.GetProperty("CountersByPhase");
 
+            var counters = summary.GetProperty("Counters");
+
+            output.ToString().Should().Contain(
+                "invocations: " + CommandLineInterface.FormatIntegerForDisplay(counters.GetProperty("InvocationCount").GetInt64()) +
+                "; loops: " + CommandLineInterface.FormatIntegerForDisplay(counters.GetProperty("LoopIterationCount").GetInt64()) +
+                "; instructions: " + CommandLineInterface.FormatIntegerForDisplay(counters.GetProperty("InstructionCount").GetInt64()));
+
             foreach (var property in typeof(PerformanceCounters).GetProperties())
             {
+                output.ToString().Should().NotContain(property.Name + ":");
+
                 var preparation =
                     phases.GetProperty("preparation").GetProperty("Total").GetProperty(property.Name).GetInt64();
 
@@ -1072,13 +1080,11 @@ public class TestCommandTests
         }
     }
 
-    [Theory]
-    [InlineData(null, 3, "first")]
-    [InlineData("chosen", 2, "first")]
-    [InlineData("missing", 0, "first")]
-    public void Profile_selection_rejection_explains_counts_and_offers_an_exact_followup(
-        string? filter, int remaining, string selectedName)
+    [Fact]
+    public void Profile_selection_rejection_explains_counts_and_offers_an_exact_followup()
     {
+        const string filter = "missing";
+
         var project =
             CreateTestProject(
                 """
@@ -1111,14 +1117,9 @@ public class TestCommandTests
 
             var text = output.ToString();
 
-            text.Should().Contain("Tests found: 3").And.Contain("Tests remaining after filter: " + remaining)
-                .And.Contain("--filter '=tests/Tests.elm/root/chosen/" + selectedName + "'");
-
-            if (filter == "chosen")
-                text.Should().NotContain("--filter '=tests/Tests.elm/root/other'");
-
-            if (remaining == 0)
-                text.Should().Contain("No tests remain");
+            text.Should().Contain("Tests found: 3").And.Contain("Tests remaining after filter: 0")
+                .And.Contain("--filter '=tests/Tests.elm/root/chosen/first'")
+                .And.Contain("No tests remain");
 
             var (nextConsole, nextOutput) = CreateConsole(AnsiSupport.No);
 
@@ -1161,13 +1162,14 @@ public class TestCommandTests
         {
             TestProfileCommand.Execute(
                 project,
-                null,
+                "missing",
                 new() { OutputPath = Path.Combine(project, "profile.json") },
                 profile => TestCommand.Execute(
                     project,
                     console: console,
                     errorConsole: console,
                     offline: true,
+                    filter: "missing",
                     instrumentation: profile),
                 console).Should().Be(1);
 
@@ -1406,8 +1408,10 @@ public class TestCommandTests
         }
     }
 
-    [Fact]
-    public void Instrument_requires_exactly_one_runnable_test_before_execution()
+    [Theory]
+    [InlineData(null, 3)]
+    [InlineData("group", 2)]
+    public void Profile_executes_all_tests_selected_by_the_filter(string? filter, int count)
     {
         var project =
             CreateTestProject(
@@ -1415,7 +1419,11 @@ public class TestCommandTests
                 module Tests exposing (suite)
                 import Test
                 import Expect
-                suite = Test.describe "group" [ Test.test "first" (\_ -> Expect.pass), Test.test "second" (\_ -> Expect.pass) ]
+                suite =
+                    Test.concat
+                        [ Test.describe "group" [ Test.test "first" (\_ -> Expect.pass), Test.test "second" (\_ -> Expect.pass) ]
+                        , Test.test "other" (\_ -> Expect.pass)
+                        ]
                 """);
 
         var (console, output) = CreateConsole(AnsiSupport.No);
@@ -1425,7 +1433,7 @@ public class TestCommandTests
             var result =
                 TestProfileCommand.Execute(
                     project,
-                    "group",
+                    filter,
                     new()
                     {
                         OutputPath = Path.Combine(project, "profile.json"),
@@ -1434,17 +1442,215 @@ public class TestCommandTests
                         project,
                         console: console,
                         errorConsole: console,
-                        filter: "group",
+                        filter: filter,
                         offline: true,
                         instrumentation: profile),
                     console);
 
-            result.Should().Be(1);
+            result.Should().Be(0, output.ToString());
 
-            output.ToString().Should().Contain("exactly one runnable Elm test")
-                .And.Contain("Tests found: 2").And.Contain("Tests remaining after filter: 2")
-                .And.Contain("pine elm test profile").And.Contain("--filter '=tests/Tests.elm/group/first'")
-                .And.NotContain("Running 2 tests");
+            output.ToString().Should().Contain("Running " + count + " tests")
+                .And.Contain("TEST RUN PASSED").And.Contain("metrics aggregate all selected tests");
+
+            using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(project, "profile.json")));
+            json.RootElement.GetProperty("SelectedTests").GetArrayLength().Should().Be(count);
+            json.RootElement.GetProperty("SelectedTest").ValueKind.Should().Be(JsonValueKind.Null);
+        }
+        finally
+        {
+            Directory.Delete(project, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Profile_counters_are_deterministic_and_additive_across_isolated_unit_and_fuzz_tests(bool disableCache)
+    {
+        var project =
+            CreateTestProject(
+                """
+                module Tests exposing (suite)
+                import Test
+                import Fuzz
+                import Expect
+                sum n = sumHelp n 0
+                sumHelp n total = if n <= 0 then total else sumHelp (n - 1) (total + n)
+                suite =
+                    Test.describe "group"
+                        [ Test.test "first" (\_ -> Expect.equal 5050 (sum 100))
+                        , Test.test "second" (\_ -> Expect.equal 5050 (sum 100))
+                        , Test.fuzz (Fuzz.intRange 1 10) "property" (\n -> Expect.equal (n * (n + 1) // 2) (sum n))
+                        ]
+                """);
+
+        try
+        {
+            ElmTestProfileReport Run(
+                string? filter,
+                int workers,
+                bool listTests = false,
+                int? invocationBudget = null,
+                int expectedExitCode = 0)
+            {
+                var (console, output) = CreateConsole(AnsiSupport.No);
+                var path = Path.Combine(project, "profile.json");
+
+                TestProfileCommand.Execute(
+                    project,
+                    filter,
+                    new()
+                    {
+                        OutputPath = path,
+                        Instrumentation =
+                        new()
+                        {
+                            SnapshotInterval = TimeSpan.Zero,
+                            DisableInvocationCache = disableCache,
+                            InvocationBudget = invocationBudget,
+                        },
+                    },
+                    instrumentation => TestCommand.Execute(
+                        project,
+                        console: console,
+                        errorConsole: console,
+                        colorMode: FormatCommandColorMode.Never,
+                        filter: filter,
+                        listTests: listTests,
+                        workers: workers,
+                        offline: true,
+                        seed: 42,
+                        fuzz: 5,
+                        instrumentation: instrumentation),
+                    console).Should().Be(expectedExitCode, output.ToString());
+
+                return JsonSerializer.Deserialize<ElmTestProfileReport>(File.ReadAllText(path))!;
+            }
+
+            var all = Run(null, workers: 1);
+            var repeated = Run("group", workers: 4);
+            repeated.Summary.Counters.Should().Be(all.Summary.Counters);
+            repeated.Summary.CountersByPhase.Should().BeEquivalentTo(all.Summary.CountersByPhase);
+            repeated.Expressions.Should().BeEquivalentTo(all.Expressions);
+            repeated.SelectedTests.Should().Equal(all.SelectedTests);
+
+            var preparation = Run(null, workers: 4, listTests: true);
+            preparation.Summary.CountersByPhase["execution"].Total.Should().Be(default(PerformanceCounters));
+            preparation.Summary.Counters.Should().Be(all.Summary.CountersByPhase["preparation"].Total);
+            preparation.SelectedTests.Should().HaveCount(3);
+
+            var selected = new[] { Run("first", 4), Run("second", 1), Run("property", 4) };
+
+            var executionSum =
+                selected.Aggregate(
+                    default(PerformanceCountersByOrigin),
+                    (sum, report) => PerformanceCountersByOrigin.Add(sum, report.Summary.CountersByPhase["execution"]));
+
+            all.Summary.CountersByPhase["execution"].Should().Be(executionSum);
+            all.Summary.Counters.Should().Be(PerformanceCounters.Add(preparation.Summary.Counters, executionSum.Total));
+            executionSum.Total.InstructionCount.Should().BeGreaterThan(0);
+
+            selected[0].Summary.CountersByPhase["execution"].Should().Be(
+                selected[1].Summary.CountersByPhase["execution"]);
+
+            foreach (var report in selected)
+            {
+                report.SelectedTests.Should().ContainSingle().Which.Should().Be(report.SelectedTest);
+                report.Summary.CountersByPhase["preparation"].Should().Be(all.Summary.CountersByPhase["preparation"]);
+            }
+
+            var preparationExpressions = preparation.Expressions.ToDictionary(row => row.Hash, StringComparer.Ordinal);
+
+            var singleExpressions =
+                selected.Select(
+                    report => report.Expressions.ToDictionary(row => row.Hash, StringComparer.Ordinal))
+                .ToArray();
+
+            foreach (var row in all.Expressions)
+            {
+                preparationExpressions.TryGetValue(row.Hash, out var prepared);
+
+                row.Invocations.Should().Be(
+                    singleExpressions.Sum(rows => rows.GetValueOrDefault(row.Hash)?.Invocations ?? 0) -
+                    2 * (prepared?.Invocations ?? 0));
+
+                row.Instructions.Should().Be(
+                    singleExpressions.Sum(rows => rows.GetValueOrDefault(row.Hash)?.Instructions ?? 0) -
+                    2 * (prepared?.Instructions ?? 0));
+
+                row.LoopIterations.Should().Be(
+                    singleExpressions.Sum(rows => rows.GetValueOrDefault(row.Hash)?.LoopIterations ?? 0) -
+                    2 * (prepared?.LoopIterations ?? 0));
+            }
+
+            var budget =
+                checked((int)(preparation.Summary.Counters.InvocationCount +
+                    selected[0].Summary.CountersByPhase["execution"].Total.InvocationCount));
+
+            var stopped = Run(null, workers: 4, invocationBudget: budget, expectedExitCode: 2);
+            stopped.SelectedTests.Should().Equal(all.SelectedTests);
+            stopped.Summary.Outcome.Should().Be("stopped");
+            stopped.Summary.Phase.Should().Be("execution");
+            stopped.Summary.Context.Should().EndWith("/second");
+            stopped.Summary.Counters.InvocationCount.Should().Be(budget + 1);
+            stopped.Summary.CountersByPhase["preparation"].Should().Be(all.Summary.CountersByPhase["preparation"]);
+        }
+        finally
+        {
+            Directory.Delete(project, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Profile_preserves_TODOs_and_continues_after_a_failed_test_with_duplicate_paths()
+    {
+        var project =
+            CreateTestProject(
+                """
+                module Tests exposing (first, second, third)
+                import Test
+                import Expect
+                first = Test.test "same" (\_ -> Expect.fail "expected failure")
+                second = Test.test "same" (\_ -> Expect.pass)
+                third =
+                    Test.describe "group"
+                        [ Test.todo "pending"
+                        , Test.test "last" (\_ -> Expect.pass)
+                        ]
+                """);
+
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            TestProfileCommand.Execute(
+                project,
+                null,
+                new() { OutputPath = Path.Combine(project, "profile.json") },
+                profile => TestCommand.Execute(
+                    project,
+                    console: console,
+                    errorConsole: console,
+                    colorMode: FormatCommandColorMode.Never,
+                    offline: true,
+                    workers: 4,
+                    instrumentation: profile),
+                console).Should().Be(1);
+
+            output.ToString().Should().Contain("Running 4 tests").And.Contain("expected failure")
+                .And.Contain("Passed:   2").And.Contain("Failed:   1").And.Contain("Todo:     1");
+
+            var report =
+                JsonSerializer.Deserialize<ElmTestProfileReport>(File.ReadAllText(Path.Combine(project, "profile.json")))!;
+
+            report.SelectedTests.Should().Equal(
+                "tests/Tests.elm/same",
+                "tests/Tests.elm/same",
+                "tests/Tests.elm/group/last");
+
+            report.Summary.Context.Should().EndWith("/last");
+            report.Summary.Outcome.Should().Be("failed");
+            report.Summary.CountersByPhase["execution"].Total.InstructionCount.Should().BeGreaterThan(0);
         }
         finally
         {

@@ -1,6 +1,5 @@
 using Pine.Core.CLI;
 using Pine.Core.Elm.Testing;
-using Pine.Core.Interpreter.IntermediateVM;
 using Spectre.Console;
 using System;
 using System.CommandLine;
@@ -208,6 +207,10 @@ public static class TestProfileCommand
             "Profiling prepares all test declarations before filtering; no --filter guarantees bypassing preparation.",
             s_mutedStyle);
 
+        Write(
+            "Selected tests execute serially with fresh VM and cache state per test; reported metrics aggregate all selected tests.",
+            s_mutedStyle);
+
         if (settings.Instrumentation.InvocationBudget is null &&
             settings.Instrumentation.LoopBudget is null &&
             settings.Instrumentation.Timeout is null)
@@ -236,7 +239,7 @@ public static class TestProfileCommand
             console.Profile.Out.Writer.Flush();
         }
 
-        void Stats(ElmTestProfileSummary summary, string heading)
+        void WriteStats(ElmTestProfileSummary summary, string heading)
         {
             Write(
                 heading + (summary.StopReason is { } reason ? " " + reason : ""),
@@ -249,9 +252,6 @@ public static class TestProfileCommand
                 $"invocations: {CommandLineInterface.FormatIntegerForDisplay(summary.Counters.InvocationCount)}; " +
                 $"loops: {CommandLineInterface.FormatIntegerForDisplay(summary.Counters.LoopIterationCount)}; " +
                 $"instructions: {CommandLineInterface.FormatIntegerForDisplay(summary.Counters.InstructionCount)}");
-
-            Write(PerformanceCountersFormatting.FormatCounts(summary.Counters));
-            Write(PerformanceCountersFormatting.FormatCountsByPhase(summary.CountersByPhase));
         }
 
         using var instrumentation =
@@ -259,11 +259,11 @@ public static class TestProfileCommand
                 settings.Instrumentation,
                 precompiledLeavesProvider: () => IntermediateVM.SetupVM.DefaultPrecompiledLeaves)
             {
-                OnProgress = summary => Stats(summary, "Instrumentation progress."),
+                OnProgress = summary => WriteStats(summary, "Instrumentation progress."),
                 OnSample =
                 sample =>
                 {
-                    Stats(sample.Summary, "Live instrumentation sample.");
+                    WriteStats(sample.Summary, "Live instrumentation sample.");
 
                     if (settings.ShowStackTraces)
                         RenderStack(sample, "Sampled stack trace (current frame first):", Write);
@@ -273,7 +273,7 @@ public static class TestProfileCommand
                 OnStopped =
                 summary =>
                 {
-                    Stats(summary, "Execution stopped.");
+                    WriteStats(summary, "Execution stopped.");
                     AnnounceSave();
                 },
             };
@@ -324,7 +324,7 @@ public static class TestProfileCommand
                     "failed"
                 });
 
-            Stats(instrumentation.GetSummary(), "Overall instrumentation stats.");
+            WriteStats(instrumentation.GetSummary(), "Overall instrumentation stats.");
             AnnounceSave();
             var report = instrumentation.GetReport();
             string hash;
@@ -347,7 +347,7 @@ public static class TestProfileCommand
 
             Write("JSON SHA256: " + hash, s_successStyle);
             Write("Saved JSON report: " + path, s_successStyle);
-            Stats(report.Summary, "Overall run stats (excluding serialization).");
+            WriteStats(report.Summary, "Overall run stats (excluding serialization).");
             Render(report, settings, Write);
             return exitCode;
         }
