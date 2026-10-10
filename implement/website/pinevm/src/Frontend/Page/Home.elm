@@ -10,7 +10,7 @@ view : Element.Element e
 view =
     [ "Grow What’s Next"
         |> headingElementFromLevel 2
-    , "Build web services, full-stack web apps, games, and command-line tools in Elm. Pine runs Elm natively on .NET across Linux, Windows, and macOS."
+    , "DevTools and runtime environment for the Elm programming language"
         |> View.paragraphFromText
         |> Element.el
             [ Element.Font.bold
