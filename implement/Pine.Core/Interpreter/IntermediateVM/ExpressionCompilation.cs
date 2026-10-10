@@ -397,7 +397,7 @@ public record ExpressionCompilation(
 
             if (invoke.Instruction is not
                 { Kind: StackInstructionKind.Invoke_StackFrame_Const, OptimizedInvocation: { } direct } ||
-                CurriedFunctionPlan.TryParseFunctionRecord(direct.ExpressionEncoded, parseCache) is not null)
+                ExpressionTemplatePlan.TryParseTemplate(direct.ExpressionEncoded, parseCache) is not null)
             {
                 continue;
             }

@@ -86,6 +86,9 @@ public sealed record EvaluationError(
     IReadOnlyList<EvaluationStackTraceFrame> StackTrace,
     PerformanceCounters Counters)
 {
+    /// <summary>Disjoint work totals accumulated before evaluation stopped.</summary>
+    public PerformanceCountersByOrigin CountersByOrigin { get; init; }
+
     /// <summary>
     /// Renders an evaluation error for human-readable output. Expression hashing and
     /// Pine-value descriptions are intentionally deferred until this function is called.

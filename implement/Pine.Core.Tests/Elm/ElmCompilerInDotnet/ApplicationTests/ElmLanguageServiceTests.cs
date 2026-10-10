@@ -337,7 +337,7 @@ public class ElmLanguageServiceTests
     /// (field access, pattern matching) on the wrapper.
     /// </para>
     /// </summary>
-    private static PineValue EvaluateZeroArgTestDeclaration(
+    private PineValue EvaluateZeroArgTestDeclaration(
         ElmInteractiveEnvironment.ParsedInteractiveEnvironment env,
         string name,
         ReportEnteredStackFrame? reportEnteredStackFrame = null,
@@ -367,7 +367,7 @@ public class ElmLanguageServiceTests
                     "Failed to compose eval args for '" + name + "': " + err));
 
         return
-            (vm ?? s_vm).EvaluateExpressionOnCustomStack(
+            (vm ?? _vm).EvaluateExpressionOnCustomStack(
                 evalArgs.expression,
                 evalArgs.environment,
                 config: ElmCompilerTestHelper.DefaultTestEvaluationConfig,
@@ -378,13 +378,13 @@ public class ElmLanguageServiceTests
             .ReturnValue.Evaluate();
     }
 
-    private static PineValue EvaluateZeroArgTestDeclaration(
+    private PineValue EvaluateZeroArgTestDeclaration(
         string name,
         ReportEnteredStackFrame? reportEnteredStackFrame = null,
         Core.Interpreter.IntermediateVM.PineVM? vm = null) =>
         EvaluateZeroArgTestDeclaration(s_env.Value, name, reportEnteredStackFrame, vm);
 
-    private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
+    private readonly Core.Interpreter.IntermediateVM.PineVM _vm =
         ElmCompilerTestHelper.PineVMForProfiling(
             reportFunctionApplication: _ => { },
             enableTailRecursionOptimization: true);
@@ -401,12 +401,12 @@ public class ElmLanguageServiceTests
     /// <see cref="ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr"/> to compose
     /// the correct expression/environment, then evaluates with profiling on the custom stack.
     /// </summary>
-    private static (PineValue result, EvaluationReport report) ApplyWithProfiling(
+    private (PineValue result, EvaluationReport report) ApplyWithProfiling(
         string functionName,
         PineValue[] arguments) =>
         ApplyWithProfiling(s_env.Value, functionName, arguments);
 
-    private static (PineValue result, EvaluationReport report) ApplyWithProfiling(
+    private (PineValue result, EvaluationReport report) ApplyWithProfiling(
         ElmInteractiveEnvironment.ParsedInteractiveEnvironment env,
         string functionName,
         PineValue[] arguments)
@@ -424,7 +424,7 @@ public class ElmLanguageServiceTests
             .Extract(err => throw new Exception("Failed to compose eval args for '" + functionName + "': " + err));
 
         var report =
-            s_vm.EvaluateExpressionOnCustomStack(
+            _vm.EvaluateExpressionOnCustomStack(
                 evalArgs.expression,
                 evalArgs.environment,
                 config: ElmCompilerTestHelper.DefaultTestEvaluationConfig)
@@ -453,7 +453,7 @@ public class ElmLanguageServiceTests
     /// applications via
     /// <see cref="InvocationCountReport.Aggregate(IEnumerable{InvocationCountReport})"/>.
     /// </summary>
-    private static (PineValue result, EvaluationReport report, InvocationCountReport invocationCounts)
+    private (PineValue result, EvaluationReport report, InvocationCountReport invocationCounts)
         ApplyWithProfilingAndInvocationCounts(
         string functionName,
         PineValue[] arguments,
@@ -477,7 +477,7 @@ public class ElmLanguageServiceTests
         var invocationCountsBuilder = new InvocationCountReportBuilder();
 
         var report =
-            (vm ?? s_vm).EvaluateExpressionOnCustomStack(
+            (vm ?? _vm).EvaluateExpressionOnCustomStack(
                 evalArgs.expression,
                 evalArgs.environment,
                 config: ElmCompilerTestHelper.DefaultTestEvaluationConfig,
@@ -879,9 +879,22 @@ public class ElmLanguageServiceTests
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
             """
             InvocationCount: 1_583
-            BuildListCount: 2_794
+            BuildListCount: 2_824
+            BuildListItemCount: 10_687
             LoopIterationCount: 869
             InstructionCount: 62_366
+            ExpressionTemplatePlanParseCount: 73
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 44
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 5
+            DirectInterpreterExpressionCount: 90
+            DirectInterpreterLiteralCount: 50
+            DirectInterpreterListCount: 30
+            DirectInterpreterEvalCount: 5
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 5
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).ShouldBeWithDiff(
@@ -1386,9 +1399,22 @@ public class ElmLanguageServiceTests
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
             """
             InvocationCount: 3_621
-            BuildListCount: 5_978
+            BuildListCount: 6_038
+            BuildListItemCount: 24_252
             LoopIterationCount: 1_985
             InstructionCount: 126_228
+            ExpressionTemplatePlanParseCount: 113
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 76
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 10
+            DirectInterpreterExpressionCount: 180
+            DirectInterpreterLiteralCount: 100
+            DirectInterpreterListCount: 60
+            DirectInterpreterEvalCount: 10
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 10
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).ShouldBeWithDiff(
@@ -1517,9 +1543,22 @@ public class ElmLanguageServiceTests
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
             """
             InvocationCount: 5_101
-            BuildListCount: 8_587
+            BuildListCount: 8_653
+            BuildListItemCount: 32_034
             LoopIterationCount: 3_702
             InstructionCount: 211_192
+            ExpressionTemplatePlanParseCount: 112
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 110
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 11
+            DirectInterpreterExpressionCount: 198
+            DirectInterpreterLiteralCount: 110
+            DirectInterpreterListCount: 66
+            DirectInterpreterEvalCount: 11
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 11
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).ShouldBeWithDiff(
@@ -1711,9 +1750,22 @@ public class ElmLanguageServiceTests
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
             """
             InvocationCount: 4_946
-            BuildListCount: 8_507
+            BuildListCount: 8_537
+            BuildListItemCount: 36_988
             LoopIterationCount: 3_584
             InstructionCount: 160_051
+            ExpressionTemplatePlanParseCount: 151
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 6
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 5
+            DirectInterpreterExpressionCount: 90
+            DirectInterpreterLiteralCount: 50
+            DirectInterpreterListCount: 30
+            DirectInterpreterEvalCount: 5
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 5
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).ShouldBeWithDiff(

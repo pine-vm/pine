@@ -80,10 +80,10 @@ public class PineVM : ICancellablePineVM
 
     private readonly bool _disableDirectEvalForSimpleTemplate;
 
-    private readonly ConcurrentDictionary<PineValue, CurriedFunctionPlanResolution>
-        _curriedFunctionPlanCache = [];
+    private readonly ConcurrentDictionary<PineValue, ExpressionTemplatePlanResolution>
+        _expressionTemplatePlanCache = [];
 
-    private sealed record CurriedFunctionPlanResolution(CurriedFunctionPlan? Plan);
+    private sealed record ExpressionTemplatePlanResolution(ExpressionTemplatePlan? Plan);
 
     /// <summary>
     /// Creates a PineVM with caller-supplied caches, precompiled leaves, optimization settings, and diagnostic callbacks.
@@ -485,6 +485,9 @@ public class PineVM : ICancellablePineVM
         int? LoopIterationCountLimit,
         int? StackDepthLimit)
     {
+        /// <summary>Forces the root return value before taking final counters; otherwise preserves lazy results.</summary>
+        public bool MaterializeResult { get; init; }
+
         /// <summary>
         /// Bounded defaults used by <see cref="EvaluateExpression(Expression, PineValue)"/>
         /// when the VM was not constructed with a custom default configuration.
@@ -550,26 +553,42 @@ public class PineVM : ICancellablePineVM
         long loopIterationCount = 0;
         long evalCount = 0;
         long buildListCount = 0;
+        long buildListItemCount = 0;
+        var planParsingCounters = new DirectInterpreterCounters();
+        var materializationCounters = new DirectInterpreterCounters();
         long stackFrameCount = 0;
         long stackFrameReplaceCount = 0;
         long lastCacheEntryInstructionCount = 0;
         long lastCacheEntryEvalCount = 0;
         long tailLoopIterationCount = 0;
-        long curriedFunctionPlanParseCount = 0;
-        long partialApplicationAllocationCount = 0;
-        long directSaturatedApplicationCount = 0;
-        long partialApplicationMaterializationCount = 0;
+        long expressionTemplatePlanParseCount = 0;
+        long deferredTemplateValueAllocationCount = 0;
+        long templateDirectInvocationCount = 0;
+        long deferredTemplateValueMaterializationCount = 0;
 
-        PerformanceCounters CurrentCounters() =>
+        PerformanceCountersByOrigin CurrentCountersByOrigin() =>
+            new(
+                VirtualMachine: CurrentVmCounters(),
+                ExpressionTemplatePlanParsing: planParsingCounters.Snapshot() with
+                {
+                    ExpressionTemplatePlanParseCount = expressionTemplatePlanParseCount
+                },
+                DeferredTemplateValueMaterialization: materializationCounters.Snapshot() with
+                {
+                    DeferredTemplateValueMaterializationCount = deferredTemplateValueMaterializationCount
+                });
+
+        PerformanceCounters CurrentCounters() => CurrentCountersByOrigin().Total;
+
+        PerformanceCounters CurrentVmCounters() =>
             new(
                 InstructionCount: instructionCount,
                 InvocationCount: invocationCount,
                 BuildListCount: buildListCount,
+                BuildListItemCount: buildListItemCount,
                 LoopIterationCount: loopIterationCount,
-                CurriedFunctionPlanParseCount: curriedFunctionPlanParseCount,
-                PartialApplicationAllocationCount: partialApplicationAllocationCount,
-                DirectSaturatedApplicationCount: directSaturatedApplicationCount,
-                PartialApplicationMaterializationCount: partialApplicationMaterializationCount);
+                DeferredTemplateValueAllocationCount: deferredTemplateValueAllocationCount,
+                TemplateDirectInvocationCount: templateDirectInvocationCount);
 
         EvaluationError BuildEvaluationError(EvaluationErrorReason reason)
         {
@@ -579,7 +598,10 @@ public class PineVM : ICancellablePineVM
                 new(
                     Reason: reason,
                     StackTrace: CompileEvaluationErrorStackTrace(100),
-                    Counters: CurrentCounters());
+                    Counters: CurrentCounters())
+                {
+                    CountersByOrigin = CurrentCountersByOrigin()
+                };
         }
 
         EvaluationError BuildParseExpressionError(
@@ -669,6 +691,9 @@ public class PineVM : ICancellablePineVM
         Func<PerformanceCounters>? loadEventCounters =
             _reportEvaluationEvent is null ? null : CurrentCounters;
 
+        Func<PerformanceCountersByOrigin>? loadEventOrigins =
+            _reportEvaluationEvent is null ? null : CurrentCountersByOrigin;
+
         Func<IEnumerable<EvaluationStackTraceFrame>>? loadEventStack =
             _reportEvaluationEvent is null ? null : EnumerateLiveStack;
 
@@ -689,7 +714,8 @@ public class PineVM : ICancellablePineVM
                     loadEventCounters!,
                     loadEventStack!,
                     reason,
-                    frame.Instructions);
+                    frame.Instructions,
+                    loadEventOrigins);
 
             report(in evaluationEvent);
         }
@@ -811,16 +837,9 @@ public class PineVM : ICancellablePineVM
                                         LocalsValues: null,
                                         ProfilingBaseline:
                                         new StackFrameProfilingBaseline(
-                                            BeginInstructionCount: instructionCount,
-                                            BeginInvocationCount: invocationCount,
+                                            BeginCountersByOrigin: CurrentCountersByOrigin(),
                                             BeginEvalCount: evalCount,
-                                            BeginStackFrameCount: stackFrameCount,
-                                            BeginBuildListCount: buildListCount,
-                                            BeginCurriedFunctionPlanParseCount: curriedFunctionPlanParseCount,
-                                            BeginPartialApplicationAllocationCount: partialApplicationAllocationCount,
-                                            BeginDirectSaturatedApplicationCount: directSaturatedApplicationCount,
-                                            BeginPartialApplicationMaterializationCount:
-                                            partialApplicationMaterializationCount),
+                                            BeginStackFrameCount: stackFrameCount),
                                         Specialization: specialization.Stepwise);
 
                                 return
@@ -885,6 +904,7 @@ public class PineVM : ICancellablePineVM
                             }
 
                             buildListCount += directContResult.PerformanceCounters.BuildListCount;
+                            buildListItemCount += directContResult.PerformanceCounters.BuildListItemCount;
                             invocationCount += directContResult.PerformanceCounters.InvocationCount + 1;
                             loopIterationCount += directContResult.PerformanceCounters.LoopIterationCount;
                             instructionCount += directContResult.PerformanceCounters.InstructionCount;
@@ -906,6 +926,7 @@ public class PineVM : ICancellablePineVM
                             DirectEvalIfSimpleTemplate(expression, environmentValue) is { } directEvalResult)
                         {
                             buildListCount += directEvalResult.perfCounts.BuildListCount;
+                            buildListItemCount += directEvalResult.perfCounts.BuildListItemCount;
                             invocationCount += directEvalResult.perfCounts.InvocationCount + 1;
                             loopIterationCount += directEvalResult.perfCounts.LoopIterationCount;
                             instructionCount += directEvalResult.perfCounts.InstructionCount;
@@ -943,146 +964,147 @@ public class PineVM : ICancellablePineVM
             }
         }
 
-        bool TryResolveCurriedFunction(
-            PineValueInProcess functionValue,
-            out CurriedFunctionPlan? plan,
-            out IReadOnlyList<PineValueInProcess> existingArguments)
+        bool TryResolveExpressionTemplate(
+            PineValueInProcess templateValue,
+            out ExpressionTemplatePlan? plan,
+            out IReadOnlyList<PineValueInProcess> existingEnvironments)
         {
             if (_disableDirectInvocation)
             {
                 plan = null;
-                existingArguments = [];
+                existingEnvironments = [];
                 return false;
             }
 
-            if (functionValue.PartialApplicationOrNull is { } partialApplication &&
-                partialApplication.Callable is CurriedFunctionPlan partialPlan)
+            if (templateValue.DeferredTemplateValueOrNull is { } deferredTemplateValue &&
+                deferredTemplateValue.TemplatePlan is ExpressionTemplatePlan templatePlan)
             {
-                plan = partialPlan;
-                existingArguments = partialApplication.Arguments;
+                plan = templatePlan;
+                existingEnvironments = deferredTemplateValue.Environments;
             }
             else
             {
-                var materializedFunctionValue = functionValue.Evaluate();
+                var materializedTemplateValue = templateValue.Evaluate();
 
                 plan =
-                    ResolveCurriedFunctionPlan(
-                        materializedFunctionValue,
-                        reportPlanParse: () => ++curriedFunctionPlanParseCount);
+                    ResolveExpressionTemplatePlan(
+                        materializedTemplateValue,
+                        reportPlanParse: () => ++expressionTemplatePlanParseCount,
+                        planParsingCounters);
 
-                existingArguments = [];
+                existingEnvironments = [];
             }
 
             return
                 plan is not null &&
-                plan.InitialArguments.Length + existingArguments.Count < plan.ParameterCount;
+                plan.InitialEnvironments.Length + existingEnvironments.Count < plan.EnvironmentCount;
         }
 
-        PineValueInProcess[] CombineArguments(
-            IReadOnlyList<PineValueInProcess> existingArguments,
-            IReadOnlyList<PineValueInProcess> newArguments,
-            int newArgumentsCount)
+        PineValueInProcess[] CombineEnvironments(
+            IReadOnlyList<PineValueInProcess> existingEnvironments,
+            IReadOnlyList<PineValueInProcess> newEnvironments,
+            int newEnvironmentCount)
         {
-            var combinedArguments =
-                new PineValueInProcess[existingArguments.Count + newArgumentsCount];
+            var combinedEnvironments =
+                new PineValueInProcess[existingEnvironments.Count + newEnvironmentCount];
 
-            for (var i = 0; i < existingArguments.Count; ++i)
+            for (var i = 0; i < existingEnvironments.Count; ++i)
             {
-                combinedArguments[i] = existingArguments[i];
+                combinedEnvironments[i] = existingEnvironments[i];
             }
 
-            for (var i = 0; i < newArgumentsCount; ++i)
+            for (var i = 0; i < newEnvironmentCount; ++i)
             {
-                combinedArguments[existingArguments.Count + i] = newArguments[i];
+                combinedEnvironments[existingEnvironments.Count + i] = newEnvironments[i];
             }
 
-            return combinedArguments;
+            return combinedEnvironments;
         }
 
-        PineValueInProcess CreatePartialApplication(
-            CurriedFunctionPlan plan,
-            IReadOnlyList<PineValueInProcess> arguments)
+        PineValueInProcess CreateDeferredTemplateValue(
+            ExpressionTemplatePlan plan,
+            IReadOnlyList<PineValueInProcess> environments)
         {
-            ++partialApplicationAllocationCount;
+            ++deferredTemplateValueAllocationCount;
 
             return
-                PineValueInProcess.CreatePartialApplication(
-                    callable: plan,
-                    arguments: arguments,
-                    materialize: plan.Materialize,
-                    reportMaterialization: () => ++partialApplicationMaterializationCount);
+                PineValueInProcess.CreateDeferredTemplateValue(
+                    templatePlan: plan,
+                    environments: environments,
+                    materialize: environments => plan.Materialize(environments, materializationCounters),
+                    reportMaterialization: () => ++deferredTemplateValueMaterializationCount);
         }
 
-        EvaluationError? TryApplyCurriedFunction(
-            PineValueInProcess functionValue,
-            PineValueInProcess argument,
+        EvaluationError? TryEvaluateTemplate(
+            PineValueInProcess templateValue,
+            PineValueInProcess environment,
             bool replaceCurrentFrame,
-            out bool applied)
+            out bool evaluated)
         {
-            if (!TryResolveCurriedFunction(
-                functionValue,
+            if (!TryResolveExpressionTemplate(
+                templateValue,
                 out var plan,
-                out var existingArguments))
+                out var existingEnvironments))
             {
-                applied = false;
+                evaluated = false;
                 return null;
             }
 
-            applied = true;
+            evaluated = true;
 
-            var combinedArguments =
-                CombineArguments(existingArguments, [argument], newArgumentsCount: 1);
+            var combinedEnvironments =
+                CombineEnvironments(existingEnvironments, [environment], newEnvironmentCount: 1);
 
-            if (plan!.InitialArguments.Length + combinedArguments.Length < plan.ParameterCount)
+            if (plan!.InitialEnvironments.Length + combinedEnvironments.Length < plan.EnvironmentCount)
             {
                 stack.Peek().PushInstructionResult(
-                    CreatePartialApplication(plan, combinedArguments));
+                    CreateDeferredTemplateValue(plan, combinedEnvironments));
 
                 return null;
             }
 
-            return InvokeSaturated(plan, combinedArguments, replaceCurrentFrame);
+            return InvokeTemplateDirectly(plan, combinedEnvironments, replaceCurrentFrame);
         }
 
-        EvaluationError? InvokeSaturated(
-            CurriedFunctionPlan plan,
-            IReadOnlyList<PineValueInProcess> arguments,
+        EvaluationError? InvokeTemplateDirectly(
+            ExpressionTemplatePlan plan,
+            IReadOnlyList<PineValueInProcess> environments,
             bool replaceCurrentFrame)
         {
-            ++directSaturatedApplicationCount;
+            ++templateDirectInvocationCount;
 
             return
                 InvokePrecompiledOrBuildStackFrame(
-                    expressionValue: plan.EncodedBody,
-                    expression: plan.Body,
-                    environmentValue: plan.BuildBodyEnvironment(arguments),
+                    expressionValue: plan.EncodedTerminalExpression,
+                    expression: plan.TerminalExpression,
+                    environmentValue: plan.BuildTerminalEnvironment(environments),
                     replaceCurrentFrame: replaceCurrentFrame);
         }
 
-        ApplyStepwise.StepResult BuildGenericApplySteps(
-            PineValueInProcess functionValue,
-            IReadOnlyList<PineValueInProcess> arguments,
-            int argumentIndex)
+        ApplyStepwise.StepResult BuildEvalSteps(
+            PineValueInProcess templateValue,
+            IReadOnlyList<PineValueInProcess> environments,
+            int environmentIndex)
         {
-            if (argumentIndex >= arguments.Count)
+            if (environmentIndex >= environments.Count)
             {
-                return new ApplyStepwise.StepResult.Complete(functionValue);
+                return new ApplyStepwise.StepResult.Complete(templateValue);
             }
 
             return
                 new ApplyStepwise.StepResult.ContinueEval(
-                    ExpressionValue: functionValue,
-                    EnvironmentValue: arguments[argumentIndex],
+                    ExpressionValue: templateValue,
+                    EnvironmentValue: environments[environmentIndex],
                     Callback:
                     result =>
-                    BuildGenericApplySteps(
+                    BuildEvalSteps(
                         result,
-                        arguments,
-                        argumentIndex + 1),
+                        environments,
+                        environmentIndex + 1),
                     CountInvocation: true);
         }
 
-        EvaluationError? PushApplicationContinuation(
+        EvaluationError? PushEvalContinuation(
             ApplyStepwise.StepResult initialStep,
             bool replaceCurrentFrame)
         {
@@ -1094,15 +1116,9 @@ public class PineVM : ICancellablePineVM
                 currentFrame.ProfilingBaseline
                 :
                 new StackFrameProfilingBaseline(
-                    BeginInstructionCount: instructionCount,
-                    BeginInvocationCount: invocationCount,
+                    BeginCountersByOrigin: CurrentCountersByOrigin(),
                     BeginEvalCount: evalCount,
-                    BeginStackFrameCount: stackFrameCount,
-                    BeginBuildListCount: buildListCount,
-                    BeginCurriedFunctionPlanParseCount: curriedFunctionPlanParseCount,
-                    BeginPartialApplicationAllocationCount: partialApplicationAllocationCount,
-                    BeginDirectSaturatedApplicationCount: directSaturatedApplicationCount,
-                    BeginPartialApplicationMaterializationCount: partialApplicationMaterializationCount);
+                    BeginStackFrameCount: stackFrameCount);
 
             var continuationFrame =
                 new StackFrame(
@@ -1124,7 +1140,7 @@ public class PineVM : ICancellablePineVM
 
                         _ =>
                         throw new ArgumentException(
-                            "Application continuation must begin with an evaluation step.",
+                            "Eval continuation must begin with an evaluation step.",
                             nameof(initialStep))
                     });
 
@@ -1177,15 +1193,9 @@ public class PineVM : ICancellablePineVM
                 stack.Peek().ProfilingBaseline
                 :
                 new StackFrameProfilingBaseline(
-                    BeginInstructionCount: instructionCount,
-                    BeginInvocationCount: invocationCount,
+                    BeginCountersByOrigin: CurrentCountersByOrigin(),
                     BeginEvalCount: evalCount,
-                    BeginStackFrameCount: stackFrameCount,
-                    BeginBuildListCount: buildListCount,
-                    BeginCurriedFunctionPlanParseCount: curriedFunctionPlanParseCount,
-                    BeginPartialApplicationAllocationCount: partialApplicationAllocationCount,
-                    BeginDirectSaturatedApplicationCount: directSaturatedApplicationCount,
-                    BeginPartialApplicationMaterializationCount: partialApplicationMaterializationCount);
+                    BeginStackFrameCount: stackFrameCount);
 
             var newFrame =
                 BuildStackFrame(
@@ -1255,35 +1265,20 @@ public class PineVM : ICancellablePineVM
         EvaluationReport? ReturnFromStackFrame(PineValueInProcess frameReturnValue)
         {
             var currentFrame = stack.Peek();
+
+            if (stack.Count is 1 && config.MaterializeResult)
+                frameReturnValue.Evaluate();
+
             FireEvaluationEvent(EvaluationEventKind.FrameExited, currentFrame);
 
             if (currentFrame.ExpressionValue is { } currentFrameExprValue)
             {
                 var frameTotalInstructionCount =
-                    instructionCount - currentFrame.ProfilingBaseline.BeginInstructionCount;
-
-                var frameInvocationCount =
-                    invocationCount - currentFrame.ProfilingBaseline.BeginInvocationCount;
+                    instructionCount -
+                    currentFrame.ProfilingBaseline.BeginCountersByOrigin.VirtualMachine.InstructionCount;
 
                 var frameEvalCount = evalCount - currentFrame.ProfilingBaseline.BeginEvalCount;
                 var frameStackFrameCount = stackFrameCount - currentFrame.ProfilingBaseline.BeginStackFrameCount;
-                var frameBuildListCount = buildListCount - currentFrame.ProfilingBaseline.BeginBuildListCount;
-
-                var frameCurriedFunctionPlanParseCount =
-                    curriedFunctionPlanParseCount -
-                    currentFrame.ProfilingBaseline.BeginCurriedFunctionPlanParseCount;
-
-                var framePartialApplicationAllocationCount =
-                    partialApplicationAllocationCount -
-                    currentFrame.ProfilingBaseline.BeginPartialApplicationAllocationCount;
-
-                var frameDirectSaturatedApplicationCount =
-                    directSaturatedApplicationCount -
-                    currentFrame.ProfilingBaseline.BeginDirectSaturatedApplicationCount;
-
-                var framePartialApplicationMaterializationCount =
-                    partialApplicationMaterializationCount -
-                    currentFrame.ProfilingBaseline.BeginPartialApplicationMaterializationCount;
 
                 var evalCountSinceLastCacheEntry =
                     evalCount - lastCacheEntryEvalCount;
@@ -1307,22 +1302,29 @@ public class PineVM : ICancellablePineVM
                     }
                 }
 
+                var frameOrigins =
+                    PerformanceCountersByOrigin.Subtract(
+                        CurrentCountersByOrigin(),
+                        currentFrame.ProfilingBaseline.BeginCountersByOrigin);
+
+                frameOrigins =
+                    frameOrigins with
+                    {
+                        VirtualMachine =
+                        frameOrigins.VirtualMachine with { LoopIterationCount = currentFrame.LoopIterationCount }
+                    };
+
                 _reportFunctionApplication?.Invoke(
                     new EvaluationReport(
                         ExpressionValue: currentFrameExprValue,
                         currentFrame.Expression,
                         currentFrame.InputValues,
-                        Counters: new PerformanceCounters(
-                            InstructionCount: frameTotalInstructionCount,
-                            InvocationCount: frameInvocationCount,
-                            BuildListCount: frameBuildListCount,
-                            LoopIterationCount: currentFrame.LoopIterationCount,
-                            CurriedFunctionPlanParseCount: frameCurriedFunctionPlanParseCount,
-                            PartialApplicationAllocationCount: framePartialApplicationAllocationCount,
-                            DirectSaturatedApplicationCount: frameDirectSaturatedApplicationCount,
-                            PartialApplicationMaterializationCount: framePartialApplicationMaterializationCount),
+                        Counters: frameOrigins.Total,
                         ReturnValue: frameReturnValue,
-                        StackTrace: CompileStackTrace(10)));
+                        StackTrace: CompileStackTrace(10))
+                    {
+                        CountersByOrigin = frameOrigins
+                    });
             }
 
             stack.Pop();
@@ -1336,17 +1338,12 @@ public class PineVM : ICancellablePineVM
                         ExpressionValue: rootExprValue,
                         Expression: rootExpression,
                         Input: rootStackFrameInput,
-                        Counters: new PerformanceCounters(
-                            InstructionCount: instructionCount,
-                            InvocationCount: invocationCount,
-                            BuildListCount: buildListCount,
-                            LoopIterationCount: loopIterationCount,
-                            CurriedFunctionPlanParseCount: curriedFunctionPlanParseCount,
-                            PartialApplicationAllocationCount: partialApplicationAllocationCount,
-                            DirectSaturatedApplicationCount: directSaturatedApplicationCount,
-                            PartialApplicationMaterializationCount: partialApplicationMaterializationCount),
+                        Counters: CurrentCounters(),
                         ReturnValue: frameReturnValue,
-                        StackTrace: []);
+                        StackTrace: [])
+                    {
+                        CountersByOrigin = CurrentCountersByOrigin()
+                    };
             }
 
             var previousFrame = stack.Peek();
@@ -1807,6 +1804,7 @@ public class PineVM : ICancellablePineVM
                                 PineValueInProcess.CreateList(items));
 
                             ++buildListCount;
+                            buildListItemCount += items.Length;
 
                             continue;
                         }
@@ -1841,6 +1839,7 @@ public class PineVM : ICancellablePineVM
                                 PineValueInProcess.CreateList(items));
 
                             ++buildListCount;
+                            buildListItemCount += items.Length;
                             continue;
                         }
 
@@ -2452,16 +2451,16 @@ public class PineVM : ICancellablePineVM
                             var replaceCurrentFrame =
                                 followingInstruction.Kind is StackInstructionKind.Return;
 
-                            if (TryApplyCurriedFunction(
+                            if (TryEvaluateTemplate(
                                 expressionValueInProcess,
                                 environmentValue,
                                 replaceCurrentFrame,
-                                out var applied) is { } applicationError)
+                                out var evaluated) is { } templateError)
                             {
-                                return applicationError;
+                                return templateError;
                             }
 
-                            if (applied)
+                            if (evaluated)
                             {
                                 continue;
                             }
@@ -2501,34 +2500,34 @@ public class PineVM : ICancellablePineVM
 
                     case StackInstructionKind.Eval_Multi:
                         {
-                            var argumentCount =
+                            var environmentCount =
                                 currentInstruction.TakeCount
                                 ??
                                 throw new Exception(
-                                    "Invalid operation form: Missing argument count for Eval_Multi");
+                                    "Invalid operation form: Missing environment count for Eval_Multi");
 
-                            var functionValue = currentFrame.PopTopmostFromStack();
-                            var arguments = new PineValueInProcess[argumentCount];
+                            var templateValue = currentFrame.PopTopmostFromStack();
+                            var environments = new PineValueInProcess[environmentCount];
 
-                            for (var i = 0; i < argumentCount; ++i)
+                            for (var i = 0; i < environmentCount; ++i)
                             {
-                                arguments[i] = currentFrame.PopTopmostFromStack();
+                                environments[i] = currentFrame.PopTopmostFromStack();
                             }
 
-                            if (TryResolveCurriedFunction(
-                                functionValue,
+                            if (TryResolveExpressionTemplate(
+                                templateValue,
                                 out var plan,
-                                out var existingArguments))
+                                out var existingEnvironments))
                             {
-                                var remainingArity =
-                                    plan!.ParameterCount -
-                                    plan.InitialArguments.Length -
-                                    existingArguments.Count;
+                                var remainingEnvironmentCount =
+                                    plan!.EnvironmentCount -
+                                    plan.InitialEnvironments.Length -
+                                    existingEnvironments.Count;
 
-                                var argumentsForSaturation =
-                                    Math.Min(remainingArity, arguments.Length);
+                                var environmentsForTerminal =
+                                    Math.Min(remainingEnvironmentCount, environments.Length);
 
-                                for (var i = 0; i < argumentsForSaturation; ++i)
+                                for (var i = 0; i < environmentsForTerminal; ++i)
                                 {
                                     ++evalCount;
 
@@ -2538,29 +2537,29 @@ public class PineVM : ICancellablePineVM
                                     }
                                 }
 
-                                var combinedArguments =
-                                    CombineArguments(
-                                        existingArguments,
-                                        arguments,
-                                        argumentsForSaturation);
+                                var combinedEnvironments =
+                                    CombineEnvironments(
+                                        existingEnvironments,
+                                        environments,
+                                        environmentsForTerminal);
 
-                                if (arguments.Length < remainingArity)
+                                if (environments.Length < remainingEnvironmentCount)
                                 {
                                     currentFrame.PushInstructionResult(
-                                        CreatePartialApplication(plan, combinedArguments));
+                                        CreateDeferredTemplateValue(plan, combinedEnvironments));
 
                                     continue;
                                 }
 
-                                if (arguments.Length == remainingArity)
+                                if (environments.Length == remainingEnvironmentCount)
                                 {
                                     var exactFollowingInstruction =
                                         currentFrame.Instructions.Instructions[
                                             currentFrame.InstructionPointer + 1];
 
-                                    if (InvokeSaturated(
+                                    if (InvokeTemplateDirectly(
                                         plan,
-                                        combinedArguments,
+                                        combinedEnvironments,
                                         replaceCurrentFrame:
                                         exactFollowingInstruction.Kind is StackInstructionKind.Return) is { } error)
                                     {
@@ -2570,36 +2569,36 @@ public class PineVM : ICancellablePineVM
                                     continue;
                                 }
 
-                                ++directSaturatedApplicationCount;
+                                ++templateDirectInvocationCount;
 
-                                var extraArguments =
-                                    new PineValueInProcess[arguments.Length - remainingArity];
+                                var extraEnvironments =
+                                    new PineValueInProcess[environments.Length - remainingEnvironmentCount];
 
                                 Array.Copy(
-                                    arguments,
-                                    remainingArity,
-                                    extraArguments,
+                                    environments,
+                                    remainingEnvironmentCount,
+                                    extraEnvironments,
                                     0,
-                                    extraArguments.Length);
+                                    extraEnvironments.Length);
 
                                 var initialStep =
                                     new ApplyStepwise.StepResult.Continue(
-                                        Expression: plan.Body,
-                                        EnvironmentValue: plan.BuildBodyEnvironment(combinedArguments),
+                                        Expression: plan.TerminalExpression,
+                                        EnvironmentValue: plan.BuildTerminalEnvironment(combinedEnvironments),
                                         Callback:
                                         result =>
-                                        BuildGenericApplySteps(
+                                        BuildEvalSteps(
                                             result,
-                                            extraArguments,
-                                            argumentIndex: 0),
+                                            extraEnvironments,
+                                            environmentIndex: 0),
                                         CountInvocation: false,
-                                        ExpressionValue: plan.EncodedBody);
+                                        ExpressionValue: plan.EncodedTerminalExpression);
 
                                 var followingInstruction =
                                     currentFrame.Instructions.Instructions[
                                         currentFrame.InstructionPointer + 1];
 
-                                if (PushApplicationContinuation(
+                                if (PushEvalContinuation(
                                     initialStep,
                                     replaceCurrentFrame:
                                     followingInstruction.Kind is StackInstructionKind.Return) is { } continuationError)
@@ -2611,16 +2610,16 @@ public class PineVM : ICancellablePineVM
                             }
 
                             var genericInitialStep =
-                                BuildGenericApplySteps(
-                                    functionValue,
-                                    arguments,
-                                    argumentIndex: 0);
+                                BuildEvalSteps(
+                                    templateValue,
+                                    environments,
+                                    environmentIndex: 0);
 
                             var genericFollowingInstruction =
                                 currentFrame.Instructions.Instructions[
                                     currentFrame.InstructionPointer + 1];
 
-                            if (PushApplicationContinuation(
+                            if (PushEvalContinuation(
                                 genericInitialStep,
                                 replaceCurrentFrame:
                                 genericFollowingInstruction.Kind is StackInstructionKind.Return) is { } genericError)
@@ -2653,16 +2652,16 @@ public class PineVM : ICancellablePineVM
                             var replaceCurrentFrame =
                                 followingInstruction.Kind is StackInstructionKind.Return;
 
-                            if (TryApplyCurriedFunction(
+                            if (TryEvaluateTemplate(
                                 expressionValueInProcess,
                                 environmentValue,
                                 replaceCurrentFrame,
-                                out var applied) is { } applicationError)
+                                out var evaluated) is { } templateError)
                             {
-                                return applicationError;
+                                return templateError;
                             }
 
-                            if (applied)
+                            if (evaluated)
                             {
                                 continue;
                             }
@@ -3326,39 +3325,40 @@ public class PineVM : ICancellablePineVM
         =>
         _expressionEncodingCache.GetOrEncode(expression);
 
-    private CurriedFunctionPlan? ResolveCurriedFunctionPlan(
-        PineValue functionValue,
-        Action reportPlanParse)
+    private ExpressionTemplatePlan? ResolveExpressionTemplatePlan(
+        PineValue templateValue,
+        Action reportPlanParse,
+        DirectInterpreterCounters counters)
     {
         return
-            _curriedFunctionPlanCache.GetOrAdd(
-                functionValue,
+            _expressionTemplatePlanCache.GetOrAdd(
+                templateValue,
                 value =>
                 {
                     reportPlanParse();
 
-                    if (CurriedFunctionPlan.TryParseFunctionRecord(value, ParseCache)
-                        is not { } functionRecord)
+                    if (ExpressionTemplatePlan.TryParseTemplate(value, ParseCache, counters)
+                        is not { } templateDescription)
                     {
-                        return new CurriedFunctionPlanResolution(null);
+                        return new ExpressionTemplatePlanResolution(null);
                     }
 
-                    if (functionRecord.ParameterCount <=
-                        functionRecord.ArgumentsAlreadyCollected.Length)
+                    if (templateDescription.ParameterCount <=
+                        templateDescription.ArgumentsAlreadyCollected.Length)
                     {
-                        return new CurriedFunctionPlanResolution(null);
+                        return new ExpressionTemplatePlanResolution(null);
                     }
 
                     return
-                        new CurriedFunctionPlanResolution(
-                            new CurriedFunctionPlan(
-                                FunctionValue: value,
-                                EncodedBody: EncodeExpressionAsValue(functionRecord.InnerFunction),
-                                Body: functionRecord.InnerFunction,
-                                ParameterCount: functionRecord.ParameterCount,
-                                EnvFunctions: functionRecord.EnvFunctions,
-                                InitialArguments: functionRecord.ArgumentsAlreadyCollected,
-                                UsesNestedArgFormat: functionRecord.UsesNestedArgFormat,
+                        new ExpressionTemplatePlanResolution(
+                            new ExpressionTemplatePlan(
+                                TemplateValue: value,
+                                EncodedTerminalExpression: EncodeExpressionAsValue(templateDescription.InnerFunction),
+                                TerminalExpression: templateDescription.InnerFunction,
+                                EnvironmentCount: templateDescription.ParameterCount,
+                                CapturedValues: templateDescription.EnvFunctions,
+                                InitialEnvironments: templateDescription.ArgumentsAlreadyCollected,
+                                UsesNestedEnvironmentFormat: templateDescription.UsesNestedArgFormat,
                                 ParseCache: ParseCache));
                 })
             .Plan;
@@ -3452,10 +3452,16 @@ public class PineVM : ICancellablePineVM
         long InvocationCount,
         long BuildListCount,
         long LoopIterationCount,
-        long InstructionCount)
+        long InstructionCount,
+        long BuildListItemCount = 0)
     {
         public readonly PerformanceCounters ToImmutable() =>
-            new(InvocationCount, BuildListCount, LoopIterationCount, InstructionCount);
+            new(
+                InvocationCount,
+                BuildListCount,
+                LoopIterationCount,
+                InstructionCount,
+                BuildListItemCount: BuildListItemCount);
     }
 
     private static PineValueInProcess? EvalDirect(
@@ -3473,6 +3479,7 @@ public class PineVM : ICancellablePineVM
         if (expression is Expression.List listExpr)
         {
             performanceCounters.BuildListCount++;
+            performanceCounters.BuildListItemCount += listExpr.Items.Count;
 
             var items = new PineValueInProcess[listExpr.Items.Count];
 

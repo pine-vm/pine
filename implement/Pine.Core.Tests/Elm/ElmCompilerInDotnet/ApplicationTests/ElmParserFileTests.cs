@@ -188,7 +188,7 @@ public class ElmParserFileTests
         .First(module => module.moduleName is "ElmSyntax.Concrete.Parser.FromString")
         .moduleContent.FunctionDeclarations[name];
 
-    private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
+    private readonly Core.Interpreter.IntermediateVM.PineVM _vm =
         ElmCompilerTestHelper.PineVMForProfiling(
             reportFunctionApplication: _ => { },
             enableTailRecursionOptimization: true);
@@ -196,14 +196,14 @@ public class ElmParserFileTests
     private static ElmValue ElmString(string text) =>
         ElmValue.StringInstance(text);
 
-    private static ((string expressionString, bool needsParens) valueAsExpression, string counts) ParseFileAndRender(
+    private ((string expressionString, bool needsParens) valueAsExpression, string counts) ParseFileAndRender(
         string moduleText)
     {
         var (value, report) =
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetParserFunction("parseFile"),
                 ElmString(moduleText),
-                s_vm);
+                _vm);
 
         return
             (ElmValue.RenderAsElmExpression(value), PerformanceCountersFormatting.FormatCounts(report));
@@ -242,8 +242,21 @@ public class ElmParserFileTests
             """
             InvocationCount: 184
             BuildListCount: 328
+            BuildListItemCount: 1_771
             LoopIterationCount: 103
             InstructionCount: 5_342
+            ExpressionTemplatePlanParseCount: 20
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 0
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -260,8 +273,21 @@ public class ElmParserFileTests
             """
             InvocationCount: 238
             BuildListCount: 411
+            BuildListItemCount: 2_188
             LoopIterationCount: 107
             InstructionCount: 6_651
+            ExpressionTemplatePlanParseCount: 22
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 0
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 

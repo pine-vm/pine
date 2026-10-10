@@ -1006,7 +1006,7 @@ public class PineIRCompiler
                 return true;
 
             return
-                CurriedFunctionPlan.TryParseFunctionRecord(
+                ExpressionTemplatePlan.TryParseTemplate(
                     functionLiteral.Value,
                     parseCache)
                 is { } functionRecord &&

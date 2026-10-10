@@ -496,6 +496,9 @@ public class KernelJsonFunctionTests
         .First(m => m.moduleName is "JsonTest")
         .moduleContent.FunctionDeclarations[name];
 
+    private readonly Core.Interpreter.IntermediateVM.PineVM _profilingVm =
+        ElmCompilerTestHelper.PineVMForProfiling(_ => { });
+
     private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
         ElmCompilerTestHelper.PineVMForProfiling(_ => { });
 
@@ -1408,7 +1411,7 @@ public class KernelJsonFunctionTests
             CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("decodeMap3Person"),
                 String("{ \"name\": \"tom\", \"age\": 42, \"height\": 180 }"),
-                s_vm);
+                _profilingVm);
 
         value.Should().Be(
             OkOf(
@@ -1417,9 +1420,22 @@ public class KernelJsonFunctionTests
         PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 38
-            BuildListCount: 64
+            BuildListCount: 182
+            BuildListItemCount: 467
             LoopIterationCount: 25
             InstructionCount: 1_060
+            ExpressionTemplatePlanParseCount: 11
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 26
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 11
+            DirectInterpreterExpressionCount: 328
+            DirectInterpreterLiteralCount: 190
+            DirectInterpreterListCount: 118
+            DirectInterpreterEvalCount: 9
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 11
             """);
     }
 
@@ -1432,16 +1448,29 @@ public class KernelJsonFunctionTests
             CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("decodeAndThenVersion"),
                 String("{ \"version\": 3, \"data\": \"v3-data\" }"),
-                s_vm);
+                _profilingVm);
 
         value.Should().Be(OkOf(String("v3-data")));
 
         PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 13
-            BuildListCount: 36
+            BuildListCount: 73
+            BuildListItemCount: 188
             LoopIterationCount: 23
             InstructionCount: 639
+            ExpressionTemplatePlanParseCount: 7
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 7
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 4
+            DirectInterpreterExpressionCount: 106
+            DirectInterpreterLiteralCount: 61
+            DirectInterpreterListCount: 37
+            DirectInterpreterEvalCount: 4
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 4
             """);
     }
 
@@ -1486,7 +1515,7 @@ public class KernelJsonFunctionTests
             CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("decodeLazyCommentMessage"),
                 String("{ \"message\": \"hello\", \"responses\": [] }"),
-                s_vm);
+                _profilingVm);
 
         value.Should().Be(OkOf(String("hello")));
 
@@ -1496,9 +1525,22 @@ public class KernelJsonFunctionTests
         formattedCounts.ShouldBeWithDiff(
             """
             InvocationCount: 20
-            BuildListCount: 44
+            BuildListCount: 118
+            BuildListItemCount: 300
             LoopIterationCount: 24
             InstructionCount: 728
+            ExpressionTemplatePlanParseCount: 10
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 13
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 8
+            DirectInterpreterExpressionCount: 209
+            DirectInterpreterLiteralCount: 120
+            DirectInterpreterListCount: 74
+            DirectInterpreterEvalCount: 7
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 8
             """);
     }
 
@@ -1509,7 +1551,7 @@ public class KernelJsonFunctionTests
             CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("decodeLazyCommentResponseCount"),
                 String("{ \"message\": \"a\", \"responses\": [{ \"message\": \"b\", \"responses\": [] }] }"),
-                s_vm);
+                _profilingVm);
 
         value.Should().Be(OkOf(Integer(1)));
 
@@ -1519,9 +1561,22 @@ public class KernelJsonFunctionTests
         formattedCounts.ShouldBeWithDiff(
             """
             InvocationCount: 46
-            BuildListCount: 113
+            BuildListCount: 193
+            BuildListItemCount: 507
             LoopIterationCount: 40
             InstructionCount: 1_450
+            ExpressionTemplatePlanParseCount: 13
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 28
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 9
+            DirectInterpreterExpressionCount: 227
+            DirectInterpreterLiteralCount: 130
+            DirectInterpreterListCount: 80
+            DirectInterpreterEvalCount: 8
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 9
             """);
     }
 
@@ -1535,16 +1590,29 @@ public class KernelJsonFunctionTests
                 GetTestFunction("decodeAtString"),
                 ElmList(String("person"), String("name")),
                 String("{ \"person\": { \"name\": \"tom\", \"age\": 42 } }"),
-                s_vm);
+                _profilingVm);
 
         value.Should().Be(OkOf(String("tom")));
 
         PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 12
-            BuildListCount: 43
+            BuildListCount: 49
+            BuildListItemCount: 130
             LoopIterationCount: 23
             InstructionCount: 725
+            ExpressionTemplatePlanParseCount: 4
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 3
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 1
+            DirectInterpreterExpressionCount: 18
+            DirectInterpreterLiteralCount: 10
+            DirectInterpreterListCount: 6
+            DirectInterpreterEvalCount: 1
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 1
             """);
     }
 
@@ -1556,16 +1624,29 @@ public class KernelJsonFunctionTests
                 GetTestFunction("decodeAtInt"),
                 ElmList(String("person"), String("age")),
                 String("{ \"person\": { \"name\": \"tom\", \"age\": 42 } }"),
-                s_vm);
+                _profilingVm);
 
         value.Should().Be(OkOf(Integer(42)));
 
         PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 12
-            BuildListCount: 43
+            BuildListCount: 49
+            BuildListItemCount: 130
             LoopIterationCount: 23
             InstructionCount: 725
+            ExpressionTemplatePlanParseCount: 4
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 3
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 1
+            DirectInterpreterExpressionCount: 18
+            DirectInterpreterLiteralCount: 10
+            DirectInterpreterListCount: 6
+            DirectInterpreterEvalCount: 1
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 1
             """);
     }
 
@@ -1619,16 +1700,29 @@ public class KernelJsonFunctionTests
                 GetTestFunction("decodeDictGetInt"),
                 String("alice"),
                 String("{ \"alice\": 42, \"bob\": 99 }"),
-                s_vm);
+                _profilingVm);
 
         value.Should().Be(JustOf(Integer(42)));
 
         PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 20
-            BuildListCount: 55
+            BuildListCount: 67
+            BuildListItemCount: 207
             LoopIterationCount: 15
             InstructionCount: 799
+            ExpressionTemplatePlanParseCount: 8
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 7
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 2
+            DirectInterpreterExpressionCount: 36
+            DirectInterpreterLiteralCount: 20
+            DirectInterpreterListCount: 12
+            DirectInterpreterEvalCount: 2
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 2
             """);
     }
 
@@ -1639,16 +1733,29 @@ public class KernelJsonFunctionTests
             CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("decodeDictSizeInt"),
                 String("{ \"alice\": 42, \"bob\": 99 }"),
-                s_vm);
+                _profilingVm);
 
         value.Should().Be(Integer(2));
 
         PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 16
-            BuildListCount: 46
+            BuildListCount: 52
+            BuildListItemCount: 160
             LoopIterationCount: 16
             InstructionCount: 741
+            ExpressionTemplatePlanParseCount: 6
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 5
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 1
+            DirectInterpreterExpressionCount: 18
+            DirectInterpreterLiteralCount: 10
+            DirectInterpreterListCount: 6
+            DirectInterpreterEvalCount: 1
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 1
             """);
     }
 
@@ -1683,7 +1790,7 @@ public class KernelJsonFunctionTests
             CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("decodeNestedListInt"),
                 String("[[1,2],[3,4]]"),
-                s_vm);
+                _profilingVm);
 
         value.Should().Be(
             OkOf(
@@ -1694,9 +1801,22 @@ public class KernelJsonFunctionTests
         PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 26
-            BuildListCount: 55
+            BuildListCount: 61
+            BuildListItemCount: 169
             LoopIterationCount: 2
             InstructionCount: 664
+            ExpressionTemplatePlanParseCount: 5
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 6
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 1
+            DirectInterpreterExpressionCount: 18
+            DirectInterpreterLiteralCount: 10
+            DirectInterpreterListCount: 6
+            DirectInterpreterEvalCount: 1
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 1
             """);
     }
 
@@ -1732,16 +1852,29 @@ public class KernelJsonFunctionTests
             CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("encodeDecodeRoundtrip"),
                 obj,
-                s_vm);
+                _profilingVm);
 
         value.Should().Be(OkOf(obj));
 
         PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 12
-            BuildListCount: 40
+            BuildListCount: 52
+            BuildListItemCount: 136
             LoopIterationCount: 21
             InstructionCount: 883
+            ExpressionTemplatePlanParseCount: 4
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 2
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 2
+            DirectInterpreterExpressionCount: 36
+            DirectInterpreterLiteralCount: 20
+            DirectInterpreterListCount: 12
+            DirectInterpreterEvalCount: 2
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 2
             """);
     }
 

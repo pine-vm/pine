@@ -1,5 +1,6 @@
 using Pine.Core.CLI;
 using Pine.Core.Elm.Testing;
+using Pine.Core.Interpreter.IntermediateVM;
 using Spectre.Console;
 using System;
 using System.CommandLine;
@@ -248,6 +249,9 @@ public static class TestProfileCommand
                 $"invocations: {CommandLineInterface.FormatIntegerForDisplay(summary.Counters.InvocationCount)}; " +
                 $"loops: {CommandLineInterface.FormatIntegerForDisplay(summary.Counters.LoopIterationCount)}; " +
                 $"instructions: {CommandLineInterface.FormatIntegerForDisplay(summary.Counters.InstructionCount)}");
+
+            Write(PerformanceCountersFormatting.FormatCounts(summary.Counters));
+            Write(PerformanceCountersFormatting.FormatCountsByPhase(summary.CountersByPhase));
         }
 
         using var instrumentation =

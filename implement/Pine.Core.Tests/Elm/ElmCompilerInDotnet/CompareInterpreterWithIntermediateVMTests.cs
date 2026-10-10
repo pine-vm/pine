@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Interpreter.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -18,6 +19,19 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 /// </summary>
 public class CompareInterpreterWithIntermediateVMTests
 {
+    [Fact]
+    public void Repeated_evaluations_keep_identical_counters_after_other_workloads()
+    {
+        var first = s_framework.Value.Eval("mapWithLambda [ 1, 2, 3 ]");
+        s_framework.Value.Eval("sumList [ 1, 2, 3, 4 ]");
+        s_framework.Value.Eval("mapWithLambda [ 5, 6 ]");
+        var repeated = s_framework.Value.Eval("mapWithLambda [ 1, 2, 3 ]");
+
+        repeated.Value.Should().Be(first.Value);
+        PerformanceCountersFormatting.FormatCounts(repeated.VmCounters)
+            .ShouldBeWithDiff(PerformanceCountersFormatting.FormatCounts(first.VmCounters));
+    }
+
     /// <summary>
     /// Custom Elm module hosting all entry points used by these tests. Kept intentionally
     /// small so the produced metrics and traces are easy to reason about in snapshot form.

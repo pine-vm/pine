@@ -7039,7 +7039,7 @@ public class CSharpFormatTests
         var input =
             """"
             ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters)
-                .Should().Be(
+                .ShouldBeWithDiff(
                     """
                     InstructionLoopCount: 2_249
                     DirectFunctionApplicationCount: 360
@@ -7050,7 +7050,7 @@ public class CSharpFormatTests
 
         var expected =
             """"
-            ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters).Should().Be(
+            ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters).ShouldBeWithDiff(
                 """
                 InstructionLoopCount: 2_249
                 DirectFunctionApplicationCount: 360

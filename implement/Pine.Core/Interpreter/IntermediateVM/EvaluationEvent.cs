@@ -34,6 +34,7 @@ public enum EvaluationEventKind
 /// <param name="LoadStackTrace">Queries live frames lazily, current frame first, during the callback.</param>
 /// <param name="StopReason">Reason for an evaluation-stop event; null for other events.</param>
 /// <param name="Instructions">Compiled body containing the reported instruction pointer.</param>
+/// <param name="LoadCountersByOrigin">Queries disjoint work totals during the callback.</param>
 public readonly record struct EvaluationEvent(
     EvaluationEventKind Kind,
     long FrameIndex,
@@ -45,4 +46,5 @@ public readonly record struct EvaluationEvent(
     Func<PerformanceCounters> LoadCounters,
     Func<IEnumerable<EvaluationStackTraceFrame>> LoadStackTrace,
     EvaluationErrorReason? StopReason = null,
-    StackFrameInstructions? Instructions = null);
+    StackFrameInstructions? Instructions = null,
+    Func<PerformanceCountersByOrigin>? LoadCountersByOrigin = null);

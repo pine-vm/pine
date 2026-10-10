@@ -129,7 +129,7 @@ public class ElmParserExpressionTests
         .First(m => m.moduleName is "ElmParserExpressionTestModule")
         .moduleContent.FunctionDeclarations[name];
 
-    private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
+    private readonly Core.Interpreter.IntermediateVM.PineVM _vm =
         ElmCompilerTestHelper.PineVMForProfiling(_ => { });
 
     /// <summary>
@@ -202,7 +202,7 @@ public class ElmParserExpressionTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("parseIntLiteral"),
                 ElmString("123"),
-                s_vm);
+                _vm);
 
         var rendered = ElmValue.RenderAsElmExpression(value);
 
@@ -213,8 +213,21 @@ public class ElmParserExpressionTests
             """
             InvocationCount: 9
             BuildListCount: 35
+            BuildListItemCount: 176
             LoopIterationCount: 5
             InstructionCount: 510
+            ExpressionTemplatePlanParseCount: 5
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 0
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -225,7 +238,7 @@ public class ElmParserExpressionTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("parseStringLiteral"),
                 ElmString("\"hello world\""),
-                s_vm);
+                _vm);
 
         var rendered = ElmValue.RenderAsElmExpression(value);
 
@@ -236,8 +249,21 @@ public class ElmParserExpressionTests
             """
             InvocationCount: 10
             BuildListCount: 41
+            BuildListItemCount: 202
             LoopIterationCount: 12
             InstructionCount: 645
+            ExpressionTemplatePlanParseCount: 5
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 0
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -252,8 +278,21 @@ public class ElmParserExpressionTests
             """
             InvocationCount: 10
             BuildListCount: 41
+            BuildListItemCount: 201
             LoopIterationCount: 3
             InstructionCount: 598
+            ExpressionTemplatePlanParseCount: 5
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 0
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
 
         // Snapshot of the Elm syntax interpreter's metrics for the same root expression.
@@ -279,7 +318,7 @@ public class ElmParserExpressionTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("parseExpression"),
                 ElmString("[]"),
-                s_vm);
+                _vm);
 
         var rendered = ElmValue.RenderAsElmExpression(value);
 
@@ -290,8 +329,21 @@ public class ElmParserExpressionTests
             """
             InvocationCount: 12
             BuildListCount: 46
+            BuildListItemCount: 236
             LoopIterationCount: 0
             InstructionCount: 623
+            ExpressionTemplatePlanParseCount: 6
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 0
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -309,8 +361,21 @@ public class ElmParserExpressionTests
             """
             InvocationCount: 26
             BuildListCount: 88
+            BuildListItemCount: 424
             LoopIterationCount: 4
             InstructionCount: 1_105
+            ExpressionTemplatePlanParseCount: 15
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 0
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
 
         // Snapshot of the Elm syntax interpreter's metrics for the same root expression.
@@ -333,7 +398,7 @@ public class ElmParserExpressionTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("parseExpression"),
                 ElmString("[1,2,3,4,5,6,7,8,9,10]"),
-                s_vm);
+                _vm);
 
         var rendered = ElmValue.RenderAsElmExpression(value);
 
@@ -346,8 +411,21 @@ public class ElmParserExpressionTests
             """
             InvocationCount: 152
             BuildListCount: 457
+            BuildListItemCount: 2_170
             LoopIterationCount: 15
             InstructionCount: 4_934
+            ExpressionTemplatePlanParseCount: 15
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 0
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -358,7 +436,7 @@ public class ElmParserExpressionTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("parseExpression"),
                 ElmString("alfa 79 \"hello world\" beta [41] (\\gamma -> delta gamma)"),
-                s_vm);
+                _vm);
 
         var valueAsExpression =
             ElmValue.RenderAsElmExpression(value);
@@ -370,8 +448,21 @@ public class ElmParserExpressionTests
             """
             InvocationCount: 291
             BuildListCount: 938
+            BuildListItemCount: 4_401
             LoopIterationCount: 147
             InstructionCount: 10_758
+            ExpressionTemplatePlanParseCount: 29
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 0
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -382,7 +473,7 @@ public class ElmParserExpressionTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("parseExpression"),
                 ElmString("[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,100,101,102,103,104,105,106,107,108,109]"),
-                s_vm);
+                _vm);
 
         var rendered = ElmValue.RenderAsElmExpression(value);
 
@@ -395,8 +486,21 @@ public class ElmParserExpressionTests
             """
             InvocationCount: 572
             BuildListCount: 1_687
+            BuildListItemCount: 7_990
             LoopIterationCount: 125
             InstructionCount: 18_174
+            ExpressionTemplatePlanParseCount: 15
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 0
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -414,7 +518,7 @@ public class ElmParserExpressionTests
                     , [ 100, 101, 102, 103, 104, 105, 106, 107, 108, 109 ]
                     ]
                     """.Trim()),
-                s_vm);
+                _vm);
 
         var rendered = ElmValue.RenderAsElmExpression(value);
 
@@ -427,8 +531,21 @@ public class ElmParserExpressionTests
             """
             InvocationCount: 632
             BuildListCount: 1_855
+            BuildListItemCount: 8_774
             LoopIterationCount: 205
             InstructionCount: 20_622
+            ExpressionTemplatePlanParseCount: 15
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 0
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -443,7 +560,7 @@ public class ElmParserExpressionTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("parseExpression"),
                 ElmString("1 + 2"),
-                s_vm);
+                _vm);
 
         var rendered = ElmValue.RenderAsElmExpression(value);
 
@@ -463,7 +580,7 @@ public class ElmParserExpressionTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("parseExpression"),
                 ElmString("a |> b"),
-                s_vm);
+                _vm);
 
         var rendered = ElmValue.RenderAsElmExpression(value);
 
@@ -483,7 +600,7 @@ public class ElmParserExpressionTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("parseExpression"),
                 ElmString("a == b"),
-                s_vm);
+                _vm);
 
         var rendered = ElmValue.RenderAsElmExpression(value);
 

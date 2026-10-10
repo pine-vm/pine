@@ -284,7 +284,7 @@ public class FunctionApplicationOverheadTests
     /// elm-syntax parser. Disabling reduction here reveals the per-call
     /// cost structure that optimization should target.
     /// </summary>
-    private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
+    private readonly Core.Interpreter.IntermediateVM.PineVM _vm =
         Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
             evalCache: null,
             evaluationConfigDefault: null,
@@ -316,7 +316,7 @@ public class FunctionApplicationOverheadTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("testApplyIncrement"),
                 ElmValue.Integer(10),
-                s_vm);
+                _vm);
 
         value.Should().Be(ElmValue.Integer(11));
 
@@ -324,8 +324,21 @@ public class FunctionApplicationOverheadTests
             """
             InvocationCount: 2
             BuildListCount: 0
+            BuildListItemCount: 0
             LoopIterationCount: 0
             InstructionCount: 12
+            ExpressionTemplatePlanParseCount: 1
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 1
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -344,16 +357,29 @@ public class FunctionApplicationOverheadTests
                 GetTestFunction("testApply2Add"),
                 ElmValue.Integer(3),
                 ElmValue.Integer(4),
-                s_vm);
+                _vm);
 
         value.Should().Be(ElmValue.Integer(7));
 
         PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 4
-            BuildListCount: 4
+            BuildListCount: 22
+            BuildListItemCount: 52
             LoopIterationCount: 0
             InstructionCount: 23
+            ExpressionTemplatePlanParseCount: 2
+            DeferredTemplateValueAllocationCount: 1
+            TemplateDirectInvocationCount: 1
+            DeferredTemplateValueMaterializationCount: 1
+            DirectInterpreterInvocationCount: 3
+            DirectInterpreterExpressionCount: 51
+            DirectInterpreterLiteralCount: 28
+            DirectInterpreterListCount: 18
+            DirectInterpreterEvalCount: 2
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 3
             """);
     }
 
@@ -370,7 +396,7 @@ public class FunctionApplicationOverheadTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("testApplyTwiceIncrement"),
                 ElmValue.Integer(10),
-                s_vm);
+                _vm);
 
         value.Should().Be(ElmValue.Integer(12));
 
@@ -378,8 +404,21 @@ public class FunctionApplicationOverheadTests
             """
             InvocationCount: 3
             BuildListCount: 0
+            BuildListItemCount: 0
             LoopIterationCount: 0
             InstructionCount: 20
+            ExpressionTemplatePlanParseCount: 1
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 2
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -400,7 +439,7 @@ public class FunctionApplicationOverheadTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("testListMapIncrement"),
                 inputList,
-                s_vm);
+                _vm);
 
         value.Should().Be(
             ElmValue.ListInstance(
@@ -410,8 +449,21 @@ public class FunctionApplicationOverheadTests
             """
             InvocationCount: 7
             BuildListCount: 3
+            BuildListItemCount: 9
             LoopIterationCount: 0
             InstructionCount: 58
+            ExpressionTemplatePlanParseCount: 2
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 3
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -489,10 +541,23 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
-            InvocationCount: 45
-            BuildListCount: 166
+            InvocationCount: 25
+            BuildListCount: 31
+            BuildListItemCount: 80
             LoopIterationCount: 0
-            InstructionCount: 707
+            InstructionCount: 205
+            ExpressionTemplatePlanParseCount: 2
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 6
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 2
+            DirectInterpreterExpressionCount: 64
+            DirectInterpreterLiteralCount: 37
+            DirectInterpreterListCount: 25
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 2
             """);
 
         // --- StackFrameInstructions tracking ---
@@ -738,7 +803,7 @@ public class FunctionApplicationOverheadTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("testMakeAdder"),
                 ElmValue.Integer(10),
-                s_vm);
+                _vm);
 
         value.Should().Be(ElmValue.Integer(15));
 
@@ -746,8 +811,21 @@ public class FunctionApplicationOverheadTests
             """
             InvocationCount: 2
             BuildListCount: 0
+            BuildListItemCount: 0
             LoopIterationCount: 0
             InstructionCount: 8
+            ExpressionTemplatePlanParseCount: 0
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 0
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -767,16 +845,29 @@ public class FunctionApplicationOverheadTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("testChainedClosures"),
                 ElmValue.Integer(10),
-                s_vm);
+                _vm);
 
         value.Should().Be(ElmValue.Integer(20));
 
         PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 3
-            BuildListCount: 0
+            BuildListCount: 12
+            BuildListItemCount: 28
             LoopIterationCount: 0
             InstructionCount: 22
+            ExpressionTemplatePlanParseCount: 2
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 2
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 2
+            DirectInterpreterExpressionCount: 36
+            DirectInterpreterLiteralCount: 20
+            DirectInterpreterListCount: 12
+            DirectInterpreterEvalCount: 2
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 2
             """);
     }
 
@@ -800,7 +891,7 @@ public class FunctionApplicationOverheadTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("testDualListMap"),
                 inputList,
-                s_vm);
+                _vm);
 
         var expectedIncrementedList =
             ElmValue.ListInstance(
@@ -818,8 +909,21 @@ public class FunctionApplicationOverheadTests
             """
             InvocationCount: 41
             BuildListCount: 21
+            BuildListItemCount: 62
             LoopIterationCount: 0
             InstructionCount: 354
+            ExpressionTemplatePlanParseCount: 3
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 20
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -842,7 +946,7 @@ public class FunctionApplicationOverheadTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("testMutualListMap"),
                 inputList,
-                s_vm);
+                _vm);
 
         // listMap_a with increment/double on [1,2,3]:
         // index 0 (listMap_a): increment 1 = 2
@@ -856,8 +960,21 @@ public class FunctionApplicationOverheadTests
             """
             InvocationCount: 7
             BuildListCount: 3
+            BuildListItemCount: 12
             LoopIterationCount: 0
             InstructionCount: 58
+            ExpressionTemplatePlanParseCount: 4
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 3
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -879,7 +996,7 @@ public class FunctionApplicationOverheadTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("testDualMutualListMap"),
                 inputList,
-                s_vm);
+                _vm);
 
         // listMap_a with (increment, double) on [1..10]:
         // Even indices (0,2,4,6,8) use increment, odd indices (1,3,5,7,9) use double
@@ -901,8 +1018,21 @@ public class FunctionApplicationOverheadTests
             """
             InvocationCount: 41
             BuildListCount: 21
+            BuildListItemCount: 82
             LoopIterationCount: 0
             InstructionCount: 348
+            ExpressionTemplatePlanParseCount: 4
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 20
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -924,7 +1054,7 @@ public class FunctionApplicationOverheadTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("testListMapTagged"),
                 inputList,
-                s_vm);
+                _vm);
 
         value.Should().Be(
             ElmValue.ListInstance(
@@ -934,8 +1064,21 @@ public class FunctionApplicationOverheadTests
             """
             InvocationCount: 7
             BuildListCount: 3
+            BuildListItemCount: 9
             LoopIterationCount: 0
             InstructionCount: 58
+            ExpressionTemplatePlanParseCount: 2
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 3
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -957,7 +1100,7 @@ public class FunctionApplicationOverheadTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("testDualListMapTagged"),
                 inputList,
-                s_vm);
+                _vm);
 
         var expectedIncrementedList =
             ElmValue.ListInstance(
@@ -975,8 +1118,21 @@ public class FunctionApplicationOverheadTests
             """
             InvocationCount: 41
             BuildListCount: 21
+            BuildListItemCount: 62
             LoopIterationCount: 0
             InstructionCount: 354
+            ExpressionTemplatePlanParseCount: 3
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 20
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 }

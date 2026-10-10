@@ -417,7 +417,7 @@ public class ParserFastTests
         .First(m => m.moduleName is "ParserFastTestModule")
         .moduleContent.FunctionDeclarations[name];
 
-    private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
+    private readonly Core.Interpreter.IntermediateVM.PineVM _vm =
         ElmCompilerTestHelper.PineVMForProfiling(_ => { });
 
     /// <summary>
@@ -511,7 +511,7 @@ public class ParserFastTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("testSkipWhitespace"),
                 ElmString("   ok"),
-                s_vm);
+                _vm);
 
         value.Should().Be(Integer(12));
 
@@ -519,8 +519,21 @@ public class ParserFastTests
             """
             InvocationCount: 0
             BuildListCount: 0
+            BuildListItemCount: 0
             LoopIterationCount: 0
             InstructionCount: 2
+            ExpressionTemplatePlanParseCount: 0
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 0
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -531,7 +544,7 @@ public class ParserFastTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("testSkipWhitespace"),
                 ElmString(" \n  x"),
-                s_vm);
+                _vm);
 
         value.Should().Be(Integer(16));
 
@@ -539,8 +552,21 @@ public class ParserFastTests
             """
             InvocationCount: 0
             BuildListCount: 0
+            BuildListItemCount: 0
             LoopIterationCount: 0
             InstructionCount: 2
+            ExpressionTemplatePlanParseCount: 0
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 0
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -551,7 +577,7 @@ public class ParserFastTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("testSkipWhitespace"),
                 ElmString("ab"),
-                s_vm);
+                _vm);
 
         value.Should().Be(Integer(0));
 
@@ -559,8 +585,21 @@ public class ParserFastTests
             """
             InvocationCount: 0
             BuildListCount: 0
+            BuildListItemCount: 0
             LoopIterationCount: 0
             InstructionCount: 2
+            ExpressionTemplatePlanParseCount: 0
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 0
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -573,7 +612,7 @@ public class ParserFastTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("testWithoutLinebreak_alpha"),
                 ElmString("hello"),
-                s_vm);
+                _vm);
 
         value.Should().Be(Integer(5));
 
@@ -581,8 +620,21 @@ public class ParserFastTests
             """
             InvocationCount: 4
             BuildListCount: 1
+            BuildListItemCount: 7
             LoopIterationCount: 4
             InstructionCount: 134
+            ExpressionTemplatePlanParseCount: 1
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 4
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -593,7 +645,7 @@ public class ParserFastTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("testWithoutLinebreak_digits"),
                 ElmString("12345"),
-                s_vm);
+                _vm);
 
         value.Should().Be(Integer(5));
 
@@ -601,8 +653,21 @@ public class ParserFastTests
             """
             InvocationCount: 4
             BuildListCount: 1
+            BuildListItemCount: 7
             LoopIterationCount: 4
             InstructionCount: 110
+            ExpressionTemplatePlanParseCount: 1
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 4
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -613,16 +678,29 @@ public class ParserFastTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("testWithoutLinebreak_thenSymbol"),
                 ElmString("abc!"),
-                s_vm);
+                _vm);
 
         value.Should().Be(Integer(3));
 
         PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 8
-            BuildListCount: 5
+            BuildListCount: 23
+            BuildListItemCount: 67
             LoopIterationCount: 1
             InstructionCount: 163
+            ExpressionTemplatePlanParseCount: 4
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 7
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 3
+            DirectInterpreterExpressionCount: 51
+            DirectInterpreterLiteralCount: 28
+            DirectInterpreterListCount: 18
+            DirectInterpreterEvalCount: 2
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 3
             """);
     }
 
@@ -683,18 +761,44 @@ public class ParserFastTests
 
         PerformanceCountersFormatting.FormatCounts(report1).ShouldBeWithDiff(
             """
-            InvocationCount: 2
-            BuildListCount: 3
-            LoopIterationCount: 18
-            InstructionCount: 849
+            InvocationCount: 26
+            BuildListCount: 1
+            BuildListItemCount: 7
+            LoopIterationCount: 25
+            InstructionCount: 690
+            ExpressionTemplatePlanParseCount: 1
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 25
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
 
         PerformanceCountersFormatting.FormatCounts(report2).ShouldBeWithDiff(
             """
-            InvocationCount: 2
-            BuildListCount: 3
-            LoopIterationCount: 44
-            InstructionCount: 1_993
+            InvocationCount: 52
+            BuildListCount: 1
+            BuildListItemCount: 7
+            LoopIterationCount: 51
+            InstructionCount: 1_366
+            ExpressionTemplatePlanParseCount: 1
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 51
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 

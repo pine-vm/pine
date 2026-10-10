@@ -19,6 +19,116 @@ public class ElmTestInstrumentationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void Counter_phase_totals_include_prefix_items_and_do_not_double_count_evaluations(bool diagnostics)
+    {
+        using var profile =
+            new ElmTestInstrumentation(
+                new() { DisablePrecompiledLeaves = true },
+                recordDiagnostics: diagnostics);
+
+        var expression = Expression.EnvironmentInstance;
+
+        var instructions =
+            new StackFrameInstructions(
+                StaticFunctionInterface.Generic,
+                [
+                StackInstruction.Push_Literal(PineValue.EmptyList),
+                StackInstruction.Build_List_With_Prefix(PineValue.List([PineValue.EmptyList, PineValue.EmptyList]), 1),
+                StackInstruction.Return
+                ],
+                null);
+
+        var caches = new PineVMSharedCaches();
+        caches.ExpressionCompilations.GetOrAdd(expression, () => new(new(instructions, []), new string('0', 64), null));
+        var vm = profile.CreateVm(new ConcurrentInvocationCache(), caches);
+
+        using (profile.EnterScope("preparation", "suite"))
+            vm.EvaluateExpression(expression, PineValue.EmptyList).IsOkOrNull().Should().NotBeNull();
+
+        var prepared = profile.GetSummary();
+
+        using (profile.EnterScope("execution", "test"))
+        {
+            vm.EvaluateExpression(expression, PineValue.EmptyList).IsOkOrNull().Should().NotBeNull();
+            vm.EvaluateExpression(expression, PineValue.EmptyList).IsOkOrNull().Should().NotBeNull();
+        }
+
+        var summary = profile.GetSummary();
+        summary.Counters.BuildListCount.Should().Be(3);
+        summary.Counters.BuildListItemCount.Should().Be(9);
+        summary.CountersByPhase["preparation"].Total.BuildListItemCount.Should().Be(3);
+        summary.CountersByPhase["execution"].Total.BuildListItemCount.Should().Be(6);
+        prepared.CountersByPhase["execution"].Total.Should().Be(default(PerformanceCounters));
+
+        PerformanceCounters.Aggregate(summary.CountersByPhase.Values.Select(origins => origins.Total))
+            .Should().Be(summary.Counters);
+
+        summary.CountersByPhase.Values.SelectMany(origins => origins.Enumerate())
+            .Where(row => row.Origin != "VirtualMachine").Select(row => row.Counters)
+            .Should().OnlyContain(counter => counter == default);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Phase_origin_totals_include_materializing_a_deferred_template_result(bool diagnostics)
+    {
+        using var profile =
+            new ElmTestInstrumentation(
+                new()
+                {
+                    DisablePrecompiledLeaves = true,
+                    DisableReduction = true,
+                    DisableInlining = true
+                },
+                recordDiagnostics: diagnostics);
+
+        var function =
+            FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(
+                ExpressionBuilder.BuildExpressionForPathInExpression([1], Expression.EnvironmentInstance),
+                parameterCount: 3)!;
+
+        var intermediateExpression =
+            new Expression.Eval(
+                Expression.LitralInst(function),
+                Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(11)));
+
+        var caches = new PineVMSharedCaches();
+
+        var instructions =
+            new StackFrameInstructions(
+                StaticFunctionInterface.Generic,
+                [
+                StackInstruction.Push_Literal(IntegerEncoding.EncodeSignedInteger(11)),
+                StackInstruction.Push_Literal(function),
+                StackInstruction.Eval_Binary,
+                StackInstruction.Return
+                ],
+                null);
+
+        caches.ExpressionCompilations.GetOrAdd(
+            intermediateExpression,
+            () => new(new(instructions, []), new string('0', 64), null));
+
+        using (profile.EnterScope("preparation", "deferred template"))
+            profile.CreateVm(new ConcurrentInvocationCache(), caches)
+                .EvaluateExpression(intermediateExpression, PineValue.EmptyList).IsOkOrNull().Should().NotBeNull();
+
+        var summary = profile.GetSummary();
+        var origins = summary.CountersByPhase["preparation"];
+        origins.DeferredTemplateValueMaterialization.DeferredTemplateValueMaterializationCount.Should().Be(1);
+        origins.DeferredTemplateValueMaterialization.DirectInterpreterInvocationCount.Should().Be(1);
+        origins.DeferredTemplateValueMaterialization.DirectInterpreterEvalCount.Should().Be(1);
+        origins.DeferredTemplateValueMaterialization.BuildListItemCount.Should().BeGreaterThan(0);
+        origins.Total.Should().Be(summary.Counters);
+        origins.ExpressionTemplatePlanParsing.ExpressionTemplatePlanParseCount.Should().Be(1);
+        origins.ExpressionTemplatePlanParsing.DirectInterpreterExpressionCount.Should().BeGreaterThan(0);
+        origins.VirtualMachine.DirectInterpreterExpressionCount.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void Application_fast_paths_can_be_disabled_without_changing_nested_eval_results(bool disableFastPaths)
     {
         using var profile =
@@ -52,7 +162,7 @@ public class ElmTestInstrumentationTests
         report.Options.DisableApplicationFastPaths.Should().Be(disableFastPaths);
 
         if (disableFastPaths)
-            report.Summary.Counters.DirectSaturatedApplicationCount.Should().Be(0);
+            report.Summary.Counters.TemplateDirectInvocationCount.Should().Be(0);
     }
 
     [Fact]
@@ -258,6 +368,9 @@ public class ElmTestInstrumentationTests
 
         var report = profile.GetReport();
         var value = report.Samples.Single().StackTrace.Single().Locals![1];
+        report.Summary.Counters.BuildListItemCount.Should().Be(2);
+        report.Samples.Single().Summary.Counters.BuildListItemCount.Should().Be(2);
+        report.Summary.CountersByPhase["initialization"].Total.Should().Be(report.Summary.Counters);
         value.ValueHash.Should().BeNull("capturing structural children must not materialize their parent");
         value.ItemCount.Should().Be(2);
         value.Items.Should().HaveCount(2);

@@ -536,10 +536,15 @@ public record FunctionRecord(
 
     internal static Result<string, FunctionRecord> ParseCurriedTemplateForm(
         PineValue encodedWrapper,
-        PineVMParseCache parseCache)
+        PineVMParseCache parseCache,
+        DirectInterpreterCounters? counters = null)
     {
         var interpreter =
-            DirectInterpreter.WithLocalEvalCache(parseCache);
+            counters is null
+            ?
+            DirectInterpreter.WithLocalEvalCache(parseCache)
+            :
+            DirectInterpreter.WithLocalEvalCache(parseCache, counters);
 
         var probeArguments = new List<PineValue>();
         var visitedValues = new HashSet<PineValue>();

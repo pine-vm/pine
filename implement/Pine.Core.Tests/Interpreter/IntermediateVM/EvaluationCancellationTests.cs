@@ -39,12 +39,26 @@ public class EvaluationCancellationTests
         error!.Reason.Should().Be(new EvaluationErrorReason.CancellationRequested());
         error.StackTrace.Should().BeEmpty();
 
-        error.Counters.Should().Be(
-            new PerformanceCounters(
-                InvocationCount: 0,
-                BuildListCount: 0,
-                LoopIterationCount: 0,
-                InstructionCount: 0));
+        PerformanceCountersFormatting.FormatCounts(error.Counters).ShouldBeWithDiff(
+            """
+            InvocationCount: 0
+            BuildListCount: 0
+            BuildListItemCount: 0
+            LoopIterationCount: 0
+            InstructionCount: 0
+            ExpressionTemplatePlanParseCount: 0
+            DeferredTemplateValueAllocationCount: 0
+            TemplateDirectInvocationCount: 0
+            DeferredTemplateValueMaterializationCount: 0
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
+            DirectInterpreterBuiltinCount: 0
+            DirectInterpreterConditionalCount: 0
+            DirectInterpreterEnvironmentCount: 0
+            """);
     }
 
     [Fact]

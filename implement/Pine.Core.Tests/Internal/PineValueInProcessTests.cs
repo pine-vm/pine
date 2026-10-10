@@ -165,7 +165,7 @@ public class PineValueInProcessTests
     }
 
     [Fact]
-    public void Partial_application_materializes_canonical_value_once()
+    public void Deferred_template_value_materializes_canonical_value_once()
     {
         var expected =
             PineValue.List(
@@ -176,18 +176,18 @@ public class PineValueInProcessTests
 
         var materializationCount = 0;
 
-        var partialApplication =
-            PineValueInProcess.CreatePartialApplication(
-                callable: new object(),
-                arguments:
+        var deferredTemplateValue =
+            PineValueInProcess.CreateDeferredTemplateValue(
+                templatePlan: new object(),
+                environments:
                 [
                 PineValueInProcess.Create(PineValue.Blob([2])),
                 PineValueInProcess.Create(PineValue.Blob([3]))
                 ],
                 materialize:
-                arguments =>
+                environments =>
                 {
-                    arguments.Select(argument => argument.Evaluate()).Should().Equal(
+                    environments.Select(environment => environment.Evaluate()).Should().Equal(
                         PineValue.Blob([2]),
                         PineValue.Blob([3]));
 
@@ -195,18 +195,18 @@ public class PineValueInProcessTests
                 },
                 reportMaterialization: () => materializationCount++);
 
-        partialApplication.EvaluatedOrNull.Should().BeNull();
-        partialApplication.PartialApplicationOrNull.Should().NotBeNull();
+        deferredTemplateValue.EvaluatedOrNull.Should().BeNull();
+        deferredTemplateValue.DeferredTemplateValueOrNull.Should().NotBeNull();
 
-        partialApplication.Evaluate().Should().BeSameAs(expected);
-        partialApplication.Evaluate().Should().BeSameAs(expected);
+        deferredTemplateValue.Evaluate().Should().BeSameAs(expected);
+        deferredTemplateValue.Evaluate().Should().BeSameAs(expected);
 
         materializationCount.Should().Be(1);
-        partialApplication.PartialApplicationOrNull.Should().BeNull();
+        deferredTemplateValue.DeferredTemplateValueOrNull.Should().BeNull();
     }
 
     [Fact]
-    public void Partial_application_structural_operations_match_canonical_value()
+    public void Deferred_template_value_structural_operations_match_canonical_value()
     {
         var expected =
             PineValue.List(
@@ -215,29 +215,29 @@ public class PineValueInProcessTests
                 PineValue.List([PineValue.Blob([2]), PineValue.Blob([3])])
                 ]);
 
-        PineValueInProcess CreatePartial() =>
-            PineValueInProcess.CreatePartialApplication(
-                callable: new object(),
-                arguments: [],
+        PineValueInProcess CreateDeferred() =>
+            PineValueInProcess.CreateDeferredTemplateValue(
+                templatePlan: new object(),
+                environments: [],
                 materialize: _ => expected);
 
-        CreatePartial().IsList().Should().BeTrue();
-        CreatePartial().IsBlob().Should().BeFalse();
-        CreatePartial().GetLength().Should().Be(2);
-        CreatePartial().GetElementAt(0).Evaluate().Should().Be(PineValue.Blob([1]));
+        CreateDeferred().IsList().Should().BeTrue();
+        CreateDeferred().IsBlob().Should().BeFalse();
+        CreateDeferred().GetLength().Should().Be(2);
+        CreateDeferred().GetElementAt(0).Evaluate().Should().Be(PineValue.Blob([1]));
 
         PineValueInProcess.ValueFromPathOrNull(
-            CreatePartial(),
+            CreateDeferred(),
             (IReadOnlyList<int>)[1, 1])!
             .Evaluate()
             .Should().Be(PineValue.Blob([3]));
 
         PineValueInProcess.AreEqual(
-            CreatePartial(),
+            CreateDeferred(),
             PineValueInProcess.Create(expected))
             .Should().BeTrue();
 
-        PineValueInProcess.AreEqual(CreatePartial(), expected).Should().BeTrue();
+        PineValueInProcess.AreEqual(CreateDeferred(), expected).Should().BeTrue();
     }
 
     [Fact]
@@ -985,15 +985,15 @@ public class PineValueInProcessTests
     }
 
     [Fact]
-    public void ConcatBinary_short_lists_defer_partial_application_materialization_until_evaluation()
+    public void ConcatBinary_short_lists_preserve_deferred_template_values_until_evaluation()
     {
         var materializationCount = 0;
         var childValue = PineValue.List([PineValue.Blob([1])]);
 
         var child =
-            PineValueInProcess.CreatePartialApplication(
-                callable: new object(),
-                arguments: [],
+            PineValueInProcess.CreateDeferredTemplateValue(
+                templatePlan: new object(),
+                environments: [],
                 materialize: _ => childValue,
                 reportMaterialization: () => ++materializationCount);
 

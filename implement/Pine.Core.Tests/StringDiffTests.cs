@@ -691,10 +691,19 @@ public class StringDiffTests
     }
 
     [Fact]
-    public void String_diff_default_context_shows_complete_performance_counter_snapshots()
+    public void String_diff_snapshot_context_shows_complete_performance_counter_snapshots()
     {
         var counters =
             new PerformanceCounters(
+                long.MaxValue,
+                long.MaxValue,
+                long.MaxValue,
+                long.MaxValue,
+                long.MaxValue,
+                long.MaxValue,
+                long.MaxValue,
+                long.MaxValue,
+                long.MaxValue,
                 long.MaxValue,
                 long.MaxValue,
                 long.MaxValue,
@@ -722,7 +731,7 @@ public class StringDiffTests
         foreach (var actual in snapshots)
         {
             var expected = actual.Replace('7', '6').Replace('0', '1');
-            var message = StringDiff.ReportDifference(actual, expected)!;
+            var message = StringDiff.ReportDifference(actual, expected, new(MaxLines: 20, MaxHunks: 3))!;
             Action compare = () => actual.ShouldBeWithDiff(expected);
             var failure = compare.Should().Throw<Exception>().Which.Message;
 

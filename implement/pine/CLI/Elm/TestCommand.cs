@@ -1,6 +1,7 @@
 using Pine.Core.CLI;
 using Pine.Core.Elm;
 using Pine.Core.Elm.Testing;
+using Pine.Core.Interpreter.IntermediateVM;
 using Spectre.Console;
 using System;
 using System.Collections.Generic;
@@ -644,6 +645,9 @@ public static class TestCommand
             "; instructions: " +
             CommandLineInterface.FormatIntegerForDisplay(summary.Counters.InstructionCount) +
             ".");
+
+        writer.WriteLine(PerformanceCountersFormatting.FormatCounts(summary.Counters));
+        writer.WriteLine(PerformanceCountersFormatting.FormatCountsByPhase(summary.CountersByPhase));
 
         writer.WriteLine("Investigate with the profile command:");
 

@@ -7,26 +7,29 @@ using System.Collections.Generic;
 namespace Pine.Core.Interpreter.IntermediateVM;
 
 /// <summary>
-/// Parsed runtime information for a canonical incrementally applicable function value.
+/// Recognized encoded-expression template chain and a plan for invoking its terminal expression.
 /// </summary>
-internal sealed record CurriedFunctionPlan(
-    PineValue FunctionValue,
-    PineValue EncodedBody,
-    Expression Body,
-    int ParameterCount,
-    ReadOnlyMemory<PineValue> EnvFunctions,
-    ReadOnlyMemory<PineValue> InitialArguments,
-    bool UsesNestedArgFormat,
+internal sealed record ExpressionTemplatePlan(
+    PineValue TemplateValue,
+    PineValue EncodedTerminalExpression,
+    Expression TerminalExpression,
+    int EnvironmentCount,
+    ReadOnlyMemory<PineValue> CapturedValues,
+    ReadOnlyMemory<PineValue> InitialEnvironments,
+    bool UsesNestedEnvironmentFormat,
     PineVMParseCache ParseCache)
 {
     /// <summary>
-    /// Parses only canonical curried-template forms, without probing arbitrary Eval values.
+    /// Recognizes canonical expression-template chains without probing arbitrary Eval values.
     /// </summary>
-    public static FunctionRecord? TryParseFunctionRecord(
-        PineValue functionValue,
-        PineVMParseCache parseCache)
+    public static FunctionRecord? TryParseTemplate(
+        PineValue templateValue,
+        PineVMParseCache parseCache,
+        DirectInterpreterCounters? counters = null)
     {
-        if (parseCache.ParseExpression(functionValue).IsOkOrNull() is not { } expression)
+        counters ??= new DirectInterpreterCounters();
+
+        if (parseCache.ParseExpression(templateValue).IsOkOrNull() is not { } expression)
             return null;
 
         var isTemplateProducer =
@@ -53,40 +56,41 @@ internal sealed record CurriedFunctionPlan(
 
         try
         {
-            var function =
+            var templateDescription =
                 FunctionRecord.ParseCurriedTemplateForm(
-                    functionValue,
-                    parseCache)
+                    templateValue,
+                    parseCache,
+                    counters)
                 .IsOkOrNull();
 
-            if (function is null ||
-                function.ParameterCount <= function.ArgumentsAlreadyCollected.Length)
+            if (templateDescription is null ||
+                templateDescription.ParameterCount <= templateDescription.ArgumentsAlreadyCollected.Length)
             {
                 return null;
             }
 
             var canonicalValue =
                 FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(
-                    function.InnerFunction,
-                    function.ParameterCount,
-                    function.EnvFunctions.ToArray())!;
+                    templateDescription.InnerFunction,
+                    templateDescription.ParameterCount,
+                    templateDescription.EnvFunctions.ToArray())!;
 
-            var interpreter = DirectInterpreter.WithoutEvalCaching(parseCache);
+            var interpreter = DirectInterpreter.WithoutEvalCaching(parseCache, counters);
 
-            foreach (var argument in function.ArgumentsAlreadyCollected.Span)
+            foreach (var initialEnvironment in templateDescription.ArgumentsAlreadyCollected.Span)
             {
                 canonicalValue =
                     interpreter.EvaluateExpressionDefault(
                         new Expression.Eval(
                             Expression.LitralInst(canonicalValue),
-                            Expression.LitralInst(argument)),
+                            Expression.LitralInst(initialEnvironment)),
                         PineValue.EmptyList);
             }
 
             var canonicalExpression = parseCache.ParseExpression(canonicalValue).IsOkOrNull()!;
 
             // Probing identifies a candidate, but only a canonical template can bypass evaluation.
-            return MatchesTemplate(expression, canonicalExpression, interpreter) ? function : null;
+            return MatchesTemplate(expression, canonicalExpression, interpreter) ? templateDescription : null;
         }
         catch (ParseExpressionException)
         {
@@ -142,19 +146,21 @@ internal sealed record CurriedFunctionPlan(
     }
 
     /// <summary>
-    /// Number of arguments not present in the original function value.
+    /// Number of successive environments still required to reach the terminal expression.
     /// </summary>
-    public int RemainingArity => ParameterCount - InitialArguments.Length;
+    public int RemainingEnvironmentCount => EnvironmentCount - InitialEnvironments.Length;
 
     /// <summary>
-    /// Materializes the canonical value produced by applying the supplied arguments incrementally.
+    /// Reconstructs the intermediate encoded-expression value by evaluating the template with successive environments.
     /// </summary>
-    public PineValue Materialize(IReadOnlyList<PineValueInProcess> additionalArguments)
+    public PineValue Materialize(
+        IReadOnlyList<PineValueInProcess> additionalEnvironments,
+        DirectInterpreterCounters counters)
     {
-        var interpreter = DirectInterpreter.WithoutEvalCaching(ParseCache);
-        var currentValue = FunctionValue;
+        var interpreter = DirectInterpreter.WithoutEvalCaching(ParseCache, counters);
+        var currentValue = TemplateValue;
 
-        for (var i = 0; i < additionalArguments.Count; ++i)
+        for (var i = 0; i < additionalEnvironments.Count; ++i)
         {
             currentValue =
                 interpreter.EvaluateExpressionDefault(
@@ -162,7 +168,7 @@ internal sealed record CurriedFunctionPlan(
                         encoded: Expression.LitralInst(currentValue),
                         environment:
                         Expression.LitralInst(
-                            additionalArguments[i].Evaluate())),
+                            additionalEnvironments[i].Evaluate())),
                     PineValue.EmptyList);
         }
 
@@ -170,41 +176,41 @@ internal sealed record CurriedFunctionPlan(
     }
 
     /// <summary>
-    /// Builds the body environment without materializing the supplied arguments.
+    /// Builds the terminal expression's environment without materializing the supplied environment values.
     /// </summary>
-    public PineValueInProcess BuildBodyEnvironment(
-        IReadOnlyList<PineValueInProcess> additionalArguments)
+    public PineValueInProcess BuildTerminalEnvironment(
+        IReadOnlyList<PineValueInProcess> additionalEnvironments)
     {
-        var allArguments =
-            new PineValueInProcess[InitialArguments.Length + additionalArguments.Count];
+        var allEnvironments =
+            new PineValueInProcess[InitialEnvironments.Length + additionalEnvironments.Count];
 
-        for (var i = 0; i < InitialArguments.Length; ++i)
+        for (var i = 0; i < InitialEnvironments.Length; ++i)
         {
-            allArguments[i] = PineValueInProcess.Create(InitialArguments.Span[i]);
+            allEnvironments[i] = PineValueInProcess.Create(InitialEnvironments.Span[i]);
         }
 
-        for (var i = 0; i < additionalArguments.Count; ++i)
+        for (var i = 0; i < additionalEnvironments.Count; ++i)
         {
-            allArguments[InitialArguments.Length + i] = additionalArguments[i];
+            allEnvironments[InitialEnvironments.Length + i] = additionalEnvironments[i];
         }
 
-        var envFunctions =
+        var capturedValues =
             PineValueInProcess.Create(
-                PineValue.List(EnvFunctions.ToArray()));
+                PineValue.List(CapturedValues.ToArray()));
 
-        if (UsesNestedArgFormat)
+        if (UsesNestedEnvironmentFormat)
         {
             return
                 PineValueInProcess.CreateList(
                     [
-                    envFunctions,
-                    PineValueInProcess.CreateList(allArguments)
+                    capturedValues,
+                    PineValueInProcess.CreateList(allEnvironments)
                     ]);
         }
 
-        var environmentItems = new PineValueInProcess[allArguments.Length + 1];
-        environmentItems[0] = envFunctions;
-        allArguments.CopyTo(environmentItems, 1);
+        var environmentItems = new PineValueInProcess[allEnvironments.Length + 1];
+        environmentItems[0] = capturedValues;
+        allEnvironments.CopyTo(environmentItems, 1);
 
         return PineValueInProcess.CreateList(environmentItems);
     }

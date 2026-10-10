@@ -937,6 +937,104 @@ public class TestCommandTests
                 console).Should().Be(0, output.ToString());
 
             output.ToString().Should().Contain("Running 1 test").And.Contain("Effective execution limits:");
+
+            output.ToString().Should().Contain("Phase: preparation; work origin:")
+                .And.Contain("Phase: execution; work origin:")
+                .And.Contain("DirectInterpreterInvocationCount:")
+                .And.Contain("DirectInterpreterExpressionCount:")
+                .And.Contain("BuildListItemCount:")
+                .And.Contain("DeferredTemplateValueMaterializationCount:")
+                .And.Contain("ExpressionTemplatePlanParseCount:")
+                .And.Contain("DeferredTemplateValueAllocationCount:")
+                .And.Contain("TemplateDirectInvocationCount:")
+                .And.NotContain("CurriedFunction")
+                .And.NotContain("PartialApplication")
+                .And.NotContain("DirectSaturatedApplication");
+
+            var reportJson = File.ReadAllText(Path.Combine(project, "profile.json"));
+
+            reportJson.Should().NotContain("CurriedFunction")
+                .And.NotContain("PartialApplication")
+                .And.NotContain("DirectSaturatedApplication");
+
+            using var json = JsonDocument.Parse(reportJson);
+            var summary = json.RootElement.GetProperty("Summary");
+            var phases = summary.GetProperty("CountersByPhase");
+
+            foreach (var property in typeof(PerformanceCounters).GetProperties())
+            {
+                var preparation =
+                    phases.GetProperty("preparation").GetProperty("Total").GetProperty(property.Name).GetInt64();
+
+                var execution =
+                    phases.GetProperty("execution").GetProperty("Total").GetProperty(property.Name).GetInt64();
+
+                (preparation + execution).Should().Be(
+                    summary.GetProperty("Counters").GetProperty(property.Name).GetInt64());
+
+                foreach (var phase in new[] { "preparation", "execution" })
+                {
+                    var origins = phases.GetProperty(phase);
+
+                    var sum =
+                        new[] { "VirtualMachine", "ExpressionTemplatePlanParsing", "DeferredTemplateValueMaterialization" }
+                        .Sum(origin => origins.GetProperty(origin).GetProperty(property.Name).GetInt64());
+
+                    sum.Should().Be(origins.GetProperty("Total").GetProperty(property.Name).GetInt64());
+                }
+            }
+        }
+        finally
+        {
+            Directory.Delete(project, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(1, false)]
+    [InlineData(2, false)]
+    [InlineData(2, true)]
+    public void Ordinary_execution_does_not_print_performance_counters_or_record_profiles(
+        int workers,
+        bool explicitLimits)
+    {
+        var project =
+            CreateTestProject(
+                """
+                module Tests exposing (suite)
+                import Expect
+                import Test
+                suite = Test.describe "group" [ Test.test "first" (\_ -> Expect.pass), Test.test "second" (\_ -> Expect.pass) ]
+                """);
+
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            TestCommand.Execute(
+                project,
+                console: console,
+                errorConsole: console,
+                colorMode: FormatCommandColorMode.Never,
+                workers: workers,
+                offline: true,
+                seed: 42,
+                showEffectiveLimits: explicitLimits).Should().Be(0, output.ToString());
+
+            var text = output.ToString();
+
+            text.Should().Contain("TEST RUN PASSED")
+                .And.NotContain("Performance counters by phase and work origin:")
+                .And.NotContain("Phase: preparation")
+                .And.NotContain("Phase: execution");
+
+            foreach (var property in typeof(PerformanceCounters).GetProperties())
+                text.Should().NotContain(property.Name + ":");
+
+            if (explicitLimits)
+                text.Should().Contain("Effective execution limits:");
+
+            Directory.Exists(Path.Combine(project, "elm-stuff", "pine", "test-profiles")).Should().BeFalse();
         }
         finally
         {
@@ -1602,7 +1700,10 @@ public class TestCommandTests
 
             output.ToString().Should().Contain("Running 2 tests").And.Contain("TEST RUN PASSED")
                 .And.Contain("Invocation budget: 100_000").And.Contain("Loop budget: 100_000")
-                .And.NotContain("Saving all recorded");
+                .And.NotContain("Saving all recorded")
+                .And.NotContain("Performance counters by phase and work origin:")
+                .And.NotContain("InstructionCount:")
+                .And.NotContain("BuildListCount:");
         }
         finally
         {
@@ -1977,6 +2078,10 @@ public class TestCommandTests
             output.ToString().Should().Contain("TEST RUN FAILED");
             output.ToString().Should().Contain("Passed:   2");
             output.ToString().Should().Contain("Failed:   1");
+
+            output.ToString().Should().NotContain("Performance counters by phase and work origin:")
+                .And.NotContain("InstructionCount:")
+                .And.NotContain("BuildListCount:");
         }
         finally
         {

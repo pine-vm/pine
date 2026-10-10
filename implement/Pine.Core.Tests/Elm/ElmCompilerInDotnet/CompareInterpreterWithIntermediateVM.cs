@@ -30,6 +30,8 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 /// or <see cref="Prepare(IReadOnlyList{string}, IReadOnlyList{DeclQualifiedName}, int)"/>
 /// and then used to evaluate many root expressions, amortizing that preparation across
 /// the test methods.
+/// Each evaluation uses a fresh profiling VM so cache warmup in earlier evaluations
+/// does not change subsequent counter snapshots.
 /// </para>
 /// <para>
 /// The <see cref="MaxOptimizationRounds"/> setting affects both paths: it is forwarded to
@@ -42,8 +44,6 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 /// </summary>
 public sealed class CompareInterpreterWithIntermediateVM
 {
-    private readonly Core.Interpreter.IntermediateVM.PineVM _vm;
-
     private readonly IReadOnlyDictionary<DeclQualifiedName, PineValue> _entryFunctionValuesByQualifiedName;
 
     private readonly IReadOnlyDictionary<string, DeclQualifiedName> _entryQualifiedNameBySimpleName;
@@ -60,13 +60,11 @@ public sealed class CompareInterpreterWithIntermediateVM
     public IReadOnlyList<Core.Elm.ElmSyntax.ElmSyntaxAbstract.File> PostOptimizationModules { get; }
 
     private CompareInterpreterWithIntermediateVM(
-        Core.Interpreter.IntermediateVM.PineVM vm,
         IReadOnlyDictionary<DeclQualifiedName, PineValue> entryFunctionValuesByQualifiedName,
         IReadOnlyDictionary<string, DeclQualifiedName> entryQualifiedNameBySimpleName,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> interpreterDeclarations,
         IReadOnlyList<Core.Elm.ElmSyntax.ElmSyntaxAbstract.File> postOptimizationModules)
     {
-        _vm = vm;
         _entryFunctionValuesByQualifiedName = entryFunctionValuesByQualifiedName;
         _entryQualifiedNameBySimpleName = entryQualifiedNameBySimpleName;
         _interpreterDeclarations = interpreterDeclarations;
@@ -175,11 +173,8 @@ public sealed class CompareInterpreterWithIntermediateVM
         var interpreterDeclarations =
             BuildInterpreterDeclarations(appCodeTree, pipelineStageResults);
 
-        var vm = ElmCompilerTestHelper.PineVMForProfiling(_ => { });
-
         return
             new CompareInterpreterWithIntermediateVM(
-                vm: vm,
                 entryFunctionValuesByQualifiedName: entryFunctionValuesByQualifiedName,
                 entryQualifiedNameBySimpleName: entryQualifiedNameBySimpleName,
                 interpreterDeclarations: interpreterDeclarations,
@@ -264,6 +259,8 @@ public sealed class CompareInterpreterWithIntermediateVM
 
         // ------------------ VM path ------------------
 
+        var vm = ElmCompilerTestHelper.PineVMForProfiling(_ => { });
+
         var pineArguments = new PineValue[argumentValues.Count];
 
         for (var i = 0; i < argumentValues.Count; i++)
@@ -281,7 +278,7 @@ public sealed class CompareInterpreterWithIntermediateVM
             // path expects at least one argument; evaluate the function value directly so
             // zero-arg entry points work too.
             var report =
-                _vm.EvaluateExpressionOnCustomStack(
+                vm.EvaluateExpressionOnCustomStack(
                     new Expression.Eval(
                         encoded: Expression.LitralInst(functionValue),
                         environment: Expression.LitralInst(PineValue.EmptyList)),
@@ -298,7 +295,7 @@ public sealed class CompareInterpreterWithIntermediateVM
                 CoreLibraryTestHelper.ApplyGenericPineWithProfiling(
                     functionValue,
                     pineArguments,
-                    _vm);
+                    vm);
         }
 
         var vmResultElm =

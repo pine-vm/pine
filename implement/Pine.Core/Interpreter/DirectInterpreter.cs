@@ -17,14 +17,21 @@ namespace Pine.Core.Interpreter;
 /// </summary>
 public class DirectInterpreter : IPineVM
 {
+    private readonly DirectInterpreterCounters _counters;
+
+    /// <summary>Work performed by this interpreter since construction, including recursive evaluations.</summary>
+    public IntermediateVM.PerformanceCounters Counters => _counters.Snapshot();
+
     private readonly PineVMParseCache _parseCache;
 
     private readonly IDictionary<EvalCacheEntryKey, PineValue>? _evalCache;
 
     private DirectInterpreter(
         PineVMParseCache parseCache,
-        IDictionary<EvalCacheEntryKey, PineValue>? evalCache)
+        IDictionary<EvalCacheEntryKey, PineValue>? evalCache,
+        DirectInterpreterCounters? counters = null)
     {
+        _counters = counters ?? new DirectInterpreterCounters();
         _parseCache = parseCache;
         _evalCache = evalCache;
     }
@@ -50,6 +57,16 @@ public class DirectInterpreter : IPineVM
     public static DirectInterpreter WithoutEvalCaching(PineVMParseCache parseCache) =>
         new(parseCache, evalCache: null);
 
+    internal static DirectInterpreter WithLocalEvalCache(
+        PineVMParseCache parseCache,
+        DirectInterpreterCounters counters) =>
+        new(parseCache, new Dictionary<EvalCacheEntryKey, PineValue>(), counters);
+
+    internal static DirectInterpreter WithoutEvalCaching(
+        PineVMParseCache parseCache,
+        DirectInterpreterCounters counters) =>
+        new(parseCache, evalCache: null, counters);
+
     /// <summary>
     /// Key type for the evaluation cache, combining the encoded expression value and the environment value.
     /// </summary>
@@ -57,26 +74,74 @@ public class DirectInterpreter : IPineVM
         PineValue ExprValue,
         PineValue EnvValue);
 
+    /// <summary>Enters direct evaluation, counting one invocation independently of recursive tree depth.</summary>
+    public PineValue EvaluateExpressionDefault(Expression expression, PineValue environment)
+    {
+        _counters.InvocationCount++;
+        return EvaluateExpressionDefaultCore(expression, environment);
+    }
+
+    /// <summary>Enters direct evaluation, counting one invocation independently of recursive tree depth.</summary>
+    public PineValue EvaluateListExpression(Expression.List listExpression, PineValue environment)
+    {
+        _counters.InvocationCount++;
+        return EvaluateListExpressionCore(listExpression, environment);
+    }
+
+    /// <summary>Enters direct evaluation, counting one invocation independently of recursive tree depth.</summary>
+    public PineValue EvaluateParseAndEvalExpression(Expression.Eval parseAndEval, PineValue environment)
+    {
+        _counters.InvocationCount++;
+        return EvaluateParseAndEvalExpressionCore(parseAndEval, environment);
+    }
+
+    /// <summary>Enters direct evaluation, counting one invocation independently of recursive tree depth.</summary>
+    public PineValue EvaluateBuiltinExpression(PineValue environment, Expression.Builtin application)
+    {
+        _counters.InvocationCount++;
+        return EvaluateBuiltinExpressionCore(environment, application);
+    }
+
+    /// <summary>Enters direct evaluation, counting one invocation independently of recursive tree depth.</summary>
+    public PineValue EvaluateBuiltinExpressionGeneric(PineValue environment, Expression.Builtin application)
+    {
+        _counters.InvocationCount++;
+        _counters.ExpressionCount++;
+        _counters.BuiltinCount++;
+        return EvaluateBuiltinExpressionGenericCore(environment, application);
+    }
+
+    /// <summary>Enters direct evaluation, counting one invocation independently of recursive tree depth.</summary>
+    public PineValue EvaluateConditionalExpression(PineValue environment, Expression.Conditional conditional)
+    {
+        _counters.InvocationCount++;
+        return EvaluateConditionalExpressionCore(environment, conditional);
+    }
+
     /// <summary>
     /// Evaluates a Pine <see cref="Expression"/> in the given environment, returning the resulting <see cref="PineValue"/>.
     /// Dispatches to specialized methods based on the expression type.
     /// </summary>
-    public PineValue EvaluateExpressionDefault(
+    private PineValue EvaluateExpressionDefaultCore(
         Expression expression,
         PineValue environment)
     {
         if (expression is Expression.Litral literalExpression)
+        {
+            _counters.ExpressionCount++;
+            _counters.LiteralCount++;
             return literalExpression.Value;
+        }
 
         if (expression is Expression.List listExpression)
         {
-            return EvaluateListExpression(listExpression, environment);
+            return EvaluateListExpressionCore(listExpression, environment);
         }
 
         if (expression is Expression.Eval applicationExpression)
         {
             return
-                EvaluateParseAndEvalExpression(
+                EvaluateParseAndEvalExpressionCore(
                     applicationExpression,
                     environment);
         }
@@ -84,7 +149,7 @@ public class DirectInterpreter : IPineVM
         if (expression is Expression.Builtin builtinExpression)
         {
             return
-                EvaluateBuiltinExpression(
+                EvaluateBuiltinExpressionCore(
                     environment,
                     builtinExpression);
         }
@@ -92,20 +157,24 @@ public class DirectInterpreter : IPineVM
         if (expression is Expression.Conditional conditionalExpression)
         {
             return
-                EvaluateConditionalExpression(
+                EvaluateConditionalExpressionCore(
                     environment,
                     conditionalExpression);
         }
 
         if (expression is Expression.Environment)
         {
+            _counters.ExpressionCount++;
+            _counters.EnvironmentCount++;
             return environment;
         }
 
         if (expression is Expression.Label stringTagExpression)
         {
+            _counters.ExpressionCount++;
+
             return
-                EvaluateExpressionDefault(
+                EvaluateExpressionDefaultCore(
                     stringTagExpression.Tagged,
                     environment);
         }
@@ -118,10 +187,14 @@ public class DirectInterpreter : IPineVM
     /// Evaluates a <see cref="Expression.List"/> expression by evaluating each item
     /// and collecting the results into a <see cref="PineValue.ListValue"/>.
     /// </summary>
-    public PineValue EvaluateListExpression(
+    private PineValue EvaluateListExpressionCore(
         Expression.List listExpression,
         PineValue environment)
     {
+        _counters.ExpressionCount++;
+        _counters.ListCount++;
+
+        _counters.BuildListItemCount += listExpression.Items.Count;
         var listItems = new PineValue[listExpression.Items.Count];
 
         for (var i = 0; i < listExpression.Items.Count; i++)
@@ -129,7 +202,7 @@ public class DirectInterpreter : IPineVM
             var item = listExpression.Items[i];
 
             var itemResult =
-                EvaluateExpressionDefault(
+                EvaluateExpressionDefaultCore(
                     item,
                     environment);
 
@@ -146,17 +219,20 @@ public class DirectInterpreter : IPineVM
     /// Results may be cached when <c>evalCache</c> is provided.
     /// </summary>
     /// <exception cref="ParseExpressionException">Thrown when the encoded value cannot be parsed as a valid expression.</exception>
-    public PineValue EvaluateParseAndEvalExpression(
+    private PineValue EvaluateParseAndEvalExpressionCore(
         Expression.Eval parseAndEval,
         PineValue environment)
     {
+        _counters.ExpressionCount++;
+        _counters.EvalCount++;
+
         var environmentValue =
-            EvaluateExpressionDefault(
+            EvaluateExpressionDefaultCore(
                 parseAndEval.Environment,
                 environment);
 
         var expressionValue =
-            EvaluateExpressionDefault(
+            EvaluateExpressionDefaultCore(
                 parseAndEval.Encoded,
                 environment);
 
@@ -188,7 +264,7 @@ public class DirectInterpreter : IPineVM
         }
 
         var result =
-            EvaluateExpressionDefault(
+            EvaluateExpressionDefaultCore(
                 environment: environmentValue,
                 expression: parseOk.Value);
 
@@ -217,10 +293,13 @@ public class DirectInterpreter : IPineVM
     /// Includes an optimized fast path for the common <c>head(skip(...))</c> pattern used for
     /// environment path access, falling back to the generic builtin function application.
     /// </summary>
-    public PineValue EvaluateBuiltinExpression(
+    private PineValue EvaluateBuiltinExpressionCore(
         PineValue environment,
         Expression.Builtin application)
     {
+        _counters.ExpressionCount++;
+        _counters.BuiltinCount++;
+
         if (application.Function is nameof(BuiltinFunction.head) &&
             application.Input is Expression.Builtin innerBuiltinExpression)
         {
@@ -229,13 +308,13 @@ public class DirectInterpreter : IPineVM
                 skipListExpr.Items.Count is 2)
             {
                 var skipValue =
-                    EvaluateExpressionDefault(
+                    EvaluateExpressionDefaultCore(
                         skipListExpr.Items[0],
                         environment);
 
                 if (BuiltinFunction.SignedIntegerFromValueRelaxed(skipValue) is { } skipCount)
                 {
-                    if (EvaluateExpressionDefault(
+                    if (EvaluateExpressionDefaultCore(
                         skipListExpr.Items[1],
                         environment) is PineValue.ListValue list)
                     {
@@ -254,19 +333,19 @@ public class DirectInterpreter : IPineVM
             }
         }
 
-        return EvaluateBuiltinExpressionGeneric(environment, application);
+        return EvaluateBuiltinExpressionGenericCore(environment, application);
     }
 
     /// <summary>
     /// Evaluates a <see cref="Expression.Builtin"/> using the generic builtin function dispatch.
     /// Evaluates the input expression first, then applies the named builtin function.
     /// </summary>
-    public PineValue EvaluateBuiltinExpressionGeneric(
+    private PineValue EvaluateBuiltinExpressionGenericCore(
         PineValue environment,
         Expression.Builtin application)
     {
         var inputValue =
-            EvaluateExpressionDefault(application.Input, environment);
+            EvaluateExpressionDefaultCore(application.Input, environment);
 
         return
             BuiltinFunction.ApplyFunctionGeneric(
@@ -279,25 +358,28 @@ public class DirectInterpreter : IPineVM
     /// Evaluates the condition first; if it equals <see cref="PineKernelValues.TrueValue"/>,
     /// evaluates and returns the true branch; otherwise evaluates and returns the false branch.
     /// </summary>
-    public PineValue EvaluateConditionalExpression(
+    private PineValue EvaluateConditionalExpressionCore(
         PineValue environment,
         Expression.Conditional conditional)
     {
+        _counters.ExpressionCount++;
+        _counters.ConditionalCount++;
+
         var conditionValue =
-            EvaluateExpressionDefault(
+            EvaluateExpressionDefaultCore(
                 conditional.Condition,
                 environment);
 
         if (conditionValue == PineKernelValues.TrueValue)
         {
             return
-                EvaluateExpressionDefault(
+                EvaluateExpressionDefaultCore(
                     conditional.TrueBranch,
                     environment);
         }
 
         return
-            EvaluateExpressionDefault(
+            EvaluateExpressionDefaultCore(
                 conditional.FalseBranch,
                 environment);
     }

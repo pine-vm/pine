@@ -187,15 +187,9 @@ public record StackFrame(
 /// used to compute per-frame deltas for instruction count, invocation count, and other metrics.
 /// </summary>
 public record struct StackFrameProfilingBaseline(
-    long BeginInstructionCount,
-    long BeginInvocationCount,
+    PerformanceCountersByOrigin BeginCountersByOrigin,
     long BeginEvalCount,
-    long BeginStackFrameCount,
-    long BeginBuildListCount,
-    long BeginCurriedFunctionPlanParseCount = 0,
-    long BeginPartialApplicationAllocationCount = 0,
-    long BeginDirectSaturatedApplicationCount = 0,
-    long BeginPartialApplicationMaterializationCount = 0);
+    long BeginStackFrameCount);
 
 
 /*

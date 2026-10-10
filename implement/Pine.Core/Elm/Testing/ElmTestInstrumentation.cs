@@ -70,7 +70,12 @@ public sealed record ElmTestInstrumentationOptions : ElmTestEvaluationOptions
 /// <summary>Cheap snapshot of the outcome, current Elm context, elapsed time and aggregate VM work.</summary>
 public sealed record ElmTestProfileSummary(
     string Outcome, string? StopReason, string Phase, string Context,
-    double ElapsedMilliseconds, PerformanceCounters Counters, string? ProfileFilter = null);
+    double ElapsedMilliseconds, PerformanceCounters Counters, string? ProfileFilter = null)
+{
+    /// <summary>Phase totals split by the origin of the work; includes pending work in a live evaluation.</summary>
+    public IReadOnlyDictionary<string, PerformanceCountersByOrigin> CountersByPhase { get; init; } =
+        new Dictionary<string, PerformanceCountersByOrigin>();
+}
 
 /// <summary>A captured value's DAG hash or bounded nonmaterializing structural preview.</summary>
 public sealed record ElmTestProfileValue(string? ValueHash, string Preview)
@@ -262,7 +267,14 @@ public sealed class ElmTestInstrumentation : IDisposable
 
     private PerformanceCounters _completed;
 
-    private Func<PerformanceCounters>? _loadCurrentCounters;
+    private readonly Dictionary<string, PerformanceCountersByOrigin> _completedByPhase =
+        new(StringComparer.Ordinal)
+        {
+            ["preparation"] = default,
+            ["execution"] = default
+        };
+
+    private Func<PerformanceCountersByOrigin>? _loadCurrentCounters;
 
     private long _nextSampleTicks;
 
@@ -363,6 +375,15 @@ public sealed class ElmTestInstrumentation : IDisposable
     {
         lock (_budgetLock)
         {
+            var pending = RecordDiagnostics ? _loadCurrentCounters?.Invoke() ?? default : default;
+            var phases = new Dictionary<string, PerformanceCountersByOrigin>(_completedByPhase, StringComparer.Ordinal);
+
+            if (pending != default)
+            {
+                phases.TryGetValue(_lastScope.Phase, out var completed);
+                phases[_lastScope.Phase] = PerformanceCountersByOrigin.Add(completed, pending);
+            }
+
             return
                 new(
                     _stopReason is null ? _outcome : CancelledByUser ? "cancelled" : "stopped",
@@ -372,8 +393,11 @@ public sealed class ElmTestInstrumentation : IDisposable
                     _elapsed.Elapsed.TotalMilliseconds,
                     PerformanceCounters.Add(
                         _completed,
-                        RecordDiagnostics ? _loadCurrentCounters?.Invoke() ?? default : default),
-                    _lastScope.ProfileFilter);
+                        pending.Total),
+                    _lastScope.ProfileFilter)
+                {
+                    CountersByPhase = phases
+                };
         }
     }
 
@@ -430,24 +454,17 @@ public sealed class ElmTestInstrumentation : IDisposable
             OnStopped?.Invoke(GetSummary());
     }
 
-    private void ObserveWork(PerformanceCounters current, ref PerformanceCounters previous)
+    private void ObserveWork(
+        string phase,
+        PerformanceCountersByOrigin current,
+        ref PerformanceCountersByOrigin previous)
     {
         lock (_budgetLock)
         {
-            _completed =
-                PerformanceCounters.Add(
-                    _completed,
-                    new PerformanceCounters(
-                        current.InvocationCount - previous.InvocationCount,
-                        current.BuildListCount - previous.BuildListCount,
-                        current.LoopIterationCount - previous.LoopIterationCount,
-                        current.InstructionCount - previous.InstructionCount,
-                        current.CurriedFunctionPlanParseCount - previous.CurriedFunctionPlanParseCount,
-                        current.PartialApplicationAllocationCount - previous.PartialApplicationAllocationCount,
-                        current.DirectSaturatedApplicationCount - previous.DirectSaturatedApplicationCount,
-                        current.PartialApplicationMaterializationCount -
-                        previous.PartialApplicationMaterializationCount));
-
+            var delta = PerformanceCountersByOrigin.Subtract(current, previous);
+            _completed = PerformanceCounters.Add(_completed, delta.Total);
+            _completedByPhase.TryGetValue(phase, out var completed);
+            _completedByPhase[phase] = PerformanceCountersByOrigin.Add(completed, delta);
             previous = current;
 
             if (Options.InvocationBudget is { } inv && _completed.InvocationCount > inv)
@@ -784,7 +801,9 @@ public sealed class ElmTestInstrumentation : IDisposable
 
         private readonly Dictionary<long, (Entry Entry, long Instructions, long Loops)> _active = [];
 
-        private PerformanceCounters _observed;
+        private PerformanceCountersByOrigin _observed;
+
+        private string _phase = "initialization";
 
         public EvaluationContext(ElmTestInstrumentation owner, IInvocationCacheAccess cache, PineVMSharedCaches caches)
         {
@@ -831,10 +850,14 @@ public sealed class ElmTestInstrumentation : IDisposable
 
         private void Event(in EvaluationEvent evaluationEvent)
         {
+            var loadOrigins =
+                evaluationEvent.LoadCountersByOrigin
+                ?? throw new InvalidOperationException("Instrumented evaluation must report work origins.");
+
+            _owner.ObserveWork(_phase, loadOrigins(), ref _observed);
+
             if (!_owner.RecordDiagnostics)
             {
-                _owner.ObserveWork(evaluationEvent.LoadCounters(), ref _observed);
-
                 if (evaluationEvent.Kind is EvaluationEventKind.EvaluationStopped &&
                     evaluationEvent.StopReason is EvaluationErrorReason.QuotaExhausted or EvaluationErrorReason.CancellationRequested)
                 {
@@ -846,7 +869,7 @@ public sealed class ElmTestInstrumentation : IDisposable
             }
 
             var entry = _owner.GetEntry(evaluationEvent.Expression);
-            _owner._loadCurrentCounters = evaluationEvent.LoadCounters;
+            _owner._loadCurrentCounters = () => PerformanceCountersByOrigin.Subtract(loadOrigins(), _observed);
 
             switch (evaluationEvent.Kind)
             {
@@ -939,6 +962,7 @@ public sealed class ElmTestInstrumentation : IDisposable
             _owner.ThrowIfStopped();
             _active.Clear();
             _observed = default;
+            _phase = _owner._scope.Value?.Phase ?? "initialization";
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(_owner.CancellationToken, token);
             PerformanceCounters completed;
 
@@ -959,18 +983,16 @@ public sealed class ElmTestInstrumentation : IDisposable
                     (int)Math.Max(0, loop - completed.LoopIterationCount)
                     :
                     null,
-                    _owner.Options.StackDepthLimit);
+                    _owner.Options.StackDepthLimit)
+                {
+                    MaterializeResult = true
+                };
 
             var result = _vm.EvaluateExpressionOnCustomStack(expression, environment, config, linked.Token);
 
             _active.Clear();
-            var counters = result.IsOkOrNull()?.Counters ?? result.IsErrOrNull()!.Counters;
-
-            if (_owner.RecordDiagnostics)
-                _owner._completed = PerformanceCounters.Add(_owner._completed, counters);
-
-            else
-                _owner.ObserveWork(counters, ref _observed);
+            var origins = result.IsOkOrNull()?.CountersByOrigin ?? result.IsErrOrNull()!.CountersByOrigin;
+            _owner.ObserveWork(_phase, origins, ref _observed);
 
             _owner._loadCurrentCounters = null;
 

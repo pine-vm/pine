@@ -12,12 +12,12 @@ using IntermediatePineVM = Pine.Core.Interpreter.IntermediateVM.PineVM;
 
 namespace Pine.Core.Tests.Interpreter.IntermediateVM;
 
-public class PartialApplicationRuntimeTests
+public class ExpressionTemplateRuntimeTests
 {
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Function_producer_with_embedded_callable_does_not_pack_arguments_as_a_pair(bool literalFunction)
+    public void Expression_producer_with_embedded_template_does_not_pack_environments_as_a_pair(bool literalTemplate)
     {
         var body =
             ExpressionBuilder.BuildExpressionForPathInExpression(
@@ -27,8 +27,8 @@ public class PartialApplicationRuntimeTests
         var function =
             FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(body, parameterCount: 1)!;
 
-        // The first application builds head([argument, literal function]).
-        // The second application evaluates that expression and returns its environment.
+        // The first Eval builds head([environment, literal encoded expression]).
+        // The second Eval evaluates that expression and returns its environment.
         var producer =
             ExpressionEncoding.EncodeExpressionAsValue(
                 Expression.ListInst(
@@ -57,8 +57,8 @@ public class PartialApplicationRuntimeTests
                 ]);
 
         var expression =
-            Apply(
-                literalFunction
+            BuildEvalChain(
+                literalTemplate
                 ?
                 Expression.LitralInst(producer)
                 :
@@ -74,7 +74,7 @@ public class PartialApplicationRuntimeTests
             EvaluateResultWithPineVm(
                 expression,
                 environment: environment,
-                enableDirectInvocation: literalFunction,
+                enableDirectInvocation: literalTemplate,
                 config:
                 new IntermediatePineVM.EvaluationConfig(
                     InvocationCountLimit: 100,
@@ -83,11 +83,11 @@ public class PartialApplicationRuntimeTests
 
         result.IsErrOrNull().Should().BeNull();
         result.IsOkOrNull()!.ReturnValue.Evaluate().Should().Be(expected);
-        result.IsOkOrNull()!.Counters.DirectSaturatedApplicationCount.Should().Be(0);
+        result.IsOkOrNull()!.Counters.TemplateDirectInvocationCount.Should().Be(0);
     }
 
     [Fact]
-    public void Function_producer_does_not_freeze_a_probe_dependent_body()
+    public void Expression_producer_does_not_freeze_a_probe_dependent_terminal_expression()
     {
         var producer =
             FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgsFromEncodedBodyExpression(
@@ -102,7 +102,7 @@ public class PartialApplicationRuntimeTests
                 envFunctionsExpression: Expression.LitralInst(PineValue.EmptyList));
 
         var expression =
-            Apply(
+            BuildEvalChain(
                 ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance),
                 IntegerEncoding.EncodeSignedInteger(11),
                 IntegerEncoding.EncodeSignedInteger(22));
@@ -118,8 +118,8 @@ public class PartialApplicationRuntimeTests
     public void Function_record_parsing_does_not_execute_deferred_template_computations()
     {
         var parseCache = new PineVMParseCache();
-        var functionValue = BuildFunctionValue(parameterCount: 2);
-        var template = (Expression.List)parseCache.ParseExpression(functionValue).IsOkOrNull()!;
+        var templateValue = BuildTemplateValue(environmentCount: 2);
+        var template = (Expression.List)parseCache.ParseExpression(templateValue).IsOkOrNull()!;
         var items = new List<Expression>(template.Items);
 
         items[1] =
@@ -134,7 +134,7 @@ public class PartialApplicationRuntimeTests
             .IsErrOrNull().Should().NotBeNull();
 
         var expression =
-            Apply(
+            BuildEvalChain(
                 deferredTemplate,
                 IntegerEncoding.EncodeSignedInteger(11),
                 IntegerEncoding.EncodeSignedInteger(13));
@@ -144,36 +144,36 @@ public class PartialApplicationRuntimeTests
     }
 
     [Fact]
-    public void Under_application_matches_direct_interpreter_without_materializing_intermediate_value()
+    public void Deferred_template_result_matches_direct_interpreter_without_materializing_intermediate_value()
     {
-        var functionValue = BuildFunctionValue(parameterCount: 3);
-        var argument = IntegerEncoding.EncodeSignedInteger(11);
+        var templateValue = BuildTemplateValue(environmentCount: 3);
+        var environmentValue = IntegerEncoding.EncodeSignedInteger(11);
 
         var expression =
             new Expression.Eval(
-                Expression.LitralInst(functionValue),
-                Expression.LitralInst(argument));
+                Expression.LitralInst(templateValue),
+                Expression.LitralInst(environmentValue));
 
         var report = EvaluateWithPineVm(expression);
         var expected = EvaluateWithDirectInterpreter(expression);
 
-        report.ReturnValue.PartialApplicationOrNull.Should().NotBeNull();
+        report.ReturnValue.DeferredTemplateValueOrNull.Should().NotBeNull();
         report.ReturnValue.EvaluatedOrNull.Should().BeNull();
-        report.Counters.CurriedFunctionPlanParseCount.Should().Be(1);
-        report.Counters.PartialApplicationAllocationCount.Should().Be(1);
-        report.Counters.DirectSaturatedApplicationCount.Should().Be(0);
-        report.Counters.PartialApplicationMaterializationCount.Should().Be(0);
+        report.Counters.ExpressionTemplatePlanParseCount.Should().Be(1);
+        report.Counters.DeferredTemplateValueAllocationCount.Should().Be(1);
+        report.Counters.TemplateDirectInvocationCount.Should().Be(0);
+        report.Counters.DeferredTemplateValueMaterializationCount.Should().Be(0);
         report.ReturnValue.Evaluate().Should().Be(expected);
     }
 
     [Fact]
-    public void Saturated_application_matches_direct_interpreter()
+    public void Template_direct_invocation_matches_direct_interpreter()
     {
-        var functionValue = BuildFunctionValue(parameterCount: 3);
+        var templateValue = BuildTemplateValue(environmentCount: 3);
 
         var expression =
-            Apply(
-                functionValue,
+            BuildEvalChain(
+                templateValue,
                 IntegerEncoding.EncodeSignedInteger(11),
                 IntegerEncoding.EncodeSignedInteger(13),
                 IntegerEncoding.EncodeSignedInteger(17));
@@ -181,22 +181,22 @@ public class PartialApplicationRuntimeTests
         var report = EvaluateWithPineVm(expression);
         var expected = EvaluateWithDirectInterpreter(expression);
 
-        report.ReturnValue.PartialApplicationOrNull.Should().BeNull();
-        report.Counters.CurriedFunctionPlanParseCount.Should().Be(1);
-        report.Counters.PartialApplicationAllocationCount.Should().Be(0);
-        report.Counters.DirectSaturatedApplicationCount.Should().Be(1);
-        report.Counters.PartialApplicationMaterializationCount.Should().Be(0);
+        report.ReturnValue.DeferredTemplateValueOrNull.Should().BeNull();
+        report.Counters.ExpressionTemplatePlanParseCount.Should().Be(1);
+        report.Counters.DeferredTemplateValueAllocationCount.Should().Be(0);
+        report.Counters.TemplateDirectInvocationCount.Should().Be(1);
+        report.Counters.DeferredTemplateValueMaterializationCount.Should().Be(0);
         report.ReturnValue.Evaluate().Should().Be(expected);
     }
 
     [Fact]
-    public void Partial_application_after_multiple_arguments_matches_direct_interpreter()
+    public void Deferred_template_value_after_multiple_environments_matches_direct_interpreter()
     {
-        var functionValue = BuildFunctionValue(parameterCount: 4);
+        var templateValue = BuildTemplateValue(environmentCount: 4);
 
         var expression =
-            Apply(
-                functionValue,
+            BuildEvalChain(
+                templateValue,
                 IntegerEncoding.EncodeSignedInteger(11),
                 IntegerEncoding.EncodeSignedInteger(13),
                 IntegerEncoding.EncodeSignedInteger(17));
@@ -204,26 +204,26 @@ public class PartialApplicationRuntimeTests
         var report = EvaluateWithPineVm(expression);
         var expected = EvaluateWithDirectInterpreter(expression);
 
-        report.ReturnValue.PartialApplicationOrNull.Should().NotBeNull();
+        report.ReturnValue.DeferredTemplateValueOrNull.Should().NotBeNull();
         report.ReturnValue.EvaluatedOrNull.Should().BeNull();
-        report.Counters.PartialApplicationAllocationCount.Should().Be(1);
-        report.Counters.DirectSaturatedApplicationCount.Should().Be(0);
-        report.Counters.PartialApplicationMaterializationCount.Should().Be(0);
+        report.Counters.DeferredTemplateValueAllocationCount.Should().Be(1);
+        report.Counters.TemplateDirectInvocationCount.Should().Be(0);
+        report.Counters.DeferredTemplateValueMaterializationCount.Should().Be(0);
         report.ReturnValue.Evaluate().Should().Be(expected);
     }
 
     [Fact]
-    public void Applying_materialized_partial_value_matches_direct_interpreter()
+    public void Evaluating_materialized_template_result_matches_direct_interpreter()
     {
-        var functionValue = BuildFunctionValue(parameterCount: 3);
-        var firstArgument = IntegerEncoding.EncodeSignedInteger(11);
+        var templateValue = BuildTemplateValue(environmentCount: 3);
+        var firstEnvironment = IntegerEncoding.EncodeSignedInteger(11);
 
-        var partialExpression = Apply(functionValue, firstArgument);
-        var partialValue = EvaluateWithDirectInterpreter(partialExpression);
+        var intermediateExpression = BuildEvalChain(templateValue, firstEnvironment);
+        var intermediateValue = EvaluateWithDirectInterpreter(intermediateExpression);
 
         var remainingExpression =
-            Apply(
-                partialValue,
+            BuildEvalChain(
+                intermediateValue,
                 IntegerEncoding.EncodeSignedInteger(13),
                 IntegerEncoding.EncodeSignedInteger(17));
 
@@ -232,32 +232,37 @@ public class PartialApplicationRuntimeTests
     }
 
     [Fact]
-    public void Structural_inspection_reports_partial_application_materialization()
+    public void Structural_inspection_reports_deferred_template_value_materialization()
     {
-        var partialExpression =
-            Apply(
-                BuildFunctionValue(parameterCount: 3),
+        var intermediateExpression =
+            BuildEvalChain(
+                BuildTemplateValue(environmentCount: 3),
                 IntegerEncoding.EncodeSignedInteger(11));
 
         var expression =
             Expression.BuiltinInst(
                 nameof(BuiltinFunction.length),
-                partialExpression);
+                intermediateExpression);
 
         var report = EvaluateWithPineVm(expression);
 
         report.ReturnValue.Evaluate().Should().Be(EvaluateWithDirectInterpreter(expression));
-        report.Counters.PartialApplicationAllocationCount.Should().Be(1);
-        report.Counters.PartialApplicationMaterializationCount.Should().Be(1);
-        report.Counters.DirectSaturatedApplicationCount.Should().Be(0);
+        report.Counters.DeferredTemplateValueAllocationCount.Should().Be(1);
+        report.Counters.DeferredTemplateValueMaterializationCount.Should().Be(1);
+        report.Counters.TemplateDirectInvocationCount.Should().Be(0);
+        report.CountersByOrigin.Total.Should().Be(report.Counters);
+        report.CountersByOrigin.ExpressionTemplatePlanParsing.DirectInterpreterInvocationCount.Should().BeGreaterThan(0);
+        report.CountersByOrigin.DeferredTemplateValueMaterialization.DirectInterpreterInvocationCount.Should().Be(1);
+        report.CountersByOrigin.DeferredTemplateValueMaterialization.DirectInterpreterEvalCount.Should().Be(1);
+        report.CountersByOrigin.DeferredTemplateValueMaterialization.BuildListItemCount.Should().BeGreaterThan(0);
     }
 
     [Fact]
     public void Nested_eval_expression_executes_fused_eval_var_instruction()
     {
         var expression =
-            Apply(
-                BuildFunctionValue(parameterCount: 3),
+            BuildEvalChain(
+                BuildTemplateValue(environmentCount: 3),
                 IntegerEncoding.EncodeSignedInteger(11),
                 IntegerEncoding.EncodeSignedInteger(13),
                 IntegerEncoding.EncodeSignedInteger(17));
@@ -267,12 +272,12 @@ public class PartialApplicationRuntimeTests
 
         report.ReturnValue.Evaluate().Should().Be(EvaluateWithDirectInterpreter(expression));
         executedInstructions.Should().Contain(StackInstructionKind.Eval_Multi);
-        report.Counters.PartialApplicationAllocationCount.Should().Be(0);
-        report.Counters.DirectSaturatedApplicationCount.Should().Be(1);
+        report.Counters.DeferredTemplateValueAllocationCount.Should().Be(0);
+        report.Counters.TemplateDirectInvocationCount.Should().Be(1);
     }
 
     [Fact]
-    public void Fused_application_falls_back_for_noncanonical_function_value()
+    public void Fused_eval_falls_back_for_noncanonical_template_value()
     {
         var identityFunction =
             ExpressionEncoding.EncodeExpressionAsValue(
@@ -283,7 +288,7 @@ public class PartialApplicationRuntimeTests
                 Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(41)));
 
         var expression =
-            Apply(
+            BuildEvalChain(
                 Expression.EnvironmentInstance,
                 constantFunction,
                 IntegerEncoding.EncodeSignedInteger(43));
@@ -300,7 +305,7 @@ public class PartialApplicationRuntimeTests
             .Should().Be(EvaluateWithDirectInterpreter(expression, identityFunction));
 
         executedInstructions.Should().Contain(StackInstructionKind.Eval_Multi);
-        report.Counters.DirectSaturatedApplicationCount.Should().Be(0);
+        report.Counters.TemplateDirectInvocationCount.Should().Be(0);
     }
 
     [Fact]
@@ -315,7 +320,7 @@ public class PartialApplicationRuntimeTests
                 Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(41)));
 
         var expression =
-            Apply(
+            BuildEvalChain(
                 Expression.EnvironmentInstance,
                 constantFunction,
                 IntegerEncoding.EncodeSignedInteger(43));
@@ -335,7 +340,7 @@ public class PartialApplicationRuntimeTests
     }
 
     [Fact]
-    public void Fused_over_application_matches_direct_interpreter()
+    public void Fused_eval_beyond_template_terminal_matches_direct_interpreter()
     {
         var innerFunction =
             FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(
@@ -344,17 +349,17 @@ public class PartialApplicationRuntimeTests
                     Expression.EnvironmentInstance),
                 parameterCount: 1)
             ??
-            throw new System.InvalidOperationException("Failed to build inner function value.");
+            throw new System.InvalidOperationException("Failed to build inner template value.");
 
         var outerFunction =
             FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(
                 Expression.LitralInst(innerFunction),
                 parameterCount: 1)
             ??
-            throw new System.InvalidOperationException("Failed to build outer function value.");
+            throw new System.InvalidOperationException("Failed to build outer template value.");
 
         var expression =
-            Apply(
+            BuildEvalChain(
                 outerFunction,
                 IntegerEncoding.EncodeSignedInteger(41),
                 IntegerEncoding.EncodeSignedInteger(43));
@@ -362,15 +367,15 @@ public class PartialApplicationRuntimeTests
         var report = EvaluateWithPineVm(expression);
 
         report.ReturnValue.Evaluate().Should().Be(EvaluateWithDirectInterpreter(expression));
-        report.Counters.PartialApplicationAllocationCount.Should().Be(0);
-        report.Counters.DirectSaturatedApplicationCount.Should().Be(1);
+        report.Counters.DeferredTemplateValueAllocationCount.Should().Be(0);
+        report.Counters.TemplateDirectInvocationCount.Should().Be(1);
     }
 
     [Fact]
-    public void Fused_application_preserves_structured_parse_error()
+    public void Fused_eval_preserves_structured_parse_error()
     {
         var expression =
-            Apply(
+            BuildEvalChain(
                 PineValue.EmptyBlob,
                 IntegerEncoding.EncodeSignedInteger(41),
                 IntegerEncoding.EncodeSignedInteger(43));
@@ -390,7 +395,7 @@ public class PartialApplicationRuntimeTests
     public void Fused_fallback_reports_parse_error_before_later_invocation_quota()
     {
         var expression =
-            Apply(
+            BuildEvalChain(
                 Expression.EnvironmentInstance,
                 IntegerEncoding.EncodeSignedInteger(41),
                 IntegerEncoding.EncodeSignedInteger(43));
@@ -413,7 +418,7 @@ public class PartialApplicationRuntimeTests
     }
 
     [Fact]
-    public void Fused_application_preserves_argument_evaluation_order()
+    public void Fused_eval_preserves_environment_evaluation_order()
     {
         var innerInvalidExpression = StringEncoding.ValueFromString("inner-invalid");
         var outerInvalidExpression = StringEncoding.ValueFromString("outer-invalid");
@@ -455,7 +460,7 @@ public class PartialApplicationRuntimeTests
     }
 
     [Fact]
-    public void Default_counter_format_omits_PAP_diagnostics()
+    public void Default_counter_format_includes_every_counter()
     {
         var counters =
             new PerformanceCounters(
@@ -463,28 +468,60 @@ public class PartialApplicationRuntimeTests
                 BuildListCount: 2,
                 LoopIterationCount: 3,
                 InstructionCount: 4,
-                CurriedFunctionPlanParseCount: 5,
-                PartialApplicationAllocationCount: 6,
-                DirectSaturatedApplicationCount: 7,
-                PartialApplicationMaterializationCount: 8);
+                ExpressionTemplatePlanParseCount: 5,
+                DeferredTemplateValueAllocationCount: 6,
+                TemplateDirectInvocationCount: 7,
+                DeferredTemplateValueMaterializationCount: 8,
+                BuildListItemCount: 9,
+                DirectInterpreterInvocationCount: 10,
+                DirectInterpreterExpressionCount: 11,
+                DirectInterpreterLiteralCount: 12,
+                DirectInterpreterListCount: 13,
+                DirectInterpreterEvalCount: 14,
+                DirectInterpreterBuiltinCount: 15,
+                DirectInterpreterConditionalCount: 16,
+                DirectInterpreterEnvironmentCount: 17);
 
         PerformanceCountersFormatting.FormatCounts(counters).ShouldBeWithDiff(
             """
             InvocationCount: 1
             BuildListCount: 2
+            BuildListItemCount: 9
             LoopIterationCount: 3
             InstructionCount: 4
+            ExpressionTemplatePlanParseCount: 5
+            DeferredTemplateValueAllocationCount: 6
+            TemplateDirectInvocationCount: 7
+            DeferredTemplateValueMaterializationCount: 8
+            DirectInterpreterInvocationCount: 10
+            DirectInterpreterExpressionCount: 11
+            DirectInterpreterLiteralCount: 12
+            DirectInterpreterListCount: 13
+            DirectInterpreterEvalCount: 14
+            DirectInterpreterBuiltinCount: 15
+            DirectInterpreterConditionalCount: 16
+            DirectInterpreterEnvironmentCount: 17
             """);
 
         PerformanceCountersFormatting.FormatAllCounts(counters).Should().Contain(
-            "PartialApplicationAllocationCount: 6");
+            "DeferredTemplateValueAllocationCount: 6");
+
+        PerformanceCountersFormatting.FormatAllCounts(counters).ShouldBeWithDiff(
+            PerformanceCountersFormatting.FormatCounts(counters));
+
+        System.Text
+            .Json.JsonSerializer.Serialize(counters).Should().Contain("\"BuildListCount\":2,\"BuildListItemCount\":9")
+            .And.NotContain("Label");
+
+        PerformanceCounters.Add(counters, counters).Should().Be(PerformanceCounters.Aggregate([counters, counters]));
+        PerformanceCounters.Subtract(PerformanceCounters.Add(counters, counters), counters).Should().Be(counters);
     }
 
-    private static PineValue BuildFunctionValue(int parameterCount)
+    private static PineValue BuildTemplateValue(int environmentCount)
     {
-        var bodyItems = new Expression[parameterCount];
+        var bodyItems = new Expression[environmentCount];
 
-        for (var i = 0; i < parameterCount; ++i)
+        for (var i = 0; i < environmentCount; ++i)
         {
             bodyItems[i] =
                 ExpressionBuilder.BuildExpressionForPathInExpression(
@@ -495,29 +532,29 @@ public class PartialApplicationRuntimeTests
         return
             FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(
                 Expression.ListInst(bodyItems),
-                parameterCount)
+                environmentCount)
             ??
-            throw new System.InvalidOperationException("Failed to build test function value.");
+            throw new System.InvalidOperationException("Failed to build test template value.");
     }
 
-    private static Expression Apply(
-        PineValue functionValue,
-        params PineValue[] arguments)
+    private static Expression BuildEvalChain(
+        PineValue templateValue,
+        params PineValue[] environments)
         =>
-        Apply(Expression.LitralInst(functionValue), arguments);
+        BuildEvalChain(Expression.LitralInst(templateValue), environments);
 
-    private static Expression Apply(
-        Expression functionExpression,
-        params PineValue[] arguments)
+    private static Expression BuildEvalChain(
+        Expression encodedExpression,
+        params PineValue[] environments)
     {
-        var expression = functionExpression;
+        var expression = encodedExpression;
 
-        for (var i = 0; i < arguments.Length; ++i)
+        for (var i = 0; i < environments.Length; ++i)
         {
             expression =
                 new Expression.Eval(
                     expression,
-                    Expression.LitralInst(arguments[i]));
+                    Expression.LitralInst(environments[i]));
         }
 
         return expression;

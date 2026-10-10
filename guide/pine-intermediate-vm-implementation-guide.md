@@ -55,6 +55,29 @@ Consumers that need human-readable output can call
 `EvaluationError.RenderDisplayString`. Rendering performs potentially expensive
 derivations such as expression encoding and hashing only on demand.
 
+## Evaluation work counters
+
+`PerformanceCountersFormatting.FormatCounts` and `FormatAllCounts` both include
+all counters. `DirectInterpreter.Counters` records external entries separately from
+recursive expression visits, with per-kind counters except for trivial labels.
+Label visits remain included in the aggregate expression count.
+`BuildListItemCount` counts immediate list slots, including literal prefixes and
+direct evaluation, rather than sizes of referenced subtrees. It is rendered
+immediately after `BuildListCount` in both text and JSON. Performance-counter snapshots use the test
+helper `ShouldBeWithDiff` to display bounded, multi-line difference hunks.
+
+VM reports, errors and live evaluation events expose `CountersByOrigin` /
+`LoadCountersByOrigin`. The disjoint origins separate `VirtualMachine` work from
+`ExpressionTemplatePlanParsing` and `DeferredTemplateValueMaterialization`. Frame baselines use the
+same counter snapshot and subtraction operations so new fields propagate to
+per-frame reports as well as evaluation-wide totals.
+
+`EvaluationConfig.MaterializeResult` defaults to `false`, preserving lazy root
+results. Consumers that will materialize the result immediately, such as Elm test
+instrumentation, set it to `true` so the final snapshot includes that work.
+Counters exclude compilation and diagnostic serialization; cache-dependent work
+should be compared under a controlled cache policy.
+
 ## Compilation Units and Specializations
 
 When compiling Pine expressions to sequential representations, the most common specialization targets a subset of `Environment` values. Under such constraints, expressions that depend on `Environment` can be reduced and simplified at compile time.
@@ -81,17 +104,29 @@ And since every list creation adds significant runtime overhead, avoiding them i
 
 > Note: specialized interface currently only implemented for the input side, output side remains TODO.
 
-### Currying Representations and Value Arity
+### Expression Templates and Deferred Values
 
-Frontend compilers for languages offering currying often emit nested `Eval` expressions to represent general function application with multiple arguments.
+An expression template constructs an encoded Pine expression from an environment.
+A recognized chain of these templates eventually reaches a terminal expression.
+Frontend compilers can emit such chains to implement incremental function
+invocation, but the VM optimization operates on the encoded-expression structure.
 
-With these currying representations, an `Eval` before the final `Eval` yields a value that itself encodes an expression, but is relatively short-lived and specific: Since it embeds earlier applied arguments as literals inside that expression, compiling that further would often not amortize. Therefore, the VM already specializes for direct evaluation of such templates.
+An intermediate `Eval` yields an encoded-expression value containing earlier
+environments as literals. These short-lived values often do not justify compilation,
+so the VM can evaluate templates directly.
 
-Direct evaluation of template-forming expressions already skips the overhead of compiling to a sequential representation.
+`ExpressionTemplatePlan` recognizes and validates the chain and describes how to
+build the terminal environment. `DeferredTemplateValue` retains that plan and the
+supplied environments without constructing the full intermediate Pine value.
+Materialization reconstructs that value only when a structural operation requires it;
+this is deferred value construction, not general-purpose deferred execution.
 
-In addition, the VM also uses a specialized representation to accumulate consecutive `Eval`s while deferring evaluation.
+The counters are `ExpressionTemplatePlanParseCount`,
+`DeferredTemplateValueAllocationCount`, `TemplateDirectInvocationCount`, and
+`DeferredTemplateValueMaterializationCount`. The direct-invocation counter measures
+terminal expression invocations that bypass intermediate encoded-expression
+construction, not every direct invocation in the VM.
 
-A value is said to have an arity of zero if it does not encode an expression.
 
 ### Inlining Using the Control Flow Graph
 

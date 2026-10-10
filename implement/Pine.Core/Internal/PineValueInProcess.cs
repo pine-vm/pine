@@ -43,7 +43,7 @@ public class PineValueInProcess
     /// </summary>
     private IReadOnlyList<PineValueInProcess>? _list;
 
-    private PartialApplicationState? _partialApplication;
+    private DeferredTemplateValue? _deferredTemplateValue;
 
     /// <summary>
     /// Read-only view of a contiguous range of the in-process items in <see cref="_list"/>: the
@@ -111,12 +111,12 @@ public class PineValueInProcess
     }
 
     /// <summary>
-    /// Runtime representation of a partially applied function whose canonical Pine value is
-    /// constructed only when an operation requires the concrete representation.
+    /// Compact intermediate template result whose concrete Pine value is reconstructed only when required.
+    /// Defers value construction, not execution of an arbitrary expression.
     /// </summary>
-    internal sealed record PartialApplicationState(
-        object Callable,
-        IReadOnlyList<PineValueInProcess> Arguments,
+    internal sealed record DeferredTemplateValue(
+        object TemplatePlan,
+        IReadOnlyList<PineValueInProcess> Environments,
         Func<IReadOnlyList<PineValueInProcess>, PineValue> Materialize,
         Action? ReportMaterialization);
 
@@ -315,34 +315,34 @@ public class PineValueInProcess
     }
 
     /// <summary>
-    /// Creates a transparent in-process representation of a partially applied function.
+    /// Creates a transparent deferred template value retaining a plan and the supplied environments.
     /// </summary>
-    internal static PineValueInProcess CreatePartialApplication(
-        object callable,
-        IReadOnlyList<PineValueInProcess> arguments,
+    internal static PineValueInProcess CreateDeferredTemplateValue(
+        object templatePlan,
+        IReadOnlyList<PineValueInProcess> environments,
         Func<IReadOnlyList<PineValueInProcess>, PineValue> materialize,
         Action? reportMaterialization = null)
     {
-        ArgumentNullException.ThrowIfNull(callable);
-        ArgumentNullException.ThrowIfNull(arguments);
+        ArgumentNullException.ThrowIfNull(templatePlan);
+        ArgumentNullException.ThrowIfNull(environments);
         ArgumentNullException.ThrowIfNull(materialize);
 
         return
             new PineValueInProcess
             {
-                _partialApplication =
-                new PartialApplicationState(
-                    callable,
-                    arguments,
+                _deferredTemplateValue =
+                new DeferredTemplateValue(
+                    templatePlan,
+                    environments,
                     materialize,
                     reportMaterialization)
             };
     }
 
     /// <summary>
-    /// Returns the partial-application state without forcing canonical value materialization.
+    /// Returns the deferred template value without forcing its concrete Pine representation.
     /// </summary>
-    internal PartialApplicationState? PartialApplicationOrNull => _partialApplication;
+    internal DeferredTemplateValue? DeferredTemplateValueOrNull => _deferredTemplateValue;
 
     /// <summary>
     /// Create an in-process representation from an integer without immediately encoding it as a blob.
@@ -594,11 +594,11 @@ public class PineValueInProcess
             return _evaluated;
         }
 
-        if (_partialApplication is { } partialApplication)
+        if (_deferredTemplateValue is { } deferredTemplateValue)
         {
-            _evaluated = partialApplication.Materialize(partialApplication.Arguments);
-            _partialApplication = null;
-            partialApplication.ReportMaterialization?.Invoke();
+            _evaluated = deferredTemplateValue.Materialize(deferredTemplateValue.Environments);
+            _deferredTemplateValue = null;
+            deferredTemplateValue.ReportMaterialization?.Invoke();
 
             return _evaluated;
         }
@@ -652,7 +652,7 @@ public class PineValueInProcess
         if (_list is not null)
             return true;
 
-        if (_partialApplication is not null)
+        if (_deferredTemplateValue is not null)
             return Evaluate() is PineValue.ListValue;
 
         if (_evaluated is not null)
@@ -679,7 +679,7 @@ public class PineValueInProcess
         if (_list is not null)
             return false;
 
-        if (_partialApplication is not null)
+        if (_deferredTemplateValue is not null)
             return Evaluate() is PineValue.BlobValue;
 
         if (_evaluated is not null)
@@ -711,7 +711,7 @@ public class PineValueInProcess
         if (_list is not null)
             return (_length = _list.Count).Value;
 
-        if (_partialApplication is not null)
+        if (_deferredTemplateValue is not null)
             return (_length = BuiltinFunctionSpecialized.length_as_int(Evaluate())).Value;
 
         if (_evaluated is not null)
