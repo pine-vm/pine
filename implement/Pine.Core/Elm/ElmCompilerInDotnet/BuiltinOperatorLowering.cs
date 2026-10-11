@@ -56,7 +56,7 @@ public static class BuiltinOperatorLowering
         IReadOnlyDictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition> AliasTypes,
         IReadOnlyDictionary<DeclQualifiedName, TypeInference.ChoiceTypeDefinition> ChoiceTypeDefinitions,
         IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<TypeInference.InferredType>> ConstructorArgumentTypes,
-        ImmutableDictionary<string, TypeInference.InferredType> FunctionSignatures);
+        TypeInference.FunctionInferenceEnvironment InferenceEnvironment);
 
     /// <summary>
     /// Applies builtin-operator lowering to a flat dictionary of Elm declarations
@@ -90,7 +90,10 @@ public static class BuiltinOperatorLowering
             return declarations;
         }
 
-        var functionTypes = BuildFunctionTypes(declarations);
+        var inferenceEnvironment =
+            new TypeInference.FunctionInferenceEnvironment(BuildFunctionSignatures(declarations));
+
+        var functionTypes = BuildFunctionTypes(declarations, inferenceEnvironment);
         var aliasTypes = BuildAliasTypes(declarations);
 
         var choiceTypeDefinitions =
@@ -98,8 +101,6 @@ public static class BuiltinOperatorLowering
 
         var constructorArgumentTypes =
             BuildConstructorArgumentTypes(choiceTypeDefinitions, aliasTypes);
-
-        var functionSignatures = BuildFunctionSignatures(declarations);
 
         var resultBuilder =
             ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
@@ -117,7 +118,7 @@ public static class BuiltinOperatorLowering
                     aliasTypes,
                     choiceTypeDefinitions,
                     constructorArgumentTypes,
-                    functionSignatures);
+                    inferenceEnvironment);
 
             resultBuilder[key] = rewritten;
         }
@@ -133,7 +134,7 @@ public static class BuiltinOperatorLowering
         IReadOnlyDictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition> aliasTypes,
         IReadOnlyDictionary<DeclQualifiedName, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
         IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<TypeInference.InferredType>> constructorArgumentTypes,
-        ImmutableDictionary<string, TypeInference.InferredType> functionSignatures)
+        TypeInference.FunctionInferenceEnvironment inferenceEnvironment)
     {
         if (declaration is not SyntaxTypes.Declaration.FunctionDeclaration functionDeclaration)
             return declaration;
@@ -145,7 +146,7 @@ public static class BuiltinOperatorLowering
                 implementation.Expression,
                 implementation.Arguments,
                 moduleName,
-                functionSignatures);
+                inferenceEnvironment);
 
         var explicitParameterTypes =
             ExpandAliasTypes(
@@ -168,7 +169,7 @@ public static class BuiltinOperatorLowering
                 AliasTypes: aliasTypes,
                 ChoiceTypeDefinitions: choiceTypeDefinitions,
                 ConstructorArgumentTypes: constructorArgumentTypes,
-                FunctionSignatures: functionSignatures);
+                InferenceEnvironment: inferenceEnvironment);
 
         var expectedReturnType =
             TypeInference.GetFunctionReturnType(functionDeclaration.Function) is { } explicitReturnType &&
@@ -898,7 +899,7 @@ public static class BuiltinOperatorLowering
                                 implementation.Expression,
                                 implementation.Arguments,
                                 context.CurrentModuleName,
-                                context.FunctionSignatures);
+                                context.InferenceEnvironment);
 
                         break;
                     }
@@ -973,7 +974,7 @@ public static class BuiltinOperatorLowering
                 implementation.Expression,
                 implementation.Arguments,
                 context.CurrentModuleName,
-                context.FunctionSignatures);
+                context.InferenceEnvironment);
 
         var explicitParameterTypes = BuildExplicitParameterTypes(letFunction.Function);
 
@@ -1026,7 +1027,7 @@ public static class BuiltinOperatorLowering
                 lambda.Expression,
                 lambda.Arguments,
                 context.CurrentModuleName,
-                context.FunctionSignatures);
+                context.InferenceEnvironment);
 
         var nestedContext =
             context with
@@ -1513,7 +1514,8 @@ public static class BuiltinOperatorLowering
     }
 
     private static ImmutableDictionary<DeclQualifiedName, FunctionTypeInfo> BuildFunctionTypes(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+        TypeInference.FunctionInferenceEnvironment inferenceEnvironment)
     {
         var result = new Dictionary<DeclQualifiedName, FunctionTypeInfo>();
 
@@ -1530,22 +1532,12 @@ public static class BuiltinOperatorLowering
             }
         }
 
-        var signatures = BuildFunctionSignatures(declarations);
-
-        foreach (var (qualifiedNameString, signatureType) in signatures)
+        foreach (var (qualifiedName, functionType) in inferenceEnvironment.FunctionTypes)
         {
-            var qualifiedName = QualifiedNameHelper.FromQualifiedNameString(qualifiedNameString);
-
             if (result.ContainsKey(qualifiedName))
                 continue;
 
-            var parameterTypes = ExtractFunctionParameterTypes(signatureType);
-            var returnType = signatureType;
-
-            while (returnType is TypeInference.InferredType.FunctionType functionType)
-                returnType = functionType.ReturnType;
-
-            result[qualifiedName] = new FunctionTypeInfo(returnType, parameterTypes);
+            result[qualifiedName] = functionType;
         }
 
         return result.ToImmutableDictionary();
@@ -1678,15 +1670,13 @@ public static class BuiltinOperatorLowering
 
         if (!context.FunctionTypes.TryGetValue(qualifiedName, out var functionTypeInfo))
         {
-            var qualifiedNameString = qualifiedName.FullName;
-
-            if (!context.FunctionSignatures.TryGetValue(qualifiedNameString, out var functionSignatureType))
+            if (!context.InferenceEnvironment.FunctionTypes.TryGetValue(qualifiedName, out var signatureInfo))
             {
                 return [];
             }
 
-            parameterTypes = ExtractFunctionParameterTypes(functionSignatureType);
-            returnType = GetFunctionReturnType(functionSignatureType);
+            parameterTypes = signatureInfo.ParameterTypes;
+            returnType = signatureInfo.ReturnType;
         }
         else
         {
@@ -1739,30 +1729,6 @@ public static class BuiltinOperatorLowering
             .Select(parameterType => ExpandAliasType(parameterType, context.AliasTypes))
             .Cast<TypeInference.InferredType?>()
             ];
-    }
-
-    private static IReadOnlyList<TypeInference.InferredType> ExtractFunctionParameterTypes(
-        TypeInference.InferredType functionType)
-    {
-        var parameterTypes = new List<TypeInference.InferredType>();
-        var remainingType = functionType;
-
-        while (remainingType is TypeInference.InferredType.FunctionType nextFunctionType)
-        {
-            parameterTypes.Add(nextFunctionType.ArgumentType);
-            remainingType = nextFunctionType.ReturnType;
-        }
-
-        return parameterTypes;
-    }
-
-    private static TypeInference.InferredType GetFunctionReturnType(
-        TypeInference.InferredType functionType)
-    {
-        while (functionType is TypeInference.InferredType.FunctionType nextFunctionType)
-            functionType = nextFunctionType.ReturnType;
-
-        return functionType;
     }
 
     private static TypeInference.InferredType? ExpandAliasType(
@@ -1831,14 +1797,14 @@ public static class BuiltinOperatorLowering
         SyntaxTypes.Expression expression,
         IReadOnlyList<SyntaxTypes.Pattern> arguments,
         string moduleName,
-        ImmutableDictionary<string, TypeInference.InferredType> functionSignatures)
+        TypeInference.FunctionInferenceEnvironment inferenceEnvironment)
     {
         var inferred =
             TypeInference.InferFunctionDeclarationType(
                 expression,
                 arguments,
                 moduleName,
-                functionSignatures);
+                inferenceEnvironment);
 
         return
             TypeInference.BuildFunctionType(

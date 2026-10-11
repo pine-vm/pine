@@ -3315,7 +3315,61 @@ public static class TypeInference
         SyntaxTypes.Expression expression,
         IReadOnlyList<SyntaxTypes.Pattern> arguments,
         string moduleName,
-        IReadOnlyDictionary<string, InferredType> functionSignatures)
+        IReadOnlyDictionary<string, InferredType> functionSignatures) =>
+        InferFunctionDeclarationType(
+            expression,
+            arguments,
+            moduleName,
+            new FunctionInferenceEnvironment(functionSignatures));
+
+    /// <summary>
+    /// Immutable signature environment shared by function inference calls in a lowering pass.
+    /// Qualified names and function type information are prepared once, rather than per function.
+    /// </summary>
+    public sealed class FunctionInferenceEnvironment
+    {
+        internal IReadOnlyDictionary<string, InferredType> FunctionSignatures { get; }
+
+        internal ImmutableDictionary<DeclQualifiedName, FunctionTypeInfo> FunctionTypes { get; }
+
+        /// <summary>
+        /// Prepares the qualified function-type lookup for the supplied immutable signature map.
+        /// </summary>
+        public FunctionInferenceEnvironment(ImmutableDictionary<string, InferredType> functionSignatures)
+            : this((IReadOnlyDictionary<string, InferredType>)functionSignatures)
+        {
+        }
+
+        internal FunctionInferenceEnvironment(IReadOnlyDictionary<string, InferredType> functionSignatures)
+        {
+            FunctionSignatures = functionSignatures;
+
+            FunctionTypes =
+                functionSignatures.ToImmutableDictionary(
+                    kvp => QualifiedNameHelper.FromQualifiedNameString(kvp.Key),
+                    kvp =>
+                    {
+                        var returnType = kvp.Value;
+
+                        while (returnType is InferredType.FunctionType functionType)
+                            returnType = functionType.ReturnType;
+
+                        return
+                            new FunctionTypeInfo(
+                                returnType,
+                                ExtractArgumentTypesFromFunctionType(kvp.Value));
+                    });
+        }
+    }
+
+    /// <summary>
+    /// Infers a function using a previously prepared immutable signature environment.
+    /// </summary>
+    public static (InferredType returnType, ImmutableDictionary<string, InferredType> parameterTypes) InferFunctionDeclarationType(
+        SyntaxTypes.Expression expression,
+        IReadOnlyList<SyntaxTypes.Pattern> arguments,
+        string moduleName,
+        FunctionInferenceEnvironment environment)
     {
         // Build parameter names dictionary
         var parameterNames = new Dictionary<string, int>();
@@ -3333,25 +3387,9 @@ public static class TypeInference
             InferParameterTypesFromUsage(
                 expression,
                 parameterNames,
-                functionSignatures);
+                environment.FunctionSignatures);
 
         var localBindingTypes = ImmutableDictionary<string, InferredType>.Empty;
-
-        var knownFunctionTypes =
-            functionSignatures.ToDictionary(
-                kvp => QualifiedNameHelper.FromQualifiedNameString(kvp.Key),
-                kvp =>
-                {
-                    var returnType = kvp.Value;
-
-                    while (returnType is InferredType.FunctionType functionType)
-                        returnType = functionType.ReturnType;
-
-                    return
-                        new FunctionTypeInfo(
-                            returnType,
-                            ExtractArgumentTypesFromFunctionType(kvp.Value));
-                });
 
         var returnType =
             InferExpressionType(
@@ -3360,7 +3398,7 @@ public static class TypeInference
                 parameterTypes,
                 localBindingTypes,
                 moduleName,
-                knownFunctionTypes);
+                environment.FunctionTypes);
 
         return (returnType, parameterTypes);
     }
