@@ -46,9 +46,9 @@ jobs:
       run: |
         git config --global core.autocrlf false
 
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
 
-    - uses: actions/setup-dotnet@v5
+    - uses: actions/setup-dotnet@v6
       with:
         dotnet-version: '10.0.x'
 
@@ -89,9 +89,29 @@ jobs:
         # path: ./implement/Pine.IntegrationTests/TestResults
         path: ./implement/**/TestResults
 
-    - name: Compile Overview of Test Results
-      uses: EnricoMi/publish-unit-test-result-action/composite@v2
-      if: always()
+    - name: Compile Overview of Test Results (Linux)
+      uses: EnricoMi/publish-unit-test-result-action/linux@v2
+      if: always() && runner.os == 'Linux'
+      with:
+        check_name: "Test Results Overview ${{ matrix.environment }}"
+        files: |
+          ./implement/**/TestResults/**/*.xml
+          ./implement/**/TestResults/**/*.trx
+          ./implement/**/TestResults/**/*.json
+
+    - name: Compile Overview of Test Results (Windows)
+      uses: EnricoMi/publish-unit-test-result-action/windows@v2
+      if: always() && runner.os == 'Windows'
+      with:
+        check_name: "Test Results Overview ${{ matrix.environment }}"
+        files: |
+          ./implement/**/TestResults/**/*.xml
+          ./implement/**/TestResults/**/*.trx
+          ./implement/**/TestResults/**/*.json
+
+    - name: Compile Overview of Test Results (macOS)
+      uses: EnricoMi/publish-unit-test-result-action/macos@v2
+      if: always() && runner.os == 'macOS'
       with:
         check_name: "Test Results Overview ${{ matrix.environment }}"
         files: |
