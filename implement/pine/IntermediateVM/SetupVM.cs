@@ -96,6 +96,47 @@ public static class SetupVM
         TryGetExpressionCompilation? tryGetExpressionCompilation = null,
         GetOrAddExpressionCompilation? getOrAddExpressionCompilation = null,
         PineVMExpressionEncodingCache? expressionEncodingCache = null,
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null) =>
+        CreateWithTemplatePlanCache(
+            new PineVMExpressionTemplatePlanCache(),
+            evaluationConfigDefault,
+            evalCache,
+            reportFunctionApplication,
+            compilationEnvClasses,
+            disableReductionInCompilation,
+            enableTailRecursionOptimization,
+            parseCache,
+            precompiledLeaves,
+            reportEnterPrecompiledLeaf,
+            reportExitPrecompiledLeaf,
+            optimizationParametersSerial,
+            cacheFileStore,
+            invocationCache,
+            invocationCacheConfiguration,
+            tryGetExpressionCompilation,
+            getOrAddExpressionCompilation,
+            expressionEncodingCache,
+            reducedExpressionCache);
+
+    public static Core.Interpreter.IntermediateVM.PineVM CreateWithTemplatePlanCache(
+        PineVMExpressionTemplatePlanCache expressionTemplatePlanCache,
+        Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig? evaluationConfigDefault,
+        IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
+        Action<EvaluationReport>? reportFunctionApplication = null,
+        IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses = null,
+        bool disableReductionInCompilation = false,
+        bool enableTailRecursionOptimization = true,
+        PineVMParseCache? parseCache = null,
+        IReadOnlyDictionary<PineValue, PrecompiledLeaf>? precompiledLeaves = null,
+        Action<PineValue, PineValueInProcess>? reportEnterPrecompiledLeaf = null,
+        Action<PineValue, PineValueInProcess, PineValueInProcess?>? reportExitPrecompiledLeaf = null,
+        OptimizationParametersSerial? optimizationParametersSerial = null,
+        IFileStore? cacheFileStore = null,
+        IInvocationCacheAccess? invocationCache = null,
+        InvocationCacheConfiguration? invocationCacheConfiguration = null,
+        TryGetExpressionCompilation? tryGetExpressionCompilation = null,
+        GetOrAddExpressionCompilation? getOrAddExpressionCompilation = null,
+        PineVMExpressionEncodingCache? expressionEncodingCache = null,
         IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null)
     {
         precompiledLeaves ??= DefaultPrecompiledLeaves;
@@ -104,6 +145,7 @@ public static class SetupVM
 
         return
             Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
+                expressionTemplatePlanCache: expressionTemplatePlanCache,
                 evalCache: evalCache,
                 evaluationConfigDefault: evaluationConfigDefault,
                 reportFunctionApplication: reportFunctionApplication,

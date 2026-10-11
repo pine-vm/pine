@@ -443,6 +443,14 @@ public sealed class ElmTestInstrumentation : IDisposable
         return vm;
     }
 
+    internal IReadOnlyDictionary<PineValue, PrecompiledLeaf> ResolvePrecompiledLeaves() =>
+        Options.DisablePrecompiledLeaves
+        ?
+        new Dictionary<PineValue, PrecompiledLeaf>()
+        :
+        _precompiledLeaves ??
+        _precompiledLeavesProvider?.Invoke() ?? IntermediateVM.SetupVM.DefaultPrecompiledLeaves;
+
     private Entry GetEntry(Expression expression)
     {
         if (!_entries.TryGetValue(expression, out var entry))
@@ -825,6 +833,7 @@ public sealed class ElmTestInstrumentation : IDisposable
 
             _vm =
                 InstrumentedVM.CreateCustom(
+                    expressionTemplatePlanCache: caches.ExpressionTemplatePlans,
                     evalCache: null,
                     evaluationConfigDefault: null,
                     reportFunctionApplication: null,
@@ -834,12 +843,7 @@ public sealed class ElmTestInstrumentation : IDisposable
                     skipInlineForExpression: _ => owner.Options.DisableInlining,
                     enableTailRecursionOptimization: !owner.Options.DisableTailRecursion,
                     parseCache: caches.ParsedExpressions,
-                    precompiledLeaves: owner.Options.DisablePrecompiledLeaves
-                    ?
-                    new Dictionary<PineValue, PrecompiledLeaf>()
-                    :
-                    owner._precompiledLeaves ??
-                    owner._precompiledLeavesProvider?.Invoke() ?? IntermediateVM.SetupVM.DefaultPrecompiledLeaves,
+                    precompiledLeaves: owner.ResolvePrecompiledLeaves(),
                     reportEnterPrecompiledLeaf: null,
                     reportExitPrecompiledLeaf: owner.RecordDiagnostics ? NativeExit : null,
                     optimizationParametersSerial: null,

@@ -88,7 +88,8 @@ public static class ElmTestRunner
             packageProvider,
             onDependenciesResolved,
             fuzzOptions,
-            instrumentation);
+            instrumentation,
+            cacheSession: null);
 
 
     /// <summary>
@@ -122,7 +123,46 @@ public static class ElmTestRunner
                 packageProvider,
                 onDependenciesResolved,
                 fuzzOptions,
-                instrumentation);
+                instrumentation,
+                cacheSession: null);
+    }
+
+
+    /// <summary>
+    /// Compiles and runs tests with caller-owned caches and fresh default VMs. Sessions can be reused
+    /// across source edits and budgeted runs, but cannot be supplied to diagnostic profiles.
+    /// </summary>
+    public static ElmTestRun CompileAndRunTests(
+        ElmTestRunCacheSession cacheSession,
+        string appDirectory,
+        int workers,
+        string? filter = null,
+        bool listTests = false,
+        Action<int>? onTestsDiscovered = null,
+        ElmDependencyResolutionConfiguration? resolutionConfiguration = null,
+        IElmPackageProvider? packageProvider = null,
+        Action<ElmDependencyResolutionReport>? onDependenciesResolved = null,
+        ElmFuzzOptions? fuzzOptions = null,
+        ElmTestInstrumentation? instrumentation = null)
+    {
+        ArgumentNullException.ThrowIfNull(cacheSession);
+        cacheSession.ValidateInstrumentation(instrumentation);
+
+        return
+            CompileAndRunTests(
+                appDirectory,
+                pineVm: null,
+                filter,
+                listTests,
+                workers,
+                pineVmFactory: null,
+                onTestsDiscovered,
+                resolutionConfiguration,
+                packageProvider,
+                onDependenciesResolved,
+                fuzzOptions,
+                instrumentation,
+                cacheSession);
     }
 
 
@@ -138,13 +178,18 @@ public static class ElmTestRunner
         IElmPackageProvider? packageProvider,
         Action<ElmDependencyResolutionReport>? onDependenciesResolved,
         ElmFuzzOptions? fuzzOptions,
-        ElmTestInstrumentation? instrumentation)
+        ElmTestInstrumentation? instrumentation,
+        ElmTestRunCacheSession? cacheSession)
     {
         if (workers < 1)
             throw new ArgumentOutOfRangeException(nameof(workers), "Worker count must be at least one.");
 
         if (instrumentation is not null && pineVm is not null)
             throw new ArgumentException("Budgeted or profiled execution uses its own VMs.", nameof(pineVm));
+
+        // Arbitrary caller factories and diagnostic controls have unknown compilation configurations.
+        if (cacheSession is null && pineVm is null && pineVmFactory is null && instrumentation is null)
+            cacheSession = new ElmTestRunCacheSession();
 
         var executionSettings = (fuzzOptions ?? new()).Resolve();
 
@@ -196,9 +241,10 @@ public static class ElmTestRunner
             .Select(
                 file =>
                 {
+                    var moduleText = Encoding.UTF8.GetString(file.content.Span);
+
                     var parsedModule =
-                        ElmSyntaxParser.ParseModuleText(
-                            Encoding.UTF8.GetString(file.content.Span))
+                        (cacheSession?.ParseSource(moduleText) ?? ElmSyntaxParser.ParseModuleText(moduleText))
                         .Extract(
                             error =>
                             throw new InvalidOperationException(
@@ -259,7 +305,8 @@ public static class ElmTestRunner
                 resolutionConfiguration,
                 packageProvider,
                 cancellationToken: instrumentation?.CancellationToken ?? default,
-                projectDirectory: appDirectory).GetAwaiter().GetResult();
+                projectDirectory: appDirectory,
+                sourceParseCache: cacheSession?.SourceParsing).GetAwaiter().GetResult();
 
         onDependenciesResolved?.Invoke(build.Resolution);
 
@@ -298,7 +345,8 @@ public static class ElmTestRunner
         var compilationRoots =
             testDeclarationNames.Add(DeclQualifiedName.Create(bridgeName.Split('.'), "prepare"));
 
-        var preparationCaches = new PineVMSharedCaches();
+        var preparationCaches = cacheSession?.VmCaches ?? new PineVMSharedCaches();
+        var preparationInvocationCache = cacheSession?.InvocationResults ?? new ConcurrentInvocationCache();
         var preparationVmTimings = new VmCallTimings();
         var executionVmTimings = new VmCallTimings();
 
@@ -306,16 +354,19 @@ public static class ElmTestRunner
             preparationVmTimings.Wrap(
                 instrumentation is not null
                 ?
-                instrumentation.CreateVm(new ConcurrentInvocationCache(), preparationCaches)
+                instrumentation.CreateVm(preparationInvocationCache, preparationCaches)
                 :
                 CreatePineVm(
-                    new ConcurrentInvocationCache(),
-                    preparationCaches));
+                    preparationInvocationCache,
+                    preparationCaches,
+                    cacheSession?.PrecompiledLeaves ?? SetupVM.DefaultPrecompiledLeaves));
 
         var (compiledEnvironment, _) =
             ElmCompiler.CompileResolvedEnvironment(
                 build,
-                rootDeclarations: compilationRoots)
+                rootDeclarations: compilationRoots,
+                sourceParseCache: cacheSession?.SourceParsing,
+                canonicalizationCache: cacheSession?.DeclarationCanonicalization)
             .Extract(error => throw new ElmCompilationException("Failed compiling Elm tests: " + error));
 
         var parsedEnvironment =
@@ -589,14 +640,16 @@ public static class ElmTestRunner
         }
         else
         {
-            var sharedInvocationCache = new ConcurrentInvocationCache();
-            var sharedPineVMCaches = new PineVMSharedCaches();
+            var sharedInvocationCache = cacheSession?.InvocationResults ?? new ConcurrentInvocationCache();
+            var sharedPineVMCaches = cacheSession?.VmCaches ?? new PineVMSharedCaches();
             var completedTestsByIndex = new CompletedTest[discoveredTests.Count];
             var nextTestIndex = -1;
 
             var workerCount = Math.Min(workers, discoveredTests.Count);
 
-            pineVmFactory ??= CreatePineVm;
+            pineVmFactory ??=
+                (invocations, caches) =>
+                CreatePineVm(invocations, caches, cacheSession?.PrecompiledLeaves ?? SetupVM.DefaultPrecompiledLeaves);
 
             var workerTasks =
                 Enumerable.Range(0, workerCount)
@@ -1181,8 +1234,10 @@ public static class ElmTestRunner
 
     private static IntermediatePineVM CreatePineVm(
         IInvocationCacheAccess invocationCache,
-        PineVMSharedCaches sharedCaches) =>
+        PineVMSharedCaches sharedCaches,
+        IReadOnlyDictionary<PineValue, PrecompiledLeaf> precompiledLeaves) =>
         IntermediatePineVM.CreateCustom(
+            expressionTemplatePlanCache: sharedCaches.ExpressionTemplatePlans,
             evalCache: null,
             evaluationConfigDefault: DefaultEvaluationConfig,
             reportFunctionApplication: null,
@@ -1192,7 +1247,7 @@ public static class ElmTestRunner
             skipInlineForExpression: _ => false,
             enableTailRecursionOptimization: true,
             parseCache: sharedCaches.ParsedExpressions,
-            precompiledLeaves: SetupVM.DefaultPrecompiledLeaves,
+            precompiledLeaves: precompiledLeaves,
             reportEnterPrecompiledLeaf: null,
             reportExitPrecompiledLeaf: null,
             optimizationParametersSerial: null,

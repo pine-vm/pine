@@ -13,6 +13,9 @@ public class PineVMParseCache
         ExpressionEncoding2026.ParseExpressionResult>
         _parseExprCache = [];
 
+    /// <summary>Number of cached expression values, including parsed subexpressions.</summary>
+    public int Count => _parseExprCache.Count;
+
     /// <summary>
     /// Parses the given <paramref name="expressionValue"/> into an <see cref="Expression"/> using
     /// <see cref="ExpressionEncoding.ParseExpressionFromValue(PineValue)"/>, caching the result.
@@ -40,4 +43,3 @@ public class PineVMParseCache
             expressionValue,
             _parseExprCache);
 }
-

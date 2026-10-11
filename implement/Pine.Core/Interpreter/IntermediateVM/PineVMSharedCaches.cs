@@ -25,6 +25,9 @@ public sealed class PineVMSharedCaches
     /// </summary>
     public PineVMExpressionEncodingCache EncodedExpressions { get; } = new();
 
+    /// <summary>Structural expression-template plans, including negative recognition results.</summary>
+    public PineVMExpressionTemplatePlanCache ExpressionTemplatePlans { get; } = new();
+
     /// <summary>
     /// Reduced expressions keyed by expression and reduction configuration.
     /// </summary>

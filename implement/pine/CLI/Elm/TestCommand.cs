@@ -11,6 +11,7 @@ using System.CommandLine.Invocation;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading;
 
 using IntermediatePineVM = Pine.Core.Interpreter.IntermediateVM.PineVM;
 
@@ -34,8 +35,17 @@ public static class TestCommand
                   pine elm test profile <project> --filter "<test path or pattern>" --budget 10000
                 """);
 
+        var watchOption =
+            new Option<bool>("--watch")
+            {
+                Recursive = true,
+                Description =
+                "Run immediately and rerun after changes anywhere in the local project directory, recursively. Stop with Ctrl+C. Not supported with profile or --dependency-report.",
+            };
+
+        command.Add(watchOption);
         var budgets = TestBudgetOptions.AddTo(command);
-        ConfigureCommonCommand(command, instrumented: false, budgets);
+        ConfigureCommonCommand(command, instrumented: false, budgets, watchOption);
         budgets.MoveAfterCommonOptions(command);
 
         var profile =
@@ -43,7 +53,7 @@ public static class TestCommand
                 "profile",
                 "Profile selected Elm tests in isolation and see where computation time is spent.");
 
-        ConfigureCommonCommand(profile, instrumented: true, budgets);
+        ConfigureCommonCommand(profile, instrumented: true, budgets, watchOption);
         command.Add(profile);
         ConfigureFormattedHelp(command, profile);
         return command;
@@ -111,7 +121,8 @@ public static class TestCommand
         }
     }
 
-    private static void ConfigureCommonCommand(Command command, bool instrumented, TestBudgetOptions budgets)
+    private static void ConfigureCommonCommand(
+        Command command, bool instrumented, TestBudgetOptions budgets, Option<bool> watchOption)
     {
         var sourceArgument =
             new Argument<string?>("source")
@@ -257,19 +268,32 @@ public static class TestCommand
                 fuzz: parseResult.GetValue(fuzzOption),
                 instrumentation: instrumentation,
                 evaluationOptions: budgets.Read(parseResult),
-                showEffectiveLimits: budgets.HasExplicitOptions(parseResult));
+                showEffectiveLimits: budgets.HasExplicitOptions(parseResult),
+                watch: parseResult.GetValue(watchOption));
 
         if (instrumented)
         {
             var options = TestProfileCommand.AddOptions(command, budgets);
 
             command.SetAction(
-                parseResult => TestProfileCommand.Execute(
-                    parseResult.GetValue(sourceArgument) ?? Environment.CurrentDirectory,
-                    parseResult.GetValue(filterOption),
-                    options.Read(parseResult),
-                    instrumentation => Run(parseResult, instrumentation),
-                    colorMode: parseResult.GetValue(colorOption)));
+                parseResult =>
+                {
+                    if (parseResult.GetValue(watchOption))
+                    {
+                        parseResult.InvocationConfiguration.Error.WriteLine(
+                            "Error: --watch is not supported with elm test profile.");
+
+                        return 1;
+                    }
+
+                    return
+                        TestProfileCommand.Execute(
+                            parseResult.GetValue(sourceArgument) ?? Environment.CurrentDirectory,
+                            parseResult.GetValue(filterOption),
+                            options.Read(parseResult),
+                            instrumentation => Run(parseResult, instrumentation),
+                            colorMode: parseResult.GetValue(colorOption));
+                });
         }
         else
             command.SetAction(parseResult => Run(parseResult, null));
@@ -295,7 +319,94 @@ public static class TestCommand
         ElmTestInstrumentation? instrumentation = null,
         ElmTestEvaluationOptions? evaluationOptions = null,
         bool showEffectiveLimits = false,
-        Func<string, IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>? remoteSourceLoader = null)
+        Func<string, IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>? remoteSourceLoader = null) =>
+        Execute(
+            source,
+            watch: false,
+            colorMode,
+            console,
+            errorConsole,
+            filter,
+            listTests,
+            workers,
+            reportDurations,
+            offline,
+            dependencyReportPath,
+            resolutionConfiguration,
+            packageProvider,
+            seed,
+            fuzz,
+            instrumentation,
+            evaluationOptions,
+            showEffectiveLimits,
+            remoteSourceLoader);
+
+    public static int Execute(
+        string source,
+        bool watch,
+        FormatCommandColorMode? colorMode = null,
+        IAnsiConsole? console = null,
+        IAnsiConsole? errorConsole = null,
+        string? filter = null,
+        bool listTests = false,
+        int? workers = null,
+        bool reportDurations = false,
+        bool offline = false,
+        string? dependencyReportPath = null,
+        ElmDependencyResolutionConfiguration? resolutionConfiguration = null,
+        IElmPackageProvider? packageProvider = null,
+        uint? seed = null,
+        uint fuzz = 100,
+        ElmTestInstrumentation? instrumentation = null,
+        ElmTestEvaluationOptions? evaluationOptions = null,
+        bool showEffectiveLimits = false,
+        Func<string, IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>? remoteSourceLoader = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteCore(
+            source,
+            watch,
+            colorMode,
+            console,
+            errorConsole,
+            filter,
+            listTests,
+            workers,
+            reportDurations,
+            offline,
+            dependencyReportPath,
+            resolutionConfiguration,
+            packageProvider,
+            seed,
+            fuzz,
+            instrumentation,
+            evaluationOptions,
+            showEffectiveLimits,
+            remoteSourceLoader,
+            cancellationToken);
+
+    internal static int ExecuteCore(
+        string source,
+        bool watch,
+        FormatCommandColorMode? colorMode = null,
+        IAnsiConsole? console = null,
+        IAnsiConsole? errorConsole = null,
+        string? filter = null,
+        bool listTests = false,
+        int? workers = null,
+        bool reportDurations = false,
+        bool offline = false,
+        string? dependencyReportPath = null,
+        ElmDependencyResolutionConfiguration? resolutionConfiguration = null,
+        IElmPackageProvider? packageProvider = null,
+        uint? seed = null,
+        uint fuzz = 100,
+        ElmTestInstrumentation? instrumentation = null,
+        ElmTestEvaluationOptions? evaluationOptions = null,
+        bool showEffectiveLimits = false,
+        Func<string, IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>? remoteSourceLoader = null,
+        CancellationToken cancellationToken = default,
+        ElmTestRunCacheSession? cacheSession = null,
+        Action<ElmTestRunCacheSession>? onCacheSession = null)
     {
         FormatCommandColorMode resolvedColorMode;
 
@@ -321,6 +432,9 @@ public static class TestCommand
 
         console ??= CreateSystemConsole(Console.Out, resolvedColorMode);
 
+        if (cancellationToken.IsCancellationRequested)
+            return 130;
+
         var effectiveLimits = instrumentation?.Options ?? evaluationOptions ?? new ElmTestEvaluationOptions();
 
         try
@@ -334,11 +448,124 @@ public static class TestCommand
             return 1;
         }
 
+        var resolvedWorkers = workers ?? DefaultWorkerCount();
+
+        if (resolvedWorkers < 1)
+        {
+            errorConsole ??= CreateSystemConsole(Console.Error, resolvedColorMode);
+            errorConsole.Write(new Text("Error: ", TestCommandTheme.Failure));
+            errorConsole.WriteLine("The --workers value must be at least 1.");
+            return 1;
+        }
+
+        if (fuzz is 0)
+        {
+            errorConsole ??= CreateSystemConsole(Console.Error, resolvedColorMode);
+            errorConsole.WriteLine("Error: The --fuzz value must be a positive unsigned 32-bit integer.");
+            return 1;
+        }
+
+        if (watch)
+        {
+            errorConsole ??= CreateSystemConsole(Console.Error, resolvedColorMode);
+
+            if (ElmTestProjectSource.IsRemote(source))
+            {
+                errorConsole.Profile.Out.Writer.WriteLine(
+                    "Error: --watch requires a local project directory, not a remote source.");
+
+                return 1;
+            }
+
+            if (instrumentation is not null)
+            {
+                errorConsole.Profile.Out.Writer.WriteLine("Error: --watch is not supported with elm test profile.");
+                return 1;
+            }
+
+            if (dependencyReportPath is not null)
+            {
+                errorConsole.Profile.Out.Writer.WriteLine(
+                    "Error: --watch cannot be combined with --dependency-report because generated reports can trigger reruns.");
+
+                return 1;
+            }
+
+            cacheSession ??= new ElmTestRunCacheSession(IntermediateVM.SetupVM.DefaultPrecompiledLeaves);
+
+            using var watchCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+            void CancelHandler(object? _, ConsoleCancelEventArgs args)
+            {
+                args.Cancel = true;
+                watchCancellation.Cancel();
+            }
+
+            Console.CancelKeyPress += CancelHandler;
+
+            try
+            {
+                return
+                    TestWatchRunner.RunAsync(
+                        source,
+                        run: token =>
+                        {
+                            console.Profile.Out.Writer.WriteLine("Starting test run...");
+                            console.Profile.Out.Writer.Flush();
+
+                            try
+                            {
+                                return
+                                    ExecuteCore(
+                                        source,
+                                        watch: false,
+                                        colorMode,
+                                        console,
+                                        errorConsole,
+                                        filter,
+                                        listTests,
+                                        workers,
+                                        reportDurations,
+                                        offline,
+                                        dependencyReportPath,
+                                        resolutionConfiguration,
+                                        packageProvider,
+                                        seed,
+                                        fuzz,
+                                        instrumentation: null,
+                                        evaluationOptions,
+                                        showEffectiveLimits,
+                                        remoteSourceLoader,
+                                        cancellationToken: token,
+                                        cacheSession: cacheSession,
+                                        onCacheSession: onCacheSession);
+                            }
+                            catch (InvalidOperationException exception) when (
+                            exception.Message.StartsWith("Failed parsing Elm test module ", StringComparison.Ordinal) ||
+                            exception.Message.StartsWith("Cannot parse Elm source '", StringComparison.Ordinal))
+                            {
+                                errorConsole.Profile.Out.Writer.WriteLine("Error: " + exception.Message);
+                                return 1;
+                            }
+                        },
+                        onReady: () => console.Profile.Out.Writer.WriteLine(
+                            "Watching all files in " + Path.GetFullPath(source) + " recursively. Press Ctrl+C to stop."),
+                        onError: exception => errorConsole.Profile.Out.Writer.WriteLine(
+                            "Error: Cannot watch project directory '" + source + "': " + exception.Message),
+                        watchCancellation.Token).GetAwaiter().GetResult();
+            }
+            finally
+            {
+                Console.CancelKeyPress -= CancelHandler;
+            }
+        }
+
         if (instrumentation is null && (effectiveLimits.HasCustomLimits || showEffectiveLimits))
             TestBudgetOptions.PrintEffective(console.Profile.Out.Writer, effectiveLimits);
 
         using var budgetTracker =
-            instrumentation is null && (effectiveLimits.HasCustomLimits || showEffectiveLimits)
+            instrumentation is null &&
+            (effectiveLimits.HasCustomLimits || showEffectiveLimits || cancellationToken.CanBeCanceled)
             ?
             new ElmTestInstrumentation(
                 effectiveLimits.ToInstrumentationOptions(),
@@ -351,28 +578,16 @@ public static class TestCommand
             null;
 
         using var budgetCancellation =
-            budgetTracker is not null ? TestBudgetOptions.RegisterCancellation(budgetTracker) : null;
+            budgetTracker is not null && !cancellationToken.CanBeCanceled
+            ?
+            TestBudgetOptions.RegisterCancellation(budgetTracker)
+            :
+            null;
 
         instrumentation ??= budgetTracker;
 
-        var resolvedWorkers =
-            workers ?? DefaultWorkerCount();
-
-        if (resolvedWorkers < 1)
-        {
-            errorConsole ??= CreateSystemConsole(Console.Error, resolvedColorMode);
-            errorConsole.Write(new Text("Error: ", TestCommandTheme.Failure));
-            errorConsole.WriteLine("The --workers value must be at least 1.");
-
-            return 1;
-        }
-
-        if (fuzz is 0)
-        {
-            errorConsole ??= CreateSystemConsole(Console.Error, resolvedColorMode);
-            errorConsole.WriteLine("Error: The --fuzz value must be a positive unsigned 32-bit integer.");
-            return 1;
-        }
+        using var tokenCancellation =
+            instrumentation is not null ? cancellationToken.Register(instrumentation.Cancel) : default;
 
         ElmTestRun testRun;
 
@@ -389,7 +604,33 @@ public static class TestCommand
             if (offline)
                 resolutionConfiguration = resolutionConfiguration with { Offline = true };
 
+            if (instrumentation is null || ReferenceEquals(instrumentation, budgetTracker))
+                cacheSession ??= new ElmTestRunCacheSession(IntermediateVM.SetupVM.DefaultPrecompiledLeaves);
+
             testRun =
+                cacheSession is not null
+                ?
+                ElmTestRunner.CompileAndRunTests(
+                    cacheSession,
+                    projectSource.DirectoryPath,
+                    workers: resolvedWorkers,
+                    resolutionConfiguration: resolutionConfiguration,
+                    packageProvider: packageProvider,
+                    fuzzOptions: new() { Seed = seed, Runs = fuzz },
+                    onDependenciesResolved: report =>
+                    {
+                        if (dependencyReportPath is not null)
+                            File.WriteAllText(dependencyReportPath, report.ToJson());
+                    },
+                    filter: filter,
+                    listTests: listTests,
+                    instrumentation: instrumentation,
+                    onTestsDiscovered: testCount =>
+                    {
+                        console.Write(
+                            new Text("Running " + testCount + " test" + (testCount is 1 ? "." : "s.") + "\n\n"));
+                    })
+                :
                 ElmTestRunner.CompileAndRunTests(
                     projectSource.DirectoryPath,
                     workers: resolvedWorkers,
@@ -403,7 +644,8 @@ public static class TestCommand
                     },
                     pineVmFactory:
                     (invocationCache, sharedCaches) =>
-                    IntermediateVM.SetupVM.Create(
+                    IntermediateVM.SetupVM.CreateWithTemplatePlanCache(
+                        expressionTemplatePlanCache: sharedCaches.ExpressionTemplatePlans,
                         evaluationConfigDefault: s_testEvaluationConfigDefault,
                         invocationCache: invocationCache,
                         parseCache: sharedCaches.ParsedExpressions,
@@ -422,6 +664,9 @@ public static class TestCommand
                                 "Running " + testCount + " test" +
                                 (testCount is 1 ? "." : "s.") + "\n\n"));
                     });
+
+            if (cacheSession is not null)
+                onCacheSession?.Invoke(cacheSession);
         }
         catch (ElmTestInstrumentationStoppedException)
         {

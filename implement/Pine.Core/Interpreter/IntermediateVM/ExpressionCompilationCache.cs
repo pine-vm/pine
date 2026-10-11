@@ -38,6 +38,9 @@ public sealed class ConcurrentExpressionCompilationCache
         Lazy<ExpressionCompilationCacheEntry>>
         _entries = [];
 
+    /// <summary>Number of compiled or currently compiling expressions.</summary>
+    public int Count => _entries.Count;
+
     /// <summary>
     /// Looks up an expression compilation, waiting for an in-progress compilation of the same expression.
     /// </summary>

@@ -270,7 +270,7 @@ public class ElmFuzzTests
     internal sealed class Project : IDisposable
     {
         public string Directory { get; } =
-            Path.Combine(Path.GetTempPath(), "pine-fuzz-tests-" + Guid.NewGuid().ToString("N"));
+            Path.GetFullPath(Path.Combine("artifacts", "elm-fuzz-tests", Guid.NewGuid().ToString("N")));
 
         public Project(string declarations)
         {

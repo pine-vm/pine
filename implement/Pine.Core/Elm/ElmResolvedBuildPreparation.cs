@@ -46,7 +46,8 @@ public static class ElmResolvedBuildPreparation
             provider,
             cancellationToken,
             projectDirectory,
-            declarationDemand: false);
+            declarationDemand: false,
+            sourceParseCache: null);
 
     /// <summary>
     /// Resolves and verifies all available sources without requiring their module-import closure.
@@ -67,6 +68,26 @@ public static class ElmResolvedBuildPreparation
         IElmPackageProvider? provider = null,
         CancellationToken cancellationToken = default,
         string? projectDirectory = null) =>
+        PrepareForDeclarationDemandAsync(
+            projectTree,
+            manifestPath,
+            rootFilePaths,
+            configuration,
+            provider,
+            cancellationToken,
+            projectDirectory,
+            sourceParseCache: null);
+
+    /// <summary>Prepares declaration-demand sources with caller-owned, source-text-keyed parsing.</summary>
+    public static Task<ElmResolvedBuild> PrepareForDeclarationDemandAsync(
+        FileTree projectTree,
+        IReadOnlyList<string> manifestPath,
+        IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
+        ElmDependencyResolutionConfiguration configuration,
+        IElmPackageProvider? provider,
+        CancellationToken cancellationToken,
+        string? projectDirectory,
+        IDictionary<string, Result<ElmSyntaxParseError, Syntax.File>>? sourceParseCache) =>
         PrepareSourcesAsync(
             projectTree,
             manifestPath,
@@ -75,7 +96,8 @@ public static class ElmResolvedBuildPreparation
             provider,
             cancellationToken,
             projectDirectory,
-            declarationDemand: true);
+            declarationDemand: true,
+            sourceParseCache);
 
     private static async Task<ElmResolvedBuild> PrepareSourcesAsync(
         FileTree projectTree,
@@ -85,7 +107,8 @@ public static class ElmResolvedBuildPreparation
         IElmPackageProvider? provider,
         CancellationToken cancellationToken,
         string? projectDirectory,
-        bool declarationDemand)
+        bool declarationDemand,
+        IDictionary<string, Result<ElmSyntaxParseError, Syntax.File>>? sourceParseCache)
     {
         provider ??=
             new ElmRegistryPackageProvider(configuration.Offline, compilerVersion: configuration.CompilerVersion);
@@ -271,7 +294,7 @@ public static class ElmResolvedBuildPreparation
         return
             declarationDemand
             ?
-            PrepareDeclarationSources(build, appSources, string.Join("/", manifestPath))
+            PrepareDeclarationSources(build, appSources, string.Join("/", manifestPath), sourceParseCache)
             :
             ValidateImports(build, appSources, string.Join("/", manifestPath));
     }
@@ -416,7 +439,10 @@ public static class ElmResolvedBuildPreparation
             });
 
     private static ElmResolvedBuild PrepareDeclarationSources(
-        ElmResolvedBuild build, FileTree appSources, string projectManifestPath)
+        ElmResolvedBuild build,
+        FileTree appSources,
+        string projectManifestPath,
+        IDictionary<string, Result<ElmSyntaxParseError, Syntax.File>>? sourceParseCache)
     {
         var byPath = new Dictionary<string, PreparedModule>(StringComparer.Ordinal);
 
@@ -433,10 +459,21 @@ public static class ElmResolvedBuildPreparation
                 var path =
                     (owner is null ? "" : "elm-packages/" + owner + "/") + string.Join("/", file.path);
 
+                var sourceText = Encoding.UTF8.GetString(file.fileContent.Span);
+
+                var parsedResult =
+                    sourceParseCache is not null && sourceParseCache.TryGetValue(sourceText, out var cached)
+                    ?
+                    cached
+                    :
+                    ElmSyntaxParser.ParseModuleText(sourceText);
+
                 var parsed =
-                    ElmSyntaxParser.ParseModuleText(Encoding.UTF8.GetString(file.fileContent.Span))
+                    parsedResult
                     .Extract(
                         error => throw new InvalidOperationException($"Cannot parse Elm source '{path}': {error}"));
+
+                sourceParseCache?[sourceText] = parsedResult;
 
                 var name = string.Join(".", Syntax.Module.GetModuleName(parsed.ModuleDefinition.Value).Value);
 

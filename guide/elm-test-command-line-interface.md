@@ -24,6 +24,7 @@ Options:
                                            Prefix a full path with '=' for exact, case-sensitive matching, including literal wildcard characters.
                                            Use '#N' for a discovery ordinal when duplicate test paths cannot distinguish a test.
   --list-tests                             List tests without running them.
+  --watch                                  Rerun tests on file changes.
   --workers <workers>                      Number of worker threads. Defaults to 11.
   --report-durations                       Show detailed durations, including compilation and test execution.
   --seed <seed>                            Initial unsigned 32-bit random seed for fuzz tests. Defaults to a new random seed.
@@ -86,6 +87,25 @@ non-test values) and calling the test bridge's `prepare` function. Execution inc
 the selected test runners. These are summed call durations, not exclusive phase durations:
 parallel execution calls overlap, so their sum can exceed the execution wall-clock duration.
 
+## Watch mode
+
+```console
+pine  elm  test  .  --watch  --report-durations
+```
+
+`--watch` runs the tests immediately, then keeps the command running and reruns
+after changes in the local project directory, including subdirectories.
+
+Rapid changes are coalesced. Test runs are sequential; changes during a run
+schedule a subsequent run rather than starting a competing one. A failed test
+or compilation error does not stop watching, so fixing the source triggers
+another attempt. Press Ctrl+C to stop.
+
+With `--report-durations`, each completed run prints its own timings. They describe the latest run, not time spent waiting for edits or accumulated time since watch mode started.
+
+Watch mode requires a local project directory; remote tree URLs are not watchable. It is an ordinary `elm test` option, not a profiling mode.
+`--dependency-report` cannot be combined with `--watch`, because writing reports could itself trigger repeated reruns. Other ordinary test options apply to each run; execution budgets and timeouts start fresh for each run. Use `--seed` to keep the fuzz seed fixed across reruns; without it each run chooses a fresh seed.
+
 ## Profiling and instrumentation
 
 Use `elm test profile` to investigate hangs, unexpected work, or expensive computations.
@@ -96,7 +116,7 @@ Omit `--filter` to profile the whole suite, or use a filter to select one test o
 pine  elm  test  profile  .  --budget 1000000  --loop-budget 10000  --include-inputs  --include-locals  --sort Loops  --output profile.json
 ```
 
-All ordinary test options are accepted, including source, filtering/listing, seed, fuzz count,
+Ordinary test options other than `--watch` are accepted, including source, filtering/listing, seed, fuzz count,
 offline resolution, dependency reports, color and duration reporting. Unlike ordinary `elm test`,
 profiling always executes selected tests serially, regardless of `--workers`. Each test gets a fresh
 VM and fresh invocation, parsing, compilation, encoding and reduction caches, separate from both

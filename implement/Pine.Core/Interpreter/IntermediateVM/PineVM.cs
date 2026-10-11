@@ -5,7 +5,6 @@ using Pine.Core.Internal;
 using Pine.Core.IO;
 using Pine.Core.PineVM;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -80,10 +79,7 @@ public class PineVM : ICancellablePineVM
 
     private readonly bool _disableDirectEvalForSimpleTemplate;
 
-    private readonly ConcurrentDictionary<PineValue, ExpressionTemplatePlanResolution>
-        _expressionTemplatePlanCache = [];
-
-    private sealed record ExpressionTemplatePlanResolution(ExpressionTemplatePlan? Plan);
+    private readonly PineVMExpressionTemplatePlanCache _expressionTemplatePlanCache;
 
     /// <summary>
     /// Creates a PineVM with caller-supplied caches, precompiled leaves, optimization settings, and diagnostic callbacks.
@@ -119,8 +115,78 @@ public class PineVM : ICancellablePineVM
         PineVMExpressionEncodingCache? expressionEncodingCache = null,
         IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null,
         ReportEvaluationEvent? reportEvaluationEvent = null,
+        bool disableDirectInvocation = false) =>
+        CreateCustom(
+            new PineVMExpressionTemplatePlanCache(),
+            evalCache,
+            evaluationConfigDefault,
+            reportFunctionApplication,
+            compilationEnvClasses,
+            disableReductionInCompilation,
+            selectPrecompiled,
+            skipInlineForExpression,
+            enableTailRecursionOptimization,
+            parseCache,
+            precompiledLeaves,
+            reportEnterPrecompiledLeaf,
+            reportExitPrecompiledLeaf,
+            optimizationParametersSerial,
+            cacheFileStore,
+            reportExecutedStackInstruction,
+            expressionCompilationOverrides,
+            pathMaxLowExclusive,
+            pathMaxHighInclusive,
+            disableGenericApplicationChainConsolidation,
+            disableDirectContinueForSimpleEval,
+            disableDirectEvalForSimpleTemplate,
+            reportTailLoopIteration,
+            reportExpressionCompiled,
+            invocationCache,
+            invocationCacheConfiguration,
+            tryGetExpressionCompilation,
+            getOrAddExpressionCompilation,
+            expressionEncodingCache,
+            reducedExpressionCache,
+            reportEvaluationEvent,
+            disableDirectInvocation);
+
+    /// <summary>Creates a VM with a retained template-plan cache and caller-selected compilation configuration.</summary>
+    public static PineVM CreateCustom(
+        PineVMExpressionTemplatePlanCache expressionTemplatePlanCache,
+        IDictionary<EvalCacheEntryKey, PineValue>? evalCache,
+        EvaluationConfig? evaluationConfigDefault,
+        Action<EvaluationReport>? reportFunctionApplication,
+        IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses,
+        bool disableReductionInCompilation,
+        Func<Expression, PineValueInProcess, PineVMParseCache, Func<PrecompiledResult>?>? selectPrecompiled,
+        Func<Expression, bool> skipInlineForExpression,
+        bool enableTailRecursionOptimization,
+        PineVMParseCache? parseCache,
+        IReadOnlyDictionary<PineValue, PrecompiledLeaf>? precompiledLeaves,
+        Action<PineValue, PineValueInProcess>? reportEnterPrecompiledLeaf,
+        Action<PineValue, PineValueInProcess, PineValueInProcess?>? reportExitPrecompiledLeaf,
+        OptimizationParametersSerial? optimizationParametersSerial,
+        IFileStore? cacheFileStore,
+        ReportExecutedStackInstruction? reportExecutedStackInstruction = null,
+        IReadOnlyDictionary<Expression, ExpressionCompilation>? expressionCompilationOverrides = null,
+        int pathMaxLowExclusive = ExpressionCompilation.DefaultPathMaxLowExclusive,
+        int pathMaxHighInclusive = ExpressionCompilation.DefaultPathMaxHighInclusive,
+        bool disableGenericApplicationChainConsolidation = false,
+        bool disableDirectContinueForSimpleEval = false,
+        bool disableDirectEvalForSimpleTemplate = false,
+        ReportTailLoopIteration? reportTailLoopIteration = null,
+        ReportExpressionCompiled? reportExpressionCompiled = null,
+        IInvocationCacheAccess? invocationCache = null,
+        InvocationCacheConfiguration? invocationCacheConfiguration = null,
+        TryGetExpressionCompilation? tryGetExpressionCompilation = null,
+        GetOrAddExpressionCompilation? getOrAddExpressionCompilation = null,
+        PineVMExpressionEncodingCache? expressionEncodingCache = null,
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null,
+        ReportEvaluationEvent? reportEvaluationEvent = null,
         bool disableDirectInvocation = false)
     {
+        ArgumentNullException.ThrowIfNull(expressionTemplatePlanCache);
+
         if ((tryGetExpressionCompilation is null) != (getOrAddExpressionCompilation is null))
         {
             throw new ArgumentException(
@@ -137,6 +203,7 @@ public class PineVM : ICancellablePineVM
 
         return
             new PineVM(
+                expressionTemplatePlanCache: expressionTemplatePlanCache,
                 evalCache: evalCache,
                 evaluationConfigDefault: evaluationConfigDefault,
                 reportFunctionApplication: reportFunctionApplication,
@@ -176,6 +243,7 @@ public class PineVM : ICancellablePineVM
     }
 
     private PineVM(
+        PineVMExpressionTemplatePlanCache expressionTemplatePlanCache,
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache,
         EvaluationConfig? evaluationConfigDefault,
         Action<EvaluationReport>? reportFunctionApplication,
@@ -208,6 +276,8 @@ public class PineVM : ICancellablePineVM
         ReportEvaluationEvent? reportEvaluationEvent = null,
         bool disableDirectInvocation = false)
     {
+        _expressionTemplatePlanCache = expressionTemplatePlanCache;
+
         if (evalCache is not null && invocationCache is not null)
         {
             throw new ArgumentException(
@@ -3331,7 +3401,7 @@ public class PineVM : ICancellablePineVM
         DirectInterpreterCounters counters)
     {
         return
-            _expressionTemplatePlanCache.GetOrAdd(
+            _expressionTemplatePlanCache.Entries.GetOrAdd(
                 templateValue,
                 value =>
                 {
@@ -3340,17 +3410,17 @@ public class PineVM : ICancellablePineVM
                     if (ExpressionTemplatePlan.TryParseTemplate(value, ParseCache, counters)
                         is not { } templateDescription)
                     {
-                        return new ExpressionTemplatePlanResolution(null);
+                        return new PineVMExpressionTemplatePlanCache.Resolution(null);
                     }
 
                     if (templateDescription.ParameterCount <=
                         templateDescription.ArgumentsAlreadyCollected.Length)
                     {
-                        return new ExpressionTemplatePlanResolution(null);
+                        return new PineVMExpressionTemplatePlanCache.Resolution(null);
                     }
 
                     return
-                        new ExpressionTemplatePlanResolution(
+                        new PineVMExpressionTemplatePlanCache.Resolution(
                             new ExpressionTemplatePlan(
                                 TemplateValue: value,
                                 EncodedTerminalExpression: EncodeExpressionAsValue(templateDescription.InnerFunction),
