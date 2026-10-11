@@ -6,8 +6,24 @@ on:
 jobs:
   delete-artifacts:
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
     steps:
-      - uses: kolpav/purge-artifacts-action@v1
+      - name: Delete artifacts older than 14 days
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          expire-in: 14days # Setting this to 0 will delete all artifacts
+          script: |
+            const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000;
+            const artifacts = await github.paginate(
+              github.rest.actions.listArtifactsForRepo,
+              { ...context.repo, per_page: 100 }
+            );
+            for (const artifact of artifacts) {
+              if (Date.parse(artifact.created_at) <= cutoff) {
+                core.info(`Deleting artifact ${artifact.id}`);
+                await github.rest.actions.deleteArtifact({
+                  ...context.repo,
+                  artifact_id: artifact.id
+                });
+              }
+            }

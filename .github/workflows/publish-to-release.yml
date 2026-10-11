@@ -25,18 +25,15 @@ jobs:
 
     steps:
 
-    - uses: olegtarasov/get-tag@v2.1.2
-      id: tagName
-
     - name: Validate release tag
+      id: tagName
       shell: pwsh
-      env:
-        RELEASE_TAG: ${{ steps.tagName.outputs.tag }}
       run: |
-        if ([string]::IsNullOrWhiteSpace($env:RELEASE_TAG)) {
+        if ($env:GITHUB_REF_TYPE -ne "tag" -or [string]::IsNullOrWhiteSpace($env:GITHUB_REF_NAME)) {
           Write-Output "::error::A release tag is required. For manual runs, select a tag as the workflow ref."
           exit 1
         }
+        Add-Content -Path $env:GITHUB_OUTPUT -Value "tag=$env:GITHUB_REF_NAME" -Encoding utf8
 
     - name: Avoid git mutating files on checkout
       run: |
