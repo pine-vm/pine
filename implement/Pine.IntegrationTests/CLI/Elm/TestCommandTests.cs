@@ -1413,7 +1413,9 @@ public class TestCommandTests
 
     [Theory]
     [InlineData(null, 3)]
+    [InlineData("*", 3)]
     [InlineData("group", 2)]
+    [InlineData("first", 1)]
     public void Profile_executes_all_tests_selected_by_the_filter(string? filter, int count)
     {
         var project =
@@ -1452,12 +1454,26 @@ public class TestCommandTests
 
             result.Should().Be(0, output.ToString());
 
-            output.ToString().Should().Contain("Running " + count + " tests")
+            var runningMessage = "Running " + count + (count is 1 ? " test." : " tests.");
+
+            if (filter is not null)
+            {
+                var skipped = 3 - count;
+                runningMessage += " " + skipped + (skipped is 1 ? " test" : " tests") + " skipped by filter.";
+            }
+            else
+            {
+                output.ToString().Should().NotContain("skipped by filter");
+            }
+
+            output.ToString().Should().Contain(runningMessage + "\n\n")
                 .And.Contain("TEST RUN PASSED").And.Contain("metrics aggregate all selected tests");
 
             using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(project, "profile.json")));
             json.RootElement.GetProperty("SelectedTests").GetArrayLength().Should().Be(count);
-            json.RootElement.GetProperty("SelectedTest").ValueKind.Should().Be(JsonValueKind.Null);
+
+            json.RootElement.GetProperty("SelectedTest").ValueKind
+                .Should().Be(count is 1 ? JsonValueKind.String : JsonValueKind.Null);
         }
         finally
         {
@@ -2302,10 +2318,12 @@ public class TestCommandTests
 
 
     [Theory]
+    [InlineData(null, 1, 3, 2, 1)]
+    [InlineData("*", 1, 3, 2, 1)]
     [InlineData("SELECTED GROUP", 0, 2, 2, 0)]
     [InlineData("UNIQUE TEST", 1, 1, 0, 1)]
     public void Filter_is_case_insensitive_and_matches_test_or_group_name(
-        string filter,
+        string? filter,
         int expectedExitCode,
         int expectedTestCount,
         int expectedPassedCount,
@@ -2324,7 +2342,21 @@ public class TestCommandTests
                     filter: filter);
 
             exitCode.Should().Be(expectedExitCode);
-            output.ToString().Should().Contain($"Running {expectedTestCount} test");
+
+            var runningMessage =
+                "Running " + expectedTestCount + (expectedTestCount is 1 ? " test." : " tests.");
+
+            if (filter is not null)
+            {
+                var skipped = 3 - expectedTestCount;
+                runningMessage += " " + skipped + (skipped is 1 ? " test" : " tests") + " skipped by filter.";
+            }
+            else
+            {
+                output.ToString().Should().NotContain("skipped by filter");
+            }
+
+            output.ToString().Should().Contain(runningMessage + "\n\n");
             output.ToString().Should().Contain($"Passed:   {expectedPassedCount}");
             output.ToString().Should().Contain($"Failed:   {expectedFailedCount}");
         }

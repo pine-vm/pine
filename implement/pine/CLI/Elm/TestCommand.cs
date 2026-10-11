@@ -591,6 +591,20 @@ public static class TestCommand
 
         ElmTestRun testRun;
 
+        void WriteRunningMessage(int testCount, int filteredOutCount)
+        {
+            var message = "Running " + testCount + " test" + (testCount is 1 ? "." : "s.");
+
+            if (filter is not null)
+            {
+                message +=
+                    " " + filteredOutCount + " test" +
+                    (filteredOutCount is 1 ? "" : "s") + " skipped by filter.";
+            }
+
+            console.Write(new Text(message + "\n\n"));
+        }
+
         try
         {
             using var projectSource =
@@ -611,8 +625,8 @@ public static class TestCommand
                 cacheSession is not null
                 ?
                 ElmTestRunner.CompileAndRunTests(
-                    cacheSession,
-                    projectSource.DirectoryPath,
+                    cacheSession: cacheSession,
+                    appDirectory: projectSource.DirectoryPath,
                     workers: resolvedWorkers,
                     resolutionConfiguration: resolutionConfiguration,
                     packageProvider: packageProvider,
@@ -625,14 +639,10 @@ public static class TestCommand
                     filter: filter,
                     listTests: listTests,
                     instrumentation: instrumentation,
-                    onTestsDiscovered: testCount =>
-                    {
-                        console.Write(
-                            new Text("Running " + testCount + " test" + (testCount is 1 ? "." : "s.") + "\n\n"));
-                    })
+                    onTestsSelected: WriteRunningMessage)
                 :
                 ElmTestRunner.CompileAndRunTests(
-                    projectSource.DirectoryPath,
+                    appDirectory: projectSource.DirectoryPath,
                     workers: resolvedWorkers,
                     resolutionConfiguration: resolutionConfiguration,
                     packageProvider: packageProvider,
@@ -656,14 +666,7 @@ public static class TestCommand
                     filter: filter,
                     listTests: listTests,
                     instrumentation: instrumentation,
-                    onTestsDiscovered:
-                    testCount =>
-                    {
-                        console.Write(
-                            new Text(
-                                "Running " + testCount + " test" +
-                                (testCount is 1 ? "." : "s.") + "\n\n"));
-                    });
+                    onTestsSelected: WriteRunningMessage);
 
             if (cacheSession is not null)
                 onCacheSession?.Invoke(cacheSession);

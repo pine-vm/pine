@@ -77,6 +77,35 @@ public static class ElmTestRunner
         ElmFuzzOptions? fuzzOptions = null,
         ElmTestInstrumentation? instrumentation = null) =>
         CompileAndRunTests(
+            onTestsSelected: null,
+            appDirectory,
+            pineVm,
+            filter,
+            listTests,
+            onTestsDiscovered,
+            resolutionConfiguration,
+            packageProvider,
+            onDependenciesResolved,
+            fuzzOptions,
+            instrumentation);
+
+
+    /// <summary>
+    /// Compiles and runs the tests in an Elm project, reporting test selection before execution.
+    /// </summary>
+    public static ElmTestRun CompileAndRunTests(
+        Action<int, int>? onTestsSelected,
+        string appDirectory,
+        IPineVM? pineVm = null,
+        string? filter = null,
+        bool listTests = false,
+        Action<int>? onTestsDiscovered = null,
+        ElmDependencyResolutionConfiguration? resolutionConfiguration = null,
+        IElmPackageProvider? packageProvider = null,
+        Action<ElmDependencyResolutionReport>? onDependenciesResolved = null,
+        ElmFuzzOptions? fuzzOptions = null,
+        ElmTestInstrumentation? instrumentation = null) =>
+        CompileAndRunTests(
             appDirectory,
             pineVm,
             filter,
@@ -89,13 +118,45 @@ public static class ElmTestRunner
             onDependenciesResolved,
             fuzzOptions,
             instrumentation,
-            cacheSession: null);
+            cacheSession: null,
+            onTestsSelected);
 
 
     /// <summary>
     /// Compiles and runs the tests in an Elm project using a separate VM for each test and shared compilation caches.
     /// </summary>
     public static ElmTestRun CompileAndRunTests(
+        string appDirectory,
+        int workers,
+        Func<IInvocationCacheAccess, PineVMSharedCaches, IPineVM> pineVmFactory,
+        string? filter = null,
+        bool listTests = false,
+        Action<int>? onTestsDiscovered = null,
+        ElmDependencyResolutionConfiguration? resolutionConfiguration = null,
+        IElmPackageProvider? packageProvider = null,
+        Action<ElmDependencyResolutionReport>? onDependenciesResolved = null,
+        ElmFuzzOptions? fuzzOptions = null,
+        ElmTestInstrumentation? instrumentation = null) =>
+        CompileAndRunTests(
+            onTestsSelected: null,
+            appDirectory,
+            workers,
+            pineVmFactory,
+            filter,
+            listTests,
+            onTestsDiscovered,
+            resolutionConfiguration,
+            packageProvider,
+            onDependenciesResolved,
+            fuzzOptions,
+            instrumentation);
+
+
+    /// <summary>
+    /// Compiles and runs tests using a separate VM for each test, reporting test selection before execution.
+    /// </summary>
+    public static ElmTestRun CompileAndRunTests(
+        Action<int, int>? onTestsSelected,
         string appDirectory,
         int workers,
         Func<IInvocationCacheAccess, PineVMSharedCaches, IPineVM> pineVmFactory,
@@ -124,7 +185,8 @@ public static class ElmTestRunner
                 onDependenciesResolved,
                 fuzzOptions,
                 instrumentation,
-                cacheSession: null);
+                cacheSession: null,
+                onTestsSelected);
     }
 
 
@@ -133,6 +195,38 @@ public static class ElmTestRunner
     /// across source edits and budgeted runs, but cannot be supplied to diagnostic profiles.
     /// </summary>
     public static ElmTestRun CompileAndRunTests(
+        ElmTestRunCacheSession cacheSession,
+        string appDirectory,
+        int workers,
+        string? filter = null,
+        bool listTests = false,
+        Action<int>? onTestsDiscovered = null,
+        ElmDependencyResolutionConfiguration? resolutionConfiguration = null,
+        IElmPackageProvider? packageProvider = null,
+        Action<ElmDependencyResolutionReport>? onDependenciesResolved = null,
+        ElmFuzzOptions? fuzzOptions = null,
+        ElmTestInstrumentation? instrumentation = null) =>
+        CompileAndRunTests(
+            onTestsSelected: null,
+            cacheSession,
+            appDirectory,
+            workers,
+            filter,
+            listTests,
+            onTestsDiscovered,
+            resolutionConfiguration,
+            packageProvider,
+            onDependenciesResolved,
+            fuzzOptions,
+            instrumentation);
+
+
+    /// <summary>
+    /// Compiles and runs tests with caller-owned caches, reporting test selection before execution.
+    /// Sessions cannot be supplied to diagnostic profiles.
+    /// </summary>
+    public static ElmTestRun CompileAndRunTests(
+        Action<int, int>? onTestsSelected,
         ElmTestRunCacheSession cacheSession,
         string appDirectory,
         int workers,
@@ -162,7 +256,8 @@ public static class ElmTestRunner
                 onDependenciesResolved,
                 fuzzOptions,
                 instrumentation,
-                cacheSession);
+                cacheSession,
+                onTestsSelected);
     }
 
 
@@ -179,7 +274,8 @@ public static class ElmTestRunner
         Action<ElmDependencyResolutionReport>? onDependenciesResolved,
         ElmFuzzOptions? fuzzOptions,
         ElmTestInstrumentation? instrumentation,
-        ElmTestRunCacheSession? cacheSession)
+        ElmTestRunCacheSession? cacheSession,
+        Action<int, int>? onTestsSelected)
     {
         if (workers < 1)
             throw new ArgumentOutOfRangeException(nameof(workers), "Worker count must be at least one.");
@@ -604,6 +700,7 @@ public static class ElmTestRunner
         preparationPhaseScope.Dispose();
 
         onTestsDiscovered?.Invoke(discoveredTests.Count);
+        onTestsSelected?.Invoke(discoveredTests.Count, filteredOutTests.Count);
 
         using var executionPhaseScope =
             new TimedScope(() => instrumentation?.EnterScope("execution", appDirectory));

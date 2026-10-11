@@ -259,8 +259,12 @@ public class ElmTestTests
     }
 
 
-    [Fact]
-    public void Each_test_uses_a_separate_vm_and_shared_caches()
+    [Theory]
+    [InlineData(null, 3)]
+    [InlineData("*", 3)]
+    [InlineData("Another Test Title", 2)]
+    [InlineData("Tests/Group Title/Test Title", 1)]
+    public void Each_test_uses_a_separate_vm_and_shared_caches(string? filter, int expectedTestCount)
     {
         var testCasesDirectory =
             TestResultSummary.FindTestDataDirectory(
@@ -276,23 +280,35 @@ public class ElmTestTests
         var discoveredTestCount = 0;
         var sharedCaches = new ConcurrentBag<object>();
         var workersObservedDiscovery = new ConcurrentBag<bool>();
+        var selectedTestCount = 0;
+        var filteredOutTestCount = 0;
 
         var testRun =
             ElmTestRunner.CompileAndRunTests(
-                appDirectory,
+                appDirectory: appDirectory,
                 workers: 1,
+                filter: filter,
                 pineVmFactory:
                 (_, caches) =>
                 {
                     Interlocked.Increment(ref factoryCalls);
                     sharedCaches.Add(caches);
-                    workersObservedDiscovery.Add(Volatile.Read(ref discoveredTestCount) is 3);
+
+                    workersObservedDiscovery.Add(
+                        Volatile.Read(ref discoveredTestCount) == expectedTestCount &&
+                        Volatile.Read(ref selectedTestCount) == expectedTestCount &&
+                        Volatile.Read(ref filteredOutTestCount) == 3 - expectedTestCount);
 
                     return ElmCompilerTestHelper.PineVMForProfiling(_ => { });
                 },
                 onTestsDiscovered:
                 testCount =>
-                Interlocked.Exchange(ref discoveredTestCount, testCount));
+                Interlocked.Exchange(ref discoveredTestCount, testCount),
+                onTestsSelected: (testCount, filteredOutCount) =>
+                {
+                    Interlocked.Exchange(ref selectedTestCount, testCount);
+                    Interlocked.Exchange(ref filteredOutTestCount, filteredOutCount);
+                });
 
         var completed = testRun.Should().BeOfType<ElmTestRun.Completed>().Which;
         completed.CompilationDuration.Should().BeGreaterThan(TimeSpan.Zero);
@@ -304,7 +320,7 @@ public class ElmTestTests
         completed.Duration.Should().Be(
             completed.CompilationDuration + completed.PreparationDuration + completed.ExecutionDuration);
 
-        factoryCalls.Should().Be(3);
+        factoryCalls.Should().Be(expectedTestCount);
         sharedCaches.Distinct(ReferenceEqualityComparer.Instance).Should().HaveCount(1);
         workersObservedDiscovery.Should().OnlyContain(observed => observed);
     }
@@ -402,11 +418,12 @@ public class ElmTestTests
 
         var testRun =
             ElmTestRunner.CompileAndRunTests(
-                appDirectory,
+                appDirectory: appDirectory,
                 workers: 2,
                 pineVmFactory: (_, _) => throw new InvalidOperationException("No worker should be started."),
                 filter: filter,
-                onTestsDiscovered: _ => discoveryCallbackCalled = true);
+                onTestsDiscovered: _ => discoveryCallbackCalled = true,
+                onTestsSelected: (_, _) => discoveryCallbackCalled = true);
 
         var noMatches = testRun.Should().BeOfType<ElmTestRun.NoMatchingTests>().Subject;
         noMatches.Filter.Should().Be(filter);

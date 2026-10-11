@@ -18,41 +18,32 @@ namespace Pine.Core.Elm;
 /// Discovers published versions and package manifests independently of source archives. Offline mode
 /// performs no HTTP requests and never treats an incomplete local registry as proof of unsatisfiability.
 /// </summary>
-public sealed class ElmRegistryPackageProvider : IElmPackageProvider
+/// <remarks>Configures registry/cache access, including the compiler-specific ELM_HOME package directory.</remarks>
+public sealed class ElmRegistryPackageProvider(
+    bool offline = false,
+    string? cacheDirectory = null,
+    IReadOnlyList<string>? sourceCacheDirectories = null,
+    string? elmHome = null,
+    ElmPackageVersion? compilerVersion = null) : IElmPackageProvider
 {
     private static readonly HttpClient s_httpClient = new();
 
-    private readonly bool _offline;
+    private readonly bool _offline = offline;
 
-    private readonly string _cacheDirectory;
+    private readonly string _cacheDirectory =
+        cacheDirectory ?? Path.Combine(Filesystem.CacheDirectory, "elm-package-metadata");
 
-    private readonly IReadOnlyList<string> _sourceCacheDirectories;
+    private readonly IReadOnlyList<string> _sourceCacheDirectories =
+        sourceCacheDirectories ?? ElmPackageSource.LocalCacheDirectoriesDefault;
 
-    private readonly string _elmHome;
+    private readonly string _elmHome =
+        elmHome ??
+        Environment.GetEnvironmentVariable("ELM_HOME") ??
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "elm");
 
-    private readonly string _compilerVersion;
+    private readonly string _compilerVersion = (compilerVersion ?? ElmPackageVersion.Parse("0.19.1")).ToString();
 
     private Dictionary<string, string[]>? _registry;
-
-    /// <summary>Configures registry/cache access, including the compiler-specific ELM_HOME package directory.</summary>
-    public ElmRegistryPackageProvider(
-        bool offline = false,
-        string? cacheDirectory = null,
-        IReadOnlyList<string>? sourceCacheDirectories = null,
-        string? elmHome = null,
-        ElmPackageVersion? compilerVersion = null)
-    {
-        _offline = offline;
-        _cacheDirectory = cacheDirectory ?? Path.Combine(Filesystem.CacheDirectory, "elm-package-metadata");
-        _sourceCacheDirectories = sourceCacheDirectories ?? ElmPackageSource.LocalCacheDirectoriesDefault;
-
-        _elmHome =
-            elmHome ??
-            Environment.GetEnvironmentVariable("ELM_HOME") ??
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "elm");
-
-        _compilerVersion = (compilerVersion ?? ElmPackageVersion.Parse("0.19.1")).ToString();
-    }
 
     /// <inheritdoc/>
     public async Task<ElmPackageVersionListing> GetVersionsAsync(
