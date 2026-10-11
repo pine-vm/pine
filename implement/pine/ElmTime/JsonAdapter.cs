@@ -1229,10 +1229,10 @@ public class ElmTimeJsonAdapter
         var maybeStateIncludingShim = applyResponseSpan[0];
 
         var parseAppStateResult =
-            ElmValueInterop.ParseElmMaybeValue(
+            ElmValueInterop.ParseElmMaybeValue<Result<string, PineValue?>>(
                 maybeStateIncludingShim,
-                nothing: () => Result<string, PineValue>.ok(null),
-                just: ParseApplyExposedFunctionOkStateIncludingShim,
+                nothing: () => Result<string, PineValue?>.ok(null),
+                just: value => ParseApplyExposedFunctionOkStateIncludingShim(value).Map<PineValue?>(state => state),
                 invalid:
                 err => throw new System.Exception("Invalid: " + err));
 
@@ -1242,7 +1242,7 @@ public class ElmTimeJsonAdapter
         }
 
         var responseJsonValue =
-            ElmValueInterop.ParseElmMaybeValue(
+            ElmValueInterop.ParseElmMaybeValue<PineValue?>(
                 applyResponseSpan[1],
                 nothing: () => null,
                 just: value => value,

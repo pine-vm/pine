@@ -24,7 +24,7 @@ public record BundledPineToDotnet(
     /// <summary>
     /// Starts loading the bundled precompiled Pine-to-.NET dictionary from the executing assembly.
     /// </summary>
-    static public readonly System.Threading.Tasks.Task<BundledPineToDotnet> LoadBundledTask =
+    static public readonly System.Threading.Tasks.Task<BundledPineToDotnet?> LoadBundledTask =
         System.Threading.Tasks.Task.Run(() => LoadFromEmbedded(Assembly.GetExecutingAssembly()));
 
     /// <summary>
@@ -46,13 +46,14 @@ public record BundledPineToDotnet(
     public static BundledPineToDotnet? LoadFromEmbedded(
         Assembly assembly) =>
         LoadEmbedded(assembly)
-        .Extract(
-            err =>
+        .Unpack<BundledPineToDotnet?>(
+            fromErr: err =>
             {
                 Console.WriteLine("Failed loading from embedded resource: " + err);
 
                 return null;
-            });
+            },
+            fromOk: bundled => bundled);
 
     /// <summary>
     /// Loads the bundled Pine-to-.NET assembly from an embedded resource and turns it into a dictionary builder.
@@ -371,7 +372,8 @@ public record BundledPineToDotnet(
             " to " + absolutePath);
 
         System.IO.Directory.CreateDirectory(
-            System.IO.Path.GetDirectoryName(absolutePath));
+            System.IO.Path.GetDirectoryName(absolutePath)
+            ?? throw new InvalidOperationException("The bundle output path has no parent directory."));
 
         System.IO.File.WriteAllBytes(
             absolutePath,

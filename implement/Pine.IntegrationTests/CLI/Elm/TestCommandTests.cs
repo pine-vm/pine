@@ -963,9 +963,12 @@ public class TestCommandTests
             var counters = summary.GetProperty("Counters");
 
             output.ToString().Should().Contain(
-                "invocations: " + CommandLineInterface.FormatIntegerForDisplay(counters.GetProperty("InvocationCount").GetInt64()) +
-                "; loops: " + CommandLineInterface.FormatIntegerForDisplay(counters.GetProperty("LoopIterationCount").GetInt64()) +
-                "; instructions: " + CommandLineInterface.FormatIntegerForDisplay(counters.GetProperty("InstructionCount").GetInt64()));
+                "invocations: " +
+                CommandLineInterface.FormatIntegerForDisplay(counters.GetProperty("InvocationCount").GetInt64()) +
+                "; loops: " +
+                CommandLineInterface.FormatIntegerForDisplay(counters.GetProperty("LoopIterationCount").GetInt64()) +
+                "; instructions: " +
+                CommandLineInterface.FormatIntegerForDisplay(counters.GetProperty("InstructionCount").GetInt64()));
 
             foreach (var property in typeof(PerformanceCounters).GetProperties())
             {

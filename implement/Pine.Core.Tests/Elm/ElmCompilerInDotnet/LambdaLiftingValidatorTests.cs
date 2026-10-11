@@ -1,8 +1,9 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmSyntax;
-using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 using System;
+using System.Collections.Generic;
 using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
@@ -38,16 +39,11 @@ public class LambdaLiftingValidatorTests
             ElmSyntaxParser.ParseModuleText(moduleText)
             .Extract(err => throw new Exception("Failed parsing: " + err));
 
-        return FromFullSyntaxModel.Convert(concreteSyntax);
+        return ConvertFromConcrete.FromFile(concreteSyntax);
     }
 
-    // Lambda lifting operates on the abstract syntax model after canonicalization.
-    // Bridge the concrete parse result to the abstract model, lift, then bridge back
-    // to the concrete model so the concrete validator/inspection can be reused.
     private static File ParseAndLift(string moduleText) =>
-        ElmSyntaxAbstractConversion.ToFile(
-            LambdaLifting.LiftLambdas(
-                ElmSyntaxAbstractConversion.FromFile(ParseModuleText(moduleText))));
+        LambdaLifting.LiftLambdas(ParseModuleText(moduleText));
 
     [Fact]
     public void Validator_accepts_simplest_closure_lifted_output()
@@ -402,11 +398,8 @@ public class LambdaLiftingValidatorTests
 
             compute n =
                 let
-                    loop x =
-                        if x <= 0 then
-                            n
-                        else
-                            loop (x - 1)
+                    loop =
+                        compute__lifted__loop_1 n
                 in
                 loop n
 
@@ -487,5 +480,144 @@ public class LambdaLiftingValidatorTests
         var violations = LambdaLiftingValidator.CollectViolations(lifted);
 
         violations.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("helper 0")]
+    [InlineData("identity helper")]
+    [InlineData("(\\x -> helper x) 0")]
+    [InlineData("helper + 1")]
+    [InlineData("-helper")]
+    [InlineData("if helper then 1 else 0")]
+    [InlineData("if True then helper else 0")]
+    [InlineData("if True then 0 else helper")]
+    [InlineData("case helper of _ -> 0")]
+    [InlineData("case 0 of _ -> helper")]
+    [InlineData("let value x = helper x in value 0")]
+    [InlineData("let ( first, second ) = ( helper, 0 ) in first")]
+    [InlineData("( helper, 0 )")]
+    [InlineData("[ helper ]")]
+    [InlineData("{ field = helper }")]
+    [InlineData("{ record | field = helper }")]
+    [InlineData("helper.field")]
+    public void Validator_rejects_references_nested_in_expression_children(string expression)
+    {
+        var module =
+            ParseModuleText(
+                $$"""
+                module Test exposing (..)
+
+                compute n =
+                    let
+                        local = helper n
+                    in
+                    {{expression}}
+
+                helper captured x =
+                    captured + x
+                """);
+
+        var violations = LambdaLiftingValidator.CollectViolations(module);
+
+        violations.Should().ContainSingle()
+            .Which.Should().Contain("inside the body of 'compute'");
+    }
+
+    [Fact]
+    public void Validator_finds_nested_partial_application_slots_and_counts_argument_references()
+    {
+        var module =
+            ParseModuleText(
+                """
+                module Test exposing (..)
+
+                compute n =
+                    case n of
+                        _ ->
+                            let
+                                ( first, second ) =
+                                    let
+                                        local = helper helper
+                                    in
+                                    ( local 0, 1 )
+                            in
+                            first
+
+                helper captured x =
+                    captured + x
+                """);
+
+        var violations = LambdaLiftingValidator.CollectViolations(module);
+
+        violations.Should().ContainSingle()
+            .Which.Should().Contain("referenced by name 1 time(s) inside the body of 'compute'");
+    }
+
+    [Fact]
+    public void Validator_rejects_duplicate_partial_application_slots()
+    {
+        var module =
+            ParseModuleText(
+                """
+                module Test exposing (..)
+
+                compute n =
+                    let
+                        first = helper n
+                        second = helper n
+                    in
+                    first 0 + second 0
+
+                helper captured x =
+                    captured + x
+                """);
+
+        LambdaLiftingValidator.CollectViolations(module)
+            .Should().ContainSingle()
+            .Which.Should().Contain("has 2 partial-application let-binding slots");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Validator_only_checks_explicit_lifted_function_candidates(bool includeHelper)
+    {
+        var module =
+            ParseModuleText(
+                """
+                module Test exposing (..)
+
+                compute n =
+                    let
+                        local = helper n
+                    in
+                    helper n 0
+
+                helper captured x =
+                    captured + x
+                """);
+
+        IReadOnlySet<string> candidates =
+            includeHelper ? new HashSet<string> { "helper" } : new HashSet<string>();
+
+        var violations = LambdaLiftingValidator.CollectViolations(module, candidates);
+        var declarationViolations = LambdaLiftingValidator.CollectViolations(module.Declarations, candidates);
+
+        violations.Should().HaveCount(includeHelper ? 1 : 0);
+        declarationViolations.Should().Equal(violations);
+
+        var validateFile = () => LambdaLiftingValidator.Validate(module, candidates);
+        var validateDeclarations = () => LambdaLiftingValidator.Validate(module.Declarations, candidates);
+
+        if (includeHelper)
+        {
+            validateFile.Should().Throw<LambdaLiftingValidationException>();
+            validateDeclarations.Should().Throw<LambdaLiftingValidationException>();
+        }
+        else
+        {
+            validateFile.Should().NotThrow();
+            validateDeclarations.Should().NotThrow();
+        }
     }
 }

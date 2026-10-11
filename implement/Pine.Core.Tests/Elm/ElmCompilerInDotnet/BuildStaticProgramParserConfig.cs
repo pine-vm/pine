@@ -41,6 +41,7 @@ public class BuildStaticProgramParserConfig
         System.Func<DeclQualifiedName, IdentifierT> mapName,
         ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv,
         PineVMParseCache parseCache)
+        where IdentifierT : notnull
     {
         // Map from extracted/lookup value -> (identifier, original declaration value)
         Dictionary<PineValue, (IdentifierT ident, PineValue originalValue)> declNamesWithOriginals = [];
@@ -88,6 +89,7 @@ public class BuildStaticProgramParserConfig
     public static StaticProgramParserConfig<IdentifierT> FromDictionary<IdentifierT>(
         IReadOnlyDictionary<PineValue, IdentifierT> declNames,
         PineVMParseCache parseCache)
+        where IdentifierT : notnull
     {
         // Convert to format with originals (original = lookup value when not separately tracked)
         var declNamesWithOriginals =

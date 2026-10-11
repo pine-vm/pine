@@ -216,7 +216,7 @@ public class DynamicPGOShare : IDisposable
         var compiledParseExpressionOverrides =
             completedCompilations
             .Reverse()
-            .SelectWhereNotNull(compilation => compilation.DictionaryResult.WithDefault(null))
+            .SelectWhereNotNull(compilation => compilation.DictionaryResult.IsOkOrNull())
             .FirstOrDefault();
 
         return

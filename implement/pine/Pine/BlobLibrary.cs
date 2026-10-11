@@ -139,7 +139,12 @@ public class BlobLibrary
             if (!httpResponse.IsSuccessStatusCode)
             {
                 throw new Exception(
-                    "unexpected HTTP response status code in response from " + httpResponse.RequestMessage.RequestUri +
+                    "unexpected HTTP response status code in response from " +
+                    httpResponse.RequestMessage?.RequestUri is { } requestUri
+                    ?
+                    requestUri.ToString()
+                    :
+                    "unknown" +
                     ": " + (int)httpResponse.StatusCode + " (" +
                     httpResponse.StatusCode + ") ('" + httpResponse.Content.ReadAsStringAsync().Result + "')");
             }
@@ -329,8 +334,7 @@ public class BlobLibrary
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        if (retryCountLimit <= 0)
-            throw new ArgumentOutOfRangeException(nameof(retryCountLimit));
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(retryCountLimit);
 
         for (var attempts = 1; ; attempts++)
         {

@@ -1119,7 +1119,7 @@ public class PatternCompiler
     /// dictionary.
     /// </param>
     public static IReadOnlyList<string>? SortedRecordFieldNamesFromInferredType(
-        TypeInference.InferredType inferredType,
+        TypeInference.InferredType? inferredType,
         IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? recordTypeAliasFields = null)
     {
         if (inferredType is TypeInference.InferredType.RecordType recordType)

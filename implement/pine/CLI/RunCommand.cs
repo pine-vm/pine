@@ -130,7 +130,10 @@ public static class RunCommand
 
         var environmentVariables =
             envVarDict.Keys.OfType<string>()
-            .Select(envVarKey => new KeyValuePair<string, string>(envVarKey, envVarDict[envVarKey].ToString()))
+            .Select(
+                envVarKey => new KeyValuePair<string, string>(
+                    envVarKey,
+                    envVarDict[envVarKey]?.ToString() ?? string.Empty))
             .ToImmutableArray();
 
         Console.WriteLine(
@@ -237,18 +240,18 @@ public static class RunCommand
         {
             var keys = new List<ReadOnlyMemory<byte>>(capacity: 100);
 
-            void readKey()
+            void ReadKey()
             {
                 var keyInfo = Console.ReadKey(intercept: true);
 
                 keys.Add(Encoding.UTF8.GetBytes([keyInfo.KeyChar]));
             }
 
-            readKey();
+            ReadKey();
 
             while (Console.KeyAvailable)
             {
-                readKey();
+                ReadKey();
             }
 
             var asStandardInput = BytesConversions.Concat(keys);

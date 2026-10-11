@@ -111,7 +111,7 @@ public class CodeAnalysis
                         null
                         :
                         parseCache.ParseExpression(expressionValue)
-                        .WithDefault(null);
+                        .IsOkOrNull();
 
                     return
                         new ParseSubExpression(
@@ -244,7 +244,7 @@ public class CodeAnalysis
                             InvocationCountLimit: 100,
                             LoopIterationCountLimit: null,
                             StackDepthLimit: null))
-                    .Unpack(
+                    .Unpack<PineValue?>(
                         fromErr: _ => null,
                         fromOk: ok => ok.ReturnValue.Evaluate());
             }

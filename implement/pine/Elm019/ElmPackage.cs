@@ -38,6 +38,11 @@ public class ElmPackage
 
         var elmJson = JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile.Value.Span);
 
+        if (elmJson is null)
+        {
+            return exposedModules;
+        }
+
         Dictionary<IReadOnlyList<string>, (IReadOnlyList<string> filePath, ReadOnlyMemory<byte> fileContent, string moduleText, ParsedModule parsedModule)> parsedModulesByName =
             new(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 

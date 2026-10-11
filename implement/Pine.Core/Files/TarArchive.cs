@@ -50,7 +50,10 @@ public static class TarArchive
 
                     var componentBytes = memoryStream.ToArray();
 
-                    return (name: tarEntry.Key, component: FileTree.File(componentBytes));
+                    return
+                        (name: tarEntry.Key
+                            ?? throw new InvalidDataException("A TAR file entry has no name."),
+                        component: FileTree.File(componentBytes));
                 }).ToImmutableList();
 
         return FileTree.SortedDirectory(treeEntries);

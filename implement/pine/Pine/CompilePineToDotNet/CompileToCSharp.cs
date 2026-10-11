@@ -920,7 +920,7 @@ public partial class CompileToCSharp
             ?.Unpack(fromErr: err =>
             {
                 Console.WriteLine("Failed to parse argument list: " + err);
-                return null;
+                return [];
             },
             fromOk: ok => ok);
 

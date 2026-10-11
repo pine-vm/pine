@@ -47,7 +47,7 @@ public class ElmValueInteropTests
                 invalid: error => throw new System.Exception(error))
                 .Should().BeTrue();
 
-            ElmValueInterop.ParseElmMaybeValue(
+            ElmValueInterop.ParseElmMaybeValue<PineValue?>(
                 encodeTag("Just", [payload]),
                 nothing: () => null,
                 just: value => value,

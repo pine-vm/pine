@@ -21,11 +21,7 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// original's return value. Drives caller-side rewriting at
 /// fully-saturated call sites of the original. Defaults to
 /// <see cref="ReturnValueSpecialization.Identity"/>: no transformation
-/// applied by the caller. <see cref="ReturnValueSpecialization.WrapWithConstructor"/>
-/// is used by <see cref="WrapperReturnStripping"/> to express that
-/// the sibling decl returns the inner (unwrapped) value and the
-/// caller must re-introduce the original's outer single-tag
-/// constructor.
+/// applied by the caller.
 /// </param>
 public sealed record FunctionSpecialization(
     ImmutableDictionary<int, ParameterSpecialization> ParameterSpecializations,

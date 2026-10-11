@@ -787,7 +787,10 @@ public static class CompileModuleToCSharp
             {
                 var parent = paramPathByAssignment[inst.AssignmentIndex - 1];
 
-                var k = inst.StackInstruction.SkipCount.Value;
+                var k =
+                    inst.StackInstruction.SkipCount
+                    ?? throw new InvalidOperationException(
+                        "ParamsPathsFromInstructionId requires SkipCount for Skip_Head_Const.");
 
                 var newPath = parent.ToArray().Concat([k]).ToArray().AsMemory();
 

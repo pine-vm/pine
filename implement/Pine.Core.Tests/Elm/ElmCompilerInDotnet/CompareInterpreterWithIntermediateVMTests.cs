@@ -28,6 +28,7 @@ public class CompareInterpreterWithIntermediateVMTests
         var repeated = s_framework.Value.Eval("mapWithLambda [ 1, 2, 3 ]");
 
         repeated.Value.Should().Be(first.Value);
+
         PerformanceCountersFormatting.FormatCounts(repeated.VmCounters)
             .ShouldBeWithDiff(PerformanceCountersFormatting.FormatCounts(first.VmCounters));
     }

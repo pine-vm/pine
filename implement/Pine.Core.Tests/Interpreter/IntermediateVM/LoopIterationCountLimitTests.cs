@@ -51,7 +51,7 @@ public class LoopIterationCountLimitTests
 
         var error =
             evaluationResult
-            .Unpack(
+            .Unpack<string?>(
                 fromErr: err => EvaluationError.RenderDisplayString(err),
                 fromOk: _ => null);
 
@@ -96,7 +96,7 @@ public class LoopIterationCountLimitTests
 
         var error =
             evaluationResult
-            .Unpack(
+            .Unpack<string?>(
                 fromErr: err => EvaluationError.RenderDisplayString(err),
                 fromOk: _ => null);
 

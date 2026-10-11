@@ -499,7 +499,7 @@ public class ElmInteractive
 
         IReadOnlyList<IReadOnlyList<string>> elmJsonSourceDirectories =
             [
-            ..elmJsonFileParsed?.SourceDirectories
+            ..(elmJsonFileParsed?.SourceDirectories ?? [])
             .Select(flat => flat.Split('/', '\\'))
             ];
 

@@ -49,7 +49,7 @@ public sealed class WebBrowserPage : IAsyncDisposable
                     request.Url,
                     request.Method,
                     request.ResourceType,
-                    request.Failure));
+                    request.Failure ?? "Request failed without a failure description."));
     }
 
     /// <summary>

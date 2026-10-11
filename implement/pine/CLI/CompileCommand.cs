@@ -136,7 +136,7 @@ public static class CompileCommand
 
         var compilationStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        IReadOnlyList<IReadOnlyList<string>>? readElmJsonSourceDirectories()
+        IReadOnlyList<IReadOnlyList<string>>? ReadElmJsonSourceDirectories()
         {
             if (loadCompositionResult.tree.GetNodeAtPath(["elm.json"]) is not
                 FileTree.FileNode elmJsonFile)
@@ -185,9 +185,9 @@ public static class CompileCommand
                 FileTreeExtensions.ToFlatDictionaryWithPathComparer(filteredSourceTree);
 
             var elmJsonSourceDirectories =
-                readElmJsonSourceDirectories() ?? [];
+                ReadElmJsonSourceDirectories() ?? [];
 
-            bool filePathIsUnderElmJsonSourceDirectories(IReadOnlyList<string> filePath)
+            bool FilePathIsUnderElmJsonSourceDirectories(IReadOnlyList<string> filePath)
             {
                 return
                     elmJsonSourceDirectories
@@ -202,7 +202,7 @@ public static class CompileCommand
                 sourceFiles
                 .Where(c => c.Key[c.Key.Count - 1].EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(c => c.Key.Count)
-                .OrderBy(c => filePathIsUnderElmJsonSourceDirectories(c.Key) ? 0 : 1)
+                .OrderBy(c => FilePathIsUnderElmJsonSourceDirectories(c.Key) ? 0 : 1)
                 .FirstOrDefault()
                 .Key;
 
@@ -222,41 +222,43 @@ public static class CompileCommand
 
             report = report with { compilationTimeSpentMilli = (int)compilationTimeSpentMilli };
 
+            if (compilationResult.IsErrOrNull() is { } compilationErrors)
+            {
+                Console.WriteLine(
+                    "\n" + ElmAppCompilation.CompileCompilationErrorsDisplayText(compilationErrors) + "\n");
+
+                return (report with { compilationErrors = compilationErrors, totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds }, null);
+            }
+
+            if (compilationResult.IsOkOrNull() is not { } compilationOk)
+            {
+                throw new NotImplementedException(
+                    "Unexpected return type from ElmAppCompilation.AsCompletelyLoweredElmApp: " +
+                    compilationResult.GetType().FullName);
+            }
+
+            var compiledAppFiles = compilationOk.Result.CompiledFiles;
+
+            var compiledTree = FileTree.FromSetOfFilesWithStringPath(compiledAppFiles);
+            var compiledComposition = FileTreeEncoding.Encode(compiledTree);
+
+            var compiledCompositionId =
+                Convert.ToHexStringLower(PineValueHashTree.ComputeHash(compiledComposition).Span);
+
+            compilationStopwatch.Stop();
+
+            Console.WriteLine(
+                "\nCompilation completed in " + (int)compilationStopwatch.Elapsed.TotalSeconds +
+                " seconds, resulting in composition " + compiledCompositionId + ".");
+
             return
-                compilationResult
-                .Unpack(
-                    fromErr: compilationErrors =>
-                    {
-                        Console.WriteLine(
-                            "\n" + ElmAppCompilation.CompileCompilationErrorsDisplayText(compilationErrors) + "\n");
-
-                        return (report with { compilationErrors = compilationErrors, totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds }, null);
-                    },
-                    fromOk: compilationOk =>
-                    {
-                        var compiledAppFiles = compilationOk.Result.CompiledFiles;
-
-                        var compiledTree = FileTree.FromSetOfFilesWithStringPath(compiledAppFiles);
-                        var compiledComposition = FileTreeEncoding.Encode(compiledTree);
-
-                        var compiledCompositionId =
-                            Convert.ToHexStringLower(PineValueHashTree.ComputeHash(compiledComposition).Span);
-
-                        compilationStopwatch.Stop();
-
-                        Console.WriteLine(
-                            "\nCompilation completed in " + (int)compilationStopwatch.Elapsed.TotalSeconds +
-                            " seconds, resulting in composition " + compiledCompositionId + ".");
-
-                        return
-                            (report with
-                            {
-                                compilationIterationsReports = compilationOk.IterationsReports,
-                                compiledCompositionId = compiledCompositionId,
-                                totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds
-                            },
-                            compiledAppFiles);
-                    });
+                (report with
+                {
+                    compilationIterationsReports = compilationOk.IterationsReports,
+                    compiledCompositionId = compiledCompositionId,
+                    totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds
+                },
+                compiledAppFiles);
         }
         catch (Exception e)
         {

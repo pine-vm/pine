@@ -671,6 +671,13 @@ public class StartupAdminInterface
                                             await context.Request
                                             .ReadFromJsonAsync<AdminInterface.ApplyDatabaseFunctionRequest>();
 
+                                        if (applyFunctionRequest is null)
+                                        {
+                                            context.Response.StatusCode = 400;
+                                            await context.Response.WriteAsJsonAsync("Request body is null or malformed.");
+                                            return;
+                                        }
+
                                         var result = applyDatabaseFunction(applyFunctionRequest);
 
                                         context.Response.StatusCode =
@@ -694,6 +701,13 @@ public class StartupAdminInterface
                                     try
                                     {
                                         var guiRequest = await context.Request.ReadFromJsonAsync<Gui.MessageToHost>();
+
+                                        if (guiRequest is null)
+                                        {
+                                            context.Response.StatusCode = 400;
+                                            await context.Response.WriteAsJsonAsync("Request body is null or malformed.");
+                                            return;
+                                        }
 
                                         var eventsToGui = HandleMessageFromGui(guiRequest);
 

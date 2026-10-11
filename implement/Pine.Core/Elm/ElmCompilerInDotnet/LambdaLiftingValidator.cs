@@ -1,9 +1,7 @@
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
-using Stil4mElmSyntax7 = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
@@ -53,7 +51,7 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// This rule is purely structural and does not depend on a naming
 /// convention for lifted functions. The set of "lifted-function candidates"
 /// is supplied explicitly by the caller (see
-/// <see cref="Validate(Stil4mElmSyntax7.File, IReadOnlySet{string})"/>) so that
+/// <see cref="Validate(SyntaxTypes.File, IReadOnlySet{string})"/>) so that
 /// user-defined top-level functions cannot accidentally be subject to the
 /// invariant. Anonymous-lambda lifts are naturally exempt because the
 /// lifter substitutes them directly into expression position (e.g.
@@ -69,14 +67,14 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 public static class LambdaLiftingValidator
 {
     /// <summary>
-    /// Validates a post-lifting Elm <see cref="Stil4mElmSyntax7.File"/>, restricting
+    /// Validates a post-lifting Elm <see cref="SyntaxTypes.File"/>, restricting
     /// the invariant check to the supplied set of <paramref name="liftedFunctionNames"/>
     /// (the top-level function names that the lifter itself created). Throws
     /// <see cref="LambdaLiftingValidationException"/> if any invariant is
     /// violated.
     /// </summary>
     public static void Validate(
-        Stil4mElmSyntax7.File module,
+        SyntaxTypes.File module,
         IReadOnlySet<string> liftedFunctionNames)
     {
         var violations = CollectViolations(module, liftedFunctionNames);
@@ -88,29 +86,16 @@ public static class LambdaLiftingValidator
     }
 
     /// <summary>
-    /// Abstract-model overload of
-    /// <see cref="Validate(Stil4mElmSyntax7.File, IReadOnlySet{string})"/>.
-    /// Bridges the abstract post-lifting file to the concrete model
-    /// consumed by the structural validator.
-    /// </summary>
-    public static void Validate(
-        SyntaxTypes.File module,
-        IReadOnlySet<string> liftedFunctionNames) =>
-        Validate(
-            ElmSyntaxAbstractConversion.ToFile(module),
-            liftedFunctionNames);
-
-    /// <summary>
     /// Convenience overload that treats every top-level function declared
     /// in <paramref name="module"/> as a candidate. Intended for tests that
     /// hand-construct post-lifting modules containing only lifter-emitted
     /// shapes; in production use, prefer
-    /// <see cref="Validate(Stil4mElmSyntax7.File, IReadOnlySet{string})"/> with
+    /// <see cref="Validate(SyntaxTypes.File, IReadOnlySet{string})"/> with
     /// the explicit set of lifter-created names so that user-defined
     /// top-level functions cannot accidentally be flagged.
     /// </summary>
-    public static void Validate(Stil4mElmSyntax7.File module) =>
-        Validate(module, CollectTopLevelFunctionNames(module.Declarations.Select(d => d.Value)));
+    public static void Validate(SyntaxTypes.File module) =>
+        Validate(module, CollectTopLevelFunctionNames(module.Declarations));
 
     /// <summary>
     /// Validates a per-module slice of post-lifting declarations, restricting
@@ -126,7 +111,7 @@ public static class LambdaLiftingValidator
     /// </para>
     /// </summary>
     public static void Validate(
-        IEnumerable<Stil4mElmSyntax7.Declaration> declarations,
+        IEnumerable<SyntaxTypes.Declaration> declarations,
         IReadOnlySet<string> liftedFunctionNames)
     {
         var violations = CollectViolations(declarations, liftedFunctionNames);
@@ -138,19 +123,6 @@ public static class LambdaLiftingValidator
     }
 
     /// <summary>
-    /// Abstract-model overload of
-    /// <see cref="Validate(IEnumerable{Stil4mElmSyntax7.Declaration}, IReadOnlySet{string})"/>.
-    /// Bridges the abstract per-module declaration slice to the concrete
-    /// model consumed by the structural validator.
-    /// </summary>
-    public static void Validate(
-        IEnumerable<SyntaxTypes.Declaration> declarations,
-        IReadOnlySet<string> liftedFunctionNames) =>
-        Validate(
-            declarations.Select(ElmSyntaxAbstractConversion.ToDeclaration),
-            liftedFunctionNames);
-
-    /// <summary>
     /// Validates a per-module slice of post-lifting declarations and
     /// returns all detected invariant violations. An empty list means the
     /// slice is well-formed with respect to the validator's rules. The
@@ -158,7 +130,7 @@ public static class LambdaLiftingValidator
     /// in <paramref name="liftedFunctionNames"/>.
     /// </summary>
     public static IReadOnlyList<string> CollectViolations(
-        IEnumerable<Stil4mElmSyntax7.Declaration> declarations,
+        IEnumerable<SyntaxTypes.Declaration> declarations,
         IReadOnlySet<string> liftedFunctionNames)
     {
         var violations = new List<string>();
@@ -196,15 +168,15 @@ public static class LambdaLiftingValidator
 
         foreach (var declaration in declarations)
         {
-            if (declaration is not Stil4mElmSyntax7.Declaration.FunctionDeclaration funcDecl)
+            if (declaration is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
             {
                 continue;
             }
 
-            var declName = funcDecl.Function.Declaration.Value.Name.Value;
+            var declName = funcDecl.Function.Declaration.Name;
 
             CountReferences(
-                funcDecl.Function.Declaration.Value.Expression,
+                funcDecl.Function.Declaration.Expression,
                 liftedNamesWithCaptures,
                 ownerDeclName: declName,
                 referenceCountsByName,
@@ -215,10 +187,10 @@ public static class LambdaLiftingValidator
         {
             var counts = referenceCountsByName[liftedName];
 
-            if (counts.InPartialAppSlot is not 1)
+            if (counts._inPartialAppSlot is not 1)
             {
                 violations.Add(
-                    $"lifted-with-captures function '{liftedName}' has {counts.InPartialAppSlot} " +
+                    $"lifted-with-captures function '{liftedName}' has {counts._inPartialAppSlot} " +
                     "partial-application let-binding slots; expected exactly 1.");
             }
 
@@ -259,20 +231,20 @@ public static class LambdaLiftingValidator
     }
 
     /// <summary>
-    /// Validates a post-lifting Elm <see cref="Stil4mElmSyntax7.File"/> and
+    /// Validates a post-lifting Elm <see cref="SyntaxTypes.File"/> and
     /// returns all detected invariant violations. An empty list means the
     /// module is well-formed with respect to the validator's rules. The
     /// invariant is only enforced for top-level functions whose names are
     /// in <paramref name="liftedFunctionNames"/>.
     /// </summary>
     public static IReadOnlyList<string> CollectViolations(
-        Stil4mElmSyntax7.File module,
+        SyntaxTypes.File module,
         IReadOnlySet<string> liftedFunctionNames) =>
-        CollectViolations(module.Declarations.Select(d => d.Value), liftedFunctionNames);
+        CollectViolations(module.Declarations, liftedFunctionNames);
 
     private sealed class ReferenceCounts
     {
-        public int InPartialAppSlot;
+        public int _inPartialAppSlot;
 
         public Dictionary<string, int> InOtherBodies { get; } =
             new(StringComparer.Ordinal);
@@ -280,28 +252,28 @@ public static class LambdaLiftingValidator
 
     /// <summary>
     /// Convenience overload of
-    /// <see cref="CollectViolations(Stil4mElmSyntax7.File, IReadOnlySet{string})"/>
+    /// <see cref="CollectViolations(SyntaxTypes.File, IReadOnlySet{string})"/>
     /// that treats every top-level function declared in <paramref name="module"/>
     /// as a candidate.
     /// </summary>
-    public static IReadOnlyList<string> CollectViolations(Stil4mElmSyntax7.File module) =>
+    public static IReadOnlyList<string> CollectViolations(SyntaxTypes.File module) =>
         CollectViolations(
-            module.Declarations.Select(d => d.Value),
-            CollectTopLevelFunctionNames(module.Declarations.Select(d => d.Value)));
+            module.Declarations,
+            CollectTopLevelFunctionNames(module.Declarations));
 
     private static HashSet<string> CollectTopLevelFunctionNames(
-        IEnumerable<Stil4mElmSyntax7.Declaration> declarations)
+        IEnumerable<SyntaxTypes.Declaration> declarations)
     {
         var result = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var declaration in declarations)
         {
-            if (declaration is not Stil4mElmSyntax7.Declaration.FunctionDeclaration funcDecl)
+            if (declaration is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
             {
                 continue;
             }
 
-            result.Add(funcDecl.Function.Declaration.Value.Name.Value);
+            result.Add(funcDecl.Function.Declaration.Name);
         }
 
         return result;
@@ -316,22 +288,22 @@ public static class LambdaLiftingValidator
     /// containing function in which the partial-app slot was found.
     /// </summary>
     private static Dictionary<string, string> CollectLetBoundLiftedNamesWithCaptures(
-        IEnumerable<Stil4mElmSyntax7.Declaration> declarations,
+        IEnumerable<SyntaxTypes.Declaration> declarations,
         IReadOnlySet<string> topLevelFunctionNames)
     {
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
 
         foreach (var declaration in declarations)
         {
-            if (declaration is not Stil4mElmSyntax7.Declaration.FunctionDeclaration funcDecl)
+            if (declaration is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
             {
                 continue;
             }
 
-            var declName = funcDecl.Function.Declaration.Value.Name.Value;
+            var declName = funcDecl.Function.Declaration.Name;
 
             FindPartialAppSlots(
-                funcDecl.Function.Declaration.Value.Expression,
+                funcDecl.Function.Declaration.Expression,
                 topLevelFunctionNames,
                 ownerDeclName: declName,
                 result);
@@ -341,59 +313,55 @@ public static class LambdaLiftingValidator
     }
 
     private static void FindPartialAppSlots(
-        Node<Stil4mElmSyntax7.Expression> exprNode,
+        SyntaxTypes.Expression expr,
         IReadOnlySet<string> topLevelFunctionNames,
         string ownerDeclName,
         Dictionary<string, string> resultBuilder)
     {
-        var expr = exprNode.Value;
-
-        if (expr is Stil4mElmSyntax7.Expression.LetExpression letExpr)
+        if (expr is SyntaxTypes.Expression.LetExpression letExpr)
         {
-            foreach (var declNode in letExpr.Value.Declarations)
+            foreach (var declaration in letExpr.Declarations)
             {
-                if (declNode.Value is Stil4mElmSyntax7.Expression.LetDeclaration.LetFunction letFunc &&
-                    letFunc.Function.Declaration.Value.Arguments.Count is 0)
+                if (declaration is SyntaxTypes.LetDeclaration.LetFunction letFunc &&
+                    letFunc.Function.Declaration.Arguments.Count is 0)
                 {
-                    var rhs = letFunc.Function.Declaration.Value.Expression.Value;
+                    var rhs = letFunc.Function.Declaration.Expression;
 
-                    if (rhs is Stil4mElmSyntax7.Expression.Application app &&
-                        app.Arguments.Count > 1 &&
-                        app.Arguments[0].Value is Stil4mElmSyntax7.Expression.FunctionOrValue head &&
-                        topLevelFunctionNames.Contains(head.Name))
+                    if (rhs is SyntaxTypes.Expression.Application app &&
+                        app.Arguments.Count > 0 &&
+                        app.Function is SyntaxTypes.Expression.Identifier head &&
+                        topLevelFunctionNames.Contains(head.QualifiedName.DeclName))
                     {
-                        // Partial-app slot supplying app.Arguments.Count - 1 captures.
-                        resultBuilder[head.Name] = ownerDeclName;
+                        // Partial-app slot supplying app.Arguments.Count captures.
+                        resultBuilder[head.QualifiedName.DeclName] = ownerDeclName;
                     }
                 }
             }
         }
 
-        foreach (var child in EnumerateChildExpressionNodes(expr))
+        foreach (var child in EnumerateChildExpressions(expr))
         {
             FindPartialAppSlots(child, topLevelFunctionNames, ownerDeclName, resultBuilder);
         }
     }
 
     private static void CountReferences(
-        Node<Stil4mElmSyntax7.Expression> exprNode,
+        SyntaxTypes.Expression expr,
         IReadOnlyDictionary<string, string> liftedNamesWithCaptures,
         string ownerDeclName,
         Dictionary<string, ReferenceCounts> resultBuilder,
         bool inPartialAppSlot)
     {
-        var expr = exprNode.Value;
-
         switch (expr)
         {
-            case Stil4mElmSyntax7.Expression.FunctionOrValue funcOrValue:
-                if (liftedNamesWithCaptures.ContainsKey(funcOrValue.Name))
+            case SyntaxTypes.Expression.Identifier identifier:
+                if (liftedNamesWithCaptures.ContainsKey(identifier.QualifiedName.DeclName))
                 {
-                    var counts = resultBuilder[funcOrValue.Name];
+                    var counts = resultBuilder[identifier.QualifiedName.DeclName];
 
                     if (inPartialAppSlot)
                     {
-                        counts.InPartialAppSlot += 1;
+                        counts._inPartialAppSlot += 1;
                     }
                     else
                     {
@@ -404,32 +372,25 @@ public static class LambdaLiftingValidator
 
                 break;
 
-            case Stil4mElmSyntax7.Expression.Application appExpr:
+            case SyntaxTypes.Expression.Application appExpr:
                 {
-                    if (appExpr.Arguments.Count is 0)
-                    {
-                        break;
-                    }
-
                     // The Application's HEAD position is treated like the
                     // current parent's `inPartialAppSlot` context: if the
                     // whole Application is the let-binding partial-app RHS,
                     // then the head reference here counts as the slot
                     // reference, and the supplied arguments are walked as
                     // ordinary subexpressions.
-                    var head = appExpr.Arguments[0];
-
                     CountReferences(
-                        head,
+                        appExpr.Function,
                         liftedNamesWithCaptures,
                         ownerDeclName,
                         resultBuilder,
                         inPartialAppSlot);
 
-                    for (var i = 1; i < appExpr.Arguments.Count; i++)
+                    foreach (var argument in appExpr.Arguments)
                     {
                         CountReferences(
-                            appExpr.Arguments[i],
+                            argument,
                             liftedNamesWithCaptures,
                             ownerDeclName,
                             resultBuilder,
@@ -439,20 +400,20 @@ public static class LambdaLiftingValidator
                     break;
                 }
 
-            case Stil4mElmSyntax7.Expression.LetExpression letExpr:
+            case SyntaxTypes.Expression.LetExpression letExpr:
                 {
-                    foreach (var declNode in letExpr.Value.Declarations)
+                    foreach (var declaration in letExpr.Declarations)
                     {
-                        switch (declNode.Value)
+                        switch (declaration)
                         {
-                            case Stil4mElmSyntax7.Expression.LetDeclaration.LetFunction letFunc:
+                            case SyntaxTypes.LetDeclaration.LetFunction letFunc:
                                 {
-                                    var letFnImpl = letFunc.Function.Declaration.Value;
+                                    var letFnImpl = letFunc.Function.Declaration;
 
                                     var isPartialAppSlot =
                                         letFnImpl.Arguments.Count is 0 &&
                                         IsLiftedHeadOrApplication(
-                                            letFnImpl.Expression.Value,
+                                            letFnImpl.Expression,
                                             liftedNamesWithCaptures);
 
                                     CountReferences(
@@ -465,7 +426,7 @@ public static class LambdaLiftingValidator
                                     break;
                                 }
 
-                            case Stil4mElmSyntax7.Expression.LetDeclaration.LetDestructuring letDestr:
+                            case SyntaxTypes.LetDeclaration.LetDestructuring letDestr:
                                 CountReferences(
                                     letDestr.Expression,
                                     liftedNamesWithCaptures,
@@ -474,11 +435,16 @@ public static class LambdaLiftingValidator
                                     inPartialAppSlot: false);
 
                                 break;
+
+                            default:
+                                throw new NotImplementedException(
+                                    "CountReferences does not handle let declaration variant: " +
+                                    declaration.GetType().Name);
                         }
                     }
 
                     CountReferences(
-                        letExpr.Value.Expression,
+                        letExpr.Expression,
                         liftedNamesWithCaptures,
                         ownerDeclName,
                         resultBuilder,
@@ -487,18 +453,25 @@ public static class LambdaLiftingValidator
                     break;
                 }
 
-            case Stil4mElmSyntax7.Expression.ParenthesizedExpression paren:
-                CountReferences(
-                    paren.Expression,
-                    liftedNamesWithCaptures,
-                    ownerDeclName,
-                    resultBuilder,
-                    inPartialAppSlot);
-
-                break;
-
-            default:
-                foreach (var child in EnumerateChildExpressionNodes(expr))
+            case SyntaxTypes.Expression.OperatorApplication:
+            case SyntaxTypes.Expression.Negation:
+            case SyntaxTypes.Expression.IfBlock:
+            case SyntaxTypes.Expression.CaseExpression:
+            case SyntaxTypes.Expression.LambdaExpression:
+            case SyntaxTypes.Expression.TupledExpression:
+            case SyntaxTypes.Expression.ListExpr:
+            case SyntaxTypes.Expression.RecordExpr:
+            case SyntaxTypes.Expression.RecordUpdateExpression:
+            case SyntaxTypes.Expression.RecordAccess:
+            case SyntaxTypes.Expression.UnitExpr:
+            case SyntaxTypes.Expression.StringLiteral:
+            case SyntaxTypes.Expression.CharLiteral:
+            case SyntaxTypes.Expression.IntegerLiteral:
+            case SyntaxTypes.Expression.FloatLiteral:
+            case SyntaxTypes.Expression.PrefixOperator:
+            case SyntaxTypes.Expression.RecordAccessFunction:
+            case SyntaxTypes.Expression.GLSLExpression:
+                foreach (var child in EnumerateChildExpressions(expr))
                 {
                     CountReferences(
                         child,
@@ -509,146 +482,135 @@ public static class LambdaLiftingValidator
                 }
 
                 break;
+
+            default:
+                throw new NotImplementedException(
+                    "CountReferences does not handle expression variant: " + expr.GetType().Name);
         }
     }
 
     private static bool IsLiftedHeadOrApplication(
-        Stil4mElmSyntax7.Expression expr,
-        IReadOnlyDictionary<string, string> liftedNamesWithCaptures)
-    {
-        if (expr is Stil4mElmSyntax7.Expression.FunctionOrValue fov &&
-            liftedNamesWithCaptures.ContainsKey(fov.Name))
-        {
-            return true;
-        }
+        SyntaxTypes.Expression expr,
+        IReadOnlyDictionary<string, string> liftedNamesWithCaptures) =>
+        (expr is SyntaxTypes.Expression.Identifier identifier &&
+        liftedNamesWithCaptures.ContainsKey(identifier.QualifiedName.DeclName)) ||
+        (expr is SyntaxTypes.Expression.Application app &&
+        app.Function is SyntaxTypes.Expression.Identifier head &&
+        liftedNamesWithCaptures.ContainsKey(head.QualifiedName.DeclName));
 
-        if (expr is Stil4mElmSyntax7.Expression.Application app &&
-            app.Arguments.Count > 0 &&
-            app.Arguments[0].Value is Stil4mElmSyntax7.Expression.FunctionOrValue head &&
-            liftedNamesWithCaptures.ContainsKey(head.Name))
-        {
-            return true;
-        }
-
-        if (expr is Stil4mElmSyntax7.Expression.ParenthesizedExpression paren)
-        {
-            return IsLiftedHeadOrApplication(paren.Expression.Value, liftedNamesWithCaptures);
-        }
-
-        return false;
-    }
-
-    private static IEnumerable<Node<Stil4mElmSyntax7.Expression>> EnumerateChildExpressionNodes(
-        Stil4mElmSyntax7.Expression expr)
+    private static IEnumerable<SyntaxTypes.Expression> EnumerateChildExpressions(
+        SyntaxTypes.Expression expr)
     {
         switch (expr)
         {
-            case Stil4mElmSyntax7.Expression.Application app:
+            case SyntaxTypes.Expression.Application app:
+                yield return app.Function;
+
                 foreach (var a in app.Arguments)
                     yield return a;
 
                 break;
 
-            case Stil4mElmSyntax7.Expression.OperatorApplication opApp:
+            case SyntaxTypes.Expression.OperatorApplication opApp:
                 yield return opApp.Left;
                 yield return opApp.Right;
                 break;
 
-            case Stil4mElmSyntax7.Expression.ParenthesizedExpression paren:
-                yield return paren.Expression;
-                break;
-
-            case Stil4mElmSyntax7.Expression.Negation neg:
+            case SyntaxTypes.Expression.Negation neg:
                 yield return neg.Expression;
                 break;
 
-            case Stil4mElmSyntax7.Expression.IfBlock ifBlock:
+            case SyntaxTypes.Expression.IfBlock ifBlock:
                 yield return ifBlock.Condition;
                 yield return ifBlock.ThenBlock;
                 yield return ifBlock.ElseBlock;
                 break;
 
-            case Stil4mElmSyntax7.Expression.CaseExpression caseExpr:
-                yield return caseExpr.CaseBlock.Expression;
+            case SyntaxTypes.Expression.CaseExpression caseExpr:
+                yield return caseExpr.Expression;
 
-                foreach (var c in caseExpr.CaseBlock.Cases)
+                foreach (var c in caseExpr.Cases)
                 {
                     yield return c.Expression;
                 }
 
                 break;
 
-            case Stil4mElmSyntax7.Expression.LetExpression letExpr:
-                foreach (var d in letExpr.Value.Declarations)
+            case SyntaxTypes.Expression.LetExpression letExpr:
+                foreach (var declaration in letExpr.Declarations)
                 {
-                    switch (d.Value)
+                    switch (declaration)
                     {
-                        case Stil4mElmSyntax7.Expression.LetDeclaration.LetFunction letFunc:
-                            yield return letFunc.Function.Declaration.Value.Expression;
+                        case SyntaxTypes.LetDeclaration.LetFunction letFunc:
+                            yield return letFunc.Function.Declaration.Expression;
                             break;
 
-                        case Stil4mElmSyntax7.Expression.LetDeclaration.LetDestructuring letDestr:
+                        case SyntaxTypes.LetDeclaration.LetDestructuring letDestr:
                             yield return letDestr.Expression;
                             break;
+
+                        default:
+                            throw new NotImplementedException(
+                                "EnumerateChildExpressions does not handle let declaration variant: " +
+                                declaration.GetType().Name);
                     }
                 }
 
-                yield return letExpr.Value.Expression;
+                yield return letExpr.Expression;
                 break;
 
-            case Stil4mElmSyntax7.Expression.LambdaExpression lambdaExpr:
-                yield return lambdaExpr.Lambda.Expression;
+            case SyntaxTypes.Expression.LambdaExpression lambdaExpr:
+                yield return lambdaExpr.Expression;
                 break;
 
-            case Stil4mElmSyntax7.Expression.TupledExpression tuple:
+            case SyntaxTypes.Expression.TupledExpression tuple:
                 foreach (var el in tuple.Elements)
                     yield return el;
 
                 break;
 
-            case Stil4mElmSyntax7.Expression.ListExpr list:
+            case SyntaxTypes.Expression.ListExpr list:
                 foreach (var el in list.Elements)
                     yield return el;
 
                 break;
 
-            case Stil4mElmSyntax7.Expression.RecordExpr record:
+            case SyntaxTypes.Expression.RecordExpr record:
                 foreach (var f in record.Fields)
-                    yield return f.Value.valueExpr;
+                    yield return f.Value;
 
                 break;
 
-            case Stil4mElmSyntax7.Expression.RecordUpdateExpression recordUpdate:
+            case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
                 foreach (var f in recordUpdate.Fields)
-                    yield return f.Value.valueExpr;
+                    yield return f.Value;
 
                 break;
 
-            case Stil4mElmSyntax7.Expression.RecordAccess recordAccess:
+            case SyntaxTypes.Expression.RecordAccess recordAccess:
                 yield return recordAccess.Record;
                 break;
 
-            case Stil4mElmSyntax7.Expression.FunctionOrValue:
-            case Stil4mElmSyntax7.Expression.UnitExpr:
-            case Stil4mElmSyntax7.Expression.Literal:
-            case Stil4mElmSyntax7.Expression.CharLiteral:
-            case Stil4mElmSyntax7.Expression.Integer:
-            case Stil4mElmSyntax7.Expression.Hex:
-            case Stil4mElmSyntax7.Expression.Floatable:
-            case Stil4mElmSyntax7.Expression.PrefixOperator:
-            case Stil4mElmSyntax7.Expression.RecordAccessFunction:
-            case Stil4mElmSyntax7.Expression.GLSLExpression:
+            case SyntaxTypes.Expression.Identifier:
+            case SyntaxTypes.Expression.UnitExpr:
+            case SyntaxTypes.Expression.StringLiteral:
+            case SyntaxTypes.Expression.CharLiteral:
+            case SyntaxTypes.Expression.IntegerLiteral:
+            case SyntaxTypes.Expression.FloatLiteral:
+            case SyntaxTypes.Expression.PrefixOperator:
+            case SyntaxTypes.Expression.RecordAccessFunction:
+            case SyntaxTypes.Expression.GLSLExpression:
                 yield break;
 
             default:
-                throw new InvalidOperationException(
-                    "LambdaLiftingValidator: unhandled expression node type: " + expr.GetType().FullName);
+                throw new NotImplementedException(
+                    "EnumerateChildExpressions does not handle expression variant: " + expr.GetType().Name);
         }
     }
 }
 
 /// <summary>
-/// Thrown by <see cref="LambdaLiftingValidator.Validate(Stil4mElmSyntax7.File)"/>
+/// Thrown by <see cref="LambdaLiftingValidator.Validate(SyntaxTypes.File)"/>
 /// when one or more invariant violations are detected on the post-lifting
 /// module.
 /// </summary>

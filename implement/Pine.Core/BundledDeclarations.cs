@@ -38,13 +38,14 @@ public record BundledDeclarations(
     public static BundledDeclarations? LoadFromEmbedded(
         System.Reflection.Assembly assembly) =>
         LoadEmbedded(assembly)
-        .Extract(
-            err =>
+        .Unpack<BundledDeclarations?>(
+            fromErr: err =>
             {
                 Console.WriteLine("Failed loading from embedded resource: " + err);
 
                 return null;
-            });
+            },
+            fromOk: bundled => bundled);
 
     /// <summary>
     /// Loads <see cref="BundledDeclarations"/> from an assembly's embedded resource at the specified path.
@@ -198,7 +199,8 @@ public record BundledDeclarations(
             " to " + absolutePath);
 
         System.IO.Directory.CreateDirectory(
-            System.IO.Path.GetDirectoryName(absolutePath));
+            System.IO.Path.GetDirectoryName(absolutePath)
+            ?? throw new System.InvalidOperationException("The declaration bundle output path has no parent directory."));
 
         System.IO.File.WriteAllBytes(
             absolutePath,

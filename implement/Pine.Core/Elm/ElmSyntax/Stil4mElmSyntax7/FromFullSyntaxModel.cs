@@ -28,7 +28,7 @@ public static class FromFullSyntaxModel
              * set the 'IncompleteDeclarations' to empty before invoking this conversion.
              * */
             throw new ParserException(
-                incompleteDeclarationNode.Value.ParseError.Message,
+                ElmSyntaxErrorRenderer.RenderConcise(incompleteDeclarationNode.Value.ParseError),
                 lineNumber: incompleteDeclarationNode.Value.ParseError.Location.Row,
                 columnNumber: incompleteDeclarationNode.Value.ParseError.Location.Column);
         }

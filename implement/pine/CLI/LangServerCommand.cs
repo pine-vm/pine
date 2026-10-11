@@ -214,7 +214,9 @@ public static class LangServerCommand
                     Thread.Sleep(TimeSpan.FromSeconds(1));
                 }
 
+#pragma warning disable CS0162 // Unreachable code detected
                 return 0;
+#pragma warning restore CS0162 // Unreachable code detected
             });
 
         return command;

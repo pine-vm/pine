@@ -143,6 +143,8 @@ public record ExpressionCompilation(
     /// <param name="pathMaxLowExclusive">Exclusive lower bound for path lengths compiled to specialized instructions.</param>
     /// <param name="pathMaxHighInclusive">Inclusive upper bound for path lengths compiled to specialized instructions.</param>
     /// <param name="disableGenericApplicationChainConsolidation">Whether generic application-chain consolidation should be disabled.</param>
+    /// <param name="enableDirectInvocation">Whether direct invocation should be enabled.</param>
+    /// <param name="skipDirectInvocation">Optional predicate identifying values that should skip direct invocation.</param>
     public static ExpressionCompilation CompileExpression(
         Expression rootExpression,
         IReadOnlyList<PineValueClass> specializations,
@@ -246,6 +248,8 @@ public record ExpressionCompilation(
     /// <param name="pathMaxLowExclusive">Exclusive lower bound for path lengths compiled to specialized instructions.</param>
     /// <param name="pathMaxHighInclusive">Inclusive upper bound for path lengths compiled to specialized instructions.</param>
     /// <param name="disableGenericApplicationChainConsolidation">Whether generic application-chain consolidation should be disabled.</param>
+    /// <param name="enableDirectInvocation">Whether direct invocation should be enabled.</param>
+    /// <param name="skipDirectInvocation">Optional predicate identifying values that should skip direct invocation.</param>
     public static IReadOnlyList<StackInstruction> InstructionsFromExpressionTransitive(
         Expression rootExpression,
         PineValueClass? envConstraintId,

@@ -28,6 +28,9 @@ public static class CompiledCSharpExpressionExtension
             lastSeen = expr;
         }
 
-        return lastSeen.AsGenericValue(declarationSyntaxContext);
+        return
+            (lastSeen
+            ?? throw new System.InvalidOperationException("AsGenericValue requires at least one compiled expression."))
+            .AsGenericValue(declarationSyntaxContext);
     }
 }

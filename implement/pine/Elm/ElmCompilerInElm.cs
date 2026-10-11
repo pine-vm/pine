@@ -476,7 +476,7 @@ public class ElmCompilerInElm
 
         var parseInteractiveSubmission =
             parseParseInteractiveSubmissionResult
-            .Unpack(
+            .Unpack<FunctionRecord?>(
                 fromErr: _ => null,
                 fromOk: ok => ok.functionRecord);
 
@@ -563,6 +563,11 @@ public class ElmCompilerInElm
         string submissionText,
         Core.PineVM.IPineVM pineVM)
     {
+        if (ParseInteractiveSubmission is not { } parseInteractiveSubmission)
+        {
+            return "This Elm compiler does not support interactive submission parsing.";
+        }
+
         var submissionTextEncoded =
             ElmValueEncoding.ElmValueAsPineValue(
                 ElmValue.StringInstance(submissionText));
@@ -570,7 +575,7 @@ public class ElmCompilerInElm
         var parseResultValue =
             ElmInteractiveEnvironment.ApplyFunction(
                 pineVM,
-                ParseInteractiveSubmission,
+                parseInteractiveSubmission,
                 [submissionTextEncoded]);
 
         if (parseResultValue.IsErrOrNull() is { } err)

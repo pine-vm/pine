@@ -15,12 +15,6 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// callers must re-introduce the original's outer single-tag
 /// constructor — see <see cref="WrapWithConstructor"/>.
 /// </para>
-/// <para>
-/// Mirrors <see cref="SiblingResultTransform"/>; the two will be
-/// unified as part of the ongoing consolidation that derives
-/// <see cref="GeneratedSiblingDecl"/> from
-/// <see cref="FunctionSpecialization"/>.
-/// </para>
 /// </summary>
 public abstract record ReturnValueSpecialization
 {
@@ -44,13 +38,6 @@ public abstract record ReturnValueSpecialization
     /// The specialized function returns the inner (unwrapped) value;
     /// callers must wrap the result with <see cref="Constructor"/> to
     /// obtain a value equivalent to the original's result.
-    /// <para>
-    /// This is the shape produced by
-    /// <see cref="WrapperReturnStripping"/>: the sibling decl peels
-    /// the original body's outer single-tag constructor application
-    /// and the caller re-introduces it at every fully-saturated call
-    /// site.
-    /// </para>
     /// </summary>
     /// <param name="Constructor">
     /// Fully-qualified name of the single-tag constructor the caller
