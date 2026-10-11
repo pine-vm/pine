@@ -179,7 +179,8 @@ public static class TestCommand
         var reportDurationsOption =
             new Option<bool>("--report-durations")
             {
-                Description = "Show detailed durations, including compilation and test execution."
+                Description =
+                "Show compilation, preparation, and execution durations, including summed VM-call timings."
             };
 
         var seedOption =
@@ -567,7 +568,11 @@ public static class TestCommand
                 :
                 null,
                 includeRunningMessage: false,
-                incompleteReason: completed.IncompleteReason);
+                incompleteReason: completed.IncompleteReason,
+                preparationDuration: reportDurations ? completed.PreparationDuration : null,
+                executionDuration: reportDurations ? completed.ExecutionDuration : null,
+                preparationVmDuration: reportDurations ? completed.PreparationVmDuration : null,
+                executionVmDuration: reportDurations ? completed.ExecutionVmDuration : null);
 
         if (resolvedColorMode is FormatCommandColorMode.Never)
         {

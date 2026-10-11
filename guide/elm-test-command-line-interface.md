@@ -71,6 +71,21 @@ accepted. Only the selected project subtree is downloaded. Remote manifests must
 directories within that subtree; use a local checkout for projects that reference parent or sibling
 source directories.
 
+## Duration reporting
+
+Use `--report-durations` to show independently measured timings using the instrumentation's
+phase labels:
+
+- `compilation`: source loading, dependency resolution, and compilation of the test environment.
+- `preparation`: constructing test values, preparing runners, discovering tests, and filtering.
+- `execution`: running the selected tests, including worker setup and result processing.
+
+Both `preparation` and `execution` include a `VM calls (sum)` breakdown, measured around each
+VM evaluation. Preparation includes evaluating exposed zero-parameter declarations (even
+non-test values) and calling the test bridge's `prepare` function. Execution includes evaluating
+the selected test runners. These are summed call durations, not exclusive phase durations:
+parallel execution calls overlap, so their sum can exceed the execution wall-clock duration.
+
 ## Profiling and instrumentation
 
 Use `elm test profile` to investigate hangs, unexpected work, or expensive computations.

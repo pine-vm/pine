@@ -16,6 +16,56 @@ namespace Pine.Core.Tests.Elm.ElmTest;
 
 public class ElmTestTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Duration_report_renders_independent_phase_and_VM_timings(bool includeTotal)
+    {
+        var output =
+            ElmTestRunner.RenderTestResults(
+                [],
+                includeTestDetails: false,
+                duration: includeTotal ? TimeSpan.FromMilliseconds(100) : null,
+                compilationDuration: TimeSpan.FromMilliseconds(2),
+                preparationDuration: TimeSpan.FromMilliseconds(3),
+                executionDuration: TimeSpan.FromMilliseconds(5),
+                preparationVmDuration: TimeSpan.FromMilliseconds(1),
+                executionVmDuration: TimeSpan.FromMilliseconds(11))
+            .PlainText;
+
+        output.Should().Contain(
+            """
+              compilation: 2 ms
+              preparation: 3 ms
+                VM calls (sum): 1 ms
+              execution:   5 ms
+                VM calls (sum): 11 ms
+            """);
+
+        if (includeTotal)
+            output.Should().Contain("Duration: 100 ms");
+
+        else
+            output.Should().NotContain("Duration:");
+    }
+
+    [Fact]
+    public void Duration_report_does_not_infer_unmeasured_components()
+    {
+        var output =
+            ElmTestRunner.RenderTestResults(
+                [],
+                includeTestDetails: false,
+                duration: TimeSpan.FromMilliseconds(100),
+                compilationDuration: TimeSpan.FromMilliseconds(2))
+            .PlainText;
+
+        output.Should().Contain("  compilation: 2 ms")
+            .And.NotContain("preparation:")
+            .And.NotContain("execution:")
+            .And.NotContain("VM calls");
+    }
+
     [Fact]
     public void Default_Elm_test_execution_has_no_invocation_or_loop_work_quota()
     {
@@ -244,7 +294,16 @@ public class ElmTestTests
                 testCount =>
                 Interlocked.Exchange(ref discoveredTestCount, testCount));
 
-        testRun.Should().BeOfType<ElmTestRun.Completed>();
+        var completed = testRun.Should().BeOfType<ElmTestRun.Completed>().Which;
+        completed.CompilationDuration.Should().BeGreaterThan(TimeSpan.Zero);
+        completed.PreparationVmDuration.Should().BeGreaterThan(TimeSpan.Zero);
+        completed.PreparationDuration.Should().BeGreaterThanOrEqualTo(completed.PreparationVmDuration);
+        completed.ExecutionVmDuration.Should().BeGreaterThan(TimeSpan.Zero);
+        completed.ExecutionDuration.Should().BeGreaterThanOrEqualTo(completed.ExecutionVmDuration);
+
+        completed.Duration.Should().Be(
+            completed.CompilationDuration + completed.PreparationDuration + completed.ExecutionDuration);
+
         factoryCalls.Should().Be(3);
         sharedCaches.Distinct(ReferenceEqualityComparer.Instance).Should().HaveCount(1);
         workersObservedDiscovery.Should().OnlyContain(observed => observed);

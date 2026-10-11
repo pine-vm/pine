@@ -2200,8 +2200,10 @@ public class TestCommandTests
             rendered.LastIndexOf("Running 3 tests", StringComparison.Ordinal).Should().Be(runningMessageIndex);
             runningMessageIndex.Should().BeLessThan(rendered.IndexOf("TEST RUN", StringComparison.Ordinal));
             rendered.Should().Contain("Duration:");
-            rendered.Should().Contain("Compilation:");
-            rendered.Should().Contain("Test execution:");
+            rendered.Should().Contain("  compilation:");
+            rendered.Should().Contain("  preparation:");
+            rendered.Should().Contain("  execution:");
+            rendered.Split("VM calls (sum):").Should().HaveCount(3);
             rendered.Should().Contain("Passed:   2");
             rendered.Should().Contain("Failed:   1");
         }

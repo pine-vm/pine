@@ -146,8 +146,6 @@ public static class ElmTestRunner
         if (instrumentation is not null && pineVm is not null)
             throw new ArgumentException("Budgeted or profiled execution uses its own VMs.", nameof(pineVm));
 
-        using var compilationScope = instrumentation?.EnterScope("compilation", appDirectory);
-
         var executionSettings = (fuzzOptions ?? new()).Resolve();
 
         if (instrumentation is { RecordDiagnostics: true })
@@ -167,7 +165,8 @@ public static class ElmTestRunner
         if (!Directory.Exists(appDirectory))
             throw new DirectoryNotFoundException("Elm project directory not found: " + appDirectory);
 
-        var compilationStopwatch = Stopwatch.StartNew();
+        using var compilationScope =
+            new TimedScope(() => instrumentation?.EnterScope("compilation", appDirectory));
 
         var appFiles =
             Filesystem.GetFilesFromDirectory(
@@ -300,15 +299,18 @@ public static class ElmTestRunner
             testDeclarationNames.Add(DeclQualifiedName.Create(bridgeName.Split('.'), "prepare"));
 
         var preparationCaches = new PineVMSharedCaches();
+        var preparationVmTimings = new VmCallTimings();
+        var executionVmTimings = new VmCallTimings();
 
         var preparationVm =
-            instrumentation is not null
-            ?
-            instrumentation.CreateVm(new ConcurrentInvocationCache(), preparationCaches)
-            :
-            CreatePineVm(
-                new ConcurrentInvocationCache(),
-                preparationCaches);
+            preparationVmTimings.Wrap(
+                instrumentation is not null
+                ?
+                instrumentation.CreateVm(new ConcurrentInvocationCache(), preparationCaches)
+                :
+                CreatePineVm(
+                    new ConcurrentInvocationCache(),
+                    preparationCaches));
 
         var (compiledEnvironment, _) =
             ElmCompiler.CompileResolvedEnvironment(
@@ -331,6 +333,11 @@ public static class ElmTestRunner
 
         var hasOnly = false;
         var hasSkipped = false;
+
+        compilationScope.Dispose();
+
+        using var preparationPhaseScope =
+            new TimedScope(() => instrumentation?.EnterScope("preparation", appDirectory));
 
         foreach (var testModule in testModules.Where(module => !module.exposedZeroParameterDeclarations.IsEmpty))
         {
@@ -543,11 +550,12 @@ public static class ElmTestRunner
                     filteredOutTests);
         }
 
-        compilationStopwatch.Stop();
+        preparationPhaseScope.Dispose();
 
         onTestsDiscovered?.Invoke(discoveredTests.Count);
 
-        var stopwatch = Stopwatch.StartNew();
+        using var executionPhaseScope =
+            new TimedScope(() => instrumentation?.EnterScope("execution", appDirectory));
 
         IReadOnlyList<CompletedTest> completedTests;
 
@@ -556,7 +564,7 @@ public static class ElmTestRunner
             var parseCache = new PineVMParseCache();
 
             completedTests =
-                [.. discoveredTests.Select(test => RunTest(test, pineVm, parseCache))];
+                [.. discoveredTests.Select(test => RunTest(test, executionVmTimings.Wrap(pineVm), parseCache))];
         }
         else if (instrumentation is { RecordDiagnostics: true })
         {
@@ -569,7 +577,11 @@ public static class ElmTestRunner
 
                 // Compiled literals and invocation results can retain evaluated state: never share execution caches between profiles.
                 var testCaches = new PineVMSharedCaches();
-                var testVm = instrumentation.CreateVm(new ConcurrentInvocationCache(), testCaches);
+
+                var testVm =
+                    executionVmTimings.Wrap(
+                        instrumentation.CreateVm(new ConcurrentInvocationCache(), testCaches));
+
                 profiledTests.Add(RunTest(test, testVm, testCaches.ParsedExpressions));
             }
 
@@ -606,8 +618,9 @@ public static class ElmTestRunner
                                             ExactFilter(discoveredTests[testIndex]));
 
                                     var testPineVm =
-                                        instrumentation?.CreateVm(invocationCache, sharedPineVMCaches)
-                                        ?? pineVmFactory(invocationCache, sharedPineVMCaches);
+                                        executionVmTimings.Wrap(
+                                            instrumentation?.CreateVm(invocationCache, sharedPineVMCaches)
+                                            ?? pineVmFactory(invocationCache, sharedPineVMCaches));
 
                                     completedTestsByIndex[testIndex] =
                                         RunTest(
@@ -630,14 +643,18 @@ public static class ElmTestRunner
             completedTests = completedTestsByIndex;
         }
 
-        stopwatch.Stop();
+        executionPhaseScope.Dispose();
 
         return
             new ElmTestRun.Completed(
                 completedTests,
-                compilationStopwatch.Elapsed + stopwatch.Elapsed)
+                compilationScope.Elapsed + preparationPhaseScope.Elapsed + executionPhaseScope.Elapsed)
             {
-                CompilationDuration = compilationStopwatch.Elapsed,
+                CompilationDuration = compilationScope.Elapsed,
+                PreparationDuration = preparationPhaseScope.Elapsed,
+                ExecutionDuration = executionPhaseScope.Elapsed,
+                PreparationVmDuration = preparationVmTimings.Elapsed,
+                ExecutionVmDuration = executionVmTimings.Elapsed,
                 ExecutionSettings = executionSettings,
                 IncompleteReason =
                 hasOnly
@@ -677,6 +694,52 @@ public static class ElmTestRunner
             loadPackage: loadPackage,
             configuration: DefaultResolutionConfiguration.Value);
 
+
+    private sealed class VmCallTimings
+    {
+        private long _ticks;
+
+        public TimeSpan Elapsed => TimeSpan.FromTicks(Interlocked.Read(ref _ticks));
+
+        public IPineVM Wrap(IPineVM vm) => new TimedVm(vm, this);
+
+        private sealed class TimedVm(IPineVM vm, VmCallTimings timings) : PineVM.ICancellablePineVM
+        {
+            public Result<string, PineValue> EvaluateExpression(Expression expression, PineValue environment) =>
+                Measure(() => vm.EvaluateExpression(expression, environment));
+
+            public Result<string, PineValue> EvaluateExpression(
+                Expression expression,
+                PineValue environment,
+                CancellationToken cancellationToken) =>
+                Measure(
+                    () =>
+                    {
+                        if (vm is PineVM.ICancellablePineVM cancellableVm)
+                            return cancellableVm.EvaluateExpression(expression, environment, cancellationToken);
+
+                        cancellationToken.ThrowIfCancellationRequested();
+                        var result = vm.EvaluateExpression(expression, environment);
+                        cancellationToken.ThrowIfCancellationRequested();
+                        return result;
+                    });
+
+            private Result<string, PineValue> Measure(Func<Result<string, PineValue>> evaluate)
+            {
+                var stopwatch = Stopwatch.StartNew();
+
+                try
+                {
+                    return evaluate();
+                }
+                finally
+                {
+                    stopwatch.Stop();
+                    Interlocked.Add(ref timings._ticks, stopwatch.Elapsed.Ticks);
+                }
+            }
+        }
+    }
 
     private static CompletedTest RunTest(
         DiscoveredTest discoveredTest,
@@ -889,6 +952,32 @@ public static class ElmTestRunner
         TimeSpan? duration = null,
         TimeSpan? compilationDuration = null,
         bool includeRunningMessage = true,
+        string? incompleteReason = null) =>
+        RenderTestResults(
+            tests,
+            includeTestDetails,
+            preparationDuration: null,
+            executionDuration: null,
+            preparationVmDuration: null,
+            executionVmDuration: null,
+            duration,
+            compilationDuration,
+            includeRunningMessage,
+            incompleteReason);
+
+    /// <summary>
+    /// Renders completed Elm tests with independently measured preparation, execution, and VM-call durations.
+    /// </summary>
+    public static StructuredTestOutput RenderTestResults(
+        IReadOnlyList<CompletedTest> tests,
+        bool includeTestDetails,
+        TimeSpan? preparationDuration,
+        TimeSpan? executionDuration,
+        TimeSpan? preparationVmDuration,
+        TimeSpan? executionVmDuration,
+        TimeSpan? duration = null,
+        TimeSpan? compilationDuration = null,
+        bool includeRunningMessage = true,
         string? incompleteReason = null)
     {
         var fragments = new List<TestOutputFragment>();
@@ -1020,15 +1109,13 @@ public static class ElmTestRunner
                 Math.Round(elapsed.TotalMilliseconds).ToString(System.Globalization.CultureInfo.InvariantCulture) +
                 " ms\n",
                 TestOutputStyle.Default);
-
-            if (compilationDuration is { } compilationElapsed)
-            {
-                Append("  Compilation:    ", TestOutputStyle.Dark);
-                Append(FormatDuration(compilationElapsed) + "\n", TestOutputStyle.Default);
-                Append("  Test execution: ", TestOutputStyle.Dark);
-                Append(FormatDuration(elapsed - compilationElapsed) + "\n", TestOutputStyle.Default);
-            }
         }
+
+        AppendDuration("  compilation: ", compilationDuration);
+        AppendDuration("  preparation: ", preparationDuration);
+        AppendDuration("    VM calls (sum): ", preparationVmDuration);
+        AppendDuration("  execution:   ", executionDuration);
+        AppendDuration("    VM calls (sum): ", executionVmDuration);
 
         Append("Passed:   ", TestOutputStyle.Dark);
         Append(passedCount + "\n", TestOutputStyle.Default);
@@ -1045,6 +1132,15 @@ public static class ElmTestRunner
 
         void Append(string text, TestOutputStyle style) =>
             fragments.Add(new TestOutputFragment(text, style));
+
+        void AppendDuration(string label, TimeSpan? elapsed)
+        {
+            if (elapsed is not { } measured)
+                return;
+
+            Append(label, TestOutputStyle.Dark);
+            Append(FormatDuration(measured) + "\n", TestOutputStyle.Default);
+        }
 
         static string FormatDuration(TimeSpan elapsed) =>
             Math.Round(elapsed.TotalMilliseconds).ToString(System.Globalization.CultureInfo.InvariantCulture) +
@@ -1537,9 +1633,21 @@ public abstract record ElmTestRun
         : ElmTestRun
     {
         /// <summary>
-        /// Gets the portion of <see cref="Duration"/> spent compiling and discovering tests.
+        /// Gets the time spent loading sources, resolving dependencies, and compiling the environment.
         /// </summary>
         public TimeSpan CompilationDuration { get; init; }
+
+        /// <summary>Time spent constructing, discovering, and selecting tests, under the preparation phase.</summary>
+        public TimeSpan PreparationDuration { get; init; }
+
+        /// <summary>Wall-clock time spent running selected tests, under the execution phase.</summary>
+        public TimeSpan ExecutionDuration { get; init; }
+
+        /// <summary>Sum of individual VM evaluation durations during preparation.</summary>
+        public TimeSpan PreparationVmDuration { get; init; }
+
+        /// <summary>Sum of individual VM evaluation durations during execution; parallel calls can overlap.</summary>
+        public TimeSpan ExecutionVmDuration { get; init; }
 
         /// <summary>The seed and default run count selected once for this invocation.</summary>
         public ElmTestExecutionSettings? ExecutionSettings { get; init; }
