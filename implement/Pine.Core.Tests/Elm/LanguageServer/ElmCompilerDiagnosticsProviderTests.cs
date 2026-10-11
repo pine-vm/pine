@@ -1,5 +1,7 @@
 using AwesomeAssertions;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
+using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.LanguageServer;
 using System.Collections.Generic;
 using System.Threading;
@@ -74,6 +76,53 @@ public class ElmCompilerDiagnosticsProviderTests
         public Dictionary<string, string> Texts { get; } = [];
 
         public string? TryGetDocumentText(string documentUri) => Texts.GetValueOrDefault(documentUri);
+    }
+
+    [Fact]
+    public async Task Declaration_demand_compiler_diagnostics_accept_substituted_json_string_encoder()
+    {
+        var (workspace, _) =
+            VirtualWorkspace.Create(
+                [
+                    (["elm.json"],
+                    Manifest.Replace(
+                        "\"elm/core\": \"1.0.5\"",
+                        "\"elm/core\": \"1.0.5\", \"elm/json\": \"1.1.3\"")),
+                    (["src", "Main.elm"],
+                    """
+                    module Main exposing (..)
+                    import Json.Encode as JE exposing (Value)
+
+                    encode : List String -> Value
+                    encode = JE.list JE.string
+                    """)
+                ]);
+
+        ElmResolvedBuild? preparedBuild = null;
+
+        var provider =
+            new ElmCompilerDiagnosticsProvider(
+                workspace,
+                new DocumentTexts(),
+                async (sources, manifestPath, token) => preparedBuild =
+                    await ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(
+                        sources,
+                        manifestPath,
+                        [],
+                        ElmPackageSubstitutions.DefaultBuild.Value,
+                        cancellationToken: token));
+
+        var diagnostics =
+            (await provider.GetDiagnosticsAsync(
+                VirtualWorkspace.DocumentUri("src", "Main.elm"),
+                CancellationToken.None))
+            .Extract(error => throw new System.Exception(error.Message));
+
+        diagnostics.Should().ContainSingle().Which.Diagnostics.Should().BeEmpty();
+
+        ElmCompiler.QueryDeclaration(preparedBuild!, DeclQualifiedName.Create(["Main"], "encode"))
+            .Extract(error => throw new System.Exception(error))
+            .Diagnostics.Should().BeEmpty();
     }
 
     [Fact]

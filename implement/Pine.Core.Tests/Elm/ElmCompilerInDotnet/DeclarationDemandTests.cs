@@ -211,6 +211,67 @@ public class DeclarationDemandTests
         query.Diagnostics.Should().Contain(diagnostic => diagnostic.Code == "elm-type");
     }
 
+    [Theory]
+    [InlineData("type alias Payload = { value : Int }", "Payload", "{ value = 0 }")]
+    [InlineData("", "List Int", "[ 1 ]")]
+    public void Declaration_demand_analysis_normalizes_referenced_function_types(
+        string aliasDeclaration,
+        string type,
+        string value)
+    {
+        var sources =
+            Sources(
+                $$"""
+                module Main exposing (..)
+
+                {{aliasDeclaration}}
+
+                original : {{type}}
+                original = {{value}}
+
+                copy : {{type}}
+                copy = original
+
+                identity : {{type}} -> {{type}}
+                identity input = input
+
+                applied : {{type}}
+                applied = identity original
+
+                localCopy : {{type}}
+                localCopy =
+                    let
+                        local : {{type}}
+                        local = {{value}}
+                    in
+                    local
+                """);
+
+        ElmCompiler.AnalyzeApplication(sources).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("type alias Payload = { value : String }", "Payload", "{ value = 0 }")]
+    [InlineData("", "List String", "[ 1 ]")]
+    [InlineData("type String = CustomString", "String", "\"hello\"")]
+    public void Declaration_demand_analysis_preserves_real_type_mismatches(
+        string typeDeclaration,
+        string type,
+        string value)
+    {
+        var sources =
+            Sources(
+                $$"""
+                module Main exposing (..)
+                {{typeDeclaration}}
+                wrong : {{type}}
+                wrong = {{value}}
+                """);
+
+        ElmCompiler.AnalyzeApplication(sources).Should().ContainSingle()
+            .Which.Code.Should().Be("elm-type");
+    }
+
     [Fact]
     public void Declaration_demand_distinguishes_type_and_value_namespaces()
     {

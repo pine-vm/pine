@@ -71,7 +71,8 @@ public partial class ElmCompiler
                 sourceParseCache,
                 canonicalizationCache,
                 build.CompilerModuleSyntax,
-                validateSourceImports: false);
+                validateSourceImports: false,
+                bundledModuleNames: BundledModuleNames(build));
 
         return
             [
@@ -94,7 +95,8 @@ public partial class ElmCompiler
         IDictionary<string, Result<ElmSyntaxParseError, Syntax.File>>? sourceParseCache = null,
         IDictionary<(Syntax.Node<Syntax.Declaration> Declaration, string Scope),
             DeclarationCanonicalizationCacheEntry>? canonicalizationCache = null,
-        IReadOnlyDictionary<string, Syntax.File>? parsedSources = null)
+        IReadOnlyDictionary<string, Syntax.File>? parsedSources = null,
+        IReadOnlySet<string>? bundledModuleNames = null)
     {
         var parseDiagnostics = new List<ElmCompilerDiagnostic>();
 
@@ -139,7 +141,14 @@ public partial class ElmCompiler
         var canonicalized = result.Extract(error => throw new InvalidOperationException(error));
         var diagnostics = DeclarationDiagnostics(parsed, canonicalized);
         var declarations = AbstractDeclarations(canonicalized);
-        diagnostics.AddRange(TypeDiagnostics(parsed, canonicalized, declarations));
+
+        diagnostics.AddRange(
+            TypeDiagnostics(
+                parsed,
+                canonicalized,
+                declarations,
+                bundledModuleNames ?? (includeBundledKernelModules ? BundledModuleNames() : null)));
+
         var type = InferDeclarationType(name, declarations);
 
         if (type is null && diagnostics.Count is 0 &&
@@ -175,7 +184,8 @@ public partial class ElmCompiler
             false,
             sourceParseCache,
             canonicalizationCache,
-            build.CompilerModuleSyntax);
+            build.CompilerModuleSyntax,
+            BundledModuleNames(build));
 
     private static IReadOnlyList<ElmCompilerDiagnostic> AnalyzeSources(
         FileTree sources,
@@ -185,7 +195,8 @@ public partial class ElmCompiler
         IDictionary<(Syntax.Node<Syntax.Declaration> Declaration, string Scope),
             DeclarationCanonicalizationCacheEntry>? canonicalizationCache,
         IReadOnlyDictionary<string, Syntax.File>? parsedSources = null,
-        bool validateSourceImports = true)
+        bool validateSourceImports = true,
+        IReadOnlySet<string>? bundledModuleNames = null)
     {
         var diagnostics = new List<ElmCompilerDiagnostic>();
 
@@ -306,7 +317,13 @@ public partial class ElmCompiler
         }
 
         var declarations = AbstractDeclarations(canonicalized);
-        diagnostics.AddRange(TypeDiagnostics(parsed, canonicalized, declarations));
+
+        diagnostics.AddRange(
+            TypeDiagnostics(
+                parsed,
+                canonicalized,
+                declarations,
+                bundledModuleNames ?? (includeBundledKernelModules ? BundledModuleNames() : null)));
 
         return
             [
@@ -320,7 +337,8 @@ public partial class ElmCompiler
     private static IReadOnlyList<ElmCompilerDiagnostic> TypeDiagnostics(
         IReadOnlyList<(string Path, Syntax.File File)> parsed,
         DeclarationCanonicalizationResult canonicalized,
-        ImmutableDictionary<DeclQualifiedName, Abstract.Declaration> declarations)
+        ImmutableDictionary<DeclQualifiedName, Abstract.Declaration> declarations,
+        IReadOnlySet<string>? bundledModuleNames)
     {
         var diagnostics = new List<ElmCompilerDiagnostic>();
 
@@ -332,7 +350,31 @@ public partial class ElmCompiler
                     string.Join(".", Abstract.Module.GetModuleName(file.ModuleDefinition))))
             .ToImmutableDictionary();
 
-        var functionTypes = BuildFunctionTypes(declarations);
+        // Bundled modules redeclare the runtime String tag to inspect its representation.
+        // These declarations are intrinsic strings, unlike user-defined types with the same name.
+        if (bundledModuleNames is not null)
+        {
+            aliases =
+                aliases.SetItems(
+                    declarations.Where(
+                        entry => entry.Key.DeclName is "String" &&
+                            bundledModuleNames.Contains(string.Join(".", entry.Key.Namespaces)) &&
+                            entry.Value is Abstract.Declaration.ChoiceTypeDeclaration)
+                    .Select(
+                        entry => KeyValuePair.Create(
+                            entry.Key,
+                            new TypeInference.TypeAliasDefinition([], TypeInference.InferredType.String()))));
+        }
+
+        var functionTypes =
+            BuildFunctionTypes(declarations).ToDictionary(
+                entry => entry.Key,
+                entry => new FunctionTypeInfo(
+                    TypeInference.ExpandTypeAliases(entry.Value.ReturnType, aliases, entry.Key.Namespaces),
+                    [
+                    .. entry.Value.ParameterTypes.Select(
+                        parameter => TypeInference.ExpandTypeAliases(parameter, aliases, entry.Key.Namespaces))
+                    ]));
 
         foreach (var (name, canonical) in canonicalized.Declarations)
         {
@@ -367,7 +409,9 @@ public partial class ElmCompiler
             var declared =
                 TypeInference.ExpandTypeAliases(TypeInference.GetFunctionReturnType(function), aliases, name.Namespaces);
 
-            if (TypeInference.TryUnify(declared, inferred).IsErrOrNull() is { } typeError)
+            if (TypeInference.TryUnify(
+                declared,
+                TypeInference.ExpandTypeAliases(inferred, aliases, name.Namespaces)).IsErrOrNull() is { } typeError)
             {
                 var path =
                     parsed.First(
@@ -387,6 +431,20 @@ public partial class ElmCompiler
 
         return diagnostics;
     }
+
+    private static HashSet<string> BundledModuleNames() =>
+        ElmInElm.BundledFiles.ElmKernelModulesDefault.Value.EnumerateFilesTransitive()
+        .Where(source => source.path[^1].EndsWith(".elm", StringComparison.Ordinal))
+        .Select(
+            source => string.Join(".", source.path.Take(source.path.Count - 1).Append(source.path[^1][..^4])))
+        .ToHashSet(StringComparer.Ordinal);
+
+    private static HashSet<string> BundledModuleNames(ElmResolvedBuild build) =>
+        build.CompilerModuleOrigins
+        .Where(
+            entry => entry.Value is ElmModuleOrigin.Substitution substitution &&
+                substitution.ImplementationId == "pine-bundled:" + substitution.ReplacedPackage.Name)
+        .Select(entry => entry.Key).ToHashSet(StringComparer.Ordinal);
 
     private static bool HasNamingErrors(DeclQualifiedName root, DeclarationCanonicalizationResult canonicalized) =>
         FindNamingError(root, canonicalized) is not null;
