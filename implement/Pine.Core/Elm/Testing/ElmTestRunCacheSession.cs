@@ -14,7 +14,8 @@ namespace Pine.Core.Elm.Testing;
 /// Caller-owned, unbounded caches for repeated Elm test runs. Retain this object, not VMs,
 /// instrumentation, cancellation state, or test reports. Native leaves must remain immutable.
 /// </summary>
-public sealed class ElmTestRunCacheSession
+/// <remarks>Creates a session with a fixed native-leaf configuration.</remarks>
+public sealed class ElmTestRunCacheSession(IReadOnlyDictionary<PineValue, PrecompiledLeaf>? precompiledLeaves = null)
 {
     /// <summary>Compilation, parsing, encoding and reduction caches shared by preparation and workers.</summary>
     public PineVMSharedCaches VmCaches { get; } = new();
@@ -45,13 +46,8 @@ public sealed class ElmTestRunCacheSession
         return result;
     }
 
-    internal IReadOnlyDictionary<PineValue, PrecompiledLeaf> PrecompiledLeaves { get; }
-
-    /// <summary>Creates a session with a fixed native-leaf configuration.</summary>
-    public ElmTestRunCacheSession(IReadOnlyDictionary<PineValue, PrecompiledLeaf>? precompiledLeaves = null)
-    {
-        PrecompiledLeaves = precompiledLeaves ?? SetupVM.DefaultPrecompiledLeaves;
-    }
+    internal IReadOnlyDictionary<PineValue, PrecompiledLeaf> PrecompiledLeaves { get; } =
+        precompiledLeaves ?? SetupVM.DefaultPrecompiledLeaves;
 
     internal void ValidateInstrumentation(ElmTestInstrumentation? instrumentation)
     {

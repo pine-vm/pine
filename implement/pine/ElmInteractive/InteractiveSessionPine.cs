@@ -28,15 +28,28 @@ namespace ElmTime.ElmInteractive;
 /// requires adapting the legacy submission compiler's runtime environment protocol; this class
 /// does not yet implement lazy seed indexing or source-backed submission history.
 /// </remarks>
-public class InteractiveSessionPine : IInteractiveSession
+public class InteractiveSessionPine(
+    FileTree compilerSourceFiles,
+    AppCompilationUnits? appCodeTree,
+    bool? overrideSkipLowering,
+    IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
+    (IPineVM pineVM, InvocationCache? pineVMCache) pineVMAndCache) : IInteractiveSession
 {
     private readonly System.Threading.Lock _submissionLock = new();
 
-    private System.Threading.Tasks.Task<Result<string, PineValue>> _buildPineEvalContextTask;
+    private System.Threading.Tasks.Task<Result<string, PineValue>> _buildPineEvalContextTask =
+        System.Threading.Tasks.Task.Run(
+            () =>
+            CompileInteractiveEnvironment(
+                appCodeTree: appCodeTree,
+                overrideSkipLowering: overrideSkipLowering,
+                entryPointsFilePaths: entryPointsFilePaths,
+                skipFilteringForSourceDirs: false));
 
-    private readonly Result<string, ElmCompilerInElm> _buildCompilerResult;
+    private readonly Result<string, ElmCompilerInElm> _buildCompilerResult =
+        ElmCompilerInElm.GetElmCompilerAsync(compilerSourceFiles).Result;
 
-    private readonly IPineVM _pineVM;
+    private readonly IPineVM _pineVM = pineVMAndCache.pineVM;
 
     private static readonly IPineVM s_compileEnvPineVM =
         new LockingPineVM(
@@ -128,28 +141,6 @@ public class InteractiveSessionPine : IInteractiveSession
             entryPointsFilePaths: entryPointsFilePaths,
             (pineVM, pineVMCache: null))
     {
-    }
-
-    public InteractiveSessionPine(
-        FileTree compilerSourceFiles,
-        AppCompilationUnits? appCodeTree,
-        bool? overrideSkipLowering,
-        IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
-        (IPineVM pineVM, InvocationCache? pineVMCache) pineVMAndCache)
-    {
-        _pineVM = pineVMAndCache.pineVM;
-
-        _buildCompilerResult =
-            ElmCompilerInElm.GetElmCompilerAsync(compilerSourceFiles).Result;
-
-        _buildPineEvalContextTask =
-            System.Threading.Tasks.Task.Run(
-                () =>
-                CompileInteractiveEnvironment(
-                    appCodeTree: appCodeTree,
-                    overrideSkipLowering: overrideSkipLowering,
-                    entryPointsFilePaths: entryPointsFilePaths,
-                    skipFilteringForSourceDirs: false));
     }
 
     public static (IPineVM, InvocationCache?) BuildPineVM(

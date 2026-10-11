@@ -6,18 +6,13 @@ namespace Pine.Core.Elm.Testing;
 /// <summary>
 /// Measures the lifetime of an optional instrumentation scope and ends both together.
 /// </summary>
-internal sealed class TimedScope : IDisposable
+internal sealed class TimedScope(Func<IDisposable?> enterScope) : IDisposable
 {
     private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
 
-    private readonly IDisposable? _scope;
+    private readonly IDisposable? _scope = enterScope();
 
     private bool _disposed;
-
-    public TimedScope(Func<IDisposable?> enterScope)
-    {
-        _scope = enterScope();
-    }
 
     public TimeSpan Elapsed => _stopwatch.Elapsed;
 
