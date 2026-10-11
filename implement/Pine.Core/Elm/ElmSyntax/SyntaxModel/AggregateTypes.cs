@@ -14,6 +14,21 @@ namespace Pine.Core.Elm.ElmSyntax.SyntaxModel;
 public abstract record SeparatedSyntaxList<TNode>
     : IEnumerable<TNode>
 {
+    private protected long _cachedHashCode;
+
+    /// <summary>Creates a syntax list.</summary>
+    protected SeparatedSyntaxList() { }
+
+    /// <summary>Copies a list without its memoized hash.</summary>
+    protected SeparatedSyntaxList(SeparatedSyntaxList<TNode> original) { }
+
+    /// <inheritdoc/>
+    public virtual bool Equals(SeparatedSyntaxList<TNode>? other) =>
+        other is not null && EqualityContract == other.EqualityContract;
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => EqualityContract.GetHashCode();
+
     /// <summary>
     /// The case of an empty list.
     /// </summary>
@@ -45,6 +60,9 @@ public abstract record SeparatedSyntaxList<TNode>
         /// <inheritdoc/>
         public override int GetHashCode()
         {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
             var hashCode = new System.HashCode();
 
             hashCode.Add(First);
@@ -52,7 +70,7 @@ public abstract record SeparatedSyntaxList<TNode>
             foreach (var item in Rest)
                 hashCode.Add(item);
 
-            return hashCode.ToHashCode();
+            return SyntaxHashCache.Store(ref _cachedHashCode, hashCode.ToHashCode());
         }
     }
 
@@ -164,7 +182,32 @@ public abstract record SeparatedSyntaxList<TNode>
 /// <param name="ParseError">The parsing error information.</param>
 public record IncompleteDeclaration(
     string OriginalText,
-    ElmSyntaxParseError ParseError);
+    ElmSyntaxParseError ParseError)
+{
+    private long _cachedHashCode;
+
+    /// <summary>Copies syntax data without its memoized hash.</summary>
+    protected IncompleteDeclaration(IncompleteDeclaration original)
+    {
+        OriginalText = original.OriginalText;
+        ParseError = original.ParseError;
+    }
+
+    /// <inheritdoc/>
+    public virtual bool Equals(IncompleteDeclaration? other) =>
+        other is not null && EqualityContract == other.EqualityContract &&
+        OriginalText == other.OriginalText && ParseError.Equals(other.ParseError);
+
+    /// <inheritdoc/>
+    public override int GetHashCode()
+    {
+        if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+            return cached;
+
+        var hash = SyntaxHashCache.Combine(EqualityContract.GetHashCode(), OriginalText);
+        return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, ParseError));
+    }
+}
 
 /// <summary>
 /// Elm import statement containing target module name, optional alias and exposing list.
@@ -173,32 +216,113 @@ public record Import(
     Location ImportTokenLocation,
     Node<ModuleName> ModuleName,
     (Location AsTokenLocation, Node<ModuleName> Alias)? ModuleAlias,
-    (Location ExposingTokenLocation, Node<Exposing> ExposingList)? ExposingList);
+    (Location ExposingTokenLocation, Node<Exposing> ExposingList)? ExposingList)
+{
+    private long _cachedHashCode;
+
+    /// <summary>Copies syntax data without its memoized hash.</summary>
+    protected Import(Import original)
+    {
+        ImportTokenLocation = original.ImportTokenLocation;
+        ModuleName = original.ModuleName;
+        ModuleAlias = original.ModuleAlias;
+        ExposingList = original.ExposingList;
+    }
+
+    /// <inheritdoc/>
+    public virtual bool Equals(Import? other) =>
+        other is not null && EqualityContract == other.EqualityContract &&
+        ImportTokenLocation.Equals(other.ImportTokenLocation) &&
+        EqualityComparer<Node<ModuleName>>.Default.Equals(ModuleName, other.ModuleName) &&
+        ModuleAlias.Equals(other.ModuleAlias) && ExposingList.Equals(other.ExposingList);
+
+    /// <inheritdoc/>
+    public override int GetHashCode()
+    {
+        if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+            return cached;
+
+        var hash = SyntaxHashCache.Combine(EqualityContract.GetHashCode(), ImportTokenLocation);
+        hash = SyntaxHashCache.Combine(hash, ModuleName);
+        hash = SyntaxHashCache.Combine(hash, ModuleAlias);
+        return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, ExposingList));
+    }
+}
 
 /// <summary>
 /// Elm module kinds: normal, port or effect (with possible commands/subscriptions).
 /// </summary>
 public abstract record Module
 {
+    private protected long _cachedHashCode;
+
+    /// <summary>Creates a module.</summary>
+    protected Module() { }
+
+    /// <summary>Copies a module without its memoized hash.</summary>
+    protected Module(Module original) { }
+
+    /// <inheritdoc/>
+    public virtual bool Equals(Module? other) =>
+        other is not null && EqualityContract == other.EqualityContract;
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => EqualityContract.GetHashCode();
+
     /// <summary>Standard module.</summary>
     public sealed record NormalModule(
         Location ModuleTokenLocation,
         DefaultModuleData ModuleData)
-        : Module;
+        : Module
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            var hash = SyntaxHashCache.Combine(base.GetHashCode(), ModuleTokenLocation);
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, ModuleData));
+        }
+    }
 
     /// <summary>Port module exposing native interop.</summary>
     public sealed record PortModule(
         Location PortTokenLocation,
         Location ModuleTokenLocation,
         DefaultModuleData ModuleData)
-        : Module;
+        : Module
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            var hash = SyntaxHashCache.Combine(base.GetHashCode(), PortTokenLocation);
+            hash = SyntaxHashCache.Combine(hash, ModuleTokenLocation);
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, ModuleData));
+        }
+    }
 
     /// <summary>Effect module with commands and subscriptions.</summary>
     public sealed record EffectModule(
         Location EffectTokenLocation,
         Location ModuleTokenLocation,
         EffectModuleData ModuleData)
-        : Module;
+        : Module
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            var hash = SyntaxHashCache.Combine(base.GetHashCode(), EffectTokenLocation);
+            hash = SyntaxHashCache.Combine(hash, ModuleTokenLocation);
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, ModuleData));
+        }
+    }
 
     /// <summary>
     /// Retrieve the module name syntax node for the specified module instance.
@@ -227,7 +351,36 @@ public abstract record Module
 public record DefaultModuleData(
     Node<ModuleName> ModuleName,
     Location ExposingTokenLocation,
-    Node<Exposing> ExposingList);
+    Node<Exposing> ExposingList)
+{
+    private long _cachedHashCode;
+
+    /// <summary>Copies syntax data without its memoized hash.</summary>
+    protected DefaultModuleData(DefaultModuleData original)
+    {
+        ModuleName = original.ModuleName;
+        ExposingTokenLocation = original.ExposingTokenLocation;
+        ExposingList = original.ExposingList;
+    }
+
+    /// <inheritdoc/>
+    public virtual bool Equals(DefaultModuleData? other) =>
+        other is not null && EqualityContract == other.EqualityContract &&
+        EqualityComparer<Node<ModuleName>>.Default.Equals(ModuleName, other.ModuleName) &&
+        ExposingTokenLocation.Equals(other.ExposingTokenLocation) &&
+        EqualityComparer<Node<Exposing>>.Default.Equals(ExposingList, other.ExposingList);
+
+    /// <inheritdoc/>
+    public override int GetHashCode()
+    {
+        if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+            return cached;
+
+        var hash = SyntaxHashCache.Combine(EqualityContract.GetHashCode(), ModuleName);
+        hash = SyntaxHashCache.Combine(hash, ExposingTokenLocation);
+        return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, ExposingList));
+    }
+}
 
 /// <summary>
 /// Data for effect modules including optional command and subscription identifiers.
@@ -237,13 +390,63 @@ public record EffectModuleData(
     Location ExposingTokenLocation,
     Node<Exposing> ExposingList,
     Node<string>? Command,
-    Node<string>? Subscription);
+    Node<string>? Subscription)
+{
+    private long _cachedHashCode;
+
+    /// <summary>Copies syntax data without its memoized hash.</summary>
+    protected EffectModuleData(EffectModuleData original)
+    {
+        ModuleName = original.ModuleName;
+        ExposingTokenLocation = original.ExposingTokenLocation;
+        ExposingList = original.ExposingList;
+        Command = original.Command;
+        Subscription = original.Subscription;
+    }
+
+    /// <inheritdoc/>
+    public virtual bool Equals(EffectModuleData? other) =>
+        other is not null && EqualityContract == other.EqualityContract &&
+        EqualityComparer<Node<ModuleName>>.Default.Equals(ModuleName, other.ModuleName) &&
+        ExposingTokenLocation.Equals(other.ExposingTokenLocation) &&
+        EqualityComparer<Node<Exposing>>.Default.Equals(ExposingList, other.ExposingList) &&
+        EqualityComparer<Node<string>?>.Default.Equals(Command, other.Command) &&
+        EqualityComparer<Node<string>?>.Default.Equals(Subscription, other.Subscription);
+
+    /// <inheritdoc/>
+    public override int GetHashCode()
+    {
+        if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+            return cached;
+
+        var hash = SyntaxHashCache.Combine(EqualityContract.GetHashCode(), ModuleName);
+        hash = SyntaxHashCache.Combine(hash, ExposingTokenLocation);
+        hash = SyntaxHashCache.Combine(hash, ExposingList);
+        hash = SyntaxHashCache.Combine(hash, Command);
+        return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, Subscription));
+    }
+}
 
 /// <summary>
 /// How a module exposes its definitions: all or explicit list.
 /// </summary>
 public abstract record Exposing
 {
+    private protected long _cachedHashCode;
+
+    /// <summary>Creates an exposing list.</summary>
+    protected Exposing() { }
+
+    /// <summary>Copies an exposing list without its memoized hash.</summary>
+    protected Exposing(Exposing original) { }
+
+    /// <inheritdoc/>
+    public virtual bool Equals(Exposing? other) =>
+        other is not null && EqualityContract == other.EqualityContract;
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => EqualityContract.GetHashCode();
+
     /// <summary>Expose everything (represented by .. in Elm).</summary>
     public sealed record All(
         Range Range)
@@ -254,7 +457,19 @@ public abstract record Exposing
         Location OpenParenLocation,
         SeparatedSyntaxList<Node<TopLevelExpose>> Nodes,
         Location CloseParenLocation)
-        : Exposing;
+        : Exposing
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            var hash = SyntaxHashCache.Combine(base.GetHashCode(), OpenParenLocation);
+            hash = SyntaxHashCache.Combine(hash, Nodes);
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, CloseParenLocation));
+        }
+    }
 }
 
 /// <summary>
@@ -295,31 +510,100 @@ public record ExposedType(
 /// </summary>
 public abstract record Declaration
 {
+    private protected long _cachedHashCode;
+
+    /// <summary>Creates a declaration.</summary>
+    protected Declaration() { }
+
+    /// <summary>Copies a declaration without its memoized hash.</summary>
+    protected Declaration(Declaration original) { }
+
+    /// <inheritdoc/>
+    public virtual bool Equals(Declaration? other) =>
+        other is not null && EqualityContract == other.EqualityContract;
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => EqualityContract.GetHashCode();
+
     /// <summary>Function declaration including implementation.</summary>
     public sealed record FunctionDeclaration(
         FunctionStruct Function)
-        : Declaration;
+        : Declaration
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(base.GetHashCode(), Function));
+        }
+    }
 
     /// <summary>Choice type declaration.</summary>
     public sealed record ChoiceTypeDeclaration(
         ChoiceTypeStruct TypeDeclaration)
-        : Declaration;
+        : Declaration
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            return
+                SyntaxHashCache.Store(
+                    ref _cachedHashCode,
+                    SyntaxHashCache.Combine(base.GetHashCode(), TypeDeclaration));
+        }
+    }
 
     /// <summary>Type alias declaration.</summary>
     public sealed record AliasDeclaration(
         TypeAlias TypeAlias)
-        : Declaration;
+        : Declaration
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(base.GetHashCode(), TypeAlias));
+        }
+    }
 
     /// <summary>Port declaration with signature.</summary>
     public sealed record PortDeclaration(
         Location PortTokenLocation,
         Signature Signature)
-        : Declaration;
+        : Declaration
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            var hash = SyntaxHashCache.Combine(base.GetHashCode(), PortTokenLocation);
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, Signature));
+        }
+    }
 
     /// <summary>Infix operator metadata declaration.</summary>
     public sealed record InfixDeclaration(
         Infix Infix)
-        : Declaration;
+        : Declaration
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(base.GetHashCode(), Infix));
+        }
+    }
 }
 
 /// <summary>
@@ -331,7 +615,45 @@ public record Infix(
     Node<int> Precedence,
     Node<string> Operator,
     Location EqualsTokenLocation,
-    Node<string> FunctionName);
+    Node<string> FunctionName)
+{
+    private long _cachedHashCode;
+
+    /// <summary>Copies syntax data without its memoized hash.</summary>
+    protected Infix(Infix original)
+    {
+        InfixTokenLocation = original.InfixTokenLocation;
+        Direction = original.Direction;
+        Precedence = original.Precedence;
+        Operator = original.Operator;
+        EqualsTokenLocation = original.EqualsTokenLocation;
+        FunctionName = original.FunctionName;
+    }
+
+    /// <inheritdoc/>
+    public virtual bool Equals(Infix? other) =>
+        other is not null && EqualityContract == other.EqualityContract &&
+        InfixTokenLocation.Equals(other.InfixTokenLocation) &&
+        EqualityComparer<Node<InfixDirection>>.Default.Equals(Direction, other.Direction) &&
+        EqualityComparer<Node<int>>.Default.Equals(Precedence, other.Precedence) &&
+        EqualityComparer<Node<string>>.Default.Equals(Operator, other.Operator) &&
+        EqualsTokenLocation.Equals(other.EqualsTokenLocation) &&
+        EqualityComparer<Node<string>>.Default.Equals(FunctionName, other.FunctionName);
+
+    /// <inheritdoc/>
+    public override int GetHashCode()
+    {
+        if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+            return cached;
+
+        var hash = SyntaxHashCache.Combine(EqualityContract.GetHashCode(), InfixTokenLocation);
+        hash = SyntaxHashCache.Combine(hash, Direction);
+        hash = SyntaxHashCache.Combine(hash, Precedence);
+        hash = SyntaxHashCache.Combine(hash, Operator);
+        hash = SyntaxHashCache.Combine(hash, EqualsTokenLocation);
+        return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, FunctionName));
+    }
+}
 
 /// <summary>
 /// Type alias with optional documentation, generics and underlying type annotation.
@@ -345,6 +667,20 @@ public record TypeAlias(
     Location EqualsTokenLocation,
     Node<TypeAnnotation> TypeAnnotation)
 {
+    private long _cachedHashCode;
+
+    /// <summary>Copies syntax data without its memoized hash.</summary>
+    protected TypeAlias(TypeAlias original)
+    {
+        Documentation = original.Documentation;
+        TypeTokenLocation = original.TypeTokenLocation;
+        AliasTokenLocation = original.AliasTokenLocation;
+        Name = original.Name;
+        Generics = original.Generics;
+        EqualsTokenLocation = original.EqualsTokenLocation;
+        TypeAnnotation = original.TypeAnnotation;
+    }
+
     /// <inheritdoc/>
     public virtual bool Equals(TypeAlias? other)
     {
@@ -367,6 +703,9 @@ public record TypeAlias(
     /// <inheritdoc/>
     public override int GetHashCode()
     {
+        if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+            return cached;
+
         var hashCode = new System.HashCode();
 
         hashCode.Add(Documentation);
@@ -380,7 +719,7 @@ public record TypeAlias(
         hashCode.Add(EqualsTokenLocation);
         hashCode.Add(TypeAnnotation);
 
-        return hashCode.ToHashCode();
+        return SyntaxHashCache.Store(ref _cachedHashCode, hashCode.ToHashCode());
     }
 }
 
@@ -395,6 +734,19 @@ public record ChoiceTypeStruct(
     Location EqualsTokenLocation,
     SeparatedSyntaxList<Node<ValueConstructor>> Constructors)
 {
+    private long _cachedHashCode;
+
+    /// <summary>Copies syntax data without its memoized hash.</summary>
+    protected ChoiceTypeStruct(ChoiceTypeStruct original)
+    {
+        Documentation = original.Documentation;
+        TypeTokenLocation = original.TypeTokenLocation;
+        Name = original.Name;
+        Generics = original.Generics;
+        EqualsTokenLocation = original.EqualsTokenLocation;
+        Constructors = original.Constructors;
+    }
+
     /// <inheritdoc/>
     public virtual bool Equals(ChoiceTypeStruct? other)
     {
@@ -416,6 +768,9 @@ public record ChoiceTypeStruct(
     /// <inheritdoc/>
     public override int GetHashCode()
     {
+        if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+            return cached;
+
         var hashCode = new System.HashCode();
 
         hashCode.Add(Documentation);
@@ -429,7 +784,7 @@ public record ChoiceTypeStruct(
 
         hashCode.Add(Constructors);
 
-        return hashCode.ToHashCode();
+        return SyntaxHashCache.Store(ref _cachedHashCode, hashCode.ToHashCode());
     }
 }
 
@@ -440,6 +795,15 @@ public record ValueConstructor(
     Node<string> Name,
     IReadOnlyList<Node<TypeAnnotation>> Arguments)
 {
+    private long _cachedHashCode;
+
+    /// <summary>Copies syntax data without its memoized hash.</summary>
+    protected ValueConstructor(ValueConstructor original)
+    {
+        Name = original.Name;
+        Arguments = original.Arguments;
+    }
+
     /// <inheritdoc/>
     public virtual bool Equals(ValueConstructor? other)
     {
@@ -457,6 +821,9 @@ public record ValueConstructor(
     /// <inheritdoc/>
     public override int GetHashCode()
     {
+        if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+            return cached;
+
         var hashCode = new System.HashCode();
 
         hashCode.Add(Name);
@@ -464,7 +831,7 @@ public record ValueConstructor(
         foreach (var item in Arguments)
             hashCode.Add(item);
 
-        return hashCode.ToHashCode();
+        return SyntaxHashCache.Store(ref _cachedHashCode, hashCode.ToHashCode());
     }
 }
 
@@ -473,6 +840,21 @@ public record ValueConstructor(
 /// </summary>
 public abstract record TypeAnnotation
 {
+    private protected long _cachedHashCode;
+
+    /// <summary>Creates a type annotation.</summary>
+    protected TypeAnnotation() { }
+
+    /// <summary>Copies an annotation without its memoized hash.</summary>
+    protected TypeAnnotation(TypeAnnotation original) { }
+
+    /// <inheritdoc/>
+    public virtual bool Equals(TypeAnnotation? other) =>
+        other is not null && EqualityContract == other.EqualityContract;
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => EqualityContract.GetHashCode();
+
     /// <summary>Reference to a generic type variable.</summary>
     public sealed record GenericType(
         string Name)
@@ -501,6 +883,9 @@ public abstract record TypeAnnotation
         /// <inheritdoc/>
         public override int GetHashCode()
         {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
             var hashCode = new System.HashCode();
 
             hashCode.Add(TypeName);
@@ -508,7 +893,7 @@ public abstract record TypeAnnotation
             foreach (var item in TypeArguments)
                 hashCode.Add(item);
 
-            return hashCode.ToHashCode();
+            return SyntaxHashCache.Store(ref _cachedHashCode, hashCode.ToHashCode());
         }
     }
 
@@ -524,7 +909,20 @@ public abstract record TypeAnnotation
     /// </remarks>
     public sealed record Tupled(
         SeparatedSyntaxList<Node<TypeAnnotation>> TypeAnnotations)
-        : TypeAnnotation;
+        : TypeAnnotation
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            return
+                SyntaxHashCache.Store(
+                    ref _cachedHashCode,
+                    SyntaxHashCache.Combine(base.GetHashCode(), TypeAnnotations));
+        }
+    }
 
     /// <summary>Record type annotation.</summary>
     /// <remarks>
@@ -534,7 +932,20 @@ public abstract record TypeAnnotation
     /// </remarks>
     public sealed record Record(
         RecordDefinition RecordDefinition)
-        : TypeAnnotation;
+        : TypeAnnotation
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            return
+                SyntaxHashCache.Store(
+                    ref _cachedHashCode,
+                    SyntaxHashCache.Combine(base.GetHashCode(), RecordDefinition));
+        }
+    }
 
     /// <summary>Record type annotation that extends a generic record.</summary>
     /// <remarks>
@@ -546,21 +957,71 @@ public abstract record TypeAnnotation
         Node<string> GenericName,
         Location PipeLocation,
         Node<RecordDefinition> RecordDefinition)
-        : TypeAnnotation;
+        : TypeAnnotation
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            var hash = SyntaxHashCache.Combine(base.GetHashCode(), GenericName);
+            hash = SyntaxHashCache.Combine(hash, PipeLocation);
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, RecordDefinition));
+        }
+    }
 
     /// <summary>Function type annotation mapping argument to return.</summary>
     public sealed record FunctionTypeAnnotation(
         Node<TypeAnnotation> ArgumentType,
         Location ArrowLocation,
         Node<TypeAnnotation> ReturnType)
-        : TypeAnnotation;
+        : TypeAnnotation
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            var hash = SyntaxHashCache.Combine(base.GetHashCode(), ArgumentType);
+            hash = SyntaxHashCache.Combine(hash, ArrowLocation);
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, ReturnType));
+        }
+    }
 }
 
 /// <summary>
 /// Record type definition listing fields.
 /// </summary>
 public record RecordDefinition(
-    SeparatedSyntaxList<Node<RecordField>> Fields);
+    SeparatedSyntaxList<Node<RecordField>> Fields)
+{
+    private long _cachedHashCode;
+
+    /// <summary>Copies syntax data without its memoized hash.</summary>
+    protected RecordDefinition(RecordDefinition original)
+    {
+        Fields = original.Fields;
+    }
+
+    /// <inheritdoc/>
+    public virtual bool Equals(RecordDefinition? other) =>
+        other is not null && EqualityContract == other.EqualityContract &&
+        EqualityComparer<SeparatedSyntaxList<Node<RecordField>>>.Default.Equals(Fields, other.Fields);
+
+    /// <inheritdoc/>
+    public override int GetHashCode()
+    {
+        if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+            return cached;
+
+        return
+            SyntaxHashCache.Store(
+                ref _cachedHashCode,
+                SyntaxHashCache.Combine(EqualityContract.GetHashCode(), Fields));
+    }
+}
 
 /// <summary>
 /// Single record field definition pairing name with type annotation.
@@ -568,7 +1029,36 @@ public record RecordDefinition(
 public record RecordField(
     Node<string> FieldName,
     Location ColonLocation,
-    Node<TypeAnnotation> FieldType);
+    Node<TypeAnnotation> FieldType)
+{
+    private long _cachedHashCode;
+
+    /// <summary>Copies syntax data without its memoized hash.</summary>
+    protected RecordField(RecordField original)
+    {
+        FieldName = original.FieldName;
+        ColonLocation = original.ColonLocation;
+        FieldType = original.FieldType;
+    }
+
+    /// <inheritdoc/>
+    public virtual bool Equals(RecordField? other) =>
+        other is not null && EqualityContract == other.EqualityContract &&
+        EqualityComparer<Node<string>>.Default.Equals(FieldName, other.FieldName) &&
+        ColonLocation.Equals(other.ColonLocation) &&
+        EqualityComparer<Node<TypeAnnotation>>.Default.Equals(FieldType, other.FieldType);
+
+    /// <inheritdoc/>
+    public override int GetHashCode()
+    {
+        if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+            return cached;
+
+        var hash = SyntaxHashCache.Combine(EqualityContract.GetHashCode(), FieldName);
+        hash = SyntaxHashCache.Combine(hash, ColonLocation);
+        return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, FieldType));
+    }
+}
 
 /// <summary>
 /// Function declaration parts: optional docs and signature plus implementation.
@@ -576,7 +1066,36 @@ public record RecordField(
 public record FunctionStruct(
     Node<string>? Documentation,
     Node<Signature>? Signature,
-    Node<FunctionImplementation> Declaration);
+    Node<FunctionImplementation> Declaration)
+{
+    private long _cachedHashCode;
+
+    /// <summary>Copies syntax data without its memoized hash.</summary>
+    protected FunctionStruct(FunctionStruct original)
+    {
+        Documentation = original.Documentation;
+        Signature = original.Signature;
+        Declaration = original.Declaration;
+    }
+
+    /// <inheritdoc/>
+    public virtual bool Equals(FunctionStruct? other) =>
+        other is not null && EqualityContract == other.EqualityContract &&
+        EqualityComparer<Node<string>?>.Default.Equals(Documentation, other.Documentation) &&
+        EqualityComparer<Node<Signature>?>.Default.Equals(Signature, other.Signature) &&
+        EqualityComparer<Node<FunctionImplementation>>.Default.Equals(Declaration, other.Declaration);
+
+    /// <inheritdoc/>
+    public override int GetHashCode()
+    {
+        if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+            return cached;
+
+        var hash = SyntaxHashCache.Combine(EqualityContract.GetHashCode(), Documentation);
+        hash = SyntaxHashCache.Combine(hash, Signature);
+        return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, Declaration));
+    }
+}
 
 /// <summary>
 /// Function implementation name, argument patterns and body expression.
@@ -587,6 +1106,17 @@ public record FunctionImplementation(
     Location EqualsTokenLocation,
     Node<Expression> Expression)
 {
+    private long _cachedHashCode;
+
+    /// <summary>Copies syntax data without its memoized hash.</summary>
+    protected FunctionImplementation(FunctionImplementation original)
+    {
+        Name = original.Name;
+        Arguments = original.Arguments;
+        EqualsTokenLocation = original.EqualsTokenLocation;
+        Expression = original.Expression;
+    }
+
     /// <inheritdoc/>
     public virtual bool Equals(FunctionImplementation? other)
     {
@@ -606,6 +1136,9 @@ public record FunctionImplementation(
     /// <inheritdoc/>
     public override int GetHashCode()
     {
+        if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+            return cached;
+
         var hashCode = new System.HashCode();
 
         hashCode.Add(Name);
@@ -616,7 +1149,7 @@ public record FunctionImplementation(
         hashCode.Add(EqualsTokenLocation);
         hashCode.Add(Expression);
 
-        return hashCode.ToHashCode();
+        return SyntaxHashCache.Store(ref _cachedHashCode, hashCode.ToHashCode());
     }
 }
 
@@ -626,13 +1159,57 @@ public record FunctionImplementation(
 public record Signature(
     Node<string> Name,
     Location ColonLocation,
-    Node<TypeAnnotation> TypeAnnotation);
+    Node<TypeAnnotation> TypeAnnotation)
+{
+    private long _cachedHashCode;
+
+    /// <summary>Copies syntax data without its memoized hash.</summary>
+    protected Signature(Signature original)
+    {
+        Name = original.Name;
+        ColonLocation = original.ColonLocation;
+        TypeAnnotation = original.TypeAnnotation;
+    }
+
+    /// <inheritdoc/>
+    public virtual bool Equals(Signature? other) =>
+        other is not null && EqualityContract == other.EqualityContract &&
+        EqualityComparer<Node<string>>.Default.Equals(Name, other.Name) &&
+        ColonLocation.Equals(other.ColonLocation) &&
+        EqualityComparer<Node<TypeAnnotation>>.Default.Equals(TypeAnnotation, other.TypeAnnotation);
+
+    /// <inheritdoc/>
+    public override int GetHashCode()
+    {
+        if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+            return cached;
+
+        var hash = SyntaxHashCache.Combine(EqualityContract.GetHashCode(), Name);
+        hash = SyntaxHashCache.Combine(hash, ColonLocation);
+        return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, TypeAnnotation));
+    }
+}
 
 /// <summary>
 /// Pattern matching forms used in destructuring and case expressions.
 /// </summary>
 public abstract record Pattern
 {
+    private protected long _cachedHashCode;
+
+    /// <summary>Creates a pattern.</summary>
+    protected Pattern() { }
+
+    /// <summary>Copies a pattern without its memoized hash.</summary>
+    protected Pattern(Pattern original) { }
+
+    /// <inheritdoc/>
+    public virtual bool Equals(Pattern? other) =>
+        other is not null && EqualityContract == other.EqualityContract;
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => EqualityContract.GetHashCode();
+
     /// <summary>Pattern matching any value.</summary>
     public sealed record AllPattern
         : Pattern;
@@ -674,24 +1251,66 @@ public abstract record Pattern
     /// <summary>Pattern matching a tuple.</summary>
     public sealed record TuplePattern(
         SeparatedSyntaxList<Node<Pattern>> Elements)
-        : Pattern;
+        : Pattern
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(base.GetHashCode(), Elements));
+        }
+    }
 
     /// <summary>Pattern matching a record with specified fields.</summary>
     public sealed record RecordPattern(
         SeparatedSyntaxList<Node<string>> Fields)
-        : Pattern;
+        : Pattern
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(base.GetHashCode(), Fields));
+        }
+    }
 
     /// <summary>List cons pattern separating head and tail.</summary>
     public sealed record UnConsPattern(
         Node<Pattern> Head,
         Location ConsOperatorLocation,
         Node<Pattern> Tail)
-        : Pattern;
+        : Pattern
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            var hash = SyntaxHashCache.Combine(base.GetHashCode(), Head);
+            hash = SyntaxHashCache.Combine(hash, ConsOperatorLocation);
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, Tail));
+        }
+    }
 
     /// <summary>Pattern matching a list of elements.</summary>
     public sealed record ListPattern(
         SeparatedSyntaxList<Node<Pattern>> Elements)
-        : Pattern;
+        : Pattern
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(base.GetHashCode(), Elements));
+        }
+    }
 
     /// <summary>Pattern matching a named constructor with arguments.</summary>
     public sealed record NamedPattern(
@@ -716,6 +1335,9 @@ public abstract record Pattern
         /// <inheritdoc/>
         public override int GetHashCode()
         {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
             var hashCode = new System.HashCode();
 
             hashCode.Add(Name);
@@ -723,7 +1345,7 @@ public abstract record Pattern
             foreach (var item in Arguments)
                 hashCode.Add(item);
 
-            return hashCode.ToHashCode();
+            return SyntaxHashCache.Store(ref _cachedHashCode, hashCode.ToHashCode());
         }
     }
 
@@ -732,12 +1354,34 @@ public abstract record Pattern
         Node<Pattern> Pattern,
         Location AsTokenLocation,
         Node<string> Name)
-        : Pattern;
+        : Pattern
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            var hash = SyntaxHashCache.Combine(base.GetHashCode(), Pattern);
+            hash = SyntaxHashCache.Combine(hash, AsTokenLocation);
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, Name));
+        }
+    }
 
     /// <summary>Pattern wrapped in parentheses.</summary>
     public sealed record ParenthesizedPattern(
         Node<Pattern> Pattern)
-        : Pattern;
+        : Pattern
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(base.GetHashCode(), Pattern));
+        }
+    }
 }
 
 /// <summary>
@@ -748,6 +1392,15 @@ public record QualifiedNameRef(
     string Name)
     : System.IEquatable<QualifiedNameRef>
 {
+    private long _cachedHashCode;
+
+    /// <summary>Copies syntax data without its memoized hash.</summary>
+    protected QualifiedNameRef(QualifiedNameRef original)
+    {
+        ModuleName = original.ModuleName;
+        Name = original.Name;
+    }
+
     /// <inheritdoc/>
     virtual public bool Equals(QualifiedNameRef? obj)
     {
@@ -766,6 +1419,9 @@ public record QualifiedNameRef(
     /// <inheritdoc/>
     public override int GetHashCode()
     {
+        if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+            return cached;
+
         var hash = new System.HashCode();
 
         foreach (var part in ModuleName)
@@ -775,7 +1431,7 @@ public record QualifiedNameRef(
 
         hash.Add(Name);
 
-        return hash.ToHashCode();
+        return SyntaxHashCache.Store(ref _cachedHashCode, hash.ToHashCode());
     }
 
     /// <summary>
@@ -819,6 +1475,21 @@ public record QualifiedNameRef(
 /// </summary>
 public abstract record Expression
 {
+    private protected long _cachedHashCode;
+
+    /// <summary>Creates an expression.</summary>
+    protected Expression() { }
+
+    /// <summary>Copies an expression without its memoized hash.</summary>
+    protected Expression(Expression original) { }
+
+    /// <inheritdoc/>
+    public virtual bool Equals(Expression? other) =>
+        other is not null && EqualityContract == other.EqualityContract;
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => EqualityContract.GetHashCode();
+
     /// <summary>Expression producing unit.</summary>
     public sealed record UnitExpr
         : Expression;
@@ -875,6 +1546,9 @@ public abstract record Expression
         /// <inheritdoc/>
         public override int GetHashCode()
         {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
             var hash = new System.HashCode();
 
             hash.Add(Value);
@@ -887,7 +1561,7 @@ public abstract record Expression
                 }
             }
 
-            return hash.ToHashCode();
+            return SyntaxHashCache.Store(ref _cachedHashCode, hash.ToHashCode());
         }
     }
 
@@ -917,12 +1591,32 @@ public abstract record Expression
     /// <summary>Arithmetic negation of an expression.</summary>
     public sealed record Negation(
         Node<Expression> Expression)
-        : Expression;
+        : Expression
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(base.GetHashCode(), Expression));
+        }
+    }
 
     /// <summary>List literal expression.</summary>
     public sealed record ListExpr(
         SeparatedSyntaxList<Node<Expression>> Elements)
-        : Expression;
+        : Expression
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(base.GetHashCode(), Elements));
+        }
+    }
 
     /// <summary>Reference to a function or value.</summary>
     public sealed record Identifier(
@@ -939,6 +1633,9 @@ public abstract record Expression
         /// <inheritdoc/>
         public override int GetHashCode()
         {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
             var hash = new System.HashCode();
 
             foreach (var part in ModuleName)
@@ -948,7 +1645,7 @@ public abstract record Expression
 
             hash.Add(Name);
 
-            return hash.ToHashCode();
+            return SyntaxHashCache.Store(ref _cachedHashCode, hash.ToHashCode());
         }
 
         /// <summary>
@@ -983,7 +1680,22 @@ public abstract record Expression
         Node<Expression> ThenBlock,
         Location ElseTokenLocation,
         Node<Expression> ElseBlock)
-        : Expression;
+        : Expression
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            var hash = SyntaxHashCache.Combine(base.GetHashCode(), IfTokenLocation);
+            hash = SyntaxHashCache.Combine(hash, Condition);
+            hash = SyntaxHashCache.Combine(hash, ThenTokenLocation);
+            hash = SyntaxHashCache.Combine(hash, ThenBlock);
+            hash = SyntaxHashCache.Combine(hash, ElseTokenLocation);
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, ElseBlock));
+        }
+    }
 
     /// <summary>Prefix operator expression.</summary>
     public sealed record PrefixOperator(
@@ -993,7 +1705,17 @@ public abstract record Expression
     /// <summary>Parenthesized subexpression.</summary>
     public sealed record Parenthesized(
         Node<Expression> Expression)
-        : Expression;
+        : Expression
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(base.GetHashCode(), Expression));
+        }
+    }
 
     /// <summary>Function application expression.</summary>
     public sealed record Application(
@@ -1025,6 +1747,9 @@ public abstract record Expression
         /// <inheritdoc/>
         public override int GetHashCode()
         {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
             var hashCode = new System.HashCode();
 
             hashCode.Add(Function);
@@ -1032,7 +1757,7 @@ public abstract record Expression
             foreach (var item in Arguments)
                 hashCode.Add(item);
 
-            return hashCode.ToHashCode();
+            return SyntaxHashCache.Store(ref _cachedHashCode, hashCode.ToHashCode());
         }
     }
 
@@ -1042,27 +1767,80 @@ public abstract record Expression
         InfixDirection Direction,
         Node<Expression> Left,
         Node<Expression> Right)
-        : Expression;
+        : Expression
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            var hash = SyntaxHashCache.Combine(base.GetHashCode(), Operator);
+            hash = SyntaxHashCache.Combine(hash, Direction);
+            hash = SyntaxHashCache.Combine(hash, Left);
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, Right));
+        }
+    }
 
     /// <summary>Tuple literal expression.</summary>
     public sealed record TupledExpression(
         SeparatedSyntaxList<Node<Expression>> Elements)
-        : Expression;
+        : Expression
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(base.GetHashCode(), Elements));
+        }
+    }
 
     /// <summary>Lambda expression.</summary>
     public sealed record LambdaExpression(
         LambdaStruct Lambda)
-        : Expression;
+        : Expression
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(base.GetHashCode(), Lambda));
+        }
+    }
 
     /// <summary>Case expression matching an expression over patterns.</summary>
     public sealed record CaseExpression(
         CaseBlock CaseBlock)
-        : Expression;
+        : Expression
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(base.GetHashCode(), CaseBlock));
+        }
+    }
 
     /// <summary>Let expression introducing local declarations.</summary>
     public sealed record LetExpression(
         LetBlock Value)
-        : Expression;
+        : Expression
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(base.GetHashCode(), Value));
+        }
+    }
 
     /// <summary>
     /// Let block containing declarations and final expression.
@@ -1073,6 +1851,16 @@ public abstract record Expression
         Location InTokenLocation,
         Node<Expression> Expression)
     {
+        private long _cachedHashCode;
+
+        private LetBlock(LetBlock original)
+        {
+            LetTokenLocation = original.LetTokenLocation;
+            Declarations = original.Declarations;
+            InTokenLocation = original.InTokenLocation;
+            Expression = original.Expression;
+        }
+
         /// <inheritdoc/>
         public bool Equals(LetBlock? other)
         {
@@ -1092,6 +1880,9 @@ public abstract record Expression
         /// <inheritdoc/>
         public override int GetHashCode()
         {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
             var hashCode = new System.HashCode();
 
             hashCode.Add(LetTokenLocation);
@@ -1102,7 +1893,7 @@ public abstract record Expression
             hashCode.Add(InTokenLocation);
             hashCode.Add(Expression);
 
-            return hashCode.ToHashCode();
+            return SyntaxHashCache.Store(ref _cachedHashCode, hashCode.ToHashCode());
         }
     }
 
@@ -1111,29 +1902,87 @@ public abstract record Expression
     /// </summary>
     public abstract record LetDeclaration
     {
+        private protected long _cachedHashCode;
+
+        /// <summary>Creates a let declaration.</summary>
+        protected LetDeclaration() { }
+
+        /// <summary>Copies a declaration without its memoized hash.</summary>
+        protected LetDeclaration(LetDeclaration original) { }
+
+        /// <inheritdoc/>
+        public virtual bool Equals(LetDeclaration? other) =>
+            other is not null && EqualityContract == other.EqualityContract;
+
+        /// <inheritdoc/>
+        public override int GetHashCode() => EqualityContract.GetHashCode();
+
         /// <summary>Local function declaration inside a let block.</summary>
         public sealed record LetFunction(
             FunctionStruct Function)
-            : LetDeclaration;
+            : LetDeclaration
+        {
+            /// <inheritdoc/>
+            public override int GetHashCode()
+            {
+                if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                    return cached;
+
+                return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(base.GetHashCode(), Function));
+            }
+        }
 
         /// <summary>Local binding via pattern destructuring.</summary>
         public sealed record LetDestructuring(
             Node<Pattern> Pattern,
             Location EqualsTokenLocation,
             Node<Expression> Expression)
-            : LetDeclaration;
+            : LetDeclaration
+        {
+            /// <inheritdoc/>
+            public override int GetHashCode()
+            {
+                if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                    return cached;
+
+                var hash = SyntaxHashCache.Combine(base.GetHashCode(), Pattern);
+                hash = SyntaxHashCache.Combine(hash, EqualsTokenLocation);
+                return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, Expression));
+            }
+        }
     }
 
     /// <summary>Record literal expression.</summary>
     public sealed record RecordExpr(
         SeparatedSyntaxList<RecordExprField> Fields)
-        : Expression;
+        : Expression
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(base.GetHashCode(), Fields));
+        }
+    }
 
     /// <summary>Expression accessing a record field.</summary>
     public sealed record RecordAccess(
         Node<Expression> Record,
         Node<string> FieldName)
-        : Expression;
+        : Expression
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            var hash = SyntaxHashCache.Combine(base.GetHashCode(), Record);
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, FieldName));
+        }
+    }
 
     /// <summary>Expression yielding a getter function for a record field.</summary>
     public sealed record RecordAccessFunction(
@@ -1145,7 +1994,19 @@ public abstract record Expression
         Node<string> RecordName,
         Location PipeLocation,
         SeparatedSyntaxList<RecordExprField> Fields)
-        : Expression;
+        : Expression
+    {
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+                return cached;
+
+            var hash = SyntaxHashCache.Combine(base.GetHashCode(), RecordName);
+            hash = SyntaxHashCache.Combine(hash, PipeLocation);
+            return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, Fields));
+        }
+    }
 
     /// <summary>GLSL shader expression [glsl| ... |].</summary>
     public sealed record GLSLExpression(
@@ -1160,7 +2021,36 @@ public abstract record Expression
 public record RecordExprField(
     Node<string> FieldName,
     Location EqualsLocation,
-    Node<Expression> ValueExpr);
+    Node<Expression> ValueExpr)
+{
+    private long _cachedHashCode;
+
+    /// <summary>Copies syntax data without its memoized hash.</summary>
+    protected RecordExprField(RecordExprField original)
+    {
+        FieldName = original.FieldName;
+        EqualsLocation = original.EqualsLocation;
+        ValueExpr = original.ValueExpr;
+    }
+
+    /// <inheritdoc/>
+    public virtual bool Equals(RecordExprField? other) =>
+        other is not null && EqualityContract == other.EqualityContract &&
+        EqualityComparer<Node<string>>.Default.Equals(FieldName, other.FieldName) &&
+        EqualsLocation.Equals(other.EqualsLocation) &&
+        EqualityComparer<Node<Expression>>.Default.Equals(ValueExpr, other.ValueExpr);
+
+    /// <inheritdoc/>
+    public override int GetHashCode()
+    {
+        if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+            return cached;
+
+        var hash = SyntaxHashCache.Combine(EqualityContract.GetHashCode(), FieldName);
+        hash = SyntaxHashCache.Combine(hash, EqualsLocation);
+        return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, ValueExpr));
+    }
+}
 
 
 /// <summary>
@@ -1172,6 +2062,17 @@ public record LambdaStruct(
     Location ArrowLocation,
     Node<Expression> Expression)
 {
+    private long _cachedHashCode;
+
+    /// <summary>Copies syntax data without its memoized hash.</summary>
+    protected LambdaStruct(LambdaStruct original)
+    {
+        BackslashLocation = original.BackslashLocation;
+        Arguments = original.Arguments;
+        ArrowLocation = original.ArrowLocation;
+        Expression = original.Expression;
+    }
+
     /// <inheritdoc/>
     public virtual bool Equals(LambdaStruct? other)
     {
@@ -1191,6 +2092,9 @@ public record LambdaStruct(
     /// <inheritdoc/>
     public override int GetHashCode()
     {
+        if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+            return cached;
+
         var hashCode = new System.HashCode();
 
         hashCode.Add(BackslashLocation);
@@ -1201,7 +2105,7 @@ public record LambdaStruct(
         hashCode.Add(ArrowLocation);
         hashCode.Add(Expression);
 
-        return hashCode.ToHashCode();
+        return SyntaxHashCache.Store(ref _cachedHashCode, hashCode.ToHashCode());
     }
 }
 
@@ -1214,6 +2118,17 @@ public record CaseBlock(
     Location OfTokenLocation,
     IReadOnlyList<Case> Cases)
 {
+    private long _cachedHashCode;
+
+    /// <summary>Copies syntax data without its memoized hash.</summary>
+    protected CaseBlock(CaseBlock original)
+    {
+        CaseTokenLocation = original.CaseTokenLocation;
+        Expression = original.Expression;
+        OfTokenLocation = original.OfTokenLocation;
+        Cases = original.Cases;
+    }
+
     /// <inheritdoc/>
     public virtual bool Equals(CaseBlock? other)
     {
@@ -1233,6 +2148,9 @@ public record CaseBlock(
     /// <inheritdoc/>
     public override int GetHashCode()
     {
+        if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+            return cached;
+
         var hashCode = new System.HashCode();
 
         hashCode.Add(CaseTokenLocation);
@@ -1242,7 +2160,7 @@ public record CaseBlock(
         foreach (var item in Cases)
             hashCode.Add(item);
 
-        return hashCode.ToHashCode();
+        return SyntaxHashCache.Store(ref _cachedHashCode, hashCode.ToHashCode());
     }
 }
 
@@ -1252,4 +2170,33 @@ public record CaseBlock(
 public record Case(
     Node<Pattern> Pattern,
     Location ArrowLocation,
-    Node<Expression> Expression);
+    Node<Expression> Expression)
+{
+    private long _cachedHashCode;
+
+    /// <summary>Copies syntax data without its memoized hash.</summary>
+    protected Case(Case original)
+    {
+        Pattern = original.Pattern;
+        ArrowLocation = original.ArrowLocation;
+        Expression = original.Expression;
+    }
+
+    /// <inheritdoc/>
+    public virtual bool Equals(Case? other) =>
+        other is not null && EqualityContract == other.EqualityContract &&
+        EqualityComparer<Node<Pattern>>.Default.Equals(Pattern, other.Pattern) &&
+        ArrowLocation.Equals(other.ArrowLocation) &&
+        EqualityComparer<Node<Expression>>.Default.Equals(Expression, other.Expression);
+
+    /// <inheritdoc/>
+    public override int GetHashCode()
+    {
+        if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+            return cached;
+
+        var hash = SyntaxHashCache.Combine(EqualityContract.GetHashCode(), Pattern);
+        hash = SyntaxHashCache.Combine(hash, ArrowLocation);
+        return SyntaxHashCache.Store(ref _cachedHashCode, SyntaxHashCache.Combine(hash, Expression));
+    }
+}

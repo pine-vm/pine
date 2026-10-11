@@ -17,6 +17,19 @@ public record File(
     IReadOnlyList<Node<string>> Comments,
     IReadOnlyList<Node<IncompleteDeclaration>> IncompleteDeclarations)
 {
+    private long _cachedHashCode;
+
+    /// <summary>Copies syntax data without carrying over the memoized hash.</summary>
+    protected File(File original)
+    {
+        ModuleDefinition = original.ModuleDefinition;
+        Imports = original.Imports;
+        Declarations = original.Declarations;
+        Comments = original.Comments;
+        IncompleteDeclarations = original.IncompleteDeclarations;
+        AdditionalParseErrors = original.AdditionalParseErrors;
+    }
+
     /// <summary>
     /// Recovered errors that do not replace a declaration, such as an expected declaration at EOF
     /// after a documentation comment. Keeping these separate preserves the comment's syntax node.
@@ -44,6 +57,9 @@ public record File(
     /// <inheritdoc/>
     public override int GetHashCode()
     {
+        if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+            return cached;
+
         var hashCode = new System.HashCode();
 
         hashCode.Add(ModuleDefinition);
@@ -63,6 +79,6 @@ public record File(
         foreach (var item in AdditionalParseErrors)
             hashCode.Add(item);
 
-        return hashCode.ToHashCode();
+        return SyntaxHashCache.Store(ref _cachedHashCode, hashCode.ToHashCode());
     }
 }

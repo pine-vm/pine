@@ -11,6 +11,15 @@ public record Node<T>(
     Range Range,
     T Value)
 {
+    private long _cachedHashCode;
+
+    /// <summary>Copies syntax data without carrying over the memoized hash.</summary>
+    protected Node(Node<T> original)
+    {
+        Range = original.Range;
+        Value = original.Value;
+    }
+
     /// <summary>
     /// Casts the contained value to another type without changing range.
     /// </summary>
@@ -63,6 +72,9 @@ public record Node<T>(
     /// <inheritdoc/>
     public override int GetHashCode()
     {
+        if (SyntaxHashCache.TryGet(ref _cachedHashCode, out var cached))
+            return cached;
+
         var hashCode = new System.HashCode();
 
         hashCode.Add(Range);
@@ -88,6 +100,6 @@ public record Node<T>(
             hashCode.Add(Value);
         }
 
-        return hashCode.ToHashCode();
+        return SyntaxHashCache.Store(ref _cachedHashCode, hashCode.ToHashCode());
     }
 }
