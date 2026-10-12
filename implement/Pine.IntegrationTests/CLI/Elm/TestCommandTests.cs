@@ -1466,7 +1466,7 @@ public class TestCommandTests
                 output.ToString().Should().NotContain("skipped by filter");
             }
 
-            output.ToString().Should().Contain(runningMessage + "\n\n")
+            output.ToString().ReplaceLineEndings("\n").Should().Contain(runningMessage + "\n\n")
                 .And.Contain("TEST RUN PASSED").And.Contain("metrics aggregate all selected tests");
 
             using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(project, "profile.json")));
@@ -2356,7 +2356,7 @@ public class TestCommandTests
                 output.ToString().Should().NotContain("skipped by filter");
             }
 
-            output.ToString().Should().Contain(runningMessage + "\n\n");
+            output.ToString().ReplaceLineEndings("\n").Should().Contain(runningMessage + "\n\n");
             output.ToString().Should().Contain($"Passed:   {expectedPassedCount}");
             output.ToString().Should().Contain($"Failed:   {expectedFailedCount}");
         }
