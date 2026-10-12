@@ -14,7 +14,7 @@ internal static class TestWatchRunner
         Action onReady,
         Action<Exception> onError,
         CancellationToken cancellationToken,
-        Func<string, FileSystemWatcher>? createWatcher = null)
+        Func<string, ITestWatcher>? createWatcher = null)
     {
         var changes =
             Channel.CreateBounded<bool>(
@@ -27,11 +27,11 @@ internal static class TestWatchRunner
 
         Exception? watcherError = null;
 
-        void Changed(object sender, FileSystemEventArgs args) => changes.Writer.TryWrite(true);
+        void Changed() => changes.Writer.TryWrite(true);
 
-        void Failed(object sender, ErrorEventArgs args)
+        void Failed(Exception exception)
         {
-            Interlocked.Exchange(ref watcherError, args.GetException());
+            Interlocked.Exchange(ref watcherError, exception);
             changes.Writer.TryWrite(true);
         }
 
@@ -39,24 +39,14 @@ internal static class TestWatchRunner
         {
             using var watcher =
                 createWatcher?.Invoke(Path.GetFullPath(directory))
-                ?? new FileSystemWatcher(Path.GetFullPath(directory));
-
-            watcher.Filter = "*";
-            watcher.IncludeSubdirectories = true;
-
-            watcher.NotifyFilter =
-                NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite |
-                NotifyFilters.Size | NotifyFilters.CreationTime | NotifyFilters.Attributes | NotifyFilters.Security;
+                ?? new FileSystemTestWatcher(Path.GetFullPath(directory));
 
             watcher.Changed += Changed;
-            watcher.Created += Changed;
-            watcher.Deleted += Changed;
-            watcher.Renamed += Changed;
             watcher.Error += Failed;
 
             try
             {
-                watcher.EnableRaisingEvents = true;
+                watcher.Start();
                 onReady();
 
                 while (true)
@@ -88,11 +78,8 @@ internal static class TestWatchRunner
             }
             finally
             {
-                watcher.EnableRaisingEvents = false;
+                watcher.Stop();
                 watcher.Changed -= Changed;
-                watcher.Created -= Changed;
-                watcher.Deleted -= Changed;
-                watcher.Renamed -= Changed;
                 watcher.Error -= Failed;
             }
         }

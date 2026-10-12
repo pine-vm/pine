@@ -227,7 +227,7 @@ public class TestWatchCommandTests
     {
         using var directory = new TestDirectory();
         using var cancellation = new CancellationTokenSource(s_wait);
-        var watcher = new ErrorTestWatcher(directory.Path);
+        var watcher = new FakeTestWatcher();
         var overflow = new InternalBufferOverflowException("Simulated watcher buffer overflow");
         Exception? reported = null;
         var count = 0;
@@ -236,9 +236,7 @@ public class TestWatchCommandTests
             directory.Path,
             _ =>
             {
-                watcher.EnableRaisingEvents.Should().BeTrue();
-                watcher.IncludeSubdirectories.Should().BeTrue();
-                watcher.Filter.Should().Be("*");
+                watcher.IsStarted.Should().BeTrue();
                 ++count;
                 watcher.RaiseError(overflow);
                 return 0;
@@ -250,7 +248,75 @@ public class TestWatchCommandTests
 
         reported.Should().BeSameAs(overflow);
         watcher.IsDisposed.Should().BeTrue();
+        watcher.IsStarted.Should().BeFalse();
+        watcher.HasSubscriptions.Should().BeFalse();
         count.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Watcher_subscriptions_and_start_precede_ready_and_initial_run()
+    {
+        using var directory = new TestDirectory();
+        using var cancellation = new CancellationTokenSource(s_wait);
+        var watcher = new FakeTestWatcher();
+        var ready = false;
+        var count = 0;
+
+        (await TestWatchRunner.RunAsync(
+            directory.Path,
+            _ =>
+            {
+                ready.Should().BeTrue();
+                watcher.IsStarted.Should().BeTrue();
+
+                if (++count == 1)
+                {
+                    for (var index = 0; index < 20; ++index)
+                        watcher.RaiseChange();
+                }
+                else
+                {
+                    cancellation.Cancel();
+                }
+
+                return 0;
+            },
+            () =>
+            {
+                watcher.IsStarted.Should().BeTrue();
+                watcher.HasSubscriptions.Should().BeTrue();
+                ready = true;
+            },
+            exception => throw new InvalidOperationException("Watcher failed", exception),
+            cancellation.Token,
+            createWatcher: path =>
+            {
+                path.Should().Be(Path.GetFullPath(directory.Path));
+                return watcher;
+            }).WaitAsync(s_wait)).Should().Be(130);
+
+        count.Should().Be(2);
+        watcher.IsDisposed.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Watcher_start_failure_reports_error_without_running_and_disposes()
+    {
+        using var directory = new TestDirectory();
+        var failure = new IOException("Cannot start watcher");
+        var watcher = new FakeTestWatcher(onStart: () => throw failure);
+        Exception? reported = null;
+
+        (await TestWatchRunner.RunAsync(
+            directory.Path,
+            _ => throw new InvalidOperationException("Must not run"),
+            () => throw new InvalidOperationException("Must not announce readiness"),
+            exception => reported = exception,
+            CancellationToken.None,
+            createWatcher: _ => watcher)).Should().Be(1);
+
+        reported.Should().BeSameAs(failure);
+        watcher.IsDisposed.Should().BeTrue();
     }
 
     [Theory]
@@ -374,6 +440,7 @@ public class TestWatchCommandTests
     public async Task Changes_during_each_run_queue_a_followup_without_parallel_execution()
     {
         using var directory = new TestDirectory();
+        var watcher = new FakeTestWatcher();
         using var cancellation = new CancellationTokenSource(s_wait);
         using var firstRelease = new ManualResetEventSlim();
         using var secondRelease = new ManualResetEventSlim();
@@ -409,18 +476,21 @@ public class TestWatchCommandTests
                     {
                         Interlocked.Decrement(ref active);
                     }
-                });
+                },
+                watcher);
 
         try
         {
             (await entered.Reader.ReadAsync().AsTask().WaitAsync(s_wait)).Should().Be(1);
             File.WriteAllText(Path.Combine(directory.Path, "edit.txt"), "first");
+            watcher.RaiseChange();
             await Task.Delay(300);
             count.Should().Be(1);
             firstRelease.Set();
 
             (await entered.Reader.ReadAsync().AsTask().WaitAsync(s_wait)).Should().Be(2);
             File.WriteAllText(Path.Combine(directory.Path, "edit.txt"), "second");
+            watcher.RaiseChange();
             await Task.Delay(300);
             count.Should().Be(2);
             secondRelease.Set();
@@ -442,6 +512,7 @@ public class TestWatchCommandTests
     public async Task Cancellation_stops_idle_or_active_runner_and_disposes_watcher(bool activeRun)
     {
         using var directory = new TestDirectory();
+        var watcher = new FakeTestWatcher();
         using var cancellation = new CancellationTokenSource(s_wait);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var count = 0;
@@ -462,15 +533,20 @@ public class TestWatchCommandTests
                     }
 
                     return 0;
-                });
+                },
+                watcher);
 
         try
         {
             await entered.Task.WaitAsync(s_wait);
             cancellation.Cancel();
             (await watching.WaitAsync(s_wait)).Should().Be(130);
+            watcher.IsDisposed.Should().BeTrue();
+            watcher.IsStarted.Should().BeFalse();
+            watcher.HasSubscriptions.Should().BeFalse();
             File.WriteAllText(Path.Combine(directory.Path, "after-cancellation.txt"), "no run");
-            await Task.Delay(300);
+            watcher.RaiseChange();
+            watcher.RaiseError(new IOException("Ignored after disposal"));
             count.Should().Be(1);
         }
         finally
@@ -484,6 +560,7 @@ public class TestWatchCommandTests
     public async Task Failed_runs_do_not_stop_watching()
     {
         using var directory = new TestDirectory();
+        var watcher = new FakeTestWatcher();
         using var cancellation = new CancellationTokenSource(s_wait);
         var runs = Channel.CreateUnbounded<int>();
         var count = 0;
@@ -497,7 +574,8 @@ public class TestWatchCommandTests
                     var current = Interlocked.Increment(ref count);
                     runs.Writer.TryWrite(current);
                     return current == 1 ? 1 : 2;
-                });
+                },
+                watcher);
 
         try
         {
@@ -506,6 +584,7 @@ public class TestWatchCommandTests
             for (var expected = 2; expected <= 3; ++expected)
             {
                 File.WriteAllText(Path.Combine(directory.Path, "fix.txt"), expected.ToString());
+                watcher.RaiseChange();
                 (await runs.Reader.ReadAsync().AsTask().WaitAsync(s_wait)).Should().Be(expected);
                 watching.IsCompleted.Should().BeFalse();
             }
@@ -527,17 +606,19 @@ public class TestWatchCommandTests
         using var cancellation = new CancellationTokenSource(s_wait);
         var output = new NotifyingWriter();
         var console = CreateConsole(output);
+        var watcher = new FakeTestWatcher();
 
         var watching =
             Task.Run(
-                () => TestCommand.Execute(
+                () => TestCommand.ExecuteCore(
                     directory.Path,
                     colorMode: FormatCommandColorMode.Never,
                     console: console,
                     errorConsole: console,
                     watch: true,
                     offline: true,
-                    cancellationToken: cancellation.Token));
+                    cancellationToken: cancellation.Token,
+                    createWatcher: _ => watcher));
 
         try
         {
@@ -545,6 +626,7 @@ public class TestWatchCommandTests
             (await output.NextContaining("Error:")).Should().Contain("Failed parsing Elm test module");
 
             File.WriteAllText(Path.Combine(directory.Path, "anything.txt"), "trigger another run");
+            watcher.RaiseChange();
             await output.NextContaining("Starting test run...");
             (await output.NextContaining("Error:")).Should().Contain("Failed parsing Elm test module");
             watching.IsCompleted.Should().BeFalse();
@@ -553,6 +635,47 @@ public class TestWatchCommandTests
         {
             cancellation.Cancel();
             (await watching.WaitAsync(s_wait)).Should().Be(130);
+        }
+    }
+
+    [Fact]
+    public async Task Command_reports_watcher_error_and_disposes_while_waiting_for_changes()
+    {
+        using var directory = new TestDirectory();
+        Directory.CreateDirectory(Path.Combine(directory.Path, "tests"));
+        File.WriteAllText(Path.Combine(directory.Path, "elm.json"), ElmJson);
+        File.WriteAllText(Path.Combine(directory.Path, "tests", "Tests.elm"), "not a valid Elm module");
+        using var cancellation = new CancellationTokenSource(s_wait);
+        var output = new NotifyingWriter();
+        var console = CreateConsole(output);
+        var watcher = new FakeTestWatcher();
+
+        var watching =
+            Task.Run(
+                () => TestCommand.ExecuteCore(
+                    directory.Path,
+                    watch: true,
+                    console: console,
+                    errorConsole: console,
+                    offline: true,
+                    cancellationToken: cancellation.Token,
+                    createWatcher: _ => watcher));
+
+        try
+        {
+            await output.NextContaining("Failed parsing Elm test module");
+            watcher.RaiseError(new InternalBufferOverflowException("Simulated watcher buffer overflow"));
+            (await watching.WaitAsync(s_wait)).Should().Be(1);
+
+            (await output.NextContaining("Cannot watch project directory")).Should()
+                .Contain("Simulated watcher buffer overflow");
+
+            watcher.IsDisposed.Should().BeTrue();
+        }
+        finally
+        {
+            cancellation.Cancel();
+            await watching.WaitAsync(s_wait);
         }
     }
 
@@ -567,10 +690,11 @@ public class TestWatchCommandTests
         using var cancellation = new CancellationTokenSource(s_wait);
         var output = new NotifyingWriter();
         var console = CreateConsole(output);
+        var watcher = new FakeTestWatcher();
 
         var watching =
             Task.Run(
-                () => TestCommand.Execute(
+                () => TestCommand.ExecuteCore(
                     directory.Path,
                     colorMode: FormatCommandColorMode.Never,
                     console: console,
@@ -582,14 +706,17 @@ public class TestWatchCommandTests
                     seed: 42,
                     fuzz: 3,
                     workers: 2,
-                    cancellationToken: cancellation.Token));
+                    cancellationToken: cancellation.Token,
+                    createWatcher: _ => watcher));
 
         try
         {
             (await output.NextContaining("Error:")).Should().Contain("Failed parsing Elm test module");
             File.WriteAllText(module, FuzzTests.Replace("Expect.equal value value", "unknownDeclaration"));
+            watcher.RaiseChange();
             await output.NextContaining("Failed compiling Elm tests");
             File.WriteAllText(module, FuzzTests.Replace("Expect.equal value value", "Expect.equal value (value + 1)"));
+            watcher.RaiseChange();
             var failed = await output.NextRun();
             AssertSingleDuration(failed);
 
@@ -597,6 +724,7 @@ public class TestWatchCommandTests
                 .And.Contain("--seed 42 --fuzz 3");
 
             File.WriteAllText(module, FuzzTests);
+            watcher.RaiseChange();
             var passed = await output.NextRun();
             AssertSingleDuration(passed);
 
@@ -604,8 +732,10 @@ public class TestWatchCommandTests
                 .And.NotContain("TEST RUN FAILED").And.Contain("--seed 42 --fuzz 3");
 
             File.WriteAllText(Path.Combine(directory.Path, "elm.json"), "{");
+            watcher.RaiseChange();
             await output.NextContaining("Error:");
             File.WriteAllText(Path.Combine(directory.Path, "elm.json"), ElmJson);
+            watcher.RaiseChange();
             (await output.NextRun()).Should().Contain("TEST RUN PASSED");
             watching.IsCompleted.Should().BeFalse();
         }
@@ -634,10 +764,11 @@ public class TestWatchCommandTests
         using var cancellation = new CancellationTokenSource(s_wait);
         var output = new NotifyingWriter();
         var console = CreateConsole(output);
+        var watcher = new FakeTestWatcher();
 
         var watching =
             Task.Run(
-                () => TestCommand.Execute(
+                () => TestCommand.ExecuteCore(
                     directory.Path,
                     colorMode: FormatCommandColorMode.Never,
                     console: console,
@@ -645,12 +776,14 @@ public class TestWatchCommandTests
                     watch: true,
                     offline: true,
                     filter: "selected",
-                    cancellationToken: cancellation.Token));
+                    cancellationToken: cancellation.Token,
+                    createWatcher: _ => watcher));
 
         try
         {
             (await output.NextContaining("Error:")).Should().Contain("Cannot parse Elm source");
             File.WriteAllText(source, "module Source exposing (zero)\nzero = 0");
+            watcher.RaiseChange();
             (await output.NextRun()).Should().Contain("TEST RUN PASSED");
         }
         finally
@@ -670,6 +803,7 @@ public class TestWatchCommandTests
         using var cancellation = new CancellationTokenSource(s_wait);
         var output = new NotifyingWriter();
         var console = CreateConsole(output);
+        var watcher = new FakeTestWatcher();
 
         var sessions =
             Channel.CreateUnbounded<(ElmTestRunCacheSession Session, int Encoded, int Reduced, int Parsed, int Compiled, int Templates, int Invocations, int Sources, int Canonical)>();
@@ -688,6 +822,7 @@ public class TestWatchCommandTests
                     fuzz: 3,
                     workers: 2,
                     cancellationToken: cancellation.Token,
+                    createWatcher: _ => watcher,
                     onCacheSession: session => sessions.Writer.TryWrite(
                         (session,
                         session.VmCaches.EncodedExpressions.Count,
@@ -712,6 +847,7 @@ public class TestWatchCommandTests
             first.Canonical.Should().BeGreaterThan(0);
             first.Invocations.Should().BeGreaterThan(0);
             File.WriteAllText(Path.Combine(directory.Path, "unrelated.txt"), "trigger without changing tests");
+            watcher.RaiseChange();
             var second = await sessions.Reader.ReadAsync().AsTask().WaitAsync(s_wait);
             (await output.NextRun()).Should().Contain("TEST RUN PASSED");
             second.Session.Should().BeSameAs(first.Session);
@@ -741,10 +877,11 @@ public class TestWatchCommandTests
         using var cancellation = new CancellationTokenSource(s_wait);
         var output = new NotifyingWriter();
         var console = CreateConsole(output);
+        var watcher = new FakeTestWatcher();
 
         var watching =
             Task.Run(
-                () => TestCommand.Execute(
+                () => TestCommand.ExecuteCore(
                     directory.Path,
                     colorMode: FormatCommandColorMode.Never,
                     console: console,
@@ -752,12 +889,14 @@ public class TestWatchCommandTests
                     watch: true,
                     offline: true,
                     evaluationOptions: new() { LoopBudget = 100 },
-                    cancellationToken: cancellation.Token));
+                    cancellationToken: cancellation.Token,
+                    createWatcher: _ => watcher));
 
         try
         {
             var first = await output.NextContaining("Invocations:");
             File.WriteAllText(Path.Combine(directory.Path, "anything.txt"), "rerun after exhausted budget");
+            watcher.RaiseChange();
             var second = await output.NextContaining("Invocations:");
 
             Regex.Match(second, @"loops: [\d_]+").Value
@@ -782,17 +921,19 @@ public class TestWatchCommandTests
         using var cancellation = new CancellationTokenSource(s_wait);
         var output = new NotifyingWriter();
         var console = CreateConsole(output);
+        var watcher = new FakeTestWatcher();
 
         var watching =
             Task.Run(
-                () => TestCommand.Execute(
+                () => TestCommand.ExecuteCore(
                     directory.Path,
                     colorMode: FormatCommandColorMode.Never,
                     console: console,
                     errorConsole: console,
                     watch: true,
                     offline: true,
-                    cancellationToken: cancellation.Token));
+                    cancellationToken: cancellation.Token,
+                    createWatcher: _ => watcher));
 
         try
         {
@@ -814,14 +955,16 @@ public class TestWatchCommandTests
         rendered.Split("VM calls (sum):").Should().HaveCount(3);
     }
 
-    private static Task<int> Start(string directory, CancellationToken token, Func<CancellationToken, int> run) =>
+    private static Task<int> Start(
+        string directory, CancellationToken token, Func<CancellationToken, int> run, ITestWatcher? watcher = null) =>
         Task.Run(
             () => TestWatchRunner.RunAsync(
                 directory,
                 run,
                 () => { },
                 exception => throw new InvalidOperationException("Watcher failed", exception),
-                token));
+                token,
+                createWatcher: watcher is null ? null : _ => watcher));
 
     private static IAnsiConsole CreateConsole(TextWriter writer) =>
         AnsiConsole.Create(
@@ -837,7 +980,7 @@ public class TestWatchCommandTests
         public string Path { get; } =
             System.IO.Path.GetFullPath(
                 System.IO.Path.Combine(
-                    "artifacts",
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "watch-command-tests",
                     Guid.NewGuid().ToString("N")));
 
@@ -846,16 +989,48 @@ public class TestWatchCommandTests
         public void Dispose() => Directory.Delete(Path, recursive: true);
     }
 
-    private sealed class ErrorTestWatcher(string path) : FileSystemWatcher(path)
+    private sealed class FakeTestWatcher(Action? onStart = null) : ITestWatcher
     {
+        public event Action? Changed;
+
+        public event Action<Exception>? Error;
+
+        public bool IsStarted { get; private set; }
+
         public bool IsDisposed { get; private set; }
 
-        public void RaiseError(Exception exception) => OnError(new ErrorEventArgs(exception));
+        public bool HasSubscriptions => Changed is not null || Error is not null;
 
-        protected override void Dispose(bool disposing)
+        public void RaiseChange()
         {
+            if (!IsDisposed)
+                IsStarted.Should().BeTrue();
+
+            Changed?.Invoke();
+        }
+
+        public void RaiseError(Exception exception)
+        {
+            if (!IsDisposed)
+                IsStarted.Should().BeTrue();
+
+            Error?.Invoke(exception);
+        }
+
+        public void Start()
+        {
+            HasSubscriptions.Should().BeTrue();
+            IsStarted = true;
+            onStart?.Invoke();
+        }
+
+        public void Stop() => IsStarted = false;
+
+        public void Dispose()
+        {
+            IsStarted.Should().BeFalse();
+            HasSubscriptions.Should().BeFalse();
             IsDisposed = true;
-            base.Dispose(disposing);
         }
     }
 

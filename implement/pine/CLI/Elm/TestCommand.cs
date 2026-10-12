@@ -406,7 +406,8 @@ public static class TestCommand
         Func<string, IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>? remoteSourceLoader = null,
         CancellationToken cancellationToken = default,
         ElmTestRunCacheSession? cacheSession = null,
-        Action<ElmTestRunCacheSession>? onCacheSession = null)
+        Action<ElmTestRunCacheSession>? onCacheSession = null,
+        Func<string, ITestWatcher>? createWatcher = null)
     {
         FormatCommandColorMode resolvedColorMode;
 
@@ -552,7 +553,8 @@ public static class TestCommand
                             "Watching all files in " + Path.GetFullPath(source) + " recursively. Press Ctrl+C to stop."),
                         onError: exception => errorConsole.Profile.Out.Writer.WriteLine(
                             "Error: Cannot watch project directory '" + source + "': " + exception.Message),
-                        watchCancellation.Token).GetAwaiter().GetResult();
+                        watchCancellation.Token,
+                        createWatcher).GetAwaiter().GetResult();
             }
             finally
             {
