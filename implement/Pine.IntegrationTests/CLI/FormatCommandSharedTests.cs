@@ -1,8 +1,10 @@
 using AwesomeAssertions;
 using Pine.CLI;
+using Pine.Core.IO;
 using Spectre.Console;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using Xunit;
@@ -284,11 +286,11 @@ public class FormatCommandSharedTests
 
         var filePath = Path.Combine(tempDirectory, "Module.elm");
 
-        Directory.CreateDirectory(tempDirectory);
-        File.WriteAllText(filePath, "before");
-
         try
         {
+            Directory.CreateDirectory(tempDirectory);
+            File.WriteAllText(filePath, "before");
+
             var (console, _) = CreateConsole();
             var (errorConsole, _) = CreateConsole();
 
@@ -302,6 +304,7 @@ public class FormatCommandSharedTests
                     skipPrompt: false,
                     verifyNoChanges: false,
                     commandLabel: "elm-format",
+                    colorMode: FormatCommandColorMode.Never,
                     console: console,
                     errorConsole: errorConsole,
                     readLine: () => response);
@@ -313,7 +316,7 @@ public class FormatCommandSharedTests
         }
         finally
         {
-            Directory.Delete(tempDirectory, recursive: true);
+            Filesystem.DeleteLocalDirectoryRecursive(tempDirectory);
         }
     }
 
@@ -360,6 +363,7 @@ public class FormatCommandSharedTests
                 skipPrompt: true,
                 verifyNoChanges: false,
                 commandLabel: "elm-format",
+                colorMode: FormatCommandColorMode.Never,
                 console: console,
                 errorConsole: errorConsole);
 
@@ -368,6 +372,188 @@ public class FormatCommandSharedTests
         errorOutput.ToString().Should().Contain("Error:");
         errorOutput.ToString().Should().Contain("Path not found:");
         errorOutput.ToString().Should().Contain(missingPath);
+    }
+
+
+    [Theory]
+    [InlineData(".cs", false)]
+    [InlineData(".cs", true)]
+    [InlineData(".elm", false)]
+    [InlineData(".elm", true)]
+    public void Execute_filters_workspace_files_from_directories(
+        string extension,
+        bool scanSubdirectory)
+    {
+        var directory = CreateTempDirectory();
+        var sourceDirectory = Path.Combine(directory, "src");
+        var objectDirectory = Path.Combine(sourceDirectory, "obj");
+        var nestedRepository = Path.Combine(sourceDirectory, "nested");
+
+        var sourcePath = Path.Combine(sourceDirectory, "Source" + extension);
+        var trackedPath = Path.Combine(sourceDirectory, "Tracked" + extension);
+        var ignoredPath = Path.Combine(sourceDirectory, "Ignored" + extension);
+        var generatedPath = Path.Combine(objectDirectory, "Generated" + extension);
+        var excludedPath = Path.Combine(sourceDirectory, "Excluded" + extension);
+        var nestedPath = Path.Combine(nestedRepository, "Nested" + extension);
+
+        try
+        {
+            Directory.CreateDirectory(objectDirectory);
+            Directory.CreateDirectory(Path.Combine(nestedRepository, ".git"));
+            InitializeGit(directory);
+
+            File.WriteAllText(Path.Combine(directory, ".gitignore"), "obj/\nIgnored*\nTracked*\n");
+            File.WriteAllText(Path.Combine(directory, ".git", "info", "exclude"), "Excluded*\n");
+            File.WriteAllText(Path.Combine(directory, ".git", "Metadata" + extension), "metadata");
+            File.WriteAllText(sourcePath, "source");
+            File.WriteAllText(trackedPath, "tracked");
+            File.WriteAllText(ignoredPath, "ignored");
+            File.WriteAllText(generatedPath, "generated");
+            File.WriteAllText(excludedPath, "excluded");
+            File.WriteAllText(nestedPath, "nested");
+
+            RunGit(directory, "add", "--force", trackedPath);
+
+            var (console, output) = CreateConsole();
+            var (errorConsole, errorOutput) = CreateConsole();
+
+            var exitCode =
+                FormatCommandShared.Execute(
+                    paths: [scanSubdirectory ? sourceDirectory : directory],
+                    fileExtension: extension,
+                    formatFile: content => new FormatFileResult.Changed("formatted " + content),
+                    skipPrompt: true,
+                    verifyNoChanges: false,
+                    commandLabel: "format",
+                    colorMode: FormatCommandColorMode.Never,
+                    console: console,
+                    errorConsole: errorConsole);
+
+            exitCode.Should().Be(0);
+            errorOutput.ToString().Should().BeEmpty();
+            File.ReadAllText(sourcePath).Should().Be("formatted source");
+            File.ReadAllText(trackedPath).Should().Be("formatted tracked");
+            File.ReadAllText(ignoredPath).Should().Be("ignored");
+            File.ReadAllText(generatedPath).Should().Be("generated");
+            File.ReadAllText(excludedPath).Should().Be("excluded");
+            File.ReadAllText(nestedPath).Should().Be("nested");
+            output.ToString().Should().NotContain("Ignored" + extension);
+            output.ToString().Should().NotContain("Generated" + extension);
+            output.ToString().Should().NotContain("Metadata" + extension);
+        }
+        finally
+        {
+            Filesystem.DeleteLocalDirectoryRecursive(directory);
+        }
+    }
+
+
+    [Theory]
+    [InlineData(".cs", false)]
+    [InlineData(".cs", true)]
+    [InlineData(".elm", false)]
+    [InlineData(".elm", true)]
+    public void Execute_filters_explicit_ignored_workspace_files(
+        string extension,
+        bool verifyNoChanges)
+    {
+        var directory = CreateTempDirectory();
+        var filePath = Path.Combine(directory, "Ignored" + extension);
+
+        try
+        {
+            InitializeGit(directory);
+            File.WriteAllText(Path.Combine(directory, ".gitignore"), "Ignored*\n");
+            File.WriteAllText(filePath, "ignored");
+
+            var (console, output) = CreateConsole();
+            var (errorConsole, _) = CreateConsole();
+
+            var exitCode =
+                FormatCommandShared.Execute(
+                    paths: [filePath],
+                    fileExtension: extension,
+                    formatFile: _ => throw new InvalidOperationException("Ignored files should not be formatted"),
+                    skipPrompt: true,
+                    verifyNoChanges: verifyNoChanges,
+                    commandLabel: "format",
+                    colorMode: FormatCommandColorMode.Never,
+                    console: console,
+                    errorConsole: errorConsole);
+
+            exitCode.Should().Be(0);
+            output.ToString().Should().Contain($"No {extension} files found.");
+            File.ReadAllText(filePath).Should().Be("ignored");
+        }
+        finally
+        {
+            Filesystem.DeleteLocalDirectoryRecursive(directory);
+        }
+    }
+
+
+    [Theory]
+    [InlineData(".cs")]
+    [InlineData(".elm")]
+    public void Execute_preserves_directory_scanning_outside_git(string extension)
+    {
+        var directory = CreateTempDirectory();
+        var objectDirectory = Path.Combine(directory, "obj");
+        var filePath = Path.Combine(objectDirectory, "Source" + extension);
+
+        try
+        {
+            Directory.CreateDirectory(objectDirectory);
+
+            File.WriteAllText(Path.Combine(directory, ".gitignore"), "obj/\n");
+            File.WriteAllText(filePath, "before");
+
+            var (console, _) = CreateConsole();
+            var (errorConsole, _) = CreateConsole();
+
+            var exitCode =
+                FormatCommandShared.Execute(
+                    paths: [directory],
+                    fileExtension: extension,
+                    formatFile: _ => new FormatFileResult.Changed("after"),
+                    skipPrompt: true,
+                    verifyNoChanges: false,
+                    commandLabel: "format",
+                    colorMode: FormatCommandColorMode.Never,
+                    console: console,
+                    errorConsole: errorConsole);
+
+            exitCode.Should().Be(0);
+            File.ReadAllText(filePath).Should().Be("after");
+        }
+        finally
+        {
+            Filesystem.DeleteLocalDirectoryRecursive(directory);
+        }
+    }
+
+
+    [Fact]
+    public void Temp_directory_cleanup_removes_readonly_git_files()
+    {
+        var directory = CreateTempDirectory();
+        var objectDirectory = Path.Combine(directory, ".git", "objects", "80");
+        var objectPath = Path.Combine(objectDirectory, "test-object");
+
+        try
+        {
+            Directory.CreateDirectory(objectDirectory);
+            File.WriteAllText(objectPath, "object");
+            File.SetAttributes(objectPath, File.GetAttributes(objectPath) | FileAttributes.ReadOnly);
+
+            Filesystem.DeleteLocalDirectoryRecursive(directory);
+
+            Directory.Exists(directory).Should().BeFalse();
+        }
+        finally
+        {
+            Filesystem.DeleteLocalDirectoryRecursive(directory);
+        }
     }
 
 
@@ -388,6 +574,72 @@ public class FormatCommandSharedTests
             verifyMode);
 
         output.ToString().Should().Contain(expectedText);
+    }
+
+
+    private static string CreateTempDirectory()
+    {
+        var directory =
+            Path.Combine(
+                Path.GetTempPath(),
+                "pine-format-command-tests",
+                Guid.NewGuid().ToString("N"));
+
+        Directory.CreateDirectory(directory);
+        return directory;
+    }
+
+
+    private static void InitializeGit(string directory)
+    {
+        RunGit(directory, "init", "--quiet", "--template=", "--object-format=sha1");
+        RunGit(directory, "config", "core.excludesFile", "");
+        Directory.CreateDirectory(Path.Combine(directory, ".git", "info"));
+    }
+
+
+    private static void RunGit(string directory, params string[] arguments)
+    {
+        var startInfo =
+            new ProcessStartInfo("git")
+            {
+                WorkingDirectory = directory,
+                UseShellExecute = false,
+                RedirectStandardError = true,
+            };
+
+        // Keep Git configuration and repository overrides local to this child process.
+        foreach (var name in new List<string>(startInfo.Environment.Keys))
+        {
+            if (name.StartsWith("GIT_", StringComparison.OrdinalIgnoreCase))
+            {
+                startInfo.Environment.Remove(name);
+            }
+        }
+
+        startInfo.Environment["GIT_CONFIG_NOSYSTEM"] = "1";
+        startInfo.Environment["GIT_CONFIG_GLOBAL"] = Path.Combine(directory, ".gitconfig-empty");
+
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        using var process =
+            Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Failed to start Git");
+
+        var errorTask = process.StandardError.ReadToEndAsync();
+
+        if (!process.WaitForExit(30_000))
+        {
+            process.Kill(entireProcessTree: true);
+            process.WaitForExit();
+            throw new TimeoutException("Git did not exit within 30 seconds.");
+        }
+
+        var error = errorTask.GetAwaiter().GetResult();
+        process.ExitCode.Should().Be(0, error);
     }
 
 

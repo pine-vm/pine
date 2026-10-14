@@ -318,6 +318,63 @@ public class PineCliOptionsTests
         }
     }
 
+    [Theory]
+    [InlineData("dotnet", ".cs", "class Source{ }\n")]
+    [InlineData("elm", ".elm", "module Source exposing (value)\n\nvalue=1\n")]
+    public void Format_commands_ignore_generated_workspace_files(
+        string command,
+        string extension,
+        string source)
+    {
+        var directory = CreateFormatTestDirectory();
+        var sourcePath = Path.Combine(directory, "Source" + extension);
+        var objectDirectory = Path.Combine(directory, "obj", "Debug", "net10.0");
+        var generatedPath = Path.Combine(objectDirectory, "Generated" + extension);
+        const string GeneratedSource = "This is not valid source code.";
+
+        try
+        {
+            using var git =
+                Process.Start(
+                    new ProcessStartInfo("git")
+                    {
+                        UseShellExecute = false,
+                        ArgumentList = { "-C", directory, "init", "--quiet", "--initial-branch=main" },
+                    })
+                ?? throw new InvalidOperationException("Failed to start Git.");
+
+            git.WaitForExit();
+            git.ExitCode.Should().Be(0);
+
+            File.WriteAllText(Path.Combine(directory, ".gitignore"), "[Bb]in/\n[Oo]bj/\n");
+            File.WriteAllText(sourcePath, source);
+            Directory.CreateDirectory(objectDirectory);
+            File.WriteAllText(generatedPath, GeneratedSource);
+
+            var result = RunPine(command, "format", directory, "--yes", "--color", "never");
+
+            result.ExitCode.Should().Be(0);
+            result.StandardError.Should().BeEmpty();
+            result.StandardOutput.Should().Contain(sourcePath);
+            result.StandardOutput.Should().NotContain(generatedPath);
+            File.ReadAllText(sourcePath).Should().NotBe(source);
+            File.ReadAllText(generatedPath).Should().Be(GeneratedSource);
+
+            var verification =
+                RunPine(command, "format", directory, "--verify-no-changes", "--color", "never");
+
+            verification.ExitCode.Should().Be(0);
+            verification.StandardError.Should().BeEmpty();
+            verification.StandardOutput.Should().Contain("Verification passed.");
+            verification.StandardOutput.Should().NotContain(generatedPath);
+            File.ReadAllText(generatedPath).Should().Be(GeneratedSource);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Fact]
     public void Elm_test_command_exposes_filter_list_workers_and_duration_options()
     {
@@ -453,8 +510,10 @@ public class PineCliOptionsTests
     private static string CreateFormatTestDirectory()
     {
         var directory =
-            Path.GetFullPath(
-                Path.Combine("artifacts", "test-files", "elm-format-" + Guid.NewGuid().ToString("N")));
+            Path.Combine(
+                Path.GetTempPath(),
+                "pine-cli-options-tests",
+                Guid.NewGuid().ToString("N"));
 
         Directory.CreateDirectory(directory);
         return directory;
