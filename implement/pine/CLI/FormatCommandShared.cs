@@ -148,12 +148,16 @@ public static class FormatCommandShared
             try
             {
                 var fullPath = Path.GetFullPath(path);
+                var workingTree = GitCore.GitWorkingTree.Discover(fullPath);
 
                 if (File.Exists(fullPath))
                 {
                     if (fullPath.EndsWith(fileExtension, StringComparison.OrdinalIgnoreCase))
                     {
-                        files.Add(fullPath);
+                        if (workingTree?.ShouldIncludeFile(fullPath) ?? true)
+                        {
+                            files.Add(fullPath);
+                        }
                     }
                     else
                     {
@@ -170,7 +174,8 @@ public static class FormatCommandShared
                         Directory.GetFiles(
                             fullPath,
                             "*" + fileExtension,
-                            SearchOption.AllDirectories));
+                            SearchOption.AllDirectories)
+                        .Where(file => workingTree?.ShouldIncludeFile(file) ?? true));
                 }
                 else
                 {
