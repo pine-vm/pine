@@ -10,6 +10,388 @@ namespace Pine.Core.Tests.Elm.ElmSyntax;
 
 public class ElmSyntaxParserTests
 {
+    [Theory]
+    [InlineData("{-| selected -}\nvalue = 1", "{-| selected -}")]
+    [InlineData("{-| selected -}\n\nvalue = 1", null)]
+    [InlineData("{-| ignored -}\nimport Alfa\n\nvalue = 1", null)]
+    [InlineData("import Alfa\n{-| selected -}\n\nvalue = 1", "{-| selected -}")]
+    [InlineData("{-| ignored -}\n\nimport Alfa\n{-| selected -}\n\nvalue = 1", "{-| selected -}")]
+    [InlineData("{-| ignored -}\n{-| selected -}\nvalue = 1", "{-| selected -}")]
+    [InlineData("{-| selected -} {- ordinary -}\nvalue = 1", "{-| selected -}")]
+    [InlineData("{-| ignored -}\n-- intervening\nvalue = 1", null)]
+    [InlineData("-- earlier\n{-| selected -}\nvalue = 1", "{-| selected -}")]
+    [InlineData("{-| ignored -}\n{- ordinary -}\n{-| selected -}\nvalue = 1", "{-| selected -}")]
+    [InlineData("{-| ignored -}\n{- ordinary\nmultiline -}\nvalue = 1", null)]
+    public void Documentation_attachment_preserves_first_declaration_and_import_boundaries(
+        string body, string? expectedDocumentation)
+    {
+        var source = "module Test exposing (..)\n\n" + body;
+
+        var file =
+            ElmSyntaxParser.ParseModuleText(source)
+            .Extract(error => throw new System.Exception(error.ToString()));
+
+        file.IncompleteDeclarations.Should().BeEmpty();
+        var declaration = file.Declarations.Should().ContainSingle().Which;
+        var function = declaration.Value.Should().BeOfType<Declaration.FunctionDeclaration>().Subject.Function;
+        function.Documentation?.Value.Should().Be(expectedDocumentation);
+
+        var commentCount = body.Split('\n').Count(line => line.StartsWith("{-") || line.StartsWith("--"));
+
+        if (body.Contains("{- ordinary -}", System.StringComparison.Ordinal) && body.StartsWith("{-| selected -}"))
+            commentCount++;
+
+        file.Comments.Should().HaveCount(commentCount - (expectedDocumentation is null ? 0 : 1));
+
+        if (function.Documentation is { } documentation)
+        {
+            documentation.Range.End.Row.Should().BeLessThan(function.Declaration.Range.Start.Row);
+            declaration.Range.Start.Should().Be(documentation.Range.Start);
+            file.Comments.Should().NotContain(comment => comment.Range == documentation.Range);
+        }
+    }
+
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    public void Documentation_attachment_ignores_future_comments_and_preserves_global_order(string newline)
+    {
+        var source =
+            """
+            {-| before module -}
+            module Test exposing (..)
+
+            {-| first -}
+            first = 1
+
+            {-| blocked -}
+            -- intervening
+            second = 2
+
+            -- before later documentation
+            {-| superseded -}
+            {-| third -}
+
+            third = 3
+
+            {-| trailing -}
+            """.Replace("\n", newline);
+
+        var file =
+            ElmSyntaxParser.ParseModuleText(source)
+            .Extract(error => throw new System.Exception(error.ToString()));
+
+        file.IncompleteDeclarations.Should().BeEmpty();
+        file.Declarations.Should().HaveCount(3);
+
+        file.Declarations.Select(node => ((Declaration.FunctionDeclaration)node.Value).Function.Documentation?.Value)
+            .Should().Equal("{-| first -}", null, "{-| third -}");
+
+        file.Comments.Select(comment => comment.Value).Should().Equal(
+            "{-| before module -}",
+            "{-| blocked -}",
+            "-- intervening",
+            "-- before later documentation",
+            "{-| superseded -}",
+            "{-| trailing -}");
+
+        file.Comments.Select(comment => comment.Range.Start.Row).Should().Equal(1, 7, 8, 11, 12, 17);
+    }
+
+    [Fact]
+    public void Documentation_attachment_excludes_only_supported_declaration_kinds()
+    {
+        const string Source =
+            """
+            port module Test exposing (..)
+
+            {-| alias -}
+            type alias Alias = Int
+
+            {-| choice -}
+            type Choice = Choice
+
+            {-| port -}
+            port send : Int -> Cmd msg
+
+            {-| infix -}
+            infix left 6 (+) = add
+
+            {-| function -}
+            add a b = a
+            """;
+
+        var file =
+            ElmSyntaxParser.ParseModuleText(Source)
+            .Extract(error => throw new System.Exception(error.ToString()));
+
+        file.IncompleteDeclarations.Should().BeEmpty();
+        file.Declarations.Should().HaveCount(5);
+
+        ((Declaration.AliasDeclaration)file.Declarations[0].Value).TypeAlias.Documentation!.Value.Should().Be(
+            "{-| alias -}");
+
+        ((Declaration.ChoiceTypeDeclaration)file.Declarations[1].Value).TypeDeclaration.Documentation!.Value
+            .Should().Be("{-| choice -}");
+
+        ((Declaration.FunctionDeclaration)file.Declarations[4].Value).Function.Documentation!.Value.Should().Be(
+            "{-| function -}");
+
+        file.Comments.Select(comment => comment.Value).Should().Equal("{-| port -}", "{-| infix -}");
+    }
+
+    [Theory]
+    [InlineData("", "{-| reused -}")]
+    [InlineData("-- blocker", null)]
+    public void Tree_recovery_preserves_documentation_eligibility_after_an_incomplete_declaration(
+        string interveningComment, string? expectedDocumentation)
+    {
+        var source =
+            string.Join(
+                "\n",
+                "effect module Test where { command = Cmd } exposing (..)",
+                "",
+                "first = 1",
+                "",
+                "{-| reused -}",
+                "broken = )",
+                interveningComment,
+                "second = 2");
+
+        ElmSyntaxDiagnostics.Parse(source).Should().BeEmpty();
+
+        var file =
+            ElmSyntaxParser.ParseModuleText(source)
+            .Extract(error => throw new System.Exception(error.ToString()));
+
+        file.Declarations.Should().HaveCount(2);
+        var second = ((Declaration.FunctionDeclaration)file.Declarations[1].Value).Function;
+        second.Documentation?.Value.Should().Be(expectedDocumentation);
+        second.Declaration.Range.Start.Should().Be(new Location(8, 1));
+        file.IncompleteDeclarations.Should().ContainSingle().Which.Value.OriginalText.Should().Be("broken = )");
+
+        file.IncompleteDeclarations[0].Range.Should().Be(
+            new Range(new(6, 1), new(6, 11)));
+
+        file.Comments.Select(comment => comment.Value).Should().Equal(
+            expectedDocumentation is null ? ["{-| reused -}", "-- blocker"] : []);
+    }
+
+    [Fact]
+    public void Tree_recovery_before_first_complete_declaration_keeps_unattached_documentation_global()
+    {
+        const string Source =
+            """
+            effect module Test where { command = Cmd } exposing (..)
+
+            {-| unattached -}
+            broken = )
+
+            value = 1
+            """;
+
+        var file =
+            ElmSyntaxParser.ParseModuleText(Source)
+            .Extract(error => throw new System.Exception(error.ToString()));
+
+        file.Declarations.Should().ContainSingle();
+        ((Declaration.FunctionDeclaration)file.Declarations[0].Value).Function.Documentation.Should().BeNull();
+        file.IncompleteDeclarations.Should().ContainSingle().Which.Range.Start.Should().Be(new Location(4, 1));
+        file.Comments.Should().ContainSingle().Which.Value.Should().Be("{-| unattached -}");
+    }
+
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    public void Tree_recovery_reconstructs_literal_delimiters_escapes_and_indentation(string newline)
+    {
+        var source =
+            string.Join(
+                newline,
+                "effect module Test where { command = Cmd } exposing (..)",
+                "",
+                "broken =",
+                "    [ \"a\\n\", \"\"\"line",
+                "next\"\"\", '\\u{1F41F}',",
+                "",
+                "after = 1");
+
+        ElmSyntaxDiagnostics.Parse(source).Should().BeEmpty();
+
+        var file =
+            ElmSyntaxParser.ParseModuleText(source)
+            .Extract(error => throw new System.Exception(error.ToString()));
+
+        file.Declarations.Should().ContainSingle().Which.Range.Start.Should().Be(new Location(7, 1));
+
+        file.IncompleteDeclarations.Should().ContainSingle().Which.Value.OriginalText.Should().Be(
+            "broken =\n    [ \"a\\n\", \"\"\"line\nnext\"\"\", '\\u{1F41F}',");
+
+        file.IncompleteDeclarations[0].Range.Should().Be(
+            new Range(new(3, 1), new(5, 22)));
+    }
+
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    [InlineData("\r")]
+    public void Diagnostic_masking_preserves_recovery_ranges_error_order_and_newlines(string newline)
+    {
+        var source =
+            string.Join(
+                newline,
+                "module Test exposing (..)",
+                "",
+                "first = 1",
+                "",
+                "broken = \"\\q\"",
+                "",
+                "wrong : Int",
+                "other = 2",
+                "",
+                "last = 3",
+                "",
+                "{-| trailing one -}",
+                "{-| trailing two -}",
+                "");
+
+        var diagnostics = ElmSyntaxDiagnostics.Parse(source);
+
+        var file =
+            ElmSyntaxParser.ParseModuleText(source)
+            .Extract(error => throw new System.Exception(error.ToString()));
+
+        file.Declarations
+            .Select(
+            node => ((Declaration.FunctionDeclaration)node.Value).Function.Declaration.Value.Name.Value)
+            .Should().Equal("first", "last");
+
+        file.Declarations.Select(node => node.Range.Start.Row).Should().Equal(3, 10);
+        file.IncompleteDeclarations.Select(node => node.Range.Start.Row).Should().Equal(5, 7);
+
+        file.IncompleteDeclarations.Select(node => node.Value.OriginalText)
+            .Should().Equal("broken = \"\\q\"", "wrong : Int\nother = 2");
+
+        file.IncompleteDeclarations.Select(node => node.Value.ParseError)
+            .Should().Equal(
+            diagnostics.Where(diagnostic => !diagnostic.PreserveTree).Select(diagnostic => diagnostic.Error));
+
+        file.IncompleteDeclarations.Select(node => node.Range)
+            .Should().Equal(
+            diagnostics.Where(diagnostic => !diagnostic.PreserveTree).Select(diagnostic => diagnostic.Declaration!));
+
+        file.AdditionalParseErrors.Should().Equal(
+            diagnostics.Where(diagnostic => diagnostic.PreserveTree).Select(diagnostic => diagnostic.Error));
+
+        file.Comments.Select(comment => comment.Value).Should().Equal("{-| trailing one -}", "{-| trailing two -}");
+    }
+
+    [Theory]
+    [InlineData("\"plain 🐟 text\"", "plain 🐟 text", "plain 🐟 text")]
+    [InlineData("\"\"", "", "")]
+    [InlineData("\"prefix\\n\\u{1F41F}suffix\"", "prefix\n🐟suffix", "prefix\\n\\u{1F41F}suffix")]
+    [InlineData("\"\\t\\r\\b\\\\\\\"\"", "\t\r\b\\\"", "\\t\\r\\b\\\\\\\"")]
+    public void String_tokenization_preserves_decoded_values_and_original_escapes(
+        string source, string expectedValue, string expectedSourceText)
+    {
+        var expression =
+            ElmSyntaxParser.ParseExpression(source)
+            .Extract(error => throw new System.Exception(error));
+
+        var literal = expression.Should().BeOfType<ExpressionSyntax.StringLiteral>().Subject;
+        literal.Value.Should().Be(expectedValue);
+        literal.SourceText.Should().Be(expectedSourceText);
+    }
+
+    [Theory]
+    [InlineData("'🐟'", 0x1F41F)]
+    [InlineData("'\\u{1F41F}'", 0x1F41F)]
+    [InlineData("'\\n'", 10)]
+    [InlineData("'x'", 120)]
+    public void Character_tokenization_preserves_supplementary_and_escaped_code_points(string source, int expected)
+    {
+        var expression =
+            ElmSyntaxParser.ParseExpression(source)
+            .Extract(error => throw new System.Exception(error));
+
+        expression.Should().BeOfType<ExpressionSyntax.CharLiteral>().Which.Value.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    [InlineData("\r")]
+    public void Multiline_string_tokenization_normalizes_newlines_without_decoding_source_escapes(string newline)
+    {
+        var source = "\"\"\"prefix" + newline + "🐟\\nend\"\"\"";
+
+        var expression =
+            ElmSyntaxParser.ParseExpression(source)
+            .Extract(error => throw new System.Exception(error));
+
+        var literal = expression.Should().BeOfType<ExpressionSyntax.MultilineStringLiteral>().Subject;
+        literal.Value.Should().Be("prefix\n🐟\nend");
+        literal.SourceLines.Should().Equal("prefix", "🐟\\nend");
+    }
+
+    [Theory]
+    [InlineData("0xCAFE", false)]
+    [InlineData("012345678901234567890123456789", false)]
+    [InlineData("12.3400", true)]
+    [InlineData("1e+09", true)]
+    [InlineData("42E-3", true)]
+    public void Number_tokenization_preserves_literal_spelling(string source, bool isFloat)
+    {
+        var expression =
+            ElmSyntaxParser.ParseExpression(source)
+            .Extract(error => throw new System.Exception(error));
+
+        if (isFloat)
+            expression.Should().BeOfType<ExpressionSyntax.FloatLiteral>().Which.LiteralText.Should().Be(source);
+
+        else
+            expression.Should().BeOfType<ExpressionSyntax.IntegerLiteral>().Which.LiteralText.Should().Be(source);
+    }
+
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    public void Comment_tokenization_preserves_nested_text_and_code_point_locations(string newline)
+    {
+        var source =
+            "module Test exposing (..)" + newline +
+            "-- 🐟 single" + newline +
+            "{- outer" + newline +
+            "   {- 🐟 nested -}" + newline +
+            "-}" + newline +
+            "value = 1";
+
+        var file =
+            ElmSyntaxParser.ParseModuleText(source)
+            .Extract(error => throw new System.Exception(error.ToString()));
+
+        file.IncompleteDeclarations.Should().BeEmpty();
+
+        file.Comments.Select(comment => comment.Value)
+            .Should().Equal("-- 🐟 single", "{- outer" + newline + "   {- 🐟 nested -}" + newline + "-}");
+
+        file.Comments[0].Range.Should().Be(new Range(new(2, 1), new(2, 12)));
+        file.Comments[1].Range.Should().Be(new Range(new(3, 1), new(5, 3)));
+        file.Declarations[0].Range.Start.Should().Be(new Location(6, 1));
+    }
+
+    [Fact]
+    public void GLSL_tokenization_preserves_source_newlines_and_delimiter_like_characters()
+    {
+        const string Shader = "\r\nvoid main() { /* 🐟 */ }\r\n| x ]\n";
+
+        var expression =
+            ElmSyntaxParser.ParseExpression("[glsl|" + Shader + "|]")
+            .Extract(error => throw new System.Exception(error));
+
+        expression.Should().BeOfType<ExpressionSyntax.GLSLExpression>().Which.ShaderCode.Should().Be(Shader);
+    }
+
     [Fact]
     public void Parses_outdented_record_type_argument_in_record_field()
     {
