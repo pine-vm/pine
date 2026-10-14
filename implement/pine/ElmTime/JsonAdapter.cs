@@ -1229,7 +1229,7 @@ public class ElmTimeJsonAdapter
         var maybeStateIncludingShim = applyResponseSpan[0];
 
         var parseAppStateResult =
-            ElmValueInterop.ParseElmMaybeValue<Result<string, PineValue?>>(
+            ElmValueInterop.ParseElmMaybeValue(
                 maybeStateIncludingShim,
                 nothing: () => Result<string, PineValue?>.ok(null),
                 just: value => ParseApplyExposedFunctionOkStateIncludingShim(value).Map<PineValue?>(state => state),

@@ -200,7 +200,7 @@ public record BundledDeclarations(
 
         System.IO.Directory.CreateDirectory(
             System.IO.Path.GetDirectoryName(absolutePath)
-            ?? throw new System.InvalidOperationException("The declaration bundle output path has no parent directory."));
+            ?? throw new InvalidOperationException("The declaration bundle output path has no parent directory."));
 
         System.IO.File.WriteAllBytes(
             absolutePath,

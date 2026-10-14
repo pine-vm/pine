@@ -12,10 +12,10 @@ using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmSyntax;
 
-using Expression = Pine.Core.Elm.ElmSyntax.SyntaxModel.Expression;
-using File = Pine.Core.Elm.ElmSyntax.SyntaxModel.File;
-using Module = Pine.Core.Elm.ElmSyntax.SyntaxModel.Module;
-using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
+using Expression = Core.Elm.ElmSyntax.SyntaxModel.Expression;
+using File = File;
+using Module = Core.Elm.ElmSyntax.SyntaxModel.Module;
+using Range = Core.Elm.ElmSyntax.SyntaxModel.Range;
 
 public class SyntaxModelHashTests
 {

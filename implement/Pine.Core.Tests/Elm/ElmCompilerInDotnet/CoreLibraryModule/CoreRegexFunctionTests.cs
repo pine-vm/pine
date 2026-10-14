@@ -292,7 +292,7 @@ public class CoreRegexFunctionTests
                     .Extract(error => throw new InvalidOperationException(error));
             });
 
-    private static readonly Lazy<Core.Elm.ElmSyntax.ElmSyntaxInterpreter.Prepared> s_prepared =
+    private static readonly Lazy<ElmSyntaxInterpreter.Prepared> s_prepared =
         new(
             () => InterpreterTestHelper.PrepareModulesFromSources(
                 [
