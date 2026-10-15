@@ -362,8 +362,8 @@ public class ElmParserExpressionTests
             InvocationCount: 26
             BuildListCount: 88
             BuildListItemCount: 424
-            LoopIterationCount: 4
-            InstructionCount: 1_105
+            LoopIterationCount: 1
+            InstructionCount: 1_042
             ExpressionTemplatePlanParseCount: 15
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
@@ -412,8 +412,8 @@ public class ElmParserExpressionTests
             InvocationCount: 152
             BuildListCount: 457
             BuildListItemCount: 2_170
-            LoopIterationCount: 15
-            InstructionCount: 4_934
+            LoopIterationCount: 12
+            InstructionCount: 4_871
             ExpressionTemplatePlanParseCount: 15
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
@@ -449,8 +449,8 @@ public class ElmParserExpressionTests
             InvocationCount: 291
             BuildListCount: 938
             BuildListItemCount: 4_401
-            LoopIterationCount: 147
-            InstructionCount: 10_758
+            LoopIterationCount: 129
+            InstructionCount: 10_407
             ExpressionTemplatePlanParseCount: 29
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
@@ -487,8 +487,8 @@ public class ElmParserExpressionTests
             InvocationCount: 572
             BuildListCount: 1_687
             BuildListItemCount: 7_990
-            LoopIterationCount: 125
-            InstructionCount: 18_174
+            LoopIterationCount: 122
+            InstructionCount: 18_111
             ExpressionTemplatePlanParseCount: 15
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
@@ -532,8 +532,8 @@ public class ElmParserExpressionTests
             InvocationCount: 632
             BuildListCount: 1_855
             BuildListItemCount: 8_774
-            LoopIterationCount: 205
-            InstructionCount: 20_622
+            LoopIterationCount: 190
+            InstructionCount: 20_307
             ExpressionTemplatePlanParseCount: 15
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0

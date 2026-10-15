@@ -11,6 +11,7 @@ using System.Text;
 
 using SyntaxModelTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using ElmSyntaxAbstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
+using IrTypes = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -23,8 +24,8 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// <see cref="DefaultLoweredResults"/>, or any alternative lowering wired in via the
 /// generic overload of
 /// <see cref="ElmCompiler.LowerToElmSyntaxForCompilation{LoweredT}"/>). The final
-/// <see cref="ModulesForCompilation"/> always uses the per-module representation
-/// expected by the compilation backend.
+/// <see cref="ModulesForCompilation"/> retains source module grouping and ordering;
+/// <see cref="DeclarationsForEmission"/> supplies qualified IR declarations to the backend.
 /// </summary>
 /// <typeparam name="LoweredT">
 /// Caller-defined lowering payload produced by the lowering delegate passed to
@@ -39,7 +40,7 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// individual stages via <see cref="DefaultLoweredResults"/>.
 /// </param>
 /// <param name="ModulesForCompilation">
-/// The final list of modules passed into the compilation backend, reconstructed
+/// The final list of source modules, reconstructed
 /// from the flat declaration dictionary returned by the caller-provided
 /// <c>extractFilteredDeclarations</c> delegate.
 /// </param>
@@ -48,6 +49,15 @@ public record CompilationPipelineStageResults<LoweredT>(
     LoweredT Lowered,
     IReadOnlyList<ElmSyntaxAbstract.File> ModulesForCompilation)
 {
+    /// <summary>
+    /// Maps the final abstract syntax declarations to the distinct IR consumed by Pine emission.
+    /// Selects numeric/append implementations and lowers closed record reads, including record-pattern reads, to projections.
+    /// </summary>
+    public ImmutableDictionary<DeclQualifiedName, IrTypes.Declaration> DeclarationsForEmission =>
+        LowerToIntermediateRepresentation.Lower(
+            ElmCompiler.FlattenModulesToDeclarationDictionary(ModulesForCompilation))
+        .Declarations;
+
     /// <summary>
     /// Fully qualified declarations selected as compilation roots before dependency filtering.
     /// </summary>
@@ -872,110 +882,30 @@ public partial class ElmCompiler
         CompilationPipelineStageResults<LoweredT> pipelineStageResults,
         bool disableGenericApplicationChainConsolidation)
     {
-        var modulesForCompilation = pipelineStageResults.ModulesForCompilation;
-
+        var declarationsForCompilation = pipelineStageResults.DeclarationsForEmission;
 
         var allFunctions =
-            new Dictionary<DeclQualifiedName, (string moduleName, string functionName, ElmSyntaxAbstract.Declaration.FunctionDeclaration declaration)>();
+            new Dictionary<DeclQualifiedName, (string moduleName, string functionName, IrTypes.Declaration.FunctionDeclaration declaration)>();
 
-        foreach (var elmModuleSyntax in modulesForCompilation)
+        foreach (var (qualifiedName, declaration) in declarationsForCompilation)
         {
-            var moduleName =
-                ElmSyntaxAbstract.Module.GetModuleName(elmModuleSyntax.ModuleDefinition);
-
-            var moduleNameFlattened =
-                string.Join(".", moduleName);
-
-            var declarations =
-                elmModuleSyntax.Declarations
-                .OfType<ElmSyntaxAbstract.Declaration.FunctionDeclaration>();
-
-            foreach (var declaration in declarations)
+            if (declaration is IrTypes.Declaration.FunctionDeclaration function)
             {
-                var functionName =
-                    declaration.Function.Declaration.Name;
-
-                var qualifiedName =
-                    QualifiedNameHelper.ToDeclQualifiedName(moduleName, functionName);
-
-                allFunctions[qualifiedName] = (moduleNameFlattened, functionName, declaration);
+                allFunctions[qualifiedName] =
+                    (string.Join(".", qualifiedName.Namespaces), qualifiedName.DeclName, function);
             }
         }
 
-        // Build function type metadata dictionary for type inference
-        var functionTypes = new Dictionary<DeclQualifiedName, FunctionTypeInfo>();
+        var choiceConstructorArities = new Dictionary<DeclQualifiedName, int>();
 
-        foreach (var (qualifiedName, (_, _, declaration)) in allFunctions)
+        foreach (var (name, declaration) in declarationsForCompilation)
         {
-            functionTypes[qualifiedName] =
-                new FunctionTypeInfo(
-                    TypeInference.GetFunctionReturnType(declaration),
-                    TypeInference.GetFunctionParameterTypes(declaration));
-        }
-
-        var typeAliasDefinitions =
-            ImmutableDictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition>.Empty;
-
-        foreach (var elmModuleSyntax in modulesForCompilation)
-        {
-            var moduleName =
-                string.Join(
-                    ".",
-                    ElmSyntaxAbstract.Module.GetModuleName(elmModuleSyntax.ModuleDefinition));
-
-            typeAliasDefinitions =
-                typeAliasDefinitions.SetItems(
-                    TypeInference.BuildTypeAliasDefinitions(elmModuleSyntax, moduleName));
-        }
-
-        // Build choice type tag types dictionary keyed by qualified constructor name.
-        // We use qualified names to avoid cross-module collisions such as
-        // ParserFast.Good vs Parser.Advanced.Good.
-        var choiceTagTypes =
-            new Dictionary<DeclQualifiedName, FunctionTypeInfo>();
-
-        foreach (var elmModuleSyntax in modulesForCompilation)
-        {
-            var moduleName =
-                ElmSyntaxAbstract.Module.GetModuleName(elmModuleSyntax.ModuleDefinition);
-
-            var typeDeclarations =
-                elmModuleSyntax.Declarations
-                .OfType<ElmSyntaxAbstract.Declaration.ChoiceTypeDeclaration>();
-
-            foreach (var typeDecl in typeDeclarations)
+            if (declaration is IrTypes.Declaration.ChoiceTypeDeclaration choice)
             {
-                var choiceType =
-                    new TypeInference.InferredType.ChoiceType(
-                        moduleName,
-                        typeDecl.TypeDeclaration.Name,
-                        [
-                        .. typeDecl.TypeDeclaration.Generics.Select(
-                            generic => new TypeInference.InferredType.TypeVariable(generic))
-                        ]);
-
-                foreach (var ctor in typeDecl.TypeDeclaration.Constructors)
-                {
-                    var ctorName = ctor.Name;
-
-                    var qualifiedCtorName =
-                        QualifiedNameHelper.ToDeclQualifiedName(moduleName, ctorName);
-
-                    var argTypes = new List<TypeInference.InferredType>();
-
-                    foreach (var argNode in ctor.Arguments)
-                    {
-                        var argType =
-                            TypeInference.ExpandTypeAliases(
-                                TypeInference.TypeAnnotationToInferredType(argNode),
-                                typeAliasDefinitions,
-                                moduleName);
-
-                        argTypes.Add(argType);
-                    }
-
-                    choiceTagTypes[qualifiedCtorName] = new FunctionTypeInfo(choiceType, argTypes);
-                }
+                foreach (var constructor in choice.TypeDeclaration.Constructors)
+                    choiceConstructorArities.Add(
+                        DeclQualifiedName.Create(name.Namespaces, constructor.Name),
+                        constructor.Arguments.Count);
             }
         }
 
@@ -984,22 +914,14 @@ public partial class ElmCompiler
         // where argument order matches the field order in the type alias declaration
         var recordTypeAliasConstructors = new Dictionary<DeclQualifiedName, IReadOnlyList<string>>();
 
-        foreach (var elmModuleSyntax in modulesForCompilation)
+        foreach (var (name, declaration) in declarationsForCompilation)
         {
-            var moduleName =
-                ElmSyntaxAbstract.Module.GetModuleName(elmModuleSyntax.ModuleDefinition);
-
-            var aliasDeclarations =
-                elmModuleSyntax.Declarations
-                .OfType<ElmSyntaxAbstract.Declaration.AliasDeclaration>();
-
-            foreach (var aliasDecl in aliasDeclarations)
+            if (declaration is IrTypes.Declaration.AliasDeclaration aliasDecl)
             {
-                var aliasName = aliasDecl.TypeAlias.Name;
                 var typeAnnotation = aliasDecl.TypeAlias.TypeAnnotation;
 
                 // Check if the type alias is for a record type
-                if (typeAnnotation is ElmSyntaxAbstract.TypeAnnotation.Record recordType)
+                if (typeAnnotation is IrTypes.TypeAnnotation.Record recordType)
                 {
                     // Extract field names in declaration order
                     var fieldNames =
@@ -1007,8 +929,7 @@ public partial class ElmCompiler
                         .Select(f => f.FieldName)
                         .ToList();
 
-                    var qualifiedName = QualifiedNameHelper.ToDeclQualifiedName(moduleName, aliasName);
-                    recordTypeAliasConstructors[qualifiedName] = fieldNames;
+                    recordTypeAliasConstructors[name] = fieldNames;
                 }
             }
         }
@@ -1019,10 +940,8 @@ public partial class ElmCompiler
                 allFunctions,
                 CompiledFunctionsCache: [],
                 PineKernelModuleNames: s_pineKernelModuleNamesDefault,
-                FunctionTypes: functionTypes,
                 RecordTypeAliasConstructors: recordTypeAliasConstructors,
-                ChoiceTagTypes: choiceTagTypes,
-                TypeAliasDefinitions: typeAliasDefinitions);
+                ChoiceConstructorArities: choiceConstructorArities);
 
         // Pre-compute dependency layouts and SCCs for all functions BEFORE compilation
         var directDependencies =
@@ -1121,27 +1040,23 @@ public partial class ElmCompiler
         // Third pass: Build module values from compiled functions
         var compiledModuleEntries = new List<PineValue>();
 
-        foreach (var parsedModule in modulesForCompilation)
+        foreach (var parsedModule in pipelineStageResults.ModulesForCompilation)
         {
+            var moduleName = ElmSyntaxAbstract.Module.GetModuleName(parsedModule.ModuleDefinition);
+
             var moduleNameFlattened =
-                string.Join('.', ElmSyntaxAbstract.Module.GetModuleName(parsedModule.ModuleDefinition));
+                string.Join('.', moduleName);
 
             var exportedDeclarations =
-                parsedModule with
-                {
-                    Declarations =
-                    [
-                    .. parsedModule.Declarations.Where(
-                        declaration =>
-                        GetDeclarationName(declaration) is { } name &&
-                        pipelineStageResults.RootDeclarationNames.Contains(
-                            DeclQualifiedName.Create(
-                                ElmSyntaxAbstract.Module.GetModuleName(parsedModule.ModuleDefinition),
-                                name)))
-                    ]
-                };
+                parsedModule.Declarations
+                .Select(declaration => GetDeclarationName(declaration))
+                .OfType<string>()
+                .Select(name => DeclQualifiedName.Create(moduleName, name))
+                .Where(pipelineStageResults.RootDeclarationNames.Contains)
+                .Select(name => declarationsForCompilation[name])
+                .ToArray();
 
-            if (exportedDeclarations.Declarations.Count is 0)
+            if (exportedDeclarations.Length is 0)
                 continue;
 
             var moduleValue = BuildModuleValue(exportedDeclarations, moduleNameFlattened, compilationContext);
@@ -1172,7 +1087,7 @@ public partial class ElmCompiler
     /// <param name="context">The module compilation context.</param>
     private static ImmutableDictionary<string, IReadOnlySet<string>>
         AnalyzeDirectFunctionDependencies(
-        IReadOnlyDictionary<DeclQualifiedName, (string moduleName, string functionName, ElmSyntaxAbstract.Declaration.FunctionDeclaration declaration)> allFunctions,
+        IReadOnlyDictionary<DeclQualifiedName, (string moduleName, string functionName, IrTypes.Declaration.FunctionDeclaration declaration)> allFunctions,
         ModuleCompilationContext context)
     {
         var allQualifiedFunctionNames =
@@ -1260,6 +1175,19 @@ public partial class ElmCompiler
     public static (IReadOnlyDictionary<string, IReadOnlyList<string>> layouts, IReadOnlyDictionary<string, FunctionScc> functionToScc, IReadOnlyList<FunctionScc> sccsInDependencyOrder)
         ComputeDependencyLayoutsAndSccs(
         IReadOnlyDictionary<DeclQualifiedName, (string moduleName, string functionName, ElmSyntaxAbstract.Declaration.FunctionDeclaration declaration)> allFunctions,
+        ModuleCompilationContext context) =>
+        ComputeDependencyLayoutsAndSccs(
+            allFunctions.ToDictionary(
+                entry => entry.Key,
+                entry => (entry.Value.moduleName,
+                entry.Value.functionName,
+                (IrTypes.Declaration.FunctionDeclaration)IrTypes.ConvertFromAbstractSyntax.FromDeclaration(entry.Value.declaration))),
+            context);
+
+    /// <summary>Pre-computes dependency layouts and SCC mappings for IR functions.</summary>
+    public static (IReadOnlyDictionary<string, IReadOnlyList<string>> layouts, IReadOnlyDictionary<string, FunctionScc> functionToScc, IReadOnlyList<FunctionScc> sccsInDependencyOrder)
+        ComputeDependencyLayoutsAndSccs(
+        IReadOnlyDictionary<DeclQualifiedName, (string moduleName, string functionName, IrTypes.Declaration.FunctionDeclaration declaration)> allFunctions,
         ModuleCompilationContext context) =>
         ComputeDependencyLayoutsAndSccsFromDirectDependencies(
             AnalyzeDirectFunctionDependencies(allFunctions, context));
@@ -1501,14 +1429,14 @@ public partial class ElmCompiler
     /// All functions should have been compiled in the SCC compilation pass.
     /// </summary>
     private static PineValue BuildModuleValue(
-        ElmSyntaxAbstract.File parsedModule,
+        IReadOnlyList<IrTypes.Declaration> moduleDeclarations,
         string currentModuleName,
         ModuleCompilationContext context)
     {
         // Get declarations in this module (for building the final module value)
         var declarations =
-            parsedModule.Declarations
-            .OfType<ElmSyntaxAbstract.Declaration.FunctionDeclaration>()
+            moduleDeclarations
+            .OfType<IrTypes.Declaration.FunctionDeclaration>()
             .ToList();
 
         // Collect compiled functions for this module (in declaration order)
@@ -1596,33 +1524,11 @@ public partial class ElmCompiler
 
             var localBindings = new Dictionary<string, Expression>();
 
-            // Walk the function's signature (if any) to assemble each
-            // parameter's inferred type by index, so record-pattern
-            // parameters can be compiled with the correct field-name
-            // layout for name-based field access.
-            var parameterTypesByIndex = new TypeInference.InferredType?[arguments.Count];
-
-            {
-                if (declaration.Function.Signature is { } sig)
-                {
-                    var currentType = sig.TypeAnnotation;
-
-                    for (var pi = 0; pi < arguments.Count
-                        && currentType is ElmSyntaxAbstract.TypeAnnotation.FunctionTypeAnnotation funcType; pi++)
-                    {
-                        parameterTypesByIndex[pi] =
-                            TypeInference.TypeAnnotationToInferredType(funcType.ArgumentType);
-
-                        currentType = funcType.ReturnType;
-                    }
-                }
-            }
-
             for (var i = 0; i < arguments.Count; i++)
             {
                 var argPattern = arguments[i];
 
-                if (argPattern is ElmSyntaxAbstract.Pattern.VarPattern varPattern)
+                if (argPattern is IrTypes.Pattern.VarPattern varPattern)
                 {
                     parameterNames[varPattern.Name] = i;
                 }
@@ -1633,10 +1539,7 @@ public partial class ElmCompiler
                     var analysis =
                         PatternCompiler.AnalyzePattern(
                             argPattern,
-                            paramExpr,
-                            scrutineeType: parameterTypesByIndex[i],
-                            recordTypeAliasFields: context.RecordTypeAliasConstructors,
-                            choiceTagTypes: context.ChoiceTagTypes);
+                            paramExpr);
 
                     foreach (var kvp in analysis.Bindings)
                     {
@@ -1645,28 +1548,17 @@ public partial class ElmCompiler
                 }
             }
 
-            // Extract parameter types
-            var parameterTypes =
-                ExtractParameterTypes(
-                    declaration.Function,
-                    context.ChoiceTagTypes,
-                    context.FunctionTypes,
-                    moduleName);
-
             // Create expression context
             var expressionContext =
                 new ExpressionCompilationContext(
                     ParameterNames: parameterNames,
-                    ParameterTypes: parameterTypes,
                     CurrentModuleName: moduleName,
                     CurrentFunctionName: declaration.Function.Declaration.Name,
                     LocalBindings: localBindings.Count > 0 ? localBindings : null,
-                    LocalBindingTypes: null,
                     DependencyLayout: sharedLayout,
                     ModuleCompilationContext: context,
                     ParseCache: parseCache,
-                    ReducedExpressionCache: reducedExpressionCache,
-                    FunctionTypes: context.FunctionTypes);
+                    ReducedExpressionCache: reducedExpressionCache);
 
             // Compile the body
             var compileBodyResult = ExpressionCompiler.Compile(functionBody, expressionContext);
@@ -1781,20 +1673,20 @@ public partial class ElmCompiler
     }
 
     private static IReadOnlySet<string> AnalyzeFunctionDependencies(
-        ElmSyntaxAbstract.Expression expression,
+        IrTypes.Expression expression,
         string currentModuleName,
         ModuleCompilationContext context)
     {
         var dependencies = new HashSet<string>();
 
-        void AnalyzeExpression(ElmSyntaxAbstract.Expression expr)
+        void AnalyzeExpression(IrTypes.Expression expr)
         {
             switch (expr)
             {
-                case ElmSyntaxAbstract.Expression.Application application:
+                case IrTypes.Expression.Application application:
 
                     if (application.Arguments.Count >= 1 &&
-                        application.Function is ElmSyntaxAbstract.Expression.Identifier funcRef)
+                        application.Function is IrTypes.Expression.Identifier funcRef)
                     {
                         // Skip Pine_kernel functions
                         if (funcRef.QualifiedName.Namespaces.Count is 1 &&
@@ -1846,36 +1738,40 @@ public partial class ElmCompiler
 
                     break;
 
-                case ElmSyntaxAbstract.Expression.OperatorApplication operatorApp:
+                case IrTypes.Expression.OperatorApplication operatorApp:
                     AnalyzeExpression(operatorApp.Left);
                     AnalyzeExpression(operatorApp.Right);
                     return;
 
-                case ElmSyntaxAbstract.Expression.IfBlock ifBlock:
+                case IrTypes.Expression.IfBlock ifBlock:
                     AnalyzeExpression(ifBlock.Condition);
                     AnalyzeExpression(ifBlock.ThenBlock);
                     AnalyzeExpression(ifBlock.ElseBlock);
                     return;
 
-                case ElmSyntaxAbstract.Expression.LetExpression letExpr:
+                case IrTypes.Expression.LetExpression letExpr:
                     foreach (var decl in letExpr.Declarations)
                     {
                         switch (decl)
                         {
-                            case ElmSyntaxAbstract.LetDeclaration.LetFunction letFunc:
+                            case IrTypes.LetDeclaration.LetFunction letFunc:
                                 AnalyzeExpression(letFunc.Function.Declaration.Expression);
                                 break;
 
-                            case ElmSyntaxAbstract.LetDeclaration.LetDestructuring letDestr:
+                            case IrTypes.LetDeclaration.LetDestructuring letDestr:
                                 AnalyzeExpression(letDestr.Expression);
                                 break;
+
+                            default:
+                                throw new NotImplementedException(
+                                    $"{nameof(AnalyzeFunctionDependencies)} does not handle let declaration variant: {decl.GetType().Name}");
                         }
                     }
 
                     AnalyzeExpression(letExpr.Expression);
                     return;
 
-                case ElmSyntaxAbstract.Expression.ListExpr listExpr:
+                case IrTypes.Expression.ListExpr listExpr:
                     foreach (var elem in listExpr.Elements)
                     {
                         AnalyzeExpression(elem);
@@ -1883,11 +1779,11 @@ public partial class ElmCompiler
 
                     return;
 
-                case ElmSyntaxAbstract.Expression.Negation negation:
+                case IrTypes.Expression.Negation negation:
                     AnalyzeExpression(negation.Expression);
                     return;
 
-                case ElmSyntaxAbstract.Expression.CaseExpression caseExpr:
+                case IrTypes.Expression.CaseExpression caseExpr:
                     AnalyzeExpression(caseExpr.Expression);
 
                     foreach (var caseItem in caseExpr.Cases)
@@ -1897,7 +1793,7 @@ public partial class ElmCompiler
 
                     return;
 
-                case ElmSyntaxAbstract.Expression.TupledExpression tupledExpr:
+                case IrTypes.Expression.TupledExpression tupledExpr:
                     foreach (var elem in tupledExpr.Elements)
                     {
                         AnalyzeExpression(elem);
@@ -1905,7 +1801,7 @@ public partial class ElmCompiler
 
                     return;
 
-                case ElmSyntaxAbstract.Expression.RecordExpr recordExpr:
+                case IrTypes.Expression.RecordExpr recordExpr:
                     foreach (var field in recordExpr.Fields)
                     {
                         AnalyzeExpression(field.Value);
@@ -1913,7 +1809,7 @@ public partial class ElmCompiler
 
                     return;
 
-                case ElmSyntaxAbstract.Expression.RecordUpdateExpression recordUpdateExpr:
+                case IrTypes.Expression.RecordUpdateExpression recordUpdateExpr:
                     foreach (var setter in recordUpdateExpr.Fields)
                     {
                         AnalyzeExpression(setter.Value);
@@ -1921,15 +1817,19 @@ public partial class ElmCompiler
 
                     return;
 
-                case ElmSyntaxAbstract.Expression.RecordAccess recordAccess:
+                case IrTypes.Expression.RecordAccess recordAccess:
                     AnalyzeExpression(recordAccess.Record);
                     return;
 
-                case ElmSyntaxAbstract.Expression.LambdaExpression lambdaExpr:
+                case IrTypes.Expression.ProjectItem projection:
+                    AnalyzeExpression(projection.Value);
+                    return;
+
+                case IrTypes.Expression.LambdaExpression lambdaExpr:
                     AnalyzeExpression(lambdaExpr.Expression);
                     return;
 
-                case ElmSyntaxAbstract.Expression.Identifier funcOrValue:
+                case IrTypes.Expression.Identifier funcOrValue:
 
                     if (funcOrValue.QualifiedName.DeclName.Length < 0)
                     {
@@ -1974,19 +1874,19 @@ public partial class ElmCompiler
 
                     return;
 
-                case ElmSyntaxAbstract.Expression.PrefixOperator:
-                case ElmSyntaxAbstract.Expression.UnitExpr:
-                case ElmSyntaxAbstract.Expression.StringLiteral:
-                case ElmSyntaxAbstract.Expression.IntegerLiteral:
-                case ElmSyntaxAbstract.Expression.CharLiteral:
-                case ElmSyntaxAbstract.Expression.FloatLiteral:
-                case ElmSyntaxAbstract.Expression.RecordAccessFunction:
-                case ElmSyntaxAbstract.Expression.GLSLExpression:
+                case IrTypes.Expression.PrefixOperator:
+                case IrTypes.Expression.UnitExpr:
+                case IrTypes.Expression.StringLiteral:
+                case IrTypes.Expression.IntegerLiteral:
+                case IrTypes.Expression.CharLiteral:
+                case IrTypes.Expression.FloatLiteral:
+                case IrTypes.Expression.RecordAccessFunction:
+                case IrTypes.Expression.GLSLExpression:
                     return;
 
                 default:
                     throw new NotImplementedException(
-                        $"Unhandled expression type: {expr.GetType().Name}");
+                        $"{nameof(AnalyzeFunctionDependencies)} does not handle expression variant: {expr.GetType().Name}");
             }
         }
 

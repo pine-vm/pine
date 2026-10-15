@@ -138,7 +138,7 @@ public class OptimizationOpportunityFinderTests
     }
 
     [Fact]
-    public void Reports_missing_parameter_type_provenance_with_semantic_layout()
+    public void Reports_open_record_generic_body_even_when_a_caller_supplies_a_closed_record()
     {
         var rendered =
             FindAndRender(
@@ -156,7 +156,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.getName: record-access: name [provenance: missing-parameter-type; semantic-layout: { name : String }]
+            Test.getName: record-access: name [provenance: open-record-source-type]
             """.Trim());
     }
 
@@ -2212,17 +2212,23 @@ public class OptimizationOpportunityFinderTests
 
         renderedCounts.Should().Be(
             """
+            ElmSyntax.Abstract.ConvertFromConcrete: RecordAccess: 27
             ElmSyntax.Abstract.ConvertFromConcrete: BasicsCompare: 1
             ElmSyntax.Abstract.ConvertFromConcrete: RootLevelChoiceTagWrapper: 6
             ElmSyntax.Concrete.Node: HigherOrderParameter_Direct: 2
             ElmSyntax.Concrete.Node: RootLevelChoiceTagWrapper: 8
+            ElmSyntax.Concrete.Parser.FromString: RecordAccess: 14
             ElmSyntax.Concrete.Parser.FromString: RootLevelChoiceTagWrapper: 113
             ElmSyntax.Concrete.Parser.StringParsing: RootLevelChoiceTagWrapper: 36
+            ElmSyntax.Concrete.Parser.TokensFromString: RecordAccess: 2
             ElmSyntax.Concrete.Parser.TokensFromString: RootLevelChoiceTagWrapper: 17
+            ElmSyntax.Concrete.SourceLookup: RecordAccess: 26
             ElmSyntax.Concrete.SourceLookup: RootLevelChoiceTagWrapper: 15
+            LanguageService: RecordAccess: 106
             LanguageService: RecordUpdate: 4
             LanguageService: BasicsCompare: 3
             LanguageService: RootLevelChoiceTagWrapper: 32
+            LanguageServiceAnalysis: RecordAccess: 21
             LanguageServiceAnalysis: RootLevelChoiceTagWrapper: 7
             """.Trim());
 

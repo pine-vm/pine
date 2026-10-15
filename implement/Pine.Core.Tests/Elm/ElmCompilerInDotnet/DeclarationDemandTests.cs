@@ -11,6 +11,7 @@ using System.Linq;
 using Xunit;
 
 using Syntax = Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using Abstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -21,6 +22,74 @@ public class DeclarationDemandTests
 
     private static DeclQualifiedName Name(string module, string declaration) =>
         DeclQualifiedName.Create(module.Split('.'), declaration);
+
+    [Fact]
+    public void IR_declaration_emission_preserves_module_and_export_order_without_exporting_dependencies()
+    {
+        var sources =
+            Sources(
+                """
+                module Zeta exposing (..)
+                import Supporting
+                zulu person = Supporting.read person
+                alpha person = person.name
+                """,
+                """
+                module Supporting exposing (..)
+                read person = hidden person
+                hidden person = person.name
+                """);
+
+        var roots = new[] { Name("Zeta", "alpha"), Name("Supporting", "read"), Name("Zeta", "zulu") };
+
+        var result =
+            ElmCompiler.CompileInteractiveEnvironment(
+                sources,
+                roots,
+                syntaxOptimization: ElmCompilerTestHelper.SyntaxOptimizationFromDisableInlining(true))
+            .Extract(error => throw new Exception(error));
+
+        var environment =
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(result.compiledEnvValue)
+            .Extract(error => throw new Exception(error));
+
+        var expectedExports =
+            result.pipelineStageResults.ModulesForCompilation
+            .Select(
+                module =>
+                (Module: string.Join(".", Abstract.Module.GetModuleName(module.ModuleDefinition)),
+                Names: module.Declarations.OfType<Abstract.Declaration.FunctionDeclaration>()
+                .Select(function => function.Function.Declaration.Name)
+                .Where(
+                    name =>
+                    roots.Contains(
+                        Name(string.Join(".", Abstract.Module.GetModuleName(module.ModuleDefinition)), name)))
+                .ToArray()))
+            .Where(module => module.Names.Length > 0)
+            .ToArray();
+
+        environment.Modules.Select(module => module.moduleName)
+            .Should().Equal(expectedExports.Select(module => module.Module));
+
+        foreach (var (module, names) in expectedExports)
+        {
+            var encodedModule = environment.Modules.Single(entry => entry.moduleName == module).moduleValue;
+            var entries = encodedModule.Should().BeOfType<PineValue.ListValue>().Subject.Items.ToArray();
+
+            var exportedNames =
+                entries.Select(
+                    entry => StringEncoding.StringFromValue(
+                        entry.Should().BeOfType<PineValue.ListValue>().Subject.Items.Span[0])
+                    .Extract(error => throw new Exception(error)));
+
+            exportedNames.Should().Equal(names);
+        }
+
+        result.pipelineStageResults.DeclarationsForEmission.Should().ContainKey(Name("Supporting", "hidden"));
+
+        environment.Modules.SelectMany(module => module.moduleContent.FunctionDeclarations.Keys).Should().NotContain(
+            "hidden");
+    }
 
     [Fact]
     public void Declaration_demand_ignores_unrelated_naming_errors_and_missing_imports()

@@ -2,6 +2,63 @@
 
 For semantics of the Elm programming language, consult the file 'elm-programming-language-semantics.md'
 
+## Elm Compiler Intermediate Representation
+
+Pine emission consumes the distinct model in `IntermediateRepresentation`, not
+`ElmSyntaxAbstract`. The IR copies the abstract syntax records except `File`, including
+normalized literals, precomputed Pine values, and structural equality, and adds
+`Expression.ProjectItem(Value, Index)`.
+
+`ConvertFromAbstractSyntax` maps declarations recursively without lowering or changing
+their encodings. IR programs are dictionaries keyed by `DeclQualifiedName`, not source
+files. `CompilationPipelineStageResults.ModulesForCompilation` retains the abstract
+syntax used by existing transformation and reporting APIs, including module grouping
+and declaration order for packaging the emitted environment.
+`DeclarationsForEmission` runs `LowerToIntermediateRepresentation` on the AST declarations.
+This conversion traverses AST expressions and patterns, queries the AST-facing inference
+entry points, and emits explicit record projections and numeric/append implementations.
+It never infers types from the IR it generates.
+Imports, source paths, and root/export selection remain outside the IR program.
+Expression compilation, pattern compilation, and dependency analysis operate on IR nodes.
+Type inference operates exclusively on `ElmSyntaxAbstract`; it has no IR entry points
+or AST-to-IR adapters. Expression and pattern emission have no semantic type contexts.
+Only calling-convention and encoding metadata, such as constructor arities and record
+constructor field order, remains in the backend. The AST data model is unchanged; source
+locations can be mapped by structured AST paths, without source-origin or AST-to-IR
+correspondence tables.
+
+`BuiltinOperatorLowering` shares its integer arithmetic and list/string append rules with
+the conversion boundary. These implementation choices also run when syntax optimization
+is disabled. Unresolved numeric and append operations retain their generic implementations;
+Pine emission does not specialize them from parameter or local binding types.
+
+`ProjectItem` reads a non-negative, zero-based physical list index and emits
+`head (skip index value)`. Its operand is not restricted to Elm tuples: a record
+using the existing tagged and labeled encoding has different physical indices
+from a plain tuple. Closed record field reads become `ProjectItem` nodes using
+the ordinally sorted record layout. Record-pattern reads in parameters, let
+bindings, and case branches become explicit projections or generic reads; direct
+applications of `.field` are lowered in the same way. Open-record function bodies
+are not closed merely because their callers supply closed records. Escaped
+accessor functions remain generic until function specialization handles them.
+Named aliases retain the compiler's conservative canonical-provenance boundary:
+untrusted imported aliases remain generic and are reported rather than assigning
+potentially incorrect field offsets.
+
+Closed record updates become physical tuple construction: the original tag, labels,
+and unchanged values are read with `ProjectItem`, and updated values replace their
+sorted slots. Every residual `RecordUpdateExpression` uses the generic runtime helper.
+Record patterns are eliminated recursively during conversion; the backend rejects an
+unlowered record pattern instead of silently introducing generic reads. Other patterns
+retain their type-independent matching and deconstruction behavior.
+
+Every residual `RecordAccess` node emits generic lookup; the emitter no longer
+independently chooses a static implementation. `FindGenericRecordAccessOpportunities`
+inventories these nodes and escaped accessors in the lowered IR, including reads
+inside generated bindings. The source-oriented finder runs the same lowering
+stage for its record-access category and retains the AST for its other categories.
+Tuple-pattern lowering and record representation changes remain separate work.
+
 ## Entry Point
 
 The entry point for compilation is the declaration in one of the Elm modules in the source code that supports integration with and connection to the outside world. Compiler applications often expose an API that offers selecting a module as an entry point. In these cases, the compiler application applies a default selection to pick a declaration from that module. Traditionally, that was simply the one declaration named main.

@@ -1,6 +1,6 @@
 using Pine.Core.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
+using SyntaxTypes = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -19,16 +19,6 @@ public class OperatorCompiler
         SyntaxTypes.Expression.OperatorApplication operatorApp,
         ExpressionCompilationContext context)
     {
-        // Use type inference to determine the operation type
-        var expressionType =
-            TypeInference.InferExpressionType(
-                operatorApp,
-                context.ParameterNames,
-                context.ParameterTypes,
-                context.LocalBindingTypes,
-                context.CurrentModuleName,
-                context.FunctionTypes);
-
         var leftResult = ExpressionCompiler.Compile(operatorApp.Left, context);
 
         if (leftResult.IsErrOrNull() is { } leftErr)
@@ -59,15 +49,6 @@ public class OperatorCompiler
         {
             throw new System.NotImplementedException(
                 "Unexpected return type compiling right: " + rightResult.GetType());
-        }
-
-        if (expressionType is TypeInference.InferredType.IntType)
-        {
-            return
-                CompileIntegerOperator(
-                    operatorApp,
-                    leftCompiled,
-                    rightCompiled);
         }
 
         if (operatorApp.Operator is "//")
@@ -174,29 +155,4 @@ public class OperatorCompiler
         return CompilationError.UnsupportedOperator(operatorApp.Operator);
     }
 
-    private static Result<CompilationError, Expression> CompileIntegerOperator(
-        SyntaxTypes.Expression.OperatorApplication operatorApp,
-        Expression leftCompiled,
-        Expression rightCompiled)
-    {
-
-        return
-            operatorApp.Operator switch
-            {
-                "+" =>
-                BuiltinHelpers.ApplyBuiltinIntAdd([leftCompiled, rightCompiled]),
-
-                "-" =>
-                CoreBasics.Int_sub(leftCompiled, rightCompiled),
-
-                "*" =>
-                BuiltinHelpers.ApplyBuiltinIntMul([leftCompiled, rightCompiled]),
-
-                "//" =>
-                CoreBasics.Int_div(leftCompiled, rightCompiled),
-
-                _ =>
-                CompilationError.UnsupportedOperator(operatorApp.Operator)
-            };
-    }
 }

@@ -240,11 +240,11 @@ public class ElmParserFileTests
 
         result.counts.ShouldBeWithDiff(
             """
-            InvocationCount: 184
+            InvocationCount: 176
             BuildListCount: 328
             BuildListItemCount: 1_771
-            LoopIterationCount: 103
-            InstructionCount: 5_342
+            LoopIterationCount: 99
+            InstructionCount: 5_168
             ExpressionTemplatePlanParseCount: 20
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
@@ -271,11 +271,11 @@ public class ElmParserFileTests
 
         result.counts.ShouldBeWithDiff(
             """
-            InvocationCount: 238
+            InvocationCount: 235
             BuildListCount: 411
             BuildListItemCount: 2_188
-            LoopIterationCount: 107
-            InstructionCount: 6_651
+            LoopIterationCount: 106
+            InstructionCount: 6_599
             ExpressionTemplatePlanParseCount: 22
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0

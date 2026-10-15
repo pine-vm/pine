@@ -243,7 +243,7 @@ public enum RecordOperationProvenance
 /// any predicate they need with a LINQ <c>Where</c>.
 /// </para>
 /// </summary>
-public static class OptimizationOpportunityFinder
+public static partial class OptimizationOpportunityFinder
 {
     private sealed record ExpressionTypeContext(
         DeclQualifiedName CurrentFunctionName,
@@ -328,6 +328,23 @@ public static class OptimizationOpportunityFinder
     public static ImmutableHashSet<Opportunity> FindOptimizationOpportunities(
         IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
         IReadOnlyCollection<DeclQualifiedName>? restrictToReachableFromEntryPoints = null)
+    {
+        var lowered =
+            LowerToIntermediateRepresentation.Lower(declarations);
+
+        return
+            FindSourceOptimizationOpportunities(declarations, restrictToReachableFromEntryPoints)
+            .Concat(
+                FindGenericRecordAccessOpportunities(
+                    lowered.Declarations,
+                    restrictToReachableFromEntryPoints,
+                    lowered.GenericAccessEvidence))
+            .ToImmutableHashSet();
+    }
+
+    private static ImmutableHashSet<Opportunity> FindSourceOptimizationOpportunities(
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+        IReadOnlyCollection<DeclQualifiedName>? restrictToReachableFromEntryPoints)
     {
         // Build the top-level arity map once. Only function declarations
         // contribute — type aliases / custom types / ports / infix
@@ -1764,23 +1781,6 @@ public static class OptimizationOpportunityFinder
         switch (expression)
         {
             case SyntaxTypes.Expression.RecordAccess recordAccess:
-                var recordAccessType =
-                    InferExpressionType(recordAccess.Record, expressionTypeContext);
-
-                if (GetRecordOperationProvenance(recordAccess.Record, expressionTypeContext) is { } provenance &&
-                    !(provenance is RecordOperationProvenance.UnresolvedNamedAlias &&
-                    recordAccessType is TypeInference.InferredType.RecordType))
-                {
-                    MaybeAdd(
-                        OpportunityCategory.RecordAccess,
-                        recordAccess.FieldName,
-                        containing,
-                        resultBuilder,
-                        new OpportunityTypeEvidence(
-                            SubjectType: recordAccessType),
-                        recordOperationProvenance: provenance);
-                }
-
                 CollectFromExpression(
                     recordAccess.Record,
                     containing,
@@ -1792,18 +1792,7 @@ public static class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.RecordAccessFunction recordAccessFunction:
-                if (!expressionTypeContext.ClosedRecordAccessFunctions.Contains(recordAccessFunction))
-                {
-                    MaybeAdd(
-                        OpportunityCategory.RecordAccess,
-                        recordAccessFunction.FieldName,
-                        containing,
-                        resultBuilder,
-                        recordOperationProvenance:
-                        RecordOperationProvenance.RecordAccessFunctionEscaped);
-                }
-
+            case SyntaxTypes.Expression.RecordAccessFunction:
                 break;
 
             case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
@@ -2270,22 +2259,7 @@ public static class OptimizationOpportunityFinder
     {
         switch (pattern)
         {
-            case SyntaxTypes.Pattern.RecordPattern recordPattern:
-                if (matchedType is not TypeInference.InferredType.RecordType)
-                {
-                    foreach (var field in recordPattern.Fields)
-                    {
-                        MaybeAdd(
-                            OpportunityCategory.RecordAccess,
-                            field.FieldName,
-                            containing,
-                            resultBuilder,
-                            new OpportunityTypeEvidence(SubjectType: matchedType),
-                            recordOperationProvenance:
-                            ProvenanceFromUnresolvedRecordType(matchedType));
-                    }
-                }
-
+            case SyntaxTypes.Pattern.RecordPattern:
                 break;
 
             case SyntaxTypes.Pattern.TuplePattern tuplePattern:

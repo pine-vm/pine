@@ -16,4 +16,8 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 /// </param>
 public record CoreFunctionInfo(
     IReadOnlyList<TypeInference.InferredType> FunctionType,
-    Func<IReadOnlyList<Expression>, Expression> CompileApplication);
+    Func<IReadOnlyList<Expression>, Expression> CompileApplication)
+{
+    /// <summary>The calling-convention arity used by emission, independent of semantic type inference.</summary>
+    public int ParameterCount => FunctionType.Count - 1;
+}
