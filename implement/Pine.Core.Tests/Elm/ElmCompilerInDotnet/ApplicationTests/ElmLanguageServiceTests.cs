@@ -135,7 +135,6 @@ public class ElmLanguageServiceTests
                     { fileLocation = LanguageServiceInterface.WorkspaceFileLocation filePath
                     , positionLineNumber = lineNumber
                     , positionColumn = column
-                    , includeDeclaration = False
                     }
                 )
                 state
@@ -214,6 +213,7 @@ public class ElmLanguageServiceTests
                             [ "src", "PackageModule.elm" ]
                     , positionLineNumber = lineNumber
                     , positionColumn = column
+                    , includeDeclaration = False
                     }
                 )
                 state
@@ -1542,11 +1542,11 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
             """
-            InvocationCount: 5_101
+            InvocationCount: 5_107
             BuildListCount: 8_653
-            BuildListItemCount: 32_034
-            LoopIterationCount: 3_702
-            InstructionCount: 211_192
+            BuildListItemCount: 32_048
+            LoopIterationCount: 3_708
+            InstructionCount: 211_350
             ExpressionTemplatePlanParseCount: 112
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 110
@@ -1564,7 +1564,7 @@ public class ElmLanguageServiceTests
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).ShouldBeWithDiff(
             """
             CompiledExpressionCount: 214
-            InvocationCountTotal: 4_964
+            InvocationCountTotal: 4_970
             InvocationCountAverage: 23
             InvocationCountPercentile10: 2
             InvocationCountMedian: 6

@@ -2091,6 +2091,7 @@ textDocumentRename renameParams languageServiceState =
             { fileLocation = LanguageServiceInterface.WorkspaceFileLocation renameParams.filePath
             , positionLineNumber = renameParams.positionLineNumber
             , positionColumn = renameParams.positionColumn
+            , includeDeclaration = False
             }
             languageServiceState
     of
