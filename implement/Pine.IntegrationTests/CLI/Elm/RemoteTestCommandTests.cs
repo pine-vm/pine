@@ -1,6 +1,6 @@
 using AwesomeAssertions;
-using Pine.CLI;
 using Pine.CLI.Elm;
+using Pine.Core.CLI;
 using Pine.Core.Elm;
 using Pine.Core.Elm.Testing;
 using Pine.Core.Files;
@@ -40,7 +40,7 @@ public class RemoteTestCommandTests
 
         TestCommand.Execute(
             PinnedProjectUrl,
-            colorMode: FormatCommandColorMode.Never,
+            colorMode: CommandLineColorMode.Never,
             console: console,
             errorConsole: console,
             listTests: true).Should().Be(0);
@@ -64,7 +64,7 @@ public class RemoteTestCommandTests
 
         TestCommand.Execute(
             PinnedProjectUrl,
-            colorMode: FormatCommandColorMode.Never,
+            colorMode: CommandLineColorMode.Never,
             console: console,
             errorConsole: console,
             listTests: true,
@@ -99,7 +99,7 @@ public class RemoteTestCommandTests
 
         TestCommand.Execute(
             PinnedProjectUrl,
-            colorMode: FormatCommandColorMode.Never,
+            colorMode: CommandLineColorMode.Never,
             console: console,
             errorConsole: console,
             filter: filter,
@@ -128,7 +128,7 @@ public class RemoteTestCommandTests
 
         TestCommand.Execute(
             PinnedProjectUrl,
-            colorMode: FormatCommandColorMode.Never,
+            colorMode: CommandLineColorMode.Never,
             console: console,
             errorConsole: console,
             listTests: true,
@@ -158,7 +158,7 @@ public class RemoteTestCommandTests
             () =>
             TestCommand.Execute(
                 PinnedProjectUrl,
-                colorMode: FormatCommandColorMode.Never,
+                colorMode: CommandLineColorMode.Never,
                 console: console,
                 errorConsole: console,
                 remoteSourceLoader: _ => throw exception);
@@ -175,7 +175,7 @@ public class RemoteTestCommandTests
 
         TestCommand.Execute(
             source,
-            colorMode: FormatCommandColorMode.Never,
+            colorMode: CommandLineColorMode.Never,
             console: console,
             errorConsole: console,
             listTests: true).Should().Be(1);
@@ -192,7 +192,7 @@ public class RemoteTestCommandTests
 
         TestCommand.Execute(
             PinnedProjectUrl,
-            colorMode: FormatCommandColorMode.Never,
+            colorMode: CommandLineColorMode.Never,
             console: console,
             errorConsole: console,
             evaluationOptions: new() { InvocationBudget = 1 },
@@ -214,7 +214,7 @@ public class RemoteTestCommandTests
 
         TestCommand.Execute(
             PinnedProjectUrl,
-            colorMode: FormatCommandColorMode.Never,
+            colorMode: CommandLineColorMode.Never,
             console: console,
             errorConsole: console,
             listTests: true,
@@ -241,7 +241,7 @@ public class RemoteTestCommandTests
 
         TestCommand.Execute(
             source,
-            colorMode: FormatCommandColorMode.Never,
+            colorMode: CommandLineColorMode.Never,
             console: console,
             errorConsole: console,
             remoteSourceLoader: _ => throw new Exception("Transport must not be called"))
@@ -259,7 +259,7 @@ public class RemoteTestCommandTests
 
         TestCommand.Execute(
             source,
-            colorMode: FormatCommandColorMode.Never,
+            colorMode: CommandLineColorMode.Never,
             console: console,
             errorConsole: console,
             remoteSourceLoader: _ => throw new Exception("Transport must not be called"))
@@ -297,7 +297,7 @@ public class RemoteTestCommandTests
 
         TestCommand.Execute(
             PinnedProjectUrl,
-            colorMode: FormatCommandColorMode.Never,
+            colorMode: CommandLineColorMode.Never,
             console: console,
             errorConsole: console,
             listTests: true,
@@ -317,7 +317,7 @@ public class RemoteTestCommandTests
 
         TestCommand.Execute(
             PinnedProjectUrl,
-            colorMode: FormatCommandColorMode.Never,
+            colorMode: CommandLineColorMode.Never,
             console: console,
             errorConsole: console,
             listTests: true,
@@ -347,7 +347,7 @@ public class RemoteTestCommandTests
 
         TestCommand.Execute(
             PinnedProjectUrl,
-            colorMode: FormatCommandColorMode.Never,
+            colorMode: CommandLineColorMode.Never,
             console: console,
             errorConsole: console,
             listTests: true,
@@ -376,7 +376,7 @@ public class RemoteTestCommandTests
 
         TestCommand.Execute(
             PinnedProjectUrl,
-            colorMode: FormatCommandColorMode.Never,
+            colorMode: CommandLineColorMode.Never,
             console: console,
             errorConsole: console,
             listTests: true,
@@ -409,7 +409,7 @@ public class RemoteTestCommandTests
 
         TestCommand.Execute(
             PinnedProjectUrl,
-            colorMode: FormatCommandColorMode.Never,
+            colorMode: CommandLineColorMode.Never,
             console: console,
             errorConsole: console,
             listTests: true,
@@ -441,7 +441,7 @@ public class RemoteTestCommandTests
 
         TestCommand.Execute(
             PinnedProjectUrl,
-            colorMode: FormatCommandColorMode.Never,
+            colorMode: CommandLineColorMode.Never,
             console: console,
             errorConsole: console,
             seed: 123,
@@ -474,7 +474,7 @@ public class RemoteTestCommandTests
 
         TestCommand.Execute(
             PinnedProjectUrl,
-            colorMode: FormatCommandColorMode.Never,
+            colorMode: CommandLineColorMode.Never,
             console: console,
             errorConsole: console,
             remoteSourceLoader: _ => files).Should().Be(1);
@@ -496,7 +496,7 @@ public class RemoteTestCommandTests
 
         TestCommand.Execute(
             PinnedProjectUrl,
-            colorMode: FormatCommandColorMode.Never,
+            colorMode: CommandLineColorMode.Never,
             console: console,
             errorConsole: console,
             remoteSourceLoader: _ => files).Should().Be(1);
@@ -520,7 +520,7 @@ public class RemoteTestCommandTests
 
         TestCommand.Execute(
             PinnedProjectUrl,
-            colorMode: FormatCommandColorMode.Never,
+            colorMode: CommandLineColorMode.Never,
             console: console,
             errorConsole: console,
             remoteSourceLoader: _ => files).Should().Be(1);
@@ -541,7 +541,7 @@ public class RemoteTestCommandTests
 
         TestCommand.Execute(
             PinnedProjectUrl,
-            colorMode: FormatCommandColorMode.Never,
+            colorMode: CommandLineColorMode.Never,
             console: console,
             errorConsole: console,
             remoteSourceLoader: _ => files).Should().Be(1);
@@ -560,7 +560,7 @@ public class RemoteTestCommandTests
 
         TestCommand.Execute(
             directory,
-            colorMode: FormatCommandColorMode.Never,
+            colorMode: CommandLineColorMode.Never,
             console: console,
             errorConsole: console,
             listTests: true,
@@ -608,14 +608,14 @@ public class RemoteTestCommandTests
                     new() { Instrumentation = new() { SnapshotInterval = TimeSpan.Zero } },
                     instrumentation => TestCommand.Execute(
                         PinnedProjectUrl,
-                        colorMode: FormatCommandColorMode.Never,
+                        colorMode: CommandLineColorMode.Never,
                         console: console,
                         errorConsole: console,
                         filter: "first test",
                         instrumentation: instrumentation,
                         remoteSourceLoader: _ => FixtureFiles()),
                     console,
-                    FormatCommandColorMode.Never);
+                    CommandLineColorMode.Never);
 
             reportPath = Directory.GetFiles(profileDirectory).Single(path => !existingReports.Contains(path));
             exitCode.Should().Be(0, output.ToString());
@@ -655,7 +655,7 @@ public class RemoteTestCommandTests
                 new(),
                 _ => 0,
                 console,
-                FormatCommandColorMode.Never).Should().Be(0);
+                CommandLineColorMode.Never).Should().Be(0);
 
             var reportPath = Directory.GetFiles(Path.Combine(directory, "elm-stuff", "pine", "test-profiles")).Single();
             output.ToString().Should().Contain("Saved JSON report: " + reportPath);
@@ -685,7 +685,7 @@ public class RemoteTestCommandTests
                 new() { OutputPath = reportPath },
                 _ => 0,
                 console,
-                FormatCommandColorMode.Never).Should().Be(0);
+                CommandLineColorMode.Never).Should().Be(0);
 
             File.Exists(reportPath).Should().BeTrue();
             output.ToString().Should().Contain("Saved JSON report: " + reportPath);

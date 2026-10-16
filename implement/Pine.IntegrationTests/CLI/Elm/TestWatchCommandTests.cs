@@ -1,7 +1,7 @@
 using AwesomeAssertions;
-using Pine.CLI;
 using Pine.CLI.Elm;
 using Pine.Core;
+using Pine.Core.CLI;
 using Pine.Core.Elm.Testing;
 using Spectre.Console;
 using System;
@@ -612,7 +612,7 @@ public class TestWatchCommandTests
             Task.Run(
                 () => TestCommand.ExecuteCore(
                     directory.Path,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     errorConsole: console,
                     watch: true,
@@ -696,7 +696,7 @@ public class TestWatchCommandTests
             Task.Run(
                 () => TestCommand.ExecuteCore(
                     directory.Path,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     errorConsole: console,
                     watch: true,
@@ -770,7 +770,7 @@ public class TestWatchCommandTests
             Task.Run(
                 () => TestCommand.ExecuteCore(
                     directory.Path,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     errorConsole: console,
                     watch: true,
@@ -813,7 +813,7 @@ public class TestWatchCommandTests
                 () => TestCommand.ExecuteCore(
                     directory.Path,
                     watch: true,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     errorConsole: console,
                     offline: true,
@@ -883,7 +883,7 @@ public class TestWatchCommandTests
             Task.Run(
                 () => TestCommand.ExecuteCore(
                     directory.Path,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     errorConsole: console,
                     watch: true,
@@ -927,7 +927,7 @@ public class TestWatchCommandTests
             Task.Run(
                 () => TestCommand.ExecuteCore(
                     directory.Path,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     errorConsole: console,
                     watch: true,

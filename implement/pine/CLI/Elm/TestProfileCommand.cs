@@ -141,9 +141,9 @@ public static class TestProfileCommand
         TestProfileSettings settings,
         Func<ElmTestInstrumentation, int> run,
         IAnsiConsole? console = null,
-        FormatCommandColorMode? colorMode = null)
+        CommandLineColorMode? colorMode = null)
     {
-        FormatCommandColorMode resolvedColorMode;
+        CommandLineColorMode resolvedColorMode;
 
         try
         {
@@ -164,7 +164,7 @@ public static class TestProfileCommand
             console.Write(
                 new Text(
                     text + "\n",
-                    resolvedColorMode is FormatCommandColorMode.Never ? Style.Plain : style ?? Style.Plain));
+                    resolvedColorMode is CommandLineColorMode.Never ? Style.Plain : style ?? Style.Plain));
 
         string path;
 

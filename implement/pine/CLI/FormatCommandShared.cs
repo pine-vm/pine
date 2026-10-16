@@ -1,3 +1,4 @@
+using Pine.Core.CLI;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 using System;
@@ -76,14 +77,6 @@ public static class FormatCommandTheme
 }
 
 
-public enum FormatCommandColorMode
-{
-    Auto,
-    Always,
-    Never,
-}
-
-
 public static class FormatCommandShared
 {
     public const int MinFilesForDetailedOverview = 5;
@@ -91,7 +84,7 @@ public static class FormatCommandShared
     public const string ColorEnvironmentVariable = "PINE_TERM_COLOR";
 
 
-    public static Option<FormatCommandColorMode?> CreateColorOption() =>
+    public static Option<CommandLineColorMode?> CreateColorOption() =>
         new("--color")
         {
             Description =
@@ -107,12 +100,12 @@ public static class FormatCommandShared
         bool skipPrompt,
         bool verifyNoChanges,
         string commandLabel,
-        FormatCommandColorMode? colorMode = null,
+        CommandLineColorMode? colorMode = null,
         IAnsiConsole? console = null,
         IAnsiConsole? errorConsole = null,
         Func<string?>? readLine = null)
     {
-        FormatCommandColorMode resolvedColorMode;
+        CommandLineColorMode resolvedColorMode;
 
         try
         {
@@ -126,7 +119,7 @@ public static class FormatCommandShared
             errorConsole ??=
                 CreateSystemConsole(
                     Console.Error,
-                    FormatCommandColorMode.Auto);
+                    CommandLineColorMode.Auto);
 
             WriteLabelledLine(
                 errorConsole,
@@ -390,8 +383,8 @@ public static class FormatCommandShared
     }
 
 
-    public static FormatCommandColorMode ResolveColorMode(
-        FormatCommandColorMode? commandLineValue,
+    public static CommandLineColorMode ResolveColorMode(
+        CommandLineColorMode? commandLineValue,
         string? environmentValue)
     {
         if (commandLineValue is { } colorMode)
@@ -401,10 +394,10 @@ public static class FormatCommandShared
 
         if (string.IsNullOrWhiteSpace(environmentValue))
         {
-            return FormatCommandColorMode.Auto;
+            return CommandLineColorMode.Auto;
         }
 
-        if (Enum.TryParse<FormatCommandColorMode>(
+        if (Enum.TryParse<CommandLineColorMode>(
             environmentValue,
             ignoreCase: true,
             out var environmentColorMode) &&
@@ -420,12 +413,12 @@ public static class FormatCommandShared
 
 
     public static AnsiSupport AnsiSupportForColorMode(
-        FormatCommandColorMode colorMode) =>
+        CommandLineColorMode colorMode) =>
         colorMode switch
         {
-            FormatCommandColorMode.Auto => AnsiSupport.Detect,
-            FormatCommandColorMode.Always => AnsiSupport.Yes,
-            FormatCommandColorMode.Never => AnsiSupport.No,
+            CommandLineColorMode.Auto => AnsiSupport.Detect,
+            CommandLineColorMode.Always => AnsiSupport.Yes,
+            CommandLineColorMode.Never => AnsiSupport.No,
 
             _ =>
             throw new ArgumentOutOfRangeException(nameof(colorMode)),
@@ -433,12 +426,12 @@ public static class FormatCommandShared
 
 
     public static ColorSystemSupport ColorSystemSupportForColorMode(
-        FormatCommandColorMode colorMode) =>
+        CommandLineColorMode colorMode) =>
         colorMode switch
         {
-            FormatCommandColorMode.Auto => ColorSystemSupport.Detect,
-            FormatCommandColorMode.Always => ColorSystemSupport.Standard,
-            FormatCommandColorMode.Never => ColorSystemSupport.NoColors,
+            CommandLineColorMode.Auto => ColorSystemSupport.Detect,
+            CommandLineColorMode.Always => ColorSystemSupport.Standard,
+            CommandLineColorMode.Never => ColorSystemSupport.NoColors,
 
             _ =>
             throw new ArgumentOutOfRangeException(nameof(colorMode)),
@@ -791,9 +784,9 @@ public static class FormatCommandShared
     }
 
 
-    private static IAnsiConsole CreateSystemConsole(
+    internal static IAnsiConsole CreateSystemConsole(
         TextWriter writer,
-        FormatCommandColorMode colorMode) =>
+        CommandLineColorMode colorMode) =>
         AnsiConsole.Create(
             new AnsiConsoleSettings
             {
@@ -845,7 +838,7 @@ public static class FormatCommandShared
     }
 
 
-    private static void WriteLabelledLine(
+    internal static void WriteLabelledLine(
         IAnsiConsole console,
         string label,
         Style labelStyle,

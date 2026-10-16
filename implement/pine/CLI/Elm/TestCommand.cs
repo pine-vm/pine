@@ -303,7 +303,7 @@ public static class TestCommand
 
     public static int Execute(
         string source,
-        FormatCommandColorMode? colorMode = null,
+        CommandLineColorMode? colorMode = null,
         IAnsiConsole? console = null,
         IAnsiConsole? errorConsole = null,
         string? filter = null,
@@ -344,7 +344,7 @@ public static class TestCommand
     public static int Execute(
         string source,
         bool watch,
-        FormatCommandColorMode? colorMode = null,
+        CommandLineColorMode? colorMode = null,
         IAnsiConsole? console = null,
         IAnsiConsole? errorConsole = null,
         string? filter = null,
@@ -387,7 +387,7 @@ public static class TestCommand
     internal static int ExecuteCore(
         string source,
         bool watch,
-        FormatCommandColorMode? colorMode = null,
+        CommandLineColorMode? colorMode = null,
         IAnsiConsole? console = null,
         IAnsiConsole? errorConsole = null,
         string? filter = null,
@@ -409,7 +409,7 @@ public static class TestCommand
         Action<ElmTestRunCacheSession>? onCacheSession = null,
         Func<string, ITestWatcher>? createWatcher = null)
     {
-        FormatCommandColorMode resolvedColorMode;
+        CommandLineColorMode resolvedColorMode;
 
         try
         {
@@ -423,7 +423,7 @@ public static class TestCommand
             errorConsole ??=
                 CreateSystemConsole(
                     Console.Error,
-                    FormatCommandColorMode.Auto);
+                    CommandLineColorMode.Auto);
 
             errorConsole.Write(new Text("Error: ", TestCommandTheme.Failure));
             errorConsole.WriteLine(exception.Message);
@@ -685,7 +685,7 @@ public static class TestCommand
                 errorConsole,
                 source,
                 exception,
-                resolvedColorMode is not FormatCommandColorMode.Never);
+                resolvedColorMode is not CommandLineColorMode.Never);
 
             return 1;
         }
@@ -758,7 +758,7 @@ public static class TestCommand
                     tests: [],
                     noMatchingTests.FilteredOutTests,
                     filterApplied: true,
-                    useColor: resolvedColorMode is not FormatCommandColorMode.Never);
+                    useColor: resolvedColorMode is not CommandLineColorMode.Never);
             }
 
             console.WriteLine("No tests matched the filter expression:");
@@ -798,7 +798,7 @@ public static class TestCommand
                 listed.Tests,
                 listed.FilteredOutTests,
                 filterApplied: filter is not null,
-                useColor: resolvedColorMode is not FormatCommandColorMode.Never);
+                useColor: resolvedColorMode is not CommandLineColorMode.Never);
 
             return 0;
         }
@@ -824,7 +824,7 @@ public static class TestCommand
                 preparationVmDuration: reportDurations ? completed.PreparationVmDuration : null,
                 executionVmDuration: reportDurations ? completed.ExecutionVmDuration : null);
 
-        if (resolvedColorMode is FormatCommandColorMode.Never)
+        if (resolvedColorMode is CommandLineColorMode.Never)
         {
             console.Write(new Text(output.PlainText));
         }
@@ -1111,7 +1111,7 @@ public static class TestCommand
 
     internal static IAnsiConsole CreateSystemConsole(
         TextWriter writer,
-        FormatCommandColorMode colorMode) =>
+        CommandLineColorMode colorMode) =>
         AnsiConsole.Create(
             new AnsiConsoleSettings
             {

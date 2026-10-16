@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Pine.CLI;
+using Pine.Core.CLI;
 using Pine.Core.IO;
 using Spectre.Console;
 using System;
@@ -199,22 +200,22 @@ public class FormatCommandSharedTests
         FormatCommandShared.ResolveColorMode(
             commandLineValue: null,
             environmentValue: null)
-            .Should().Be(FormatCommandColorMode.Auto);
+            .Should().Be(CommandLineColorMode.Auto);
 
         FormatCommandShared.ResolveColorMode(
             commandLineValue: null,
             environmentValue: "never")
-            .Should().Be(FormatCommandColorMode.Never);
+            .Should().Be(CommandLineColorMode.Never);
 
         FormatCommandShared.ResolveColorMode(
             commandLineValue: null,
             environmentValue: "ALWAYS")
-            .Should().Be(FormatCommandColorMode.Always);
+            .Should().Be(CommandLineColorMode.Always);
 
         FormatCommandShared.ResolveColorMode(
-            commandLineValue: FormatCommandColorMode.Auto,
+            commandLineValue: CommandLineColorMode.Auto,
             environmentValue: "never")
-            .Should().Be(FormatCommandColorMode.Auto);
+            .Should().Be(CommandLineColorMode.Auto);
     }
 
 
@@ -236,27 +237,27 @@ public class FormatCommandSharedTests
     public void ColorMode_maps_to_spectre_ansi_support()
     {
         FormatCommandShared.AnsiSupportForColorMode(
-            FormatCommandColorMode.Auto)
+            CommandLineColorMode.Auto)
             .Should().Be(AnsiSupport.Detect);
 
         FormatCommandShared.AnsiSupportForColorMode(
-            FormatCommandColorMode.Always)
+            CommandLineColorMode.Always)
             .Should().Be(AnsiSupport.Yes);
 
         FormatCommandShared.AnsiSupportForColorMode(
-            FormatCommandColorMode.Never)
+            CommandLineColorMode.Never)
             .Should().Be(AnsiSupport.No);
 
         FormatCommandShared.ColorSystemSupportForColorMode(
-            FormatCommandColorMode.Auto)
+            CommandLineColorMode.Auto)
             .Should().Be(ColorSystemSupport.Detect);
 
         FormatCommandShared.ColorSystemSupportForColorMode(
-            FormatCommandColorMode.Always)
+            CommandLineColorMode.Always)
             .Should().Be(ColorSystemSupport.Standard);
 
         FormatCommandShared.ColorSystemSupportForColorMode(
-            FormatCommandColorMode.Never)
+            CommandLineColorMode.Never)
             .Should().Be(ColorSystemSupport.NoColors);
     }
 
@@ -304,7 +305,7 @@ public class FormatCommandSharedTests
                     skipPrompt: false,
                     verifyNoChanges: false,
                     commandLabel: "elm-format",
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     errorConsole: errorConsole,
                     readLine: () => response);
@@ -363,7 +364,7 @@ public class FormatCommandSharedTests
                 skipPrompt: true,
                 verifyNoChanges: false,
                 commandLabel: "elm-format",
-                colorMode: FormatCommandColorMode.Never,
+                colorMode: CommandLineColorMode.Never,
                 console: console,
                 errorConsole: errorConsole);
 
@@ -425,7 +426,7 @@ public class FormatCommandSharedTests
                     skipPrompt: true,
                     verifyNoChanges: false,
                     commandLabel: "format",
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     errorConsole: errorConsole);
 
@@ -477,7 +478,7 @@ public class FormatCommandSharedTests
                     skipPrompt: true,
                     verifyNoChanges: verifyNoChanges,
                     commandLabel: "format",
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     errorConsole: errorConsole);
 
@@ -519,7 +520,7 @@ public class FormatCommandSharedTests
                     skipPrompt: true,
                     verifyNoChanges: false,
                     commandLabel: "format",
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     errorConsole: errorConsole);
 

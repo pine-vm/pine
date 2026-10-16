@@ -650,7 +650,7 @@ public class TestCommandTests
                     return 0;
                 },
                 console,
-                FormatCommandColorMode.Never).Should().Be(0);
+                CommandLineColorMode.Never).Should().Be(0);
 
             var finalLines = new List<string>();
 
@@ -751,7 +751,7 @@ public class TestCommandTests
                     return 0;
                 },
                 console,
-                FormatCommandColorMode.Never).Should().Be(2);
+                CommandLineColorMode.Never).Should().Be(2);
 
             using var json = JsonDocument.Parse(File.ReadAllText(path));
             json.RootElement.GetProperty("SchemaVersion").GetInt32().Should().Be(2);
@@ -805,7 +805,7 @@ public class TestCommandTests
                     throw new ElmTestInstrumentationStoppedException("Direct execution stop.");
                 },
                 console,
-                FormatCommandColorMode.Never).Should().Be(expectedExitCode);
+                CommandLineColorMode.Never).Should().Be(expectedExitCode);
 
             using var json = JsonDocument.Parse(File.ReadAllText(path));
             json.RootElement.GetProperty("Summary").GetProperty("Outcome").GetString().Should().Be(expectedOutcome);
@@ -835,7 +835,7 @@ public class TestCommandTests
                 new() { OutputPath = path },
                 _ => throw new InvalidOperationException("Unexpected bug."),
                 console,
-                FormatCommandColorMode.Never).Should().Be(1);
+                CommandLineColorMode.Never).Should().Be(1);
 
             using var json = JsonDocument.Parse(File.ReadAllText(path));
             json.RootElement.GetProperty("Summary").GetProperty("Outcome").GetString().Should().Be("failed");
@@ -890,7 +890,7 @@ public class TestCommandTests
                     return 0;
                 },
                 console,
-                FormatCommandColorMode.Never).Should().Be(0);
+                CommandLineColorMode.Never).Should().Be(0);
         }
         finally
         {
@@ -936,7 +936,7 @@ public class TestCommandTests
                     project,
                     console: console,
                     errorConsole: console,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     offline: true,
                     instrumentation: profile),
                 console).Should().Be(0, output.ToString());
@@ -1026,7 +1026,7 @@ public class TestCommandTests
                 project,
                 console: console,
                 errorConsole: console,
-                colorMode: FormatCommandColorMode.Never,
+                colorMode: CommandLineColorMode.Never,
                 workers: workers,
                 offline: true,
                 seed: 42,
@@ -1200,9 +1200,9 @@ public class TestCommandTests
     }
 
     [Theory]
-    [InlineData(FormatCommandColorMode.Always, true)]
-    [InlineData(FormatCommandColorMode.Never, false)]
-    public void Profile_report_colors_respect_the_explicit_mode(FormatCommandColorMode mode, bool expectColor)
+    [InlineData(CommandLineColorMode.Always, true)]
+    [InlineData(CommandLineColorMode.Never, false)]
+    public void Profile_report_colors_respect_the_explicit_mode(CommandLineColorMode mode, bool expectColor)
     {
         var directory = Path.Combine(Path.GetTempPath(), "pine-profile-colors-" + Guid.NewGuid().ToString("N"));
         var (console, output) = CreateConsole(AnsiSupport.Yes);
@@ -1533,7 +1533,7 @@ public class TestCommandTests
                         project,
                         console: console,
                         errorConsole: console,
-                        colorMode: FormatCommandColorMode.Never,
+                        colorMode: CommandLineColorMode.Never,
                         filter: filter,
                         listTests: listTests,
                         workers: workers,
@@ -1650,7 +1650,7 @@ public class TestCommandTests
                     project,
                     console: console,
                     errorConsole: console,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     offline: true,
                     workers: 4,
                     instrumentation: profile),
@@ -1950,7 +1950,7 @@ public class TestCommandTests
             var exitCode =
                 TestCommand.Execute(
                     project,
-                    FormatCommandColorMode.Never,
+                    CommandLineColorMode.Never,
                     errorConsole: errorConsole,
                     offline: true);
 
@@ -1998,14 +1998,14 @@ public class TestCommandTests
     }
 
     [Theory]
-    [InlineData(80, FormatCommandColorMode.Never)]
-    [InlineData(120, FormatCommandColorMode.Never)]
-    [InlineData(200, FormatCommandColorMode.Never)]
-    [InlineData(80, FormatCommandColorMode.Always)]
-    [InlineData(120, FormatCommandColorMode.Always)]
-    [InlineData(200, FormatCommandColorMode.Always)]
+    [InlineData(80, CommandLineColorMode.Never)]
+    [InlineData(120, CommandLineColorMode.Never)]
+    [InlineData(200, CommandLineColorMode.Never)]
+    [InlineData(80, CommandLineColorMode.Always)]
+    [InlineData(120, CommandLineColorMode.Always)]
+    [InlineData(200, CommandLineColorMode.Always)]
     public void Fuzz_failure_displays_counterexample_and_reproduction_flags(
-        int consoleWidth, FormatCommandColorMode colorMode)
+        int consoleWidth, CommandLineColorMode colorMode)
     {
         var directory =
             CreateTestProject(
@@ -2018,7 +2018,7 @@ public class TestCommandTests
                 """);
 
         var (console, output) =
-            CreateConsole(colorMode is FormatCommandColorMode.Always ? AnsiSupport.Yes : AnsiSupport.No);
+            CreateConsole(colorMode is CommandLineColorMode.Always ? AnsiSupport.Yes : AnsiSupport.No);
 
         console.Profile.Width = consoleWidth;
 
@@ -2066,7 +2066,7 @@ public class TestCommandTests
         {
             TestCommand.Execute(
                 directory,
-                FormatCommandColorMode.Never,
+                CommandLineColorMode.Never,
                 console: console,
                 seed: 0,
                 offline: true)
@@ -2115,7 +2115,7 @@ public class TestCommandTests
             var exitCode =
                 TestCommand.Execute(
                     projectDirectory,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     errorConsole: errorConsole);
 
@@ -2149,7 +2149,7 @@ public class TestCommandTests
             var exitCode =
                 TestCommand.Execute(
                     projectDirectory,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     errorConsole: errorConsole,
                     offline: true,
                     dependencyReportPath: reportPath);
@@ -2178,7 +2178,7 @@ public class TestCommandTests
             var exitCode =
                 TestCommand.Execute(
                     projectDirectory,
-                    colorMode: FormatCommandColorMode.Always,
+                    colorMode: CommandLineColorMode.Always,
                     console: console);
 
             exitCode.Should().Be(0);
@@ -2203,7 +2203,7 @@ public class TestCommandTests
             var exitCode =
                 TestCommand.Execute(
                     projectDirectory,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     workers: 2,
                     reportDurations: true);
@@ -2241,7 +2241,7 @@ public class TestCommandTests
             var exitCode =
                 TestCommand.Execute(
                     projectDirectory,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     errorConsole: errorConsole,
                     workers: 0);
 
@@ -2266,7 +2266,7 @@ public class TestCommandTests
             var exitCode =
                 TestCommand.Execute(
                     projectDirectory,
-                    colorMode: FormatCommandColorMode.Always,
+                    colorMode: CommandLineColorMode.Always,
                     console: console);
 
             var rendered = output.ToString();
@@ -2297,7 +2297,7 @@ public class TestCommandTests
             var exitCode =
                 TestCommand.Execute(
                     projectDirectory,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console);
 
             exitCode.Should().Be(1);
@@ -2337,7 +2337,7 @@ public class TestCommandTests
             var exitCode =
                 TestCommand.Execute(
                     projectDirectory,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     filter: filter);
 
@@ -2390,7 +2390,7 @@ public class TestCommandTests
             var exitCode =
                 TestCommand.Execute(
                     projectDirectory,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     filter: filter,
                     listTests: true);
@@ -2443,7 +2443,7 @@ public class TestCommandTests
             var exitCode =
                 TestCommand.Execute(
                     projectDirectory,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     filter: "tests/Tests/Root/Selected Group/*irst",
                     listTests: listTests);
@@ -2483,7 +2483,7 @@ public class TestCommandTests
             var exitCode =
                 TestCommand.Execute(
                     projectDirectory,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     filter: "tests/Tests/**/Selected Group/Firstt",
                     listTests: listTests);
@@ -2530,7 +2530,7 @@ public class TestCommandTests
             var exitCode =
                 TestCommand.Execute(
                     projectDirectory,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     filter: "missing test");
 
@@ -2565,7 +2565,7 @@ public class TestCommandTests
             var exitCode =
                 TestCommand.Execute(
                     projectDirectory,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     filter: parseResult.GetValue(option),
                     listTests: true);
@@ -2673,7 +2673,7 @@ public class TestCommandTests
             var exitCode =
                 TestCommand.Execute(
                     projectDirectory,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     filter: @"tests\nested\NestedTests\Nested test",
                     listTests: true);
@@ -2700,7 +2700,7 @@ public class TestCommandTests
             var exitCode =
                 TestCommand.Execute(
                     projectDirectory,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     filter: "Empty group");
 
@@ -2744,7 +2744,7 @@ public class TestCommandTests
             var exitCode =
                 TestCommand.Execute(
                     projectDirectory,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     filter: "selected",
                     listTests: true);
@@ -2787,7 +2787,7 @@ public class TestCommandTests
             var exitCode =
                 TestCommand.Execute(
                     projectDirectory,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     filter: "Tests/**/First",
                     listTests: true);
@@ -2834,7 +2834,7 @@ public class TestCommandTests
             var exitCode =
                 TestCommand.Execute(
                     projectDirectory,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     filter: filter,
                     listTests: true);
@@ -2860,7 +2860,7 @@ public class TestCommandTests
             var exitCode =
                 TestCommand.Execute(
                     projectDirectory,
-                    colorMode: FormatCommandColorMode.Always,
+                    colorMode: CommandLineColorMode.Always,
                     console: console,
                     filter: "Tests/**/First",
                     listTests: true);
@@ -2889,7 +2889,7 @@ public class TestCommandTests
             var exitCode =
                 TestCommand.Execute(
                     projectDirectory,
-                    colorMode: FormatCommandColorMode.Always,
+                    colorMode: CommandLineColorMode.Always,
                     console: console,
                     listTests: true);
 
@@ -2918,7 +2918,7 @@ public class TestCommandTests
             var exitCode =
                 TestCommand.Execute(
                     projectDirectory,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     console: console,
                     listTests: true);
 
@@ -2951,7 +2951,7 @@ public class TestCommandTests
             var exitCode =
                 TestCommand.Execute(
                     projectDirectory,
-                    colorMode: FormatCommandColorMode.Never,
+                    colorMode: CommandLineColorMode.Never,
                     errorConsole: errorConsole);
 
             exitCode.Should().Be(1);
@@ -2977,7 +2977,7 @@ public class TestCommandTests
                 () =>
                 TestCommand.Execute(
                     projectDirectory,
-                    colorMode: FormatCommandColorMode.Never);
+                    colorMode: CommandLineColorMode.Never);
 
             execute.Should().Throw<InvalidOperationException>()
                 .WithMessage("Failed parsing Elm test module 'tests/Tests.elm':*");
