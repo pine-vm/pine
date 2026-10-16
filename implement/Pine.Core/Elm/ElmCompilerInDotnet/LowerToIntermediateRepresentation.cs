@@ -825,8 +825,10 @@ public static class LowerToIntermediateRepresentation
         {
             string name;
 
-            do name = GeneratedNameSuffixes.RecordProjectionBindingPrefix + m_nextName++;
-
+            do
+            {
+                name = GeneratedNameSuffixes.RecordProjectionBindingPrefix + m_nextName++;
+            }
             while (!m_usedNames.Add(name));
 
             return name;
