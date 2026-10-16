@@ -12,32 +12,17 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 public class ModuleCompilationContextTests
 {
     [Fact]
-    public void Merged_function_types_support_string_and_structured_lookup()
+    public void Emission_contexts_do_not_contain_semantic_type_information()
     {
-        var qualifiedFunctionName = DeclQualifiedName.Create(["Test"], "alfa");
-        var returnType = TypeInference.InferredType.Int();
-        IReadOnlyList<TypeInference.InferredType> parameterTypes = [TypeInference.InferredType.String()];
-
-        var context =
-            new ModuleCompilationContext(
-                allFunctions:
-                new Dictionary<DeclQualifiedName, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)>(),
-                compiledFunctionsCache: [],
-                pineKernelModuleNames: FrozenSet.Create<string>([]),
-                functionTypes: new Dictionary<DeclQualifiedName, FunctionTypeInfo>
-                {
-                    [qualifiedFunctionName] = new(returnType, parameterTypes)
-                });
-
-        var typeInfoByRef = context.TryGetFunctionTypeInfo(qualifiedFunctionName);
-        var typeInfoByString = context.TryGetFunctionTypeInfo("Test.alfa");
-
-        typeInfoByRef.Should().NotBeNull();
-        typeInfoByString.Should().NotBeNull();
-        typeInfoByRef!.ReturnType.Should().Be(returnType);
-        typeInfoByRef.ParameterTypes.Should().Equal(parameterTypes);
-        typeInfoByString!.ReturnType.Should().Be(returnType);
-        typeInfoByString.ParameterTypes.Should().Equal(parameterTypes);
+        foreach (var type in new[] { typeof(ModuleCompilationContext), typeof(ExpressionCompilationContext) })
+        {
+            foreach (var property in type.GetProperties())
+            {
+                property.PropertyType.ToString().Should().NotContain("InferredType");
+                property.PropertyType.ToString().Should().NotContain("FunctionTypeInfo");
+                property.PropertyType.ToString().Should().NotContain("TypeAliasDefinition");
+            }
+        }
     }
 
     [Fact]
@@ -52,12 +37,9 @@ public class ModuleCompilationContextTests
                 new Dictionary<DeclQualifiedName, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)>(),
                 compiledFunctionsCache: [],
                 pineKernelModuleNames: FrozenSet.Create<string>([]),
-                choiceTagTypes: new Dictionary<DeclQualifiedName, FunctionTypeInfo>
+                choiceConstructorArities: new Dictionary<DeclQualifiedName, int>
                 {
-                    [constructorName] =
-                    new(
-                        new TypeInference.InferredType.UnknownType(),
-                        [TypeInference.InferredType.Int(), TypeInference.InferredType.Bool()])
+                    [constructorName] = 2
                 },
                 recordTypeAliasConstructors: new Dictionary<DeclQualifiedName, IReadOnlyList<string>>
                 {

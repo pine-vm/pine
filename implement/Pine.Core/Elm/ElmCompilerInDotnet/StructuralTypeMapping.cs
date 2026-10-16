@@ -24,7 +24,7 @@ public static class StructuralTypeMapping
     /// <param name="inferredType">The inferred type to map.</param>
     /// <param name="choiceTypeDefinitions">
     /// Lookup table for resolving named choice types to their constructor definitions.
-    /// Built by <see cref="TypeInference.BuildChoiceTypeDefinitions"/>.
+    /// Built by <see cref="TypeInference.BuildChoiceTypeDefinitions(ImmutableDictionary{DeclQualifiedName, ElmSyntax.ElmSyntaxAbstract.Declaration})"/>.
     /// </param>
     /// <returns>
     /// The structural type, or <c>null</c> if the type cannot be mapped

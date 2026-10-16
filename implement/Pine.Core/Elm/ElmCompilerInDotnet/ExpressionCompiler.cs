@@ -1,18 +1,16 @@
-using Pine.Core.CodeAnalysis;
 using Pine.Core.CodeGen;
 using Pine.Core.CommonEncodings;
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 using System.Numerics;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
+using SyntaxTypes = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
 /// <summary>
-/// Compiles Elm expressions to Pine expressions.
+/// Compiles Elm compiler IR expressions to Pine expressions.
 /// Uses recursive mapping for type-safe expression handling.
 /// </summary>
 public class ExpressionCompiler
@@ -55,6 +53,9 @@ public class ExpressionCompiler
             SyntaxTypes.Expression.TupledExpression expr =>
             CompileTupledExpression(expr, context),
 
+            SyntaxTypes.Expression.ProjectItem expr =>
+            CompileProjectItem(expr, context),
+
             SyntaxTypes.Expression.RecordExpr expr =>
             CompileRecordExpr(expr, context),
 
@@ -85,9 +86,22 @@ public class ExpressionCompiler
             SyntaxTypes.Expression.RecordAccessFunction expr =>
             CompileRecordAccessFunction(expr),
 
+            SyntaxTypes.Expression.LambdaExpression =>
+            CompilationError.UnsupportedExpression(expression.GetType().Name),
+
+            SyntaxTypes.Expression.GLSLExpression =>
+            CompilationError.UnsupportedExpression(expression.GetType().Name),
+
             _ =>
-            CompilationError.UnsupportedExpression(expression.GetType().Name)
+            throw new NotImplementedException(
+                $"{nameof(Compile)} does not handle expression variant: {expression.GetType().Name}")
         };
+
+    private static Result<CompilationError, Expression> CompileProjectItem(
+        SyntaxTypes.Expression.ProjectItem projection,
+        ExpressionCompilationContext context) =>
+        Compile(projection.Value, context)
+        .Map(value => BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(projection.Index, value)));
 
     private static Result<CompilationError, Expression> CompileInteger(
         SyntaxTypes.Expression.IntegerLiteral expr) =>
@@ -490,36 +504,8 @@ public class ExpressionCompiler
             // Check using the structured module name list rather than string manipulation
             if (funcRef.QualifiedName.Namespaces.Count is 1 && funcRef.QualifiedName.Namespaces[0] is "Basics" &&
                 CoreLibraryModule.CoreBasics.GetBasicsFunctionInfo(funcRef.QualifiedName.DeclName) is { } basicsFuncInfo &&
-                basicsFuncInfo.FunctionType.Count - compiledArguments.Length - 1 is 0)
+                basicsFuncInfo.ParameterCount == compiledArguments.Length)
             {
-                // For polymorphic numeric functions (add, sub, mul), use type inference to decide
-                // whether to use the integer-specific implementation
-                if (funcRef.QualifiedName.DeclName is "add" or "sub" or "mul")
-                {
-                    // Use type inference to determine the expression type
-                    var expressionType =
-                        TypeInference.InferExpressionType(
-                            expr,
-                            context.ParameterNames,
-                            context.ParameterTypes,
-                            context.LocalBindingTypes,
-                            context.CurrentModuleName,
-                            context.FunctionTypes);
-
-                    if (expressionType is TypeInference.InferredType.IntType)
-                    {
-                        // Use integer-specific implementation
-                        if (funcRef.QualifiedName.DeclName is "add")
-                            return BuiltinHelpers.ApplyBuiltinIntAdd(compiledArguments);
-
-                        if (funcRef.QualifiedName.DeclName is "sub")
-                            return CoreLibraryModule.CoreBasics.Int_sub(compiledArguments[0], compiledArguments[1]);
-
-                        if (funcRef.QualifiedName.DeclName is "mul")
-                            return BuiltinHelpers.ApplyBuiltinIntMul(compiledArguments);
-                    }
-                }
-
                 return basicsFuncInfo.CompileApplication(compiledArguments);
             }
 
@@ -878,8 +864,6 @@ public class ExpressionCompiler
             return new CompilationError.UnresolvedReference(recordName, context.CurrentModuleName);
         }
 
-        var recordType = TryGetRecordTypeForVariable(recordName, context);
-
         // Compile each field update and sort by field name alphabetically.
         // This ordering is required because the runtime update function relies on both 
         // the record fields and updates being sorted in the same order to efficiently 
@@ -905,29 +889,6 @@ public class ExpressionCompiler
             }
 
             compiledUpdateValues.Add((fieldName, compiledValue.IsOkOrNull()!));
-        }
-
-        // If we know the record type at compile time, use direct field update
-        if (recordType is not null)
-        {
-            // Build a map of field name to index
-            var fieldIndices =
-                recordType.Fields
-                .Select((field, idx) => (field.FieldName, idx))
-                .ToDictionary(x => x.FieldName, x => x.idx);
-
-            // Check if all update field names exist in the record type
-            var allFieldsKnown = compiledUpdateValues.All(u => fieldIndices.ContainsKey(u.fieldName));
-
-            if (allFieldsKnown)
-            {
-                // Use compile-time field index computation
-                return
-                    CompileRecordUpdateWithKnownIndices(
-                        recordExpr,
-                        recordType.Fields.Count,
-                        compiledUpdateValues.Select(u => (fieldIndices[u.fieldName], u.valueExpr)).ToList());
-            }
         }
 
         // Fall back to runtime field update when type is not known
@@ -958,61 +919,6 @@ public class ExpressionCompiler
                 environment: callEnv);
     }
 
-    /// <summary>
-    /// Compiles a record update when field indices are known at compile time.
-    /// This avoids runtime iteration through fields.
-    /// </summary>
-    private static Expression CompileRecordUpdateWithKnownIndices(
-        Expression recordExpr,
-        int totalFieldCount,
-        IReadOnlyList<(int fieldIndex, Expression newValue)> updates)
-    {
-        // New flat record structure: [tag, name0, value0, name1, value1, ...].
-        // Field i has its name at outer slot (2*i + 1) and its value at outer slot (2*i + 2).
-        //
-        // Strategy: build a fresh outer list whose tag and field names are read from the
-        // original record (so we don't have to know the name strings here), and whose
-        // values are either the original value (for unchanged slots) or the new value
-        // expression (for updated slots).
-
-        var updatesDict = updates.ToDictionary(u => u.fieldIndex, u => u.newValue);
-
-        var resultItems =
-            new List<Expression>(totalFieldCount * 2 + 1)
-            {
-                // Tag: read from the original record so we don't bake the constant in twice.
-                BuiltinHelpers.ApplyBuiltinHead(recordExpr),
-            };
-
-        for (var i = 0; i < totalFieldCount; i++)
-        {
-            // Field name at outer slot (2*i + 1) - always read from original.
-            var nameSlot = 2 * i + 1;
-
-            var nameExpr =
-                BuiltinHelpers.ApplyBuiltinHead(
-                    BuiltinHelpers.ApplyBuiltinSkip(nameSlot, recordExpr));
-
-            resultItems.Add(nameExpr);
-
-            // Field value at outer slot (2*i + 2) - either the original value or the update.
-            if (updatesDict.TryGetValue(i, out var newValueExpr))
-            {
-                resultItems.Add(newValueExpr);
-            }
-            else
-            {
-                var valueSlot = 2 * i + 2;
-
-                resultItems.Add(
-                    BuiltinHelpers.ApplyBuiltinHead(
-                        BuiltinHelpers.ApplyBuiltinSkip(valueSlot, recordExpr)));
-            }
-        }
-
-        return Expression.ListInst(resultItems);
-    }
-
     private static Result<CompilationError, Expression> CompileRecordAccess(
         SyntaxTypes.Expression.RecordAccess expr,
         ExpressionCompilationContext context)
@@ -1028,32 +934,7 @@ public class ExpressionCompiler
         var recordExpr = recordResult.IsOkOrNull()!;
         var fieldName = expr.FieldName;
 
-        // Try to get the record type to compute field index at compile time
-        var recordType = TryGetRecordTypeForAccess(expr.Record, context);
-
-        if (recordType is not null)
-        {
-            // We know the record field layout at compile time
-            // Find the index of the field in the sorted field list
-            var fieldIndex =
-                recordType.Fields
-                .Select((field, idx) => (field.FieldName, idx))
-                .FirstOrDefault(x => x.FieldName == fieldName);
-
-            if (fieldIndex.FieldName == fieldName)
-            {
-                // Emit direct field access using the known index
-                // Record structure: [ElmRecordTag, [[field1, field2, ...]]]
-                // Each field is [fieldName, fieldValue]
-                // To get field at index N: skip N fields, take head, get value (index 1)
-                return
-                    CompileRecordAccessWithKnownIndex(
-                        recordExpr,
-                        fieldIndex.idx);
-            }
-        }
-
-        // Fall back to runtime field lookup when type is not known
+        // Static reads have already become ProjectItem nodes in the IR.
         // Build the call to the record access function
         // The environment for the function is: [record, fieldName]
         var callEnv =
@@ -1115,138 +996,6 @@ public class ExpressionCompiler
                 "Failed to build function value template for record access function.");
 
         return Expression.LitralInst(functionValue);
-    }
-
-    /// <summary>
-    /// Compiles a record field access when the field index is known at compile time.
-    /// This avoids runtime iteration through fields.
-    /// </summary>
-    private static Expression CompileRecordAccessWithKnownIndex(
-        Expression recordExpr,
-        int fieldIndex)
-    {
-        var valueSlot = 2 * fieldIndex + 2;
-
-        return
-            BuiltinHelpers.ApplyBuiltinHead(
-                BuiltinHelpers.ApplyBuiltinSkip(valueSlot, recordExpr));
-    }
-
-    /// <summary>
-    /// Tries to determine if an expression has a known record type with field names.
-    /// </summary>
-    private static TypeInference.InferredType.RecordType? TryGetRecordTypeForAccess(
-        SyntaxTypes.Expression expression,
-        ExpressionCompilationContext context)
-    {
-        if (expression is SyntaxTypes.Expression.Identifier identifier &&
-            identifier.QualifiedName.Namespaces.Count is 0)
-        {
-            return TryGetRecordTypeForVariable(identifier.QualifiedName.DeclName, context);
-        }
-
-        if (expression is SyntaxTypes.Expression.RecordExpr recordExpr)
-        {
-            var fields =
-                recordExpr.Fields
-                .OrderBy(field => field.FieldName, StringComparer.Ordinal)
-                .Select(
-                    field =>
-                    (field.FieldName,
-                    FieldType: (TypeInference.InferredType?)
-                    TryGetRecordTypeForAccess(field.Value, context)
-                        ?? new TypeInference.InferredType.UnknownType()))
-                .ToList();
-
-            return new TypeInference.InferredType.RecordType(fields);
-        }
-
-        if (expression is SyntaxTypes.Expression.RecordUpdateExpression recordUpdate)
-        {
-            return TryGetRecordTypeForVariable(recordUpdate.RecordName, context);
-        }
-
-        if (expression is SyntaxTypes.Expression.RecordAccess recordAccess &&
-            TryGetRecordTypeForAccess(recordAccess.Record, context) is { } outerRecord)
-        {
-            var fieldType =
-                outerRecord.Fields.FirstOrDefault(field => field.FieldName == recordAccess.FieldName).FieldType;
-
-            return fieldType is not null ? TryExpandDirectRecordAlias(fieldType, context) : null;
-        }
-
-        return null;
-    }
-
-    private static TypeInference.InferredType.RecordType? TryGetRecordTypeForVariable(
-        string name,
-        ExpressionCompilationContext context)
-    {
-        // Local bindings shadow parameters, including when no type was inferred for the binding.
-        if (context.TryGetLocalBinding(name) is not null)
-        {
-            return
-                context.TryGetLocalBindingType(name) is { } localType
-                ?
-                TryExpandDirectRecordAlias(localType, context)
-                :
-                null;
-        }
-
-        return
-            context.TryGetParameterIndex(name) is not null &&
-            context.ParameterTypes.TryGetValue(name, out var parameterType)
-            ?
-            TryExpandDirectRecordAlias(parameterType, context)
-            :
-            null;
-    }
-
-    private static TypeInference.InferredType.RecordType? TryExpandDirectRecordAlias(
-        TypeInference.InferredType type,
-        ExpressionCompilationContext context)
-    {
-        if (type is TypeInference.InferredType.RecordType recordType)
-            return recordType;
-
-        if (type is not TypeInference.InferredType.ChoiceType choiceType ||
-            context.ModuleCompilationContext.TypeAliasDefinitions is not { } aliasDefinitions)
-        {
-            return null;
-        }
-
-        var aliasName =
-            DeclQualifiedName.Create(
-                choiceType.ModuleName.Count is 0
-                ?
-                context.CurrentModuleName.Split('.')
-                :
-                choiceType.ModuleName,
-                choiceType.TypeName);
-
-        var aliasIsLocal =
-            aliasName.Namespaces.SequenceEqual(context.CurrentModuleName.Split('.'));
-
-        var aliasModuleContainsFunctions =
-            context.ModuleCompilationContext.AllFunctions.Keys.Any(
-                functionName => functionName.Namespaces.SequenceEqual(aliasName.Namespaces));
-
-        var aliasesInModule =
-            aliasDefinitions.Keys.Count(
-                candidate => candidate.Namespaces.SequenceEqual(aliasName.Namespaces));
-
-        // Imported aliases from modules with runtime declarations or multiple aliases do not
-        // yet carry enough canonical provenance to rule out an incorrectly associated layout.
-        if ((!aliasIsLocal && (aliasModuleContainsFunctions || aliasesInModule is not 1)) ||
-            !aliasDefinitions.TryGetValue(aliasName, out var aliasDefinition) ||
-            aliasDefinition.AliasedType is not TypeInference.InferredType.RecordType)
-        {
-            return null;
-        }
-
-        return
-            TypeInference.ExpandTypeAliases(type, aliasDefinitions, context.CurrentModuleName.Split('.'))
-            as TypeInference.InferredType.RecordType;
     }
 
     private static Result<CompilationError, Expression> CompileOperatorApplication(
@@ -1373,13 +1122,6 @@ public class ExpressionCompiler
     {
         var newBindings = new Dictionary<string, Expression>();
 
-        var newBindingTypes =
-            context.LocalBindingTypes is { } existingBindingTypes
-            ?
-            existingBindingTypes.ToImmutableDictionary()
-            :
-            [];
-
         if (context.LocalBindings is { } existingBindings)
         {
             foreach (var kvp in existingBindings)
@@ -1409,6 +1151,10 @@ public class ExpressionCompiler
                     PatternCompiler.CollectPatternNames(letDestructuring.Pattern, names);
                     CollectExpressionReferences(letDestructuring.Expression, deps);
                     break;
+
+                default:
+                    throw new NotImplementedException(
+                        $"{nameof(CompileLetExpressionBody)} does not handle let declaration variant: {decl.GetType().Name}");
             }
 
             declarationInfos.Add((i, names, deps));
@@ -1437,7 +1183,7 @@ public class ExpressionCompiler
                 "Unexpected type of result from TopologicalSortDeclarations: " + sortedIndicesResult.GetType().FullName);
         }
 
-        var letContext = context.WithReplacedLocalBindingsAndTypes(newBindings, newBindingTypes);
+        var letContext = context.WithReplacedLocalBindings(newBindings);
 
         foreach (var idx in sortedIndices)
         {
@@ -1452,28 +1198,6 @@ public class ExpressionCompiler
 
                     if (funcArgs.Count is 0)
                     {
-                        // Infer the type of the bound expression BEFORE compiling
-                        // This allows us to propagate types from parameters through let bindings
-                        var bindingType =
-                            TypeInference.InferExpressionType(
-                                funcBody,
-                                context.ParameterNames,
-                                context.ParameterTypes,
-                                newBindingTypes.Count > 0 ? newBindingTypes : null,
-                                context.CurrentModuleName,
-                                context.FunctionTypes);
-
-                        if (bindingType is TypeInference.InferredType.UnknownType &&
-                            TryGetRecordTypeForAccess(funcBody, letContext) is { } recordType)
-                        {
-                            bindingType = recordType;
-                        }
-
-                        newBindingTypes = newBindingTypes.SetItem(funcName, bindingType);
-
-                        // Update the let context with the new type before compiling
-                        letContext = letContext.WithReplacedLocalBindingsAndTypes(newBindings, newBindingTypes);
-
                         var compiledBodyResult = Compile(funcBody, letContext);
 
                         if (compiledBodyResult.IsErrOrNull() is { } bodyErr)
@@ -1492,27 +1216,6 @@ public class ExpressionCompiler
 
                 case SyntaxTypes.LetDeclaration.LetDestructuring letDestructuring:
 
-                    // Infer the type of the expression being destructured
-                    var destructuredExprType =
-                        TypeInference.InferExpressionType(
-                            letDestructuring.Expression,
-                            context.ParameterNames,
-                            context.ParameterTypes,
-                            newBindingTypes.Count > 0 ? newBindingTypes : null,
-                            context.CurrentModuleName,
-                            context.FunctionTypes);
-
-                    // Extract binding types from the pattern using the inferred type
-                    newBindingTypes =
-                        TypeInference.ExtractPatternBindingTypesFromInferredWithChoiceTagTypes(
-                            letDestructuring.Pattern,
-                            destructuredExprType,
-                            newBindingTypes,
-                            context.ModuleCompilationContext.ChoiceTagTypes);
-
-                    // Update the let context with the new types
-                    letContext = letContext.WithReplacedLocalBindingsAndTypes(newBindings, newBindingTypes);
-
                     var destructuredResult = Compile(letDestructuring.Expression, letContext);
 
                     if (destructuredResult.IsErrOrNull() is { } destrErr)
@@ -1529,12 +1232,7 @@ public class ExpressionCompiler
                     var patternBindings =
                         PatternCompiler.ExtractPatternBindings(
                             letDestructuring.Pattern,
-                            destrExpr,
-                            scrutineeType: destructuredExprType,
-                            recordTypeAliasFields:
-                            context.ModuleCompilationContext.RecordTypeAliasConstructors,
-                            choiceTagTypes:
-                            context.ModuleCompilationContext.ChoiceTagTypes);
+                            destrExpr);
 
                     foreach (var kvp in patternBindings)
                     {
@@ -1542,9 +1240,13 @@ public class ExpressionCompiler
                     }
 
                     // Update the let context with the new bindings
-                    letContext = letContext.WithReplacedLocalBindingsAndTypes(newBindings, newBindingTypes);
+                    letContext = letContext.WithReplacedLocalBindings(newBindings);
 
                     break;
+
+                default:
+                    throw new NotImplementedException(
+                        $"{nameof(CompileLetExpressionBody)} does not handle let declaration variant: {decl.GetType().Name}");
             }
         }
 
@@ -1614,6 +1316,10 @@ public class ExpressionCompiler
                         case SyntaxTypes.LetDeclaration.LetDestructuring letDestr:
                             PatternCompiler.CollectPatternNames(letDestr.Pattern, localNames);
                             break;
+
+                        default:
+                            throw new NotImplementedException(
+                                $"{nameof(CollectExpressionReferences)} does not handle let declaration variant: {decl.GetType().Name}");
                     }
                 }
 
@@ -1630,6 +1336,10 @@ public class ExpressionCompiler
                         case SyntaxTypes.LetDeclaration.LetDestructuring letDestr:
                             CollectExpressionReferences(letDestr.Expression, innerRefs);
                             break;
+
+                        default:
+                            throw new NotImplementedException(
+                                $"{nameof(CollectExpressionReferences)} does not handle let declaration variant: {decl.GetType().Name}");
                     }
                 }
 
@@ -1665,6 +1375,10 @@ public class ExpressionCompiler
 
             case SyntaxTypes.Expression.RecordAccess recordAccess:
                 CollectExpressionReferences(recordAccess.Record, refs);
+                break;
+
+            case SyntaxTypes.Expression.ProjectItem projection:
+                CollectExpressionReferences(projection.Value, refs);
                 break;
 
             case SyntaxTypes.Expression.CaseExpression caseExpr:
@@ -1717,6 +1431,20 @@ public class ExpressionCompiler
                 }
 
                 break;
+
+            case SyntaxTypes.Expression.UnitExpr:
+            case SyntaxTypes.Expression.StringLiteral:
+            case SyntaxTypes.Expression.CharLiteral:
+            case SyntaxTypes.Expression.IntegerLiteral:
+            case SyntaxTypes.Expression.FloatLiteral:
+            case SyntaxTypes.Expression.PrefixOperator:
+            case SyntaxTypes.Expression.RecordAccessFunction:
+            case SyntaxTypes.Expression.GLSLExpression:
+                break;
+
+            default:
+                throw new NotImplementedException(
+                    $"{nameof(CollectExpressionReferences)} does not handle expression variant: {expression.GetType().Name}");
         }
     }
 

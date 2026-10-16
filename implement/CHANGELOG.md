@@ -1,5 +1,11 @@
 # Pine Changelog - Implement
 
+## 2026-10-16 - Elm Compiler - Introduce intermediate representation for lowering and record projection
+
++ Introduced a distinct intermediate representation (IR) between Elm syntax transformations and Pine emission, separating type-informed lowering from the emission backend.
++ Lowered closed-record field access, record patterns, and updates to explicit projections and construction, while retaining generic runtime operations for open records. The existing record encoding is unchanged.
++ Aligned generic record-access optimization reporting with the lowered IR used for emission, resolving inconsistencies between reported opportunities and generated code.
+
 ## 2026-09-21 - Elm - Make Elm value encodings for choices and records more compact
 
 + Changed encoding of Elm choice values to `<Choice>`

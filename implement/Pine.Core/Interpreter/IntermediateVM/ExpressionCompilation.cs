@@ -25,6 +25,23 @@ public record ExpressionCompilation(
     StackFrameInstructions Generic,
     IReadOnlyList<(IReadOnlyList<EnvConstraintItem> constraint, StackFrameInstructions instructions)> Specialized)
 {
+    // Deep projections must not turn one computed argument into multiple evaluations.
+    private static bool DuplicatesArgumentEvaluations(
+        Expression.Eval call,
+        Expression body,
+        Expression inlined)
+    {
+        if (call.Environment.EvalCount is 0 ||
+            inlined.EvalCount <= body.EvalCount + call.Environment.EvalCount)
+        {
+            return false;
+        }
+
+        return
+            ComputeEvalPathMax(inlined, _ => true) >
+            (long)ComputeEvalPathMax(body, _ => true) + ComputeEvalPathMax(call.Environment, _ => true);
+    }
+
     /// <summary>
     /// Selects the most specific instruction variant whose environment constraints match the supplied environment.
     /// </summary>
@@ -615,6 +632,9 @@ public record ExpressionCompilation(
                     },
                     parseCache,
                     reducedExpressionCache: reducedExpressionCache);
+
+            if (DuplicatesArgumentEvaluations(evalExpr, parseOk, inlinedExprReduced))
+                return null;
 
             /*
              * Per-branch (max-of-paths) cost gate: a Conditional contributes the cost of
@@ -1230,6 +1250,9 @@ public record ExpressionCompilation(
                         },
                         parseCache,
                         reducedExpressionCache: reducedExpressionCache);
+
+                if (DuplicatesArgumentEvaluations(evalExpr, parseOk, inlinedExprReduced))
+                    return null;
 
                 bool IsExpansionCandidateForSecondInliner(Expression.Eval pe)
                 {

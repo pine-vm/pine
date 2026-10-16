@@ -7,6 +7,9 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// </summary>
 internal static class GeneratedNameSuffixes
 {
+    /// <summary>Prefix for collision-free IR bindings replacing record patterns.</summary>
+    public const string RecordProjectionBindingPrefix = "record__projection_";
+
     /// <summary>
     /// Infix used by <see cref="LambdaLifting"/> when promoting a
     /// closure to a top-level decl. The full pattern is

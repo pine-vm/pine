@@ -1,6 +1,11 @@
 using AwesomeAssertions;
+using Pine.Core.CodeAnalysis;
+using Pine.Core.CodeGen;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Interpreter.IntermediateVM;
+using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using Xunit;
 
@@ -8,6 +13,140 @@ namespace Pine.Core.Tests.Interpreter.IntermediateVM;
 
 public class ExpressionCompilationInlineEvalTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Mutually_exclusive_projections_can_still_be_inlined(bool environmentAware)
+    {
+        var parseCache = new PineVMParseCache();
+
+        var producer =
+            new Expression.Eval(
+                ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance),
+                ExpressionBuilder.BuildExpressionForPathInExpression([1], Expression.EnvironmentInstance));
+
+        var body =
+            Expression.ConditionalInst(
+                condition: ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance),
+                trueBranch: ExpressionBuilder.BuildExpressionForPathInExpression([1, 2], Expression.EnvironmentInstance),
+                falseBranch:
+                ExpressionBuilder.BuildExpressionForPathInExpression([1, 4], Expression.EnvironmentInstance));
+
+        var call =
+            new Expression.Eval(
+                Expression.LitralInst(ExpressionEncoding.EncodeExpressionAsValue(body)),
+                Expression.ListInst(
+                    [
+                    ExpressionBuilder.BuildExpressionForPathInExpression([2], Expression.EnvironmentInstance),
+                    producer
+                    ]));
+
+        var inlined =
+            environmentAware
+            ?
+            ExpressionCompilation.ReduceExpressionAndInlineRecursive(
+                rootExpression: call,
+                rootExprAlternativeForms: [],
+                envConstraintId: null,
+                maxDepth: 4,
+                maxSubexpressionCount: 4_000,
+                parseCache,
+                disableRecurseAfterInline: false,
+                skipInlining: (_, _) => false)
+            :
+            ExpressionCompilation.InlineStaticInvocationsAndReduceRecursive(
+                call,
+                ImmutableStack<Expression>.Empty,
+                maxDepth: 4,
+                maxSubexpressionCount: 4_000,
+                parseCache,
+                disableRecurseAfterInline: false,
+                skipInlining: _ => false);
+
+        inlined.Should().BeOfType<Expression.Conditional>();
+        ExpressionCompilation.ComputeEvalPathMax(inlined, _ => true).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Deep_projections_do_not_duplicate_computed_arguments(bool environmentAware, bool repeated)
+    {
+        var parseCache = new PineVMParseCache();
+
+        var producer =
+            new Expression.Eval(
+                ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance),
+                ExpressionBuilder.BuildExpressionForPathInExpression([1], Expression.EnvironmentInstance));
+
+        var first = ExpressionBuilder.BuildExpressionForPathInExpression([1, 2], Expression.EnvironmentInstance);
+        var second = ExpressionBuilder.BuildExpressionForPathInExpression([1, 4], Expression.EnvironmentInstance);
+        var body = Expression.ListInst(repeated ? [first, second] : [first]);
+
+        var call =
+            new Expression.Eval(
+                Expression.LitralInst(ExpressionEncoding.EncodeExpressionAsValue(body)),
+                Expression.ListInst([Expression.LitralInst(PineValue.EmptyList), producer]));
+
+        var inlined =
+            environmentAware
+            ?
+            ExpressionCompilation.ReduceExpressionAndInlineRecursive(
+                rootExpression: call,
+                rootExprAlternativeForms: [],
+                envConstraintId: null,
+                maxDepth: 4,
+                maxSubexpressionCount: 4_000,
+                parseCache,
+                disableRecurseAfterInline: false,
+                skipInlining: (_, _) => false)
+            :
+            ExpressionCompilation.InlineStaticInvocationsAndReduceRecursive(
+                call,
+                ImmutableStack<Expression>.Empty,
+                maxDepth: 4,
+                maxSubexpressionCount: 4_000,
+                parseCache,
+                disableRecurseAfterInline: false,
+                skipInlining: _ => false);
+
+        Pine.Core.CodeAnalysis.CodeAnalysis.CountOccurrencesInSelfAndDescendants(inlined, producer).Should().Be(1);
+
+        if (repeated)
+            inlined.Should().BeOfType<Expression.Eval>();
+
+        else
+            inlined.Should().BeOfType<Expression.List>();
+
+        var producerBody =
+            Expression.ListInst(
+                [
+                Expression.LitralInst(PineValue.EmptyList),
+                Expression.LitralInst(StringEncoding.ValueFromString("a")),
+                Expression.EnvironmentInstance,
+                Expression.LitralInst(StringEncoding.ValueFromString("b")),
+                Expression.EnvironmentInstance
+                ]);
+
+        var environment =
+            PineValue.List(
+                [ExpressionEncoding.EncodeExpressionAsValue(producerBody), IntegerEncoding.EncodeSignedInteger(7)]);
+
+        var actual =
+            Pine.Core.Interpreter.DirectInterpreter.WithoutEvalCaching(parseCache)
+            .EvaluateExpression(inlined, environment).Extract(error => throw new Exception(error));
+
+        actual.Should().Be(
+            PineValue.List(
+                repeated
+                ?
+                [IntegerEncoding.EncodeSignedInteger(7), IntegerEncoding.EncodeSignedInteger(7)]
+                :
+                [IntegerEncoding.EncodeSignedInteger(7)]));
+    }
+
     [Fact]
     public void Traverses_all_composite_expression_types_and_tracks_condition_count()
     {

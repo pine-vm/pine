@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
+using SyntaxTypes = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 using ConcreteSyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
@@ -80,13 +80,6 @@ public record CompiledFunctionInfo(
     IReadOnlyList<PineValue> EnvFunctions);
 
 /// <summary>
-/// Aggregates the type information known for a function.
-/// </summary>
-public record FunctionTypeInfo(
-    TypeInference.InferredType ReturnType,
-    IReadOnlyList<TypeInference.InferredType> ParameterTypes);
-
-/// <summary>
 /// Represents a Strongly Connected Component (SCC) of functions.
 /// All functions in an SCC share the same dependency layout as per the spec:
 /// "All functions in a group of mutually recursive functions use the same order."
@@ -155,19 +148,15 @@ public record FunctionScc(
 /// <param name="CompiledFunctionsCache">Cache of already compiled functions with their dependency layouts.</param>
 /// <param name="PineKernelModuleNames">Names of Pine kernel modules.</param>
 /// <param name="FunctionDependencyLayouts">Pre-computed dependency layouts for all functions (populated before compilation).</param>
-/// <param name="FunctionTypes">Map of qualified function names to their return and parameter types.</param>
 /// <param name="RecordTypeAliasConstructors">Map of qualified record type alias names to their field names in declaration order (for record constructors).</param>
-/// <param name="ChoiceTagTypes">Map of qualified choice type tag names to their result and argument types.</param>
-/// <param name="TypeAliasDefinitions">Map of qualified type alias names to definitions used for expanding types during emission.</param>
+/// <param name="ChoiceConstructorArities">Map of qualified choice constructors to their argument counts.</param>
 public record ModuleCompilationContext(
     IReadOnlyDictionary<DeclQualifiedName, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)> AllFunctions,
     ImmutableDictionary<DeclQualifiedName, CompiledFunctionInfo> CompiledFunctionsCache,
     FrozenSet<string> PineKernelModuleNames,
     IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? FunctionDependencyLayouts = null,
-    IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? FunctionTypes = null,
     IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? RecordTypeAliasConstructors = null,
-    IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? ChoiceTagTypes = null,
-    IReadOnlyDictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition>? TypeAliasDefinitions = null)
+    IReadOnlyDictionary<DeclQualifiedName, int>? ChoiceConstructorArities = null)
 {
     /// <summary>
     /// Creates a module compilation context from concrete Elm declarations by converting them to abstract declarations first.
@@ -177,10 +166,8 @@ public record ModuleCompilationContext(
         ImmutableDictionary<DeclQualifiedName, CompiledFunctionInfo> compiledFunctionsCache,
         FrozenSet<string> pineKernelModuleNames,
         IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? functionDependencyLayouts = null,
-        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? functionTypes = null,
         IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? recordTypeAliasConstructors = null,
-        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? choiceTagTypes = null,
-        IReadOnlyDictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition>? typeAliasDefinitions = null)
+        IReadOnlyDictionary<DeclQualifiedName, int>? choiceConstructorArities = null)
         : this(
             allFunctions.ToDictionary(
                 kvp => kvp.Key,
@@ -188,14 +175,13 @@ public record ModuleCompilationContext(
                 (
                     kvp.Value.moduleName,
                     kvp.Value.functionName,
-                    (SyntaxTypes.Declaration.FunctionDeclaration)ElmSyntaxAbstractConversion.FromDeclaration(kvp.Value.declaration))),
+                    (SyntaxTypes.Declaration.FunctionDeclaration)SyntaxTypes.ConvertFromAbstractSyntax.FromDeclaration(
+                        ElmSyntaxAbstractConversion.FromDeclaration(kvp.Value.declaration)))),
             compiledFunctionsCache,
             pineKernelModuleNames,
             functionDependencyLayouts,
-            functionTypes,
             recordTypeAliasConstructors,
-            choiceTagTypes,
-            typeAliasDefinitions)
+            choiceConstructorArities)
     {
     }
 
@@ -339,25 +325,6 @@ public record ModuleCompilationContext(
         PineKernelModuleNames.Contains(moduleName);
 
     /// <summary>
-    /// Gets the recorded type information for a function.
-    /// </summary>
-    public FunctionTypeInfo? TryGetFunctionTypeInfo(string qualifiedName) =>
-        TryGetFunctionTypeInfo(QualifiedNameHelper.FromQualifiedNameString(qualifiedName));
-
-    /// <summary>
-    /// Gets the recorded type information for a function.
-    /// </summary>
-    public FunctionTypeInfo? TryGetFunctionTypeInfo(DeclQualifiedName qualifiedName)
-    {
-        if (FunctionTypes?.TryGetValue(qualifiedName, out var functionTypeInfo) ?? false)
-        {
-            return functionTypeInfo;
-        }
-
-        return null;
-    }
-
-    /// <summary>
     /// Tries to get the field names for a record type alias constructor.
     /// The field names are returned in the order they appear in the type alias declaration,
     /// which determines the order of constructor arguments.
@@ -394,9 +361,9 @@ public record ModuleCompilationContext(
     /// </summary>
     public int? TryGetChoiceTypeConstructorArgumentCount(DeclQualifiedName qualifiedConstructorName)
     {
-        if (ChoiceTagTypes?.TryGetValue(qualifiedConstructorName, out var choiceTagType) ?? false)
+        if (ChoiceConstructorArities?.TryGetValue(qualifiedConstructorName, out var arity) ?? false)
         {
-            return choiceTagType.ParameterTypes.Count;
+            return arity;
         }
 
         return null;
@@ -409,16 +376,13 @@ public record ModuleCompilationContext(
 /// </summary>
 public record ExpressionCompilationContext(
     IReadOnlyDictionary<string, int> ParameterNames,
-    IReadOnlyDictionary<string, TypeInference.InferredType> ParameterTypes,
     string CurrentModuleName,
     string? CurrentFunctionName,
     IReadOnlyDictionary<string, Expression>? LocalBindings,
-    IReadOnlyDictionary<string, TypeInference.InferredType>? LocalBindingTypes,
     IReadOnlyList<string> DependencyLayout,
     ModuleCompilationContext ModuleCompilationContext,
     PineVMParseCache ParseCache,
-    IDictionary<(Expression, ReductionConfig), Expression>? ReducedExpressionCache,
-    IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? FunctionTypes = null)
+    IDictionary<(Expression, ReductionConfig), Expression>? ReducedExpressionCache)
 {
 
     /// <summary>
@@ -456,32 +420,6 @@ public record ExpressionCompilationContext(
     /// <returns>A new context with the new bindings.</returns>
     public ExpressionCompilationContext WithReplacedLocalBindings(IReadOnlyDictionary<string, Expression>? bindings) =>
         this with { LocalBindings = bindings };
-
-    /// <summary>
-    /// Creates a new context with updated local bindings and their types (replacing existing).
-    /// </summary>
-    /// <param name="bindings">The new bindings dictionary.</param>
-    /// <param name="bindingTypes">The new binding types dictionary.</param>
-    /// <returns>A new context with the new bindings and types.</returns>
-    public ExpressionCompilationContext WithReplacedLocalBindingsAndTypes(
-        IReadOnlyDictionary<string, Expression>? bindings,
-        IReadOnlyDictionary<string, TypeInference.InferredType>? bindingTypes) =>
-        this with { LocalBindings = bindings, LocalBindingTypes = bindingTypes };
-
-    /// <summary>
-    /// Tries to get the type of a local binding by name.
-    /// </summary>
-    /// <param name="name">The binding name.</param>
-    /// <returns>The type if found, or null otherwise.</returns>
-    public TypeInference.InferredType? TryGetLocalBindingType(string name)
-    {
-        if (LocalBindingTypes is { } types && types.TryGetValue(name, out var t))
-        {
-            return t;
-        }
-
-        return null;
-    }
 
     /// <summary>
     /// Tries to get a local binding by name.

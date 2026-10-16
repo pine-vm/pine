@@ -1,11 +1,10 @@
-using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
+using SyntaxTypes = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -82,17 +81,7 @@ public class PatternCompiler
                 "CompileCaseExpression: unexpected result type: " + scrutineeResult.GetType().Name);
         }
 
-        // Infer the type of the scrutinee for pattern type extraction
-        var scrutineeType =
-            TypeInference.InferExpressionType(
-                caseExpression.Expression,
-                context.ParameterNames,
-                context.ParameterTypes,
-                context.LocalBindingTypes,
-                context.CurrentModuleName,
-                context.FunctionTypes);
-
-        return CompileCaseBlock(scrutinee, scrutineeType, caseExpression.Cases, context);
+        return CompileCaseBlock(scrutinee, caseExpression.Cases, context);
     }
 
     /// <summary>
@@ -100,7 +89,6 @@ public class PatternCompiler
     /// </summary>
     public static Result<CompilationError, Expression> CompileCaseBlock(
         Expression scrutineeExpr,
-        TypeInference.InferredType scrutineeType,
         IReadOnlyList<SyntaxTypes.Case> cases,
         ExpressionCompilationContext context)
     {
@@ -109,7 +97,6 @@ public class PatternCompiler
             var invokedResult =
                 CompileCaseBlockViaInvocation(
                     scrutineeExpr,
-                    scrutineeType,
                     cases,
                     context);
 
@@ -140,7 +127,6 @@ public class PatternCompiler
         var inlinedResult =
             CompileCaseBlockInliningScrutinee(
                 scrutineeExpr,
-                scrutineeType,
                 cases,
                 context);
 
@@ -193,7 +179,6 @@ public class PatternCompiler
     /// </summary>
     public static Result<CompilationError, Expression> CompileCaseBlockInliningScrutinee(
         Expression scrutineeExpr,
-        TypeInference.InferredType scrutineeType,
         IReadOnlyList<SyntaxTypes.Case> cases,
         ExpressionCompilationContext context)
     {
@@ -207,42 +192,9 @@ public class PatternCompiler
             var patternBindings =
                 ExtractPatternBindings(
                     pattern,
-                    scrutineeExpr,
-                    scrutineeType: scrutineeType,
-                    recordTypeAliasFields:
-                    context.ModuleCompilationContext.RecordTypeAliasConstructors,
-                    choiceTagTypes:
-                    context.ModuleCompilationContext.ChoiceTagTypes);
+                    scrutineeExpr);
 
-            // Extract binding types from the pattern
-            var patternBindingTypes =
-                TypeInference.ExtractPatternBindingTypesFromInferredWithChoiceTagTypes(
-                    pattern,
-                    scrutineeType,
-                    [],
-                    context.ModuleCompilationContext.ChoiceTagTypes);
-
-            // Create case context with both bindings and binding types
-            var caseContext = context;
-
-            if (patternBindings.Count > 0)
-            {
-                caseContext = caseContext.WithLocalBindings(patternBindings);
-            }
-
-            if (patternBindingTypes.Count > 0)
-            {
-                // Merge existing binding types with new pattern binding types
-                var mergedBindingTypes =
-                    context.LocalBindingTypes is { } existingTypes
-                    ?
-                    existingTypes.ToImmutableDictionary().SetItems(patternBindingTypes)
-                    :
-                    patternBindingTypes;
-
-                caseContext =
-                    caseContext.WithReplacedLocalBindingsAndTypes(caseContext.LocalBindings, mergedBindingTypes);
-            }
+            var caseContext = context.WithLocalBindings(patternBindings);
 
             var caseBodyResult = ExpressionCompiler.Compile(caseItem.Expression, caseContext);
 
@@ -286,7 +238,6 @@ public class PatternCompiler
     /// </summary>
     public static Result<CompilationError, Expression> CompileCaseBlockViaInvocation(
         Expression scrutineeOuterExpr,
-        TypeInference.InferredType scrutineeType,
         IReadOnlyList<SyntaxTypes.Case> cases,
         ExpressionCompilationContext outerContext)
     {
@@ -325,8 +276,8 @@ public class PatternCompiler
          *
          *   Item 0:     the env-functions list (forwarded from the outer
          *               environment so that sibling-SCC references inside
-         *               the case-arm bodies — which always look up
-         *               Env[0][functionIndex] — keep working).
+         *               the case-arm bodies â€” which always look up
+         *               Env[0][functionIndex] â€” keep working).
          *   Item 1:     the scrutinee.
          *   Item 2 - N: all bindings required by the case-arm expressions.
          * */
@@ -386,42 +337,9 @@ public class PatternCompiler
             var patternBindings =
                 ExtractPatternBindings(
                     pattern,
-                    scrutineeInnerExpr,
-                    scrutineeType: scrutineeType,
-                    recordTypeAliasFields:
-                    innerContext.ModuleCompilationContext.RecordTypeAliasConstructors,
-                    choiceTagTypes:
-                    innerContext.ModuleCompilationContext.ChoiceTagTypes);
+                    scrutineeInnerExpr);
 
-            // Extract binding types from the pattern
-            var patternBindingTypes =
-                TypeInference.ExtractPatternBindingTypesFromInferredWithChoiceTagTypes(
-                    pattern,
-                    scrutineeType,
-                    [],
-                    innerContext.ModuleCompilationContext.ChoiceTagTypes);
-
-            // Create case context with both bindings and binding types
-            var caseContext = innerContext;
-
-            if (patternBindings.Count > 0)
-            {
-                caseContext = caseContext.WithLocalBindings(patternBindings);
-            }
-
-            if (patternBindingTypes.Count > 0)
-            {
-                // Merge existing binding types with new pattern binding types
-                var mergedBindingTypes =
-                    innerContext.LocalBindingTypes is { } existingTypes
-                    ?
-                    existingTypes.ToImmutableDictionary().SetItems(patternBindingTypes)
-                    :
-                    patternBindingTypes;
-
-                caseContext =
-                    caseContext.WithReplacedLocalBindingsAndTypes(caseContext.LocalBindings, mergedBindingTypes);
-            }
+            var caseContext = innerContext.WithLocalBindings(patternBindings);
 
             var caseBodyResult = ExpressionCompiler.Compile(caseItem.Expression, caseContext);
 
@@ -477,64 +395,16 @@ public class PatternCompiler
     /// </summary>
     /// <param name="pattern">The pattern being analyzed.</param>
     /// <param name="scrutinee">An expression for the value being matched.</param>
-    /// <param name="recordFieldNames">
-    /// Optional alphabetically-sorted full list of field names of the
-    /// scrutinee's record type, used by record-pattern destructure to
-    /// look up each named field by its true position in the record
-    /// rather than by the pattern's local loop position. When the
-    /// caller has type-checker access this should always be supplied
-    /// for record-pattern destructures, otherwise the destructure is
-    /// only correct when the pattern lists every field of the record.
-    /// </param>
     public static PatternAnalysis AnalyzePattern(
         SyntaxTypes.Pattern pattern,
-        Expression scrutinee,
-        IReadOnlyList<string>? recordFieldNames = null) =>
+        Expression scrutinee) =>
         AnalyzePatternRecursive(
             pattern,
-            scrutinee,
-            scrutineeType: null,
-            recordTypeAliasFields: null,
-            choiceTagTypes: null,
-            topLevelRecordFieldNamesOverride: recordFieldNames);
-
-    /// <summary>
-    /// Analyzes a pattern carrying the scrutinee's full
-    /// <see cref="TypeInference.InferredType"/> and the module's
-    /// record-type-alias dictionary. This enables the recursive
-    /// descent — through <see cref="SyntaxTypes.Pattern.UnConsPattern"/>,
-    /// <see cref="SyntaxTypes.Pattern.ListPattern"/>,
-    /// <see cref="SyntaxTypes.Pattern.TuplePattern"/>,
-    /// <see cref="SyntaxTypes.Pattern.NamedPattern"/>, and
-    /// <see cref="SyntaxTypes.Pattern.AsPattern"/> — to compute the
-    /// nested scrutinee's type at every level, so a record sub-pattern
-    /// like the head of <c>{ start, end } :: rest</c> on a
-    /// <c>List Layout</c>, or the inner record pattern of a
-    /// <c>Node { start } _</c> destructure of a choice-type
-    /// constructor whose argument is a record alias, still hits the
-    /// static field-access path.
-    /// </summary>
-    public static PatternAnalysis AnalyzePattern(
-        SyntaxTypes.Pattern pattern,
-        Expression scrutinee,
-        TypeInference.InferredType? scrutineeType,
-        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? choiceTagTypes = null) =>
-        AnalyzePatternRecursive(
-            pattern,
-            scrutinee,
-            scrutineeType: scrutineeType,
-            recordTypeAliasFields: recordTypeAliasFields,
-            choiceTagTypes: choiceTagTypes,
-            topLevelRecordFieldNamesOverride: null);
+            scrutinee);
 
     private static PatternAnalysis AnalyzePatternRecursive(
         SyntaxTypes.Pattern pattern,
-        Expression scrutinee,
-        TypeInference.InferredType? scrutineeType,
-        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? choiceTagTypes = null,
-        IReadOnlyList<string>? topLevelRecordFieldNamesOverride = null)
+        Expression scrutinee)
     {
         return pattern switch
         {
@@ -561,50 +431,40 @@ public class PatternCompiler
             SyntaxTypes.Pattern.AsPattern asPattern =>
             AnalyzeAsPattern(
                 asPattern,
-                scrutinee,
-                scrutineeType,
-                recordTypeAliasFields,
-                choiceTagTypes,
-                topLevelRecordFieldNamesOverride),
+                scrutinee),
 
             SyntaxTypes.Pattern.ListPattern listPattern =>
-            AnalyzeListPattern(listPattern, scrutinee, scrutineeType, recordTypeAliasFields, choiceTagTypes),
+            AnalyzeListPattern(listPattern, scrutinee),
 
             SyntaxTypes.Pattern.UnConsPattern unConsPattern =>
             AnalyzeUnConsPattern(
                 unConsPattern,
-                scrutinee,
-                scrutineeType,
-                recordTypeAliasFields,
-                choiceTagTypes),
+                scrutinee),
 
             SyntaxTypes.Pattern.TuplePattern tuplePattern =>
-            AnalyzeTuplePattern(tuplePattern, scrutinee, scrutineeType, recordTypeAliasFields, choiceTagTypes),
+            AnalyzeTuplePattern(tuplePattern, scrutinee),
 
             SyntaxTypes.Pattern.NamedPattern namedPattern =>
-            AnalyzeNamedPattern(namedPattern, scrutinee, scrutineeType, recordTypeAliasFields, choiceTagTypes),
+            AnalyzeNamedPattern(namedPattern, scrutinee),
 
-            SyntaxTypes.Pattern.RecordPattern recordPattern =>
-            AnalyzeRecordPattern(
-                recordPattern,
-                scrutinee,
-                topLevelRecordFieldNamesOverride
-                ?? SortedRecordFieldNamesFromInferredType(scrutineeType, recordTypeAliasFields)),
+            SyntaxTypes.Pattern.RecordPattern =>
+            throw new InvalidOperationException("Record patterns must be lowered before Pine emission."),
 
             SyntaxTypes.Pattern.UnitPattern =>
             PatternAnalysis.WithCondition(new PatternCondition.LengthEquals(0)),
 
+            SyntaxTypes.Pattern.FloatPattern =>
+            throw new NotImplementedException($"Pattern type not yet supported: {pattern.GetType().Name}"),
+
             _ =>
-            throw new NotImplementedException($"Pattern type not yet supported: {pattern.GetType().Name}")
+            throw new NotImplementedException(
+                $"{nameof(AnalyzePatternRecursive)} does not handle pattern variant: {pattern.GetType().Name}")
         };
     }
 
     private static PatternAnalysis AnalyzeListPattern(
         SyntaxTypes.Pattern.ListPattern listPattern,
-        Expression scrutinee,
-        TypeInference.InferredType? scrutineeType,
-        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? choiceTagTypes)
+        Expression scrutinee)
     {
         if (listPattern.Elements.Count is 0)
         {
@@ -626,13 +486,6 @@ public class PatternCompiler
 
         var allBindings = ImmutableDictionary<string, Expression>.Empty;
 
-        var elementType =
-            scrutineeType is TypeInference.InferredType.ListType listType
-            ?
-            listType.ElementType
-            :
-            null;
-
         for (var i = 0; i < listPattern.Elements.Count; i++)
         {
             var elementPattern = listPattern.Elements[i];
@@ -641,10 +494,7 @@ public class PatternCompiler
             var elementAnalysis =
                 AnalyzePatternRecursive(
                     elementPattern,
-                    elementExpr,
-                    elementType,
-                    recordTypeAliasFields,
-                    choiceTagTypes);
+                    elementExpr);
 
             allBindings = allBindings.SetItems(elementAnalysis.Bindings);
 
@@ -671,38 +521,20 @@ public class PatternCompiler
 
     private static PatternAnalysis AnalyzeUnConsPattern(
         SyntaxTypes.Pattern.UnConsPattern unConsPattern,
-        Expression scrutinee,
-        TypeInference.InferredType? scrutineeType,
-        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? choiceTagTypes)
+        Expression scrutinee)
     {
         var headExpr = BuiltinHelpers.ApplyBuiltinHead(scrutinee);
         var tailExpr = BuiltinHelpers.ApplyBuiltinSkip(1, scrutinee);
 
-        // For `head :: tail`, the head's type is the element type of
-        // the list, and the tail's type is the list itself.
-        var elementType =
-            scrutineeType is TypeInference.InferredType.ListType listType
-            ?
-            listType.ElementType
-            :
-            null;
-
         var headAnalysis =
             AnalyzePatternRecursive(
                 unConsPattern.Head,
-                headExpr,
-                elementType,
-                recordTypeAliasFields,
-                choiceTagTypes);
+                headExpr);
 
         var tailAnalysis =
             AnalyzePatternRecursive(
                 unConsPattern.Tail,
-                tailExpr,
-                scrutineeType,
-                recordTypeAliasFields,
-                choiceTagTypes);
+                tailExpr);
 
         var allBindings =
             ImmutableDictionary<string, Expression>.Empty
@@ -743,10 +575,7 @@ public class PatternCompiler
 
     private static PatternAnalysis AnalyzeTuplePattern(
         SyntaxTypes.Pattern.TuplePattern tuplePattern,
-        Expression scrutinee,
-        TypeInference.InferredType? scrutineeType,
-        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? choiceTagTypes)
+        Expression scrutinee)
     {
         if (AsConstantPattern(tuplePattern) is { } constantValue)
         {
@@ -763,32 +592,15 @@ public class PatternCompiler
 
         var allBindings = ImmutableDictionary<string, Expression>.Empty;
 
-        var tupleElementTypes =
-            scrutineeType is TypeInference.InferredType.TupleType tupleType
-            ?
-            tupleType.ElementTypes
-            :
-            null;
-
         for (var i = 0; i < tuplePattern.Elements.Count; i++)
         {
             var elementPattern = tuplePattern.Elements[i];
             var elementExpr = GetListElementExpression(scrutinee, i);
 
-            var elementType =
-                tupleElementTypes is not null && i < tupleElementTypes.Count
-                ?
-                tupleElementTypes[i]
-                :
-                null;
-
             var elementAnalysis =
                 AnalyzePatternRecursive(
                     elementPattern,
-                    elementExpr,
-                    elementType,
-                    recordTypeAliasFields,
-                    choiceTagTypes);
+                    elementExpr);
 
             allBindings = allBindings.SetItems(elementAnalysis.Bindings);
 
@@ -815,10 +627,7 @@ public class PatternCompiler
 
     private static PatternAnalysis AnalyzeNamedPattern(
         SyntaxTypes.Pattern.NamedPattern namedPattern,
-        Expression scrutinee,
-        TypeInference.InferredType? scrutineeType,
-        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? choiceTagTypes)
+        Expression scrutinee)
     {
         var tagName = namedPattern.Name.Name;
 
@@ -843,53 +652,15 @@ public class PatternCompiler
 
         if (namedPattern.Arguments.Count > 0)
         {
-            // Look up the constructor's argument types so that nested
-            // record patterns inside choice-type arguments (for example
-            // the inner record pattern of `Node { start } _` where
-            // `Node` wraps a `Range` record alias) can take the
-            // static field-access path.
-            IReadOnlyList<TypeInference.InferredType>? ctorArgTypes = null;
-
-            if (choiceTagTypes is not null)
-            {
-                var ctorQualifiedName =
-                    DeclQualifiedName.Create(
-                        namedPattern.Name.ModuleName,
-                        namedPattern.Name.Name);
-
-                if (choiceTagTypes.TryGetValue(ctorQualifiedName, out var choiceTagType))
-                {
-                    ctorArgTypes =
-                        scrutineeType is null
-                        ?
-                        choiceTagType.ParameterTypes
-                        :
-                        TypeInference.SpecializeTypesFromMatch(
-                            choiceTagType.ReturnType,
-                            scrutineeType,
-                            choiceTagType.ParameterTypes);
-                }
-            }
-
             for (var i = 0; i < namedPattern.Arguments.Count; i++)
             {
                 var argPattern = namedPattern.Arguments[i];
                 var argExpr = GetListElementExpression(scrutinee, 2 + i);
 
-                var argType =
-                    ctorArgTypes is not null && i < ctorArgTypes.Count
-                    ?
-                    ctorArgTypes[i]
-                    :
-                    null;
-
                 var argAnalysis =
                     AnalyzePatternRecursive(
                         argPattern,
-                        argExpr,
-                        scrutineeType: argType,
-                        recordTypeAliasFields: recordTypeAliasFields,
-                        choiceTagTypes: choiceTagTypes);
+                        argExpr);
 
                 allBindings = allBindings.SetItems(argAnalysis.Bindings);
 
@@ -915,111 +686,15 @@ public class PatternCompiler
         return new PatternAnalysis(allBindings, finalCondition);
     }
 
-    /// <summary>
-    /// Builds the bindings for a record-pattern match against
-    /// <paramref name="scrutinee"/>. When <paramref name="recordFieldNames"/>
-    /// is provided (the alphabetically-sorted field name list of the
-    /// scrutinee's full record type, as known to the type checker),
-    /// each pattern field is bound by looking up its position in that
-    /// list. Otherwise we fall back to the historical positional
-    /// approach: index slot <c>i</c> of the record for the i-th
-    /// alphabetically-sorted pattern name. The fallback is only correct
-    /// when the pattern names all of the record's fields; this is the
-    /// case for every record-pattern in the in-tree code outside the
-    /// LanguageService, but breaks for the
-    /// <c>let { hoverItems } = hoverItemsFromParsedModule ...</c> shape
-    /// the LS migration introduced. Always prefer the type-driven path
-    /// at the call site.
-    /// </summary>
-    private static PatternAnalysis AnalyzeRecordPattern(
-        SyntaxTypes.Pattern.RecordPattern recordPattern,
-        Expression scrutinee,
-        IReadOnlyList<string>? recordFieldNames)
-    {
-        var bindings = ImmutableDictionary<string, Expression>.Empty;
-
-        if (recordFieldNames is not null)
-        {
-            // Type-driven path: the caller knows the scrutinee's full
-            // record-field layout, so we compute each pattern field's
-            // position in the record directly. Records are stored with
-            // their fields sorted alphabetically in the new flat layout
-            // [tag, name0, value0, name1, value1, ...]. The index of the
-            // pattern field's name in `recordFieldNames` gives N, and the
-            // value at sorted index N lives at outer slot (2*N + 2).
-            var fieldNameToIndex =
-                recordFieldNames
-                .Select((name, idx) => (name, idx))
-                .ToDictionary(x => x.name, x => x.idx);
-
-            foreach (var fieldNode in recordPattern.Fields)
-            {
-                var fieldName = fieldNode.FieldName;
-
-                if (!fieldNameToIndex.TryGetValue(fieldName, out var indexInRecord))
-                {
-                    // Pattern names a field absent from the inferred
-                    // record type — should not happen for well-typed
-                    // programs, but be defensive: fall back to position.
-                    indexInRecord = bindings.Count;
-                }
-
-                var fieldValueExpr =
-                    GetListElementExpression(scrutinee, 2 * indexInRecord + 2);
-
-                bindings = bindings.Add(fieldName, fieldValueExpr);
-            }
-
-            return new PatternAnalysis(bindings, new PatternCondition.Always());
-        }
-
-        // Fallback path: we don't know the scrutinee's full layout
-        // statically. Look each pattern field up by name at runtime,
-        // using the same helper the dot-access fallback uses. This is
-        // O(n) over the record's fields (the static path above is
-        // O(1)), but is correct in every case — including open record
-        // types, records destructured before the type checker has full
-        // type info, and strict-subset patterns whose surrounding
-        // declaration has no type annotation.
-        foreach (var fieldNode in recordPattern.Fields)
-        {
-            var fieldName = fieldNode.FieldName;
-
-            var lookupEnv =
-                Expression.ListInst(
-                    [
-                    scrutinee,
-                    Expression.LitralInst(StringEncoding.ValueFromString(fieldName))
-                    ]);
-
-            var fieldValueExpr =
-                new Expression.Eval(
-                    encoded: Expression.LitralInst(RecordRuntime.PineFunctionForRecordAccessAsValue),
-                    environment: lookupEnv);
-
-            bindings = bindings.Add(fieldName, fieldValueExpr);
-        }
-
-        return new PatternAnalysis(bindings, new PatternCondition.Always());
-    }
-
     private static PatternAnalysis AnalyzeAsPattern(
         SyntaxTypes.Pattern.AsPattern asPattern,
-        Expression scrutinee,
-        TypeInference.InferredType? scrutineeType,
-        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? choiceTagTypes,
-        IReadOnlyList<string>? topLevelRecordFieldNamesOverride)
+        Expression scrutinee)
     {
         // First, analyze the inner pattern
         var innerAnalysis =
             AnalyzePatternRecursive(
                 asPattern.Pattern,
-                scrutinee,
-                scrutineeType,
-                recordTypeAliasFields,
-                choiceTagTypes,
-                topLevelRecordFieldNamesOverride);
+                scrutinee);
 
         // Add the "as" binding - this binds the entire scrutinee to the alias name
         var bindings = innerAnalysis.Bindings.Add(asPattern.Name, scrutinee);
@@ -1096,98 +771,15 @@ public class PatternCompiler
     }
 
     /// <summary>
-    /// If <paramref name="inferredType"/> is a closed record type,
-    /// returns its field names sorted alphabetically (the order in
-    /// which Elm records' fields are stored in the Pine encoding).
-    /// If <paramref name="inferredType"/> is a <see cref="TypeInference.InferredType.ChoiceType"/>
-    /// whose qualified name resolves to a record type-alias in
-    /// <paramref name="recordTypeAliasFields"/>, the alias's field
-    /// names are returned (sorted alphabetically) — this is what
-    /// makes record-pattern destructuring through type aliases (for
-    /// example <c>type alias Layout = { start : Int, end : Int }</c>)
-    /// take the static field-access path instead of the runtime
-    /// <see cref="RecordRuntime.PineFunctionForRecordAccessAsValue"/>
-    /// fallback. Otherwise returns <c>null</c>, signalling to the
-    /// pattern compiler that the record's full layout is not known.
-    /// </summary>
-    /// <param name="inferredType">The type inferred for the scrutinee.</param>
-    /// <param name="recordTypeAliasFields">
-    /// Optional map of qualified record type-alias names to the
-    /// alias's field names (the order does not have to be alphabetical;
-    /// this method sorts before returning). Typically the
-    /// <see cref="ModuleCompilationContext.RecordTypeAliasConstructors"/>
-    /// dictionary.
-    /// </param>
-    public static IReadOnlyList<string>? SortedRecordFieldNamesFromInferredType(
-        TypeInference.InferredType? inferredType,
-        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? recordTypeAliasFields = null)
-    {
-        if (inferredType is TypeInference.InferredType.RecordType recordType)
-        {
-            return
-                [
-                .. recordType.Fields
-                .Select(f => f.FieldName)
-                .OrderBy(name => name, StringComparer.Ordinal)
-                ];
-        }
-
-        if (recordTypeAliasFields is not null &&
-            inferredType is TypeInference.InferredType.ChoiceType choiceType)
-        {
-            var qualifiedName =
-                QualifiedNameHelper.ToDeclQualifiedName(choiceType.ModuleName, choiceType.TypeName);
-
-            if (recordTypeAliasFields.TryGetValue(qualifiedName, out var aliasFields))
-            {
-                return
-                    [
-                    .. aliasFields.OrderBy(name => name, StringComparer.Ordinal)
-                    ];
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>
     /// Extract variable bindings from a pattern and return expressions to access their values.
     /// </summary>
     /// <param name="pattern">The pattern to extract bindings for.</param>
     /// <param name="scrutinee">An expression for the value being matched.</param>
-    /// <param name="recordFieldNames">
-    /// Optional alphabetically-sorted full list of field names of the
-    /// scrutinee's record type, used by record-pattern destructure to
-    /// look up each named field by its true position in the record.
-    /// See <see cref="AnalyzePattern(SyntaxTypes.Pattern, Expression, IReadOnlyList{string})"/> for details.
-    /// </param>
     public static IReadOnlyDictionary<string, Expression> ExtractPatternBindings(
         SyntaxTypes.Pattern pattern,
-        Expression scrutinee,
-        IReadOnlyList<string>? recordFieldNames = null)
+        Expression scrutinee)
     {
-        var analysis = AnalyzePattern(pattern, scrutinee, recordFieldNames);
-        return analysis.Bindings;
-    }
-
-    /// <summary>
-    /// Extract variable bindings from a pattern, threading the
-    /// scrutinee's <see cref="TypeInference.InferredType"/> and the
-    /// module's record-type-alias dictionary so that nested
-    /// record-pattern destructures (for example the head of
-    /// <c>{ start, end } :: rest</c> on a list whose element type is a
-    /// record alias) can use static field-index lookup.
-    /// </summary>
-    public static IReadOnlyDictionary<string, Expression> ExtractPatternBindings(
-        SyntaxTypes.Pattern pattern,
-        Expression scrutinee,
-        TypeInference.InferredType? scrutineeType,
-        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? recordTypeAliasFields,
-        IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? choiceTagTypes = null)
-    {
-        var analysis =
-            AnalyzePattern(pattern, scrutinee, scrutineeType, recordTypeAliasFields, choiceTagTypes);
-
+        var analysis = AnalyzePattern(pattern, scrutinee);
         return analysis.Bindings;
     }
 
@@ -1201,9 +793,7 @@ public class PatternCompiler
         var analysis =
             AnalyzePatternRecursive(
                 pattern,
-                scrutinee,
-                scrutineeType: null,
-                recordTypeAliasFields: null);
+                scrutinee);
 
         return CompileConditionToExpression(analysis.Condition, scrutinee);
     }
@@ -1270,9 +860,13 @@ public class PatternCompiler
             SyntaxTypes.Pattern.UnitPattern =>
             PineValue.EmptyList, // Unit is the empty list
 
+            SyntaxTypes.Pattern.FloatPattern =>
+            throw new NotImplementedException(
+                $"Pattern type not yet supported for constant analysis: {pattern.GetType().Name}"),
+
             _ =>
             throw new NotImplementedException(
-                $"Pattern type not yet supported for constant analysis: {pattern.GetType().Name}")
+                $"{nameof(AsConstantPattern)} does not handle pattern variant: {pattern.GetType().Name}")
         };
     }
 
@@ -1392,6 +986,18 @@ public class PatternCompiler
                 }
 
                 break;
+
+            case SyntaxTypes.Pattern.AllPattern:
+            case SyntaxTypes.Pattern.UnitPattern:
+            case SyntaxTypes.Pattern.CharPattern:
+            case SyntaxTypes.Pattern.StringPattern:
+            case SyntaxTypes.Pattern.IntPattern:
+            case SyntaxTypes.Pattern.FloatPattern:
+                break;
+
+            default:
+                throw new NotImplementedException(
+                    $"{nameof(CollectPatternNames)} does not handle pattern variant: {pattern.GetType().Name}");
         }
     }
 }

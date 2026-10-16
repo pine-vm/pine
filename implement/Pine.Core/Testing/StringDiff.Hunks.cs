@@ -139,14 +139,15 @@ public static partial class StringDiff
 
         var markers =
             new string(
-                Enumerable.Range(range.Start, markerLength)
+                [
+                .. Enumerable.Range(range.Start, markerLength)
                 .Select(
                     column => displayedLines.Any(pair => HasDifferenceAtColumn(pair.actual, pair.expected, column))
                     ?
                     '↓'
                     :
                     ' ')
-                .ToArray());
+                ]);
 
         string Quote(string? text)
         {
