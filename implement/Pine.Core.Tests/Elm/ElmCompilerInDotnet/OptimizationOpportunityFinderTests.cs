@@ -138,7 +138,7 @@ public class OptimizationOpportunityFinderTests
     }
 
     [Fact]
-    public void Reports_missing_parameter_type_provenance_with_semantic_layout()
+    public void Reports_open_record_generic_body_even_when_a_caller_supplies_a_closed_record()
     {
         var rendered =
             FindAndRender(
@@ -156,7 +156,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.getName: record-access: name [provenance: missing-parameter-type; semantic-layout: { name : String }]
+            Test.getName: record-access: name [provenance: open-record-source-type]
             """.Trim());
     }
 
@@ -2209,6 +2209,8 @@ public class OptimizationOpportunityFinderTests
                 group.Key.Module + ": " + group.Key.Category + ": " + group.Count());
 
         var renderedCounts = string.Join("\n", countsByModuleAndCategory);
+        var lowered = LowerToIntermediateRepresentation.Lower(pipelineResults.Lowered.FilteredDeclarations);
+        lowered.GenericAccessEvidence.Should().BeEmpty();
 
         renderedCounts.Should().Be(
             """

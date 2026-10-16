@@ -746,6 +746,69 @@ The Elm syntax interpreter complements this by reporting metrics keyed at Elm-so
 
 The `CompareInterpreterWithIntermediateVM` test framework wires these two paths together: it compiles a set of Elm modules once, then for each root expression both invokes the compiled function on the intermediate VM (the same `ApplyAndProfileUnary`-style call path used by `ElmParserExpressionTests.Expression_char_literal`) and re-evaluates the expression through the syntax interpreter against `CompilationPipelineStageResults.ModulesForCompilation`. It asserts the two paths agree on the resulting `ElmValue` (compared via `RenderAsElmExpression(...).expressionString`) and returns both metric snapshots plus the application log. Because the same `maxOptimizationRounds` setting feeds both paths, the framework can be used to bisect *which* of the optimization rounds increased a particular VM-side counter and *which Elm-source declarations* are still being dispatched at runtime under that setting — exactly the data needed to find the next high-leverage optimization opportunity.
 
+## Elm Compiler Intermediate Representation
+
+Pine emission consumes the distinct model in `IntermediateRepresentation`, not
+`ElmSyntaxAbstract`. The IR copies the abstract syntax records except `File`, including
+normalized literals, precomputed Pine values, and structural equality, and adds
+`Expression.ProjectItem(Value, Index)`.
+
+`ConvertFromAbstractSyntax` maps declarations recursively without lowering or changing
+their encodings. IR programs are dictionaries keyed by `DeclQualifiedName`, not source
+files. `CompilationPipelineStageResults.ModulesForCompilation` retains the abstract
+syntax used by existing transformation and reporting APIs, including module grouping
+and declaration order for packaging the emitted environment.
+`DeclarationsForEmission` runs `LowerToIntermediateRepresentation` on the AST declarations.
+This conversion traverses AST expressions and patterns, queries the AST-facing inference
+entry points, and emits explicit record projections and numeric/append implementations.
+It never infers types from the IR it generates.
+Imports, source paths, and root/export selection remain outside the IR program.
+Expression compilation, pattern compilation, and dependency analysis operate on IR nodes.
+Type inference operates exclusively on `ElmSyntaxAbstract`; it has no IR entry points
+or AST-to-IR adapters. Expression and pattern emission have no semantic type contexts.
+Only calling-convention and encoding metadata, such as constructor arities and record
+constructor field order, remains in the backend. The AST data model is unchanged; source
+locations can be mapped by structured AST paths, without source-origin or AST-to-IR
+correspondence tables.
+
+`BuiltinOperatorLowering` shares its integer arithmetic and list/string append rules with
+the conversion boundary. These implementation choices also run when syntax optimization
+is disabled. Unresolved numeric and append operations retain their generic implementations;
+Pine emission does not specialize them from parameter or local binding types.
+
+`ProjectItem` reads a non-negative, zero-based physical list index and emits
+`head (skip index value)`. Its operand is not restricted to Elm tuples: a record
+using the existing tagged and labeled encoding has different physical indices
+from a plain tuple. Closed record field reads become `ProjectItem` nodes using
+the ordinally sorted record layout. Record-pattern reads in parameters, let
+bindings, and case branches become explicit projections or generic reads; direct
+applications of `.field` are lowered in the same way. Open-record function bodies
+are not closed merely because their callers supply closed records. Escaped
+accessor functions remain generic until function specialization handles them.
+Named aliases are resolved by their qualified identity, including aliases imported
+from modules with multiple aliases and runtime functions. References inside an alias
+definition resolve in the defining module, not the module using the alias. Canonical
+`List.List` annotations retain their element types through generic lookups and pattern
+bindings. Expanding an alias with an open row does not establish a closed layout.
+
+Closed record updates become physical tuple construction: the original tag, labels,
+and unchanged values are read with `ProjectItem`, and updated values replace their
+sorted slots. Every residual `RecordUpdateExpression` uses the generic runtime helper.
+Record patterns are eliminated recursively during conversion; the backend rejects an
+unlowered record pattern instead of silently introducing generic reads. Other patterns
+retain their type-independent matching and deconstruction behavior.
+
+Every residual `RecordAccess` node emits generic lookup; the emitter no longer
+independently chooses a static implementation. `FindGenericRecordAccessOpportunities`
+inventories these nodes and escaped accessors in the lowered IR, including reads
+inside generated bindings. The source-oriented finder runs the same lowering
+stage for its record-access category and retains the AST for its other categories.
+Tuple-pattern lowering and record representation changes remain separate work.
+
+The Pine VM's inliners retain a call boundary when substituting its environment would
+duplicate argument evaluations. This preserves sharing when several static projections
+select fields from a computed record, instead of repeating the record-producing work.
+
 ## Future Exploration
 
 ### Future Exploration - Monomorphizing Extensible Records

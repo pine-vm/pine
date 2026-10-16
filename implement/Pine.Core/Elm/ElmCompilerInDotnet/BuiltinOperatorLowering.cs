@@ -443,21 +443,10 @@ public static class BuiltinOperatorLowering
                 return rewrittenApplication;
             }
 
-            if (loweredOp is LoweredOperator.Append)
-            {
-                if (leftType is TypeInference.InferredType.StringType ||
-                    rightType is TypeInference.InferredType.StringType)
-                {
-                    return BuildStringAppendApplication(left, right);
-                }
+            if (TryLowerNumericAndAppend(loweredOp, left, right, leftType, rightType, expectedType) is { } loweredNumeric)
+                return loweredNumeric;
 
-                if (leftType is TypeInference.InferredType.ListType ||
-                    rightType is TypeInference.InferredType.ListType)
-                {
-                    return BuildBuiltinApplication("concat", left, right);
-                }
-            }
-            else if (loweredOp is LoweredOperator.Equal)
+            if (loweredOp is LoweredOperator.Equal)
             {
                 if (IsEmptyList(left) ||
                     IsEmptyList(right) ||
@@ -540,27 +529,94 @@ public static class BuiltinOperatorLowering
                         BuildBasicsBoolReference(value: true),
                         right);
             }
-            else if (expectedType is TypeInference.InferredType.IntType ||
-                ProvesIntegerBuiltin(leftType, rightType))
-            {
-                return loweredOp switch
-                {
-                    LoweredOperator.IntSub =>
-                    BuildBuiltinSubtractionApplication(left, right),
-
-                    LoweredOperator.IntAdd =>
-                    BuildBuiltinApplication("int_add", left, right),
-
-                    LoweredOperator.IntMul =>
-                    BuildBuiltinApplication("int_mul", left, right),
-
-                    _ =>
-                    rewrittenApplication
-                };
-            }
         }
 
         return rewrittenApplication;
+    }
+
+    /// <summary>Selects numeric and append implementations on AST before IR conversion, even when syntax optimization is disabled.</summary>
+    internal static SyntaxTypes.Expression? TryLowerNumericAndAppend(
+        SyntaxTypes.Expression expression,
+        System.Func<SyntaxTypes.Expression, TypeInference.InferredType> infer)
+    {
+        SyntaxTypes.Expression function;
+        SyntaxTypes.Expression left;
+        SyntaxTypes.Expression right;
+
+        if (expression is SyntaxTypes.Expression.Application { Arguments.Count: 2 } application)
+        {
+            function = application.Function;
+            left = application.Arguments[0];
+            right = application.Arguments[1];
+        }
+        else if (expression is SyntaxTypes.Expression.OperatorApplication operation)
+        {
+            function = new SyntaxTypes.Expression.PrefixOperator(operation.Operator);
+            left = operation.Left;
+            right = operation.Right;
+        }
+        else
+        {
+            return null;
+        }
+
+        if (TryMapBuiltinOperator(function) is not { } operationKind ||
+            operationKind is not (LoweredOperator.IntAdd or LoweredOperator.IntSub or
+                LoweredOperator.IntMul or LoweredOperator.Append))
+        {
+            return null;
+        }
+
+        var leftType = infer(left);
+        var rightType = infer(right);
+
+        var resultType =
+            operationKind is LoweredOperator.Append || ProvesIntegerBuiltin(leftType, rightType)
+            ?
+            null
+            :
+            infer(expression);
+
+        return TryLowerNumericAndAppend(operationKind, left, right, leftType, rightType, resultType);
+    }
+
+    private static SyntaxTypes.Expression? TryLowerNumericAndAppend(
+        LoweredOperator operation,
+        SyntaxTypes.Expression left,
+        SyntaxTypes.Expression right,
+        TypeInference.InferredType leftType,
+        TypeInference.InferredType rightType,
+        TypeInference.InferredType? resultType)
+    {
+        if (operation is LoweredOperator.Append)
+        {
+            if (leftType is TypeInference.InferredType.StringType ||
+                rightType is TypeInference.InferredType.StringType)
+            {
+                return BuildStringAppendApplication(left, right);
+            }
+
+            if (leftType is TypeInference.InferredType.ListType ||
+                rightType is TypeInference.InferredType.ListType)
+            {
+                return BuildBuiltinApplication("concat", left, right);
+            }
+
+            return null;
+        }
+
+        if (resultType is not TypeInference.InferredType.IntType && !ProvesIntegerBuiltin(leftType, rightType))
+            return null;
+
+        return operation switch
+        {
+            LoweredOperator.IntAdd => BuildBuiltinApplication("int_add", left, right),
+            LoweredOperator.IntSub => BuildBuiltinSubtractionApplication(left, right),
+            LoweredOperator.IntMul => BuildBuiltinApplication("int_mul", left, right),
+
+            _ =>
+            null
+        };
     }
 
     /// <summary>

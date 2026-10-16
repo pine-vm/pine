@@ -8,6 +8,11 @@ using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
+/// <summary>Aggregates semantic type information known for an AST function.</summary>
+public record FunctionTypeInfo(
+    TypeInference.InferredType ReturnType,
+    IReadOnlyList<TypeInference.InferredType> ParameterTypes);
+
 /// <summary>
 /// Constraint on a type variable, mirroring Elm's built-in constrained type variables.
 /// </summary>
@@ -40,7 +45,7 @@ public enum TypeVariableConstraint
 /// Type inference for Elm expressions.
 /// This module determines the types of expressions to enable proper code generation.
 /// </summary>
-public static class TypeInference
+public static partial class TypeInference
 {
     private static DeclQualifiedName DeclQualifiedNameFromSyntax(SyntaxTypes.QualifiedNameRef qualifiedNameRef) =>
         DeclQualifiedName.Create(qualifiedNameRef.ModuleName, qualifiedNameRef.Name);
@@ -1223,7 +1228,7 @@ public static class TypeInference
             }
 
             // Handle List type specially
-            if (name is "List" && moduleName.Count is 0 && typed.TypeArguments.Count is 1)
+            if (name is "List" && (moduleName.Count is 0 || moduleName is ["List"]) && typed.TypeArguments.Count is 1)
             {
                 var elementType = TypeAnnotationToInferredType(typed.TypeArguments[0]);
                 return new InferredType.ListType(elementType);
@@ -2122,6 +2127,20 @@ public static class TypeInference
 
                 break;
 
+            case SyntaxTypes.Pattern.AllPattern:
+            case SyntaxTypes.Pattern.UnitPattern:
+            case SyntaxTypes.Pattern.CharPattern:
+            case SyntaxTypes.Pattern.StringPattern:
+            case SyntaxTypes.Pattern.IntPattern:
+            case SyntaxTypes.Pattern.FloatPattern:
+            case SyntaxTypes.Pattern.UnConsPattern:
+            case SyntaxTypes.Pattern.ListPattern:
+            case SyntaxTypes.Pattern.NamedPattern:
+                break;
+
+            default:
+                throw new NotImplementedException(
+                    $"{nameof(ExtractBindingsFromPattern)} does not handle pattern variant: {pattern.GetType().Name}");
         }
     }
 
@@ -2370,6 +2389,10 @@ public static class TypeInference
                                 ExtractTypeConstraintsFromTagApplicationsInternal(letDestr.Expression, constructorArgumentTypes, constraints);
 
                             break;
+
+                        default:
+                            throw new NotImplementedException(
+                                $"{nameof(ExtractTypeConstraintsFromTagApplicationsInternal)} does not handle let declaration variant: {decl.GetType().Name}");
                     }
                 }
 
@@ -2411,10 +2434,24 @@ public static class TypeInference
             case SyntaxTypes.Expression.Negation negation:
                 return ExtractTypeConstraintsFromTagApplicationsInternal(negation.Expression, constructorArgumentTypes, constraints);
 
-            default:
-
-                // Other expression types that don't introduce constraints
+            case SyntaxTypes.Expression.UnitExpr:
+            case SyntaxTypes.Expression.StringLiteral:
+            case SyntaxTypes.Expression.CharLiteral:
+            case SyntaxTypes.Expression.IntegerLiteral:
+            case SyntaxTypes.Expression.FloatLiteral:
+            case SyntaxTypes.Expression.Identifier:
+            case SyntaxTypes.Expression.PrefixOperator:
+            case SyntaxTypes.Expression.LambdaExpression:
+            case SyntaxTypes.Expression.RecordExpr:
+            case SyntaxTypes.Expression.RecordAccess:
+            case SyntaxTypes.Expression.RecordAccessFunction:
+            case SyntaxTypes.Expression.RecordUpdateExpression:
+            case SyntaxTypes.Expression.GLSLExpression:
                 return constraints;
+
+            default:
+                throw new NotImplementedException(
+                    $"{nameof(ExtractTypeConstraintsFromTagApplicationsInternal)} does not handle expression variant: {expression.GetType().Name}");
         }
     }
 
@@ -2608,6 +2645,10 @@ public static class TypeInference
                                     constraints);
 
                             break;
+
+                        default:
+                            throw new NotImplementedException(
+                                $"{nameof(ExtractTypeConstraintsFromFunctionApplicationsInternal)} does not handle let declaration variant: {decl.GetType().Name}");
                     }
                 }
 
@@ -2666,10 +2707,24 @@ public static class TypeInference
                         currentModuleName,
                         constraints);
 
-            default:
-
-                // Other expression types that don't introduce constraints
+            case SyntaxTypes.Expression.UnitExpr:
+            case SyntaxTypes.Expression.StringLiteral:
+            case SyntaxTypes.Expression.CharLiteral:
+            case SyntaxTypes.Expression.IntegerLiteral:
+            case SyntaxTypes.Expression.FloatLiteral:
+            case SyntaxTypes.Expression.Identifier:
+            case SyntaxTypes.Expression.PrefixOperator:
+            case SyntaxTypes.Expression.LambdaExpression:
+            case SyntaxTypes.Expression.RecordExpr:
+            case SyntaxTypes.Expression.RecordAccess:
+            case SyntaxTypes.Expression.RecordAccessFunction:
+            case SyntaxTypes.Expression.RecordUpdateExpression:
+            case SyntaxTypes.Expression.GLSLExpression:
                 return constraints;
+
+            default:
+                throw new NotImplementedException(
+                    $"{nameof(ExtractTypeConstraintsFromFunctionApplicationsInternal)} does not handle expression variant: {expression.GetType().Name}");
         }
     }
 
@@ -2750,10 +2805,28 @@ public static class TypeInference
                 // Negation preserves numeric type
                 return ExtractTypeConstraintsFromExpression(negation.Expression, targetType, constraints);
 
-            default:
-
-                // Other expression types - no additional constraints to extract
+            case SyntaxTypes.Expression.UnitExpr:
+            case SyntaxTypes.Expression.StringLiteral:
+            case SyntaxTypes.Expression.CharLiteral:
+            case SyntaxTypes.Expression.IntegerLiteral:
+            case SyntaxTypes.Expression.FloatLiteral:
+            case SyntaxTypes.Expression.ListExpr:
+            case SyntaxTypes.Expression.IfBlock:
+            case SyntaxTypes.Expression.PrefixOperator:
+            case SyntaxTypes.Expression.TupledExpression:
+            case SyntaxTypes.Expression.LambdaExpression:
+            case SyntaxTypes.Expression.CaseExpression:
+            case SyntaxTypes.Expression.LetExpression:
+            case SyntaxTypes.Expression.RecordExpr:
+            case SyntaxTypes.Expression.RecordAccess:
+            case SyntaxTypes.Expression.RecordAccessFunction:
+            case SyntaxTypes.Expression.RecordUpdateExpression:
+            case SyntaxTypes.Expression.GLSLExpression:
                 return constraints;
+
+            default:
+                throw new NotImplementedException(
+                    $"{nameof(ExtractTypeConstraintsFromExpression)} does not handle expression variant: {expression.GetType().Name}");
         }
     }
 
@@ -2818,14 +2891,21 @@ public static class TypeInference
                 return bindings;
 
             case SyntaxTypes.Pattern.AllPattern:
-
-                // Wildcard pattern - no bindings
+            case SyntaxTypes.Pattern.UnitPattern:
+            case SyntaxTypes.Pattern.CharPattern:
+            case SyntaxTypes.Pattern.StringPattern:
+            case SyntaxTypes.Pattern.IntPattern:
+            case SyntaxTypes.Pattern.FloatPattern:
+            case SyntaxTypes.Pattern.RecordPattern:
+            case SyntaxTypes.Pattern.UnConsPattern:
+            case SyntaxTypes.Pattern.ListPattern:
+            case SyntaxTypes.Pattern.NamedPattern:
+            case SyntaxTypes.Pattern.AsPattern:
                 return bindings;
 
             default:
-
-                // Additional patterns can be added as needed
-                return bindings;
+                throw new NotImplementedException(
+                    $"{nameof(ExtractPatternBindingTypesInternal)} does not handle pattern variant: {pattern.GetType().Name}");
         }
     }
 
@@ -2917,10 +2997,19 @@ public static class TypeInference
                         constructorArgumentTypes,
                         bindings);
 
-            default:
-
-                // Other patterns don't introduce type constraints from constructors without type annotation
+            case SyntaxTypes.Pattern.AllPattern:
+            case SyntaxTypes.Pattern.VarPattern:
+            case SyntaxTypes.Pattern.UnitPattern:
+            case SyntaxTypes.Pattern.CharPattern:
+            case SyntaxTypes.Pattern.StringPattern:
+            case SyntaxTypes.Pattern.IntPattern:
+            case SyntaxTypes.Pattern.FloatPattern:
+            case SyntaxTypes.Pattern.RecordPattern:
                 return bindings;
+
+            default:
+                throw new NotImplementedException(
+                    $"{nameof(ExtractPatternBindingTypesWithConstructorsInternal)} does not handle pattern variant: {pattern.GetType().Name}");
         }
     }
 
@@ -3161,38 +3250,47 @@ public static class TypeInference
                         resolveConstructorArgumentTypes);
 
             case SyntaxTypes.Pattern.AllPattern:
-
-                // Wildcard pattern - no bindings
+            case SyntaxTypes.Pattern.UnitPattern:
+            case SyntaxTypes.Pattern.CharPattern:
+            case SyntaxTypes.Pattern.StringPattern:
+            case SyntaxTypes.Pattern.IntPattern:
+            case SyntaxTypes.Pattern.FloatPattern:
                 return bindings;
 
             default:
-
-                // Additional patterns can be added as needed
-                return bindings;
+                throw new NotImplementedException(
+                    $"{nameof(ExtractPatternBindingTypesFromInferredInternal)} does not handle pattern variant: {pattern.GetType().Name}");
         }
     }
 
     /// <summary>
-    /// Builds a map of function signatures from a file for type inference.
+    /// Builds a map of function signatures from module declarations for type inference.
     /// Includes function declarations, choice type constructors, and type alias record constructors.
     /// </summary>
-    /// <param name="file">The parsed Elm file.</param>
+    /// <param name="file">The module's AST.</param>
     /// <param name="moduleName">The module name for qualifying function names.</param>
     /// <param name="aliasDefinitions">Optional precomputed type alias definitions.</param>
     /// <returns>A dictionary mapping qualified function names to their inferred types.</returns>
     public static ImmutableDictionary<string, InferredType> BuildFunctionSignaturesMap(
         SyntaxTypes.File file,
         string moduleName,
+        IReadOnlyDictionary<DeclQualifiedName, TypeAliasDefinition>? aliasDefinitions = null) =>
+        BuildFunctionSignaturesMap(file.Declarations, moduleName, aliasDefinitions);
+
+    /// <summary>Builds signatures from AST declarations in a module.</summary>
+    public static ImmutableDictionary<string, InferredType> BuildFunctionSignaturesMap(
+        IReadOnlyList<SyntaxTypes.Declaration> declarations,
+        string moduleName,
         IReadOnlyDictionary<DeclQualifiedName, TypeAliasDefinition>? aliasDefinitions = null)
     {
         var builder = ImmutableDictionary.CreateBuilder<string, InferredType>();
 
-        foreach (var declaration in file.Declarations)
+        foreach (var declaration in declarations)
         {
             CollectFunctionSignaturesFromDeclaration(declaration, moduleName, builder);
         }
 
-        aliasDefinitions ??= BuildTypeAliasDefinitions(file, moduleName);
+        aliasDefinitions ??= BuildTypeAliasDefinitions(declarations, moduleName);
 
         return
             builder.ToImmutableDictionary(
@@ -3486,11 +3584,17 @@ public static class TypeInference
     /// </summary>
     public static ImmutableDictionary<DeclQualifiedName, TypeAliasDefinition> BuildTypeAliasDefinitions(
         SyntaxTypes.File file,
+        string moduleName) =>
+        BuildTypeAliasDefinitions(file.Declarations, moduleName);
+
+    /// <summary>Builds type alias definitions from AST declarations in a module.</summary>
+    public static ImmutableDictionary<DeclQualifiedName, TypeAliasDefinition> BuildTypeAliasDefinitions(
+        IEnumerable<SyntaxTypes.Declaration> declarations,
         string moduleName)
     {
         var definitions = ImmutableDictionary.CreateBuilder<DeclQualifiedName, TypeAliasDefinition>();
 
-        foreach (var aliasDeclaration in file.Declarations.OfType<SyntaxTypes.Declaration.AliasDeclaration>())
+        foreach (var aliasDeclaration in declarations.OfType<SyntaxTypes.Declaration.AliasDeclaration>())
         {
             definitions[QualifiedNameHelper.FromQualifiedNameString(moduleName + "." + aliasDeclaration.TypeAlias.Name)] =
                 new TypeAliasDefinition(
@@ -3674,7 +3778,9 @@ public static class TypeInference
 
                 return
                     ExpandTypeAliases(
-                        ApplyTypeSubstitutions(aliasDefinition.AliasedType, substitutions),
+                        ApplyTypeSubstitutions(
+                            QualifyLocalTypeAliases(aliasDefinition.AliasedType, aliasDefinitions, qualifiedName.Namespaces),
+                            substitutions),
                         aliasDefinitions,
                         aliasesBeingExpanded.Add(qualifiedName));
 
@@ -3783,7 +3889,10 @@ public static class TypeInference
     {
         switch (expression)
         {
-            case SyntaxTypes.Expression.Application app when app.Arguments.Count >= 1:
+            case SyntaxTypes.Expression.Application app:
+
+                if (app.Arguments.Count is 0)
+                    break;
 
                 // Check if first argument is a function reference with known signature
                 if (app.Function is SyntaxTypes.Expression.Identifier funcRef)
@@ -3795,12 +3904,12 @@ public static class TypeInference
                     {
                         funcType = ft;
                     }
-                    else
+                    else if (funcRef.QualifiedName.Namespaces.Count is 0)
                     {
-                        // Try to find by scanning all keys
+                        // A qualified name must never borrow another module's signature.
                         foreach (var kvp in functionSignatures)
                         {
-                            if (kvp.Key.EndsWith("." + funcRef.QualifiedName.DeclName))
+                            if (kvp.Key.EndsWith("." + funcRef.QualifiedName.DeclName, StringComparison.Ordinal))
                             {
                                 funcType = kvp.Value;
                                 break;
@@ -4296,6 +4405,22 @@ public static class TypeInference
                 }
 
                 break;
+
+            case SyntaxTypes.Expression.UnitExpr:
+            case SyntaxTypes.Expression.StringLiteral:
+            case SyntaxTypes.Expression.CharLiteral:
+            case SyntaxTypes.Expression.IntegerLiteral:
+            case SyntaxTypes.Expression.FloatLiteral:
+            case SyntaxTypes.Expression.Negation:
+            case SyntaxTypes.Expression.Identifier:
+            case SyntaxTypes.Expression.PrefixOperator:
+            case SyntaxTypes.Expression.RecordAccessFunction:
+            case SyntaxTypes.Expression.GLSLExpression:
+                break;
+
+            default:
+                throw new NotImplementedException(
+                    $"{nameof(ScanExpressionForParameterTypes)} does not handle expression variant: {expression.GetType().Name}");
         }
 
         return parameterTypes;
@@ -4442,8 +4567,29 @@ public static class TypeInference
 
                 return parameterTypes;
 
-            default:
+            case SyntaxTypes.Expression.UnitExpr:
+            case SyntaxTypes.Expression.StringLiteral:
+            case SyntaxTypes.Expression.CharLiteral:
+            case SyntaxTypes.Expression.IntegerLiteral:
+            case SyntaxTypes.Expression.FloatLiteral:
+            case SyntaxTypes.Expression.Negation:
+            case SyntaxTypes.Expression.ListExpr:
+            case SyntaxTypes.Expression.IfBlock:
+            case SyntaxTypes.Expression.PrefixOperator:
+            case SyntaxTypes.Expression.Application:
+            case SyntaxTypes.Expression.TupledExpression:
+            case SyntaxTypes.Expression.LambdaExpression:
+            case SyntaxTypes.Expression.CaseExpression:
+            case SyntaxTypes.Expression.LetExpression:
+            case SyntaxTypes.Expression.RecordExpr:
+            case SyntaxTypes.Expression.RecordAccessFunction:
+            case SyntaxTypes.Expression.RecordUpdateExpression:
+            case SyntaxTypes.Expression.GLSLExpression:
                 return parameterTypes;
+
+            default:
+                throw new NotImplementedException(
+                    $"{nameof(ExtractTypeConstraintFromExpression)} does not handle expression variant: {expression.GetType().Name}");
         }
     }
 
