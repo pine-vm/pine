@@ -567,8 +567,10 @@ public class ElmTestInstrumentationTests
             report.Values.Should().ContainKey(row.Hash);
 
         foreach (var node in report.Values.Values.Where(node => node.Items is not null))
+        {
             foreach (var item in node.Items!)
                 report.Values.Should().ContainKey(item);
+        }
     }
 
     [Fact]

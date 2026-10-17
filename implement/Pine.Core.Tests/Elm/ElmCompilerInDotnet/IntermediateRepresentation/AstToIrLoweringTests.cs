@@ -69,8 +69,10 @@ public class AstToIrLoweringTests
         yield return type;
 
         foreach (var argument in type.GetGenericArguments())
+        {
             foreach (var component in TypeComponents(argument))
                 yield return component;
+        }
     }
 
     [Theory]

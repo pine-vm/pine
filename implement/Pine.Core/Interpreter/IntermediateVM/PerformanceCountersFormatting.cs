@@ -40,8 +40,10 @@ public static class PerformanceCountersFormatting
             sections.Add("Phase: " + phase + "\n" + FormatCounts(origins.Total));
 
             foreach (var (origin, counters) in origins.Enumerate())
+            {
                 if (counters != default)
                     sections.Add("Phase: " + phase + "; work origin: " + origin + "\n" + FormatCounts(counters));
+            }
         }
 
         return string.Join("\n\n", sections);

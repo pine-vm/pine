@@ -359,9 +359,11 @@ public static class SyntaxAnalysis
                     var result = ImmutableHashSet.Create(recordUpdate.RecordName.Value);
 
                     foreach (var field in recordUpdate.Fields)
+                    {
                         result =
                             result.Union(
                                 CollectRemainingFreeVariables(field.Value.valueExpr.Value));
+                    }
 
                     return result;
                 }
@@ -680,21 +682,25 @@ public static class SyntaxAnalysis
 
             case Expression.RecordExpr recordExpr:
                 foreach (var f in recordExpr.Fields)
+                {
                     AddNamesFlowingIntoAppFunctions(
                         f.Value.valueExpr.Value,
                         letRhsByName,
                         bound,
                         result);
+                }
 
                 break;
 
             case Expression.RecordUpdateExpression recordUpdate:
                 foreach (var f in recordUpdate.Fields)
+                {
                     AddNamesFlowingIntoAppFunctions(
                         f.Value.valueExpr.Value,
                         letRhsByName,
                         bound,
                         result);
+                }
 
                 break;
 

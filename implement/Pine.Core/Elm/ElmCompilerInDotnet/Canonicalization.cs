@@ -135,16 +135,22 @@ public partial class Canonicalization
                     var qualifier = importedModule.Alias ?? string.Join(".", importedModule.ModuleName);
 
                     foreach (var name in exports.ValueExports.Union(exports.TypeExports))
+                    {
                         if (!mergedAliasMap.ContainsKey(qualifier + "." + name))
                             mergedAliasMap = mergedAliasMap.Add(qualifier + "." + name, importedModule.ModuleName);
+                    }
 
                     foreach (var name in exports.TypeExports)
+                    {
                         mergedAliasMap =
                             mergedAliasMap.SetItem("type:" + qualifier + "." + name, importedModule.ModuleName);
+                    }
 
                     foreach (var name in exports.ValueExports)
+                    {
                         mergedAliasMap =
                             mergedAliasMap.SetItem("value:" + qualifier + "." + name, importedModule.ModuleName);
+                    }
                 }
             }
 
@@ -413,8 +419,10 @@ public partial class Canonicalization
         var operators = CollectImportedInfixOperators(module.Imports, exports, infixes);
 
         foreach (var declaration in module.Declarations)
+        {
             if (declaration.Value is Declaration.InfixDeclaration infix)
                 operators = operators.SetItem(infix.Infix.Operator.Value, (moduleName, infix.Infix.FunctionName.Value));
+        }
 
         var typeNames = ImmutableHashSet.CreateBuilder<string>();
         var valueNames = ImmutableHashSet.CreateBuilder<string>();

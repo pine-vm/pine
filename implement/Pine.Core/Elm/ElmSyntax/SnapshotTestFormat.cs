@@ -1543,8 +1543,10 @@ public class SnapshotTestFormat
                 var typeRefs = ImmutableHashSet<DeclQualifiedName>.Empty;
 
                 foreach (var constructor in typeDecl.TypeDeclaration.Constructors)
+                {
                     foreach (var arg in constructor.Value.Arguments)
                         typeRefs = typeRefs.Union(CollectReferencesFromTypeAnnotation(arg.Value));
+                }
 
                 return typeRefs;
 

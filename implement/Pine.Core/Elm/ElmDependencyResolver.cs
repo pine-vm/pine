@@ -162,6 +162,7 @@ public static class ElmDependencyResolver
             cancellationToken.ThrowIfCancellationRequested();
 
             foreach (var name in requirements.Select(item => item.PackageName).Distinct(StringComparer.Ordinal).ToArray())
+            {
                 if (configuration.LockedVersions.TryGetValue(name, out var lockedVersion) &&
                     !requirements.Any(item => item.PackageName == name && item.Scope is ElmDependencyScope.ResolutionLock))
                 {
@@ -176,6 +177,7 @@ public static class ElmDependencyResolver
                                 ElmDependencyScope.ResolutionLock,
                                 []));
                 }
+            }
 
             var constraints = new Dictionary<string, ElmPackageVersionConstraint>(StringComparer.Ordinal);
 
@@ -838,11 +840,13 @@ public static class ElmDependencyResolver
                 }
 
                 foreach (var version in item.Versions)
+                {
                     if (!versions.Add(version))
                     {
                         throw new ArgumentException(
                             $"Version '{group.Key}@{version}' is covered by multiple substitution entries. Version sets must be disjoint.");
                     }
+                }
 
                 foreach (var dependency in item.ImplementationDependencies)
                 {
@@ -869,16 +873,20 @@ public static class ElmDependencyResolver
             stack.Add(name);
 
             foreach (var dependency in packages[name].Dependencies)
+            {
                 if (Visit(dependency.PackageName) is { } cycle)
                     return cycle;
+            }
 
             stack.RemoveAt(stack.Count - 1);
             return null;
         }
 
         foreach (var name in packages.Keys.Order(StringComparer.Ordinal))
+        {
             if (Visit(name) is { } cycle)
                 return cycle;
+        }
 
         return null;
     }

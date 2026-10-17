@@ -303,6 +303,7 @@ public static class ElmResolvedBuildPreparation
     public static FileTree AddPackageSources(FileTree tree, string packageName, FileTree sources)
     {
         foreach (var file in sources.EnumerateFilesTransitive())
+        {
             if (file.path.Count >= 2 && file.path[0] is "src" &&
                 file.path[^1].EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
             {
@@ -311,6 +312,7 @@ public static class ElmResolvedBuildPreparation
                         ["elm-packages", .. packageName.Split('/'), .. file.path],
                         FileTree.File(file.fileContent));
             }
+        }
 
         return tree;
     }
@@ -383,9 +385,11 @@ public static class ElmResolvedBuildPreparation
         var baseDirectory = Path.GetFullPath(projectDirectory);
 
         for (var level = 0; level < parentLevels; ++level)
+        {
             baseDirectory =
                 Directory.GetParent(baseDirectory)?.FullName
                 ?? throw new JsonException("A source-directory traverses above the filesystem root.");
+        }
 
         var prefix =
             Path.GetRelativePath(baseDirectory, projectDirectory).Split(
@@ -545,6 +549,7 @@ public static class ElmResolvedBuildPreparation
         var compilerNames = ImmutableDictionary.CreateBuilder<string, string>(StringComparer.Ordinal);
 
         foreach (var module in byPath.Values.OrderBy(module => module.Path, StringComparer.Ordinal))
+        {
             compilerNames.Add(
                 module.Path,
                 module.Owner is null or "elm/core"
@@ -552,6 +557,7 @@ public static class ElmResolvedBuildPreparation
                 module.Name
                 :
                 ReserveName("PinePackage.P" + ElmDependencyResolver.Fingerprint(module.Owner) + "." + module.Name));
+        }
 
         var directPackages =
             build.Resolution.Requirements
@@ -798,6 +804,7 @@ public static class ElmResolvedBuildPreparation
         var declarations = new HashSet<(string name, bool type, bool constructors)>();
 
         foreach (var declaration in file.Declarations)
+        {
             switch (declaration.Value)
             {
                 case Syntax.Declaration.FunctionDeclaration function:
@@ -825,6 +832,7 @@ public static class ElmResolvedBuildPreparation
                     throw new NotImplementedException(
                         $"{nameof(GetExposedApi)} does not handle declaration variant: {declaration.Value.GetType().Name}");
             }
+        }
 
         var exposing =
             file.ModuleDefinition.Value switch
@@ -1066,12 +1074,14 @@ public static class ElmResolvedBuildPreparation
 
         // Implicit compiler imports also need a validated source closure, including non-substituted core packages.
         foreach (var module in byPath.Values)
+        {
             if (module.Owner is not null &&
                 (module.Owner is "elm/core" ||
                 build.Resolution.Packages[module.Owner].SubstitutionImplementationId is not null))
             {
                 queue.Enqueue((module, [module.Path]));
             }
+        }
 
         while (queue.TryDequeue(out var next))
         {

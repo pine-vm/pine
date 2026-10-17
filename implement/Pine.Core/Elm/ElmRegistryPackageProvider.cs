@@ -93,8 +93,10 @@ public sealed class ElmRegistryPackageProvider(
                 if (Directory.Exists(directory))
                 {
                     foreach (var path in Directory.EnumerateDirectories(directory))
+                    {
                         if (File.Exists(Path.Combine(path, "elm.json")))
                             versions.Add(ElmPackageVersion.Parse(Path.GetFileName(path)));
+                    }
                 }
             }
 

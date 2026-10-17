@@ -818,8 +818,10 @@ public sealed partial record PineControlFlowGraph
             if (instruction.Kind is StackInstructionKind.Local_Set)
             {
                 for (var depth = 0; depth < instruction.LocalIndices.Length; depth++)
+                {
                     locals[instruction.LocalIndices[depth]] =
                         values.GetValueOrDefault(stack[^(depth + 1)], ListOrigin.Other);
+                }
             }
             else if (instruction.Kind is StackInstructionKind.Local_Set_Literal &&
                 instruction.SingleLocalIndex is { } literalLocal)

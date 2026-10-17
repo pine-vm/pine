@@ -128,9 +128,11 @@ public static class TestProfileCommand
             null);
 
         foreach (var option in new[] { options.TraceDepth, options.MaxSamples, options.Top })
+        {
             NumericOptionParsing.SetIntegerParser(
                 option,
                 value => value <= 0 ? option.Name + " must be positive." : null);
+        }
 
         return options;
     }
@@ -472,17 +474,21 @@ public static class TestProfileCommand
             if (frame.Inputs is { } inputs)
             {
                 for (var i = 0; i < inputs.Count; i++)
+                {
                     write(
                         $"    input [{string.Join(",", frame.ParameterPaths![i].Select(number => CommandLineInterface.FormatIntegerForDisplay(number)))}]: {inputs[i].Preview}",
                         s_mutedStyle);
+                }
             }
 
             if (frame.Locals is { } locals)
             {
                 for (var i = 0; i < locals.Count; i++)
+                {
                     write(
                         $"    local {CommandLineInterface.FormatIntegerForDisplay(i)}: {locals[i].Preview}",
                         s_mutedStyle);
+                }
             }
         }
     }

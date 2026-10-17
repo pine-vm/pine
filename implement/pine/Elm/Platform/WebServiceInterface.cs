@@ -2383,6 +2383,7 @@ type alias LoadDependencyStruct =
                 jsonExportNames.Add(compilerModuleName, publicModuleName);
 
                 for (var index = 0; index < hostRoots.Count; index++)
+                {
                     if (string.Join(".", hostRoots[index].Namespaces) == publicModuleName)
                     {
                         hostRoots[index] =
@@ -2390,6 +2391,7 @@ type alias LoadDependencyStruct =
                                 compilerModuleName.Split('.'),
                                 hostRoots[index].DeclName);
                     }
+                }
             }
         }
 

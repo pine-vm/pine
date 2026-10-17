@@ -240,8 +240,10 @@ public class ElmFuzzTests
             Apply(permutation, index).Should().Be(expected[index]);
 
         for (var value = 0; value < 256; ++value)
+        {
             Apply(reverse, value).Should().Be(
                 Enumerable.Range(0, 8).Aggregate(0, (bits, index) => (bits << 1) | ((value >> index) & 1)));
+        }
 
         Apply(permutation, -1).Should().Be(0);
         Apply(permutation, 2048).Should().Be(0);

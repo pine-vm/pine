@@ -338,6 +338,12 @@ public static class FormatCSharpFile
                 if (atLineStart)
                     originalIndentOnCurrentLine += t.ToFullString().Length;
             }
+            else if (t.IsKind(SyntaxKind.DisabledTextTrivia))
+            {
+                r.Add(t);
+                atLineStart = EndsWithLineBreak(t);
+                originalIndentOnCurrentLine = 0;
+            }
             else if (t.HasStructure)
             {
                 // Structured trivia (doc comments, preprocessor directives)
@@ -464,13 +470,15 @@ public static class FormatCSharpFile
         var r = new List<SyntaxTrivia>();
 
         for (var i = 0; i < minBreaks; i++)
+        {
             r.Add(s_lineFeed);
+        }
 
         foreach (var (t, originalTriviaIndent) in preserved)
         {
             // Preprocessor directives stay at column 0, except region directives
             // which are indented to match their scope.
-            if (!IsDirectiveTrivia(t) || IsRegionDirective(t))
+            if ((!IsDirectiveTrivia(t) || IsRegionDirective(t)) && !t.IsKind(SyntaxKind.DisabledTextTrivia))
                 r.Add(Indent(indent));
 
             r.Add(
@@ -479,7 +487,7 @@ public static class FormatCSharpFile
                     originalTriviaIndent,
                     indent * IndentSize));
             // Doc comments include their own trailing newline; others need one
-            if (!t.HasStructure)
+            if (!t.HasStructure && !EndsWithLineBreak(t))
                 r.Add(s_lineFeed);
         }
 
@@ -552,7 +560,9 @@ public static class FormatCSharpFile
             var n = Math.Max(1, extraFirstGapBreaks + trailingGap);
 
             for (var k = 0; k < n; k++)
+            {
                 r.Add(s_lineFeed);
+            }
 
             r.Add(Indent(indent));
             return [.. r];
@@ -580,7 +590,9 @@ public static class FormatCSharpFile
                 Math.Max(1, gaps[k]);
 
             for (var j = 0; j < lineBreaksToEmit; j++)
+            {
                 r.Add(s_lineFeed);
+            }
 
             var t = preserved[k];
 
@@ -618,7 +630,9 @@ public static class FormatCSharpFile
             Math.Max(1, trailingGap);
 
         for (var j = 0; j < finalGap; j++)
+        {
             r.Add(s_lineFeed);
+        }
 
         if (IsDirectiveTrivia(preserved[^1]))
         {
@@ -1048,7 +1062,9 @@ public static class FormatCSharpFile
                     var leading = new List<SyntaxTrivia>();
 
                     for (var j = 0; j < leadingBreaks; j++)
+                    {
                         leading.Add(s_lineFeed);
+                    }
 
                     foreach (var c in origComments)
                     {
@@ -1403,7 +1419,9 @@ public static class FormatCSharpFile
 
         return
             block.WithOpenBraceToken(
-                brace.WithLeadingTrivia(s_lineFeed, Indent(indent)).WithTrailingTrivia(s_lineFeed));
+                brace.WithLeadingTrivia(
+                    new SyntaxTriviaList(s_lineFeed).AddRange(RebuildLeading(brace.LeadingTrivia, indent)))
+                .WithTrailingTrivia(s_lineFeed));
     }
 
     // ──────────────────────────────────────────────────────────
@@ -1651,12 +1669,10 @@ public static class FormatCSharpFile
         FormatContext ctx,
         bool braceMultilineBody = false)
     {
-        var headerText = headerOwner.ToString()[..(closeParen.Span.End - headerOwner.SpanStart)];
-
         if (statement is BlockSyntax block)
             return EnsureBraceNewline(FormatBlock(block, ctx), ctx.IndentLevel);
 
-        if (SpansMultipleLines(headerText))
+        if (HeaderSpansMultipleLines(headerOwner, headerOwner.GetFirstToken(), closeParen))
             return EnsureBraceNewline(FormatBlock(SyntaxFactory.Block(statement), ctx), ctx.IndentLevel);
 
         var body = (StatementSyntax)FormatNode(statement, ctx.Indented());
@@ -1735,6 +1751,77 @@ public static class FormatCSharpFile
         return node.WithElseKeyword(kw).WithStatement(body);
     }
 
+    /// <summary>Checks a header's text, excluding surrounding trivia and the body.</summary>
+    private static bool HeaderSpansMultipleLines(SyntaxNode owner, SyntaxToken start, SyntaxToken end) =>
+        SpansMultipleLines(owner.ToString()[(start.SpanStart - owner.SpanStart)..(end.Span.End - owner.SpanStart)]);
+
+    /// <summary>Formats a loop body, requiring braces when the header or body spans multiple lines.</summary>
+    private static StatementSyntax FormatLoopBody(
+        StatementSyntax statement,
+        FormatContext ctx,
+        bool multilineHeader)
+    {
+        var bodyStatement = statement;
+
+        if (statement is not BlockSyntax && !multilineHeader)
+        {
+            var formatted = (StatementSyntax)FormatNode(statement, ctx.Indented());
+
+            if (!SpansMultipleLines(formatted.ToString().Trim()))
+            {
+                return
+                    formatted.WithLeadingTrivia(
+                        EnsureLeadingBreaks(formatted.GetLeadingTrivia(), 1, ctx.IndentLevel + 1));
+            }
+
+            bodyStatement = formatted;
+        }
+
+        var block = bodyStatement as BlockSyntax ?? SyntaxFactory.Block(bodyStatement);
+
+        if (statement is not BlockSyntax)
+        {
+            if (statement.DescendantTrivia().Any(
+                trivia => trivia.GetStructure() is DirectiveTriviaSyntax directive &&
+                    (directive is IfDirectiveTriviaSyntax or ElifDirectiveTriviaSyntax or
+                        ElseDirectiveTriviaSyntax or EndIfDirectiveTriviaSyntax) &&
+                    (trivia.SpanStart >= statement.SpanStart ||
+                    directive.GetRelatedDirectives().Any(
+                        related => related is IfDirectiveTriviaSyntax &&
+                            related.SpanStart < statement.FullSpan.Start))))
+            {
+                throw new NotSupportedException(
+                    "Cannot safely add loop body braces across conditional-compilation boundaries. " +
+                    "Add explicit braces in each configuration before formatting.");
+            }
+
+            var leading = statement.GetLeadingTrivia();
+            var lastDirective = -1;
+
+            for (var i = 0; i < leading.Count; i++)
+            {
+                if (IsDirectiveTrivia(leading[i]))
+                    lastDirective = i;
+            }
+
+            if (lastDirective >= 0)
+            {
+                block =
+                    SyntaxFactory.Block(bodyStatement.WithLeadingTrivia(leading.Skip(lastDirective + 1)))
+                    .WithLeadingTrivia(leading.Take(lastDirective + 1));
+            }
+        }
+
+        var body = EnsureBraceNewline(FormatBlock(block, ctx), ctx.IndentLevel);
+
+        return
+            statement is BlockSyntax
+            ?
+            body.WithTrailingTrivia(EnsureSpaceBeforeComments(StripWhitespace(statement.GetTrailingTrivia())))
+            :
+            body;
+    }
+
     /// <summary>Formats a while statement with correct keyword and brace placement.</summary>
     private static WhileStatementSyntax FormatWhileStatement(WhileStatementSyntax node, FormatContext ctx)
     {
@@ -1746,9 +1833,13 @@ public static class FormatCSharpFile
             .WithWhileKeyword(node.WhileKeyword.WithTrailingTrivia(s_space))
             .WithOpenParenToken(node.OpenParenToken.WithLeadingTrivia().WithTrailingTrivia())
             .WithCondition(cond.WithLeadingTrivia(StripWhitespace(node.Condition.GetLeadingTrivia())))
-            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia());
+            .WithCloseParenToken(
+                node.CloseParenToken.WithLeadingTrivia()
+                .WithTrailingTrivia(EnsureSpaceBeforeComments(StripWhitespace(node.CloseParenToken.TrailingTrivia))));
 
-        return r.WithStatement(FormatEmbeddedStatement(node.Statement, r, r.CloseParenToken, ctx));
+        return
+            r.WithStatement(
+                FormatLoopBody(node.Statement, ctx, HeaderSpansMultipleLines(r, r.GetFirstToken(), r.CloseParenToken)));
     }
 
     /// <summary>Formats a for statement with correct keyword and brace placement.</summary>
@@ -1758,9 +1849,13 @@ public static class FormatCSharpFile
             node
             .WithForKeyword(node.ForKeyword.WithTrailingTrivia(s_space))
             .WithOpenParenToken(node.OpenParenToken.WithLeadingTrivia().WithTrailingTrivia())
-            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia());
+            .WithCloseParenToken(
+                node.CloseParenToken.WithLeadingTrivia()
+                .WithTrailingTrivia(EnsureSpaceBeforeComments(StripWhitespace(node.CloseParenToken.TrailingTrivia))));
 
-        return r.WithStatement(FormatEmbeddedStatement(node.Statement, r, r.CloseParenToken, ctx));
+        return
+            r.WithStatement(
+                FormatLoopBody(node.Statement, ctx, HeaderSpansMultipleLines(r, r.GetFirstToken(), r.CloseParenToken)));
     }
 
     /// <summary>Formats a foreach statement with correct keyword and brace placement.</summary>
@@ -1800,9 +1895,13 @@ public static class FormatCSharpFile
                     FormatTriviaBeforeForEachIn(node.Identifier.TrailingTrivia.AddRange(node.InKeyword.LeadingTrivia))))
             .WithInKeyword(inKeyword)
             .WithExpression(exprWithLeading)
-            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia());
+            .WithCloseParenToken(
+                node.CloseParenToken.WithLeadingTrivia()
+                .WithTrailingTrivia(EnsureSpaceBeforeComments(StripWhitespace(node.CloseParenToken.TrailingTrivia))));
 
-        return r.WithStatement(FormatEmbeddedStatement(node.Statement, r, r.CloseParenToken, ctx));
+        return
+            r.WithStatement(
+                FormatLoopBody(node.Statement, ctx, HeaderSpansMultipleLines(r, r.GetFirstToken(), r.CloseParenToken)));
     }
 
     /// <summary>Joins the foreach variable and in keyword unless comments or directives require a line break.</summary>
@@ -1845,28 +1944,53 @@ public static class FormatCSharpFile
                 :
                 node.InKeyword.WithLeadingTrivia())
             .WithExpression(expression)
-            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia());
+            .WithCloseParenToken(
+                node.CloseParenToken.WithLeadingTrivia()
+                .WithTrailingTrivia(EnsureSpaceBeforeComments(StripWhitespace(node.CloseParenToken.TrailingTrivia))));
 
-        return r.WithStatement(FormatEmbeddedStatement(node.Statement, r, r.CloseParenToken, ctx));
+        return
+            r.WithStatement(
+                FormatLoopBody(node.Statement, ctx, HeaderSpansMultipleLines(r, r.GetFirstToken(), r.CloseParenToken)));
     }
 
     /// <summary>Formats a do-while statement with correct keyword placement.</summary>
     private static DoStatementSyntax FormatDoStatement(DoStatementSyntax node, FormatContext ctx)
     {
         var body =
-            node.Statement is BlockSyntax block
+            FormatLoopBody(
+                node.Statement,
+                ctx,
+                HeaderSpansMultipleLines(node, node.WhileKeyword, node.CloseParenToken));
+
+        body = body.WithTrailingTrivia(EnsureSpaceBeforeComments(StripWhitespace(body.GetTrailingTrivia())));
+
+        var hasInterveningTrivia =
+            body.GetTrailingTrivia().Concat(node.WhileKeyword.LeadingTrivia)
+            .Any(t => !IsWhitespace(t) && !IsLineBreak(t));
+
+        var bodyTrailingBreaks =
+            node.Statement is BlockSyntax ? CountLineBreaks(node.Statement.GetTrailingTrivia()) : 0;
+
+        var whileLeading =
+            hasInterveningTrivia
             ?
-            EnsureBraceNewline(FormatBlock(block, ctx), ctx.IndentLevel)
+            new SyntaxTriviaList(Enumerable.Repeat(s_lineFeed, bodyTrailingBreaks))
+            .AddRange(node.WhileKeyword.LeadingTrivia)
             :
-            (StatementSyntax)FormatNode(node.Statement, ctx.Indented());
+            new SyntaxTriviaList(s_lineFeed);
+
+        if (CountLeadingBreaksBeforeFirstContent(whileLeading) is 0)
+            whileLeading = whileLeading.Insert(0, s_lineFeed);
 
         return
             node
-            .WithDoKeyword(node.DoKeyword.WithTrailingTrivia())
+            .WithDoKeyword(
+                node.DoKeyword.WithTrailingTrivia(
+                    EnsureSpaceBeforeComments(StripWhitespace(node.DoKeyword.TrailingTrivia))))
             .WithStatement(body)
             .WithWhileKeyword(
                 node.WhileKeyword
-                .WithLeadingTrivia(s_lineFeed, Indent(ctx.IndentLevel))
+                .WithLeadingTrivia(RebuildLeading(whileLeading, ctx.IndentLevel))
                 .WithTrailingTrivia(s_space));
     }
 
@@ -2387,7 +2511,9 @@ public static class FormatCSharpFile
                         var stripped = 0;
 
                         while (stripped < excess && stripped < lines[li].Length && lines[li][stripped] is ' ')
+                        {
                             stripped++;
+                        }
 
                         if (stripped > 0)
                             lines[li] = lines[li][stripped..];
@@ -2509,16 +2635,20 @@ public static class FormatCSharpFile
 
             // Any arg multi-line
             foreach (var arg in node.Arguments)
+            {
                 if (SpansMultipleLines(arg))
                     return true;
+            }
 
             // First arg on different line
             if (LineOf(node.Arguments[0]) != openLine)
                 return true;
             // Any arg on different line than first
             for (var i = 1; i < node.Arguments.Count; i++)
+            {
                 if (LineOf(node.Arguments[i]) != LineOf(node.Arguments[0]))
                     return true;
+            }
         }
 
         return false;
@@ -2798,15 +2928,19 @@ public static class FormatCSharpFile
             if (firstParamLine != openLine)
             {
                 for (var i = 1; i < node.Parameters.Count; i++)
+                {
                     if (LineOf(node.Parameters[i]) != firstParamLine)
                         return true;
+                }
 
                 return false;
             }
 
             for (var i = 1; i < node.Parameters.Count; i++)
+            {
                 if (LineOf(node.Parameters[i]) != firstParamLine)
                     return true;
+            }
         }
 
         var openLoc = node.OpenParenToken.GetLocation();
@@ -2949,12 +3083,16 @@ public static class FormatCSharpFile
                     shouldBeMultiLine = true;
 
                 for (var i = 1; i < node.Elements.Count && !shouldBeMultiLine; i++)
+                {
                     if (LineOf(node.Elements[i]) != LineOf(node.Elements[0]))
                         shouldBeMultiLine = true;
+                }
 
                 foreach (var e in node.Elements)
+                {
                     if (SpansMultipleLines(e))
                         shouldBeMultiLine = true;
+                }
             }
         }
 
@@ -3431,7 +3569,9 @@ public static class FormatCSharpFile
                         var stripped = 0;
 
                         while (stripped < excess && stripped < lines[li].Length && lines[li][stripped] is ' ')
+                        {
                             stripped++;
+                        }
 
                         if (stripped > 0)
                             lines[li] = lines[li][stripped..];
@@ -3819,7 +3959,9 @@ public static class FormatCSharpFile
                 var walk = node.Parent;
 
                 while (walk is MemberAccessExpressionSyntax)
+                {
                     walk = walk.Parent;
+                }
 
                 if (walk is InvocationExpressionSyntax)
                 {
@@ -3988,7 +4130,9 @@ public static class FormatCSharpFile
             var expr = arg.Expression;
 
             while (expr is ParenthesizedExpressionSyntax paren)
+            {
                 expr = paren.Expression;
+            }
 
             if (expr is LiteralExpressionSyntax lit &&
                 lit.Token.IsKind(SyntaxKind.MultiLineRawStringLiteralToken))
@@ -4459,7 +4603,9 @@ public static class FormatCSharpFile
                 exprCol - expectedCol;
 
             while (stripped < lineExcess && stripped < lines[li].Length && lines[li][stripped] is ' ')
+            {
                 stripped++;
+            }
 
             if (stripped > 0)
                 lines[li] = lines[li][stripped..];

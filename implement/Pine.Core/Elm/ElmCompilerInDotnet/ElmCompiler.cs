@@ -473,12 +473,14 @@ public partial class ElmCompiler
         }
 
         foreach (var root in rootDeclarations)
+        {
             if (canonicalizedDeclarations.Declarations[root].Value.Value is not SyntaxModelTypes.Declaration.FunctionDeclaration)
             {
                 return
                     new CompilationError.Message(
                         $"Root declaration '{root.FullName}' is not an executable function or value definition.");
             }
+        }
 
         var moduleErrors = new List<CompilationError.CanonicalizationDiagnostic>();
 
@@ -903,9 +905,11 @@ public partial class ElmCompiler
             if (declaration is IrTypes.Declaration.ChoiceTypeDeclaration choice)
             {
                 foreach (var constructor in choice.TypeDeclaration.Constructors)
+                {
                     choiceConstructorArities.Add(
                         DeclQualifiedName.Create(name.Namespaces, constructor.Name),
                         constructor.Arguments.Count);
+                }
             }
         }
 

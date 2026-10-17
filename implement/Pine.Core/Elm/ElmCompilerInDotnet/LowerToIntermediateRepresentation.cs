@@ -559,8 +559,10 @@ public static class LowerToIntermediateRepresentation
                 }
 
                 foreach (var name in names)
+                {
                     context =
                         context with { Bindings = context.Bindings.SetItem(name, new Type.UnknownType()), Parameters = context.Parameters.Remove(name) };
+                }
             }
 
             for (var iteration = 0; iteration < let.Declarations.Count; iteration++)

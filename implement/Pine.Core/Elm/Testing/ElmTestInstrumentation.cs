@@ -423,6 +423,7 @@ public sealed class ElmTestInstrumentation : IDisposable
         var cache = new PineVMParseCache();
 
         foreach (var module in environment.Modules)
+        {
             foreach (var (name, value) in module.moduleContent.FunctionDeclarations)
             {
                 // Zero-parameter roots are executable expression wrappers, not necessarily tagged functions.
@@ -432,6 +433,7 @@ public sealed class ElmTestInstrumentation : IDisposable
                 if (FunctionRecord.ParseFunctionRecordTagged(value, cache).IsOkOrNull() is { ParameterCount: > 0 } function)
                     GetEntry(function.InnerFunction).Names.Add(module.moduleName + "." + name);
             }
+        }
     }
 
     /// <summary>Creates a VM sharing this run's limits and optional recording; profiling VMs must execute serially.</summary>
@@ -926,6 +928,7 @@ public sealed class ElmTestInstrumentation : IDisposable
                     _owner.AnnounceStop(_owner.DescribeStopReason(evaluationEvent.StopReason));
 
                     foreach (var frame in evaluationEvent.LoadStackTrace())
+                    {
                         if (frame.FrameIndex is { } index && _active.ContainsKey(index))
                         {
                             AttributeWork(
@@ -934,6 +937,7 @@ public sealed class ElmTestInstrumentation : IDisposable
                                 frame.FrameInstructionCount,
                                 frame.FrameLoopIterationCount);
                         }
+                    }
 
                     _owner.Capture(evaluationEvent.LoadStackTrace);
                     break;

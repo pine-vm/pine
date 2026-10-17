@@ -1042,8 +1042,10 @@ public record ExpressionCompilation(
                 pending.Push((next.expression, true));
 
                 foreach (var child in Children(next.expression))
+                {
                     if (!costs.ContainsKey(child))
                         pending.Push((child, false));
+                }
 
                 continue;
             }

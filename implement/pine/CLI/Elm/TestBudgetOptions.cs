@@ -70,9 +70,11 @@ internal sealed record TestBudgetOptions(
         }
 
         foreach (var option in new[] { options.Budget, options.Invocations, options.Loops })
+        {
             NumericOptionParsing.SetCountParser(
                 option,
                 value => value is <= 0 ? $"{option.Name} must be positive." : null);
+        }
 
         NumericOptionParsing.SetCountParser(
             options.StackDepth,
