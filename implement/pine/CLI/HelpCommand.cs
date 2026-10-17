@@ -58,6 +58,7 @@ public static class HelpCommand
                 ["dotnet"] = ".NET and C# development tools.",
                 ["describe"] = "Describe a composition.",
                 ["run"] = null,
+                ["apply"] = null,
                 ["run-server"] = "Run a server with a web-based admin interface.",
                 ["deploy"] = "Deploy an app to an Elm backend process.",
                 ["copy-app-state"] = "Copy the state of an Elm backend app.",
@@ -106,6 +107,7 @@ public static class HelpCommand
             new List<string>
             {
                 "run",
+                "apply",
                 "run-server",
                 "deploy",
                 "copy-app-state",

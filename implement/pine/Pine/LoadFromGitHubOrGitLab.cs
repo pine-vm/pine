@@ -5,8 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Pine;
@@ -38,8 +36,8 @@ public static class LoadFromGitHubOrGitLab
         string refGroupName,
         string pathGroupName) =>
         "(?<" + repositoryGroupName + ">" +
-        "https://(github\\.com|gitlab\\.com)/" +
-        "[^/]+/[^/]+)(/(?<" + typeGroupName + ">blob|tree)/" +
+        "https?://(github\\.com|gitlab\\.com)/" +
+        "[^/]+/[^/]+)(/(?:-/)?(?<" + typeGroupName + ">blob|tree)/" +
         "(?<" + refGroupName + ">[^/]+)($|/(?<" + pathGroupName + ">.*))|)";
 
     public record ParsedUrl(
@@ -114,38 +112,38 @@ public static class LoadFromGitHubOrGitLab
     public static Result<string, LoadFromUrlSuccess> LoadFromUrl(
         string sourceUrl,
         Func<GetRepositoryFilesPartialForCommitRequest, Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>> getRepositoryFilesPartialForCommit)
+        => LoadFromUrl(sourceUrl, getRepositoryFilesPartialForCommit, openRepository: null);
+
+    internal static Result<string, LoadFromUrlSuccess> LoadFromUrl(
+        string sourceUrl,
+        Func<GetRepositoryFilesPartialForCommitRequest, Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>>? getRepositoryFilesPartialForCommit,
+        Func<string, string, IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>, GitRemoteRepository>? openRepository)
     {
+        using var branchResolution = GitBranchResolutionCache.BeginScope();
         var parsedUrl = ParseUrl(sourceUrl);
 
         if (parsedUrl is null)
             return "Failed to parse string '" + sourceUrl + "' as GitHub or GitLab URL.";
 
-        string? branchName = null;
-        var refLooksLikeCommit = false;
-
-        if (parsedUrl.inRepository is { } inRepository)
-        {
-            refLooksLikeCommit = Regex.IsMatch(inRepository.@ref, "[A-Fa-f0-9]{40}");
-
-            branchName = refLooksLikeCommit ? null : inRepository.@ref;
-        }
-
         var cloneUrl = parsedUrl.repository.TrimEnd('/') + ".git";
 
-        getRepositoryFilesPartialForCommit ??=
-            req => GetRepositoryFilesPartialForCommitViaGitCore(
-                cloneUrl: req.cloneUrlCandidates[0],
-                commit: req.commit);
+        var refName =
+            RefCanonicalNameFromPathComponentInGitHubRepository(
+                parsedUrl.inRepository is { } location ? Uri.UnescapeDataString(location.@ref) : null);
+
+        var resolvedCommit =
+            GetCommitFromReference(cloneUrl, refName)
+            .MapError(err => "Failed to resolve ref '" + refName + "': " + err);
+
+        getRepositoryFilesPartialForCommit ??= GetRepositoryFilesPartialForCommitDefault;
 
         var repositoryFilesResult =
-            refLooksLikeCommit
-            ?
-            getRepositoryFilesPartialForCommit(
-                new GetRepositoryFilesPartialForCommitRequest(
-                    commit: parsedUrl.inRepository!.@ref,
-                    cloneUrlCandidates: [cloneUrl]))
-            :
-            GetRepositoryFilesPartialForBranchViaGitCore(cloneUrl, branchName);
+            resolvedCommit.AndThen(
+                commit =>
+                getRepositoryFilesPartialForCommit(
+                    new GetRepositoryFilesPartialForCommitRequest(
+                        commit: commit,
+                        cloneUrlCandidates: [cloneUrl])));
 
         return
             repositoryFilesResult
@@ -154,34 +152,26 @@ public static class LoadFromGitHubOrGitLab
                 {
                     try
                     {
-                        var refName = RefCanonicalNameFromPathComponentInGitHubRepository(parsedUrl.inRepository?.@ref);
-
-                        var loadStartCommitResult =
-                            GetCommitFromReference(cloneUrl, refName)
-                            .MapError(err => "I did not find the commit for ref '" + err + "'.");
-
                         return
-                            loadStartCommitResult
+                            resolvedCommit
                             .AndThen(
                                 commitSha =>
                                 {
-                                    // Fetch the repository with commit data using GitCore
-                                    var repository =
-                                        GitCore.LoadFromUrl.FetchBloblessClone(
-                                            gitUrl: cloneUrl,
-                                            commitSha: commitSha,
-                                            depth: null);
+                                    var remote =
+                                        openRepository is null
+                                        ?
+                                        GitRemoteRepository.Open(
+                                            cloneUrl,
+                                            commitSha,
+                                            depth: null,
+                                            cachedFiles: repositoryFilesPartial)
+                                        :
+                                        openRepository(cloneUrl, commitSha, repositoryFilesPartial);
 
-                                    var commitObject =
-                                        repository.GetObject(commitSha)
-                                        ?? throw new Exception("Commit " + commitSha + " not found in repository");
+                                    var repository = remote.Objects;
+                                    var commit = remote.Commit;
 
-                                    if (commitObject.Type is not GitCore.PackFile.ObjectType.Commit)
-                                        throw new Exception("Object " + commitSha + " is not a commit");
-
-                                    var commit = GitCore.GitObjects.ParseCommit(commitObject.Data);
-
-                                    ParsedUrlInRepository partInRepositoryWithCommit(string replacementCommitSha) =>
+                                    ParsedUrlInRepository PartInRepositoryWithCommit(string replacementCommitSha) =>
                                         parsedUrl.inRepository is null
                                         ?
                                         new ParsedUrlInRepository(
@@ -192,7 +182,7 @@ public static class LoadFromGitHubOrGitLab
                                         parsedUrl.inRepository with { @ref = replacementCommitSha };
 
                                     var urlInCommit =
-                                        BackToUrl(parsedUrl with { inRepository = partInRepositoryWithCommit(commitSha) });
+                                        BackToUrl(parsedUrl with { inRepository = PartInRepositoryWithCommit(commitSha) });
 
                                     var rootCommit = GetCommitHashAndContentFromGitCore(commitSha, commit);
 
@@ -200,7 +190,8 @@ public static class LoadFromGitHubOrGitLab
                                         parsedUrl.inRepository is null ? "" : parsedUrl.inRepository.path;
 
                                     var pathNodesNames =
-                                        parsedUrlPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                                        parsedUrlPath.Split('/', StringSplitOptions.RemoveEmptyEntries)
+                                        .Select(Uri.UnescapeDataString).ToArray();
 
                                     // Get the tree or blob at the specified path
                                     var treeHash = commit.TreeHash;
@@ -226,63 +217,6 @@ public static class LoadFromGitHubOrGitLab
 
                                         treeHash = entry.HashBase16;
                                         currentPath.Add(pathComponent);
-                                    }
-
-                                    // Collect all blob SHAs we need
-                                    var blobShas = new List<string>();
-
-                                    void CollectBlobShas(string objHash)
-                                    {
-                                        var obj = repository.GetObject(objHash);
-
-                                        // If object is not in repository, assume it's a blob that needs to be fetched
-                                        if (obj is null)
-                                        {
-                                            blobShas.Add(objHash);
-                                            return;
-                                        }
-
-                                        if (obj.Type is GitCore.PackFile.ObjectType.Blob)
-                                        {
-                                            blobShas.Add(objHash);
-                                        }
-                                        else if (obj.Type is GitCore.PackFile.ObjectType.Tree)
-                                        {
-                                            var tree = GitCore.GitObjects.ParseTree(obj.Data);
-
-                                            foreach (var entry in tree.Entries)
-                                            {
-                                                CollectBlobShas(entry.HashBase16);
-                                            }
-                                        }
-                                    }
-
-                                    CollectBlobShas(treeHash);
-
-                                    // Fetch all blobs if we have any
-                                    if (blobShas.Count > 0)
-                                    {
-                                        var blobsPackFileData =
-                                            GitCore.GitSmartHttp.FetchSpecificObjectsAsync(
-                                                cloneUrl,
-                                                blobShas).GetAwaiter().GetResult();
-
-                                        // Parse the blobs pack file
-                                        var blobsIndexResult = GitCore.PackIndex.GeneratePackIndexV2(blobsPackFileData);
-
-                                        var blobsIndexEntries =
-                                            GitCore.PackIndex.ParsePackIndexV2(blobsIndexResult.IndexData);
-
-                                        var blobObjects =
-                                            GitCore.PackFile.ParseAllObjects(blobsPackFileData, blobsIndexEntries);
-
-                                        // Add blobs to repository
-                                        var blobPackObjects =
-                                            blobObjects
-                                            .Where(obj => obj.Type is GitCore.PackFile.ObjectType.Blob)
-                                            .ToDictionary(obj => obj.SHA1base16, obj => obj);
-
-                                        repository = repository.WithObjects(blobPackObjects.ToImmutableDictionary());
                                     }
 
                                     // Trace back to find first parent with same tree at this path
@@ -364,54 +298,9 @@ public static class LoadFromGitHubOrGitLab
                                     var firstParentCommitWithSameTree = TraceBackToFirstParentWithSameTree();
 
                                     var urlInFirstParentCommitWithSameValueAtThisPath =
-                                        BackToUrl(parsedUrl with { inRepository = partInRepositoryWithCommit(firstParentCommitWithSameTree.hash) });
+                                        BackToUrl(parsedUrl with { inRepository = PartInRepositoryWithCommit(firstParentCommitWithSameTree.hash) });
 
-                                    // Convert the tree or blob to the expected format
-                                    FileTree ConvertGitObjectToBlobTree(string objectHash)
-                                    {
-                                        var obj = repository.GetObject(objectHash);
-
-                                        if (obj is null)
-                                            throw new Exception("Object not found: " + objectHash);
-
-                                        if (obj.Type is GitCore.PackFile.ObjectType.Blob)
-                                        {
-                                            // Verify blob hash
-                                            var blobContent = obj.Data.ToArray();
-                                            var expectedSHA = objectHash.ToLowerInvariant();
-
-                                            var loadedBlobSHA1Base16Lower =
-                                                Convert.ToHexStringLower(GitBlobSHAFromBlobContent(blobContent));
-
-                                            if (loadedBlobSHA1Base16Lower != expectedSHA)
-                                            {
-                                                throw new Exception(
-                                                    "Unexpected content for git object : SHA is " +
-                                                    loadedBlobSHA1Base16Lower +
-                                                    " instead of " +
-                                                    expectedSHA);
-                                            }
-
-                                            return FileTree.File(blobContent);
-                                        }
-
-                                        if (obj.Type is GitCore.PackFile.ObjectType.Tree)
-                                        {
-                                            var tree = GitCore.GitObjects.ParseTree(obj.Data);
-
-                                            return
-                                                FileTree.SortedDirectory(
-                                                    directoryContent:
-                                                    tree.Entries.Select(
-                                                        entry =>
-                                                        (entry.Name, ConvertGitObjectToBlobTree(entry.HashBase16)))
-                                                    .ToImmutableList());
-                                        }
-
-                                        throw new Exception("Unexpected git object type: " + obj.Type);
-                                    }
-
-                                    var literalNodeObject = ConvertGitObjectToBlobTree(treeHash);
+                                    var literalNodeObject = remote.ReadPath(pathNodesNames);
 
                                     return
                                         Result<string, LoadFromUrlSuccess>.ok(
@@ -454,49 +343,17 @@ public static class LoadFromGitHubOrGitLab
     private static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> GetRepositoryFilesPartialForCommitDefault(
         GetRepositoryFilesPartialForCommitRequest request)
     {
-        Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadNew()
-        {
-            var loadCandidates =
-                request.cloneUrlCandidates.Select(
-                    cloneUrlCandidate =>
-                    new Func<Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>>(
-                        () => GetRepositoryFilesPartialForCommitViaGitCore(
-                            cloneUrl: cloneUrlCandidate,
-                            commit: request.commit)));
+        var cached = RepositoryFilesPartialForCommitCacheDefault?.FileStore.GetFileContent([request.commit]);
 
-            return
-                loadCandidates.FirstOkOrAllErrors().MapError(
-                    candidatesErrors =>
-                    "Failed for " + candidatesErrors.Count + " clone urls:\n" + string.Join("\n", candidatesErrors));
-        }
-
-        var localCache =
-            new Lazy<Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>>(LoadNew);
-
-        var externalCache = RepositoryFilesPartialForCommitCacheDefault;
-
-        var fromExternalCache =
-            externalCache?.GetOrTryAdd(
-            fileName: request.commit,
-            tryBuild: () =>
-            {
-                return localCache.Value.Unpack(
-                    fromErr: _ => null,
-                    fromOk: files => (byte[]?)ZipArchive.ZipArchiveFromFiles(files));
-            });
-
-        return fromExternalCache switch
-        {
-            not null =>
+        return
             Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>.ok(
                 FileTreeExtensions.ToFlatDictionaryWithPathComparer(
-                    FileTree.FromSetOfFilesWithCommonFilePath(
-                        ZipArchive.EntriesFromZipArchive(fromExternalCache.Value))
-                    .EnumerateFilesTransitive())),
-
-            _ =>
-            localCache.Value
-        };
+                    cached is { } zip
+                    ?
+                    FileTree.FromSetOfFilesWithCommonFilePath(ZipArchive.EntriesFromZipArchive(zip))
+                    .EnumerateFilesTransitive()
+                    :
+                    []));
     }
 
     public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> GetRepositoryFilesPartialForBranchViaGitCore(
@@ -569,18 +426,6 @@ public static class LoadFromGitHubOrGitLab
 
         try
         {
-            // Parse the clone URL to extract base URL, owner, and repo
-            // Expected format: https://github.com/owner/repo.git or https://gitlab.com/owner/repo.git
-            var uri = new Uri(cloneUrl);
-            var baseUrl = $"{uri.Scheme}://{uri.Host}";
-            var pathParts = uri.AbsolutePath.TrimStart('/').TrimEnd('/').Replace(".git", "").Split('/');
-
-            if (pathParts.Length < 2)
-                return Result<string, string>.err("Invalid clone URL format: " + cloneUrl);
-
-            var owner = pathParts[0];
-            var repo = pathParts[1];
-
             // Extract branch name from canonical name (e.g., "refs/heads/main" -> "main")
             var branchName =
                 referenceCanonicalName.StartsWith("refs/heads/")
@@ -597,11 +442,7 @@ public static class LoadFromGitHubOrGitLab
                     try
                     {
                         var commitSha =
-                            GitCore.GitSmartHttp.FetchBranchCommitShaAsync(
-                                baseUrl,
-                                owner,
-                                repo,
-                                defaultBranch).GetAwaiter().GetResult();
+                            GitBranchResolutionCache.Current.Pin(cloneUrl, defaultBranch);
 
                         return Result<string, string>.ok(commitSha);
                     }
@@ -615,11 +456,7 @@ public static class LoadFromGitHubOrGitLab
             }
 
             var commitShaResult =
-                GitCore.GitSmartHttp.FetchBranchCommitShaAsync(
-                    baseUrl,
-                    owner,
-                    repo,
-                    branchName).GetAwaiter().GetResult();
+                GitBranchResolutionCache.Current.Pin(cloneUrl, branchName);
 
             return Result<string, string>.ok(commitShaResult);
         }
@@ -658,7 +495,7 @@ public static class LoadFromGitHubOrGitLab
                 matchingReference.TargetIdentifier);
     }
 
-    public static bool RefLooksLikeCommit(string reference) => Regex.IsMatch(reference, "[A-Fa-f0-9]{40}");
+    public static bool RefLooksLikeCommit(string reference) => GitBranchResolutionCache.IsCommit(reference);
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetRepositoryFilesPartialForCommitViaEnvironmentGitCheckout(
         string cloneUrl,
@@ -727,13 +564,6 @@ public static class LoadFromGitHubOrGitLab
         {
             DeleteLocalDirectoryRecursive(tempWorkingDirectory);
         }
-    }
-
-    private static byte[] GitBlobSHAFromBlobContent(byte[] blobContent)
-    {
-        var prefixAsText = "blob " + blobContent.Length + "\0";
-
-        return SHA1.HashData([.. Encoding.ASCII.GetBytes(prefixAsText), .. blobContent]);
     }
 
     public record LoadFromUrlSuccess(

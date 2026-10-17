@@ -598,7 +598,7 @@ public class LambdaLiftingValidatorTests
                 """);
 
         IReadOnlySet<string> candidates =
-            includeHelper ? new HashSet<string> { "helper" } : new HashSet<string>();
+            includeHelper ? new HashSet<string> { "helper" } : [];
 
         var violations = LambdaLiftingValidator.CollectViolations(module, candidates);
         var declarationViolations = LambdaLiftingValidator.CollectViolations(module.Declarations, candidates);

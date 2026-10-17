@@ -27,8 +27,7 @@ public class MutatingCommandLineApp
 
     private readonly ConcurrentQueue<ReadOnlyMemory<byte>> _stdErr = new();
 
-    private readonly PineVMResettingCache _pineVM =
-        PineVMResettingCache.Create(resetCacheEntriesThresholdDefault: 10_000);
+    private readonly Core.PineVM.IPineVM _pineVM;
 
     private readonly CommandLineAppConfig _appConfig;
 
@@ -42,9 +41,11 @@ public class MutatingCommandLineApp
 
     public MutatingCommandLineApp(
         CommandLineAppConfig appConfig,
-        CommandLineAppConfig.CommandLineAppInitEnvironment environment)
+        CommandLineAppConfig.CommandLineAppInitEnvironment environment,
+        Core.PineVM.IPineVM? pineVM = null)
     {
         _appConfig = appConfig;
+        _pineVM = pineVM ?? PineVMResettingCache.Create(resetCacheEntriesThresholdDefault: 10_000);
 
         (_appState, var initResponse) =
             CommandLineAppConfig.Init(

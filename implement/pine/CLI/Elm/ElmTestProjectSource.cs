@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
+using System.Threading;
 
 namespace Pine.CLI.Elm;
 
@@ -27,7 +28,8 @@ internal sealed class ElmTestProjectSource(string directory, bool ownsDirectory,
         string source,
         bool offline,
         IAnsiConsole console,
-        Func<string, IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>? loadRemote = null)
+        Func<string, IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>? loadRemote = null,
+        CancellationToken cancellationToken = default)
     {
         if (!IsRemote(source))
             return new(source, ownsDirectory: false);
@@ -65,12 +67,23 @@ internal sealed class ElmTestProjectSource(string directory, bool ownsDirectory,
 
         try
         {
+            using var branchResolution = GitBranchResolutionCache.BeginScope();
+
+            var pinnedSource =
+                GitBranchResolutionCache.Current.PinUrl(source, cancellationToken, console.Profile.Out.Writer);
+
             files =
                 loadRemote is not null
                 ?
-                loadRemote(source)
+                loadRemote(pinnedSource)
                 :
-                GitCore.LoadFromUrl.LoadTreeContentsFromUrlAsync(source).GetAwaiter().GetResult();
+                GitCore.LoadFromUrl.LoadTreeContentsFromUrlAsync(pinnedSource).GetAwaiter().GetResult();
+
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception exception) when (
             exception.GetType() == typeof(Exception) ||

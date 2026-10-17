@@ -1,5 +1,10 @@
 # Pine Changelog - Implement
 
+## 2026-10-17 - CLI - Add apply command and batch mode
+
++ Added `pine  apply` for batch evaluation of Elm functions from local sources or from remote Git repository URLs.
++ Added batch input via `--input` or `--input-file`, result output via `--output-file`, and in-place file transformation via `--transform-file`.
+
 ## 2026-10-16 - Elm Compiler - Introduce intermediate representation for lowering and record projection
 
 + Introduced a distinct intermediate representation (IR) between Elm syntax transformations and Pine emission, separating type-informed lowering from the emission backend.

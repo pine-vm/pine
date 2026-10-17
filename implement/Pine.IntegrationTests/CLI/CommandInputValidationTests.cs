@@ -141,7 +141,8 @@ public class CommandInputValidationTests
         yield return new(userSecretsStoreCommand, ["site", "password"], ["site", "password"]);
         yield return new(TruncateProcessHistoryCommand.Create(), ["process-site"], ["site"]);
         yield return new(ApplyFunctionCommand.Create(), ["process-site", "function-name"], ["site", "function"]);
-        yield return new(RunCommand.Create(), ["entry-point-module"], ["Main"]);
+        yield return new(RunCommand.Create(), ["entry-point"], ["Main"]);
+        yield return new(RunCommand.Create(batchOnly: true), ["entry-point"], ["Main"]);
         yield return new(MakeCommand.Create(), ["path-to-elm-file"], ["src/Main.elm"]);
         yield return new(ListFunctionsCommand.Create(), ["process-site"], ["site"]);
         yield return new(DeployCommand.Create(), ["source", "process-site"], ["source", "site"]);

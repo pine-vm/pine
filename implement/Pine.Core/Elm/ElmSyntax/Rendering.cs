@@ -53,6 +53,20 @@ public class Rendering
         return null;
     }
 
+    /// <summary>Renders a type annotation using its source token locations.</summary>
+    public static string RenderTypeAnnotation(Node<TypeAnnotation> annotation)
+    {
+        var context =
+            new RenderContext(LinebreakStyle.LF)
+            {
+                CurrentRow = annotation.Range.Start.Row,
+                CurrentColumn = annotation.Range.Start.Column
+            };
+
+        RenderTypeAnnotation(annotation, context);
+        return context.Output.ToString();
+    }
+
     /// <summary>
     /// Represents an item that can be inserted during rendering (comment or incomplete declaration).
     /// </summary>

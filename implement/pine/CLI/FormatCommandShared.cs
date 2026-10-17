@@ -792,6 +792,7 @@ public static class FormatCommandShared
             {
                 Ansi = AnsiSupportForColorMode(colorMode),
                 ColorSystem = ColorSystemSupportForColorMode(colorMode),
+                Enrichment = new ProfileEnrichment { UseDefaultEnrichers = false },
                 Out = new AnsiConsoleOutput(writer),
             });
 

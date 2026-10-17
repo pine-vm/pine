@@ -551,7 +551,9 @@ public class PineCliOptionsTests
             startInfo.Environment["PATH"] = pathEnvironment;
 
         foreach (var argument in arguments)
+        {
             startInfo.ArgumentList.Add(argument);
+        }
 
         using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to start Pine.");
 
