@@ -47,6 +47,73 @@ public enum TypeVariableConstraint
 /// </summary>
 public static partial class TypeInference
 {
+    /// <summary>
+    /// Renders an inferred type using Elm type-annotation syntax, with '?' for undetermined types.
+    /// </summary>
+    public static string RenderInferredType(
+        InferredType type,
+        Func<InferredType.ChoiceType, string>? choiceTypeName = null)
+    {
+        string Render(InferredType item) =>
+            item switch
+            {
+                InferredType.IntType => "Int",
+                InferredType.FloatType => "Float",
+                InferredType.StringType => "String",
+                InferredType.CharType => "Char",
+                InferredType.BoolType => "Bool",
+                InferredType.NumberType => "number",
+
+                InferredType.TypeVariable variable =>
+                variable.Constraint == TypeVariableConstraint.None
+                ?
+                variable.Name
+                :
+                ConstraintName(variable.Constraint),
+
+                InferredType.UnknownType => "?",
+                InferredType.ListType list => "List " + Argument(list.ElementType),
+                InferredType.TupleType tuple => "(" + string.Join(", ", tuple.ElementTypes.Select(Render)) + ")",
+
+                InferredType.RecordType record =>
+                "{ " +
+                string.Join(", ", record.Fields.Select(field => field.FieldName + " : " + Render(field.FieldType))) +
+                " }",
+
+                InferredType.OpenRecordType record =>
+                "{ " + record.ExtensionVariable + " | " +
+                string.Join(
+                    ", ",
+                    record.KnownFields.Select(field => field.FieldName + " : " + Render(field.FieldType))) +
+                " }",
+
+                InferredType.FunctionType function =>
+                (function.ArgumentType is InferredType.FunctionType
+                ?
+                "(" + Render(function.ArgumentType) + ")"
+                :
+                Render(function.ArgumentType)) +
+                " -> " + Render(function.ReturnType),
+
+                InferredType.ChoiceType choice =>
+                (choiceTypeName?.Invoke(choice) ?? string.Join(".", choice.ModuleName.Append(choice.TypeName))) +
+                (choice.TypeArguments.Count is 0 ? "" : " " + string.Join(" ", choice.TypeArguments.Select(Argument))),
+
+                _ =>
+                throw new NotImplementedException(
+                    "RenderInferredType does not handle inferred type variant: " + item.GetType().Name)
+            };
+
+        string Argument(InferredType item) =>
+            item is InferredType.FunctionType or InferredType.ListType or InferredType.ChoiceType { TypeArguments.Count: > 0 }
+            ?
+            "(" + Render(item) + ")"
+            :
+            Render(item);
+
+        return Render(type);
+    }
+
     private static DeclQualifiedName DeclQualifiedNameFromSyntax(SyntaxTypes.QualifiedNameRef qualifiedNameRef) =>
         DeclQualifiedName.Create(qualifiedNameRef.ModuleName, qualifiedNameRef.Name);
 

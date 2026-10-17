@@ -34,6 +34,8 @@ public class PineCliCommand
         string[] args,
         DynamicPGOShare? dynamicPGOShare)
     {
+        using var branchResolution = GitBranchResolutionCache.BeginScope();
+
         LoadFromGitHubOrGitLab.RepositoryFilesPartialForCommitCacheDefault =
             new CacheByFileName(
                 new FileStoreFromSystemIOFile(
@@ -69,6 +71,7 @@ public class PineCliCommand
         // Core commands
         rootCommand.Add(SelfTestCommand.Create());
         rootCommand.Add(RunCommand.Create());
+        rootCommand.Add(RunCommand.Create(batchOnly: true));
         rootCommand.Add(RunServerCommand.Create());
         rootCommand.Add(DeployCommand.Create());
         rootCommand.Add(CopyAppStateCommand.Create());

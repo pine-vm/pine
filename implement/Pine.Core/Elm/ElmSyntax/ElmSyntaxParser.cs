@@ -80,7 +80,7 @@ public class ElmSyntaxParser
 
             if (!diagnostic.PreserveTree)
             {
-                maskedRangeBuilder ??= new List<Range>();
+                maskedRangeBuilder ??= [];
                 maskedRangeBuilder.Add(range);
             }
         }

@@ -2337,7 +2337,7 @@ public partial class ElmCompiler
     /// Flattens a list of modules into an immutable dictionary of declarations keyed by
     /// their fully qualified name.
     /// </summary>
-    internal static ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>
+    public static ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>
         FlattenModulesToDeclarationDictionary(
         IReadOnlyList<ElmSyntaxAbstract.File> modules)
     {

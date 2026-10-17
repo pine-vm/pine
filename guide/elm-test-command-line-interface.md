@@ -66,6 +66,10 @@ Available tests (2)
 
 Prefer a commit-pinned URL over a mutable branch when sharing a reproducible invocation.
 
+Branch resolution uses the same disk cache as other Pine commands loading Git files or
+directories.
+Full commit IDs bypass branch resolution.
+
 Remote loading requires network access and is rejected with `--offline`; use a local project
 directory for offline operation. URLs containing credentials, query strings or fragments are not
 accepted. Only the selected project subtree is downloaded. Remote manifests must keep their source

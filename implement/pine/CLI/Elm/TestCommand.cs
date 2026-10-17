@@ -610,7 +610,12 @@ public static class TestCommand
         try
         {
             using var projectSource =
-                ElmTestProjectSource.Resolve(source, offline, console, remoteSourceLoader);
+                ElmTestProjectSource.Resolve(
+                    source,
+                    offline,
+                    console,
+                    remoteSourceLoader,
+                    instrumentation?.CancellationToken ?? cancellationToken);
 
             if (instrumentation is not null && ElmTestProjectSource.IsRemote(source))
                 instrumentation.Metadata["ProjectSource"] = source;
@@ -831,7 +836,9 @@ public static class TestCommand
         else
         {
             foreach (var fragment in output.Fragments)
+            {
                 console.Write(new Text(fragment.Text, StyleFor(fragment.Style)));
+            }
         }
 
         console.WriteLine();

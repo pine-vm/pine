@@ -46,7 +46,7 @@ public class PineRunSubprocessTests
     private static readonly IReadOnlyList<string> s_appDirectoryPathParts =
         ["TestAppInterface", "PineRunCliApp"];
 
-    private const string AppEntryPoint = "src/App.elm";
+    private const string AppEntryPoint = "src/App.elm/runRoot";
 
     [Fact(Timeout = TestTimeoutMs, Skip = "Skip temporary while performance optimizations are WIP")]
     public async Task Run_command_line_app_via_pine_run_subprocess_reports_greeting_request_response_stderr_and_exit_code_7_Async()
