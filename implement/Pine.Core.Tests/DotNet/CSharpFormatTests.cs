@@ -3035,7 +3035,7 @@ public class CSharpFormatTests
     }
 
     [Fact]
-    public void Formatting_only_changes_whitespace_in_Pine_Core_files()
+    public void Formatting_only_changes_whitespace_and_adds_loop_blocks_in_Pine_Core_files()
     {
         var repositoryPath = FindGitRepository();
 
@@ -3148,7 +3148,7 @@ public class CSharpFormatTests
                 continue;
             }
 
-            var originalNonWhitespace = StripWhitespace(originalText);
+            var originalNonWhitespace = StripWhitespace(AddLoopBodyBlocks(originalText));
             var formattedNonWhitespace = StripWhitespace(formattedText);
 
             if (originalNonWhitespace == formattedNonWhitespace)
@@ -3210,6 +3210,31 @@ public class CSharpFormatTests
 
     private static string EscapeNewlines(string text) =>
         text.Replace("\r", "\\r").Replace("\n", "\\n");
+
+    private static string AddLoopBodyBlocks(string text)
+    {
+        var root = CSharpSyntaxTree.ParseText(text).GetRoot();
+
+        static BlockSyntax AsBlock(StatementSyntax statement) =>
+            statement as BlockSyntax ?? SyntaxFactory.Block(statement);
+
+        return
+            root.ReplaceNodes(
+                root.DescendantNodes().OfType<StatementSyntax>(),
+                (_, rewritten) =>
+                rewritten switch
+                {
+                    ForStatementSyntax loop => loop.WithStatement(AsBlock(loop.Statement)),
+                    ForEachStatementSyntax loop => loop.WithStatement(AsBlock(loop.Statement)),
+                    ForEachVariableStatementSyntax loop => loop.WithStatement(AsBlock(loop.Statement)),
+                    WhileStatementSyntax loop => loop.WithStatement(AsBlock(loop.Statement)),
+                    DoStatementSyntax loop => loop.WithStatement(AsBlock(loop.Statement)),
+
+                    _ =>
+                    rewritten
+                })
+            .ToFullString();
+    }
 
 
     private static string StripWhitespace(string text) =>
@@ -3827,11 +3852,6 @@ public class CSharpFormatTests
     [Theory]
     [InlineData("if (condition)")]
     [InlineData("if (condition) // Header comment")]
-    [InlineData("while (condition)")]
-    [InlineData("for (var i = 0; i < count; i++)")]
-    [InlineData("foreach (var item in items)")]
-    [InlineData("foreach (var item in new[] { first, second })")]
-    [InlineData("foreach (var (first, second) in pairs)")]
     [InlineData("using (var resource = GetResource())")]
     [InlineData("fixed (int* pointer = GetPointer())")]
     [InlineData("fixed (int* pointer = GetPointer()) // Header comment")]
@@ -3844,6 +3864,392 @@ public class CSharpFormatTests
 
         AssertFormattedSyntax(input, input, scriptMode: true);
         AssertFormattedSyntax("// Leading comment\n" + input, "// Leading comment\n" + input, scriptMode: true);
+    }
+
+    [Theory]
+    [InlineData("while (condition)")]
+    [InlineData("for (var i = 0; i < count; i++)")]
+    [InlineData("foreach (var item in items)")]
+    [InlineData("foreach (var item in new[] { first, second })")]
+    [InlineData("await foreach (var item in items)")]
+    [InlineData("foreach (var (first, second) in pairs)")]
+    [InlineData("await foreach (var (first, second) in pairs)")]
+    [InlineData("foreach ((int first, int second) in pairs)")]
+    public void Loop_body_always_requires_braces(string header)
+    {
+        var expected =
+            header +
+            """
+
+            {
+                DoSomething();
+            }
+            """;
+
+        AssertFormattedSyntax(header + " DoSomething();", expected, scriptMode: true);
+        AssertFormattedSyntax(header + "\n    DoSomething();", expected, scriptMode: false);
+
+        AssertFormattedSyntax(
+            "// Leading comment\n" + header + "\n    DoSomething();",
+            "// Leading comment\n" + expected,
+            scriptMode: true);
+
+        AssertFormattedSyntax(expected, expected, scriptMode: true);
+    }
+
+    [Theory]
+    [InlineData("while (condition)")]
+    [InlineData("for (;;)")]
+    [InlineData("foreach (var item in items)")]
+    [InlineData("foreach (var (first, second) in pairs)")]
+    public void Loop_braces_preserve_header_and_body_comments(string header)
+    {
+        var input =
+            header +
+            """
+             // Header comment
+                // Body comment
+                DoSomething(); // Trailing comment
+            """;
+
+        var expected =
+            header +
+            """
+             // Header comment
+            {
+                // Body comment
+                DoSomething(); // Trailing comment
+            }
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Theory]
+    [InlineData("while (condition)")]
+    [InlineData("for (;;)")]
+    [InlineData("foreach (var item in items)")]
+    public void Empty_loop_statement_gets_braces(string header)
+    {
+        var expected =
+            header +
+            """
+
+            {
+                ;
+            }
+            """;
+
+        AssertFormattedSyntax(header + ";", expected, scriptMode: true);
+    }
+
+    [Theory]
+    [InlineData("while (condition)", 0)]
+    [InlineData("for (;;)", 0)]
+    [InlineData("foreach (var item in items)", 0)]
+    [InlineData("foreach (var (first, second) in pairs)", 0)]
+    [InlineData("do", 0)]
+    [InlineData("while (condition)", 1)]
+    [InlineData("for (;;)", 1)]
+    [InlineData("foreach (var item in items)", 1)]
+    [InlineData("foreach (var (first, second) in pairs)", 1)]
+    [InlineData("do", 1)]
+    [InlineData("while (condition)", 2)]
+    [InlineData("for (;;)", 2)]
+    [InlineData("foreach (var item in items)", 2)]
+    [InlineData("foreach (var (first, second) in pairs)", 2)]
+    [InlineData("do", 2)]
+    [InlineData("while (condition)", 3)]
+    [InlineData("for (;;)", 3)]
+    [InlineData("foreach (var item in items)", 3)]
+    [InlineData("foreach (var (first, second) in pairs)", 3)]
+    [InlineData("do", 3)]
+    [InlineData("while (condition)", 4)]
+    [InlineData("for (;;)", 4)]
+    [InlineData("foreach (var item in items)", 4)]
+    [InlineData("foreach (var (first, second) in pairs)", 4)]
+    public void Loop_braces_preserve_conditional_compilation(string header, int conditionalLayout)
+    {
+        var suffix = header is "do" ? "\nwhile (condition);" : "";
+
+        var input =
+            conditionalLayout switch
+            {
+                1 =>
+                $$"""
+                {{header}}
+                #if !FEATURE
+                if (otherCondition)
+                #endif
+                First();
+                {{suffix}}
+                """,
+
+                2 =>
+                $$"""
+                {{header}}
+                if (otherCondition)
+                #if FEATURE
+                First();
+                #else
+                Second();
+                #endif
+                {{suffix}}
+                """,
+
+                3 =>
+                $$"""
+                {{header}}
+                #if FEATURE
+                while (otherCondition)
+                #if INNER
+                First();
+                #else
+                Second();
+                #endif
+                #else
+                Third();
+                #endif
+                {{suffix}}
+                """,
+
+                4 =>
+                $$"""
+                {{header}}
+                #if FEATURE
+                First();
+                After();
+                #else
+                Second();
+                #endif
+                {{suffix}}
+                """,
+
+                _ =>
+                $$"""
+                {{header}}
+                #if FEATURE
+                First();
+                #else
+                Second();
+                #endif
+                {{suffix}}
+                """
+            };
+
+        foreach (var defineFeature in new[] { false, true })
+        {
+            var source = (defineFeature ? "#define FEATURE\n" : "") + input;
+
+            if (conditionalLayout is 2 ||
+                (conditionalLayout is 1 && !defineFeature) ||
+                (conditionalLayout is 3 && defineFeature))
+            {
+                var format = () => FormatCSharpScriptOrThrow(source);
+
+                format.Should().Throw<NotSupportedException>()
+                    .WithMessage("*conditional-compilation boundaries*");
+
+                continue;
+            }
+
+            var formatted = FormatCSharpScriptOrThrow(source);
+
+            foreach (var symbols in new[]
+            {
+                Array.Empty<string>(), new[] { "FEATURE" }, new[] { "INNER" }, new[] { "FEATURE", "INNER" }
+            })
+            {
+                var parsed =
+                    CSharpSyntaxTree.ParseText(
+                        formatted.Replace("#define FEATURE\n", ""),
+                        new CSharpParseOptions(kind: SourceCodeKind.Script, preprocessorSymbols: symbols));
+
+                parsed.GetDiagnostics().Should().BeEmpty();
+            }
+
+            var tree = CSharpSyntaxTree.ParseText(formatted, new CSharpParseOptions(kind: SourceCodeKind.Script));
+
+            var loop =
+                tree.GetRoot().DescendantNodes().OfType<StatementSyntax>()
+                .First(
+                    statement => statement is WhileStatementSyntax or ForStatementSyntax or
+                    ForEachStatementSyntax or ForEachVariableStatementSyntax or DoStatementSyntax);
+
+            var body =
+                loop switch
+                {
+                    WhileStatementSyntax statement => statement.Statement,
+                    ForStatementSyntax statement => statement.Statement,
+                    ForEachStatementSyntax statement => statement.Statement,
+                    ForEachVariableStatementSyntax statement => statement.Statement,
+                    DoStatementSyntax statement => statement.Statement,
+
+                    _ =>
+                    throw new NotImplementedException()
+                };
+
+            body.Should().BeOfType<BlockSyntax>();
+
+            if (conditionalLayout is 4 && defineFeature)
+            {
+                ((BlockSyntax)body).Statements.Should().ContainSingle();
+                loop.GetLastToken().GetNextToken().ValueText.Should().Be("After");
+            }
+
+            formatted.Should().Contain("First();");
+
+            if (conditionalLayout is not 1)
+                formatted.Should().Contain("Second();");
+
+            AssertFormattingIsStable(source, scriptMode: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("while (condition)")]
+    [InlineData("for (;;)")]
+    [InlineData("foreach (var item in items)")]
+    [InlineData("foreach (var (first, second) in pairs)")]
+    public void Rejects_brace_insertion_when_conditional_compilation_controls_only_loop_header(string header)
+    {
+        var input =
+            $$"""
+            #define FEATURE
+            #if FEATURE
+            {{header}}
+            #endif
+                int.TryParse(text, out var value);
+            #if !FEATURE
+            Use(value);
+            #endif
+            """;
+
+        var format = () => FormatCSharpScriptOrThrow(input);
+
+        format.Should().Throw<NotSupportedException>()
+            .WithMessage("*conditional-compilation boundaries*");
+    }
+
+    [Theory]
+    [InlineData("do name = prefix + nextName++; while (!usedNames.Add(name));")]
+    [InlineData("do                  name = prefix + nextName++;\n\nwhile (!usedNames.Add(name));")]
+    [InlineData("do { name = prefix + nextName++; } while (!usedNames.Add(name));")]
+    [InlineData("do\n{\n    name = prefix + nextName++;\n}\n\n\nwhile (!usedNames.Add(name));")]
+    public void Do_loop_has_block_body_and_while_on_next_line(string input)
+    {
+        var expected =
+            """
+            do
+            {
+                name = prefix + nextName++;
+            }
+            while (!usedNames.Add(name));
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+        AssertFormattedSyntax(input, expected, scriptMode: false);
+    }
+
+    [Fact]
+    public void Do_loop_preserves_comments_around_body_and_while()
+    {
+        var input =
+            """
+            do // Before body
+                // Inside body
+                DoSomething(); // After statement
+            // Before condition
+            while (condition); // After loop
+            """;
+
+        var expected =
+            """
+            do // Before body
+            {
+                // Inside body
+                DoSomething(); // After statement
+            }
+            // Before condition
+            while (condition); // After loop
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Theory]
+    [InlineData("// After body")]
+    [InlineData("/* After body */")]
+    public void Do_loop_preserves_comments_between_block_and_while(string comment)
+    {
+        var input =
+            $$"""
+            do
+            {
+                DoSomething();
+            } {{comment}}
+
+            // Before condition
+
+            while (condition);
+            """;
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Do_loop_preserves_directives_before_while()
+    {
+        var input =
+            """
+            do
+            {
+                DoSomething();
+            }
+            #region Condition
+
+            while (condition);
+            #endregion
+            """;
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Nested_loop_bodies_get_braces_without_changing_else_binding()
+    {
+        var input =
+            """
+            for (;;)
+                while (condition)
+                    do
+                        if (otherCondition)
+                            DoSomething();
+                        else
+                            DoOtherThing();
+                    while (keepGoing);
+            """;
+
+        var expected =
+            """
+            for (;;)
+            {
+                while (condition)
+                {
+                    do
+                    {
+                        if (otherCondition)
+                            DoSomething();
+
+                        else
+                            DoOtherThing();
+                    }
+                    while (keepGoing);
+                }
+            }
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
     }
 
     [Fact]
