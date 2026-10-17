@@ -5,7 +5,7 @@ using System.Collections.Frozen;
 using System.Collections.Generic;
 using Xunit;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Stil4mElmSyntax7 = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -34,7 +34,7 @@ public class ModuleCompilationContextTests
         var context =
             new ModuleCompilationContext(
                 allFunctions:
-                new Dictionary<DeclQualifiedName, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)>(),
+                new Dictionary<DeclQualifiedName, (string moduleName, string functionName, Stil4mElmSyntax7.Declaration.FunctionDeclaration declaration)>(),
                 compiledFunctionsCache: [],
                 pineKernelModuleNames: FrozenSet.Create<string>([]),
                 choiceConstructorArities: new Dictionary<DeclQualifiedName, int>

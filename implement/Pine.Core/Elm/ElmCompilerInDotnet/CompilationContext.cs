@@ -5,7 +5,7 @@ using System.Collections.Immutable;
 using System.Linq;
 
 using SyntaxTypes = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
-using ConcreteSyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Stil4mElmSyntax7 = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -162,7 +162,7 @@ public record ModuleCompilationContext(
     /// Creates a module compilation context from concrete Elm declarations by converting them to abstract declarations first.
     /// </summary>
     public ModuleCompilationContext(
-        IReadOnlyDictionary<DeclQualifiedName, (string moduleName, string functionName, ConcreteSyntaxTypes.Declaration.FunctionDeclaration declaration)> allFunctions,
+        IReadOnlyDictionary<DeclQualifiedName, (string moduleName, string functionName, Stil4mElmSyntax7.Declaration.FunctionDeclaration declaration)> allFunctions,
         ImmutableDictionary<DeclQualifiedName, CompiledFunctionInfo> compiledFunctionsCache,
         FrozenSet<string> pineKernelModuleNames,
         IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? functionDependencyLayouts = null,
