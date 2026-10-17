@@ -80,10 +80,8 @@ public static class SyntaxAnalysis
 
     /// <summary>
     /// Accumulator-form pattern-name walker shared by
-    /// <see cref="CollectNamesBoundByPattern"/>,
-    /// <see cref="CollectNamesBoundByPatterns"/> and the
-    /// <c>HashSet</c>-based mirrors retained on
-    /// <c>ElmSyntaxTransformations</c> for legacy mutable-collection call sites.
+    /// <see cref="CollectNamesBoundByPattern"/> and
+    /// <see cref="CollectNamesBoundByPatterns"/>.
     /// </summary>
     internal static void CollectNamesBoundByPatternInto(
         Pattern pattern,
@@ -1396,7 +1394,7 @@ public static class SyntaxAnalysis
     /// bare reference to a name introduced by an
     /// <see cref="Pattern.AsPattern"/> whose inner pattern carries a
     /// statically-known tag (via
-    /// <c>ElmSyntaxTransformations.TryUnwrapToNamedPattern</c>), the
+    /// <see cref="TryUnwrapToNamedPattern"/>), the
     /// aliased binding's tag is inferred from the surrounding match.
     ///
     /// <para>
@@ -1454,17 +1452,41 @@ public static class SyntaxAnalysis
         if (!string.Equals(asPattern.Name.Value, fov.Name, StringComparison.Ordinal))
             return null;
 
-        // Use the same alias-aware unwrap as the inlining pipeline so
-        // ``((Wrap _) as alias)``-style nested aliases also resolve.
-        var inner =
-            ElmCompilerInDotnet.ElmSyntaxTransformations.TryUnwrapToNamedPattern(
-                asPattern.Pattern.Value);
+        var inner = TryUnwrapToNamedPattern(asPattern.Pattern.Value);
 
         if (inner is null)
             return null;
 
         return inner.Name;
     }
+
+    private static Pattern.NamedPattern? TryUnwrapToNamedPattern(Pattern pattern) =>
+        pattern switch
+        {
+            Pattern.NamedPattern namedPattern => namedPattern,
+            Pattern.AsPattern asPattern => TryUnwrapToNamedPattern(asPattern.Pattern.Value),
+
+            Pattern.ParenthesizedPattern parenthesized =>
+            TryUnwrapToNamedPattern(parenthesized.Pattern.Value),
+
+            Pattern.AllPattern or
+            Pattern.UnitPattern or
+            Pattern.CharPattern or
+            Pattern.StringPattern or
+            Pattern.IntPattern or
+            Pattern.HexPattern or
+            Pattern.FloatPattern or
+            Pattern.TuplePattern or
+            Pattern.RecordPattern or
+            Pattern.UnConsPattern or
+            Pattern.ListPattern or
+            Pattern.VarPattern =>
+            null,
+
+            _ =>
+            throw new NotImplementedException(
+                "TryUnwrapToNamedPattern does not handle pattern variant: " + pattern.GetType().Name)
+        };
 
     /// <summary>
     /// Yields the "return leaves" reachable from <paramref name="expression"/>

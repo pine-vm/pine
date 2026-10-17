@@ -8,7 +8,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 
-using AbstractSyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using AbstractSyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 // Alias to avoid ambiguity with System.Range
 using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
@@ -157,11 +157,9 @@ public class AddInferredTypeAnnotations
             // don't prevent us from inferring types for cross-module references
             var moduleNameStr = string.Join(".", moduleName);
 
-            var loweringFile = AbstractSyntaxTypes.FromFullSyntaxModel.Convert(canonicalizedFile);
+            var abstractFile = AbstractSyntaxTypes.ConvertFromConcrete.FromFile(canonicalizedFile);
 
-            canonicalizedFilesByModuleName[moduleNameStr] = loweringFile;
-
-            var abstractFile = ElmSyntaxAbstractConversion.FromFile(loweringFile);
+            canonicalizedFilesByModuleName[moduleNameStr] = abstractFile;
 
             allAliasDefinitions =
                 allAliasDefinitions.SetItems(
@@ -172,7 +170,7 @@ public class AddInferredTypeAnnotations
         {
             var moduleSignatures =
                 TypeInference.BuildFunctionSignaturesMap(
-                    ElmSyntaxAbstractConversion.FromFile(canonicalizedFile),
+                    canonicalizedFile,
                     moduleNameStr,
                     allAliasDefinitions);
 
@@ -244,9 +242,9 @@ public class AddInferredTypeAnnotations
 
         foreach (var declaration in file.Declarations)
         {
-            if (declaration.Value is AbstractSyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+            if (declaration is AbstractSyntaxTypes.Declaration.FunctionDeclaration funcDecl)
             {
-                var funcName = funcDecl.Function.Declaration.Value.Name.Value;
+                var funcName = funcDecl.Function.Declaration.Name;
                 var declarationPath = new[] { funcName };
 
                 if (!includeDeclaration(declarationPath))
@@ -255,9 +253,9 @@ public class AddInferredTypeAnnotations
                 }
 
                 // Expression and arguments are already in abstract syntax (canonicalized)
-                var abstractExpression = funcDecl.Function.Declaration.Value.Expression;
+                var abstractExpression = funcDecl.Function.Declaration.Expression;
 
-                var abstractArguments = funcDecl.Function.Declaration.Value.Arguments;
+                var abstractArguments = funcDecl.Function.Declaration.Arguments;
 
                 // Skip if already has a type annotation
                 if (funcDecl.Function.Signature is not null)
@@ -265,9 +263,8 @@ public class AddInferredTypeAnnotations
                     // Still need to recursively traverse for let-block declarations
                     annotations =
                         CollectTypeAnnotationsInExpression(
-                            abstractExpression.Value,
+                            abstractExpression,
                             declarationPath,
-                            abstractArguments,
                             moduleName,
                             functionSignatures,
                             SourceModuleName,
@@ -280,8 +277,8 @@ public class AddInferredTypeAnnotations
                 // Use TypeInference to infer the function type
                 var (returnType, parameterTypes) =
                     TypeInference.InferFunctionDeclarationType(
-                        ElmSyntaxAbstractConversion.FromExpression(abstractExpression.Value),
-                        [.. abstractArguments.Select(arg => ElmSyntaxAbstractConversion.FromPattern(arg.Value))],
+                        abstractExpression,
+                        abstractArguments,
                         moduleName,
                         functionSignatures);
 
@@ -290,7 +287,7 @@ public class AddInferredTypeAnnotations
                     // Build the full function type using TypeInference
                     var fullType =
                         TypeInference.BuildFunctionType(
-                            [.. abstractArguments.Select(arg => ElmSyntaxAbstractConversion.FromPattern(arg.Value))],
+                            abstractArguments,
                             parameterTypes,
                             returnType);
 
@@ -306,9 +303,8 @@ public class AddInferredTypeAnnotations
                 // Recursively traverse for let-block declarations
                 annotations =
                     CollectTypeAnnotationsInExpression(
-                        abstractExpression.Value,
+                        abstractExpression,
                         declarationPath,
-                        abstractArguments,
                         moduleName,
                         functionSignatures,
                         SourceModuleName,
@@ -326,7 +322,7 @@ public class AddInferredTypeAnnotations
         string typeName)
     {
         var currentModuleName =
-            AbstractSyntaxTypes.Module.GetModuleName(file.ModuleDefinition.Value).Value;
+            AbstractSyntaxTypes.Module.GetModuleName(file.ModuleDefinition);
 
         if (currentModuleName.SequenceEqual(typeModuleName))
         {
@@ -335,19 +331,17 @@ public class AddInferredTypeAnnotations
 
         IReadOnlyList<string>? importedModuleName = null;
 
-        foreach (var importNode in file.Imports)
+        foreach (var import in file.Imports)
         {
-            var import = importNode.Value;
-
-            if (!import.ModuleName.Value.SequenceEqual(typeModuleName))
+            if (!import.ModuleName.SequenceEqual(typeModuleName))
             {
                 continue;
             }
 
-            importedModuleName ??= import.ModuleAlias?.Value ?? import.ModuleName.Value;
+            importedModuleName ??= import.ModuleAlias ?? import.ModuleName;
 
             if (import.ExposingList is { } exposingList &&
-                ExposingIncludesType(exposingList.Value, typeName))
+                ExposingIncludesType(exposingList, typeName))
             {
                 return [];
             }
@@ -367,8 +361,8 @@ public class AddInferredTypeAnnotations
 
             case AbstractSyntaxTypes.Exposing.Explicit explicitExposing:
                 return
-                    explicitExposing.Nodes.Any(
-                        exposeNode => TopLevelExposeIncludesType(exposeNode.Value, typeName));
+                    explicitExposing.Exposes.Any(
+                        expose => TopLevelExposeIncludesType(expose, typeName));
 
             default:
                 throw new NotImplementedException(
@@ -405,7 +399,6 @@ public class AddInferredTypeAnnotations
     private static ImmutableDictionary<IReadOnlyList<string>, TypeAnnotation> CollectTypeAnnotationsInExpression(
         AbstractSyntaxTypes.Expression expression,
         IReadOnlyList<string> currentPath,
-        IReadOnlyList<Node<AbstractSyntaxTypes.Pattern>> parentArguments,
         string moduleName,
         IReadOnlyDictionary<string, TypeInference.InferredType> functionSignatures,
         Func<IReadOnlyList<string>, string, IReadOnlyList<string>> sourceModuleName,
@@ -417,11 +410,11 @@ public class AddInferredTypeAnnotations
             case AbstractSyntaxTypes.Expression.LetExpression letExpr:
 
                 // Process each declaration in the let-block
-                foreach (var letDecl in letExpr.Value.Declarations)
+                foreach (var letDecl in letExpr.Declarations)
                 {
-                    if (letDecl.Value is AbstractSyntaxTypes.Expression.LetDeclaration.LetFunction letFunc)
+                    if (letDecl is AbstractSyntaxTypes.LetDeclaration.LetFunction letFunc)
                     {
-                        var localFuncName = letFunc.Function.Declaration.Value.Name.Value;
+                        var localFuncName = letFunc.Function.Declaration.Name;
                         var localPath = currentPath.Append(localFuncName).ToArray();
 
                         if (!includeDeclaration(localPath))
@@ -435,9 +428,8 @@ public class AddInferredTypeAnnotations
                             // Still recurse into the expression
                             annotations =
                                 CollectTypeAnnotationsInExpression(
-                                    letFunc.Function.Declaration.Value.Expression.Value,
+                                    letFunc.Function.Declaration.Expression,
                                     localPath,
-                                    letFunc.Function.Declaration.Value.Arguments,
                                     moduleName,
                                     functionSignatures,
                                     sourceModuleName,
@@ -450,12 +442,8 @@ public class AddInferredTypeAnnotations
                         // Use TypeInference to infer the type of the local declaration
                         var (returnType, parameterTypes) =
                             TypeInference.InferFunctionDeclarationType(
-                                ElmSyntaxAbstractConversion.FromExpression(
-                                    letFunc.Function.Declaration.Value.Expression.Value),
-                                [
-                                .. letFunc.Function.Declaration.Value.Arguments.Select(
-                                    arg => ElmSyntaxAbstractConversion.FromPattern(arg.Value))
-                                ],
+                                letFunc.Function.Declaration.Expression,
+                                letFunc.Function.Declaration.Arguments,
                                 moduleName,
                                 functionSignatures);
 
@@ -464,10 +452,7 @@ public class AddInferredTypeAnnotations
                             // Build the full function type using TypeInference
                             var fullType =
                                 TypeInference.BuildFunctionType(
-                                    [
-                                    .. letFunc.Function.Declaration.Value.Arguments.Select(
-                                        arg => ElmSyntaxAbstractConversion.FromPattern(arg.Value))
-                                    ],
+                                    letFunc.Function.Declaration.Arguments,
                                     parameterTypes,
                                     returnType);
 
@@ -483,9 +468,8 @@ public class AddInferredTypeAnnotations
                         // Recurse into the local function's expression
                         annotations =
                             CollectTypeAnnotationsInExpression(
-                                letFunc.Function.Declaration.Value.Expression.Value,
+                                letFunc.Function.Declaration.Expression,
                                 localPath,
-                                letFunc.Function.Declaration.Value.Arguments,
                                 moduleName,
                                 functionSignatures,
                                 sourceModuleName,
@@ -497,9 +481,8 @@ public class AddInferredTypeAnnotations
                 // Recurse into the let-block's body expression
                 annotations =
                     CollectTypeAnnotationsInExpression(
-                        letExpr.Value.Expression.Value,
+                        letExpr.Expression,
                         currentPath,
-                        parentArguments,
                         moduleName,
                         functionSignatures,
                         sourceModuleName,
@@ -511,9 +494,8 @@ public class AddInferredTypeAnnotations
             case AbstractSyntaxTypes.Expression.IfBlock ifBlock:
                 annotations =
                     CollectTypeAnnotationsInExpression(
-                        ifBlock.Condition.Value,
+                        ifBlock.Condition,
                         currentPath,
-                        parentArguments,
                         moduleName,
                         functionSignatures,
                         sourceModuleName,
@@ -522,9 +504,8 @@ public class AddInferredTypeAnnotations
 
                 annotations =
                     CollectTypeAnnotationsInExpression(
-                        ifBlock.ThenBlock.Value,
+                        ifBlock.ThenBlock,
                         currentPath,
-                        parentArguments,
                         moduleName,
                         functionSignatures,
                         sourceModuleName,
@@ -533,9 +514,8 @@ public class AddInferredTypeAnnotations
 
                 annotations =
                     CollectTypeAnnotationsInExpression(
-                        ifBlock.ElseBlock.Value,
+                        ifBlock.ElseBlock,
                         currentPath,
-                        parentArguments,
                         moduleName,
                         functionSignatures,
                         sourceModuleName,
@@ -547,22 +527,20 @@ public class AddInferredTypeAnnotations
             case AbstractSyntaxTypes.Expression.CaseExpression caseExpr:
                 annotations =
                     CollectTypeAnnotationsInExpression(
-                        caseExpr.CaseBlock.Expression.Value,
+                        caseExpr.Expression,
                         currentPath,
-                        parentArguments,
                         moduleName,
                         functionSignatures,
                         sourceModuleName,
                         includeDeclaration,
                         annotations);
 
-                foreach (var caseCase in caseExpr.CaseBlock.Cases)
+                foreach (var caseCase in caseExpr.Cases)
                 {
                     annotations =
                         CollectTypeAnnotationsInExpression(
-                            caseCase.Expression.Value,
+                            caseCase.Expression,
                             currentPath,
-                            parentArguments,
                             moduleName,
                             functionSignatures,
                             sourceModuleName,
@@ -575,9 +553,8 @@ public class AddInferredTypeAnnotations
             case AbstractSyntaxTypes.Expression.LambdaExpression lambda:
                 annotations =
                     CollectTypeAnnotationsInExpression(
-                        lambda.Lambda.Expression.Value,
+                        lambda.Expression,
                         currentPath,
-                        lambda.Lambda.Arguments,
                         moduleName,
                         functionSignatures,
                         sourceModuleName,
@@ -587,13 +564,22 @@ public class AddInferredTypeAnnotations
                 break;
 
             case AbstractSyntaxTypes.Expression.Application app:
+                annotations =
+                    CollectTypeAnnotationsInExpression(
+                        app.Function,
+                        currentPath,
+                        moduleName,
+                        functionSignatures,
+                        sourceModuleName,
+                        includeDeclaration,
+                        annotations);
+
                 foreach (var arg in app.Arguments)
                 {
                     annotations =
                         CollectTypeAnnotationsInExpression(
-                            arg.Value,
+                            arg,
                             currentPath,
-                            parentArguments,
                             moduleName,
                             functionSignatures,
                             sourceModuleName,
@@ -606,9 +592,8 @@ public class AddInferredTypeAnnotations
             case AbstractSyntaxTypes.Expression.OperatorApplication opApp:
                 annotations =
                     CollectTypeAnnotationsInExpression(
-                        opApp.Left.Value,
+                        opApp.Left,
                         currentPath,
-                        parentArguments,
                         moduleName,
                         functionSignatures,
                         sourceModuleName,
@@ -617,23 +602,8 @@ public class AddInferredTypeAnnotations
 
                 annotations =
                     CollectTypeAnnotationsInExpression(
-                        opApp.Right.Value,
+                        opApp.Right,
                         currentPath,
-                        parentArguments,
-                        moduleName,
-                        functionSignatures,
-                        sourceModuleName,
-                        includeDeclaration,
-                        annotations);
-
-                break;
-
-            case AbstractSyntaxTypes.Expression.ParenthesizedExpression paren:
-                annotations =
-                    CollectTypeAnnotationsInExpression(
-                        paren.Expression.Value,
-                        currentPath,
-                        parentArguments,
                         moduleName,
                         functionSignatures,
                         sourceModuleName,
@@ -647,9 +617,8 @@ public class AddInferredTypeAnnotations
                 {
                     annotations =
                         CollectTypeAnnotationsInExpression(
-                            elem.Value,
+                            elem,
                             currentPath,
-                            parentArguments,
                             moduleName,
                             functionSignatures,
                             sourceModuleName,
@@ -664,9 +633,8 @@ public class AddInferredTypeAnnotations
                 {
                     annotations =
                         CollectTypeAnnotationsInExpression(
-                            elem.Value,
+                            elem,
                             currentPath,
-                            parentArguments,
                             moduleName,
                             functionSignatures,
                             sourceModuleName,
@@ -681,9 +649,8 @@ public class AddInferredTypeAnnotations
                 {
                     annotations =
                         CollectTypeAnnotationsInExpression(
-                            field.Value.valueExpr.Value,
+                            field.Value,
                             currentPath,
-                            parentArguments,
                             moduleName,
                             functionSignatures,
                             sourceModuleName,
@@ -692,6 +659,25 @@ public class AddInferredTypeAnnotations
                 }
 
                 break;
+
+            case AbstractSyntaxTypes.Expression.UnitExpr:
+            case AbstractSyntaxTypes.Expression.StringLiteral:
+            case AbstractSyntaxTypes.Expression.CharLiteral:
+            case AbstractSyntaxTypes.Expression.IntegerLiteral:
+            case AbstractSyntaxTypes.Expression.FloatLiteral:
+            case AbstractSyntaxTypes.Expression.Negation:
+            case AbstractSyntaxTypes.Expression.Identifier:
+            case AbstractSyntaxTypes.Expression.PrefixOperator:
+            case AbstractSyntaxTypes.Expression.RecordAccess:
+            case AbstractSyntaxTypes.Expression.RecordAccessFunction:
+            case AbstractSyntaxTypes.Expression.RecordUpdateExpression:
+            case AbstractSyntaxTypes.Expression.GLSLExpression:
+                break;
+
+            default:
+                throw new NotImplementedException(
+                    "CollectTypeAnnotationsInExpression does not handle expression variant: " +
+                    expression.GetType().Name);
         }
 
         return annotations;
@@ -762,8 +748,16 @@ public class AddInferredTypeAnnotations
                     choiceType.TypeArguments,
                     sourceModuleName),
 
+                TypeInference.InferredType.OpenRecordType =>
+                null,
+
+                TypeInference.InferredType.UnknownType =>
+                null,
+
                 _ =>
-                null
+                throw new NotImplementedException(
+                    "InferredTypeToTypeAnnotation does not handle inferred type variant: " +
+                    inferredType.GetType().Name)
             };
     }
 

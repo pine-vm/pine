@@ -627,20 +627,16 @@ public class OperatorLoweringTests
             ElmSyntaxParser.ParseModuleText(moduleText)
             .Extract(err => throw new Exception("Failed parsing: " + err));
 
-        var parsedModulesStil4mElmSyntax7 =
-            new[] { Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(parsedModule) };
-
-        var canonicalizedModulesStil4mElmSyntax7 =
-            Canonicalization.CanonicalizeOrThrow(parsedModulesStil4mElmSyntax7)
+        var canonicalizedModules =
+            Canonicalization.CanonicalizeOrThrow([parsedModule])
             .Extract(err => throw new Exception("Failed canonicalization: " + err));
 
-        var canonicalizedModuleStil4mElmSyntax7 =
-            canonicalizedModulesStil4mElmSyntax7.Single()
+        var canonicalizedConcrete =
+            canonicalizedModules.Single()
             .Value.Extract(err => throw new Exception("Failed extracting canonicalized module: " + err));
 
         var canonicalizedModule =
-            SyntaxTypes.ConvertFromConcrete.FromFile(
-                Core.Elm.ElmSyntax.Stil4mElmSyntax7.ToFullSyntaxModel.Convert(canonicalizedModuleStil4mElmSyntax7));
+            SyntaxTypes.ConvertFromConcrete.FromFile(canonicalizedConcrete);
 
         var loweringConfig =
             new SyntaxTypes.OperatorLowering.Config(

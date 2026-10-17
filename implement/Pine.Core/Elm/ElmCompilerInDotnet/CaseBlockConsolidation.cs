@@ -1,13 +1,9 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
-
-// Alias to avoid ambiguity with System.Range.
-using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -51,10 +47,6 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// </summary>
 internal static class CaseBlockConsolidation
 {
-    private static readonly Location s_zeroLoc = new(Row: 0, Column: 0);
-
-    private static readonly Range s_zeroRange = new(Start: s_zeroLoc, End: s_zeroLoc);
-
     /// <summary>
     /// Cost model for the case-block consolidation pass. The rewrite
     /// in <see cref="TryConsolidateBranchedCase"/> can duplicate an arm
@@ -86,11 +78,9 @@ internal static class CaseBlockConsolidation
         OptimizedElmSyntaxDeclarations declarations,
         CaseConsolidationConfig config) =>
         OptimizedElmSyntaxDeclarations.FromFlatDictionary(
-            ElmSyntaxAbstractConversion.FromDeclarationDictionary(
-                RewriteDeclarationDictionary(
-                    ElmSyntaxAbstractConversion.ToDeclarationDictionary(
-                        declarations.RenderAsFlatDictionary()),
-                    config)));
+            RewriteDeclarationDictionary(
+                declarations.RenderAsFlatDictionary(),
+                config));
 
     /// <summary>
     /// Walks every function declaration's body bottom-up and applies the
@@ -124,32 +114,29 @@ internal static class CaseBlockConsolidation
         {
             case SyntaxTypes.Declaration.FunctionDeclaration funcDecl:
                 {
-                    var impl = funcDecl.Function.Declaration.Value;
+                    var impl = funcDecl.Function.Declaration;
 
-                    var newBody = RewriteExpression(impl.Expression.Value, config);
+                    var newBody = RewriteExpression(impl.Expression, config);
 
-                    if (ReferenceEquals(newBody, impl.Expression.Value))
+                    if (ReferenceEquals(newBody, impl.Expression))
                         return decl;
 
                     var newImpl =
-                        impl with
-                        {
-                            Expression = new Node<SyntaxTypes.Expression>(impl.Expression.Range, newBody),
-                        };
+                        new SyntaxTypes.FunctionImplementation(
+                            impl.Name,
+                            impl.Arguments,
+                            newBody);
 
                     var newFunc =
                         funcDecl.Function with
                         {
-                            Declaration =
-                            new Node<SyntaxTypes.FunctionImplementation>(
-                                funcDecl.Function.Declaration.Range,
-                                newImpl),
+                            Declaration = newImpl,
                         };
 
                     return new SyntaxTypes.Declaration.FunctionDeclaration(newFunc);
                 }
 
-            case SyntaxTypes.Declaration.CustomTypeDeclaration:
+            case SyntaxTypes.Declaration.ChoiceTypeDeclaration:
             case SyntaxTypes.Declaration.AliasDeclaration:
             case SyntaxTypes.Declaration.PortDeclaration:
             case SyntaxTypes.Declaration.InfixDeclaration:
@@ -165,7 +152,7 @@ internal static class CaseBlockConsolidation
     /// <summary>
     /// Bottom-up rewrite over an expression tree. Recurses into all
     /// children first via
-    /// <see cref="ElmSyntaxTransformations.MapChildExpressions"/>, then
+    /// <see cref="ElmSyntaxAbstractTransformations.MapChildExpressions"/>, then
     /// applies the two local peephole rewrites. If the local rewrite
     /// fires, the result is re-rewritten to allow cascading
     /// consolidations.
@@ -176,18 +163,18 @@ internal static class CaseBlockConsolidation
     {
         var anyChildChanged = false;
 
-        Node<SyntaxTypes.Expression> RecurseNode(Node<SyntaxTypes.Expression> child)
+        SyntaxTypes.Expression Recurse(SyntaxTypes.Expression child)
         {
-            var rewrittenChild = RewriteExpression(child.Value, config);
+            var rewrittenChild = RewriteExpression(child, config);
 
-            if (ReferenceEquals(rewrittenChild, child.Value))
+            if (ReferenceEquals(rewrittenChild, child))
                 return child;
 
             anyChildChanged = true;
-            return new Node<SyntaxTypes.Expression>(child.Range, rewrittenChild);
+            return rewrittenChild;
         }
 
-        var withChildrenRewritten = ElmSyntaxTransformations.MapChildExpressions(expr, RecurseNode);
+        var withChildrenRewritten = ElmSyntaxAbstractTransformations.MapChildExpressions(expr, Recurse);
 
         var afterChildRecursion = anyChildChanged ? withChildrenRewritten : expr;
 
@@ -233,7 +220,6 @@ internal static class CaseBlockConsolidation
 
     /// <summary>
     /// If <paramref name="caseExpr"/>'s scrutinee is, after peeling
-    /// <see cref="SyntaxTypes.Expression.ParenthesizedExpression"/> /
     /// <see cref="SyntaxTypes.Expression.LetExpression"/>, an
     /// <see cref="SyntaxTypes.Expression.IfBlock"/> whose every leaf is
     /// tagged by a statically-known constructor, AND each predicted
@@ -254,19 +240,18 @@ internal static class CaseBlockConsolidation
         SyntaxTypes.Expression.CaseExpression caseExpr,
         CaseConsolidationConfig config)
     {
-        var scrutinee = caseExpr.CaseBlock.Expression.Value;
+        var scrutinee = caseExpr.Expression;
 
-        // Identify and split the root: any LetExpression / Paren wrappers
+        // Identify and split the root: any LetExpression wrappers
         // around the IfBlock will be re-emitted as outer wrappers around
         // the consolidated expression.
-        var (peeledScrutinee, rewrap) = PeelLetAndParenWrappers(scrutinee);
+        var (peeledScrutinee, rewrap) = PeelLetWrappers(scrutinee);
 
         if (peeledScrutinee is not SyntaxTypes.Expression.IfBlock)
             return null;
 
         var leaves =
-            SyntaxTypes.SyntaxAnalysis
-            .EnumerateConstructorTaggedLeavesOfIfChain(peeledScrutinee);
+            EnumerateConstructorTaggedLeavesOfIfChain(peeledScrutinee);
 
         if (leaves is null || leaves.Count is 0)
             return null;
@@ -278,7 +263,7 @@ internal static class CaseBlockConsolidation
 
         for (var i = 0; i < leaves.Count; i++)
         {
-            var match = TryFindUniqueArmForTag(caseExpr.CaseBlock.Cases, leaves[i].PredictedTag);
+            var match = TryFindUniqueArmForTag(caseExpr.Cases, leaves[i].PredictedTag);
 
             if (match is null)
                 return null;
@@ -292,8 +277,8 @@ internal static class CaseBlockConsolidation
         foreach (var arm in armForLeaf)
         {
             var armNodes =
-                SyntaxTypes.SyntaxAnalysis.CountExpressionNodes(
-                    arm.Expression.Value,
+                CountExpressionNodes(
+                    arm.Expression,
                     max: config.MaxArmBodyNodeCount + 1);
 
             if (armNodes > config.MaxArmBodyNodeCount)
@@ -318,7 +303,7 @@ internal static class CaseBlockConsolidation
         for (var i = 0; i < leaves.Count; i++)
         {
             var armPatternBindings =
-                SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(armForLeaf[i].Pattern.Value);
+                SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(armForLeaf[i].Pattern);
 
             if (armPatternBindings.Count is 0)
                 continue;
@@ -337,7 +322,7 @@ internal static class CaseBlockConsolidation
             // produces two declarations of the same name in overlapping
             // scopes — a naming clash caught by post-stage validation.
             var leafBoundVars =
-                SyntaxTypes.SyntaxAnalysis.CollectTopLevelLetBoundNames(leaves[i].LeafExpression);
+                CollectTopLevelLetBoundNames(leaves[i].LeafExpression);
 
             if (armPatternBindings.Overlaps(leafBoundVars))
                 return null;
@@ -363,33 +348,21 @@ internal static class CaseBlockConsolidation
         SyntaxTypes.Case[] armForLeaf,
         ref int leafIndex)
     {
-        // Peel parens at each chain position. Parens around an IfBlock
-        // are transparent.
         var current = expression;
-
-        if (current is SyntaxTypes.Expression.ParenthesizedExpression paren)
-        {
-            var rewrittenInner =
-                RebuildIfChainWithSubstitutedLeaves(paren.Expression.Value, leaves, armForLeaf, ref leafIndex);
-
-            return
-                new SyntaxTypes.Expression.ParenthesizedExpression(
-                    new Node<SyntaxTypes.Expression>(paren.Expression.Range, rewrittenInner));
-        }
 
         if (current is SyntaxTypes.Expression.IfBlock ifBlock)
         {
             var newThen =
-                RebuildIfChainWithSubstitutedLeaves(ifBlock.ThenBlock.Value, leaves, armForLeaf, ref leafIndex);
+                RebuildIfChainWithSubstitutedLeaves(ifBlock.ThenBlock, leaves, armForLeaf, ref leafIndex);
 
             var newElse =
-                RebuildIfChainWithSubstitutedLeaves(ifBlock.ElseBlock.Value, leaves, armForLeaf, ref leafIndex);
+                RebuildIfChainWithSubstitutedLeaves(ifBlock.ElseBlock, leaves, armForLeaf, ref leafIndex);
 
             return
                 new SyntaxTypes.Expression.IfBlock(
                     Condition: ifBlock.Condition,
-                    ThenBlock: new Node<SyntaxTypes.Expression>(ifBlock.ThenBlock.Range, newThen),
-                    ElseBlock: new Node<SyntaxTypes.Expression>(ifBlock.ElseBlock.Range, newElse));
+                    ThenBlock: newThen,
+                    ElseBlock: newElse);
         }
 
         // Otherwise this is a leaf. The leaf's expression must match the
@@ -422,92 +395,34 @@ internal static class CaseBlockConsolidation
         SyntaxTypes.Expression leafExpression,
         SyntaxTypes.Case arm)
     {
-        // Peel parens around the leaf to expose the constructor head
-        // / argument list. The leaf retains its tag by construction (the
-        // enumerator only reports leaves whose
-        // TryPredictOutermostConstructorTag returns non-null).
-        var peeledLeaf = UnwrapParenExpression(leafExpression);
-
-        var armPattern = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(arm.Pattern.Value);
-
-        // If the arm pattern is a wildcard or var pattern, no
-        // destructure is needed — substitute the var name (if any)
-        // through the body.
-        if (armPattern is SyntaxTypes.Pattern.AllPattern)
-        {
-            return arm.Expression.Value;
-        }
-
-        if (armPattern is SyntaxTypes.Pattern.VarPattern armVar)
-        {
-            // The entire leaf expression is bound to the var.
-            var subs =
-                new Dictionary<string, Node<SyntaxTypes.Expression>>(StringComparer.Ordinal)
-                {
-                    [armVar.Name] = new Node<SyntaxTypes.Expression>(s_zeroRange, leafExpression),
-                };
-
-            return ElmSyntaxTransformations.SubstituteInExpression(arm.Expression, subs).Value;
-        }
-
         // Named constructor (possibly aliased): emit a let-destructure
         // binding the arm pattern against the constructor argument
         // expression(s) from the leaf.
-        var namedArmPattern = ElmSyntaxTransformations.TryUnwrapToNamedPattern(arm.Pattern.Value);
+        var namedArmPattern =
+            SyntaxTypes.SyntaxAnalysis.PeelPatternAsBinder(arm.Pattern) as SyntaxTypes.Pattern.NamedPattern;
 
         // Even with an alias, we need the alias name visible inside the
         // arm body — re-emit the original arm pattern as the
         // let-destructure pattern so all bound names (alias + nested
         // var patterns) are introduced together.
-        var destructurePattern = arm.Pattern;
-
-        Node<SyntaxTypes.Expression> rhsNode;
-
-        if (namedArmPattern is null)
-        {
-            // Arm pattern is not a constructor — fall back to a single
-            // VarPattern destructure of the leaf if possible, or emit
-            // the leaf as the RHS unchanged.
-            rhsNode = new Node<SyntaxTypes.Expression>(s_zeroRange, leafExpression);
-        }
-        else if (namedArmPattern.Arguments.Count is 0)
+        if (namedArmPattern is { Arguments.Count: 0 } &&
+            SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(arm.Pattern).Count is 0)
         {
             // Zero-arity constructor arm (e.g. `Maybe.Nothing -> body`).
-            // The destructure has no variables to bind, so we can elide
-            // it entirely and emit the arm body directly.
-            return arm.Expression.Value;
-        }
-        else if (peeledLeaf is SyntaxTypes.Expression.Application app
-            && app.Arguments.Count == namedArmPattern.Arguments.Count + 1)
-        {
-            // Constructor with arguments: rhsNode is the leaf
-            // application as-is. The let-destructure pattern matches
-            // it positionally.
-            rhsNode = new Node<SyntaxTypes.Expression>(s_zeroRange, leafExpression);
-        }
-        else
-        {
-            // The leaf is a bare uppercase reference but the arm
-            // expects arguments, or the arity does not match — give up
-            // safely by binding the leaf to the destructure pattern as
-            // a whole (Elm runtime will fail at pattern match, but the
-            // shape is preserved).
-            rhsNode = new Node<SyntaxTypes.Expression>(s_zeroRange, leafExpression);
+            // Elide the destructure only when it introduces no names;
+            // an alias still needs to be bound even without arguments.
+            return arm.Expression;
         }
 
         var letDestr =
-            new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
-                Pattern: destructurePattern,
-                Expression: rhsNode);
+            new SyntaxTypes.LetDeclaration.LetDestructuring(
+                Pattern: arm.Pattern,
+                Expression: leafExpression);
 
         return
             new SyntaxTypes.Expression.LetExpression(
-                new SyntaxTypes.Expression.LetBlock(
-                    Declarations:
-                    [
-                    new Node<SyntaxTypes.Expression.LetDeclaration>(s_zeroRange, letDestr),
-                    ],
-                    Expression: arm.Expression));
+                Declarations: [letDestr],
+                Expression: arm.Expression);
     }
 
     /// <summary>
@@ -526,15 +441,10 @@ internal static class CaseBlockConsolidation
         for (var i = 0; i < arms.Count; i++)
         {
             var arm = arms[i];
-            var peeled = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(arm.Pattern.Value);
+            var peeled = SyntaxTypes.SyntaxAnalysis.PeelPatternAsBinder(arm.Pattern);
 
             // Look through AsPattern: the alias-bound name does not
             // change the matched tag.
-            while (peeled is SyntaxTypes.Pattern.AsPattern asPat)
-            {
-                peeled = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(asPat.Pattern.Value);
-            }
-
             // A wildcard or var arm preceding our predicted-tag arm
             // would short-circuit the match — abort the rewrite.
             if (peeled is SyntaxTypes.Pattern.AllPattern || peeled is SyntaxTypes.Pattern.VarPattern)
@@ -578,7 +488,6 @@ internal static class CaseBlockConsolidation
 
     /// <summary>
     /// If <paramref name="outerCase"/>'s scrutinee is, after peeling
-    /// <see cref="SyntaxTypes.Expression.ParenthesizedExpression"/> /
     /// <see cref="SyntaxTypes.Expression.LetExpression"/>, another
     /// <see cref="SyntaxTypes.Expression.CaseExpression"/>, AND every
     /// inner-arm body has a statically-inferable outermost tag (either
@@ -596,14 +505,14 @@ internal static class CaseBlockConsolidation
     public static SyntaxTypes.Expression? TryConsolidateNestedCaseOfCase(
         SyntaxTypes.Expression.CaseExpression outerCase)
     {
-        var outerScrutinee = outerCase.CaseBlock.Expression.Value;
-        var (peeledScrutinee, rewrap) = PeelLetAndParenWrappers(outerScrutinee);
+        var outerScrutinee = outerCase.Expression;
+        var (peeledScrutinee, rewrap) = PeelLetWrappers(outerScrutinee);
 
         if (peeledScrutinee is not SyntaxTypes.Expression.CaseExpression innerCase)
             return null;
 
         // For every inner arm, compute the predicted outermost tag.
-        var innerArms = innerCase.CaseBlock.Cases;
+        var innerArms = innerCase.Cases;
 
         if (innerArms.Count is 0)
             return null;
@@ -613,9 +522,9 @@ internal static class CaseBlockConsolidation
         for (var i = 0; i < innerArms.Count; i++)
         {
             var tag =
-                SyntaxTypes.SyntaxAnalysis.TryPredictOutermostConstructorTagInArmBody(
-                    innerArms[i].Pattern.Value,
-                    innerArms[i].Expression.Value);
+                TryPredictOutermostConstructorTagInArmBody(
+                    innerArms[i].Pattern,
+                    innerArms[i].Expression);
 
             if (tag is null)
                 return null;
@@ -632,7 +541,7 @@ internal static class CaseBlockConsolidation
         for (var i = 0; i < innerArms.Count; i++)
         {
             var (outerArm, outerIdx) =
-                TryFindUniqueArmForTagWithIndex(outerCase.CaseBlock.Cases, tagPerInnerArm[i]);
+                TryFindUniqueArmForTagWithIndex(outerCase.Cases, tagPerInnerArm[i]);
 
             if (outerArm is null)
                 return null;
@@ -648,10 +557,10 @@ internal static class CaseBlockConsolidation
             // post-stage <c>CheckForNamingErrors</c> validation. Abort
             // the rewrite rather than emit shadow-prone code.
             var innerBindings =
-                SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(innerArms[i].Pattern.Value);
+                SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(innerArms[i].Pattern);
 
             var outerBindings =
-                SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(outerArm.Pattern.Value);
+                SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(outerArm.Pattern);
 
             if (innerBindings.Overlaps(outerBindings))
                 return null;
@@ -661,7 +570,7 @@ internal static class CaseBlockConsolidation
             // binder of the same name (e.g. a nested `let`), the wrapping
             // would create a naming clash; abort.
             var innerBodyBound =
-                SyntaxTypes.SyntaxAnalysis.CollectTopLevelLetBoundNames(innerArms[i].Expression.Value);
+                CollectTopLevelLetBoundNames(innerArms[i].Expression);
 
             if (outerBindings.Overlaps(innerBodyBound))
                 return null;
@@ -681,7 +590,6 @@ internal static class CaseBlockConsolidation
 
             var rewrittenBody =
                 BuildConsolidatedArmBody(
-                    innerArmPattern: innerArm.Pattern.Value,
                     innerArmBody: innerArm.Expression,
                     outerArmPattern: outerArm.Pattern,
                     outerArmBody: outerArm.Expression);
@@ -694,9 +602,8 @@ internal static class CaseBlockConsolidation
 
         var consolidatedCase =
             new SyntaxTypes.Expression.CaseExpression(
-                new SyntaxTypes.CaseBlock(
-                    Expression: innerCase.CaseBlock.Expression,
-                    Cases: newCases));
+                Expression: innerCase.Expression,
+                Cases: newCases);
 
         return rewrap(consolidatedCase);
     }
@@ -711,12 +618,7 @@ internal static class CaseBlockConsolidation
         for (var i = 0; i < arms.Count; i++)
         {
             var arm = arms[i];
-            var peeled = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(arm.Pattern.Value);
-
-            while (peeled is SyntaxTypes.Pattern.AsPattern asPat)
-            {
-                peeled = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(asPat.Pattern.Value);
-            }
+            var peeled = SyntaxTypes.SyntaxAnalysis.PeelPatternAsBinder(arm.Pattern);
 
             if ((peeled is SyntaxTypes.Pattern.AllPattern || peeled is SyntaxTypes.Pattern.VarPattern)
                 && match is null)
@@ -737,60 +639,167 @@ internal static class CaseBlockConsolidation
         return (match, matchIndex);
     }
 
-    private static Node<SyntaxTypes.Expression> BuildConsolidatedArmBody(
-        SyntaxTypes.Pattern innerArmPattern,
-        Node<SyntaxTypes.Expression> innerArmBody,
-        Node<SyntaxTypes.Pattern> outerArmPattern,
-        Node<SyntaxTypes.Expression> outerArmBody)
+    private static SyntaxTypes.Expression BuildConsolidatedArmBody(
+        SyntaxTypes.Expression innerArmBody,
+        SyntaxTypes.Pattern outerArmPattern,
+        SyntaxTypes.Expression outerArmBody)
     {
-        var outerPeeled = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(outerArmPattern.Value);
-
-        // Trivial cases for the outer arm pattern:
-        // - wildcard `_` → no binding, return outer body unchanged.
-        // - bare var `x`  → substitute `x` with the inner arm's body expression.
-        if (outerPeeled is SyntaxTypes.Pattern.AllPattern)
-        {
-            return outerArmBody;
-        }
-
-        if (outerPeeled is SyntaxTypes.Pattern.VarPattern outerVar)
-        {
-            var subs =
-                new Dictionary<string, Node<SyntaxTypes.Expression>>(StringComparer.Ordinal)
-                {
-                    [outerVar.Name] = innerArmBody,
-                };
-
-            return ElmSyntaxTransformations.SubstituteInExpression(outerArmBody, subs);
-        }
-
-        // Otherwise emit a let-destructure binding the outer arm
+        // The selected outer arm always has a named constructor pattern.
+        // Emit a let-destructure binding the outer arm
         // pattern against the inner arm body, and evaluate the outer
         // arm body in that scope.
         var letDestr =
-            new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
+            new SyntaxTypes.LetDeclaration.LetDestructuring(
                 Pattern: outerArmPattern,
                 Expression: innerArmBody);
 
-        var letExpr =
+        return
             new SyntaxTypes.Expression.LetExpression(
-                new SyntaxTypes.Expression.LetBlock(
-                    Declarations:
-                    [
-                    new Node<SyntaxTypes.Expression.LetDeclaration>(s_zeroRange, letDestr),
-                    ],
-                    Expression: outerArmBody));
-
-        return new Node<SyntaxTypes.Expression>(outerArmBody.Range, letExpr);
+                Declarations: [letDestr],
+                Expression: outerArmBody);
     }
 
     // ------------------------------------------------------------------
     // Shared helpers.
     // ------------------------------------------------------------------
 
+    private static int CountExpressionNodes(SyntaxTypes.Expression expression, int max)
+    {
+        if (max <= 0)
+            return 0;
+
+        var pending = new Stack<SyntaxTypes.Expression>();
+        pending.Push(expression);
+
+        // Preserve the existing budget convention: count descendants, not the root.
+        var count = 0;
+
+        while (pending.TryPop(out var current))
+        {
+            ElmSyntaxAbstractTransformations.MapChildExpressions(
+                current,
+                child =>
+                {
+                    pending.Push(child);
+                    count++;
+                    return child;
+                });
+
+            if (count >= max)
+                return max;
+        }
+
+        return count;
+    }
+
+    private static ImmutableHashSet<string> CollectTopLevelLetBoundNames(SyntaxTypes.Expression expression)
+    {
+        var names = ImmutableHashSet.CreateBuilder<string>();
+
+        while (expression is SyntaxTypes.Expression.LetExpression letExpr)
+        {
+            foreach (var declaration in letExpr.Declarations)
+            {
+                switch (declaration)
+                {
+                    case SyntaxTypes.LetDeclaration.LetFunction function:
+                        names.Add(function.Function.Declaration.Name);
+                        break;
+
+                    case SyntaxTypes.LetDeclaration.LetDestructuring destructuring:
+                        names.UnionWith(SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(destructuring.Pattern));
+                        break;
+
+                    default:
+                        throw new NotImplementedException(
+                            "CollectTopLevelLetBoundNames does not handle let declaration variant: " +
+                            declaration.GetType().Name);
+                }
+            }
+
+            expression = letExpr.Expression;
+        }
+
+        return names.ToImmutable();
+    }
+
+    private static SyntaxTypes.QualifiedNameRef? TryPredictOutermostConstructorTag(
+        SyntaxTypes.Expression expression)
+    {
+        while (expression is SyntaxTypes.Expression.LetExpression letExpr)
+            expression = letExpr.Expression;
+
+        var identifier =
+            expression is SyntaxTypes.Expression.Application application
+            ?
+            application.Function as SyntaxTypes.Expression.Identifier
+            :
+            expression as SyntaxTypes.Expression.Identifier;
+
+        if (identifier is not null &&
+            identifier.QualifiedName.DeclName.Length > 0 &&
+            char.IsUpper(identifier.QualifiedName.DeclName[0]))
+        {
+            return
+                new SyntaxTypes.QualifiedNameRef(
+                    identifier.QualifiedName.Namespaces,
+                    identifier.QualifiedName.DeclName);
+        }
+
+        if (expression is SyntaxTypes.Expression.IfBlock ifBlock)
+        {
+            var thenTag = TryPredictOutermostConstructorTag(ifBlock.ThenBlock);
+            var elseTag = TryPredictOutermostConstructorTag(ifBlock.ElseBlock);
+
+            return thenTag is not null && thenTag.Equals(elseTag) ? thenTag : null;
+        }
+
+        return null;
+    }
+
+    private static IReadOnlyList<(SyntaxTypes.Expression LeafExpression, SyntaxTypes.QualifiedNameRef PredictedTag)>?
+        EnumerateConstructorTaggedLeavesOfIfChain(SyntaxTypes.Expression expression)
+    {
+        var leaves = new List<(SyntaxTypes.Expression, SyntaxTypes.QualifiedNameRef)>();
+
+        bool Collect(SyntaxTypes.Expression current)
+        {
+            if (current is SyntaxTypes.Expression.IfBlock ifBlock)
+                return Collect(ifBlock.ThenBlock) && Collect(ifBlock.ElseBlock);
+
+            var tag = TryPredictOutermostConstructorTag(current);
+
+            if (tag is null)
+                return false;
+
+            leaves.Add((current, tag));
+            return true;
+        }
+
+        return Collect(expression) ? leaves : null;
+    }
+
+    private static SyntaxTypes.QualifiedNameRef? TryPredictOutermostConstructorTagInArmBody(
+        SyntaxTypes.Pattern armPattern,
+        SyntaxTypes.Expression armBody)
+    {
+        if (TryPredictOutermostConstructorTag(armBody) is { } directTag)
+            return directTag;
+
+        if (armBody is SyntaxTypes.Expression.Identifier identifier &&
+            identifier.QualifiedName.Namespaces.Count is 0 &&
+            armPattern is SyntaxTypes.Pattern.AsPattern alias &&
+            string.Equals(alias.Name, identifier.QualifiedName.DeclName, StringComparison.Ordinal) &&
+            SyntaxTypes.SyntaxAnalysis.PeelPatternAsBinder(alias.Pattern) is SyntaxTypes.Pattern.NamedPattern named)
+        {
+            return named.Name;
+        }
+
+        return null;
+    }
+
     /// <summary>
-    /// Peels <see cref="SyntaxTypes.Expression.ParenthesizedExpression"/>
-    /// and <see cref="SyntaxTypes.Expression.LetExpression"/> wrappers
+    /// Peels <see cref="SyntaxTypes.Expression.LetExpression"/> wrappers
     /// off the given expression, returning the peeled inner expression
     /// together with a function that re-wraps a replacement inner
     /// expression in the same enclosing wrappers. The re-wrap function
@@ -798,46 +807,20 @@ internal static class CaseBlockConsolidation
     /// scope around the new inner expression.
     /// </summary>
     private static (SyntaxTypes.Expression Peeled, Func<SyntaxTypes.Expression, SyntaxTypes.Expression> Rewrap)
-        PeelLetAndParenWrappers(SyntaxTypes.Expression expression)
+        PeelLetWrappers(SyntaxTypes.Expression expression)
     {
         var stack = new List<Func<SyntaxTypes.Expression, SyntaxTypes.Expression>>();
         var current = expression;
 
-        while (true)
+        while (current is SyntaxTypes.Expression.LetExpression letExpr)
         {
-            switch (current)
-            {
-                case SyntaxTypes.Expression.ParenthesizedExpression paren:
-                    {
-                        var range = paren.Expression.Range;
+            stack.Add(
+                inner =>
+                new SyntaxTypes.Expression.LetExpression(
+                    Declarations: letExpr.Declarations,
+                    Expression: inner));
 
-                        stack.Add(
-                            inner =>
-                            new SyntaxTypes.Expression.ParenthesizedExpression(
-                                new Node<SyntaxTypes.Expression>(range, inner)));
-
-                        current = paren.Expression.Value;
-                        continue;
-                    }
-
-                case SyntaxTypes.Expression.LetExpression letExpr:
-                    {
-                        var letBlock = letExpr.Value;
-                        var bodyRange = letBlock.Expression.Range;
-
-                        stack.Add(
-                            inner =>
-                            new SyntaxTypes.Expression.LetExpression(
-                                new SyntaxTypes.Expression.LetBlock(
-                                    Declarations: letBlock.Declarations,
-                                    Expression: new Node<SyntaxTypes.Expression>(bodyRange, inner))));
-
-                        current = letBlock.Expression.Value;
-                        continue;
-                    }
-            }
-
-            break;
+            current = letExpr.Expression;
         }
 
         SyntaxTypes.Expression Rewrap(SyntaxTypes.Expression inner)
@@ -855,13 +838,4 @@ internal static class CaseBlockConsolidation
         return (current, Rewrap);
     }
 
-    private static SyntaxTypes.Expression UnwrapParenExpression(SyntaxTypes.Expression expression)
-    {
-        while (expression is SyntaxTypes.Expression.ParenthesizedExpression paren)
-        {
-            expression = paren.Expression.Value;
-        }
-
-        return expression;
-    }
 }

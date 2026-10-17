@@ -411,7 +411,9 @@ public class ElmCoreBasicsLoweringTests
                 Core.Elm.ElmSyntax.ElmSyntaxAbstract.Module.GetModuleName(module.ModuleDefinition)
                 .SequenceEqual(["Test"]));
 
-        return ElmSyntaxAbstractConversion.ToFile(moduleAbstract);
+        return
+            SyntaxTypes.FromFullSyntaxModel.Convert(
+                Core.Elm.ElmSyntax.ElmSyntaxAbstract.ConvertToConcrete.FromFile(moduleAbstract));
     }
 
     private static string RenderCanonicalized(SyntaxTypes.File module) =>

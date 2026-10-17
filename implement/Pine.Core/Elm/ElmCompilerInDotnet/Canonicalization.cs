@@ -8,7 +8,6 @@ using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
 using ElmSyntaxAbstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
-using Stil4mElmSyntax7 = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 // Alias to avoid ambiguity with System.Range
 using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
@@ -254,50 +253,6 @@ public partial class Canonicalization
         }
 
         return resultDictionary;
-    }
-
-    /// <summary>
-    /// Compatibility adapter for callers that explicitly use the stil4m/elm-syntax 7 model.
-    /// Canonicalization itself runs on the concrete syntax model.
-    /// </summary>
-    public static Result<string, IReadOnlyDictionary<ModuleName, Result<string, Stil4mElmSyntax7.File>>> CanonicalizeOrThrow(
-        IReadOnlyList<Stil4mElmSyntax7.File> modules)
-    {
-        var concreteResult =
-            CanonicalizeOrThrow(
-                [.. modules.Select(Stil4mElmSyntax7.ToFullSyntaxModel.Convert)]);
-
-        if (concreteResult.IsErrOrNull() is { } error)
-            return error;
-
-        var concreteModules =
-            concreteResult.IsOkOrNull() ??
-            throw new NotImplementedException(
-                "Unexpected result type from concrete Canonicalize");
-
-        var compatibilityModules =
-            new Dictionary<ModuleName, Result<string, Stil4mElmSyntax7.File>>(
-                EnumerableExtensions.EqualityComparer<ModuleName>());
-
-        foreach (var (moduleName, moduleResult) in concreteModules)
-        {
-            if (moduleResult.IsErrOrNull() is { } moduleError)
-            {
-                compatibilityModules[moduleName] = moduleError;
-                continue;
-            }
-
-            var concreteFile =
-                moduleResult.IsOkOrNull() ??
-                throw new NotImplementedException(
-                    "Unexpected module result type from concrete Canonicalize");
-
-            compatibilityModules[moduleName] =
-                Stil4mElmSyntax7.FromFullSyntaxModel.Convert(
-                    concreteFile with { Imports = [] });
-        }
-
-        return compatibilityModules;
     }
 
     /// <summary>

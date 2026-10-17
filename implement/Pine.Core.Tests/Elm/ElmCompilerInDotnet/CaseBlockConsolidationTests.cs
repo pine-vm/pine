@@ -1,10 +1,12 @@
 using AwesomeAssertions;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmSyntax;
 using System;
+using System.Collections.Immutable;
 using Xunit;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -15,13 +17,10 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 ///
 /// <para>
 /// Each test parses a small Elm function body, applies
-/// <see cref="CaseBlockConsolidation.TryConsolidateLocal"/> directly to
+/// <see cref="CaseBlockConsolidation.RewriteExpression"/> to
 /// the outermost <see cref="SyntaxTypes.Expression.CaseExpression"/>,
 /// and asserts a structural property of the result (e.g. the outer
-/// case is gone; the if-chain has absorbed the arms). Snapshot-style
-/// rendering via <see cref="SnapshotTestFormat.RenderQualifiedDeclarations"/>
-/// is used to lock in the canonical text shape for the two primary
-/// positive cases.
+/// case is gone; the if-chain has absorbed the arms).
 /// </para>
 /// </summary>
 public class CaseBlockConsolidationTests
@@ -58,6 +57,17 @@ public class CaseBlockConsolidationTests
         // After consolidation the top-level expression should be an
         // IfBlock — the outer case is gone.
         rewritten.Should().BeOfType<SyntaxTypes.Expression.IfBlock>();
+
+        var original = (SyntaxTypes.Expression.CaseExpression)ParseFunctionByName(ModuleText, "foo").Expression;
+        var originalIf = (SyntaxTypes.Expression.IfBlock)original.Expression;
+
+        rewritten.Should().Be(
+            new SyntaxTypes.Expression.IfBlock(
+                originalIf.Condition,
+                new SyntaxTypes.Expression.LetExpression(
+                    [new SyntaxTypes.LetDeclaration.LetDestructuring(original.Cases[0].Pattern, originalIf.ThenBlock)],
+                    original.Cases[0].Expression),
+                original.Cases[1].Expression));
     }
 
     [Fact]
@@ -190,10 +200,43 @@ public class CaseBlockConsolidationTests
         // unchanged (no let-destructure wrapper, since the Nothing
         // pattern binds no variables).
         var ifBlock = (SyntaxTypes.Expression.IfBlock)rewritten;
-        var elseValue = ifBlock.ElseBlock.Value;
+        var elseValue = ifBlock.ElseBlock;
 
         // After peeling, must be a non-let expression — no destructure was emitted.
         elseValue.Should().NotBeOfType<SyntaxTypes.Expression.LetExpression>();
+    }
+
+    [Fact]
+    public void ConditionalDuplication_zero_arity_aliased_arm_preserves_alias_binding()
+    {
+        const string ModuleText =
+            """
+            module Test exposing (..)
+
+            foo b x =
+                case (if b then Just x else Nothing) of
+                    Just _ ->
+                        Nothing
+
+                    Nothing as alias ->
+                        alias
+            """;
+
+        var (rewritten, fired) = TryConsolidateBodyOf(ModuleText, "foo");
+
+        fired.Should().BeTrue();
+
+        var ifBlock = (SyntaxTypes.Expression.IfBlock)rewritten;
+        var elseBody = (SyntaxTypes.Expression.LetExpression)ifBlock.ElseBlock;
+        var original = (SyntaxTypes.Expression.CaseExpression)ParseFunctionByName(ModuleText, "foo").Expression;
+        var originalIf = (SyntaxTypes.Expression.IfBlock)original.Expression;
+
+        elseBody.Should().Be(
+            new SyntaxTypes.Expression.LetExpression(
+                [new SyntaxTypes.LetDeclaration.LetDestructuring(original.Cases[1].Pattern, originalIf.ElseBlock)],
+                original.Cases[1].Expression));
+
+        SyntaxTypes.SyntaxAnalysis.CollectRemainingFreeVariables(elseBody).Should().NotContain("alias");
     }
 
     // =========================================================================
@@ -236,7 +279,26 @@ public class CaseBlockConsolidationTests
         rewritten.Should().BeOfType<SyntaxTypes.Expression.CaseExpression>();
 
         var consolidated = (SyntaxTypes.Expression.CaseExpression)rewritten;
-        consolidated.CaseBlock.Cases.Count.Should().Be(2);
+        consolidated.Cases.Count.Should().Be(2);
+
+        var original = (SyntaxTypes.Expression.CaseExpression)ParseFunctionByName(ModuleText, "foo").Expression;
+        var inner = (SyntaxTypes.Expression.CaseExpression)original.Expression;
+
+        consolidated.Expression.Should().Be(inner.Expression);
+
+        for (var i = 0; i < inner.Cases.Count; i++)
+        {
+            consolidated.Cases[i].Pattern.Should().Be(inner.Cases[i].Pattern);
+
+            consolidated.Cases[i].Expression.Should().Be(
+                new SyntaxTypes.Expression.LetExpression(
+                    [
+                    new SyntaxTypes.LetDeclaration.LetDestructuring(
+                        original.Cases[i].Pattern,
+                        inner.Cases[i].Expression)
+                    ],
+                    original.Cases[i].Expression));
+        }
     }
 
     [Fact]
@@ -280,7 +342,7 @@ public class CaseBlockConsolidationTests
 
         // The let body should now be a single CaseExpression
         // (the consolidated case).
-        letExpr.Value.Expression.Value.Should().BeOfType<SyntaxTypes.Expression.CaseExpression>();
+        letExpr.Expression.Should().BeOfType<SyntaxTypes.Expression.CaseExpression>();
     }
 
     [Fact]
@@ -386,6 +448,218 @@ public class CaseBlockConsolidationTests
         fired.Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData("Just y")]
+    [InlineData("let y = x in Just y")]
+    public void ConditionalDuplication_pattern_binding_clashes_block_rewrite(string leaf)
+    {
+        var moduleText =
+            $$"""
+            module Test exposing (..)
+
+            foo b x y =
+                case (if b then {{leaf}} else Nothing) of
+                    Just y ->
+                        plus y 1
+
+                    Nothing ->
+                        0
+            """;
+
+        var (rewritten, fired) = TryConsolidateBodyOf(moduleText, "foo");
+
+        fired.Should().BeFalse();
+        rewritten.Should().Be(ParseFunctionByName(moduleText, "foo").Expression);
+    }
+
+    [Fact]
+    public void ConditionalDuplication_leaf_let_binding_preserved_in_destructure()
+    {
+        const string ModuleText =
+            """
+            module Test exposing (..)
+
+            foo b x =
+                case (if b then let z = x in Just z else Nothing) of
+                    Just y ->
+                        plus y 1
+
+                    Nothing ->
+                        0
+            """;
+
+        var (rewritten, fired) = TryConsolidateBodyOf(ModuleText, "foo");
+
+        fired.Should().BeTrue();
+
+        var ifBlock = (SyntaxTypes.Expression.IfBlock)rewritten;
+        var armBody = (SyntaxTypes.Expression.LetExpression)ifBlock.ThenBlock;
+        var destructuring = (SyntaxTypes.LetDeclaration.LetDestructuring)armBody.Declarations[0];
+
+        destructuring.Expression.Should().BeOfType<SyntaxTypes.Expression.LetExpression>();
+
+        destructuring.Expression.Should().Be(
+            ((SyntaxTypes.Expression.IfBlock)
+            ((SyntaxTypes.Expression.CaseExpression)ParseFunctionByName(ModuleText, "foo").Expression)
+            .Expression).ThenBlock);
+    }
+
+    [Fact]
+    public void ConditionalDuplication_total_duplication_budget_blocks_rewrite()
+    {
+        const string ModuleText =
+            """
+            module Test exposing (..)
+
+            foo b1 b2 x =
+                case (if b1 then Just x else if b2 then Just 1 else Nothing) of
+                    Just y ->
+                        plus y 1
+
+                    Nothing ->
+                        0
+            """;
+
+        var body = ParseFunctionByName(ModuleText, "foo").Expression;
+
+        var rewritten =
+            CaseBlockConsolidation.RewriteExpression(
+                body,
+                new CaseBlockConsolidation.CaseConsolidationConfig(
+                    MaxArmBodyNodeCount: 16,
+                    MaxTotalDuplicatedNodes: 5));
+
+        rewritten.Should().BeSameAs(body);
+    }
+
+    [Fact]
+    public void ConditionalDuplication_duplicate_constructor_arm_uses_first_match()
+    {
+        const string ModuleText =
+            """
+            module Test exposing (..)
+
+            foo b x =
+                case (if b then Just x else Nothing) of
+                    Just _ ->
+                        1
+
+                    Just _ ->
+                        2
+
+                    Nothing ->
+                        0
+            """;
+
+        var (rewritten, fired) = TryConsolidateBodyOf(ModuleText, "foo");
+
+        fired.Should().BeTrue();
+
+        var ifBlock = (SyntaxTypes.Expression.IfBlock)rewritten;
+        var thenBody = (SyntaxTypes.Expression.LetExpression)ifBlock.ThenBlock;
+        var original = (SyntaxTypes.Expression.CaseExpression)ParseFunctionByName(ModuleText, "foo").Expression;
+
+        thenBody.Expression.Should().Be(original.Cases[0].Expression);
+    }
+
+    [Fact]
+    public void ConditionalDuplication_constructor_module_mismatch_blocks_rewrite()
+    {
+        const string ModuleText =
+            """
+            module Test exposing (..)
+
+            foo b x =
+                case (if b then First.Just x else Nothing) of
+                    Second.Just y ->
+                        y
+
+                    Nothing ->
+                        0
+            """;
+
+        var (_, fired) = TryConsolidateBodyOf(ModuleText, "foo");
+
+        fired.Should().BeFalse();
+    }
+
+    [Fact]
+    public void NestedCaseOfCase_outer_pattern_clashes_with_inner_let_blocks_rewrite()
+    {
+        const string ModuleText =
+            """
+            module Test exposing (..)
+
+            foo simplified =
+                case
+                    case simplified of
+                        Good a ->
+                            let p = a in Good p
+
+                        Bad x ->
+                            Bad x
+                of
+                    Good p ->
+                        p
+
+                    Bad q ->
+                        q
+            """;
+
+        var (_, fired) = TryConsolidateBodyOf(ModuleText, "foo");
+
+        fired.Should().BeFalse();
+    }
+
+    [Fact]
+    public void RewriteDeclarationDictionary_rewrites_abstract_declarations_directly()
+    {
+        const string ModuleText =
+            """
+            module Test exposing (..)
+
+            foo b =
+                case (if b then Good else Bad) of
+                    Good ->
+                        1
+
+                    Bad ->
+                        0
+            """;
+
+        var name = DeclQualifiedName.Create(["Test"], "foo");
+
+        var declaration =
+            new SyntaxTypes.Declaration.FunctionDeclaration(
+                new SyntaxTypes.FunctionStruct(
+                    Signature: null,
+                    Declaration: ParseFunctionByName(ModuleText, "foo")));
+
+        var declarations =
+            ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>.Empty.Add(name, declaration);
+
+        var rewritten =
+            CaseBlockConsolidation.RewriteDeclarationDictionary(
+                declarations,
+                CaseBlockConsolidation.CaseConsolidationConfig.Default);
+
+        var rewrittenOptimized =
+            CaseBlockConsolidation.RewriteDeclarationDictionary(
+                OptimizedElmSyntaxDeclarations.FromFlatDictionary(declarations),
+                CaseBlockConsolidation.CaseConsolidationConfig.Default);
+
+        rewrittenOptimized.RenderAsFlatDictionary().Should().Equal(rewritten);
+        var function = (SyntaxTypes.Declaration.FunctionDeclaration)rewritten[name];
+
+        function.Function.Declaration.Expression.Should().BeOfType<SyntaxTypes.Expression.IfBlock>();
+
+        function.Function.Declaration.GetHashCode().Should().Be(
+            new SyntaxTypes.FunctionImplementation(
+                function.Function.Declaration.Name,
+                function.Function.Declaration.Arguments,
+                function.Function.Declaration.Expression).GetHashCode());
+    }
+
     // =========================================================================
     // Helpers
     // =========================================================================
@@ -393,8 +667,8 @@ public class CaseBlockConsolidationTests
     /// <summary>
     /// Parses <paramref name="moduleText"/>, locates the function body
     /// of <paramref name="functionName"/>, and applies the local
-    /// case-block consolidation rewrite to its outermost expression
-    /// (after peeling parens). Returns the rewritten expression (or
+    /// case-block consolidation rewrite to its outermost expression.
+    /// Returns the rewritten expression (or
     /// the original, if no rewrite fired) together with a flag
     /// indicating whether a rewrite fired.
     /// </summary>
@@ -403,31 +677,16 @@ public class CaseBlockConsolidationTests
     {
         var func = ParseFunctionByName(moduleText, functionName);
 
-        var body = func.Expression.Value;
-
-        while (body is SyntaxTypes.Expression.ParenthesizedExpression paren)
-        {
-            body = paren.Expression.Value;
-        }
+        var body = func.Expression;
 
         var rewritten =
             CaseBlockConsolidation.RewriteExpression(
                 body,
                 CaseBlockConsolidation.CaseConsolidationConfig.Default);
 
-        // Peel parens off the rewritten result too — the rebuilt
-        // if-chain often retains parens from the original scrutinee
-        // position, which is presentation-only noise.
-        var rewrittenPeeled = rewritten;
-
-        while (rewrittenPeeled is SyntaxTypes.Expression.ParenthesizedExpression rp)
-        {
-            rewrittenPeeled = rp.Expression.Value;
-        }
-
         var fired = !ReferenceEquals(rewritten, body);
 
-        return (rewrittenPeeled, fired);
+        return (rewritten, fired);
     }
 
     private static SyntaxTypes.FunctionImplementation ParseFunctionByName(
@@ -438,14 +697,14 @@ public class CaseBlockConsolidationTests
             .Extract(err => throw new Exception("Failed parsing: " + err));
 
         var converted =
-            SyntaxTypes.FromFullSyntaxModel.Convert(parsed);
+            SyntaxTypes.ConvertFromConcrete.FromFile(parsed);
 
-        foreach (var declNode in converted.Declarations)
+        foreach (var declaration in converted.Declarations)
         {
-            if (declNode.Value is SyntaxTypes.Declaration.FunctionDeclaration funcDecl &&
-                funcDecl.Function.Declaration.Value.Name.Value == functionName)
+            if (declaration is SyntaxTypes.Declaration.FunctionDeclaration funcDecl &&
+                funcDecl.Function.Declaration.Name == functionName)
             {
-                return funcDecl.Function.Declaration.Value;
+                return funcDecl.Function.Declaration;
             }
         }
 

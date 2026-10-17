@@ -56,6 +56,8 @@ The model is designed for an interpreter that operates over `PineValue`. To avoi
 
 Use `ConvertFromConcrete` to obtain an abstract tree from a parsed concrete `SyntaxModel` tree. It exposes entry points for each major syntactic category (`FromFile`, `FromModule`, `FromImport`, `FromExposing`, `FromDeclaration`, `FromTypeAnnotation`, `FromPattern`, `FromExpression`). The converter performs the paren unwrapping, literal normalization, leading-dot stripping for record-access functions, and `PineValue` precomputation described above. Its behavior — including the literal normalizations — is covered by `ElmSyntaxAbstractTests.ConvertFromConcreteTests`.
 
+The Elm compiler canonicalizes concrete syntax while source ranges are still available for diagnostics, then converts directly to abstract syntax for optimization and type inference. Compiler passes must not round-trip through the legacy syntax model. Source-oriented features, such as applying inferred annotations, retain the original concrete file for output.
+
 ## Stil4mElmSyntax7
 
 The syntax model in the namespace `Stil4mElmSyntax7` was the first one implemented and originally used in more applications. Later, we split the syntax model into concrete and abstract forms, and since then `Stil4mElmSyntax7` has only been used for backward compatibility with certain tools.

@@ -1,20 +1,19 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmSyntax;
-using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Xunit;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
 /// <summary>
-/// Tests for <see cref="ElmSyntaxTransformations.RenameBindingsAvoidingCapture(Stil4mElmSyntax7.FunctionImplementation, IReadOnlySet{string})"/>
+/// Tests for <see cref="ElmSyntaxAbstractTransformations.RenameBindingsAvoidingCapture"/>
 /// and related methods.
 ///
 /// These methods perform capture-avoiding renaming of local bindings (function parameters,
@@ -33,11 +32,11 @@ public class RenameBindingsAvoidingCaptureTests
             ElmSyntaxParser.ParseModuleText(moduleText)
             .Extract(err => throw new Exception("Failed parsing: " + err));
 
-        return FromFullSyntaxModel.Convert(concreteSyntax);
+        return ConvertFromConcrete.FromFile(concreteSyntax);
     }
 
     /// <summary>
-    /// Parses the module, applies <see cref="ElmSyntaxTransformations.RenameBindingsAvoidingCapture"/>
+    /// Parses the module, applies <see cref="ElmSyntaxAbstractTransformations.RenameBindingsAvoidingCapture"/>
     /// to each function declaration with the given <paramref name="namesInScope"/>,
     /// and returns the formatted module text.
     /// </summary>
@@ -50,32 +49,26 @@ public class RenameBindingsAvoidingCaptureTests
         var renamedDeclarations =
             parsedModule.Declarations
             .Select(
-                declNode =>
+                declaration =>
                 {
-                    if (declNode.Value is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
-                        return declNode;
+                    if (declaration is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+                        return declaration;
 
-                    var impl = funcDecl.Function.Declaration.Value;
+                    var impl = funcDecl.Function.Declaration;
 
                     var renamedImpl =
-                        ElmSyntaxTransformations.RenameBindingsAvoidingCapture(impl, namesInScope);
+                        ElmSyntaxAbstractTransformations.RenameBindingsAvoidingCapture(impl, namesInScope);
 
                     if (ReferenceEquals(renamedImpl, impl))
-                        return declNode;
+                        return declaration;
 
                     var newFunc =
                         funcDecl.Function with
                         {
-                            Declaration =
-                            new Node<SyntaxTypes.FunctionImplementation>(
-                                funcDecl.Function.Declaration.Range,
-                                renamedImpl)
+                            Declaration = renamedImpl
                         };
 
-                    return
-                        new Node<SyntaxTypes.Declaration>(
-                            declNode.Range,
-                            new SyntaxTypes.Declaration.FunctionDeclaration(newFunc));
+                    return new SyntaxTypes.Declaration.FunctionDeclaration(newFunc);
                 })
             .ToImmutableArray();
 
@@ -83,7 +76,7 @@ public class RenameBindingsAvoidingCaptureTests
 
         return
             Avh4Format.FormatToString(
-                ToFullSyntaxModel.Convert(renamedModule));
+                ConvertToConcrete.FromFile(renamedModule));
     }
 
     /// <summary>
@@ -467,7 +460,7 @@ public class RenameBindingsAvoidingCaptureTests
     }
 
     /// <summary>
-    /// Verifies that <see cref="ElmSyntaxTransformations.GenerateUniqueLocalName"/>
+    /// Verifies that <see cref="ElmSyntaxAbstractTransformations.GenerateUniqueLocalName"/>
     /// produces names with incrementing suffixes until an unused name is found.
     /// </summary>
     [Fact]
@@ -475,13 +468,13 @@ public class RenameBindingsAvoidingCaptureTests
     {
         var usedNames = new HashSet<string> { "x", "x_0", "x_1" };
 
-        var result = ElmSyntaxTransformations.GenerateUniqueLocalName("x", usedNames);
+        var result = ElmSyntaxAbstractTransformations.GenerateUniqueLocalName("x", usedNames);
 
         result.Should().Be("x_2");
     }
 
     /// <summary>
-    /// Verifies that <see cref="ElmSyntaxTransformations.GenerateUniqueLocalName"/>
+    /// Verifies that <see cref="ElmSyntaxAbstractTransformations.GenerateUniqueLocalName"/>
     /// returns <c>_0</c> suffix when the base name is used but <c>_0</c> is available.
     /// </summary>
     [Fact]
@@ -489,8 +482,124 @@ public class RenameBindingsAvoidingCaptureTests
     {
         var usedNames = new HashSet<string> { "y" };
 
-        var result = ElmSyntaxTransformations.GenerateUniqueLocalName("y", usedNames);
+        var result = ElmSyntaxAbstractTransformations.GenerateUniqueLocalName("y", usedNames);
 
         result.Should().Be("y_0");
+    }
+
+    [Theory]
+    [InlineData("foo x x_0 = x + x_0", "foo x_1 x_0 = x_1 + x_0")]
+    [InlineData("foo x = (x, x_0)", "foo x_1 = (x_1, x_0)")]
+    [InlineData("foo x = \\x -> x", "foo x_0 = \\x_1 -> x_1")]
+    [InlineData("foo x = Other.x x", "foo x_0 = Other.x x_0")]
+    [InlineData("foo x = { x | field = x.field }", "foo x_0 = { x_0 | field = x_0.field }")]
+    [InlineData("foo (Just x as value) = (x, value)", "foo (Just x_0 as value) = (x_0, value)")]
+    [InlineData("foo (x :: xs) = (x, xs)", "foo (x_0 :: xs) = (x_0, xs)")]
+    [InlineData("foo { x } = x", "foo recordPattern_0 = let x_0 = recordPattern_0.x in x_0")]
+    [InlineData("foo = \\{ x } -> x", "foo = \\recordPattern_0 -> let x_0 = recordPattern_0.x in x_0")]
+    [InlineData(
+        "foo value = case value of\n    { x } -> x",
+        "foo value = case value of\n    recordPattern_0 -> let x_0 = recordPattern_0.x in x_0")]
+    [InlineData(
+        "foo value =\n    let\n        { x } = value\n    in\n    x",
+        "foo value =\n    let\n        recordPattern_0 = value\n        x_0 = recordPattern_0.x\n    in\n    x_0")]
+    public void Rename_preserves_binding_scopes_and_record_fields(string input, string expected)
+    {
+        const string moduleHeader = "module Test exposing (..)\n\n";
+
+        var result =
+            RenameAndFormat(moduleHeader + input, ImmutableHashSet.Create("x"));
+
+        ParseModuleText(result).Should().Be(ParseModuleText(moduleHeader + expected));
+    }
+
+    [Fact]
+    public void Rename_updates_let_signatures_and_mutually_recursive_references()
+    {
+        const string input =
+            """
+            module Test exposing (..)
+
+            foo =
+                let
+                    x : Int -> Int
+                    x n =
+                        y n
+
+                    y n =
+                        if n == 0 then
+                            0
+                        else
+                            x (n - 1)
+                in
+                x 3
+            """;
+
+        const string expected =
+            """
+            module Test exposing (..)
+
+            foo =
+                let
+                    x_0 : Int -> Int
+                    x_0 n =
+                        y n
+
+                    y n =
+                        if n == 0 then
+                            0
+                        else
+                            x_0 (n - 1)
+                in
+                x_0 3
+            """;
+
+        var result = RenameAndFormat(input, ImmutableHashSet.Create("x"));
+
+        ParseModuleText(result).Should().Be(ParseModuleText(expected));
+    }
+
+    [Fact]
+    public void Rename_expression_preserves_free_references()
+    {
+        var input = ParseModuleText("module Test exposing (..)\n\nfoo = (\\x -> x) x");
+        var expected = ParseModuleText("module Test exposing (..)\n\nfoo = (\\x_0 -> x_0) x");
+        var inputFunction = (SyntaxTypes.Declaration.FunctionDeclaration)input.Declarations[0];
+        var expectedFunction = (SyntaxTypes.Declaration.FunctionDeclaration)expected.Declarations[0];
+
+        var renamed =
+            ElmSyntaxAbstractTransformations.RenameBindingsAvoidingCapture(
+                inputFunction.Function.Declaration.Expression,
+                ImmutableHashSet.Create("x"));
+
+        renamed.Should().Be(expectedFunction.Function.Declaration.Expression);
+        renamed.GetHashCode().Should().Be(expectedFunction.Function.Declaration.Expression.GetHashCode());
+    }
+
+    [Fact]
+    public void MapChildExpressions_recomputes_let_function_hash_codes()
+    {
+        var originalBody = SyntaxTypes.Expression.Identifier.Create([], "original");
+        var rewrittenBody = SyntaxTypes.Expression.Identifier.Create([], "rewritten");
+        var implementation = new SyntaxTypes.FunctionImplementation("value", [], originalBody);
+
+        var expression =
+            new SyntaxTypes.Expression.LetExpression(
+                [
+                new SyntaxTypes.LetDeclaration.LetFunction(
+                    new SyntaxTypes.FunctionStruct(null, implementation))
+                ],
+                SyntaxTypes.Expression.Identifier.Create([], "value"));
+
+        var rewritten =
+            (SyntaxTypes.Expression.LetExpression)ElmSyntaxAbstractTransformations.MapChildExpressions(
+                expression,
+                child => ReferenceEquals(child, originalBody) ? rewrittenBody : child);
+
+        var rewrittenFunction = (SyntaxTypes.LetDeclaration.LetFunction)rewritten.Declarations[0];
+        var expected = new SyntaxTypes.FunctionImplementation("value", [], rewrittenBody);
+
+        rewrittenFunction.Function.Declaration.Should().Be(expected);
+        rewrittenFunction.Function.Declaration.GetHashCode().Should().Be(expected.GetHashCode());
     }
 }

@@ -4,7 +4,7 @@ using Pine.Core.Elm.ElmSyntax;
 using System.Linq;
 using Xunit;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Concrete = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 namespace Pine.Core.Tests.Elm.ElmSyntax;
 
@@ -20,14 +20,14 @@ public class DeclarationSortOrderTests
     /// </summary>
     private static System.Collections.Generic.IReadOnlyDictionary<
         Core.CodeAnalysis.DeclQualifiedName,
-        SyntaxTypes.Declaration> GetFlatDict(string moduleText)
+        Core.Elm.ElmSyntax.Stil4mElmSyntax7.Declaration> GetFlatDict(string moduleText)
     {
         var parsedModule =
             ElmSyntaxParser.ParseModuleText(moduleText)
             .Extract(err => throw new System.Exception("Failed parsing: " + err));
 
         var parsedModules =
-            new[] { SyntaxTypes.FromFullSyntaxModel.Convert(parsedModule) };
+            new[] { parsedModule };
 
         var canonicalizedModules =
             Canonicalization.CanonicalizeOrThrow(parsedModules)
@@ -37,7 +37,7 @@ public class DeclarationSortOrderTests
             parsedModules
             .Select(
                 module =>
-                canonicalizedModules[SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value]
+                canonicalizedModules[Concrete.Module.GetModuleName(module.ModuleDefinition.Value).Value]
                 .Extract(err => throw new System.Exception("Module has errors: " + err)))
             .ToList();
 

@@ -7,6 +7,7 @@ using System.Linq;
 using Xunit;
 
 using SyntaxTypesNs = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Abstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -39,9 +40,10 @@ public class LambdaLiftingTests
     // Tests parse into the concrete Stil4m model, so bridge to the abstract model,
     // lift, then bridge back to the concrete model for formatting/inspection.
     private static File LiftLambdas(File module) =>
-        ElmSyntaxAbstractConversion.ToFile(
-            LambdaLifting.LiftLambdas(
-                ElmSyntaxAbstractConversion.FromFile(module)));
+        FromFullSyntaxModel.Convert(
+            Abstract.ConvertToConcrete.FromFile(
+                LambdaLifting.LiftLambdas(
+                    Abstract.ConvertFromConcrete.FromFile(ToFullSyntaxModel.Convert(module)))));
 
     private static string LiftAndFormat(string inputModuleText)
     {

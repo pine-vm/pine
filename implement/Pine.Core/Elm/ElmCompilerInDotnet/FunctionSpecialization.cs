@@ -172,8 +172,8 @@ public sealed record FunctionSpecialization(
     /// inside the body would collide on a shallow <c>ToString</c>-based
     /// key. We wrap the lambda in a synthetic value declaration and
     /// reuse the declaration-deduplication structural fingerprint,
-    /// which delegates to the snapshot formatter — a deep, purely
-    /// structural walk.
+    /// which serializes the abstract syntax directly without formatting
+    /// or converting it to another syntax model.
     /// </summary>
     private static string LambdaStructuralFingerprint(
         SyntaxTypes.Expression.LambdaExpression lambda)

@@ -18,6 +18,8 @@ using System.Text;
 
 using Stil4mElmSyntax7 = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 using ConcreteSyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using AbstractSyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
+using IR = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -284,7 +286,7 @@ public class ElmCompilerTestHelper
             .ToImmutableArray();
 
         var parsedModulesBeforeCanonicalize =
-            new List<Stil4mElmSyntax7.File>();
+            new List<ConcreteSyntaxTypes.File>();
 
         foreach (var moduleFile in elmModuleFiles)
         {
@@ -301,10 +303,7 @@ public class ElmCompilerTestHelper
                 throw new Exception("Unexpected parse result type");
             }
 
-            var parseModuleAst =
-                FromFullSyntaxModel.Convert(parseModuleOk);
-
-            parsedModulesBeforeCanonicalize.Add(parseModuleAst);
+            parsedModulesBeforeCanonicalize.Add(parseModuleOk);
         }
 
         var canonicalizationResult =
@@ -331,30 +330,28 @@ public class ElmCompilerTestHelper
             canonicalizedModules
             .Select(
                 module =>
-                ElmSyntaxAbstractConversion.ToFile(
-                    LambdaLifting.LiftLambdas(
-                        ElmSyntaxAbstractConversion.FromFile(module))))
+                LambdaLifting.LiftLambdas(
+                    AbstractSyntaxTypes.ConvertFromConcrete.FromFile(module)))
             .ToList();
 
         // Collect all functions
         var allFunctions =
-            new Dictionary<DeclQualifiedName, (string moduleName, string functionName, Stil4mElmSyntax7.Declaration.FunctionDeclaration declaration)>();
+            new Dictionary<DeclQualifiedName, (string moduleName, string functionName, AbstractSyntaxTypes.Declaration.FunctionDeclaration declaration)>();
 
         foreach (var elmModuleSyntax in lambdaLiftedModules)
         {
             var moduleName =
-                Stil4mElmSyntax7.Module.GetModuleName(elmModuleSyntax.ModuleDefinition.Value).Value;
+                AbstractSyntaxTypes.Module.GetModuleName(elmModuleSyntax.ModuleDefinition);
 
             var moduleNameFlattened = string.Join(".", moduleName);
 
             var declarations =
                 elmModuleSyntax.Declarations
-                .Select(declNode => declNode.Value)
-                .OfType<Stil4mElmSyntax7.Declaration.FunctionDeclaration>();
+                .OfType<AbstractSyntaxTypes.Declaration.FunctionDeclaration>();
 
             foreach (var declaration in declarations)
             {
-                var functionName = declaration.Function.Declaration.Value.Name.Value;
+                var functionName = declaration.Function.Declaration.Name;
                 var qualifiedName = DeclQualifiedName.Create(moduleName, functionName);
                 allFunctions[qualifiedName] = (moduleNameFlattened, functionName, declaration);
             }
@@ -363,20 +360,19 @@ public class ElmCompilerTestHelper
         // Create initial context
         var initialContext =
             new ModuleCompilationContext(
-                allFunctions,
-                compiledFunctionsCache: [],
-                pineKernelModuleNames: s_pineBuiltinModuleNamesDefault);
-
-        var allFunctionsAbstract =
-            allFunctions
-            .ToImmutableDictionary(
-                kvp => kvp.Key,
-                kvp =>
-                (kvp.Value.moduleName, kvp.Value.functionName, (Core.Elm.ElmSyntax.ElmSyntaxAbstract.Declaration.FunctionDeclaration)ElmSyntaxAbstractConversion.FromDeclaration(kvp.Value.declaration)));
+                AllFunctions:
+                allFunctions.ToDictionary(
+                    kvp => kvp.Key,
+                    kvp =>
+                    (kvp.Value.moduleName,
+                    kvp.Value.functionName,
+                    (IR.Declaration.FunctionDeclaration)IR.ConvertFromAbstractSyntax.FromDeclaration(kvp.Value.declaration))),
+                CompiledFunctionsCache: [],
+                PineKernelModuleNames: s_pineBuiltinModuleNamesDefault);
 
         // Compute and return dependency layouts
         var (layouts, _, _) =
-            ElmCompiler.ComputeDependencyLayoutsAndSccs(allFunctionsAbstract, initialContext);
+            ElmCompiler.ComputeDependencyLayoutsAndSccs(allFunctions, initialContext);
 
         return layouts;
     }

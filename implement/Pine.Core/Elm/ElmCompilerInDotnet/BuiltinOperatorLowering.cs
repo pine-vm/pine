@@ -16,7 +16,7 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// This stage operates exclusively on the abstract Elm syntax model
 /// (<see cref="ElmSyntax.ElmSyntaxAbstract"/>): there is no source-location
 /// tracking, no concrete-syntax <c>Node&lt;T&gt;</c> wrapper, and no bridging/conversion to or
-/// from the concrete <c>Stil4mElmSyntax7</c> model. Callers are expected to supply and receive
+/// from a legacy syntax model. Callers are expected to supply and receive
 /// declarations already expressed in the abstract model.
 /// </para>
 /// </summary>

@@ -6,6 +6,8 @@ using System;
 using System.Collections.Generic;
 using Xunit;
 
+using ConcreteSyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
+
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 
 public class AddInferredTypeAnnotationsTests
@@ -841,6 +843,237 @@ public class AddInferredTypeAnnotationsTests
                 ["Test"]);
 
         result.Trim().Should().Be(expectedModuleText.Trim());
+    }
+
+    [Theory]
+    [InlineData("BODY", "Int")]
+    [InlineData("((BODY))", "Int")]
+    [InlineData("identity (BODY)", "Int")]
+    [InlineData("(\\_ -> BODY) ()", "Int")]
+    [InlineData("if BODY == 41 then 1 else 0", "Int")]
+    [InlineData("if True then BODY else 0", "Int")]
+    [InlineData("if True then 0 else BODY", "Int")]
+    [InlineData("case BODY of\n    _ ->\n        0", "Int")]
+    [InlineData("case True of\n    _ ->\n        BODY", "Int")]
+    [InlineData("\\_ -> BODY", "a -> Int")]
+    [InlineData("( BODY, 0 )", "( Int, Int )")]
+    [InlineData("[ BODY ]", "List Int")]
+    [InlineData("{ field = BODY }", "{ field : Int }")]
+    [InlineData("BODY + 1", "Int")]
+    [InlineData("1 + BODY", "Int")]
+    [InlineData("let\n    outer =\n        0\nin\nBODY", "Int")]
+    public void Infers_local_annotations_through_abstract_expression_variants(
+        string expressionTemplate,
+        string signature)
+    {
+        var localExpression =
+            """
+            let
+                local =
+                    41
+            in
+            local
+            """;
+
+        var bodyIndex = expressionTemplate.IndexOf("BODY", StringComparison.Ordinal);
+        var lineStart = expressionTemplate.LastIndexOf('\n', bodyIndex) + 1;
+        var indentation = new string(' ', bodyIndex - lineStart);
+
+        var expression =
+            expressionTemplate.Replace(
+                "BODY",
+                localExpression.Replace("\n", "\n" + indentation, StringComparison.Ordinal),
+                StringComparison.Ordinal);
+
+        var moduleText =
+            "module Test exposing (..)\n\nalfa : " + signature + "\nalfa =\n    " +
+            expression.Replace("\n", "\n    ", StringComparison.Ordinal) + "\n";
+
+        var result =
+            AddAllTypeAnnotationsAndFormatToString(
+                TestCase.DefaultAppWithoutPackages([moduleText]),
+                ["Test"]);
+
+        result.Should().Contain("local : number");
+        result.Should().Contain("alfa : " + signature);
+    }
+
+    [Theory]
+    [InlineData("import Types", "Types.Choice", "Types.Choice")]
+    [InlineData("import Types as Alias", "Alias.Choice", "Alias.Choice")]
+    [InlineData("import Types exposing (Choice)", "Types.Choice", "Choice")]
+    [InlineData("import Types exposing (Choice(..))", "Choice", "Choice")]
+    [InlineData("import Types exposing (..)", "Choice", "Choice")]
+    [InlineData("import Types as Alias exposing (Choice)", "Alias.Choice", "Choice")]
+    public void Preserves_source_module_names_for_inferred_choice_annotations(
+        string import,
+        string constructor,
+        string annotation)
+    {
+        var typesModuleText =
+            """
+            module Types exposing (..)
+
+            type Choice
+                = Choice String
+            """;
+
+        var moduleText =
+            "module Test exposing (..)\n\n" + import +
+            "\n\nresult =\n    " + constructor + " \"done\"\n";
+
+        var result =
+            AddAllTypeAnnotationsAndFormatToString(
+                TestCase.DefaultAppWithoutPackages([typesModuleText, moduleText]),
+                ["Test"]);
+
+        result.Should().Contain("result : " + annotation);
+        result.Should().Contain(constructor + " \"done\"");
+    }
+
+    [Fact]
+    public void Preserves_concrete_source_details_and_existing_annotations()
+    {
+        var moduleText =
+            """
+            module Test exposing (..)
+
+
+            {-| Keep this documentation.
+            -}
+            existing : (String -> String)
+            existing text =
+                (text)
+
+
+            -- Keep hexadecimal spelling and redundant parentheses.
+            value =
+                ((0x2A))
+
+
+            text =
+                "line\n\u{0041}"
+
+            """;
+
+        var original =
+            ElmSyntaxParser.ParseModuleText(moduleText)
+            .Extract(err => throw new Exception(err.ToString()));
+
+        var annotatedModule =
+            AddInferredTypeAnnotations.InferAndAddTypeAnnotationsForAllDeclarationsByModuleName(
+                TestCase.DefaultAppWithoutPackages([moduleText]).AsFileTree())
+            .Extract(err => throw new Exception(err));
+
+        var annotated =
+            annotatedModule(["Test"])
+            .Extract(err => throw new Exception(err));
+
+        annotated.Comments.Should().BeEquivalentTo(original.Comments);
+        annotated.Declarations.Count.Should().Be(original.Declarations.Count);
+
+        for (var index = 0; index < original.Declarations.Count; index++)
+        {
+            var originalFunction =
+                (ConcreteSyntaxTypes.Declaration.FunctionDeclaration)original.Declarations[index].Value;
+
+            var annotatedFunction =
+                (ConcreteSyntaxTypes.Declaration.FunctionDeclaration)annotated.Declarations[index].Value;
+
+            annotatedFunction.Function.Declaration.Should().BeEquivalentTo(originalFunction.Function.Declaration);
+
+            if (originalFunction.Function.Signature is { } originalSignature)
+            {
+                annotatedFunction.Function.Signature.Should().BeEquivalentTo(originalSignature);
+            }
+            else
+            {
+                annotatedFunction.Function.Signature.Should().NotBeNull();
+            }
+        }
+
+        var formatted = Avh4Format.FormatToString(annotated);
+        formatted.Should().Contain("value : number");
+        formatted.Should().Contain("text : String");
+    }
+
+    [Fact]
+    public void Filters_nested_declaration_paths_under_existing_annotations()
+    {
+        var moduleText =
+            """
+            module Test exposing (..)
+
+
+            alfa : Int
+            alfa =
+                let
+                    nested : Int
+                    nested =
+                        let
+                            selected =
+                                41
+
+                            excluded =
+                                "keep"
+                        in
+                        selected
+                in
+                nested
+
+            """;
+
+        var visitedPaths = new List<string>();
+
+        var result =
+            AddTypeAnnotationsAndFormatToString(
+                TestCase.DefaultAppWithoutPackages([moduleText]),
+                ["Test"],
+                path =>
+                {
+                    var joinedPath = string.Join(".", path);
+                    visitedPaths.Add(joinedPath);
+                    return joinedPath != "alfa.nested.excluded";
+                });
+
+        visitedPaths.Should().Contain("alfa.nested.selected");
+        visitedPaths.Should().Contain("alfa.nested.excluded");
+        result.Should().Contain("selected : number");
+        result.Should().NotContain("excluded :");
+        result.Should().Contain("alfa : Int");
+        result.Should().Contain("nested : Int");
+    }
+
+    [Fact]
+    public void Infers_function_types_from_unwrapped_argument_patterns()
+    {
+        var moduleText =
+            """
+            module Test exposing (..)
+
+
+            alfa (value) =
+                value // 2
+
+
+            beta =
+                let
+                    local (value) =
+                        value // 3
+                in
+                local 41
+
+            """;
+
+        var result =
+            AddAllTypeAnnotationsAndFormatToString(
+                TestCase.DefaultAppWithoutPackages([moduleText]),
+                ["Test"]);
+
+        result.Should().Contain("alfa : number -> Int");
+        result.Should().Contain("alfa (value) =");
+        result.Should().Contain("local : number -> Int");
+        result.Should().Contain("local (value) =");
     }
 
     private static string AddAllTypeAnnotationsAndFormatToString(

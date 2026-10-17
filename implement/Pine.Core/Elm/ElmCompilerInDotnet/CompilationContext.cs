@@ -5,7 +5,6 @@ using System.Collections.Immutable;
 using System.Linq;
 
 using SyntaxTypes = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
-using ConcreteSyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -158,33 +157,6 @@ public record ModuleCompilationContext(
     IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? RecordTypeAliasConstructors = null,
     IReadOnlyDictionary<DeclQualifiedName, int>? ChoiceConstructorArities = null)
 {
-    /// <summary>
-    /// Creates a module compilation context from concrete Elm declarations by converting them to abstract declarations first.
-    /// </summary>
-    public ModuleCompilationContext(
-        IReadOnlyDictionary<DeclQualifiedName, (string moduleName, string functionName, ConcreteSyntaxTypes.Declaration.FunctionDeclaration declaration)> allFunctions,
-        ImmutableDictionary<DeclQualifiedName, CompiledFunctionInfo> compiledFunctionsCache,
-        FrozenSet<string> pineKernelModuleNames,
-        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? functionDependencyLayouts = null,
-        IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>>? recordTypeAliasConstructors = null,
-        IReadOnlyDictionary<DeclQualifiedName, int>? choiceConstructorArities = null)
-        : this(
-            allFunctions.ToDictionary(
-                kvp => kvp.Key,
-                kvp =>
-                (
-                    kvp.Value.moduleName,
-                    kvp.Value.functionName,
-                    (SyntaxTypes.Declaration.FunctionDeclaration)SyntaxTypes.ConvertFromAbstractSyntax.FromDeclaration(
-                        ElmSyntaxAbstractConversion.FromDeclaration(kvp.Value.declaration)))),
-            compiledFunctionsCache,
-            pineKernelModuleNames,
-            functionDependencyLayouts,
-            recordTypeAliasConstructors,
-            choiceConstructorArities)
-    {
-    }
-
     /// <summary>
     /// Creates a new context with the specified function added to the cache.
     /// </summary>
