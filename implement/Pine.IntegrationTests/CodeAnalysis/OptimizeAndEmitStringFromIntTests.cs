@@ -68,7 +68,8 @@ public class OptimizeAndEmitStringFromIntTests
                     return
                         BuiltinFunctionFused.ListPrependItem(
                             itemToPrepend: CommonReusedValues.Blob_Char_hyphen,
-                            suffix: String.fromUnsignedIntAsList(
+                            suffix:
+                            String.fromUnsignedIntAsList(
                                 param_1_1 == CommonReusedValues.Blob_Str_Elm_Float
                                 ?
                                 PineValue.List(
@@ -196,7 +197,8 @@ public class OptimizeAndEmitStringFromIntTests
                             PineValue local_param_2_1_temp =
                                 PineValueExtension.ValueFromPathOrEmptyList(
                                     BuiltinFunctionFused.ListPrependItem(
-                                        itemToPrepend: String.unsafeDigitCharacterFromValue(
+                                        itemToPrepend:
+                                        String.unsafeDigitCharacterFromValue(
                                             BuiltinFunctionSpecialized.int_add(
                                                 local_param_1,
                                                 BuiltinFunctionSpecialized.int_mul(-10, local_006))),
@@ -208,7 +210,8 @@ public class OptimizeAndEmitStringFromIntTests
                             PineValue local_param_2_2_temp =
                                 PineValueExtension.ValueFromPathOrEmptyList(
                                     BuiltinFunctionFused.ListPrependItem(
-                                        itemToPrepend: String.unsafeDigitCharacterFromValue(
+                                        itemToPrepend:
+                                        String.unsafeDigitCharacterFromValue(
                                             BuiltinFunctionSpecialized.int_add(
                                                 local_param_1,
                                                 BuiltinFunctionSpecialized.int_mul(-10, local_006))),
@@ -220,7 +223,8 @@ public class OptimizeAndEmitStringFromIntTests
                             PineValue local_param_2_3_temp =
                                 PineValueExtension.ValueFromPathOrEmptyList(
                                     BuiltinFunctionFused.ListPrependItem(
-                                        itemToPrepend: String.unsafeDigitCharacterFromValue(
+                                        itemToPrepend:
+                                        String.unsafeDigitCharacterFromValue(
                                             BuiltinFunctionSpecialized.int_add(
                                                 local_param_1,
                                                 BuiltinFunctionSpecialized.int_mul(-10, local_006))),

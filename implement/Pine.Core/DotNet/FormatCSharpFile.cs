@@ -2769,20 +2769,20 @@ public static class FormatCSharpFile
                 var lineLen = argIndent * IndentSize + firstLine.TrimEnd().Length;
 
                 if (lineLen > MaximumLineLength ||
-                    (argSyntax.Expression is CollectionExpressionSyntax && SpansMultipleLines(argText)))
+                    SpansMultipleLines(argSyntax.Expression.ToString()))
                 {
-                    // Break after the colon when the first line exceeds max length.
+                    // Break after the colon for multiline expressions or long first lines.
                     var nc = nameColon.WithTrailingTrivia();
 
                     var expr =
                         argSyntax.Expression.WithLeadingTrivia(
                             EnsureLeadingBreaks(
-                                node.Arguments[i].Expression.GetLeadingTrivia(),
+                                nameColon.GetTrailingTrivia()
+                                .AddRange(node.Arguments[i].Expression.GetLeadingTrivia()),
                                 1,
                                 argIndent));
 
                     a = argSyntax.WithNameColon(nc).WithExpression(expr);
-                    a = a.WithLeadingTrivia(s_lineFeed, Indent(argIndent));
                 }
                 else
                 {
@@ -3129,9 +3129,9 @@ public static class FormatCSharpFile
 
     /// <summary>
     /// Formats a collection expression across multiple lines. The original line
-    /// grouping of elements is preserved (elements that shared a line in the source
-    /// stay grouped), as is the indentation of each element relative to the opening
-    /// bracket.
+    /// grouping of single-line elements is preserved, as is the indentation of each
+    /// group relative to the opening bracket. Multiline elements have line breaks
+    /// both before and after them.
     /// </summary>
     private static CollectionExpressionSyntax FormatCollectionMultiLine(
         CollectionExpressionSyntax node,
@@ -3154,8 +3154,12 @@ public static class FormatCSharpFile
         var firstElementSharesOpenLine =
             LineOf(node.Elements[0].GetFirstToken()) == LineOf(node.OpenBracketToken);
 
-        var isNamedArgument =
-            node.Parent is ArgumentSyntax { NameColon: not null };
+        var indentInlineElements =
+            node.Parent is ArgumentSyntax argument &&
+            (sourceMultiLine || argument.NameColon is not null);
+
+        var previousElementIndent = ctx.IndentLevel;
+        var previousElementIsMultiline = false;
 
         for (var i = 0; i < node.Elements.Count; i++)
         {
@@ -3163,28 +3167,34 @@ public static class FormatCSharpFile
             var origLeading = e.GetLeadingTrivia();
 
             // Preserve the original element grouping: an element that shared a line
-            // with the previous element in the source stays on the same line.
+            // with the previous element in the source stays on the same line only
+            // when both elements remain single-line after formatting.
             var sameLineAsPrev =
                 sourceMultiLine &&
                 i > 0 &&
                 LineOf(node.Elements[i].GetFirstToken()) == EndLineOf(node.Elements[i - 1]);
 
-            // Preserve the indentation of each element relative to the opening
-            // bracket (e.g. some collections indent items one level deeper than the
-            // bracket, others align them with it).
+            // Preserve each group's indentation relative to the opening bracket,
+            // not the source columns of subsequent items after a comma.
             var elemLevel =
                 node.Elements[i].GetFirstToken().GetLocation().GetLineSpan().StartLinePosition.Character / IndentSize;
 
             var elemIndent =
                 firstElementSharesOpenLine
                 ?
-                ctx.IndentLevel + (isNamedArgument ? 1 : 0)
+                ctx.IndentLevel + (indentInlineElements ? 1 : 0)
+                :
+                sameLineAsPrev
+                ?
+                previousElementIndent
                 :
                 sourceMultiLine
                 ?
                 ctx.IndentLevel + Math.Max(0, elemLevel - openBracketLevel)
                 :
                 ctx.IndentLevel;
+
+            previousElementIndent = elemIndent;
 
             if (e is ExpressionElementSyntax ee)
                 e = ee.WithExpression((ExpressionSyntax)FormatNode(ee.Expression, elemIndent));
@@ -3209,7 +3219,9 @@ public static class FormatCSharpFile
                 }
             }
 
-            if (sameLineAsPrev)
+            var elementIsMultiline = SpansMultipleLines(e.ToString());
+
+            if (sameLineAsPrev && !previousElementIsMultiline && !elementIsMultiline)
             {
                 // Grouped with the previous element on the same line: a single space
                 // separates this element from the preceding comma.
@@ -3236,6 +3248,8 @@ public static class FormatCSharpFile
                             sepTrailingBreaksForGap,
                             elemIndent));
             }
+
+            previousElementIsMultiline = elementIsMultiline;
 
             var trailingTrivia =
                 EnsureSpaceBeforeComments(
@@ -4230,7 +4244,7 @@ public static class FormatCSharpFile
         // aligns one level deeper than the foreach when the chain head sits inline
         // after `in`; if the head was placed on its own line, align with the head
         // (which the parent already positioned at ctx.IndentLevel).
-        if (chainTop.Parent is ForEachStatementSyntax forEachParent &&
+        if (chainTop.Parent is CommonForEachStatementSyntax forEachParent &&
             forEachParent.Expression == chainTop)
         {
             var headOnOwnLine = LineOf(chainTop.GetFirstToken()) > LineOf(forEachParent.InKeyword);

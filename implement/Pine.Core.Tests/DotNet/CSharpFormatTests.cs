@@ -457,6 +457,208 @@ public class CSharpFormatTests
         AssertFormattedSyntax(inputSyntaxText, inputSyntaxText, scriptMode: true);
     }
 
+    [Fact]
+    public void Formats_nested_collection_arguments_with_multiline_elements()
+    {
+        var input =
+            """
+            Expression.BuiltinInst(
+            input: Expression.ListInst(
+                [Expression.BuiltinInst(
+                    input: Expression.ListInst(
+                        [Expression.LitralInst(
+                            IntegerEncoding.EncodeSignedInteger(0)),
+                        Expression.EnvironmentInstance]),
+                    function: "take"), Expression.LitralInst(
+                    PineValue.EmptyList)]),
+            function: "equal");
+            """;
+
+        var expected =
+            """
+            Expression.BuiltinInst(
+                input:
+                Expression.ListInst(
+                    [
+                        Expression.BuiltinInst(
+                            input:
+                            Expression.ListInst(
+                                [
+                                    Expression.LitralInst(
+                                        IntegerEncoding.EncodeSignedInteger(0)),
+                                    Expression.EnvironmentInstance
+                                ]),
+                            function: "take"),
+                        Expression.LitralInst(
+                            PineValue.EmptyList)
+                    ]),
+                function: "equal");
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("Expression.EnvironmentInstance")]
+    public void Moves_multiline_collection_element_to_new_line_at_group_indent(string firstElement)
+    {
+        var input =
+            $$"""
+            var items =
+                [
+                    {{firstElement}}, Expression.LitralInst(
+                        PineValue.EmptyList), Expression.EnvironmentInstance
+                ];
+            """;
+
+        var expected =
+            $$"""
+            var items =
+                [
+                    {{firstElement}},
+                    Expression.LitralInst(
+                        PineValue.EmptyList),
+                    Expression.EnvironmentInstance
+                ];
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Moves_collection_spread_to_new_line_when_formatting_makes_it_multiline()
+    {
+        var input =
+            """
+            var items =
+                [
+                    first, .. GetValues(firstArgumentWithAnEspeciallyLongName, secondArgumentWithALongName, thirdArgumentWithALongName), last
+                ];
+            """;
+
+        var expected =
+            """
+            var items =
+                [
+                    first,
+                    .. GetValues(
+                        firstArgumentWithAnEspeciallyLongName,
+                        secondArgumentWithALongName,
+                        thirdArgumentWithALongName),
+                    last
+                ];
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_comments_when_moving_multiline_collection_element()
+    {
+        var input =
+            """
+            var items =
+                [
+                    first, /* before */ Build(
+                        value /* argument */), /* after */ last
+                ];
+            """;
+
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+    [Theory]
+    [InlineData("Build")]
+    [InlineData("new Widget")]
+    [InlineData("new")]
+    public void Moves_multiline_named_argument_expression_after_colon(string expression)
+    {
+        var input =
+            $$"""
+            Call(
+                input: {{expression}}(
+                    first,
+                    second),
+                other: value);
+            """;
+
+        var expected =
+            $$"""
+            Call(
+                input:
+                {{expression}}(
+                    first,
+                    second),
+                other: value);
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_comments_when_breaking_multiline_named_argument()
+    {
+        var input =
+            """
+            Call(
+                first,
+
+                // Before argument
+                input: /* Before expression */ Build(
+                    value),
+                other: value);
+            """;
+
+        var expected =
+            """
+            Call(
+                first,
+
+                // Before argument
+                input:
+                /* Before expression */
+                Build(
+                    value),
+                other: value);
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Separates_single_line_collection_group_after_multiline_item()
+    {
+        var input =
+            """
+            var items =
+                [
+                    Expression.LitralInst(
+                        IntegerEncoding.EncodeSignedInteger(
+                            1)), Expression.EnvironmentInstance, other
+                ];
+            """;
+
+        var expected =
+            """
+            var items =
+                [
+                    Expression.LitralInst(
+                        IntegerEncoding.EncodeSignedInteger(
+                            1)),
+                    Expression.EnvironmentInstance, other
+                ];
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
 
     [Fact]
     public void Preserves_return_statement_simple_case_on_same_line()
@@ -969,7 +1171,7 @@ public class CSharpFormatTests
 
 
     [Fact]
-    public void Preserves_named_argument_layout()
+    public void Formats_multiline_named_argument_layout()
     {
         var inputSyntaxText =
             """"
@@ -980,7 +1182,17 @@ public class CSharpFormatTests
                 argument: local_000);
             """";
 
-        AssertFormattedSyntax(inputSyntaxText, inputSyntaxText, scriptMode: true);
+        var expected =
+            """
+            KernelFunctionFused.TakeLast(
+                takeCountValue:
+                Global_Anonymous.zzz_anon_627f403e_dca18c16(
+                    KernelFunction.length(local_000),
+                    local_000),
+                argument: local_000);
+            """;
+
+        AssertFormattedSyntax(inputSyntaxText, expected, scriptMode: true);
     }
 
 
@@ -6184,7 +6396,21 @@ public class CSharpFormatTests
                     (blobPathAndContent.path, blobContentAsString));
             """";
 
-        AssertFormattedSyntax(input, input, scriptMode: false);
+        var expected =
+            """
+            return
+                ParseModuleName(blobContentAsString)
+                .Unpack(
+                    fromErr:
+                    _ =>
+                    Maybe<(IReadOnlyList<string> path, string content)>.nothing(),
+
+                    fromOk:
+                    moduleName =>
+                    (blobPathAndContent.path, blobContentAsString));
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: false);
     }
 
     [Fact]
@@ -6210,13 +6436,13 @@ public class CSharpFormatTests
                 ElmValue.TagInstance(
                     "PortModule",
                     [
-                    new ElmValue.ElmRecord(
-                        [
-                        ("exposingList",
-                        EncodeNode(EncodeExposing, moduleData.ModuleData.ExposingList)),
-                        ("moduleName",
-                        EncodeNode(EncodeModuleName, moduleData.ModuleData.ModuleName)),
-                        ])
+                        new ElmValue.ElmRecord(
+                            [
+                            ("exposingList",
+                            EncodeNode(EncodeExposing, moduleData.ModuleData.ExposingList)),
+                            ("moduleName",
+                            EncodeNode(EncodeModuleName, moduleData.ModuleData.ModuleName)),
+                            ])
                     ]);
             """";
 
@@ -7301,8 +7527,8 @@ public class CSharpFormatTests
                     TypeInference.InferredType.RecordType recordType =>
                     new TypeInference.InferredType.RecordType(
                         [
-                        ..recordType.Fields.Select(
-                            field => (field.FieldName, ExpandAliasType(field.FieldType, aliasTypes) ?? field.FieldType))
+                            ..recordType.Fields.Select(
+                                field => (field.FieldName, ExpandAliasType(field.FieldType, aliasTypes) ?? field.FieldType))
                         ]),
 
                     _ =>
@@ -7899,6 +8125,77 @@ public class CSharpFormatTests
     }
 
     [Fact]
+    public void Preserves_dependency_resolver_deconstructing_foreach_pipeline_indent()
+    {
+        var input =
+            """
+            void Add(IReadOnlyDictionary<string, string>? dependencies, ElmDependencyScope scope)
+            {
+                foreach (var (name, text) in (dependencies ?? ImmutableDictionary<string, string>.Empty)
+                    .OrderBy(kv => kv.Key, StringComparer.Ordinal))
+                {
+                    ValidatePackageName(name);
+                }
+            }
+            """;
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Theory]
+    [InlineData("foreach (var entry in")]
+    [InlineData("await foreach (var entry in")]
+    [InlineData("foreach (var (name, text) in")]
+    [InlineData("await foreach (var (name, text) in")]
+    [InlineData("foreach ((string name, string text) in")]
+    [InlineData("await foreach ((string name, string text) in")]
+    public void Indents_foreach_pipeline_continuations_one_level_from_header(string header)
+    {
+        var input =
+            $$"""
+            {{header}} dependencies
+            .OrderBy(kv => kv.Key)
+            .ThenBy(kv => kv.Value))
+            {
+            }
+            """;
+
+        var expected =
+            $$"""
+            {{header}} dependencies
+                .OrderBy(kv => kv.Key)
+                .ThenBy(kv => kv.Value))
+            {
+            }
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+    [Theory]
+    [InlineData("foreach (var entry in")]
+    [InlineData("await foreach (var entry in")]
+    [InlineData("foreach (var (name, text) in")]
+    [InlineData("await foreach (var (name, text) in")]
+    public void Aligns_foreach_pipeline_continuations_with_source_on_own_line(string header)
+    {
+        var input =
+            $$"""
+            {{header}}
+                dependencies
+                // Keep sorting deterministic.
+                .OrderBy(kv => kv.Key)
+                .ThenBy(kv => kv.Value))
+            {
+            }
+            """;
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+    [Fact]
     public void Preserve_if_condition_pipeline_member_invocation_indent()
     {
         var input =
@@ -8398,8 +8695,8 @@ public class CSharpFormatTests
             var combinedEnvironment =
                 PineValue.List(
                     [
-                    PineValue.List(functionValueAndRecord.functionRecord.EnvFunctions),
-                    PineValue.List(combinedArguments)
+                        PineValue.List(functionValueAndRecord.functionRecord.EnvFunctions),
+                        PineValue.List(combinedArguments)
                     ]);
             """";
 

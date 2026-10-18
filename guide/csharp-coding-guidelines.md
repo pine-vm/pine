@@ -32,13 +32,17 @@ If the last item is not on the same line as the first, the items must be placed 
 For multiline collection expressions, the closing bracket must be placed on a new line after the last item. For argument lists and parameter lists, the closing parentheses must be placed on the same line as the last item.
 
 For argument lists in the multiline form, the first argument must be separated from the opening parens with a line break.
+For named arguments whose expression spans multiple lines, the expression must start on a new line after the parameter name and colon.
 
-For multiline collection expressions and array, collection, and object initializers, preserve the original line grouping: items that shared a line stay grouped, including items following a multiline item on its closing line.
+For multiline collection expressions, each multiline element must start on a new line, and the next element must start on a new line after the comma ending the multiline element. Preserve the original line grouping only between adjacent single-line elements.
+When moving collection elements off the opening bracket's line in an argument, indent them one level deeper than the bracket, matching Visual Studio editor indentation.
+For array, collection, and object initializers, preserve the original line grouping: items that shared a line stay grouped, including items following a multiline item on its closing line.
 When an initializer continues an expression starting on the `foreach` header line, its braces align with the `foreach` keyword, and its items are indented one level deeper, matching Visual Studio editor indentation.
 If the source expression already starts on a separate, indented line, the initializer braces align with that expression instead.
 
 In a `foreach` header, the `in` keyword stays on the same line as the end of the loop variable, including deconstruction patterns.
 When wrapping the source expression, break after `in`, not before it, unless a comment or preprocessor directive requires preserving a line break.
+Member-access continuations of the source expression are indented one level deeper than the `foreach` keyword, including deconstructing and `await foreach` loops. If the source expression already starts on its own indented line, continuations align with it instead.
 
 For example, the following code:
 

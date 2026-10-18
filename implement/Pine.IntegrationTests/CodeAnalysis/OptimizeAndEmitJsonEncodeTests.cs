@@ -453,7 +453,8 @@ public class OptimizeAndEmitJsonEncodeTests
                             return
                                 BuiltinFunctionFused.ListAppendItem(
                                     prefix: local_param_2.Evaluate(),
-                                    itemToAppend: BuiltinFunctionFused.SkipAndTake(
+                                    itemToAppend:
+                                    BuiltinFunctionFused.SkipAndTake(
                                         takeCountValue: local_001,
                                         skipCountValue: local_param_1,
                                         argument: local_param_3));
@@ -1082,6 +1083,7 @@ public class OptimizeAndEmitJsonEncodeTests
                     return CommonReusedValues.Blob_Char_question;
                 }
             }
+
             """".Trim());
 
         moduleGlobalAnonymousText.Trim().Should().Be(
