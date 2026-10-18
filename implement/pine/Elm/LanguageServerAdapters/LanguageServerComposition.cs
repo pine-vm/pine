@@ -73,6 +73,7 @@ public static class LanguageServerComposition
                 getOrAddExpressionCompilation: sharedCaches.ExpressionCompilations.GetOrAdd,
                 expressionEncodingCache: sharedCaches.EncodedExpressions,
                 reducedExpressionCache: sharedCaches.ReducedExpressions,
+                expressionTemplatePlanCache: sharedCaches.ExpressionTemplatePlans,
                 invocationCacheConfiguration: s_defaultInvocationCacheConfiguration),
             CreateDefaultCompilationCache(pineAppVersionId),
             logDelegate);

@@ -78,6 +78,10 @@ public static class SetupVM
         return s_aggregateCacheValue;
     }
 
+    /// <summary>
+    /// Creates a VM with independently configurable caches. An omitted template-plan cache is created per VM.
+    /// The template-plan cache can be shared without sharing mutable evaluation state.
+    /// </summary>
     public static Core.Interpreter.IntermediateVM.PineVM Create(
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
         Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig? evaluationConfigDefault = null,
@@ -96,9 +100,10 @@ public static class SetupVM
         TryGetExpressionCompilation? tryGetExpressionCompilation = null,
         GetOrAddExpressionCompilation? getOrAddExpressionCompilation = null,
         PineVMExpressionEncodingCache? expressionEncodingCache = null,
-        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null) =>
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null,
+        PineVMExpressionTemplatePlanCache? expressionTemplatePlanCache = null) =>
         CreateWithTemplatePlanCache(
-            new PineVMExpressionTemplatePlanCache(),
+            expressionTemplatePlanCache ?? new PineVMExpressionTemplatePlanCache(),
             evaluationConfigDefault,
             evalCache,
             reportFunctionApplication,

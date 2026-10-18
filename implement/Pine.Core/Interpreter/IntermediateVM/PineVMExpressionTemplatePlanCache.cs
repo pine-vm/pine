@@ -4,7 +4,8 @@ namespace Pine.Core.Interpreter.IntermediateVM;
 
 /// <summary>
 /// Thread-safe structural template plans shared by short-lived VMs. A plan depends only on its
-/// encoded template value; it retains its parsing cache, never VM state or evaluation counters.
+/// encoded template value; it retains structural expressions and recipes, never mutable VM state
+/// or evaluation counters. The integrating application controls the cache lifetime.
 /// </summary>
 public sealed class PineVMExpressionTemplatePlanCache
 {
