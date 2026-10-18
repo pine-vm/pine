@@ -302,6 +302,9 @@ public sealed class ElmTestInstrumentation : IDisposable
     /// <summary>Whether expression statistics, sampled stacks and captured values are collected.</summary>
     public bool RecordDiagnostics { get; }
 
+    /// <summary>Optional numeric work-site stream, requiring serial execution and retaining no values.</summary>
+    public PineVMWorkProfile? WorkProfile { get; }
+
     /// <summary>Effective immutable limits and diagnostic controls for this run.</summary>
     public ElmTestInstrumentationOptions Options { get; }
 
@@ -326,11 +329,13 @@ public sealed class ElmTestInstrumentation : IDisposable
         ElmTestInstrumentationOptions options,
         IReadOnlyDictionary<PineValue, PrecompiledLeaf>? precompiledLeaves = null,
         Func<IReadOnlyDictionary<PineValue, PrecompiledLeaf>>? precompiledLeavesProvider = null,
-        bool recordDiagnostics = true)
+        bool recordDiagnostics = true,
+        PineVMWorkProfile? workProfile = null)
     {
         options.Validate();
         Options = options;
         RecordDiagnostics = recordDiagnostics;
+        WorkProfile = workProfile;
         _precompiledLeaves = precompiledLeaves;
         _precompiledLeavesProvider = precompiledLeavesProvider;
         _nextSampleTicks = options.SnapshotInterval.Ticks;
@@ -352,7 +357,12 @@ public sealed class ElmTestInstrumentation : IDisposable
         }
 
         OnProgress?.Invoke(GetSummary());
-        return new ScopeLease(() => _scope.Value = previous);
+        WorkProfile?.SetScenario(phase, context);
+        return new ScopeLease(() =>
+        {
+            _scope.Value = previous;
+            WorkProfile?.SetScenario(previous?.Phase ?? "initialization", previous?.Context ?? "");
+        });
     }
 
     /// <summary>Records the selected test's full path for the saved report.</summary>
@@ -370,10 +380,11 @@ public sealed class ElmTestInstrumentation : IDisposable
     {
         _outcome = outcome;
         _elapsed.Stop();
+        WorkProfile?.WriteSnapshot(outcome);
     }
 
     /// <summary>Announces cancellation observed outside VM evaluation, such as during dependency resolution.</summary>
-    public void NotifyCancellation() => AnnounceStop(_stopReason ?? "Time budget exhausted.");
+    public void NotifyCancellation() => AnnounceStop(_stopReason ?? WorkProfile?.StopReason ?? "Time budget exhausted.");
 
     /// <summary>Requests user cancellation without serializing or querying VM state.</summary>
     public void Cancel()
@@ -859,6 +870,7 @@ public sealed class ElmTestInstrumentation : IDisposable
                     disableDirectContinueForSimpleEval: owner.Options.DisableApplicationFastPaths,
                     disableDirectEvalForSimpleTemplate: owner.Options.DisableApplicationFastPaths,
                     disableDirectInvocation: owner.Options.DisableApplicationFastPaths,
+                    workProfile: owner.WorkProfile,
                     reportEvaluationEvent: Event);
         }
 
@@ -870,6 +882,7 @@ public sealed class ElmTestInstrumentation : IDisposable
 
         private void Event(in EvaluationEvent evaluationEvent)
         {
+            _owner.WorkProfile?.Checkpoint(force: true);
             var loadOrigins =
                 evaluationEvent.LoadCountersByOrigin
                 ?? throw new InvalidOperationException("Instrumented evaluation must report work origins.");

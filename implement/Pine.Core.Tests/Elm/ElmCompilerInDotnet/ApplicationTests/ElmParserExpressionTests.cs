@@ -220,6 +220,7 @@ public class ElmParserExpressionTests
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 0
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -256,6 +257,7 @@ public class ElmParserExpressionTests
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 0
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -285,6 +287,7 @@ public class ElmParserExpressionTests
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 0
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -336,6 +339,7 @@ public class ElmParserExpressionTests
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 0
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -368,6 +372,7 @@ public class ElmParserExpressionTests
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 0
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -418,6 +423,7 @@ public class ElmParserExpressionTests
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 0
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -453,8 +459,9 @@ public class ElmParserExpressionTests
             InstructionCount: 3_658
             ExpressionTemplatePlanParseCount: 29
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 0
+            TemplateDirectInvocationCount: 2
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 2
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -493,6 +500,7 @@ public class ElmParserExpressionTests
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 0
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -538,6 +546,7 @@ public class ElmParserExpressionTests
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 0
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0

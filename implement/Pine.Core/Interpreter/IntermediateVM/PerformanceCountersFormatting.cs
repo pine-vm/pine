@@ -60,6 +60,7 @@ public static class PerformanceCountersFormatting
         yield return "DeferredTemplateValueAllocationCount: " + CommandLineInterface.FormatIntegerForDisplay(counters.DeferredTemplateValueAllocationCount);
         yield return "TemplateDirectInvocationCount: " + CommandLineInterface.FormatIntegerForDisplay(counters.TemplateDirectInvocationCount);
         yield return "DeferredTemplateValueMaterializationCount: " + CommandLineInterface.FormatIntegerForDisplay(counters.DeferredTemplateValueMaterializationCount);
+        yield return "TemplateConsolidatedEvalCount: " + CommandLineInterface.FormatIntegerForDisplay(counters.TemplateConsolidatedEvalCount);
         yield return "DirectInterpreterInvocationCount: " + CommandLineInterface.FormatIntegerForDisplay(counters.DirectInterpreterInvocationCount);
         yield return "DirectInterpreterExpressionCount: " + CommandLineInterface.FormatIntegerForDisplay(counters.DirectInterpreterExpressionCount);
         yield return "DirectInterpreterLiteralCount: " + CommandLineInterface.FormatIntegerForDisplay(counters.DirectInterpreterLiteralCount);

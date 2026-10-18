@@ -261,7 +261,11 @@ public record ApplyStepwise
             PineValueInProcess EnvironmentValue,
             Func<PineValueInProcess, StepResult> Callback,
             bool CountInvocation = true,
-            PineValue? ExpressionValue = null)
+            PineValue? ExpressionValue = null,
+            StackFrameInput? ProjectedInput = null,
+            StackFrameInstructions? ProjectedInstructions = null,
+            Func<PrecompiledResult>? SelectedPrecompiled = null,
+            bool PrecompiledSelectionAttempted = false)
             : StepResult;
 
         /// <summary>

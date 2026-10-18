@@ -543,6 +543,24 @@ public class PineIRCompiler
     {
         context = context with { IsTailPosition = false };
 
+        if (context.EnableDirectInvocation &&
+            ExpressionTemplatePlan.TryParseTemplate(
+                ExpressionEncoding.EncodeExpressionAsValue(listExpr),
+                parseCache) is { EnvironmentCount: > 1 } templatePlan)
+        {
+            return
+                prior
+                .ContinueWithExpression(
+                    context.StackFrameParameters.ParamsPaths.Any(path => path.Count is 0)
+                    ?
+                    Expression.EnvironmentInstance
+                    :
+                    Expression.LitralInst(PineValue.EmptyList),
+                    context,
+                    parseCache)
+                .AppendInstruction(StackInstruction.CreateTemplate(templatePlan, producer: true));
+        }
+
         if (listExpr.Items.Count is 0)
         {
             return
@@ -1009,13 +1027,23 @@ public class PineIRCompiler
                 ExpressionTemplatePlan.TryParseTemplate(
                     functionLiteral.Value,
                     parseCache)
-                is { } functionRecord &&
-                functionRecord.ParameterCount >
-                functionRecord.ArgumentsAlreadyCollected.Length;
+                is { EnvironmentCount: > 0 };
         }
 
         if (evalExpr.Encoded is Expression.Litral literalEncodedExpression)
         {
+            if (context.EnableDirectInvocation &&
+                !(context.SkipDirectInvocation?.Invoke(literalEncodedExpression.Value) ?? false) &&
+                ExpressionTemplatePlan.TryParseTemplate(
+                    literalEncodedExpression.Value,
+                    parseCache) is { } templatePlan)
+            {
+                return
+                    prior
+                    .ContinueWithExpression(evalExpr.Environment, context, parseCache)
+                    .AppendInstruction(StackInstruction.CreateTemplate(templatePlan, producer: false));
+            }
+
             if (context.EnableDirectInvocation &&
                 !(context.SkipDirectInvocation?.Invoke(literalEncodedExpression.Value) ?? false) &&
                 parseCache.ParseExpression(literalEncodedExpression.Value).IsOkOrNull() is { } targetExpression)

@@ -1,5 +1,6 @@
 using Pine.Core.CLI;
 using Pine.Core.CommonEncodings;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.Optimization;
 using System;
 using System.Collections.Frozen;
@@ -123,8 +124,14 @@ public abstract record PineValue : IEquatable<PineValue>
     /// </summary>
     public static ListValue List(ReadOnlyMemory<PineValue> items)
     {
+        var profile = PineVMWorkProfile.Current;
+        profile?.Count(PineVMWorkProfile.Metric.PineListCalls);
+
         if (items.Length is 0)
+        {
+            profile?.Count(PineVMWorkProfile.Metric.PineListPreallocationReuses);
             return EmptyList;
+        }
 
         if (items.Length is 1)
         {
@@ -132,6 +139,7 @@ public abstract record PineValue : IEquatable<PineValue>
             {
                 if (reusedSingletonListValues.TryGetValue(items.Span[0], out var existing))
                 {
+                    profile?.Count(PineVMWorkProfile.Metric.PineListPreallocationReuses);
                     return existing;
                 }
             }
@@ -143,6 +151,7 @@ public abstract record PineValue : IEquatable<PineValue>
         {
             if (reusedListValues.TryGetValue(asStruct, out var existing))
             {
+                profile?.Count(PineVMWorkProfile.Metric.PineListPreallocationReuses);
                 return existing;
             }
         }
@@ -160,7 +169,12 @@ public abstract record PineValue : IEquatable<PineValue>
         {
             if (newInstance.NodesCount * 30 + newInstance.BlobsBytesCount > 10_000)
             {
-                return PineValueWeakInterner.GetOrAdd(newInstance);
+                var canonical = PineValueWeakInterner.GetOrAdd(newInstance);
+
+                if (profile is not null && !ReferenceEquals(canonical, newInstance))
+                    profile.Count(PineVMWorkProfile.Metric.PineListPostallocationReuses);
+
+                return canonical;
             }
         }
 
@@ -321,6 +335,7 @@ public abstract record PineValue : IEquatable<PineValue>
 
         internal ListValue(ListValueStruct listValueStruct)
         {
+            PineVMWorkProfile.Current?.Count(PineVMWorkProfile.Metric.ListValueConstructorAllocations);
             Items = listValueStruct.Items;
 
             _slimHashCode = listValueStruct.SlimHashCode;

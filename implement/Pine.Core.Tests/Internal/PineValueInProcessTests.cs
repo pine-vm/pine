@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Internal;
+using Pine.Core.Interpreter.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -15,6 +16,37 @@ namespace Pine.Core.Tests.Internal;
 
 public class PineValueInProcessTests
 {
+    private static PineValueInProcess CreateDeferredTemplateFixture(
+        PineValue.ListValue expected,
+        IReadOnlyList<PineValueInProcess> environments,
+        Func<IReadOnlyList<PineValueInProcess>, PineValue> materialize,
+        Action? reportMaterialization = null)
+    {
+        var collected = CollectedTemplateEnvironments.Empty;
+
+        foreach (var environment in environments)
+            collected = collected.Append(environment);
+
+        if (collected.Count is 0)
+            collected = collected.Append(PineValueInProcess.EmptyList);
+
+        var recipe =
+            new TemplateValueRecipe.List(
+                expected.Items
+                .ToArray().Select(item => (TemplateValueRecipe)new TemplateValueRecipe.Constant(item)).ToArray());
+
+        var plan =
+            new ExpressionTemplatePlan(
+                PineValue.EmptyList,
+                PineValue.EmptyList,
+                Expression.EnvironmentInstance,
+                collected.Count + 1,
+                Enumerable.Repeat<TemplateValueRecipe>(recipe, collected.Count).ToArray(),
+                TemplateValueRecipe.EmptyList);
+
+        return PineValueInProcess.CreateDeferredTemplateValue(plan, collected, materialize, reportMaterialization);
+    }
+
     [Fact]
     public void Create_initializes_with_evaluated_value()
     {
@@ -177,8 +209,8 @@ public class PineValueInProcessTests
         var materializationCount = 0;
 
         var deferredTemplateValue =
-            PineValueInProcess.CreateDeferredTemplateValue(
-                templatePlan: new object(),
+            CreateDeferredTemplateFixture(
+                expected: expected,
                 environments:
                 [
                 PineValueInProcess.Create(PineValue.Blob([2])),
@@ -202,7 +234,7 @@ public class PineValueInProcessTests
         deferredTemplateValue.Evaluate().Should().BeSameAs(expected);
 
         materializationCount.Should().Be(1);
-        deferredTemplateValue.DeferredTemplateValueOrNull.Should().BeNull();
+        deferredTemplateValue.DeferredTemplateValueOrNull.Should().NotBeNull();
     }
 
     [Fact]
@@ -216,8 +248,8 @@ public class PineValueInProcessTests
                 ]);
 
         PineValueInProcess CreateDeferred() =>
-            PineValueInProcess.CreateDeferredTemplateValue(
-                templatePlan: new object(),
+            CreateDeferredTemplateFixture(
+                expected: expected,
                 environments: [],
                 materialize: _ => expected);
 
@@ -238,6 +270,305 @@ public class PineValueInProcessTests
             .Should().BeTrue();
 
         PineValueInProcess.AreEqual(CreateDeferred(), expected).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Lazy_template_recipe_preserves_shared_list_subrecipes()
+    {
+        var shared =
+            TemplateValueRecipe.BuildList(
+                [TemplateValueRecipe.EnvironmentSlot(0), TemplateValueRecipe.EnvironmentSlot(1)]);
+
+        var recipe = TemplateValueRecipe.BuildList([shared, shared]);
+
+        var value =
+            PineValueInProcess.CreateFromTemplateRecipe(
+                recipe,
+                [PineValueInProcess.CreateInteger(11), PineValueInProcess.CreateInteger(13)]);
+
+        value.EvaluatedOrNull.Should().BeNull();
+        value.GetElementAt(0).Should().BeSameAs(value.GetElementAt(1));
+        value.GetElementAt(0).EvaluatedOrNull.Should().BeNull();
+        var concrete = (PineValue.ListValue)value.Evaluate();
+        concrete.Items.Span[0].Should().BeSameAs(concrete.Items.Span[1]);
+
+        concrete.Should().Be(
+            recipe.Instantiate(
+                [PineValueInProcess.CreateInteger(11), PineValueInProcess.CreateInteger(13)]).Evaluate());
+    }
+
+    [Fact]
+    public void Deferred_template_allocation_and_metadata_do_not_traverse_the_recipe_DAG()
+    {
+        var environment = PineValueInProcess.CreateList([PineValueInProcess.CreateInteger(29)]);
+        var environments = CollectedTemplateEnvironments.Empty.Append(environment);
+        var observations = new List<ObservedTemplateListItems<TemplateValueRecipe>>();
+        TemplateValueRecipe recipe = TemplateValueRecipe.EnvironmentSlot(0);
+
+        for (var depth = 0; depth < 32; ++depth)
+        {
+            var items = new ObservedTemplateListItems<TemplateValueRecipe>([recipe, recipe]);
+            observations.Add(items);
+            recipe = new TemplateValueRecipe.List(items);
+        }
+
+        var plan =
+            new ExpressionTemplatePlan(
+                PineValue.EmptyList,
+                PineValue.EmptyList,
+                Expression.EnvironmentInstance,
+                EnvironmentCount: 2,
+                [recipe],
+                TemplateValueRecipe.EmptyList);
+
+        var value =
+            PineValueInProcess.CreateDeferredTemplateValue(
+                plan,
+                environments,
+                collected => recipe.Instantiate(collected).Evaluate());
+
+        observations.Should().OnlyContain(items => items.ObservationCount == 0);
+        value.IsList().Should().BeTrue();
+        value.IsBlob().Should().BeFalse();
+        value.GetLength().Should().Be(2);
+        value.ListItemsOrNull()!.Count.Should().Be(2);
+        value.EvaluatedOrNull.Should().BeNull();
+        observations.Should().OnlyContain(items => items.ObservationCount == 0);
+
+        var first = value.GetElementAt(0);
+        observations.Should().OnlyContain(items => items.ObservationCount == 2);
+        value.GetElementAt(1).Should().BeSameAs(first);
+        first.GetLength().Should().Be(2);
+        first.EvaluatedOrNull.Should().BeNull();
+        observations.Should().OnlyContain(items => items.ObservationCount == 2);
+        environment.EvaluatedOrNull.Should().BeNull();
+    }
+
+    [Fact]
+    public void Lazy_template_recipe_binding_does_not_observe_projected_paths_or_expand_shared_lists()
+    {
+        var selected = PineValueInProcess.CreateInteger(29);
+        var environmentItems = new ObservedTemplateListItems<PineValueInProcess>([selected]);
+        var environment = PineValueInProcess.CreateList(environmentItems);
+
+        TemplateValueRecipe recipe =
+            TemplateValueRecipe.BuildList(
+                [TemplateValueRecipe.EnvironmentSlot(0).Project([0])]);
+
+        for (var depth = 0; depth < 18; ++depth)
+            recipe = TemplateValueRecipe.BuildList([recipe, recipe]);
+
+        var value = PineValueInProcess.CreateFromTemplateRecipe(recipe, [environment]);
+        environmentItems.ObservationCount.Should().Be(0);
+        value.IsList().Should().BeTrue();
+        value.GetLength().Should().Be(2);
+        environmentItems.ObservationCount.Should().Be(0);
+
+        var current = value;
+
+        for (var depth = 0; depth < 18; ++depth)
+        {
+            current.GetElementAt(0).Should().BeSameAs(current.GetElementAt(1));
+            current = current.GetElementAt(0);
+        }
+
+        current.GetLength().Should().Be(1);
+        environmentItems.ObservationCount.Should().Be(0);
+        current.GetElementAt(0).Should().BeSameAs(selected);
+        environmentItems.ObservationCount.Should().Be(1);
+
+        PineValue concrete = value.Evaluate();
+
+        for (var depth = 0; depth < 18; ++depth)
+        {
+            var list = (PineValue.ListValue)concrete;
+            list.Items.Span[0].Should().BeSameAs(list.Items.Span[1]);
+            concrete = list.Items.Span[0];
+        }
+
+        concrete.Should().Be(PineValue.List([IntegerEncoding.EncodeSignedInteger(29)]));
+        environmentItems.ObservationCount.Should().Be(1);
+        environment.EvaluatedOrNull.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Native_lazy_template_environment_retains_only_referenced_roots(bool materialize)
+    {
+        var (value, unused, required) = CreatePrunedTemplateView(nestedSubview: false, observeSibling: false);
+
+        if (materialize)
+            value.Evaluate();
+
+        CollectTemplateViewGarbage();
+        unused.Should().OnlyContain(reference => !reference.IsAlive);
+        required.IsAlive.Should().BeTrue();
+
+        value.Evaluate().Should().Be(
+            PineValue.List(
+                [
+                PineValue.List(
+                    [PineValue.List([IntegerEncoding.EncodeSignedInteger(73)])])
+                ]));
+
+        GC.KeepAlive(value);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Escaped_nested_template_view_does_not_retain_parent_roots_or_sibling_caches(
+        bool deferredParent,
+        bool observeSibling)
+    {
+        var (value, unused, required) =
+            CreatePrunedTemplateView(nestedSubview: true, observeSibling, deferredParent);
+
+        CollectTemplateViewGarbage();
+        unused.Should().OnlyContain(reference => !reference.IsAlive);
+        required.IsAlive.Should().BeTrue();
+        value.GetElementAt(0).Should().BeSameAs(value.GetElementAt(1));
+        var concrete = (PineValue.ListValue)value.Evaluate();
+        concrete.Items.Span[0].Should().BeSameAs(concrete.Items.Span[1]);
+        GC.KeepAlive(value);
+    }
+
+    [Fact]
+    public void Observed_template_projection_releases_its_original_environment_root()
+    {
+        var (value, unused) = CreateObservedTemplateProjection();
+
+        CollectTemplateViewGarbage();
+        unused.Should().OnlyContain(reference => !reference.IsAlive);
+
+        value.Evaluate().Should().Be(
+            PineValue.List(
+                [
+                PineValue.List(
+                    [IntegerEncoding.EncodeSignedInteger(79)])
+                ]));
+
+        GC.KeepAlive(value);
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static (PineValueInProcess value, WeakReference[] unused, WeakReference required)
+        CreatePrunedTemplateView(bool nestedSubview, bool observeSibling, bool deferredParent = false)
+    {
+        var first = PineValueInProcess.CreateList([PineValueInProcess.CreateInteger(71)]);
+        var required = PineValueInProcess.CreateList([PineValueInProcess.CreateInteger(73)]);
+        var last = PineValueInProcess.CreateList([PineValueInProcess.CreateInteger(77)]);
+        var environments = CollectedTemplateEnvironments.Empty.Append(first).Append(required).Append(last);
+        var shared = TemplateValueRecipe.BuildList([TemplateValueRecipe.EnvironmentSlot(1)]);
+        var unused = new List<WeakReference> { new(first), new(last), new(environments) };
+
+        if (!nestedSubview)
+        {
+            return
+                (PineValueInProcess.CreateFromTemplateRecipe(
+                    TemplateValueRecipe.BuildList([shared]),
+                    environments),
+                unused.ToArray(),
+                new(required));
+        }
+
+        var recipe =
+            TemplateValueRecipe.BuildList(
+                [
+                TemplateValueRecipe.BuildList([shared, shared]),
+                TemplateValueRecipe.BuildList(
+                    [shared, TemplateValueRecipe.EnvironmentSlot(0), TemplateValueRecipe.EnvironmentSlot(2)])
+                ]);
+
+        PineValueInProcess parent;
+
+        if (deferredParent)
+        {
+            var plan =
+                new ExpressionTemplatePlan(
+                    PineValue.EmptyList,
+                    PineValue.EmptyList,
+                    Expression.EnvironmentInstance,
+                    environments.Count + 1,
+                    [recipe, recipe, recipe],
+                    TemplateValueRecipe.EmptyList);
+
+            parent =
+                PineValueInProcess.CreateDeferredTemplateValue(
+                    plan,
+                    environments,
+                    collected => recipe.Instantiate(collected).Evaluate());
+
+            unused.Add(new(plan));
+        }
+        else
+        {
+            parent = PineValueInProcess.CreateFromTemplateRecipe(recipe, environments);
+        }
+
+        unused.Add(new(parent));
+
+        if (observeSibling)
+        {
+            var sibling = parent.GetElementAt(1);
+            sibling.Evaluate();
+            unused.Add(new(sibling));
+        }
+
+        return (parent.GetElementAt(0), unused.ToArray(), new(required));
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static (PineValueInProcess value, WeakReference[] unused) CreateObservedTemplateProjection()
+    {
+        var selected = PineValueInProcess.CreateList([PineValueInProcess.CreateInteger(79)]);
+        var sibling = PineValueInProcess.CreateList([PineValueInProcess.CreateInteger(83)]);
+        var environment = PineValueInProcess.CreateList([selected, sibling]);
+        var history = CollectedTemplateEnvironments.Empty.Append(environment);
+
+        var value =
+            PineValueInProcess.CreateFromTemplateRecipe(
+                TemplateValueRecipe.BuildList([TemplateValueRecipe.EnvironmentSlot(0).Project([0])]),
+                history);
+
+        value.GetElementAt(0).Should().BeSameAs(selected);
+
+        return (value, [new(environment), new(sibling), new(history)]);
+    }
+
+    private static void CollectTemplateViewGarbage()
+    {
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+    }
+
+    private sealed class ObservedTemplateListItems<T>(
+        IReadOnlyList<T> items) : IReadOnlyList<T>
+    {
+        public int ObservationCount { get; private set; }
+
+        public int Count => items.Count;
+
+        public T this[int index]
+        {
+            get
+            {
+                ++ObservationCount;
+                return items[index];
+            }
+        }
+
+        public IEnumerator<T> GetEnumerator()
+        {
+            for (var index = 0; index < Count; ++index)
+                yield return this[index];
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     [Fact]
@@ -991,8 +1322,8 @@ public class PineValueInProcessTests
         var childValue = PineValue.List([PineValue.Blob([1])]);
 
         var child =
-            PineValueInProcess.CreateDeferredTemplateValue(
-                templatePlan: new object(),
+            CreateDeferredTemplateFixture(
+                expected: childValue,
                 environments: [],
                 materialize: _ => childValue,
                 reportMaterialization: () => ++materializationCount);

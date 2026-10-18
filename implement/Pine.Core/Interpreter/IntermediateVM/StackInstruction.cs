@@ -597,6 +597,10 @@ public record StackInstruction(
     ImmutableArray<int> LocalIndices = default,
     int? PopCount = null)
 {
+    internal ExpressionTemplatePlan? TemplatePlan { get; init; }
+
+    internal bool TemplateProducer { get; init; }
+
     /// <summary>
     /// Gets the only local index, throwing if this instruction does not have exactly one.
     /// </summary>
@@ -628,6 +632,7 @@ public record StackInstruction(
             TakeCount != other.TakeCount ||
             JumpOffset != other.JumpOffset ||
             ShiftCount != other.ShiftCount ||
+            TemplateProducer != other.TemplateProducer ||
             OptimizedInvocation != other.OptimizedInvocation ||
             !EqualityComparer<ImmutableDictionary<PineValue, int>?>.Default.Equals(
                 SwitchJumpTable,
@@ -649,6 +654,7 @@ public record StackInstruction(
         var hashCode = new HashCode();
 
         hashCode.Add(Kind);
+        hashCode.Add(TemplateProducer);
         hashCode.Add(Literal?.Evaluate());
         hashCode.Add(IntegerLiteral);
         hashCode.Add(PopCount);
@@ -1126,6 +1132,11 @@ public record StackInstruction(
         new(
             StackInstructionKind.Eval_Const,
             Literal: PineValueInProcess.CreateFullyRepresented(expressionValue));
+
+    internal static StackInstruction CreateTemplate(
+        ExpressionTemplatePlan plan,
+        bool producer) =>
+        Eval_Const(plan.TemplateValue) with { TemplatePlan = plan, TemplateProducer = producer };
 
     /// <summary>
     /// Creates a <see cref="StackInstructionKind.Invoke_StackFrame_Const"/> instruction that invokes

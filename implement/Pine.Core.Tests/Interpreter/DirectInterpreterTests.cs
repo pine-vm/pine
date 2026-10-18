@@ -48,6 +48,7 @@ public class DirectInterpreterTests
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 0
             DirectInterpreterInvocationCount: 1
             DirectInterpreterExpressionCount: 10
             DirectInterpreterLiteralCount: 3

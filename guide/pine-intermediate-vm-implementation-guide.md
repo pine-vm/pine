@@ -104,29 +104,171 @@ And since every list creation adds significant runtime overhead, avoiding them i
 
 > Note: specialized interface currently only implemented for the input side, output side remains TODO.
 
-### Expression Templates and Deferred Values
+### Expression Templates and Deferred Evaluation Chains
 
 An expression template constructs an encoded Pine expression from an environment.
-A recognized chain of these templates eventually reaches a terminal expression.
-Frontend compilers can emit such chains to implement incremental function
-invocation, but the VM optimization operates on the encoded-expression structure.
 
-An intermediate `Eval` yields an encoded-expression value containing earlier
-environments as literals. These short-lived values often do not justify compilation,
-so the VM can evaluate templates directly.
+The optimization described in this section is motivated by the frequented occurrence of these forms, driven by frontend compilers often using it to represent curried functions and partial application.
 
-`ExpressionTemplatePlan` recognizes and validates the chain and describes how to
-build the terminal environment. `DeferredTemplateValue` retains that plan and the
-supplied environments without constructing the full intermediate Pine value.
-Materialization reconstructs that value only when a structural operation requires it;
-this is deferred value construction, not general-purpose deferred execution.
+Frontend compilers use such templates to represent curried functions that escape as values:
+incremental application of a function of unknown origin is represented by nesting each
+argument in another `Eval` expression. Intermediate results contain earlier environments
+as literals in the encoded expression for the next application.
 
-The counters are `ExpressionTemplatePlanParseCount`,
-`DeferredTemplateValueAllocationCount`, `TemplateDirectInvocationCount`, and
-`DeferredTemplateValueMaterializationCount`. The direct-invocation counter measures
-terminal expression invocations that bypass intermediate encoded-expression
-construction, not every direct invocation in the VM.
+The optimization replaces repeated construction, parsing, and evaluation of these
+intermediate encoded expressions with a shared structural plan and collected environments.
+It defers **value construction**, not execution of arbitrary computations. Upon reaching
+the terminal expression, the VM forwards its arguments directly where possible, rather
+than constructing and then deconstructing its canonical environment.
 
+#### Recognition and semantic contract
+
+Initially, intermediate template expressions support only `List`, `Litral`, and
+`Environment`. `Environment` may occur in any list item, including multiple times per
+level. Recognition uses the current compact 2026 expression encoding only; legacy 2024
+constructors use ordinary evaluation instead. The terminal expression may contain arbitrary Pine computations.
+
+Constructor-only syntax is necessary for this initial scope, but is not sufficient to
+prove a recognized chain. Recognition tracks each stage's environment symbolically and
+establishes a finite sequence of stages, invariant terminal code, and recipes for the
+values constructed from collected environments.
+
+For example, in schematic expression notation,
+`List([Litral("Litral"), Environment])` constructs an encoded literal whose payload
+depends on the supplied environment. A recognizer cannot cache one fixed terminal AST
+for all applications of this template, so this case is outside the initial fixed-terminal
+scope.
+Putting `Environment` in an encoding tag or another code-structural position can make
+the expression kind or validity dynamic. Recognition must prove that environment
+references preserve the chain's code structure and can be represented by recipes
+referencing the collected environments. It falls back at the first stage where this
+cannot be established.
+
+For a recognized chain requiring `n` further applications, let `E_1, ..., E_n` be the
+successive supplied environments, `B` the invariant terminal code, `R_k` the exact
+intermediate-value recipe after `k` applications, and `G` the terminal-environment recipe.
+Constants already present in the entry value are part of these recipes. The contract is:
+
+```text
+Before saturation (0 <= k < n):
+    ordinary application result = instantiate(R_k, E_1, ..., E_k)
+
+At saturation:
+    ordinary application result = evaluate(B, instantiate(G, E_1, ..., E_n))
+
+Optimized terminal invocation:
+    supply projections of G directly, without constructing G
+```
+
+Recipes describe value construction and references to collected environments, not suspended arbitrary
+expressions. An underapplication returns the corresponding deferred intermediate value.
+With overapplication, the VM executes `B` and then applies remaining environments to
+its result. "Terminal" is relative to this plan, not necessarily to the enclosing
+application chain.
+
+Failure to recognize a chain is not a program error. In particular, recognition must
+not report an error merely because a future stage would construct malformed code:
+constructing that value can succeed, and the parse error belongs to the later `Eval`
+that attempts to execute it. Recognition of unfamiliar values has a bounded-work policy
+and falls back to ordinary evaluation when its budget is exhausted.
+
+#### Shared plans and immutable intermediate values
+
+The shared structural plan contains terminal code, stage transitions, and recipes for
+intermediate values and the terminal environment, including constants already present
+in the entry value. A shared-plan dictionary is keyed by that concrete entry value;
+factoring different entry values into a common structural identity is not required.
+
+Each intermediate `PineValueInProcess` holds a plan reference and the environments
+supplied by successive `Eval`s. These collected environments are not part of the
+dictionary key or cached plan, so varying them does not create new dictionary entries.
+Continuing a recognized chain reuses the plan reference without materializing the
+intermediate value for another cache lookup. The applicable intermediate-value recipe
+follows from the chain description and the number of supplied environments.
+
+Every intermediate value is represented as an immutable `PineValueInProcess`, just as
+other in-process values. Allocating a small instance for each encountered `Eval` is
+acceptable; avoiding these allocations is not a primary goal. Applying a partial value
+produces a new value without mutating the original, so the same partial application can
+be independently reused with different arguments. Internal memoization must preserve
+these immutable value semantics.
+
+When compilation establishes an intermediate template expression's shape, its instructions can
+create this representation directly. They need not first construct a concrete encoded
+Pine value and then rediscover its structure. Runtime recognition and caching remain
+available for externally supplied or otherwise unknown values; this optimization does
+not require a new frontend encoding or a new observable Pine value kind.
+
+Recipes share common structure rather than expanding an independent tree for every
+nesting level. Intermediate recipes and their derived metadata can be prepared on
+demand. Extending a chain must not repeatedly copy the complete prefix of collected
+environments. Multiple references to one environment share the value and reusable
+derivations rather than duplicating the value. The storage representation is not
+prescribed, but chain bookkeeping should be linear in the number of applications,
+excluding recognition and work required by consumers.
+
+#### Direct terminal argument and guard projection
+
+For the parameter layout inferred for the terminal expression's unconstrained
+compilation, derive an argument recipe for each parameter path `p`:
+
+```text
+ArgumentRecipe[p] = project(G, p)
+```
+
+Simplify these projections before invocation. Prefer a constant, a collected environment,
+or a path within that environment over building enclosing lists. Construct a list only when
+the requested argument actually includes that list. Projection must preserve Pine's
+path semantics, including missing fields and list/blob distinctions.
+
+For example, if `G = [constantFunctions, E_1, [E_2, E_1]]`, a parameter at `[2, 1]`
+receives `E_1` directly: neither the inner pair nor the enclosing environment is built.
+This also allows unrelated environment components to remain unmaterialized.
+
+Here, "unconstrained interface" means the inferred `StaticFunctionInterface` of the
+generic compilation, not `StaticFunctionInterface.Generic`, which forwards the whole
+environment as one parameter. If terminal code genuinely consumes the whole
+environment, its recipe remains available as an in-process value.
+
+Specialization selection also uses projections of `G`. Guard paths may descend below
+a forwarded parameter or inspect components not independently exposed as parameters.
+They must not require canonical environment reconstruction just to select instructions.
+Keep structural recipes separate from compilation-specific entry-point adapters, so
+recompilation and future parameter layouts do not constrain the value representation.
+Native or other consumers that require a concrete environment can use the same `G`
+recipe as a fallback.
+
+After projection, an invocation should not retain the entire chain or unnecessary
+environment roots merely through its adapter or backing storage. Retain only data
+needed by the selected invocation and its resulting values.
+
+#### Demand-driven observation and materialization
+
+Using an intermediate value outside another `Eval` is not inherently a reason to fully
+materialize it. Returning it, storing it in a list, or forwarding it to another function
+can preserve the same deferred representation. Representation-aware consumers resolve
+only what they demand: known kind or length from recipe metadata, an individual field
+from its projection, or relevant components for an equality comparison.
+
+Full materialization is a fallback when a consumer requires a concrete Pine value and
+has no representation-aware implementation. Reaching `B` is an execution boundary,
+not a requirement to materialize intermediate encoded expressions or `G`. Materializing
+an intermediate value need not discard its plan and collected environments if later invocations can
+still reuse them; their retention must be weighed against memory lifetime.
+
+Materialization reconstructs the exact Pine value, not merely an equivalent executable
+expression. This matters when different accepted expression encodings decode to the
+same AST. Equality and hashing must agree with concrete value semantics; shortcuts
+based on plans and collected environments are valid only when they prove that agreement.
+
+#### Evaluation order, limits, and accounting
+
+Bypassed logical `Eval` invocations are not counted in `InvocationCount`. We introduce a new work counter specifically for the `Eval` operations saved by this consolidation mechanism, and another new work counter for non-terminal materialization of intermediate values.
+
+`TemplateConsolidatedEvalCount` includes bypassed nonterminal applications and any elided
+terminal `Eval` wrapper. An invariant constructor terminal has no such wrapper.
+Materialization performed during an evaluation is charged to that evaluation, even when
+the intermediate value originated in an earlier evaluation.
 
 ### Inlining Using the Control Flow Graph
 

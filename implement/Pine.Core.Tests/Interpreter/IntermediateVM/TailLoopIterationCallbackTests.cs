@@ -197,17 +197,17 @@ public class TailLoopIterationCallbackTests
             "the FrameInput of a TailCallReplace iteration is the live input of the replacing frame");
     }
 
-    [Fact]
-    public void Callback_fires_for_each_step_in_a_tail_call_chain()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Callback_fires_for_each_step_in_a_tail_call_chain(bool consolidateTemplates)
     {
         // Two-step tail-call chain:
         //   root      = ParseAndEval(targetMid, env=Environment)
         //   targetMid = ParseAndEval(targetInner, env=Environment)
         //   targetInner = Environment
         //
-        // Evaluation: root frame tail-calls targetMid (replacement #1),
-        // targetMid tail-calls targetInner (replacement #2), targetInner
-        // returns the environment value.
+        // Template consolidation bypasses targetMid; otherwise both replacements execute.
         var nestedEnvironment = IntegerEncoding.EncodeSignedInteger(42);
 
         var targetInner = Expression.EnvironmentInstance;
@@ -247,6 +247,7 @@ public class TailLoopIterationCallbackTests
                 reportExitPrecompiledLeaf: null,
                 optimizationParametersSerial: null,
                 cacheFileStore: null,
+                disableDirectInvocation: !consolidateTemplates,
                 reportTailLoopIteration:
                 (in tailLoopIteration) =>
                 iterations.Add(tailLoopIteration));
@@ -255,8 +256,7 @@ public class TailLoopIterationCallbackTests
 
         result.IsOkOrNull().Should().Be(nestedEnvironment);
 
-        // Both tail-call replacements should have been observed.
-        iterations.Should().HaveCount(2);
+        iterations.Should().HaveCount(consolidateTemplates ? 1 : 2);
 
         iterations.Should().AllSatisfy(
             item =>
@@ -269,10 +269,13 @@ public class TailLoopIterationCallbackTests
             });
 
         iterations[0].IterationIndex.Should().Be(0);
-        iterations[1].IterationIndex.Should().Be(1);
+        iterations[0].FrameExpression.Should().Be(consolidateTemplates ? targetInner : targetMid);
 
-        iterations[0].FrameExpression.Should().Be(targetMid);
-        iterations[1].FrameExpression.Should().Be(targetInner);
+        if (!consolidateTemplates)
+        {
+            iterations[1].IterationIndex.Should().Be(1);
+            iterations[1].FrameExpression.Should().Be(targetInner);
+        }
     }
 
     [Fact]

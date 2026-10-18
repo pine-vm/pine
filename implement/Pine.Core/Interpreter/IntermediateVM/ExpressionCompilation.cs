@@ -81,6 +81,70 @@ public record ExpressionCompilation(
         return Generic;
     }
 
+    /// <summary>Selects guards directly from a structural terminal-environment recipe.</summary>
+    internal StackFrameInstructions SelectInstructionsForTemplate(
+        TemplateValueRecipe environment,
+        IReadOnlyList<PineValueInProcess> collectedEnvironments)
+    {
+        foreach (var specialization in Specialized)
+        {
+            var matches = true;
+
+            foreach (var constraint in specialization.constraint)
+            {
+                var value = ProjectTemplateGuard(environment, constraint.Path.Span, collectedEnvironments);
+
+                if (value is null || !PineValueInProcess.AreEqual(value, constraint.Value))
+                {
+                    matches = false;
+                    break;
+                }
+            }
+
+            if (matches)
+                return specialization.instructions;
+        }
+
+        return Generic;
+    }
+
+    private static PineValueInProcess? ProjectTemplateGuard(
+        TemplateValueRecipe recipe,
+        ReadOnlySpan<int> path,
+        IReadOnlyList<PineValueInProcess> environments)
+    {
+        for (var offset = 0; offset < path.Length; ++offset)
+        {
+            switch (recipe)
+            {
+                case TemplateValueRecipe.List list:
+                    var index = Math.Max(0, path[offset]);
+
+                    if (index >= list.Items.Count)
+                        return null;
+
+                    recipe = list.Items[index];
+                    break;
+
+                case TemplateValueRecipe.Constant constant:
+                    var value = PineValueExtension.ValueFromPathOrNull(constant.Value, path[offset..]);
+                    return value is null ? null : PineValueInProcess.Create(value);
+
+                case TemplateValueRecipe.Slot slot:
+                    return PineValueInProcess.ValueInProcessFromPathOrNull(environments[slot.Index], path[offset..]);
+
+                case TemplateValueRecipe.ProjectedSlot slot:
+                    return PineValueInProcess.ValueInProcessFromPathOrNull(slot.Instantiate(environments), path[offset..]);
+
+                default:
+                    throw new NotImplementedException(
+                        "ProjectTemplateGuard does not handle recipe variant: " + recipe.GetType().Name);
+            }
+        }
+
+        return PineValueInProcess.CreateFromTemplateRecipe(recipe, environments);
+    }
+
     /// <summary>
     /// Selects the most specific instruction variant whose environment constraints match
     /// arguments already projected into a stack-frame input.

@@ -243,6 +243,49 @@ public static class TestCommand
                 "Write the full dependency resolution report as JSON, including rejected branches and conflicts.",
             };
 
+        var workProfileOption =
+            new Option<string?>("--work-profile")
+            {
+                Description =
+                "Write flushed numeric NDJSON work/cost snapshots, without value graphs. Executes serially."
+            };
+
+        var workProfileMemoryOption =
+            new Option<long?>("--work-profile-memory-limit")
+            {
+                Description =
+                "Optional process working-set limit in bytes for --work-profile; checked cooperatively at coarse work boundaries."
+            };
+
+        var workProfileDirectBudgetOption =
+            new Option<long?>("--work-profile-direct-budget")
+            {
+                Description =
+                "Maximum direct-evaluation node entries, including invocation roots, across this work profile. Positive; flushes counters before stopping."
+            };
+
+        var workProfileReferenceCapacityOption =
+            new Option<int>("--work-profile-reference-capacity")
+            {
+                Description =
+                "Bounded reference identities per pure constructor invocation; 0 disables HashSets and counterfactual estimates while retaining site counters.",
+                DefaultValueFactory = _ => 4096
+            };
+
+        var workProfileConstructorBudgetOption =
+            new Option<long?>("--work-profile-constructor-budget")
+            {
+                Description =
+                "Maximum constructor invocations across this work profile. Positive; stops before starting the next invocation, for matched-work comparisons."
+            };
+
+        var workProfileNoConstructorSharingOption =
+            new Option<bool>("--work-profile-no-constructor-sharing")
+            {
+                Description =
+                "Disable constructor sharing only within this work profile, for diagnostic baseline A/B comparisons."
+            };
+
         command.Add(sourceArgument);
         command.Add(colorOption);
         command.Add(filterOption);
@@ -254,13 +297,23 @@ public static class TestCommand
         command.Add(offlineOption);
         command.Add(dependencyReportOption);
 
+        if (!instrumented)
+        {
+            command.Add(workProfileOption);
+            command.Add(workProfileMemoryOption);
+            command.Add(workProfileDirectBudgetOption);
+            command.Add(workProfileReferenceCapacityOption);
+            command.Add(workProfileConstructorBudgetOption);
+            command.Add(workProfileNoConstructorSharingOption);
+        }
+
         int Run(ParseResult parseResult, ElmTestInstrumentation? instrumentation) =>
             Execute(
                 source: parseResult.GetValue(sourceArgument) ?? Environment.CurrentDirectory,
                 colorMode: parseResult.GetValue(colorOption),
                 filter: parseResult.GetValue(filterOption),
                 listTests: parseResult.GetValue(listTestsOption),
-                workers: parseResult.GetValue(workersOption),
+                workers: instrumentation?.WorkProfile is not null ? 1 : parseResult.GetValue(workersOption),
                 reportDurations: parseResult.GetValue(reportDurationsOption),
                 offline: parseResult.GetValue(offlineOption),
                 dependencyReportPath: parseResult.GetValue(dependencyReportOption),
@@ -296,7 +349,72 @@ public static class TestCommand
                 });
         }
         else
-            command.SetAction(parseResult => Run(parseResult, null));
+        {
+            command.SetAction(
+                parseResult =>
+                {
+                    if (parseResult.GetValue(workProfileOption) is not { } path)
+                    {
+                        if (parseResult.GetValue(workProfileMemoryOption) is not null ||
+                            parseResult.GetValue(workProfileDirectBudgetOption) is not null ||
+                            parseResult.GetValue(workProfileConstructorBudgetOption) is not null ||
+                            parseResult.GetResult(workProfileNoConstructorSharingOption)?.IdentifierTokenCount > 0 ||
+                            parseResult.GetResult(workProfileReferenceCapacityOption)?.IdentifierTokenCount > 0)
+                        {
+                            parseResult.InvocationConfiguration.Error.WriteLine(
+                                "Work-profile limits require --work-profile.");
+
+                            return 1;
+                        }
+
+                        return Run(parseResult, null);
+                    }
+
+                    if (parseResult.GetValue(watchOption) ||
+                        parseResult.GetValue(workersOption) is > 1 ||
+                        parseResult.GetValue(workProfileMemoryOption) is <= 0 ||
+                        parseResult.GetValue(workProfileDirectBudgetOption) is <= 0 ||
+                        parseResult.GetValue(workProfileConstructorBudgetOption) is <= 0 ||
+                        parseResult.GetValue(workProfileReferenceCapacityOption) < 0)
+                    {
+                        parseResult.InvocationConfiguration.Error.WriteLine(
+                            "--work-profile requires serial, non-watch execution and positive optional profiling limits.");
+
+                        return 1;
+                    }
+
+                    using var work =
+                        PineVMWorkProfile.Open(
+                            path,
+                            parseResult.GetValue(workProfileMemoryOption),
+                            parseResult.GetValue(workProfileDirectBudgetOption),
+                            parseResult.GetValue(workProfileReferenceCapacityOption),
+                            constructorInvocationBudget: parseResult.GetValue(workProfileConstructorBudgetOption),
+                            preserveConstructorSharing: !parseResult.GetValue(workProfileNoConstructorSharingOption));
+
+                    var limits = budgets.Read(parseResult);
+                    TestBudgetOptions.PrintEffective(parseResult.InvocationConfiguration.Output, limits);
+
+                    using var tracker =
+                        new ElmTestInstrumentation(
+                            limits.ToInstrumentationOptions(),
+                            recordDiagnostics: false,
+                            workProfile: work);
+
+                    using var cancellation = TestBudgetOptions.RegisterCancellation(tracker);
+
+                    try
+                    {
+                        var result = Run(parseResult, tracker);
+                        work.WriteSnapshot(result is 0 ? "completed" : result is 2 ? "stopped" : "failed");
+                        return result;
+                    }
+                    finally
+                    {
+                        work.WriteSnapshot("command-exit");
+                    }
+                });
+        }
 
     }
 

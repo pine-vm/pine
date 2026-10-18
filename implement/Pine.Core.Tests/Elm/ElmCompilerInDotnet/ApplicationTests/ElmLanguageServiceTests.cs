@@ -21,6 +21,106 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ApplicationTests;
 /// </summary>
 public class ElmLanguageServiceTests
 {
+    [Fact]
+    public void Work_profile_language_service_repeated_request_exports_numeric_report()
+    {
+        // Compile and construct inputs once, outside all measured phases.
+        var state = EvaluateZeroArgTestDeclaration("initState");
+
+        var arguments =
+            new PineValue[]
+            {
+                ElmValueEncoding.ElmValueAsPineValue(ElmString(ComplexDocumentSymbolsScenario_FilePath)),
+                ElmValueEncoding.ElmValueAsPineValue(ElmString(ComplexDocumentSymbolsScenario_ModuleText)),
+                state
+            };
+
+        var addFile = Prepare("addWorkspaceFile", arguments);
+
+        var preparedState =
+            ((PineValue.ListValue)ApplyWithProfiling("addWorkspaceFile", arguments).result).Items.Span[1];
+
+        var symbols =
+            Prepare(
+                "textDocumentSymbol",
+                [arguments[0], preparedState]);
+
+        var scenarios =
+            new[]
+            {
+                (Name: "language-service-add-file", Invocation: addFile),
+                (Name: "language-service-document-symbols", Invocation: symbols)
+            };
+
+        var path = Environment.GetEnvironmentVariable("PINE_WORK_PROFILE_LANGUAGE_SERVICE");
+        using var profile = path is null ? new PineVMWorkProfile() : PineVMWorkProfile.Open(path);
+        using var cancellation = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(30));
+
+        foreach (var scenario in scenarios)
+        {
+            PineValue? expected = null;
+
+            foreach (var enabled in new[] { false, true })
+            {
+                var vm =
+                    ElmCompilerTestHelper.PineVMForProfiling(
+                        _ => { },
+                        enableTailRecursionOptimization: true,
+                        workProfile: enabled ? profile : null);
+
+                profile.SetScenario(enabled ? "instrumented-warmup" : "baseline-warmup", scenario.Name);
+                var factoriesBefore = profile[PineVMWorkProfile.Metric.TemplateCacheFactoryRuns];
+                Run();
+                var warmFactories = profile[PineVMWorkProfile.Metric.TemplateCacheFactoryRuns];
+
+                if (enabled)
+                    warmFactories.Should().BeGreaterThan(factoriesBefore);
+
+                profile.SetScenario(enabled ? "instrumented-repeated" : "baseline-repeated", scenario.Name);
+
+                for (var iteration = 0; iteration < 3; ++iteration)
+                    Run();
+
+                profile[PineVMWorkProfile.Metric.TemplateCacheFactoryRuns].Should().Be(warmFactories);
+                profile.WriteSnapshot("phase-completed");
+
+                void Run()
+                {
+                    var report =
+                        vm.EvaluateExpressionOnCustomStack(
+                            scenario.Invocation.expression,
+                            scenario.Invocation.environment,
+                            ElmCompilerTestHelper.DefaultTestEvaluationConfig with { MaterializeResult = true },
+                            cancellation.Token)
+                        .Extract(error => throw new Exception(error.ToString()));
+
+                    var actual = report.ReturnValue.Evaluate();
+                    expected ??= actual;
+                    actual.Should().Be(expected);
+
+                    if (scenario.Name is "language-service-document-symbols")
+                        RenderResponseFromResult(actual).Should().Be(ComplexDocumentSymbolsScenario_ExpectedResponse);
+                }
+            }
+        }
+
+        profile[PineVMWorkProfile.Metric.EvaluateCalls].Should().BeGreaterThan(0);
+        PineVMWorkProfile.Current.Should().BeNull();
+
+        static (Expression expression, PineValue environment) Prepare(string functionName, PineValue[] arguments)
+        {
+            var function =
+                FunctionRecord.ParseFunctionRecordTagged(
+                    GetTestFunction(s_env.Value, functionName),
+                    new PineVMParseCache())
+                .Extract(error => throw new Exception(error));
+
+            return
+                ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(function, arguments)
+                .Extract(error => throw new Exception(error));
+        }
+    }
+
     /// <summary>
     /// Wrapper module that imports the real language service and exposes thin
     /// functions for exercising it from C# tests.
@@ -880,23 +980,24 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
             """
-            InvocationCount: 781
-            BuildListCount: 1_577
-            BuildListItemCount: 6_577
+            InvocationCount: 777
+            BuildListCount: 1_535
+            BuildListItemCount: 6_487
             LoopIterationCount: 216
-            InstructionCount: 23_907
+            InstructionCount: 23_871
             ExpressionTemplatePlanParseCount: 68
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 8
+            TemplateDirectInvocationCount: 9
             DeferredTemplateValueMaterializationCount: 0
-            DirectInterpreterInvocationCount: 5
-            DirectInterpreterExpressionCount: 90
-            DirectInterpreterLiteralCount: 50
-            DirectInterpreterListCount: 30
-            DirectInterpreterEvalCount: 5
+            TemplateConsolidatedEvalCount: 9
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
             DirectInterpreterBuiltinCount: 0
             DirectInterpreterConditionalCount: 0
-            DirectInterpreterEnvironmentCount: 5
+            DirectInterpreterEnvironmentCount: 0
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).ShouldBeWithDiff(
@@ -1430,33 +1531,34 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
             """
-            InvocationCount: 2_153
-            BuildListCount: 4_213
-            BuildListItemCount: 17_953
+            InvocationCount: 2_141
+            BuildListCount: 4_113
+            BuildListItemCount: 17_747
             LoopIterationCount: 737
-            InstructionCount: 62_463
+            InstructionCount: 62_353
             ExpressionTemplatePlanParseCount: 111
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 20
+            TemplateDirectInvocationCount: 24
             DeferredTemplateValueMaterializationCount: 0
-            DirectInterpreterInvocationCount: 10
-            DirectInterpreterExpressionCount: 180
-            DirectInterpreterLiteralCount: 100
-            DirectInterpreterListCount: 60
-            DirectInterpreterEvalCount: 10
+            TemplateConsolidatedEvalCount: 24
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
             DirectInterpreterBuiltinCount: 0
             DirectInterpreterConditionalCount: 0
-            DirectInterpreterEnvironmentCount: 10
+            DirectInterpreterEnvironmentCount: 0
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).ShouldBeWithDiff(
             """
-            CompiledExpressionCount: 214
+            CompiledExpressionCount: 215
             InvocationCountTotal: 2_096
             InvocationCountAverage: 10
             InvocationCountPercentile10: 1
             InvocationCountMedian: 4
-            InvocationCountPercentile90: 20
+            InvocationCountPercentile90: 19
             """);
     }
 
@@ -1574,33 +1676,34 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
             """
-            InvocationCount: 2_158
-            BuildListCount: 4_235
-            BuildListItemCount: 18_043
+            InvocationCount: 2_145
+            BuildListCount: 4_126
+            BuildListItemCount: 17_818
             LoopIterationCount: 737
-            InstructionCount: 62_549
+            InstructionCount: 62_430
             ExpressionTemplatePlanParseCount: 112
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 21
+            TemplateDirectInvocationCount: 25
             DeferredTemplateValueMaterializationCount: 0
-            DirectInterpreterInvocationCount: 11
-            DirectInterpreterExpressionCount: 198
-            DirectInterpreterLiteralCount: 110
-            DirectInterpreterListCount: 66
-            DirectInterpreterEvalCount: 11
+            TemplateConsolidatedEvalCount: 25
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
             DirectInterpreterBuiltinCount: 0
             DirectInterpreterConditionalCount: 0
-            DirectInterpreterEnvironmentCount: 11
+            DirectInterpreterEnvironmentCount: 0
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).ShouldBeWithDiff(
             """
-            CompiledExpressionCount: 215
+            CompiledExpressionCount: 216
             InvocationCountTotal: 2_100
             InvocationCountAverage: 10
             InvocationCountPercentile10: 1
             InvocationCountMedian: 4
-            InvocationCountPercentile90: 21
+            InvocationCountPercentile90: 19
             """);
     }
 
@@ -1782,22 +1885,23 @@ public class ElmLanguageServiceTests
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
             """
             InvocationCount: 4_092
-            BuildListCount: 7_409
-            BuildListItemCount: 32_732
+            BuildListCount: 7_379
+            BuildListItemCount: 32_662
             LoopIterationCount: 2_740
             InstructionCount: 116_867
             ExpressionTemplatePlanParseCount: 149
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 6
+            TemplateDirectInvocationCount: 35
             DeferredTemplateValueMaterializationCount: 0
-            DirectInterpreterInvocationCount: 5
-            DirectInterpreterExpressionCount: 90
-            DirectInterpreterLiteralCount: 50
-            DirectInterpreterListCount: 30
-            DirectInterpreterEvalCount: 5
+            TemplateConsolidatedEvalCount: 35
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
             DirectInterpreterBuiltinCount: 0
             DirectInterpreterConditionalCount: 0
-            DirectInterpreterEnvironmentCount: 5
+            DirectInterpreterEnvironmentCount: 0
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).ShouldBeWithDiff(

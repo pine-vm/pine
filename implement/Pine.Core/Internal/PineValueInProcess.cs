@@ -1,10 +1,12 @@
 using Pine.Core.CommonEncodings;
 using Pine.Core.DotNet.Builtins;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.PineVM;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using System.Threading;
 
 namespace Pine.Core.Internal;
 
@@ -25,6 +27,21 @@ public class PineValueInProcess
     private const int ShortBlobLengthThreshold = 8;
 
     private const int ConcatDirectThreshold = 16;
+
+    private static readonly AsyncLocal<Action?> s_templateMaterializationReporter = new();
+
+    internal static IDisposable UseTemplateMaterializationReporter(Action report) =>
+        new TemplateMaterializationReportingScope(report);
+
+    private sealed class TemplateMaterializationReportingScope : IDisposable
+    {
+        private readonly Action? _previous = s_templateMaterializationReporter.Value;
+
+        public TemplateMaterializationReportingScope(Action report) =>
+            s_templateMaterializationReporter.Value = report;
+
+        public void Dispose() => s_templateMaterializationReporter.Value = _previous;
+    }
 
     private PineValue? _evaluated;
 
@@ -115,10 +132,142 @@ public class PineValueInProcess
     /// Defers value construction, not execution of an arbitrary expression.
     /// </summary>
     internal sealed record DeferredTemplateValue(
-        object TemplatePlan,
-        IReadOnlyList<PineValueInProcess> Environments,
+        ExpressionTemplatePlan TemplatePlan,
+        CollectedTemplateEnvironments Environments,
         Func<IReadOnlyList<PineValueInProcess>, PineValue> Materialize,
         Action? ReportMaterialization);
+
+    // Bindings share descendant nodes, never a parent or the root-binding lookup.
+    private sealed class BoundTemplateRecipe(
+        TemplateValueRecipe recipe,
+        PineValueInProcess? environment,
+        IReadOnlyList<BoundTemplateRecipe>? items)
+    {
+        private PineValueInProcess? _environment = environment;
+
+        private PineValueInProcess? _value;
+
+        public PineValueInProcess Resolve()
+        {
+            if (_value is { } cached)
+            {
+                PineVMWorkProfile.Current?.Count(PineVMWorkProfile.Metric.RecipeResolveCacheHits);
+                return cached;
+            }
+
+            _value =
+                recipe switch
+                {
+                    TemplateValueRecipe.Constant constant => Create(constant.Value),
+                    TemplateValueRecipe.Slot => _environment!,
+
+                    TemplateValueRecipe.ProjectedSlot slot =>
+                    ValueFromPathOrNull(_environment!, slot.Path) ?? EmptyList,
+
+                    TemplateValueRecipe.List => CreateList(new TemplateRecipeItems(items!)),
+
+                    _ =>
+                    throw new NotImplementedException(
+                        "Resolve does not handle recipe variant: " + recipe.GetType().Name)
+                };
+
+            _environment = null;
+            return _value;
+        }
+
+        public static BoundTemplateRecipe Bind(
+            TemplateValueRecipe recipe,
+            IReadOnlyList<PineValueInProcess> environments,
+            Dictionary<TemplateValueRecipe, BoundTemplateRecipe> bound)
+        {
+            if (bound.TryGetValue(recipe, out var cached))
+            {
+                PineVMWorkProfile.Current?.Count(PineVMWorkProfile.Metric.RecipeBindCacheHits);
+                return cached;
+            }
+
+            PineValueInProcess? environment = null;
+            BoundTemplateRecipe[]? items = null;
+
+            switch (recipe)
+            {
+                case TemplateValueRecipe.Constant:
+                    break;
+
+                case TemplateValueRecipe.Slot slot:
+                    environment = environments[slot.Index];
+                    break;
+
+                case TemplateValueRecipe.ProjectedSlot slot:
+                    environment = environments[slot.Index];
+                    break;
+
+                case TemplateValueRecipe.List list:
+                    items = new BoundTemplateRecipe[list.Items.Count];
+                    PineVMWorkProfile.Current?.Count(PineVMWorkProfile.Metric.RecipeChildArrays);
+
+                    for (var index = 0; index < items.Length; ++index)
+                        items[index] = Bind(list.Items[index], environments, bound);
+
+                    break;
+
+                default:
+                    throw new NotImplementedException(
+                        "Bind does not handle recipe variant: " + recipe.GetType().Name);
+            }
+
+            var result = new BoundTemplateRecipe(recipe, environment, items);
+            PineVMWorkProfile.Current?.Count(PineVMWorkProfile.Metric.RecipeBindings);
+            bound[recipe] = result;
+            return result;
+        }
+    }
+
+    private sealed class TemplateRecipeItems(
+        IReadOnlyList<BoundTemplateRecipe> items) : IReadOnlyList<PineValueInProcess>
+    {
+        public int Count => items.Count;
+
+        public PineValueInProcess this[int index] => items[index].Resolve();
+
+        public IEnumerator<PineValueInProcess> GetEnumerator()
+        {
+            for (var index = 0; index < Count; ++index)
+                yield return this[index];
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    // A partial already owns its continuation history. Bind its observable view only on demand.
+    private sealed class DeferredTemplateRecipeItems(
+        TemplateValueRecipe.List recipe,
+        IReadOnlyList<PineValueInProcess> environments) : IReadOnlyList<PineValueInProcess>
+    {
+        private IReadOnlyList<PineValueInProcess>? _items;
+
+        public int Count => recipe.Items.Count;
+
+        public PineValueInProcess this[int index] =>
+            (_items ??= CreateFromTemplateRecipe(recipe, environments).ListItemsOrNull()!)[index];
+
+        public IEnumerator<PineValueInProcess> GetEnumerator()
+        {
+            for (var index = 0; index < Count; ++index)
+                yield return this[index];
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    internal static PineValueInProcess CreateFromTemplateRecipe(
+        TemplateValueRecipe recipe,
+        IReadOnlyList<PineValueInProcess> environments) =>
+        recipe is TemplateValueRecipe.List
+        ?
+        BoundTemplateRecipe.Bind(recipe, environments, new(ReferenceEqualityComparer.Instance)).Resolve()
+        :
+        recipe.Instantiate(environments);
 
     private readonly static IReadOnlyList<PineValueInProcess> s_blobSingle =
         [
@@ -188,9 +337,13 @@ public class PineValueInProcess
     /// <returns>A new <see cref="PineValueInProcess"/> wrapping <paramref name="evaluated"/>.</returns>
     public static PineValueInProcess Create(PineValue evaluated)
     {
+        var profile = PineVMWorkProfile.Current;
+        profile?.Count(PineVMWorkProfile.Metric.CreateCalls);
+
         {
             if (evaluated == PineValue.EmptyList && EmptyList is { } reusedInst)
             {
+                profile?.Count(PineVMWorkProfile.Metric.CreateReuses);
                 return reusedInst;
             }
         }
@@ -198,6 +351,7 @@ public class PineValueInProcess
         {
             if (evaluated == PineValue.EmptyBlob && EmptyBlob is { } reusedInst)
             {
+                profile?.Count(PineVMWorkProfile.Metric.CreateReuses);
                 return reusedInst;
             }
         }
@@ -205,6 +359,7 @@ public class PineValueInProcess
         {
             if (evaluated == PineKernelValues.TrueValue && KernelTrueValue is { } reusedInst)
             {
+                profile?.Count(PineVMWorkProfile.Metric.CreateReuses);
                 return reusedInst;
             }
         }
@@ -212,6 +367,7 @@ public class PineValueInProcess
         {
             if (evaluated == PineKernelValues.FalseValue && KernelFalseValue is { } reusedInst)
             {
+                profile?.Count(PineVMWorkProfile.Metric.CreateReuses);
                 return reusedInst;
             }
         }
@@ -237,6 +393,7 @@ public class PineValueInProcess
             }
 
             var items = new PineValueInProcess[listValue.Items.Length];
+            PineVMWorkProfile.Current?.ChildArray(items.Length);
             var sourceItems = listValue.Items.Span;
 
             for (var i = 0; i < sourceItems.Length; ++i)
@@ -301,8 +458,12 @@ public class PineValueInProcess
     /// <returns>A new <see cref="PineValueInProcess"/> representing the list.</returns>
     public static PineValueInProcess CreateList(IReadOnlyList<PineValueInProcess> list)
     {
+        var profile = PineVMWorkProfile.Current;
+        profile?.Count(PineVMWorkProfile.Metric.CreateListCalls);
+
         if (list.Count is 0)
         {
+            profile?.Count(PineVMWorkProfile.Metric.CreateListReuses);
             return EmptyList;
         }
 
@@ -318,25 +479,39 @@ public class PineValueInProcess
     /// Creates a transparent deferred template value retaining a plan and the supplied environments.
     /// </summary>
     internal static PineValueInProcess CreateDeferredTemplateValue(
-        object templatePlan,
-        IReadOnlyList<PineValueInProcess> environments,
+        ExpressionTemplatePlan templatePlan,
+        CollectedTemplateEnvironments environments,
         Func<IReadOnlyList<PineValueInProcess>, PineValue> materialize,
         Action? reportMaterialization = null)
     {
         ArgumentNullException.ThrowIfNull(templatePlan);
         ArgumentNullException.ThrowIfNull(environments);
         ArgumentNullException.ThrowIfNull(materialize);
+        PineVMWorkProfile.Current?.Count(PineVMWorkProfile.Metric.DeferredValuesCreated);
 
-        return
+        var recipe = templatePlan.IntermediateRecipes[environments.Count - 1];
+
+        var value =
+            recipe is TemplateValueRecipe.List list
+            ?
+            CreateList(new DeferredTemplateRecipeItems(list, environments))
+            :
+            CreateFromTemplateRecipe(recipe, environments);
+
+        // The representation is private to this intermediate: never attach a plan to a
+        // shared constant or collected slot returned by recipe instantiation.
+        var result =
             new PineValueInProcess
             {
+                _list = value._list,
+                _evaluated = value._evaluated,
+                _length = value._length,
                 _deferredTemplateValue =
-                new DeferredTemplateValue(
-                    templatePlan,
-                    environments,
-                    materialize,
-                    reportMaterialization)
+                new DeferredTemplateValue(templatePlan, environments, materialize, reportMaterialization)
             };
+
+        return
+            result;
     }
 
     /// <summary>
@@ -491,6 +666,7 @@ public class PineValueInProcess
     /// </summary>
     protected PineValueInProcess()
     {
+        PineVMWorkProfile.Current?.Count(PineVMWorkProfile.Metric.WrapperAllocations);
     }
 
     /// <summary>
@@ -544,10 +720,17 @@ public class PineValueInProcess
     /// <returns>The fully evaluated <see cref="PineValue"/>.</returns>
     public PineValue Evaluate()
     {
+        var profile = PineVMWorkProfile.Current;
+        profile?.Count(PineVMWorkProfile.Metric.EvaluateCalls);
+
         if (_evaluated is not null)
         {
+            profile?.Count(PineVMWorkProfile.Metric.EvaluateCached);
             return _evaluated;
         }
+
+        profile?.Count(PineVMWorkProfile.Metric.EvaluateUncached);
+        profile?.Checkpoint();
 
         if (_sliceBuilder is not null)
         {
@@ -596,9 +779,9 @@ public class PineValueInProcess
 
         if (_deferredTemplateValue is { } deferredTemplateValue)
         {
+            profile?.DeferredMaterialized(deferredTemplateValue.Environments.Count);
             _evaluated = deferredTemplateValue.Materialize(deferredTemplateValue.Environments);
-            _deferredTemplateValue = null;
-            deferredTemplateValue.ReportMaterialization?.Invoke();
+            (s_templateMaterializationReporter.Value ?? deferredTemplateValue.ReportMaterialization)?.Invoke();
 
             return _evaluated;
         }
@@ -608,12 +791,19 @@ public class PineValueInProcess
             var evaluatedItems =
                 new PineValue[_list.Count];
 
+            profile?.Count(PineVMWorkProfile.Metric.ConcreteChildArrays);
+            profile?.Count(PineVMWorkProfile.Metric.ConcreteChildItems, evaluatedItems.Length);
+
             for (var i = 0; i < _list.Count; i++)
             {
+                if (profile is not null && (i & 4095) is 0)
+                    profile.Checkpoint(force: true);
+
                 evaluatedItems[i] = _list[i].Evaluate();
             }
 
             _evaluated = PineValue.List(evaluatedItems);
+            profile?.MaterializedList();
 
             return _evaluated;
         }
@@ -1006,6 +1196,7 @@ public class PineValueInProcess
             var structuralItems = input.UnevaluatedStructuralItemsOrNull();
 
             var reversed = new PineValueInProcess[length];
+            PineVMWorkProfile.Current?.ChildArray(reversed.Length);
 
             if (structuralItems is not null)
             {
@@ -1205,6 +1396,7 @@ public class PineValueInProcess
         if (frontItems is null)
         {
             var copiedFrontItems = new PineValueInProcess[frontLength];
+            PineVMWorkProfile.Current?.ChildArray(copiedFrontItems.Length);
 
             for (var i = 0; i < frontLength; ++i)
             {
@@ -1287,6 +1479,7 @@ public class PineValueInProcess
                 rightLength < ConcatDirectThreshold - leftLength)
             {
                 var items = new PineValueInProcess[leftLength + rightLength];
+                PineVMWorkProfile.Current?.ChildArray(items.Length);
 
                 for (var i = 0; i < leftLength; ++i)
                 {

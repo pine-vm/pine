@@ -7,6 +7,7 @@ using Pine.Core.PineVM;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 
 using BuiltinFunctionSpecialized = Pine.Core.Internal.BuiltinFunctionSpecialized;
 
@@ -81,6 +82,33 @@ public class PineVM : ICancellablePineVM
 
     private readonly PineVMExpressionTemplatePlanCache _expressionTemplatePlanCache;
 
+    private readonly PineVMWorkProfile? _workProfile;
+
+    private sealed class DeferredTemplateMaterializationAccounting
+    {
+        public DirectInterpreterCounters Counters { get; } = new();
+
+        public long MaterializationCount { get; private set; }
+
+        private readonly Action _reportMaterialization;
+
+        public DeferredTemplateMaterializationAccounting()
+        {
+            _reportMaterialization = ReportMaterialization;
+        }
+
+        public void ReportMaterialization() => ++MaterializationCount;
+
+        public PineValueInProcess CreateValue(
+            ExpressionTemplatePlan plan,
+            CollectedTemplateEnvironments environments) =>
+            PineValueInProcess.CreateDeferredTemplateValue(
+                plan,
+                environments,
+                collected => plan.Materialize(collected, Counters),
+                _reportMaterialization);
+    }
+
     /// <summary>
     /// Creates a PineVM with caller-supplied caches, precompiled leaves, optimization settings, and diagnostic callbacks.
     /// </summary>
@@ -115,7 +143,8 @@ public class PineVM : ICancellablePineVM
         PineVMExpressionEncodingCache? expressionEncodingCache = null,
         IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null,
         ReportEvaluationEvent? reportEvaluationEvent = null,
-        bool disableDirectInvocation = false) =>
+        bool disableDirectInvocation = false,
+        PineVMWorkProfile? workProfile = null) =>
         CreateCustom(
             new PineVMExpressionTemplatePlanCache(),
             evalCache,
@@ -148,7 +177,8 @@ public class PineVM : ICancellablePineVM
             expressionEncodingCache,
             reducedExpressionCache,
             reportEvaluationEvent,
-            disableDirectInvocation);
+            disableDirectInvocation,
+            workProfile);
 
     /// <summary>Creates a VM with a retained template-plan cache and caller-selected compilation configuration.</summary>
     public static PineVM CreateCustom(
@@ -183,7 +213,8 @@ public class PineVM : ICancellablePineVM
         PineVMExpressionEncodingCache? expressionEncodingCache = null,
         IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null,
         ReportEvaluationEvent? reportEvaluationEvent = null,
-        bool disableDirectInvocation = false)
+        bool disableDirectInvocation = false,
+        PineVMWorkProfile? workProfile = null)
     {
         ArgumentNullException.ThrowIfNull(expressionTemplatePlanCache);
 
@@ -236,6 +267,7 @@ public class PineVM : ICancellablePineVM
                 expressionEncodingCache ??
                 new PineVMExpressionEncodingCache(),
                 reportEvaluationEvent: reportEvaluationEvent,
+                workProfile: workProfile,
                 reducedExpressionCache:
                 reducedExpressionCache ??
                 new Dictionary<(Expression, ReductionConfig), Expression>());
@@ -274,9 +306,11 @@ public class PineVM : ICancellablePineVM
         IInvocationCacheAccess? invocationCache = null,
         InvocationCacheConfiguration? invocationCacheConfiguration = null,
         ReportEvaluationEvent? reportEvaluationEvent = null,
-        bool disableDirectInvocation = false)
+        bool disableDirectInvocation = false,
+        PineVMWorkProfile? workProfile = null)
     {
         _expressionTemplatePlanCache = expressionTemplatePlanCache;
+        _workProfile = workProfile;
 
         if (evalCache is not null && invocationCache is not null)
         {
@@ -370,6 +404,9 @@ public class PineVM : ICancellablePineVM
         PineValue environment,
         System.Threading.CancellationToken cancellationToken)
     {
+        using var workScope =
+            PineVMWorkProfile.EnterEvaluation(_workProfile, cancellationToken, _expressionTemplatePlanCache);
+
         var evalReportResult =
             EvaluateExpressionOnCustomStack(
                 expression,
@@ -395,6 +432,7 @@ public class PineVM : ICancellablePineVM
                 "Unexpected result type: " + evalReportResult.GetType().FullName);
         }
 
+        using var returnCause = _workProfile?.WithCause(PineVMWorkProfile.MaterializationCause.RootReturn);
         return evalReport.ReturnValue.Evaluate();
     }
 
@@ -618,6 +656,11 @@ public class PineVM : ICancellablePineVM
         ReportEnteredStackFrame? reportEnteredStackFrame,
         System.Threading.CancellationToken cancellationToken)
     {
+        using var workScope =
+            PineVMWorkProfile.EnterEvaluation(_workProfile, cancellationToken, _expressionTemplatePlanCache);
+
+        _workProfile?.Checkpoint(force: true);
+
         long instructionCount = 0;
         long invocationCount = 0;
         long loopIterationCount = 0;
@@ -625,7 +668,11 @@ public class PineVM : ICancellablePineVM
         long buildListCount = 0;
         long buildListItemCount = 0;
         var planParsingCounters = new DirectInterpreterCounters();
-        var materializationCounters = new DirectInterpreterCounters();
+        var materializationAccounting = new DeferredTemplateMaterializationAccounting();
+
+        using var materializationScope =
+            PineValueInProcess.UseTemplateMaterializationReporter(materializationAccounting.ReportMaterialization);
+
         long stackFrameCount = 0;
         long stackFrameReplaceCount = 0;
         long lastCacheEntryInstructionCount = 0;
@@ -634,7 +681,7 @@ public class PineVM : ICancellablePineVM
         long expressionTemplatePlanParseCount = 0;
         long deferredTemplateValueAllocationCount = 0;
         long templateDirectInvocationCount = 0;
-        long deferredTemplateValueMaterializationCount = 0;
+        long templateConsolidatedEvalCount = 0;
 
         PerformanceCountersByOrigin CurrentCountersByOrigin() =>
             new(
@@ -643,9 +690,9 @@ public class PineVM : ICancellablePineVM
                 {
                     ExpressionTemplatePlanParseCount = expressionTemplatePlanParseCount
                 },
-                DeferredTemplateValueMaterialization: materializationCounters.Snapshot() with
+                DeferredTemplateValueMaterialization: materializationAccounting.Counters.Snapshot() with
                 {
-                    DeferredTemplateValueMaterializationCount = deferredTemplateValueMaterializationCount
+                    DeferredTemplateValueMaterializationCount = materializationAccounting.MaterializationCount
                 });
 
         PerformanceCounters CurrentCounters() => CurrentCountersByOrigin().Total;
@@ -658,7 +705,8 @@ public class PineVM : ICancellablePineVM
                 BuildListItemCount: buildListItemCount,
                 LoopIterationCount: loopIterationCount,
                 DeferredTemplateValueAllocationCount: deferredTemplateValueAllocationCount,
-                TemplateDirectInvocationCount: templateDirectInvocationCount);
+                TemplateDirectInvocationCount: templateDirectInvocationCount,
+                TemplateConsolidatedEvalCount: templateConsolidatedEvalCount);
 
         EvaluationError BuildEvaluationError(EvaluationErrorReason reason)
         {
@@ -838,7 +886,9 @@ public class PineVM : ICancellablePineVM
             PineValue? expressionValue,
             Expression expression,
             PineValueInProcess environmentValue,
-            bool replaceCurrentFrame)
+            bool replaceCurrentFrame,
+            Func<PrecompiledResult>? selectedPrecompiled = null,
+            bool precompiledSelectionAttempted = false)
         {
             while (true)
             {
@@ -849,8 +899,18 @@ public class PineVM : ICancellablePineVM
 
                 var currentFrame = stack.Peek();
 
-                if (_selectPrecompiled is { } selectPrecompiled &&
-                    selectPrecompiled(expression, environmentValue, ParseCache) is { } precompiledDelegate)
+                var precompiledDelegate =
+                    selectedPrecompiled ??
+                    (precompiledSelectionAttempted
+                    ?
+                    null
+                    :
+                    _selectPrecompiled?.Invoke(expression, environmentValue, ParseCache));
+
+                selectedPrecompiled = null;
+                precompiledSelectionAttempted = false;
+
+                if (precompiledDelegate is not null)
                 {
                     var precompiledResult = precompiledDelegate();
 
@@ -925,8 +985,7 @@ public class PineVM : ICancellablePineVM
                 }
                 else
                 {
-                    if (currentFrame.StackValues.Length > 0 &&
-                        _precompiledLeaves is not null && expressionValue is not null)
+                    if (_precompiledLeaves is not null && expressionValue is not null)
                     {
                         if (_precompiledLeaves.TryGetValue(expressionValue, out var computeLeafDelegate))
                         {
@@ -941,7 +1000,7 @@ public class PineVM : ICancellablePineVM
 
                             if (valueComputedInLeaf is { } computedValue)
                             {
-                                currentFrame.PushInstructionResult(computedValue);
+                                currentFrame.ReturnFromChildFrame(computedValue);
 
                                 return null;
                             }
@@ -1037,24 +1096,35 @@ public class PineVM : ICancellablePineVM
         bool TryResolveExpressionTemplate(
             PineValueInProcess templateValue,
             out ExpressionTemplatePlan? plan,
-            out IReadOnlyList<PineValueInProcess> existingEnvironments)
+            out CollectedTemplateEnvironments existingEnvironments)
         {
             if (_disableDirectInvocation)
             {
                 plan = null;
-                existingEnvironments = [];
+                existingEnvironments = CollectedTemplateEnvironments.Empty;
                 return false;
             }
 
             if (templateValue.DeferredTemplateValueOrNull is { } deferredTemplateValue &&
-                deferredTemplateValue.TemplatePlan is ExpressionTemplatePlan templatePlan)
+                deferredTemplateValue.TemplatePlan is { } templatePlan)
             {
+                _workProfile?.Count(PineVMWorkProfile.Metric.DeferredProducerHits);
                 plan = templatePlan;
                 existingEnvironments = deferredTemplateValue.Environments;
             }
             else
             {
-                var materializedTemplateValue = templateValue.Evaluate();
+                PineValue materializedTemplateValue;
+
+                using (_workProfile?.WithCause(PineVMWorkProfile.MaterializationCause.Recognition))
+                    materializedTemplateValue = templateValue.Evaluate();
+
+                if (_precompiledLeaves?.ContainsKey(materializedTemplateValue) is true)
+                {
+                    plan = null;
+                    existingEnvironments = CollectedTemplateEnvironments.Empty;
+                    return false;
+                }
 
                 plan =
                     ResolveExpressionTemplatePlan(
@@ -1062,30 +1132,26 @@ public class PineVM : ICancellablePineVM
                         reportPlanParse: () => ++expressionTemplatePlanParseCount,
                         planParsingCounters);
 
-                existingEnvironments = [];
+                existingEnvironments = CollectedTemplateEnvironments.Empty;
             }
 
             return
                 plan is not null &&
-                plan.InitialEnvironments.Length + existingEnvironments.Count < plan.EnvironmentCount;
+                existingEnvironments.Count < plan.EnvironmentCount;
         }
 
-        PineValueInProcess[] CombineEnvironments(
-            IReadOnlyList<PineValueInProcess> existingEnvironments,
+        CollectedTemplateEnvironments CombineEnvironments(
+            CollectedTemplateEnvironments existingEnvironments,
             IReadOnlyList<PineValueInProcess> newEnvironments,
             int newEnvironmentCount)
         {
-            var combinedEnvironments =
-                new PineValueInProcess[existingEnvironments.Count + newEnvironmentCount];
-
-            for (var i = 0; i < existingEnvironments.Count; ++i)
-            {
-                combinedEnvironments[i] = existingEnvironments[i];
-            }
+            var combinedEnvironments = existingEnvironments;
 
             for (var i = 0; i < newEnvironmentCount; ++i)
             {
-                combinedEnvironments[existingEnvironments.Count + i] = newEnvironments[i];
+                _workProfile?.Checkpoint();
+                _workProfile?.Count(PineVMWorkProfile.Metric.TemplateEnvironmentStagesCollected);
+                combinedEnvironments = combinedEnvironments.Append(newEnvironments[i]);
             }
 
             return combinedEnvironments;
@@ -1093,28 +1159,29 @@ public class PineVM : ICancellablePineVM
 
         PineValueInProcess CreateDeferredTemplateValue(
             ExpressionTemplatePlan plan,
-            IReadOnlyList<PineValueInProcess> environments)
+            CollectedTemplateEnvironments environments)
         {
             ++deferredTemplateValueAllocationCount;
 
             return
-                PineValueInProcess.CreateDeferredTemplateValue(
-                    templatePlan: plan,
-                    environments: environments,
-                    materialize: environments => plan.Materialize(environments, materializationCounters),
-                    reportMaterialization: () => ++deferredTemplateValueMaterializationCount);
+                materializationAccounting.CreateValue(plan, environments);
         }
 
         EvaluationError? TryEvaluateTemplate(
             PineValueInProcess templateValue,
             PineValueInProcess environment,
             bool replaceCurrentFrame,
-            out bool evaluated)
+            out bool evaluated,
+            ExpressionTemplatePlan? establishedPlan = null)
         {
-            if (!TryResolveExpressionTemplate(
-                templateValue,
-                out var plan,
-                out var existingEnvironments))
+            var plan = establishedPlan;
+            var existingEnvironments = CollectedTemplateEnvironments.Empty;
+
+            if (plan is null &&
+                !TryResolveExpressionTemplate(
+                    templateValue,
+                    out plan,
+                    out existingEnvironments))
             {
                 evaluated = false;
                 return null;
@@ -1125,15 +1192,60 @@ public class PineVM : ICancellablePineVM
             var combinedEnvironments =
                 CombineEnvironments(existingEnvironments, [environment], newEnvironmentCount: 1);
 
-            if (plan!.InitialEnvironments.Length + combinedEnvironments.Length < plan.EnvironmentCount)
+            if (combinedEnvironments.Count < plan!.EnvironmentCount)
             {
-                stack.Peek().PushInstructionResult(
+                ++templateConsolidatedEvalCount;
+
+                stack.Peek().ReturnFromChildFrame(
                     CreateDeferredTemplateValue(plan, combinedEnvironments));
 
                 return null;
             }
 
+            if (IncrementInvocationCountAndEnforceLimits() is { } limitError)
+                return limitError;
+
+            if (plan.ElidesTerminalEval)
+                ++templateConsolidatedEvalCount;
+
             return InvokeTemplateDirectly(plan, combinedEnvironments, replaceCurrentFrame);
+        }
+
+        (StackFrameInstructions instructions, StackFrameInput input) ProjectTemplateInput(
+            ExpressionTemplatePlan plan,
+            IReadOnlyList<PineValueInProcess> environments)
+        {
+            var compilation = GetExpressionEntry(plan.TerminalExpression).Compilation;
+
+            var instructions =
+                compilation.SelectInstructionsForTemplate(plan.TerminalEnvironmentRecipe, environments);
+
+            var parameters = compilation.Generic.Parameters;
+            var arguments = new PineValueInProcess[parameters.ParamsPaths.Count];
+
+            for (var index = 0; index < arguments.Length; ++index)
+            {
+                arguments[index] =
+                    plan.TerminalEnvironmentRecipe.Project(parameters.ParamsPaths[index]).Instantiate(environments);
+            }
+
+            return (instructions, StackFrameInput.FromArguments(parameters, arguments));
+        }
+
+        (PineValueInProcess? environment, Func<PrecompiledResult>? selected) SelectTemplateNative(
+            ExpressionTemplatePlan plan,
+            IReadOnlyList<PineValueInProcess> environments)
+        {
+            if (_selectPrecompiled is null)
+                return default;
+
+            // An opaque native selector is a consumer of the canonical environment.
+            // Give it a demand-driven recipe view, not an eagerly instantiated envelope.
+            var environment =
+                PineValueInProcess.CreateFromTemplateRecipe(plan.TerminalEnvironmentRecipe, environments);
+
+            var selected = _selectPrecompiled(plan.TerminalExpression, environment, ParseCache);
+            return selected is null ? default : (environment, selected);
         }
 
         EvaluationError? InvokeTemplateDirectly(
@@ -1143,11 +1255,41 @@ public class PineVM : ICancellablePineVM
         {
             ++templateDirectInvocationCount;
 
+            if (CheckCancellation() is { } cancellationError)
+                return cancellationError;
+
+            var native = SelectTemplateNative(plan, environments);
+
+            if (native.selected is not null)
+            {
+                return
+                    InvokePrecompiledOrBuildStackFrame(
+                        plan.EncodedTerminalExpression,
+                        plan.TerminalExpression,
+                        native.environment!,
+                        replaceCurrentFrame,
+                        selectedPrecompiled: native.selected);
+            }
+
+            if (_precompiledLeaves?.ContainsKey(plan.EncodedTerminalExpression) is true)
+            {
+                return
+                    InvokePrecompiledOrBuildStackFrame(
+                        plan.EncodedTerminalExpression,
+                        plan.TerminalExpression,
+                        plan.BuildTerminalEnvironment(environments),
+                        replaceCurrentFrame,
+                        precompiledSelectionAttempted: true);
+            }
+
+            var projected = ProjectTemplateInput(plan, environments);
+
             return
-                InvokePrecompiledOrBuildStackFrame(
+                InvokeStackFrame(
                     expressionValue: plan.EncodedTerminalExpression,
                     expression: plan.TerminalExpression,
-                    environmentValue: plan.BuildTerminalEnvironment(environments),
+                    instructions: projected.instructions,
+                    stackFrameInput: projected.input,
                     replaceCurrentFrame: replaceCurrentFrame);
         }
 
@@ -1337,7 +1479,10 @@ public class PineVM : ICancellablePineVM
             var currentFrame = stack.Peek();
 
             if (stack.Count is 1 && config.MaterializeResult)
+            {
+                using var cause = _workProfile?.WithCause(PineVMWorkProfile.MaterializationCause.RootReturn);
                 frameReturnValue.Evaluate();
+            }
 
             FireEvaluationEvent(EvaluationEventKind.FrameExited, currentFrame);
 
@@ -1363,6 +1508,8 @@ public class PineVM : ICancellablePineVM
                         instructionCountSinceLastEntry: instructionCountSinceLastCacheEntry,
                         evalCountSinceLastEntry: evalCountSinceLastCacheEntry))
                 {
+                    using var cause = _workProfile?.WithCause(PineVMWorkProfile.MaterializationCause.InvocationCache);
+
                     if (invocationCache.TryAdd(
                         new EvalCacheEntryKey(currentFrameExprValue, currentFrame.InputValues),
                         frameReturnValue.Evaluate()))
@@ -1512,11 +1659,28 @@ public class PineVM : ICancellablePineVM
                             return limitError;
                         }
 
+                        if (cont.ProjectedInput is { } projectedInput)
+                        {
+                            if (InvokeStackFrame(
+                                cont.ExpressionValue,
+                                cont.Expression,
+                                cont.ProjectedInstructions!,
+                                projectedInput,
+                                replaceCurrentFrame: false) is { } projectedError)
+                            {
+                                return projectedError;
+                            }
+
+                            continue;
+                        }
+
                         if (InvokePrecompiledOrBuildStackFrame(
                             expressionValue: cont.ExpressionValue,
                             expression: cont.Expression,
                             environmentValue: cont.EnvironmentValue,
-                            replaceCurrentFrame: false) is { } error)
+                            replaceCurrentFrame: false,
+                            selectedPrecompiled: cont.SelectedPrecompiled,
+                            precompiledSelectionAttempted: cont.PrecompiledSelectionAttempted) is { } error)
                         {
                             return error;
                         }
@@ -1526,9 +1690,24 @@ public class PineVM : ICancellablePineVM
 
                     if (stepResult is ApplyStepwise.StepResult.ContinueEval continueEval)
                     {
+                        if (CheckCancellation() is { } cancellationError)
+                            return cancellationError;
+
                         if (continueEval.CountInvocation)
                         {
                             ++evalCount;
+
+                            if (TryEvaluateTemplate(
+                                continueEval.ExpressionValue,
+                                continueEval.EnvironmentValue,
+                                replaceCurrentFrame: false,
+                                out var evaluated) is { } templateError)
+                            {
+                                return templateError;
+                            }
+
+                            if (evaluated)
+                                continue;
 
                             if (IncrementInvocationCountAndEnforceLimits() is { } limitError)
                             {
@@ -1864,6 +2043,7 @@ public class PineVM : ICancellablePineVM
                                 throw new Exception("Invalid operation form: Missing take count");
 
                             var items = new PineValueInProcess[itemsCount];
+                            _workProfile?.ChildArray(items.Length);
 
                             for (var i = 0; i < itemsCount; ++i)
                             {
@@ -1894,6 +2074,7 @@ public class PineVM : ICancellablePineVM
                                 throw new Exception("Invalid operation form: Missing take count");
 
                             var items = new PineValueInProcess[prefixItems.Count + itemsCount];
+                            _workProfile?.ChildArray(items.Length);
 
                             for (var i = 0; i < prefixItems.Count; ++i)
                             {
@@ -1938,6 +2119,7 @@ public class PineVM : ICancellablePineVM
 
                             // Pop items in reverse order (last pushed is first popped)
                             var items = new PineValueInProcess[itemsCount];
+                            _workProfile?.ChildArray(items.Length);
 
                             for (var i = 0; i < itemsCount; ++i)
                             {
@@ -1968,6 +2150,7 @@ public class PineVM : ICancellablePineVM
 
                             // Pop items in reverse order (last pushed is first popped)
                             var items = new PineValueInProcess[itemsCount];
+                            _workProfile?.ChildArray(items.Length);
 
                             for (var i = 0; i < itemsCount; ++i)
                             {
@@ -2506,10 +2689,8 @@ public class PineVM : ICancellablePineVM
                         {
                             ++evalCount;
 
-                            if (IncrementInvocationCountAndEnforceLimits() is { } limitError)
-                            {
-                                return limitError;
-                            }
+                            if (CheckCancellation() is { } cancellationError)
+                                return cancellationError;
 
                             var expressionValueInProcess = currentFrame.PopTopmostFromStack();
 
@@ -2534,6 +2715,9 @@ public class PineVM : ICancellablePineVM
                             {
                                 continue;
                             }
+
+                            if (IncrementInvocationCountAndEnforceLimits() is { } limitError)
+                                return limitError;
 
                             var expressionValue = expressionValueInProcess.Evaluate();
 
@@ -2570,6 +2754,9 @@ public class PineVM : ICancellablePineVM
 
                     case StackInstructionKind.Eval_Multi:
                         {
+                            if (CheckCancellation() is { } cancellationError)
+                                return cancellationError;
+
                             var environmentCount =
                                 currentInstruction.TakeCount
                                 ??
@@ -2591,21 +2778,15 @@ public class PineVM : ICancellablePineVM
                             {
                                 var remainingEnvironmentCount =
                                     plan!.EnvironmentCount -
-                                    plan.InitialEnvironments.Length -
                                     existingEnvironments.Count;
 
                                 var environmentsForTerminal =
                                     Math.Min(remainingEnvironmentCount, environments.Length);
 
-                                for (var i = 0; i < environmentsForTerminal; ++i)
-                                {
-                                    ++evalCount;
+                                evalCount += environmentsForTerminal;
 
-                                    if (IncrementInvocationCountAndEnforceLimits() is { } limitError)
-                                    {
-                                        return limitError;
-                                    }
-                                }
+                                templateConsolidatedEvalCount +=
+                                    Math.Min(environmentsForTerminal, remainingEnvironmentCount - 1);
 
                                 var combinedEnvironments =
                                     CombineEnvironments(
@@ -2620,6 +2801,12 @@ public class PineVM : ICancellablePineVM
 
                                     continue;
                                 }
+
+                                if (IncrementInvocationCountAndEnforceLimits() is { } limitError)
+                                    return limitError;
+
+                                if (plan.ElidesTerminalEval)
+                                    ++templateConsolidatedEvalCount;
 
                                 if (environments.Length == remainingEnvironmentCount)
                                 {
@@ -2640,6 +2827,17 @@ public class PineVM : ICancellablePineVM
                                 }
 
                                 ++templateDirectInvocationCount;
+                                var native = SelectTemplateNative(plan, combinedEnvironments);
+
+                                var nativeLeaf =
+                                    _precompiledLeaves?.ContainsKey(plan.EncodedTerminalExpression) is true;
+
+                                var projected =
+                                    native.selected is not null || nativeLeaf
+                                    ?
+                                    default
+                                    :
+                                    ProjectTemplateInput(plan, combinedEnvironments);
 
                                 var extraEnvironments =
                                     new PineValueInProcess[environments.Length - remainingEnvironmentCount];
@@ -2654,7 +2852,13 @@ public class PineVM : ICancellablePineVM
                                 var initialStep =
                                     new ApplyStepwise.StepResult.Continue(
                                         Expression: plan.TerminalExpression,
-                                        EnvironmentValue: plan.BuildTerminalEnvironment(combinedEnvironments),
+                                        EnvironmentValue:
+                                        native.environment ??
+                                        (nativeLeaf
+                                        ?
+                                        plan.BuildTerminalEnvironment(combinedEnvironments)
+                                        :
+                                        PineValueInProcess.EmptyList),
                                         Callback:
                                         result =>
                                         BuildEvalSteps(
@@ -2662,7 +2866,11 @@ public class PineVM : ICancellablePineVM
                                             extraEnvironments,
                                             environmentIndex: 0),
                                         CountInvocation: false,
-                                        ExpressionValue: plan.EncodedTerminalExpression);
+                                        ExpressionValue: plan.EncodedTerminalExpression,
+                                        ProjectedInput: projected.input,
+                                        ProjectedInstructions: projected.instructions,
+                                        SelectedPrecompiled: native.selected,
+                                        PrecompiledSelectionAttempted: true);
 
                                 var followingInstruction =
                                     currentFrame.Instructions.Instructions[
@@ -2702,12 +2910,8 @@ public class PineVM : ICancellablePineVM
 
                     case StackInstructionKind.Eval_Const:
                         {
-                            ++evalCount;
-
-                            if (IncrementInvocationCountAndEnforceLimits() is { } limitError)
-                            {
-                                return limitError;
-                            }
+                            if (CheckCancellation() is { } cancellationError)
+                                return cancellationError;
 
                             var expressionValueInProcess =
                                 currentInstruction.Literal
@@ -2715,6 +2919,18 @@ public class PineVM : ICancellablePineVM
                                 throw new Exception("Invalid operation form: Missing literal");
 
                             var environmentValue = currentFrame.PopTopmostFromStack();
+
+                            if (currentInstruction.TemplateProducer)
+                            {
+                                currentFrame.PushInstructionResult(
+                                    CreateDeferredTemplateValue(
+                                        currentInstruction.TemplatePlan!,
+                                        CollectedTemplateEnvironments.Empty.Append(environmentValue)));
+
+                                continue;
+                            }
+
+                            ++evalCount;
 
                             var followingInstruction =
                                 currentFrame.Instructions.Instructions[currentFrame.InstructionPointer + 1];
@@ -2726,7 +2942,8 @@ public class PineVM : ICancellablePineVM
                                 expressionValueInProcess,
                                 environmentValue,
                                 replaceCurrentFrame,
-                                out var evaluated) is { } templateError)
+                                out var evaluated,
+                                establishedPlan: currentInstruction.TemplatePlan) is { } templateError)
                             {
                                 return templateError;
                             }
@@ -2735,6 +2952,9 @@ public class PineVM : ICancellablePineVM
                             {
                                 continue;
                             }
+
+                            if (IncrementInvocationCountAndEnforceLimits() is { } limitError)
+                                return limitError;
 
                             var expressionValue = expressionValueInProcess.Evaluate();
 
@@ -3379,7 +3599,7 @@ public class PineVM : ICancellablePineVM
                             "Unexpected instruction kind: " + instructionKind);
                 }
             }
-            catch (Exception e)
+            catch (Exception e) when (e is not OperationCanceledException || _workProfile is null)
             {
                 var errorReport = BuildErrorReport(currentFrame);
 
@@ -3400,38 +3620,45 @@ public class PineVM : ICancellablePineVM
         Action reportPlanParse,
         DirectInterpreterCounters counters)
     {
-        return
+        _workProfile?.Count(PineVMWorkProfile.Metric.TemplateCacheProbes);
+
+        if (_workProfile is not null)
+        {
+            _workProfile.Count(
+                _expressionTemplatePlanCache.Entries.ContainsKey(templateValue)
+                ?
+                PineVMWorkProfile.Metric.TemplateCacheHits
+                :
+                PineVMWorkProfile.Metric.TemplateCacheMisses);
+        }
+
+        var resolution =
             _expressionTemplatePlanCache.Entries.GetOrAdd(
                 templateValue,
                 value =>
                 {
+                    _workProfile?.Count(PineVMWorkProfile.Metric.TemplateCacheFactoryRuns);
                     reportPlanParse();
+                    var budgetFailuresBefore = _workProfile?[PineVMWorkProfile.Metric.RecognizerBudgetFailures] ?? 0;
+                    var plan = ExpressionTemplatePlan.TryParseTemplate(value, ParseCache, counters);
 
-                    if (ExpressionTemplatePlan.TryParseTemplate(value, ParseCache, counters)
-                        is not { } templateDescription)
+                    if (plan is null && _workProfile is not null)
                     {
-                        return new PineVMExpressionTemplatePlanCache.Resolution(null);
+                        _workProfile.Count(
+                            _workProfile[PineVMWorkProfile.Metric.RecognizerBudgetFailures] > budgetFailuresBefore
+                            ?
+                            PineVMWorkProfile.Metric.RecognizerRejectedByBudget
+                            :
+                            PineVMWorkProfile.Metric.RecognizerMalformedOrUnsupportedFailures);
                     }
 
-                    if (templateDescription.ParameterCount <=
-                        templateDescription.ArgumentsAlreadyCollected.Length)
-                    {
-                        return new PineVMExpressionTemplatePlanCache.Resolution(null);
-                    }
+                    return new PineVMExpressionTemplatePlanCache.Resolution(plan);
+                });
 
-                    return
-                        new PineVMExpressionTemplatePlanCache.Resolution(
-                            new ExpressionTemplatePlan(
-                                TemplateValue: value,
-                                EncodedTerminalExpression: EncodeExpressionAsValue(templateDescription.InnerFunction),
-                                TerminalExpression: templateDescription.InnerFunction,
-                                EnvironmentCount: templateDescription.ParameterCount,
-                                CapturedValues: templateDescription.EnvFunctions,
-                                InitialEnvironments: templateDescription.ArgumentsAlreadyCollected,
-                                UsesNestedEnvironmentFormat: templateDescription.UsesNestedArgFormat,
-                                ParseCache: ParseCache));
-                })
-            .Plan;
+        if (resolution.Plan is null)
+            _workProfile?.Count(PineVMWorkProfile.Metric.TemplateCacheNullResults);
+
+        return resolution.Plan;
     }
 
     private Result<string, Expression> ParseExpression(PineValue expressionValue)
@@ -3502,20 +3729,153 @@ public class PineVM : ICancellablePineVM
         return EvalDirect(expression, envValue);
     }
 
-    private static (PineValueInProcess value, PerformanceCounters perfCounts)? EvalDirect(
+    internal static (PineValueInProcess value, PerformanceCounters perfCounts)? EvalDirect(
         Expression expression,
-        PineValueInProcess envValue)
+        PineValueInProcess envValue) =>
+        EvalDirect(expression, envValue, preserveConstructorSharing: true);
+
+    internal static (PineValueInProcess value, PerformanceCounters perfCounts)? EvalDirect(
+        Expression expression,
+        PineValueInProcess envValue,
+        bool preserveConstructorSharing)
     {
+        var profile = PineVMWorkProfile.Current;
+
+        if (profile is not null)
+            return EvalDirectProfiled(expression, envValue, profile, preserveConstructorSharing);
+
+        var performanceCounters = new MutablePerformanceCounters();
+        var memo = preserveConstructorSharing ? CreateDirectConstructorMemo(expression) : null;
+        var value = EvalDirect(expression, envValue, ref performanceCounters, isRoot: true, constructorMemo: memo);
+        return value is null ? null : (value, performanceCounters.ToImmutable());
+    }
+
+    private readonly record struct DirectConstructorMemoEntry(
+        PineValueInProcess Value, long Instructions, long Lists, long ListItems);
+
+    private static Dictionary<Expression, DirectConstructorMemoEntry>? CreateDirectConstructorMemo(
+        Expression expression)
+    {
+        if (expression is not Expression.List list ||
+            expression.EvalCount is not 0 ||
+            expression.BuiltinCount is not 0 ||
+            expression.ConditionCount is not 0)
+        {
+            return null;
+        }
+
+        // Flat, small constructors need no tracking unless a child reference actually repeats.
+        if (list.MaxDepth <= 1 && list.Items.Count <= 4)
+        {
+            for (var i = 0; i < list.Items.Count; ++i)
+            {
+                for (var j = 0; j < i; ++j)
+                {
+                    if (ReferenceEquals(list.Items[i], list.Items[j]))
+                        return new(ReferenceEqualityComparer.Instance);
+                }
+            }
+
+            return null;
+        }
+
+        return new(ReferenceEqualityComparer.Instance);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (PineValueInProcess value, PerformanceCounters perfCounts)? EvalDirectProfiled(
+        Expression expression,
+        PineValueInProcess envValue,
+        PineVMWorkProfile profile,
+        bool preserveConstructorSharing)
+    {
+        profile.Count(PineVMWorkProfile.Metric.EvalDirectCalls);
+        profile.Checkpoint(force: true);
+        HashSet<Expression>? references = null;
+        PineVMWorkProfile.ConstructorOpportunities previousOpportunities = default;
+        var constructorEligible = expression.EvalCount is 0 && expression.BuiltinCount is 0;
+
+        profile.Count(
+            constructorEligible
+            ?
+            PineVMWorkProfile.Metric.ConstructorEligibleInvocations
+            :
+            PineVMWorkProfile.Metric.ConstructorIneligibleInvocations);
+
+        if (constructorEligible)
+            previousOpportunities = profile.BeginConstructorInvocation();
+
         var performanceCounters = new MutablePerformanceCounters();
 
-        var value = EvalDirect(expression, envValue, ref performanceCounters);
+        var completed = false;
+        bool? resultAlreadyMaterialized = null;
 
-        if (value is null)
-            return null;
+        try
+        {
+            if (profile is { ReferenceCapacity: > 0 } && constructorEligible)
+            {
+                var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+                references = new HashSet<Expression>(ReferenceEqualityComparer.Instance);
 
-        var perfCounts = performanceCounters.ToImmutable();
+                profile.Count(
+                    PineVMWorkProfile.Metric.TrackingAllocatedBytes,
+                    GC.GetAllocatedBytesForCurrentThread() - allocatedBefore);
 
-        return (value, perfCounts);
+                profile.Count(PineVMWorkProfile.Metric.TrackingSets);
+            }
+
+            PineValueInProcess? value;
+
+            if (constructorEligible)
+            {
+                profile.BeginConstructorBody();
+
+                try
+                {
+                    var memo =
+                        preserveConstructorSharing && profile.PreserveConstructorSharing
+                        ?
+                        CreateDirectConstructorMemo(expression)
+                        :
+                        null;
+
+                    value =
+                        EvalDirect(
+                            expression,
+                            envValue,
+                            ref performanceCounters,
+                            references,
+                            isRoot: true,
+                            constructorMemo: memo);
+                }
+                finally
+                {
+                    profile.EndConstructorBody();
+                }
+            }
+            else
+                value = EvalDirect(expression, envValue, ref performanceCounters, references, isRoot: true);
+
+            if (value is null)
+                return null;
+
+            completed = true;
+            resultAlreadyMaterialized = value.EvaluatedOrNull is not null;
+            var perfCounts = performanceCounters.ToImmutable();
+
+            return (value, perfCounts);
+        }
+        finally
+        {
+            if (constructorEligible)
+            {
+                profile.EndConstructorInvocation(
+                    previousOpportunities,
+                    completed,
+                    resultAlreadyMaterialized,
+                    completed ? performanceCounters.ToImmutable() : null);
+            }
+        }
     }
 
     private record struct MutablePerformanceCounters(
@@ -3537,28 +3897,84 @@ public class PineVM : ICancellablePineVM
     private static PineValueInProcess? EvalDirect(
         Expression expression,
         PineValueInProcess envValue,
-        ref MutablePerformanceCounters performanceCounters)
+        ref MutablePerformanceCounters performanceCounters,
+        HashSet<Expression>? references = null,
+        bool isRoot = false,
+        bool underRepeatFrontier = false,
+        Dictionary<Expression, DirectConstructorMemoEntry>? constructorMemo = null)
     {
+        var profile = PineVMWorkProfile.Current;
+        // Prune only the counterfactual estimate's overlapping frontiers, never actual evaluation.
+        var pruned = profile?.DirectEntry(expression, references, isRoot, underRepeatFrontier) ?? false;
+
+        if (constructorMemo is not null && constructorMemo.TryGetValue(expression, out var cached))
+        {
+            performanceCounters.InstructionCount += cached.Instructions;
+            performanceCounters.BuildListCount += cached.Lists;
+            performanceCounters.BuildListItemCount += cached.ListItems;
+            profile?.DirectConstructorMemoHit(expression);
+            return cached.Value;
+        }
+
         performanceCounters.InstructionCount++;
 
         if (expression is Expression.Litral literal)
         {
-            return PineValueInProcess.Create(literal.Value);
+            profile?.Count(PineVMWorkProfile.Metric.LiteralWrapperCalls);
+            var wrappersBefore = pruned ? profile![PineVMWorkProfile.Metric.WrapperAllocations] : 0;
+            var result = PineValueInProcess.Create(literal.Value);
+
+            if (pruned)
+            {
+                var wrappers = profile![PineVMWorkProfile.Metric.WrapperAllocations] - wrappersBefore;
+
+                profile.CountConstructorOpportunity(
+                    PineVMWorkProfile.Metric.ConstructorFrontierAvoidableWrappers,
+                    wrappers);
+
+                profile.CountConstructorOpportunity(
+                    PineVMWorkProfile.Metric.ConstructorFrontierAvoidableLiteralWrappers,
+                    wrappers);
+            }
+
+            constructorMemo?.Add(expression, new(result, 1, 0, 0));
+            return result;
         }
 
         if (expression is Expression.List listExpr)
         {
+            var instructionsBefore = performanceCounters.InstructionCount - 1;
+            var listsBefore = performanceCounters.BuildListCount;
+            var listItemsBefore = performanceCounters.BuildListItemCount;
+            var pureConstructor = constructorMemo is not null;
             performanceCounters.BuildListCount++;
             performanceCounters.BuildListItemCount += listExpr.Items.Count;
-
             var items = new PineValueInProcess[listExpr.Items.Count];
+            profile?.Count(PineVMWorkProfile.Metric.EvalDirectListArrays);
+            profile?.Count(PineVMWorkProfile.Metric.EvalDirectListItems, items.Length);
+            profile?.ChildArray(items.Length);
+
+            if (pruned)
+            {
+                profile!.CountConstructorOpportunity(PineVMWorkProfile.Metric.ConstructorFrontierAvoidableListArrays);
+
+                profile.CountConstructorOpportunity(
+                    PineVMWorkProfile.Metric.ConstructorFrontierAvoidableListItems,
+                    items.Length);
+            }
 
             for (var i = 0; i < items.Length; ++i)
             {
                 var itemExpr = listExpr.Items[i];
 
                 var itemValue =
-                    EvalDirect(itemExpr, envValue, ref performanceCounters);
+                    EvalDirect(
+                        itemExpr,
+                        envValue,
+                        ref performanceCounters,
+                        references,
+                        underRepeatFrontier: pruned,
+                        constructorMemo: constructorMemo);
 
                 if (itemValue is null)
                 {
@@ -3566,15 +3982,49 @@ public class PineVM : ICancellablePineVM
                 }
 
                 items[i] = itemValue;
+                // Labels (including their ancestors) are deliberately outside the memoized grammar.
+                pureConstructor = pureConstructor && constructorMemo!.ContainsKey(itemExpr);
             }
 
-            return PineValueInProcess.CreateList(items);
+            var wrappersBefore = pruned ? profile![PineVMWorkProfile.Metric.WrapperAllocations] : 0;
+            var result = PineValueInProcess.CreateList(items);
+
+            if (pruned)
+            {
+                var wrappers = profile![PineVMWorkProfile.Metric.WrapperAllocations] - wrappersBefore;
+
+                profile.CountConstructorOpportunity(
+                    PineVMWorkProfile.Metric.ConstructorFrontierAvoidableWrappers,
+                    wrappers);
+
+                profile.CountConstructorOpportunity(
+                    PineVMWorkProfile.Metric.ConstructorFrontierAvoidableListWrappers,
+                    wrappers);
+            }
+
+            if (pureConstructor)
+            {
+                constructorMemo!.Add(
+                    expression,
+                    new(
+                        result,
+                        performanceCounters.InstructionCount - instructionsBefore,
+                        performanceCounters.BuildListCount - listsBefore,
+                        performanceCounters.BuildListItemCount - listItemsBefore));
+            }
+
+            return result;
         }
 
         if (expression is Expression.Conditional conditionalExpr)
         {
             var conditionValue =
-                EvalDirect(conditionalExpr.Condition, envValue, ref performanceCounters);
+                EvalDirect(
+                    conditionalExpr.Condition,
+                    envValue,
+                    ref performanceCounters,
+                    references,
+                    underRepeatFrontier: pruned);
 
             if (conditionValue is null)
             {
@@ -3583,16 +4033,29 @@ public class PineVM : ICancellablePineVM
 
             if (PineValueInProcess.AreEqual(conditionValue, PineValueInProcess.KernelTrueValue))
             {
-                return EvalDirect(conditionalExpr.TrueBranch, envValue, ref performanceCounters);
+                return
+                    EvalDirect(
+                        conditionalExpr.TrueBranch,
+                        envValue,
+                        ref performanceCounters,
+                        references,
+                        underRepeatFrontier: pruned);
             }
             else
             {
-                return EvalDirect(conditionalExpr.FalseBranch, envValue, ref performanceCounters);
+                return
+                    EvalDirect(
+                        conditionalExpr.FalseBranch,
+                        envValue,
+                        ref performanceCounters,
+                        references,
+                        underRepeatFrontier: pruned);
             }
         }
 
         if (expression is Expression.Environment)
         {
+            constructorMemo?.Add(expression, new(envValue, 1, 0, 0));
             return envValue;
         }
 
@@ -3842,7 +4305,13 @@ public class PineVM : ICancellablePineVM
 
         if (expression is Expression.Label stringTagExpr)
         {
-            return EvalDirect(stringTagExpr.Tagged, envValue, ref performanceCounters);
+            return
+                EvalDirect(
+                    stringTagExpr.Tagged,
+                    envValue,
+                    ref performanceCounters,
+                    references,
+                    underRepeatFrontier: pruned);
         }
 
         return null;

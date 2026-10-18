@@ -526,6 +526,7 @@ public class ParserFastTests
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 0
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -559,6 +560,7 @@ public class ParserFastTests
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 0
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -592,6 +594,7 @@ public class ParserFastTests
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 0
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -627,6 +630,7 @@ public class ParserFastTests
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 4
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 4
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -660,6 +664,7 @@ public class ParserFastTests
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 4
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 4
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -684,23 +689,24 @@ public class ParserFastTests
 
         PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
-            InvocationCount: 8
-            BuildListCount: 23
-            BuildListItemCount: 67
+            InvocationCount: 7
+            BuildListCount: 5
+            BuildListItemCount: 25
             LoopIterationCount: 1
             InstructionCount: 163
             ExpressionTemplatePlanParseCount: 4
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 7
             DeferredTemplateValueMaterializationCount: 0
-            DirectInterpreterInvocationCount: 3
-            DirectInterpreterExpressionCount: 51
-            DirectInterpreterLiteralCount: 28
-            DirectInterpreterListCount: 18
-            DirectInterpreterEvalCount: 2
+            TemplateConsolidatedEvalCount: 8
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
             DirectInterpreterBuiltinCount: 0
             DirectInterpreterConditionalCount: 0
-            DirectInterpreterEnvironmentCount: 3
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -770,6 +776,7 @@ public class ParserFastTests
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 25
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 0
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -791,6 +798,7 @@ public class ParserFastTests
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 51
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 0
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0

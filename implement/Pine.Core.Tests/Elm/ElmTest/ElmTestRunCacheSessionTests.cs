@@ -231,7 +231,7 @@ public class ElmTestRunCacheSessionTests(ITestOutputHelper output)
 
         File.WriteAllText(helper, "module Helper exposing (other)\nother ignored = 0\nanswer ignored = 2");
         Action privateCallee = () => Run(filter: "callee");
-        privateCallee.Should().Throw<Pine.Core.Elm.ElmCompilerInDotnet.ElmCompilationException>();
+        privateCallee.Should().Throw<Core.Elm.ElmCompilerInDotnet.ElmCompilationException>();
         File.WriteAllText(helper, "module Helper exposing (answer)\nanswer ignored = 2");
         Run(filter: "callee").Tests.Should().ContainSingle().Which.Kind.Should().Be(CompletedTestKind.Passed);
     }

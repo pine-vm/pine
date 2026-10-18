@@ -117,13 +117,15 @@ public class ElmTestInstrumentationTests
         var summary = profile.GetSummary();
         var origins = summary.CountersByPhase["preparation"];
         origins.DeferredTemplateValueMaterialization.DeferredTemplateValueMaterializationCount.Should().Be(1);
-        origins.DeferredTemplateValueMaterialization.DirectInterpreterInvocationCount.Should().Be(1);
-        origins.DeferredTemplateValueMaterialization.DirectInterpreterEvalCount.Should().Be(1);
-        origins.DeferredTemplateValueMaterialization.BuildListItemCount.Should().BeGreaterThan(0);
+        origins.DeferredTemplateValueMaterialization.DirectInterpreterInvocationCount.Should().Be(0);
+        origins.DeferredTemplateValueMaterialization.DirectInterpreterEvalCount.Should().Be(0);
+        origins.DeferredTemplateValueMaterialization.BuildListItemCount.Should().Be(0);
         origins.Total.Should().Be(summary.Counters);
         origins.ExpressionTemplatePlanParsing.ExpressionTemplatePlanParseCount.Should().Be(1);
-        origins.ExpressionTemplatePlanParsing.DirectInterpreterExpressionCount.Should().BeGreaterThan(0);
+        origins.ExpressionTemplatePlanParsing.DirectInterpreterExpressionCount.Should().Be(0);
         origins.VirtualMachine.DirectInterpreterExpressionCount.Should().Be(0);
+        origins.VirtualMachine.InvocationCount.Should().Be(0);
+        origins.VirtualMachine.TemplateConsolidatedEvalCount.Should().Be(1);
     }
 
     [Theory]

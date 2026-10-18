@@ -1,5 +1,5 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CodeGen;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Internal;
 using System;
 using System.Collections.Generic;
@@ -7,211 +7,309 @@ using System.Collections.Generic;
 namespace Pine.Core.Interpreter.IntermediateVM;
 
 /// <summary>
-/// Recognized encoded-expression template chain and a plan for invoking its terminal expression.
+/// A fixed-code chain proved by symbolic constructor evaluation, independent of supplied environments.
 /// </summary>
 internal sealed record ExpressionTemplatePlan(
     PineValue TemplateValue,
     PineValue EncodedTerminalExpression,
     Expression TerminalExpression,
     int EnvironmentCount,
-    ReadOnlyMemory<PineValue> CapturedValues,
-    ReadOnlyMemory<PineValue> InitialEnvironments,
-    bool UsesNestedEnvironmentFormat,
-    PineVMParseCache ParseCache)
+    IReadOnlyList<TemplateValueRecipe> IntermediateRecipes,
+    TemplateValueRecipe TerminalEnvironmentRecipe,
+    bool ElidesTerminalEval = false)
 {
+    public int RemainingEnvironmentCount => EnvironmentCount;
+
     /// <summary>
-    /// Recognizes canonical expression-template chains without probing arbitrary Eval values.
+    /// Recognition never runs arbitrary Pine code. Exhausted budgets and uncertain code shapes
+    /// are ordinary misses, including values which would fail only at a later Eval.
     /// </summary>
-    public static FunctionRecord? TryParseTemplate(
+    public static ExpressionTemplatePlan? TryParseTemplate(
         PineValue templateValue,
         PineVMParseCache parseCache,
         DirectInterpreterCounters? counters = null)
     {
-        counters ??= new DirectInterpreterCounters();
+        var budget = new RecognitionBudget();
+        TemplateValueRecipe current = new TemplateValueRecipe.Constant(templateValue);
+        var intermediates = new List<TemplateValueRecipe>();
+        (PineValue Code, int Stage)? lastInvariantConstructor = null;
 
-        if (parseCache.ParseExpression(templateValue).IsOkOrNull() is not { } expression)
-            return null;
-
-        var isTemplateProducer =
-            expression is Expression.List &&
-            expression.EvalCount is 0 &&
-            expression.BuiltinCount is 0 &&
-            expression.ConditionCount is 0;
-
-        var isTerminalTemplate =
-            expression is Expression.Eval
-            {
-                Encoded: Expression.Litral,
-                Environment: Expression.List environment
-            } &&
-            environment.Items.Count >= 2 &&
-            environment.Items[0] is Expression.Litral
-            {
-                Value: PineValue.ListValue
-            } &&
-            environment.Items[^1] is Expression.Environment;
-
-        if (!isTemplateProducer && !isTerminalTemplate)
-            return null;
-
-        try
+        for (var stage = 0; stage < 256; ++stage)
         {
-            var templateDescription =
-                FunctionRecord.ParseCurriedTemplateForm(
-                    templateValue,
-                    parseCache,
-                    counters)
-                .IsOkOrNull();
+            PineVMWorkProfile.Current?.Count(PineVMWorkProfile.Metric.RecognizerStages);
+            var environment = TemplateValueRecipe.EnvironmentSlot(stage);
+            var constructedNodes = new Dictionary<TemplateValueRecipe, TemplateValueRecipe?>();
+            var constructed = TryConstruct(current, environment, budget, 0, constructedNodes);
 
-            if (templateDescription is null ||
-                templateDescription.ParameterCount <= templateDescription.ArgumentsAlreadyCollected.Length)
+            if (constructed is not null)
             {
+                PineVMWorkProfile.Current?.Count(PineVMWorkProfile.Metric.RecognizerConstructorStages);
+
+                if (stage > 0 && current.TryGetConstant() is { } invariantCode)
+                    lastInvariantConstructor = (invariantCode, stage);
+
+                intermediates.Add(constructed);
+                current = constructed;
+                continue;
+            }
+
+            if (budget.Exhausted)
                 return null;
-            }
 
-            var canonicalValue =
-                FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(
-                    templateDescription.InnerFunction,
-                    templateDescription.ParameterCount,
-                    templateDescription.EnvFunctions.ToArray())!;
-
-            var interpreter = DirectInterpreter.WithoutEvalCaching(parseCache, counters);
-
-            foreach (var initialEnvironment in templateDescription.ArgumentsAlreadyCollected.Span)
+            if (TryGetEvalArguments(current, out var encoded, out var input))
             {
-                canonicalValue =
-                    interpreter.EvaluateExpressionDefault(
-                        new Expression.Eval(
-                            Expression.LitralInst(canonicalValue),
-                            Expression.LitralInst(initialEnvironment)),
-                        PineValue.EmptyList);
+                var terminalCode = TryConstruct(encoded, environment, budget, 0, constructedNodes)?.TryGetConstant();
+                var terminalInput = TryConstruct(input, environment, budget, 0, constructedNodes);
+
+                if (terminalCode is not null &&
+                    terminalInput is not null &&
+                    ParseBounded(terminalCode, parseCache, budget) is { } terminal)
+                {
+                    return
+                        new(
+                            templateValue,
+                            terminalCode,
+                            terminal,
+                            stage + 1,
+                            intermediates.ToArray(),
+                            terminalInput,
+                            ElidesTerminalEval: true);
+                }
             }
 
-            var canonicalExpression = parseCache.ParseExpression(canonicalValue).IsOkOrNull()!;
+            // An invariant arbitrary computation can end a constructor chain directly.
+            // A literal containing a slot is not invariant code, even though its encoding tag is fixed.
+            if (intermediates.Count > 0 &&
+                current.TryGetConstant() is { } constantCode &&
+                ParseBounded(constantCode, parseCache, budget) is { } body)
+            {
+                return
+                    new(
+                        templateValue,
+                        constantCode,
+                        body,
+                        stage + 1,
+                        intermediates.ToArray(),
+                        environment);
+            }
 
-            // Probing identifies a candidate, but only a canonical template can bypass evaluation.
-            return MatchesTemplate(expression, canonicalExpression, interpreter) ? templateDescription : null;
-        }
-        catch (ParseExpressionException)
-        {
+            // A fixed constructor may itself be the terminal computation: for example,
+            // a literal returning a blob or Environment returning arbitrary user data.
+            // Do not mistake an unfamiliar result for malformed code to execute now.
+            if (lastInvariantConstructor is { } boundary &&
+                ParseBounded(boundary.Code, parseCache, budget) is { } constructorBody)
+            {
+                return
+                    new(
+                        templateValue,
+                        boundary.Code,
+                        constructorBody,
+                        boundary.Stage + 1,
+                        intermediates.GetRange(0, boundary.Stage).ToArray(),
+                        TemplateValueRecipe.EnvironmentSlot(boundary.Stage));
+            }
+
             return null;
         }
+
+        PineVMWorkProfile.Current?.Count(PineVMWorkProfile.Metric.RecognizerBudgetFailures);
+        return null;
     }
 
-    private static bool MatchesTemplate(
-        Expression expression,
-        Expression canonical,
-        DirectInterpreter interpreter)
+    internal static Expression? ParseBounded(
+        PineValue value,
+        PineVMParseCache parseCache,
+        RecognitionBudget budget)
     {
-        var pending = new Stack<(Expression Actual, Expression Expected)>();
-        pending.Push((expression, canonical));
+        if (!budget.CheckValue(value))
+            return null;
 
-        while (pending.TryPop(out var pair))
+        var parsed = parseCache.ParseExpression(value).IsOkOrNull();
+
+        if (parsed is null)
+            PineVMWorkProfile.Current?.Count(PineVMWorkProfile.Metric.RecognizerTerminalParseFailures);
+
+        return parsed;
+    }
+
+    private static TemplateValueRecipe? TryConstruct(
+        TemplateValueRecipe encoded,
+        TemplateValueRecipe environment,
+        RecognitionBudget budget,
+        int depth,
+        Dictionary<TemplateValueRecipe, TemplateValueRecipe?> constructedNodes)
+    {
+        if (constructedNodes.TryGetValue(encoded, out var cached))
+            return cached;
+
+        var result = TryConstructUncached(encoded, environment, budget, depth, constructedNodes);
+        constructedNodes[encoded] = result;
+        return result;
+    }
+
+    private static TemplateValueRecipe? TryConstructUncached(
+        TemplateValueRecipe encoded,
+        TemplateValueRecipe environment,
+        RecognitionBudget budget,
+        int depth,
+        Dictionary<TemplateValueRecipe, TemplateValueRecipe?> constructedNodes)
+    {
+        if (!budget.Visit(depth) ||
+            encoded.GetListItems() is not { Count: > 0 } items ||
+            items[0].TryGetConstant() is not { } tagValue)
         {
-            if (pair.Actual.Equals(pair.Expected))
-                continue;
+            return null;
+        }
 
-            if (!pair.Actual.ReferencesEnvironment && !pair.Expected.ReferencesEnvironment &&
-                pair.Actual.EvalCount is 0 && pair.Actual.BuiltinCount is 0 && pair.Actual.ConditionCount is 0 &&
-                pair.Expected.EvalCount is 0 && pair.Expected.BuiltinCount is 0 && pair.Expected.ConditionCount is 0)
+        // Compare against fixed tags, rather than decoding arbitrary user values as strings.
+        if (tagValue == s_literalTag && items.Count is 2)
+            return items[1];
+
+        if (tagValue == s_environmentTag && items.Count is 1)
+            return environment;
+
+        if (tagValue != s_listTag)
+            return null;
+
+        if (!budget.AllowItems(items.Count - 1))
+            return null;
+
+        var resultItems = new TemplateValueRecipe[items.Count - 1];
+        PineVMWorkProfile.Current?.Count(PineVMWorkProfile.Metric.RecognizerRecipeChildArrays);
+        PineVMWorkProfile.Current?.Count(PineVMWorkProfile.Metric.RecognizerRecipeChildItems, resultItems.Length);
+
+        for (var index = 1; index < items.Count; ++index)
+        {
+            if (TryConstruct(items[index], environment, budget, depth + 1, constructedNodes) is not { } child)
+                return null;
+
+            resultItems[index - 1] = child;
+        }
+
+        return TemplateValueRecipe.BuildList(resultItems);
+    }
+
+    private static bool TryGetEvalArguments(
+        TemplateValueRecipe encoded,
+        out TemplateValueRecipe code,
+        out TemplateValueRecipe environment)
+    {
+        code = environment = TemplateValueRecipe.EmptyList;
+
+        if (encoded.GetListItems() is not { } items)
+            return false;
+
+        if (items.Count is 3 && items[0].TryGetConstant() == s_evalTag)
+        {
+            code = items[1];
+            environment = items[2];
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Reconstructs the exact escaped value, preserving its original encoding.</summary>
+    public PineValue Materialize(
+        IReadOnlyList<PineValueInProcess> environments,
+        DirectInterpreterCounters counters)
+    {
+        if (environments.Count is 0)
+            return TemplateValue;
+
+        if (environments.Count >= EnvironmentCount)
+            throw new ArgumentOutOfRangeException(nameof(environments), "The template is already saturated.");
+
+        return IntermediateRecipes[environments.Count - 1].Instantiate(environments).Evaluate();
+    }
+
+    public PineValueInProcess BuildTerminalEnvironment(
+        IReadOnlyList<PineValueInProcess> environments) =>
+        TerminalEnvironmentRecipe.Instantiate(environments);
+
+    private static readonly PineValue s_listTag = StringEncoding.ValueFromString("List");
+
+    private static readonly PineValue s_literalTag = StringEncoding.ValueFromString("Litral");
+
+    private static readonly PineValue s_environmentTag = StringEncoding.ValueFromString("Environment");
+
+    private static readonly PineValue s_evalTag = StringEncoding.ValueFromString("Eval");
+
+    internal sealed class RecognitionBudget
+    {
+        private int _remaining = 16_384;
+
+        public bool Exhausted { get; private set; }
+
+        public bool Visit(int depth)
+        {
+            var profile = PineVMWorkProfile.Current;
+            profile?.Count(PineVMWorkProfile.Metric.RecognizerVisits);
+            profile?.Checkpoint();
+
+            if (Exhausted || depth > 128 || --_remaining < 0)
             {
-                if (interpreter.EvaluateExpressionDefault(pair.Actual, PineValue.EmptyList) !=
-                    interpreter.EvaluateExpressionDefault(pair.Expected, PineValue.EmptyList))
-                {
-                    return false;
-                }
+                if (!Exhausted)
+                    profile?.Count(PineVMWorkProfile.Metric.RecognizerBudgetFailures);
 
-                continue;
-            }
-
-            if (pair.Actual is Expression.Eval actualEval && pair.Expected is Expression.Eval expectedEval)
-            {
-                pending.Push((actualEval.Encoded, expectedEval.Encoded));
-                pending.Push((actualEval.Environment, expectedEval.Environment));
-                continue;
-            }
-
-            if (pair.Actual is not Expression.List actualList ||
-                pair.Expected is not Expression.List expectedList ||
-                actualList.Items.Count != expectedList.Items.Count)
-            {
+                Exhausted = true;
                 return false;
             }
 
-            for (var index = 0; index < actualList.Items.Count; ++index)
-                pending.Push((actualList.Items[index], expectedList.Items[index]));
+            return true;
         }
 
-        return true;
-    }
-
-    /// <summary>
-    /// Number of successive environments still required to reach the terminal expression.
-    /// </summary>
-    public int RemainingEnvironmentCount => EnvironmentCount - InitialEnvironments.Length;
-
-    /// <summary>
-    /// Reconstructs the intermediate encoded-expression value by evaluating the template with successive environments.
-    /// </summary>
-    public PineValue Materialize(
-        IReadOnlyList<PineValueInProcess> additionalEnvironments,
-        DirectInterpreterCounters counters)
-    {
-        var interpreter = DirectInterpreter.WithoutEvalCaching(ParseCache, counters);
-        var currentValue = TemplateValue;
-
-        for (var i = 0; i < additionalEnvironments.Count; ++i)
+        public bool AllowItems(int count)
         {
-            currentValue =
-                interpreter.EvaluateExpressionDefault(
-                    new Expression.Eval(
-                        encoded: Expression.LitralInst(currentValue),
-                        environment:
-                        Expression.LitralInst(
-                            additionalEnvironments[i].Evaluate())),
-                    PineValue.EmptyList);
+            if (count > _remaining)
+            {
+                if (!Exhausted)
+                    PineVMWorkProfile.Current?.Count(PineVMWorkProfile.Metric.RecognizerBudgetFailures);
+
+                Exhausted = true;
+                return false;
+            }
+
+            return !Exhausted;
         }
 
-        return currentValue;
-    }
-
-    /// <summary>
-    /// Builds the terminal expression's environment without materializing the supplied environment values.
-    /// </summary>
-    public PineValueInProcess BuildTerminalEnvironment(
-        IReadOnlyList<PineValueInProcess> additionalEnvironments)
-    {
-        var allEnvironments =
-            new PineValueInProcess[InitialEnvironments.Length + additionalEnvironments.Count];
-
-        for (var i = 0; i < InitialEnvironments.Length; ++i)
+        public bool CheckValue(PineValue value)
         {
-            allEnvironments[i] = PineValueInProcess.Create(InitialEnvironments.Span[i]);
+            var pending = new Stack<(PineValue Value, int Depth)>();
+            pending.Push((value, 0));
+
+            while (pending.TryPop(out var item))
+            {
+                if (!Visit(item.Depth))
+                    return false;
+
+                switch (item.Value)
+                {
+                    case PineValue.BlobValue:
+                        break;
+
+                    case PineValue.ListValue list:
+                        if (list.Items.Length > _remaining)
+                        {
+                            if (!Exhausted)
+                                PineVMWorkProfile.Current?.Count(PineVMWorkProfile.Metric.RecognizerBudgetFailures);
+
+                            Exhausted = true;
+                            return false;
+                        }
+
+                        foreach (var child in list.Items.Span)
+                            pending.Push((child, item.Depth + 1));
+
+                        break;
+
+                    default:
+                        throw new NotImplementedException(
+                            "CheckValue does not handle value variant: " + item.Value.GetType().Name);
+                }
+            }
+
+            return true;
         }
-
-        for (var i = 0; i < additionalEnvironments.Count; ++i)
-        {
-            allEnvironments[InitialEnvironments.Length + i] = additionalEnvironments[i];
-        }
-
-        var capturedValues =
-            PineValueInProcess.Create(
-                PineValue.List(CapturedValues.ToArray()));
-
-        if (UsesNestedEnvironmentFormat)
-        {
-            return
-                PineValueInProcess.CreateList(
-                    [
-                    capturedValues,
-                    PineValueInProcess.CreateList(allEnvironments)
-                    ]);
-        }
-
-        var environmentItems = new PineValueInProcess[allEnvironments.Length + 1];
-        environmentItems[0] = capturedValues;
-        allEnvironments.CopyTo(environmentItems, 1);
-
-        return PineValueInProcess.CreateList(environmentItems);
     }
 }

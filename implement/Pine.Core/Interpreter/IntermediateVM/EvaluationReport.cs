@@ -12,7 +12,7 @@ namespace Pine.Core.Interpreter.IntermediateVM;
 /// <param name="InstructionCount">The total number of VM instructions executed.</param>
 /// <param name="ExpressionTemplatePlanParseCount">The number of concrete values inspected to recognize and validate an expression-template plan.</param>
 /// <param name="DeferredTemplateValueAllocationCount">The number of compact intermediate template values allocated.</param>
-/// <param name="TemplateDirectInvocationCount">The number of terminal expressions invoked directly, bypassing intermediate encoded-expression construction.</param>
+/// <param name="TemplateDirectInvocationCount">The number of direct terminal plan invocations, including terminal Eval wrapper elision when present.</param>
 /// <param name="DeferredTemplateValueMaterializationCount">The number of deferred template values reconstructed as concrete Pine values.</param>
 /// <param name="BuildListItemCount">The number of immediate item slots allocated by VM list builds and direct list evaluation, including literal prefixes and attempted builds.</param>
 /// <param name="DirectInterpreterInvocationCount">The number of external entries into a direct interpreter, excluding recursive evaluation.</param>
@@ -23,6 +23,7 @@ namespace Pine.Core.Interpreter.IntermediateVM;
 /// <param name="DirectInterpreterBuiltinCount">The number of builtin expression evaluations in direct interpreters.</param>
 /// <param name="DirectInterpreterConditionalCount">The number of conditional expression evaluations in direct interpreters.</param>
 /// <param name="DirectInterpreterEnvironmentCount">The number of environment expression evaluations in direct interpreters.</param>
+/// <param name="TemplateConsolidatedEvalCount">The number of logical Eval invocations bypassed by a structural template plan, including nonterminal application stages and elided terminal Eval wrappers.</param>
 public readonly record struct PerformanceCounters(
     [property: JsonPropertyOrder(0)] long InvocationCount,
     [property: JsonPropertyOrder(3)] long BuildListCount,
@@ -40,7 +41,8 @@ public readonly record struct PerformanceCounters(
     [property: JsonPropertyOrder(13)] long DirectInterpreterEvalCount = 0,
     [property: JsonPropertyOrder(14)] long DirectInterpreterBuiltinCount = 0,
     [property: JsonPropertyOrder(15)] long DirectInterpreterConditionalCount = 0,
-    [property: JsonPropertyOrder(16)] long DirectInterpreterEnvironmentCount = 0)
+    [property: JsonPropertyOrder(16)] long DirectInterpreterEnvironmentCount = 0,
+    [property: JsonPropertyOrder(17)] long TemplateConsolidatedEvalCount = 0)
 {
     /// <summary>
     /// Returns the element-wise sum of two <see cref="PerformanceCounters"/> instances.
@@ -65,7 +67,8 @@ public readonly record struct PerformanceCounters(
             DirectInterpreterEvalCount: a.DirectInterpreterEvalCount + b.DirectInterpreterEvalCount,
             DirectInterpreterBuiltinCount: a.DirectInterpreterBuiltinCount + b.DirectInterpreterBuiltinCount,
             DirectInterpreterConditionalCount: a.DirectInterpreterConditionalCount + b.DirectInterpreterConditionalCount,
-            DirectInterpreterEnvironmentCount: a.DirectInterpreterEnvironmentCount + b.DirectInterpreterEnvironmentCount);
+            DirectInterpreterEnvironmentCount: a.DirectInterpreterEnvironmentCount + b.DirectInterpreterEnvironmentCount,
+            TemplateConsolidatedEvalCount: a.TemplateConsolidatedEvalCount + b.TemplateConsolidatedEvalCount);
 
     /// <summary>Returns counter deltas between two snapshots of the same evaluation.</summary>
     public static PerformanceCounters Subtract(PerformanceCounters a, PerformanceCounters b) =>
@@ -88,7 +91,8 @@ public readonly record struct PerformanceCounters(
             DirectInterpreterEvalCount: a.DirectInterpreterEvalCount - b.DirectInterpreterEvalCount,
             DirectInterpreterBuiltinCount: a.DirectInterpreterBuiltinCount - b.DirectInterpreterBuiltinCount,
             DirectInterpreterConditionalCount: a.DirectInterpreterConditionalCount - b.DirectInterpreterConditionalCount,
-            DirectInterpreterEnvironmentCount: a.DirectInterpreterEnvironmentCount - b.DirectInterpreterEnvironmentCount);
+            DirectInterpreterEnvironmentCount: a.DirectInterpreterEnvironmentCount - b.DirectInterpreterEnvironmentCount,
+            TemplateConsolidatedEvalCount: a.TemplateConsolidatedEvalCount - b.TemplateConsolidatedEvalCount);
 
     /// <summary>Sums the counters in a sequence; an empty sequence has zero counters.</summary>
     public static PerformanceCounters Aggregate(IEnumerable<PerformanceCounters> counters)
@@ -153,7 +157,7 @@ public record EvaluationReport(
     public long DeferredTemplateValueAllocationCount => Counters.DeferredTemplateValueAllocationCount;
 
     /// <summary>
-    /// The number of terminal expressions invoked directly, bypassing intermediate encoded-expression construction.
+    /// The number of direct terminal plan invocations, including terminal Eval wrapper elision when present.
     /// </summary>
     public long TemplateDirectInvocationCount => Counters.TemplateDirectInvocationCount;
 
@@ -161,6 +165,11 @@ public record EvaluationReport(
     /// The number of deferred template values reconstructed as concrete Pine values.
     /// </summary>
     public long DeferredTemplateValueMaterializationCount => Counters.DeferredTemplateValueMaterializationCount;
+
+    /// <summary>
+    /// The number of bypassed logical Eval invocations, including elided terminal Eval wrappers.
+    /// </summary>
+    public long TemplateConsolidatedEvalCount => Counters.TemplateConsolidatedEvalCount;
 
     /// <summary>The number of immediate item slots populated by VM list builds and direct list evaluation, including literal prefixes.</summary>
     public long BuildListItemCount => Counters.BuildListItemCount;

@@ -329,8 +329,9 @@ public class FunctionApplicationOverheadTests
             InstructionCount: 12
             ExpressionTemplatePlanParseCount: 1
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 1
+            TemplateDirectInvocationCount: 2
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 2
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -363,23 +364,24 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
-            InvocationCount: 4
-            BuildListCount: 22
-            BuildListItemCount: 52
+            InvocationCount: 2
+            BuildListCount: 0
+            BuildListItemCount: 0
             LoopIterationCount: 0
-            InstructionCount: 23
-            ExpressionTemplatePlanParseCount: 2
-            DeferredTemplateValueAllocationCount: 1
-            TemplateDirectInvocationCount: 1
-            DeferredTemplateValueMaterializationCount: 1
-            DirectInterpreterInvocationCount: 3
-            DirectInterpreterExpressionCount: 51
-            DirectInterpreterLiteralCount: 28
-            DirectInterpreterListCount: 18
-            DirectInterpreterEvalCount: 2
+            InstructionCount: 17
+            ExpressionTemplatePlanParseCount: 1
+            DeferredTemplateValueAllocationCount: 2
+            TemplateDirectInvocationCount: 2
+            DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 4
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
             DirectInterpreterBuiltinCount: 0
             DirectInterpreterConditionalCount: 0
-            DirectInterpreterEnvironmentCount: 3
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -409,8 +411,9 @@ public class FunctionApplicationOverheadTests
             InstructionCount: 20
             ExpressionTemplatePlanParseCount: 1
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 2
+            TemplateDirectInvocationCount: 3
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 3
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -454,8 +457,9 @@ public class FunctionApplicationOverheadTests
             InstructionCount: 58
             ExpressionTemplatePlanParseCount: 2
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 3
+            TemplateDirectInvocationCount: 4
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 4
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -813,11 +817,12 @@ public class FunctionApplicationOverheadTests
             BuildListCount: 0
             BuildListItemCount: 0
             LoopIterationCount: 0
-            InstructionCount: 8
+            InstructionCount: 7
             ExpressionTemplatePlanParseCount: 0
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 0
+            TemplateDirectInvocationCount: 2
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 2
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -852,22 +857,23 @@ public class FunctionApplicationOverheadTests
         PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 3
-            BuildListCount: 12
-            BuildListItemCount: 28
+            BuildListCount: 0
+            BuildListItemCount: 0
             LoopIterationCount: 0
             InstructionCount: 22
             ExpressionTemplatePlanParseCount: 2
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 2
+            TemplateDirectInvocationCount: 3
             DeferredTemplateValueMaterializationCount: 0
-            DirectInterpreterInvocationCount: 2
-            DirectInterpreterExpressionCount: 36
-            DirectInterpreterLiteralCount: 20
-            DirectInterpreterListCount: 12
-            DirectInterpreterEvalCount: 2
+            TemplateConsolidatedEvalCount: 3
+            DirectInterpreterInvocationCount: 0
+            DirectInterpreterExpressionCount: 0
+            DirectInterpreterLiteralCount: 0
+            DirectInterpreterListCount: 0
+            DirectInterpreterEvalCount: 0
             DirectInterpreterBuiltinCount: 0
             DirectInterpreterConditionalCount: 0
-            DirectInterpreterEnvironmentCount: 2
+            DirectInterpreterEnvironmentCount: 0
             """);
     }
 
@@ -914,8 +920,9 @@ public class FunctionApplicationOverheadTests
             InstructionCount: 354
             ExpressionTemplatePlanParseCount: 3
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 20
+            TemplateDirectInvocationCount: 21
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 21
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -965,8 +972,9 @@ public class FunctionApplicationOverheadTests
             InstructionCount: 58
             ExpressionTemplatePlanParseCount: 4
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 3
+            TemplateDirectInvocationCount: 4
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 4
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -1023,8 +1031,9 @@ public class FunctionApplicationOverheadTests
             InstructionCount: 348
             ExpressionTemplatePlanParseCount: 4
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 20
+            TemplateDirectInvocationCount: 21
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 21
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -1069,8 +1078,9 @@ public class FunctionApplicationOverheadTests
             InstructionCount: 58
             ExpressionTemplatePlanParseCount: 2
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 3
+            TemplateDirectInvocationCount: 4
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 4
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -1123,8 +1133,9 @@ public class FunctionApplicationOverheadTests
             InstructionCount: 354
             ExpressionTemplatePlanParseCount: 3
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 20
+            TemplateDirectInvocationCount: 21
             DeferredTemplateValueMaterializationCount: 0
+            TemplateConsolidatedEvalCount: 21
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
