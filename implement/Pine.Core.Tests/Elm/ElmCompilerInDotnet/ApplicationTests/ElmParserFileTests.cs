@@ -206,7 +206,7 @@ public class ElmParserFileTests
                 _vm);
 
         return
-            (ElmValue.RenderAsElmExpression(value), PerformanceCountersFormatting.FormatCounts(report));
+            (ElmValue.RenderAsElmExpression(value), EvalWorkCountersFormatting.FormatCounts(report));
     }
 
     [Fact]
@@ -245,7 +245,6 @@ public class ElmParserFileTests
             BuildListItemCount: 1_420
             LoopIterationCount: 79
             InstructionCount: 4_153
-            ExpressionTemplatePlanParseCount: 19
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
@@ -277,7 +276,6 @@ public class ElmParserFileTests
             BuildListItemCount: 1_742
             LoopIterationCount: 79
             InstructionCount: 5_095
-            ExpressionTemplatePlanParseCount: 21
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0

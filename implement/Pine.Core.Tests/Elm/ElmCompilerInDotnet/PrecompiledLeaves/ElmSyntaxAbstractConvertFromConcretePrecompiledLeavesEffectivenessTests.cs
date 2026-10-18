@@ -124,7 +124,7 @@ public class ElmSyntaxAbstractConvertFromConcretePrecompiledLeavesEffectivenessT
             optimizationParametersSerial: null,
             cacheFileStore: null);
 
-    private static (ElmValue value, PerformanceCounters counters) Apply(
+    private static (ElmValue value, EvalWorkCounters counters) Apply(
         Core.Interpreter.IntermediateVM.PineVM vm) =>
         CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
             s_exerciseFunction.Value,

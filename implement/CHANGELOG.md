@@ -72,7 +72,7 @@ Motivation: less list nesting per record means fewer `Pine_kernel.head` /
 `skip` operations per access, fewer intermediate `PineValue.List` allocations
 per record literal/update, and simpler code paths in
 `ExpressionCompiler`/`PatternCompiler`/`RecordRuntime`. Several VM
-performance-counter snapshots dropped accordingly (mostly visible as a
+evaluation-work-counter snapshots dropped accordingly (mostly visible as a
 reduction in `BuildListCount`).
 
 Back-compat for stored values: the decoder still recognizes the legacy

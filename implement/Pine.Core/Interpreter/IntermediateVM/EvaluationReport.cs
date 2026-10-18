@@ -4,13 +4,12 @@ using System.Text.Json.Serialization;
 namespace Pine.Core.Interpreter.IntermediateVM;
 
 /// <summary>
-/// Aggregated performance counters collected during expression evaluation.
+/// Aggregated evaluation work counters collected during expression evaluation.
 /// </summary>
 /// <param name="InvocationCount">The total number of runtime invocations performed, including parse-and-eval and direct stack-frame invocations.</param>
 /// <param name="BuildListCount">The total number of VM list-building instructions and direct-interpreter list expression evaluations.</param>
 /// <param name="LoopIterationCount">The total number of loop iterations reported by the active stack frames.</param>
 /// <param name="InstructionCount">The total number of VM instructions executed.</param>
-/// <param name="ExpressionTemplatePlanParseCount">The number of concrete values inspected to recognize and validate an expression-template plan.</param>
 /// <param name="DeferredTemplateValueAllocationCount">The number of compact intermediate template values allocated.</param>
 /// <param name="TemplateDirectInvocationCount">The number of direct terminal plan invocations, including terminal Eval wrapper elision when present.</param>
 /// <param name="DeferredTemplateValueMaterializationCount">The number of deferred template values reconstructed as concrete Pine values.</param>
@@ -24,12 +23,11 @@ namespace Pine.Core.Interpreter.IntermediateVM;
 /// <param name="DirectInterpreterConditionalCount">The number of conditional expression evaluations in direct interpreters.</param>
 /// <param name="DirectInterpreterEnvironmentCount">The number of environment expression evaluations in direct interpreters.</param>
 /// <param name="TemplateConsolidatedEvalCount">The number of logical Eval invocations bypassed by a structural template plan, including nonterminal application stages and elided terminal Eval wrappers.</param>
-public readonly record struct PerformanceCounters(
+public readonly record struct EvalWorkCounters(
     [property: JsonPropertyOrder(0)] long InvocationCount,
     [property: JsonPropertyOrder(3)] long BuildListCount,
     [property: JsonPropertyOrder(1)] long LoopIterationCount,
     [property: JsonPropertyOrder(2)] long InstructionCount,
-    [property: JsonPropertyOrder(5)] long ExpressionTemplatePlanParseCount = 0,
     [property: JsonPropertyOrder(6)] long DeferredTemplateValueAllocationCount = 0,
     [property: JsonPropertyOrder(7)] long TemplateDirectInvocationCount = 0,
     [property: JsonPropertyOrder(8)] long DeferredTemplateValueMaterializationCount = 0,
@@ -45,15 +43,14 @@ public readonly record struct PerformanceCounters(
     [property: JsonPropertyOrder(17)] long TemplateConsolidatedEvalCount = 0)
 {
     /// <summary>
-    /// Returns the element-wise sum of two <see cref="PerformanceCounters"/> instances.
+    /// Returns the element-wise sum of two <see cref="EvalWorkCounters"/> instances.
     /// </summary>
-    public static PerformanceCounters Add(PerformanceCounters a, PerformanceCounters b) =>
+    public static EvalWorkCounters Add(EvalWorkCounters a, EvalWorkCounters b) =>
         new(
             InvocationCount: a.InvocationCount + b.InvocationCount,
             BuildListCount: a.BuildListCount + b.BuildListCount,
             LoopIterationCount: a.LoopIterationCount + b.LoopIterationCount,
             InstructionCount: a.InstructionCount + b.InstructionCount,
-            ExpressionTemplatePlanParseCount: a.ExpressionTemplatePlanParseCount + b.ExpressionTemplatePlanParseCount,
             DeferredTemplateValueAllocationCount:
             a.DeferredTemplateValueAllocationCount + b.DeferredTemplateValueAllocationCount,
             TemplateDirectInvocationCount: a.TemplateDirectInvocationCount + b.TemplateDirectInvocationCount,
@@ -71,13 +68,12 @@ public readonly record struct PerformanceCounters(
             TemplateConsolidatedEvalCount: a.TemplateConsolidatedEvalCount + b.TemplateConsolidatedEvalCount);
 
     /// <summary>Returns counter deltas between two snapshots of the same evaluation.</summary>
-    public static PerformanceCounters Subtract(PerformanceCounters a, PerformanceCounters b) =>
+    public static EvalWorkCounters Subtract(EvalWorkCounters a, EvalWorkCounters b) =>
         new(
             InvocationCount: a.InvocationCount - b.InvocationCount,
             BuildListCount: a.BuildListCount - b.BuildListCount,
             LoopIterationCount: a.LoopIterationCount - b.LoopIterationCount,
             InstructionCount: a.InstructionCount - b.InstructionCount,
-            ExpressionTemplatePlanParseCount: a.ExpressionTemplatePlanParseCount - b.ExpressionTemplatePlanParseCount,
             DeferredTemplateValueAllocationCount:
             a.DeferredTemplateValueAllocationCount - b.DeferredTemplateValueAllocationCount,
             TemplateDirectInvocationCount: a.TemplateDirectInvocationCount - b.TemplateDirectInvocationCount,
@@ -95,9 +91,9 @@ public readonly record struct PerformanceCounters(
             TemplateConsolidatedEvalCount: a.TemplateConsolidatedEvalCount - b.TemplateConsolidatedEvalCount);
 
     /// <summary>Sums the counters in a sequence; an empty sequence has zero counters.</summary>
-    public static PerformanceCounters Aggregate(IEnumerable<PerformanceCounters> counters)
+    public static EvalWorkCounters Aggregate(IEnumerable<EvalWorkCounters> counters)
     {
-        var total = default(PerformanceCounters);
+        var total = default(EvalWorkCounters);
 
         foreach (var counter in counters)
             total = Add(total, counter);
@@ -112,19 +108,22 @@ public readonly record struct PerformanceCounters(
 /// <param name="ExpressionValue">Encoded representation of the evaluated expression.</param>
 /// <param name="Expression">The evaluated expression.</param>
 /// <param name="Input">The input values supplied to the expression.</param>
-/// <param name="Counters">The aggregated performance counters for this evaluation.</param>
+/// <param name="Counters">The aggregated evaluation work counters for this evaluation.</param>
 /// <param name="ReturnValue">The returned value in the in-process representation.</param>
 /// <param name="StackTrace">The captured stack trace at the time of reporting.</param>
 public record EvaluationReport(
     PineValue ExpressionValue,
     Expression Expression,
     StackFrameInput Input,
-    PerformanceCounters Counters,
+    EvalWorkCounters Counters,
     Internal.PineValueInProcess ReturnValue,
     IReadOnlyList<Expression> StackTrace)
 {
     /// <summary>Disjoint work totals for this evaluation, including work performed by direct interpreters.</summary>
-    public PerformanceCountersByOrigin CountersByOrigin { get; init; }
+    public EvalWorkCountersByOrigin CountersByOrigin { get; init; }
+
+    /// <summary>Cache-derivation work performed by this evaluation, excluded from <see cref="Counters"/>.</summary>
+    public CachedWorkCounters CachedWorkCounters => CountersByOrigin.CachedWorkCounters;
 
     /// <summary>
     /// The total number of VM instructions executed.
@@ -145,11 +144,6 @@ public record EvaluationReport(
     /// The total number of loop iterations.
     /// </summary>
     public long LoopIterationCount => Counters.LoopIterationCount;
-
-    /// <summary>
-    /// The number of concrete values inspected to recognize and validate an expression-template plan.
-    /// </summary>
-    public long ExpressionTemplatePlanParseCount => Counters.ExpressionTemplatePlanParseCount;
 
     /// <summary>
     /// The number of compact intermediate template values allocated.

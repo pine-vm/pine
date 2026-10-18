@@ -101,9 +101,9 @@ public sealed class FunctionStepCountingInvocationLogger : IInvocationLogger
     public long FunctionValueApplicationCount => _functionValueApplicationCount;
 
     /// <summary>
-    /// Snapshot of the aggregate performance counters accumulated so far.
+    /// Snapshot of the aggregate evaluation work counters accumulated so far.
     /// </summary>
-    public ElmSyntaxInterpreterPerformanceCounters Counters =>
+    public ElmSyntaxInterpreterEvalWorkCounters Counters =>
         new(
             InstructionLoopCount: _instructionLoopCount,
             DirectFunctionApplicationCount: _directFunctionApplicationCount,

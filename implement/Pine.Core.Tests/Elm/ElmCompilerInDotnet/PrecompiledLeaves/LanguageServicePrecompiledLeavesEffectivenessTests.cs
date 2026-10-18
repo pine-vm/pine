@@ -369,7 +369,7 @@ public class LanguageServicePrecompiledLeavesEffectivenessTests
             .Should().BeLessThan(complexNoLeaves.counters.InstructionCount);
     }
 
-    private static (ElmValue value, PerformanceCounters counters) Apply(
+    private static (ElmValue value, EvalWorkCounters counters) Apply(
         PineValue function,
         ElmValue[] arguments,
         Core.Interpreter.IntermediateVM.PineVM vm) =>

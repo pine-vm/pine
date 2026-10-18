@@ -1020,7 +1020,7 @@ public class TestCommandTests
                 "; instructions: " +
                 CommandLineInterface.FormatIntegerForDisplay(counters.GetProperty("InstructionCount").GetInt64()));
 
-            foreach (var property in typeof(PerformanceCounters).GetProperties())
+            foreach (var property in typeof(EvalWorkCounters).GetProperties())
             {
                 output.ToString().Should().NotContain(property.Name + ":");
 
@@ -1038,11 +1038,29 @@ public class TestCommandTests
                     var origins = phases.GetProperty(phase);
 
                     var sum =
-                        new[] { "VirtualMachine", "ExpressionTemplatePlanParsing", "DeferredTemplateValueMaterialization" }
+                        new[] { "VirtualMachine", "DeferredTemplateValueMaterialization" }
                         .Sum(origin => origins.GetProperty(origin).GetProperty(property.Name).GetInt64());
 
                     sum.Should().Be(origins.GetProperty("Total").GetProperty(property.Name).GetInt64());
                 }
+            }
+
+            var cached = summary.GetProperty("CachedWorkCounters");
+
+            var cachedPhases =
+                new[] { "preparation", "execution" }
+                .Select(phase => phases.GetProperty(phase).GetProperty("CachedWorkCounters")).ToArray();
+
+            cachedPhases.Sum(c => c.GetProperty("ExpressionTemplatePlanParseCount").GetInt64())
+                .Should().Be(cached.GetProperty("ExpressionTemplatePlanParseCount").GetInt64());
+
+            foreach (var property in typeof(EvalWorkCounters).GetProperties())
+            {
+                cachedPhases.Sum(
+                    c => c.GetProperty("ExpressionTemplatePlanParsing").GetProperty(property.Name).GetInt64())
+                    .Should()
+                    .Be(
+                    cached.GetProperty("ExpressionTemplatePlanParsing").GetProperty(property.Name).GetInt64());
             }
         }
         finally
@@ -1055,7 +1073,7 @@ public class TestCommandTests
     [InlineData(1, false)]
     [InlineData(2, false)]
     [InlineData(2, true)]
-    public void Ordinary_execution_does_not_print_performance_counters_or_record_profiles(
+    public void Ordinary_execution_does_not_print_eval_work_counters_or_record_profiles(
         int workers,
         bool explicitLimits)
     {
@@ -1085,11 +1103,11 @@ public class TestCommandTests
             var text = output.ToString();
 
             text.Should().Contain("TEST RUN PASSED")
-                .And.NotContain("Performance counters by phase and work origin:")
+                .And.NotContain("Evaluation work counters by phase and work origin:")
                 .And.NotContain("Phase: preparation")
                 .And.NotContain("Phase: execution");
 
-            foreach (var property in typeof(PerformanceCounters).GetProperties())
+            foreach (var property in typeof(EvalWorkCounters).GetProperties())
                 text.Should().NotContain(property.Name + ":");
 
             if (explicitLimits)
@@ -1605,7 +1623,7 @@ public class TestCommandTests
             repeated.SelectedTests.Should().Equal(all.SelectedTests);
 
             var preparation = Run(null, workers: 4, listTests: true);
-            preparation.Summary.CountersByPhase["execution"].Total.Should().Be(default(PerformanceCounters));
+            preparation.Summary.CountersByPhase["execution"].Total.Should().Be(default(EvalWorkCounters));
             preparation.Summary.Counters.Should().Be(all.Summary.CountersByPhase["preparation"].Total);
             preparation.SelectedTests.Should().HaveCount(3);
 
@@ -1613,11 +1631,11 @@ public class TestCommandTests
 
             var executionSum =
                 selected.Aggregate(
-                    default(PerformanceCountersByOrigin),
-                    (sum, report) => PerformanceCountersByOrigin.Add(sum, report.Summary.CountersByPhase["execution"]));
+                    default(EvalWorkCountersByOrigin),
+                    (sum, report) => EvalWorkCountersByOrigin.Add(sum, report.Summary.CountersByPhase["execution"]));
 
             all.Summary.CountersByPhase["execution"].Should().Be(executionSum);
-            all.Summary.Counters.Should().Be(PerformanceCounters.Add(preparation.Summary.Counters, executionSum.Total));
+            all.Summary.Counters.Should().Be(EvalWorkCounters.Add(preparation.Summary.Counters, executionSum.Total));
             executionSum.Total.InstructionCount.Should().BeGreaterThan(0);
 
             selected[0].Summary.CountersByPhase["execution"].Should().Be(
@@ -1977,7 +1995,7 @@ public class TestCommandTests
             output.ToString().Should().Contain("Running 2 tests").And.Contain("TEST RUN PASSED")
                 .And.Contain("Invocation budget: 100_000").And.Contain("Loop budget: 100_000")
                 .And.NotContain("Saving all recorded")
-                .And.NotContain("Performance counters by phase and work origin:")
+                .And.NotContain("Evaluation work counters by phase and work origin:")
                 .And.NotContain("InstructionCount:")
                 .And.NotContain("BuildListCount:");
         }
@@ -2357,7 +2375,7 @@ public class TestCommandTests
             output.ToString().Should().Contain("Passed:   2");
             output.ToString().Should().Contain("Failed:   1");
 
-            output.ToString().Should().NotContain("Performance counters by phase and work origin:")
+            output.ToString().Should().NotContain("Evaluation work counters by phase and work origin:")
                 .And.NotContain("InstructionCount:")
                 .And.NotContain("BuildListCount:");
         }

@@ -857,14 +857,14 @@ public partial class ElmSyntaxInterpreter
 
     /// <summary>
     /// As <see cref="ParseAndInterpret(string, IReadOnlyDictionary{DeclQualifiedName, SyntaxModel.Declaration})"/>,
-    /// but additionally returns an <see cref="ElmSyntaxInterpreterPerformanceCounters"/>
+    /// but additionally returns an <see cref="ElmSyntaxInterpreterEvalWorkCounters"/>
     /// snapshot describing how much work the interpreter performed.
     /// </summary>
     /// <returns>
     /// A tuple of the usual interpretation <see cref="Result{ErrT, OkT}"/> and the
     /// counters snapshot. Parse failures yield zero counters because the trampoline never ran.
     /// </returns>
-    public static (Result<ElmInterpretationError, PineValueInProcess> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
+    public static (Result<ElmInterpretationError, PineValueInProcess> Result, ElmSyntaxInterpreterEvalWorkCounters Counters)
         ParseAndInterpretWithCounters(
         string rootExpressionText,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
@@ -877,7 +877,7 @@ public partial class ElmSyntaxInterpreter
     /// <summary>
     /// Parses and interprets an expression with counters and explicit evaluation quotas.
     /// </summary>
-    public static (Result<ElmInterpretationError, PineValueInProcess> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
+    public static (Result<ElmInterpretationError, PineValueInProcess> Result, ElmSyntaxInterpreterEvalWorkCounters Counters)
         ParseAndInterpretWithCounters(
         string rootExpressionText,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations,
@@ -940,7 +940,7 @@ public partial class ElmSyntaxInterpreter
     /// dispatches. Tests typically supply <c>list.Add</c> here to capture a trace they
     /// can later search or render.
     /// </param>
-    public static (Result<ElmInterpretationError, PineValueInProcess> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
+    public static (Result<ElmInterpretationError, PineValueInProcess> Result, ElmSyntaxInterpreterEvalWorkCounters Counters)
         ParseAndInterpretWithCounters(
         string rootExpressionText,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations,
@@ -956,7 +956,7 @@ public partial class ElmSyntaxInterpreter
     /// Parses and interprets an expression with counters, application logging, and explicit
     /// evaluation quotas.
     /// </summary>
-    public static (Result<ElmInterpretationError, PineValueInProcess> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
+    public static (Result<ElmInterpretationError, PineValueInProcess> Result, ElmSyntaxInterpreterEvalWorkCounters Counters)
         ParseAndInterpretWithCounters(
         string rootExpressionText,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations,
@@ -2431,8 +2431,8 @@ public partial class ElmSyntaxInterpreter
     /// <summary>
     /// Default <see cref="IInvocationLogger"/> implementation. Threaded through
     /// <see cref="ApplyResolvedCall"/> and <see cref="ApplyFunctionOrValue"/> so all function-body entries can
-    /// be counted against a single origin. Also accumulates the high-level performance counters surfaced via
-    /// <see cref="ElmSyntaxInterpreterPerformanceCounters"/>, optionally forwarding each
+    /// be counted against a single origin. Also accumulates the high-level evaluation work counters surfaced via
+    /// <see cref="ElmSyntaxInterpreterEvalWorkCounters"/>, optionally forwarding each
     /// <see cref="ApplicationLogEntry"/> event to a caller-supplied delegate so callers
     /// can build a richer trace without re-implementing the counting logic.
     /// </summary>
@@ -2474,9 +2474,9 @@ public partial class ElmSyntaxInterpreter
 
         /// <summary>
         /// Snapshots the accumulated counters as a public, immutable
-        /// <see cref="ElmSyntaxInterpreterPerformanceCounters"/> value.
+        /// <see cref="ElmSyntaxInterpreterEvalWorkCounters"/> value.
         /// </summary>
-        public ElmSyntaxInterpreterPerformanceCounters ToReadOnly() =>
+        public ElmSyntaxInterpreterEvalWorkCounters ToReadOnly() =>
             new(
                 InstructionLoopCount: _instructionLoopCount,
                 DirectFunctionApplicationCount: _directFunctionApplicationCount,

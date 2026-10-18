@@ -17,12 +17,34 @@ public sealed class PineVMWorkProfile : IDisposable
     /// <summary>Sites covered by this profiler; allocations elsewhere are not counted as objects.</summary>
     public enum Metric
     {
-        EvalDirectCalls, EvalDirectEntries,
+        /// <summary>Calls to the profiled direct-evaluation entry point, excluding recursive evaluator calls.</summary>
+        EvalDirectCalls,
+        /// <summary>Private evaluator body entries accepted by the direct-visit budget, including recursive entries.</summary>
+        EvalDirectEntries,
         /// <summary>Private evaluator invocations rejected before accepting a body entry.</summary>
         EvalDirectBudgetRejectedEntries,
-        EvalDirectRecursiveEntries, EvalDirectLiteral, EvalDirectList, EvalDirectEnvironment,
-        EvalDirectConditional, EvalDirectBuiltin, EvalDirectStringTag, EvalDirectUnsupported,
-        EvalDirectListArrays, EvalDirectListItems, LiteralWrapperCalls,
+        /// <summary>Accepted private evaluator body entries below the invocation root.</summary>
+        EvalDirectRecursiveEntries,
+        /// <summary>Accepted direct-evaluator entries for literal expressions.</summary>
+        EvalDirectLiteral,
+        /// <summary>Accepted direct-evaluator entries for list expressions.</summary>
+        EvalDirectList,
+        /// <summary>Accepted direct-evaluator entries for environment expressions.</summary>
+        EvalDirectEnvironment,
+        /// <summary>Accepted direct-evaluator entries for conditional expressions.</summary>
+        EvalDirectConditional,
+        /// <summary>Accepted direct-evaluator entries for builtin expressions.</summary>
+        EvalDirectBuiltin,
+        /// <summary>Accepted direct-evaluator entries for label expressions.</summary>
+        EvalDirectStringTag,
+        /// <summary>Accepted direct-evaluator entries for unsupported Eval expressions.</summary>
+        EvalDirectUnsupported,
+        /// <summary>Child arrays allocated by direct evaluation of list expressions.</summary>
+        EvalDirectListArrays,
+        /// <summary>Immediate child slots in arrays allocated by direct evaluation of list expressions.</summary>
+        EvalDirectListItems,
+        /// <summary>Calls to wrap literal values during direct evaluation, including wrapper reuses.</summary>
+        LiteralWrapperCalls,
         /// <summary>Successful invocation-local pure constructor result reuses; other direct counters remain physical.</summary>
         DirectConstructorMemoHits,
         /// <summary>Literal body entries that returned an invocation-local memoized result without allocating a wrapper.</summary>
@@ -35,16 +57,55 @@ public sealed class PineVMWorkProfile : IDisposable
         ConstructorCompletedLogicalInstructions,
         /// <summary>Constructor invocations rejected before beginning by the optional invocation budget.</summary>
         ConstructorBudgetRejectedInvocations,
-        ConstructorEntries, ConstructorDistinctReferences, ConstructorRepeatedReferences,
-        ConstructorRepeatedLists, ConstructorRepeatedListItems, ConstructorCoverageCapEvents,
-        ConstructorEligibleInvocations, ConstructorIneligibleInvocations,
-        ConstructorInvocationsStarted, ConstructorInvocationsCompleted, ConstructorInvocationsIncomplete,
-        ConstructorRepeatFrontiers, ConstructorFrontierAvoidableListArrays, ConstructorFrontierAvoidableListItems,
-        ConstructorFrontierAvoidableWrappers, ConstructorFrontierAvoidableLiteralWrappers, ConstructorFrontierAvoidableListWrappers,
+        /// <summary>Literal, list and environment body entries observed while reference tracking is enabled.</summary>
+        ConstructorEntries,
+        /// <summary>Distinct expression identities added to invocation-local constructor reference sets.</summary>
+        ConstructorDistinctReferences,
+        /// <summary>Constructor body entries whose expression identity is already in the invocation's reference set.</summary>
+        ConstructorRepeatedReferences,
+        /// <summary>Repeated constructor body entries for list expressions.</summary>
+        ConstructorRepeatedLists,
+        /// <summary>Immediate child counts summed over repeated constructor list entries.</summary>
+        ConstructorRepeatedListItems,
+        /// <summary>Untracked constructor entries encountered after the reference-capacity limit is reached.</summary>
+        ConstructorCoverageCapEvents,
+        /// <summary>Direct-evaluation invocations eligible for constructor opportunity tracking.</summary>
+        ConstructorEligibleInvocations,
+        /// <summary>Direct-evaluation invocations outside constructor opportunity tracking.</summary>
+        ConstructorIneligibleInvocations,
+        /// <summary>Eligible constructor invocations started after passing the invocation budget.</summary>
+        ConstructorInvocationsStarted,
+        /// <summary>Started constructor invocations that returned a non-null result.</summary>
+        ConstructorInvocationsCompleted,
+        /// <summary>Started constructor invocations that did not return a non-null result.</summary>
+        ConstructorInvocationsIncomplete,
+        /// <summary>Repeated expression identities encountered outside an already repeated subtree.</summary>
+        ConstructorRepeatFrontiers,
+        /// <summary>List child arrays constructed in repeated subtrees that identity sharing could avoid.</summary>
+        ConstructorFrontierAvoidableListArrays,
+        /// <summary>Immediate slots in avoidable list child arrays in repeated subtrees.</summary>
+        ConstructorFrontierAvoidableListItems,
+        /// <summary>Fresh value wrappers constructed in repeated subtrees that identity sharing could avoid.</summary>
+        ConstructorFrontierAvoidableWrappers,
+        /// <summary>Fresh literal wrappers constructed in repeated subtrees that identity sharing could avoid.</summary>
+        ConstructorFrontierAvoidableLiteralWrappers,
+        /// <summary>Fresh list wrappers constructed in repeated subtrees that identity sharing could avoid.</summary>
+        ConstructorFrontierAvoidableListWrappers,
+        /// <summary>Descendant body entries below repeat frontiers that identity sharing could avoid.</summary>
         ConstructorFrontierAvoidableNodeEntries,
-        ConstructorCompletedRepeatFrontiers, ConstructorCompletedFrontierAvoidableNodeEntries,
-        ConstructorCompletedFrontierAvoidableListArrays, ConstructorCompletedFrontierAvoidableListItems,
-        ConstructorCompletedFrontierAvoidableWrappers, ConstructorCompletedFrontierAvoidableLiteralWrappers,
+        /// <summary>Repeat frontiers summed over successfully completed constructor invocations only.</summary>
+        ConstructorCompletedRepeatFrontiers,
+        /// <summary>Avoidable descendant body entries in successfully completed constructor invocations only.</summary>
+        ConstructorCompletedFrontierAvoidableNodeEntries,
+        /// <summary>Avoidable list child arrays in successfully completed constructor invocations only.</summary>
+        ConstructorCompletedFrontierAvoidableListArrays,
+        /// <summary>Immediate slots in avoidable list arrays in successfully completed constructor invocations only.</summary>
+        ConstructorCompletedFrontierAvoidableListItems,
+        /// <summary>Avoidable fresh wrappers in successfully completed constructor invocations only.</summary>
+        ConstructorCompletedFrontierAvoidableWrappers,
+        /// <summary>Avoidable fresh literal wrappers in successfully completed constructor invocations only.</summary>
+        ConstructorCompletedFrontierAvoidableLiteralWrappers,
+        /// <summary>Avoidable fresh list wrappers in successfully completed constructor invocations only.</summary>
         ConstructorCompletedFrontierAvoidableListWrappers,
         /// <summary>Completed invocations with proven fresh wrapper/array reachability from the returned root.</summary>
         ConstructorCompletedRootRetentionProvenInvocations,
@@ -58,22 +119,121 @@ public sealed class PineVMWorkProfile : IDisposable
         ConstructorCompletedRootRetainedFreshObjectExposures,
         /// <summary>Gross sharing opportunity over return lifetimes with complete identity coverage, excluding memo overhead.</summary>
         ConstructorCompletedRootRetainedAvoidableObjectExposures,
-        TrackingSets, TrackingReferences, TrackingAllocatedBytes,
-        CreateCalls, CreateReuses, WrapperAllocations, CreateListCalls, CreateListReuses,
-        InProcessChildArrays, InProcessChildItems,
-        EvaluateCalls, EvaluateCached, EvaluateUncached, ConcreteChildArrays, ConcreteChildItems,
-        MaterializedListCalls, MaterializedListRootReturn, MaterializedListInvocationCache,
-        MaterializedListRecognition, MaterializedListOther,
-        PineListCalls, PineListPreallocationReuses, PineListPostallocationReuses, ListValueConstructorAllocations,
-        DeferredProducerHits, DeferredValuesCreated, DeferredMaterializations, DeferredMaterializedEnvironmentSlots,
-        DeferredMaterializedRootReturn, DeferredMaterializedInvocationCache, DeferredMaterializedRecognition, DeferredMaterializedOther,
-        TemplateEnvironmentStagesCollected, RecipeBindings, RecipeBindCacheHits, RecipeResolveCacheHits, RecipeChildArrays,
-        RecipeInstantiateCalls, RecipeInstantiateSharedCalls, RecipeInstantiateSharedMemoHits,
-        RecipeInstantiateSharedChildArrays, RecipeInstantiateSharedChildItems, RecipeConstantChildArrays,
-        RecognizerStages, RecognizerConstructorStages, RecognizerRecipeChildArrays, RecognizerRecipeChildItems,
-        RecognizerTerminalParseFailures, RecognizerRejectedByBudget, RecognizerMalformedOrUnsupportedFailures,
-        TemplateCacheProbes, TemplateCacheHits, TemplateCacheMisses, TemplateCacheNullResults,
-        TemplateCacheFactoryRuns, RecognizerVisits, RecognizerBudgetFailures,
+        /// <summary>Invocation-local expression reference-tracking sets allocated.</summary>
+        TrackingSets,
+        /// <summary>Expression identities inserted into reference-tracking sets.</summary>
+        TrackingReferences,
+        /// <summary>Thread-allocated bytes measured around reference-tracking set creation and insertion.</summary>
+        TrackingAllocatedBytes,
+        /// <summary>Calls to create an in-process wrapper for a concrete Pine value.</summary>
+        CreateCalls,
+        /// <summary>Concrete-value wrapping calls satisfied by an existing in-process wrapper.</summary>
+        CreateReuses,
+        /// <summary>In-process value wrappers allocated at the instrumented constructor.</summary>
+        WrapperAllocations,
+        /// <summary>Calls to create an in-process list wrapper.</summary>
+        CreateListCalls,
+        /// <summary>In-process list creation calls satisfied by an existing wrapper.</summary>
+        CreateListReuses,
+        /// <summary>In-process child arrays allocated at instrumented sites, including direct and shared-recipe evaluation.</summary>
+        InProcessChildArrays,
+        /// <summary>Immediate slots in in-process child arrays allocated at instrumented sites.</summary>
+        InProcessChildItems,
+        /// <summary>Calls to evaluate an in-process value to a concrete Pine value.</summary>
+        EvaluateCalls,
+        /// <summary>Value evaluation calls returning an already materialized concrete value.</summary>
+        EvaluateCached,
+        /// <summary>Value evaluation calls requiring materialization.</summary>
+        EvaluateUncached,
+        /// <summary>Concrete child arrays allocated while materializing in-process lists.</summary>
+        ConcreteChildArrays,
+        /// <summary>Immediate slots in concrete child arrays allocated during list materialization.</summary>
+        ConcreteChildItems,
+        /// <summary>In-process list materializations across all recorded causes.</summary>
+        MaterializedListCalls,
+        /// <summary>In-process list materializations attributed to returning the root result.</summary>
+        MaterializedListRootReturn,
+        /// <summary>In-process list materializations attributed to invocation caching.</summary>
+        MaterializedListInvocationCache,
+        /// <summary>In-process list materializations attributed to template recognition.</summary>
+        MaterializedListRecognition,
+        /// <summary>In-process list materializations without a more specific recorded cause.</summary>
+        MaterializedListOther,
+        /// <summary>Calls to the concrete Pine list factory.</summary>
+        PineListCalls,
+        /// <summary>Concrete list factory calls reusing a value before allocating a list object.</summary>
+        PineListPreallocationReuses,
+        /// <summary>Concrete list factory calls reusing an interned value after allocating a list object.</summary>
+        PineListPostallocationReuses,
+        /// <summary>Concrete list objects allocated at the instrumented list-value constructor.</summary>
+        ListValueConstructorAllocations,
+        /// <summary>Eval operations handled by a deferred template producer plan.</summary>
+        DeferredProducerHits,
+        /// <summary>Deferred template values created.</summary>
+        DeferredValuesCreated,
+        /// <summary>Deferred template values reconstructed as concrete Pine values.</summary>
+        DeferredMaterializations,
+        /// <summary>Collected environment slots summed over deferred template materializations.</summary>
+        DeferredMaterializedEnvironmentSlots,
+        /// <summary>Deferred template materializations attributed to returning the root result.</summary>
+        DeferredMaterializedRootReturn,
+        /// <summary>Deferred template materializations attributed to invocation caching.</summary>
+        DeferredMaterializedInvocationCache,
+        /// <summary>Deferred template materializations attributed to template recognition.</summary>
+        DeferredMaterializedRecognition,
+        /// <summary>Deferred template materializations without a more specific recorded cause.</summary>
+        DeferredMaterializedOther,
+        /// <summary>Additional template environment stages collected by the Eval fast path.</summary>
+        TemplateEnvironmentStagesCollected,
+        /// <summary>Bound template recipe nodes allocated.</summary>
+        RecipeBindings,
+        /// <summary>Recipe binding requests reusing an existing bound node.</summary>
+        RecipeBindCacheHits,
+        /// <summary>Bound recipe resolutions returning an already resolved in-process value.</summary>
+        RecipeResolveCacheHits,
+        /// <summary>Child arrays allocated while binding template recipes.</summary>
+        RecipeChildArrays,
+        /// <summary>Calls to instantiate a template recipe against collected environments.</summary>
+        RecipeInstantiateCalls,
+        /// <summary>Calls to the identity-sharing recipe instantiator, including recursive calls.</summary>
+        RecipeInstantiateSharedCalls,
+        /// <summary>Shared recipe instantiation calls reusing a memoized in-process value.</summary>
+        RecipeInstantiateSharedMemoHits,
+        /// <summary>In-process child arrays allocated by shared recipe instantiation.</summary>
+        RecipeInstantiateSharedChildArrays,
+        /// <summary>Immediate slots in child arrays allocated by shared recipe instantiation.</summary>
+        RecipeInstantiateSharedChildItems,
+        /// <summary>Concrete child arrays allocated while constructing constant recipe values.</summary>
+        RecipeConstantChildArrays,
+        /// <summary>Template stages visited by the recognizer.</summary>
+        RecognizerStages,
+        /// <summary>Template stages accepted as constructor recipes by the recognizer.</summary>
+        RecognizerConstructorStages,
+        /// <summary>Recipe child arrays allocated by template recognition.</summary>
+        RecognizerRecipeChildArrays,
+        /// <summary>Immediate slots in recipe child arrays allocated by template recognition.</summary>
+        RecognizerRecipeChildItems,
+        /// <summary>Failures to parse a template's terminal encoded expression.</summary>
+        RecognizerTerminalParseFailures,
+        /// <summary>Template recognition attempts returning no plan after exhausting a recognizer budget.</summary>
+        RecognizerRejectedByBudget,
+        /// <summary>Template recognition attempts returning no plan without a recorded recognizer budget failure.</summary>
+        RecognizerMalformedOrUnsupportedFailures,
+        /// <summary>Template plan cache resolution requests.</summary>
+        TemplateCacheProbes,
+        /// <summary>Template plan cache probes finding an existing entry, including negative entries.</summary>
+        TemplateCacheHits,
+        /// <summary>Template plan cache probes finding no existing entry.</summary>
+        TemplateCacheMisses,
+        /// <summary>Template plan resolutions returning a negative recognition result, including cached results.</summary>
+        TemplateCacheNullResults,
+        /// <summary>Template plan cache factory executions, including redundant executions under races.</summary>
+        TemplateCacheFactoryRuns,
+        /// <summary>Expression visits during constructor-recipe recognition.</summary>
+        RecognizerVisits,
+        /// <summary>Recognizer budget-limit encounters, not necessarily distinct failed recognition attempts.</summary>
+        RecognizerBudgetFailures,
+        /// <summary>Number of metric slots; sentinel excluded from recorded measurements.</summary>
         Count
     }
 
@@ -592,7 +752,7 @@ public sealed class PineVMWorkProfile : IDisposable
         ConstructorOpportunities previous,
         bool completed,
         bool? resultAlreadyMaterialized = null,
-        PerformanceCounters? logicalCounters = null)
+        EvalWorkCounters? logicalCounters = null)
     {
         var boundary =
             CompleteConstructorBoundary(completed, resultAlreadyMaterialized) with
@@ -968,6 +1128,7 @@ public sealed class PineVMWorkProfile : IDisposable
             }
         }
 
+        /// <summary>Restores the previous thread-local profiler, cancellation token and template cache.</summary>
         public void Dispose()
         {
             if (_profile is not null)

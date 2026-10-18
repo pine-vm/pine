@@ -683,23 +683,22 @@ public class PineVM : ICancellablePineVM
         long templateDirectInvocationCount = 0;
         long templateConsolidatedEvalCount = 0;
 
-        PerformanceCountersByOrigin CurrentCountersByOrigin() =>
+        EvalWorkCountersByOrigin CurrentCountersByOrigin() =>
             new(
                 VirtualMachine: CurrentVmCounters(),
-                ExpressionTemplatePlanParsing:
-                planParsingCounters.Snapshot() with
-                {
-                    ExpressionTemplatePlanParseCount = expressionTemplatePlanParseCount
-                },
+                CachedWorkCounters:
+                new(
+                    ExpressionTemplatePlanParseCount: expressionTemplatePlanParseCount,
+                    ExpressionTemplatePlanParsing: planParsingCounters.Snapshot()),
                 DeferredTemplateValueMaterialization:
                 materializationAccounting.Counters.Snapshot() with
                 {
                     DeferredTemplateValueMaterializationCount = materializationAccounting.MaterializationCount
                 });
 
-        PerformanceCounters CurrentCounters() => CurrentCountersByOrigin().Total;
+        EvalWorkCounters CurrentCounters() => CurrentCountersByOrigin().Total;
 
-        PerformanceCounters CurrentVmCounters() =>
+        EvalWorkCounters CurrentVmCounters() =>
             new(
                 InstructionCount: instructionCount,
                 InvocationCount: invocationCount,
@@ -808,10 +807,10 @@ public class PineVM : ICancellablePineVM
             }
         }
 
-        Func<PerformanceCounters>? loadEventCounters =
+        Func<EvalWorkCounters>? loadEventCounters =
             _reportEvaluationEvent is null ? null : CurrentCounters;
 
-        Func<PerformanceCountersByOrigin>? loadEventOrigins =
+        Func<EvalWorkCountersByOrigin>? loadEventOrigins =
             _reportEvaluationEvent is null ? null : CurrentCountersByOrigin;
 
         Func<IEnumerable<EvaluationStackTraceFrame>>? loadEventStack =
@@ -1034,11 +1033,11 @@ public class PineVM : ICancellablePineVM
                                     "Unexpected result type: " + contParseResult.GetType().FullName);
                             }
 
-                            buildListCount += directContResult.PerformanceCounters.BuildListCount;
-                            buildListItemCount += directContResult.PerformanceCounters.BuildListItemCount;
-                            invocationCount += directContResult.PerformanceCounters.InvocationCount + 1;
-                            loopIterationCount += directContResult.PerformanceCounters.LoopIterationCount;
-                            instructionCount += directContResult.PerformanceCounters.InstructionCount;
+                            buildListCount += directContResult.EvalWorkCounters.BuildListCount;
+                            buildListItemCount += directContResult.EvalWorkCounters.BuildListItemCount;
+                            invocationCount += directContResult.EvalWorkCounters.InvocationCount + 1;
+                            loopIterationCount += directContResult.EvalWorkCounters.LoopIterationCount;
+                            instructionCount += directContResult.EvalWorkCounters.InstructionCount;
 
                             if (EnforceCountLimits() is { } quotaError)
                             {
@@ -1056,11 +1055,11 @@ public class PineVM : ICancellablePineVM
                             currentFrame.StackValues.Length > 0 &&
                             DirectEvalIfSimpleTemplate(expression, environmentValue) is { } directEvalResult)
                         {
-                            buildListCount += directEvalResult.perfCounts.BuildListCount;
-                            buildListItemCount += directEvalResult.perfCounts.BuildListItemCount;
-                            invocationCount += directEvalResult.perfCounts.InvocationCount + 1;
-                            loopIterationCount += directEvalResult.perfCounts.LoopIterationCount;
-                            instructionCount += directEvalResult.perfCounts.InstructionCount;
+                            buildListCount += directEvalResult.evalWorkCounters.BuildListCount;
+                            buildListItemCount += directEvalResult.evalWorkCounters.BuildListItemCount;
+                            invocationCount += directEvalResult.evalWorkCounters.InvocationCount + 1;
+                            loopIterationCount += directEvalResult.evalWorkCounters.LoopIterationCount;
+                            instructionCount += directEvalResult.evalWorkCounters.InstructionCount;
 
                             if (EnforceCountLimits() is { } quotaError)
                             {
@@ -1522,7 +1521,7 @@ public class PineVM : ICancellablePineVM
                 }
 
                 var frameOrigins =
-                    PerformanceCountersByOrigin.Subtract(
+                    EvalWorkCountersByOrigin.Subtract(
                         CurrentCountersByOrigin(),
                         currentFrame.ProfilingBaseline.BeginCountersByOrigin);
 
@@ -3686,7 +3685,7 @@ public class PineVM : ICancellablePineVM
     private record struct DirectContinuation(
         PineValueInProcess EncodedExprValue,
         PineValueInProcess EnvironmentValue,
-        PerformanceCounters PerformanceCounters);
+        EvalWorkCounters EvalWorkCounters);
 
     private static DirectContinuation? DirectContinuationIfSimpleEnough(
         Expression expression,
@@ -3708,17 +3707,17 @@ public class PineVM : ICancellablePineVM
         if (innerEnvValue is null)
             return null;
 
-        var aggregatePerformanceCounters =
-            PerformanceCounters.Add(encodedExprValue.Value.perfCounts, innerEnvValue.Value.perfCounts);
+        var aggregateEvalWorkCounters =
+            EvalWorkCounters.Add(encodedExprValue.Value.evalWorkCounters, innerEnvValue.Value.evalWorkCounters);
 
         return
             new DirectContinuation(
                 EncodedExprValue: encodedExprValue.Value.value,
                 EnvironmentValue: innerEnvValue.Value.value,
-                PerformanceCounters: aggregatePerformanceCounters);
+                EvalWorkCounters: aggregateEvalWorkCounters);
     }
 
-    private static (PineValueInProcess value, PerformanceCounters perfCounts)? DirectEvalIfSimpleTemplate(
+    private static (PineValueInProcess value, EvalWorkCounters evalWorkCounters)? DirectEvalIfSimpleTemplate(
         Expression expression,
         PineValueInProcess envValue)
     {
@@ -3731,12 +3730,12 @@ public class PineVM : ICancellablePineVM
         return EvalDirect(expression, envValue);
     }
 
-    internal static (PineValueInProcess value, PerformanceCounters perfCounts)? EvalDirect(
+    internal static (PineValueInProcess value, EvalWorkCounters evalWorkCounters)? EvalDirect(
         Expression expression,
         PineValueInProcess envValue) =>
         EvalDirect(expression, envValue, preserveConstructorSharing: true);
 
-    internal static (PineValueInProcess value, PerformanceCounters perfCounts)? EvalDirect(
+    internal static (PineValueInProcess value, EvalWorkCounters evalWorkCounters)? EvalDirect(
         Expression expression,
         PineValueInProcess envValue,
         bool preserveConstructorSharing)
@@ -3746,10 +3745,10 @@ public class PineVM : ICancellablePineVM
         if (profile is not null)
             return EvalDirectProfiled(expression, envValue, profile, preserveConstructorSharing);
 
-        var performanceCounters = new MutablePerformanceCounters();
+        var evalWorkCounters = new MutableEvalWorkCounters();
         var memo = preserveConstructorSharing ? CreateDirectConstructorMemo(expression) : null;
-        var value = EvalDirect(expression, envValue, ref performanceCounters, isRoot: true, constructorMemo: memo);
-        return value is null ? null : (value, performanceCounters.ToImmutable());
+        var value = EvalDirect(expression, envValue, ref evalWorkCounters, isRoot: true, constructorMemo: memo);
+        return value is null ? null : (value, evalWorkCounters.ToImmutable());
     }
 
     private readonly record struct DirectConstructorMemoEntry(
@@ -3785,7 +3784,7 @@ public class PineVM : ICancellablePineVM
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static (PineValueInProcess value, PerformanceCounters perfCounts)? EvalDirectProfiled(
+    private static (PineValueInProcess value, EvalWorkCounters evalWorkCounters)? EvalDirectProfiled(
         Expression expression,
         PineValueInProcess envValue,
         PineVMWorkProfile profile,
@@ -3807,7 +3806,7 @@ public class PineVM : ICancellablePineVM
         if (constructorEligible)
             previousOpportunities = profile.BeginConstructorInvocation();
 
-        var performanceCounters = new MutablePerformanceCounters();
+        var evalWorkCounters = new MutableEvalWorkCounters();
 
         var completed = false;
         bool? resultAlreadyMaterialized = null;
@@ -3845,7 +3844,7 @@ public class PineVM : ICancellablePineVM
                         EvalDirect(
                             expression,
                             envValue,
-                            ref performanceCounters,
+                            ref evalWorkCounters,
                             references,
                             isRoot: true,
                             constructorMemo: memo);
@@ -3856,16 +3855,16 @@ public class PineVM : ICancellablePineVM
                 }
             }
             else
-                value = EvalDirect(expression, envValue, ref performanceCounters, references, isRoot: true);
+                value = EvalDirect(expression, envValue, ref evalWorkCounters, references, isRoot: true);
 
             if (value is null)
                 return null;
 
             completed = true;
             resultAlreadyMaterialized = value.EvaluatedOrNull is not null;
-            var perfCounts = performanceCounters.ToImmutable();
+            var snapshot = evalWorkCounters.ToImmutable();
 
-            return (value, perfCounts);
+            return (value, snapshot);
         }
         finally
         {
@@ -3875,19 +3874,19 @@ public class PineVM : ICancellablePineVM
                     previousOpportunities,
                     completed,
                     resultAlreadyMaterialized,
-                    completed ? performanceCounters.ToImmutable() : null);
+                    completed ? evalWorkCounters.ToImmutable() : null);
             }
         }
     }
 
-    private record struct MutablePerformanceCounters(
+    private record struct MutableEvalWorkCounters(
         long InvocationCount,
         long BuildListCount,
         long LoopIterationCount,
         long InstructionCount,
         long BuildListItemCount = 0)
     {
-        public readonly PerformanceCounters ToImmutable() =>
+        public readonly EvalWorkCounters ToImmutable() =>
             new(
                 InvocationCount,
                 BuildListCount,
@@ -3899,7 +3898,7 @@ public class PineVM : ICancellablePineVM
     private static PineValueInProcess? EvalDirect(
         Expression expression,
         PineValueInProcess envValue,
-        ref MutablePerformanceCounters performanceCounters,
+        ref MutableEvalWorkCounters evalWorkCounters,
         HashSet<Expression>? references = null,
         bool isRoot = false,
         bool underRepeatFrontier = false,
@@ -3911,14 +3910,14 @@ public class PineVM : ICancellablePineVM
 
         if (constructorMemo is not null && constructorMemo.TryGetValue(expression, out var cached))
         {
-            performanceCounters.InstructionCount += cached.Instructions;
-            performanceCounters.BuildListCount += cached.Lists;
-            performanceCounters.BuildListItemCount += cached.ListItems;
+            evalWorkCounters.InstructionCount += cached.Instructions;
+            evalWorkCounters.BuildListCount += cached.Lists;
+            evalWorkCounters.BuildListItemCount += cached.ListItems;
             profile?.DirectConstructorMemoHit(expression);
             return cached.Value;
         }
 
-        performanceCounters.InstructionCount++;
+        evalWorkCounters.InstructionCount++;
 
         if (expression is Expression.Litral literal)
         {
@@ -3945,12 +3944,12 @@ public class PineVM : ICancellablePineVM
 
         if (expression is Expression.List listExpr)
         {
-            var instructionsBefore = performanceCounters.InstructionCount - 1;
-            var listsBefore = performanceCounters.BuildListCount;
-            var listItemsBefore = performanceCounters.BuildListItemCount;
+            var instructionsBefore = evalWorkCounters.InstructionCount - 1;
+            var listsBefore = evalWorkCounters.BuildListCount;
+            var listItemsBefore = evalWorkCounters.BuildListItemCount;
             var pureConstructor = constructorMemo is not null;
-            performanceCounters.BuildListCount++;
-            performanceCounters.BuildListItemCount += listExpr.Items.Count;
+            evalWorkCounters.BuildListCount++;
+            evalWorkCounters.BuildListItemCount += listExpr.Items.Count;
             var items = new PineValueInProcess[listExpr.Items.Count];
             profile?.Count(PineVMWorkProfile.Metric.EvalDirectListArrays);
             profile?.Count(PineVMWorkProfile.Metric.EvalDirectListItems, items.Length);
@@ -3973,7 +3972,7 @@ public class PineVM : ICancellablePineVM
                     EvalDirect(
                         itemExpr,
                         envValue,
-                        ref performanceCounters,
+                        ref evalWorkCounters,
                         references,
                         underRepeatFrontier: pruned,
                         constructorMemo: constructorMemo);
@@ -4010,9 +4009,9 @@ public class PineVM : ICancellablePineVM
                     expression,
                     new(
                         result,
-                        performanceCounters.InstructionCount - instructionsBefore,
-                        performanceCounters.BuildListCount - listsBefore,
-                        performanceCounters.BuildListItemCount - listItemsBefore));
+                        evalWorkCounters.InstructionCount - instructionsBefore,
+                        evalWorkCounters.BuildListCount - listsBefore,
+                        evalWorkCounters.BuildListItemCount - listItemsBefore));
             }
 
             return result;
@@ -4024,7 +4023,7 @@ public class PineVM : ICancellablePineVM
                 EvalDirect(
                     conditionalExpr.Condition,
                     envValue,
-                    ref performanceCounters,
+                    ref evalWorkCounters,
                     references,
                     underRepeatFrontier: pruned);
 
@@ -4039,7 +4038,7 @@ public class PineVM : ICancellablePineVM
                     EvalDirect(
                         conditionalExpr.TrueBranch,
                         envValue,
-                        ref performanceCounters,
+                        ref evalWorkCounters,
                         references,
                         underRepeatFrontier: pruned);
             }
@@ -4049,7 +4048,7 @@ public class PineVM : ICancellablePineVM
                     EvalDirect(
                         conditionalExpr.FalseBranch,
                         envValue,
-                        ref performanceCounters,
+                        ref evalWorkCounters,
                         references,
                         underRepeatFrontier: pruned);
             }
@@ -4065,7 +4064,7 @@ public class PineVM : ICancellablePineVM
         {
             if (builtinExpr.Function is nameof(BuiltinFunction.length))
             {
-                var inputValue = EvalDirect(builtinExpr.Input, envValue, ref performanceCounters);
+                var inputValue = EvalDirect(builtinExpr.Input, envValue, ref evalWorkCounters);
 
                 if (inputValue is null)
                     return null;
@@ -4080,12 +4079,12 @@ public class PineVM : ICancellablePineVM
                     if (equalInputList.Items.Count < 2)
                         return PineValueInProcess.KernelTrueValue;
 
-                    if (EvalDirect(equalInputList.Items[0], envValue, ref performanceCounters) is not { } firstItemValue)
+                    if (EvalDirect(equalInputList.Items[0], envValue, ref evalWorkCounters) is not { } firstItemValue)
                         return null;
 
                     for (var i = 1; i < equalInputList.Items.Count; ++i)
                     {
-                        if (EvalDirect(equalInputList.Items[i], envValue, ref performanceCounters) is not { } nextItemValue)
+                        if (EvalDirect(equalInputList.Items[i], envValue, ref evalWorkCounters) is not { } nextItemValue)
                             return null;
 
                         if (!PineValueInProcess.AreEqual(firstItemValue, nextItemValue))
@@ -4096,7 +4095,7 @@ public class PineVM : ICancellablePineVM
                 }
 
                 {
-                    var inputValue = EvalDirect(builtinExpr.Input, envValue, ref performanceCounters);
+                    var inputValue = EvalDirect(builtinExpr.Input, envValue, ref evalWorkCounters);
 
                     if (inputValue is null)
                         return null;
@@ -4140,7 +4139,7 @@ public class PineVM : ICancellablePineVM
 
                         if (!skipCount.HasValue)
                         {
-                            if (EvalDirect(skipInputListExpr.Items[0], envValue, ref performanceCounters) is { } skipInputValue)
+                            if (EvalDirect(skipInputListExpr.Items[0], envValue, ref evalWorkCounters) is { } skipInputValue)
                             {
                                 skipCount = (int?)skipInputValue.AsInteger();
                             }
@@ -4148,7 +4147,7 @@ public class PineVM : ICancellablePineVM
 
                         if (skipCount.HasValue)
                         {
-                            if (EvalDirect(skipInputListExpr.Items[1], envValue, ref performanceCounters) is { } skipSubjectValue)
+                            if (EvalDirect(skipInputListExpr.Items[1], envValue, ref evalWorkCounters) is { } skipSubjectValue)
                             {
                                 if (skipCount <= 0)
                                 {
@@ -4161,7 +4160,7 @@ public class PineVM : ICancellablePineVM
                     }
                     else
                     {
-                        if (EvalDirect(innerBuiltinExpr.Input, envValue, ref performanceCounters) is { } skipInputValue)
+                        if (EvalDirect(innerBuiltinExpr.Input, envValue, ref evalWorkCounters) is { } skipInputValue)
                         {
                             var skipInputLength = skipInputValue.GetLength();
 
@@ -4186,7 +4185,7 @@ public class PineVM : ICancellablePineVM
                     }
                 }
 
-                var inputValue = EvalDirect(builtinExpr.Input, envValue, ref performanceCounters);
+                var inputValue = EvalDirect(builtinExpr.Input, envValue, ref evalWorkCounters);
 
                 if (inputValue is null)
                     return null;
@@ -4196,7 +4195,7 @@ public class PineVM : ICancellablePineVM
 
             if (builtinExpr.Function is nameof(BuiltinFunction.skip))
             {
-                var inputValue = EvalDirect(builtinExpr.Input, envValue, ref performanceCounters);
+                var inputValue = EvalDirect(builtinExpr.Input, envValue, ref evalWorkCounters);
 
                 if (inputValue is null)
                     return null;
@@ -4222,7 +4221,7 @@ public class PineVM : ICancellablePineVM
 
             if (builtinExpr.Function is nameof(BuiltinFunction.take))
             {
-                var inputValue = EvalDirect(builtinExpr.Input, envValue, ref performanceCounters);
+                var inputValue = EvalDirect(builtinExpr.Input, envValue, ref evalWorkCounters);
 
                 if (inputValue is null)
                     return null;
@@ -4257,14 +4256,14 @@ public class PineVM : ICancellablePineVM
             {
                 if (builtinExpr.Input is Expression.List concatList && concatList.Items.Count is 2)
                 {
-                    if (EvalDirect(concatList.Items[0], envValue, ref performanceCounters) is { } leftValue &&
-                        EvalDirect(concatList.Items[1], envValue, ref performanceCounters) is { } rightValue)
+                    if (EvalDirect(concatList.Items[0], envValue, ref evalWorkCounters) is { } leftValue &&
+                        EvalDirect(concatList.Items[1], envValue, ref evalWorkCounters) is { } rightValue)
                     {
                         return PineValueInProcess.ConcatBinary(leftValue, rightValue);
                     }
                 }
 
-                var inputValue = EvalDirect(builtinExpr.Input, envValue, ref performanceCounters);
+                var inputValue = EvalDirect(builtinExpr.Input, envValue, ref evalWorkCounters);
 
                 if (inputValue is null)
                     return null;
@@ -4274,7 +4273,7 @@ public class PineVM : ICancellablePineVM
 
             if (builtinExpr.Function is nameof(BuiltinFunction.int_is_sorted_asc))
             {
-                var inputValue = EvalDirect(builtinExpr.Input, envValue, ref performanceCounters);
+                var inputValue = EvalDirect(builtinExpr.Input, envValue, ref evalWorkCounters);
 
                 if (inputValue is null)
                     return null;
@@ -4284,7 +4283,7 @@ public class PineVM : ICancellablePineVM
 
             if (builtinExpr.Function is nameof(BuiltinFunction.int_add))
             {
-                var inputValue = EvalDirect(builtinExpr.Input, envValue, ref performanceCounters);
+                var inputValue = EvalDirect(builtinExpr.Input, envValue, ref evalWorkCounters);
 
                 if (inputValue is null)
                     return null;
@@ -4294,7 +4293,7 @@ public class PineVM : ICancellablePineVM
 
             if (builtinExpr.Function is nameof(BuiltinFunction.int_mul))
             {
-                var inputValue = EvalDirect(builtinExpr.Input, envValue, ref performanceCounters);
+                var inputValue = EvalDirect(builtinExpr.Input, envValue, ref evalWorkCounters);
 
                 if (inputValue is null)
                     return null;
@@ -4311,7 +4310,7 @@ public class PineVM : ICancellablePineVM
                 EvalDirect(
                     stringTagExpr.Tagged,
                     envValue,
-                    ref performanceCounters,
+                    ref evalWorkCounters,
                     references,
                     underRepeatFrontier: pruned);
         }

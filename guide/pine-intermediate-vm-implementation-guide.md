@@ -45,7 +45,7 @@ the token cannot be interrupted while it is running.
 
 ## Structured evaluation errors
 
-`EvaluationError` contains a reason, performance counters, and a bounded stack
+`EvaluationError` contains a reason, evaluation work counters, and a bounded stack
 trace ordered from the innermost frame to the outermost. Each stack-trace entry
 retains the expression, frame input, selected instructions, and instruction
 pointer. These objects are retained by reference, avoiding expression hashing,
@@ -57,26 +57,41 @@ derivations such as expression encoding and hashing only on demand.
 
 ## Evaluation work counters
 
-`PerformanceCountersFormatting.FormatCounts` and `FormatAllCounts` both include
-all counters. `DirectInterpreter.Counters` records external entries separately from
+`EvalWorkCounters` contains execution work, excluding cached metadata derivations.
+`EvalWorkCountersFormatting.FormatCounts` and `FormatAllCounts` both include
+all evaluation counters. `DirectInterpreter.Counters` records external entries separately from
 recursive expression visits, with per-kind counters except for trivial labels.
 Label visits remain included in the aggregate expression count.
 `BuildListItemCount` counts immediate list slots, including literal prefixes and
 direct evaluation, rather than sizes of referenced subtrees. It is rendered
-immediately after `BuildListCount` in both text and JSON. Performance-counter snapshots use the test
+immediately after `BuildListCount` in both text and JSON. Evaluation-work-counter snapshots use the test
 helper `ShouldBeWithDiff` to display bounded, multi-line difference hunks.
 
 VM reports, errors and live evaluation events expose `CountersByOrigin` /
-`LoadCountersByOrigin`. The disjoint origins separate `VirtualMachine` work from
-`ExpressionTemplatePlanParsing` and `DeferredTemplateValueMaterialization`. Frame baselines use the
-same counter snapshot and subtraction operations so new fields propagate to
-per-frame reports as well as evaluation-wide totals.
+`LoadCountersByOrigin`. `EvalWorkCountersByOrigin.Total` sums only `VirtualMachine`
+and `DeferredTemplateValueMaterialization`. Allocating and reconstructing deferred
+runtime values is evaluation work, not shared metadata derivation work.
+The snapshot's separate `CachedWorkCounters` contains template recognition attempts
+(`ExpressionTemplatePlanParseCount`) and their direct-interpreter work
+(`ExpressionTemplatePlanParsing`). Reports and errors also expose it directly.
+Frame baselines subtract both categories independently.
+
+`CachedWorkCounters` is a reusable value record, independent of the collector:
+an evaluation or a cache container can populate and aggregate snapshots.
+Only template recognition is currently instrumented here; expression parsing,
+encoding, reduction and sequential-IR compilation are not yet counted.
+Cached derivation work depends on cache state and is **not deterministic per VM
+or request** when workers share caches: attribution depends on who wins a race,
+and concurrent cache factories may perform redundant work. Do not equate attempts
+with distinct cache entries. `CachedWorkCountersFormatting` renders this work
+separately; phase reports and JSON preserve both categories without adding cached
+work to evaluation totals or invocation/loop budgets.
 
 `EvaluationConfig.MaterializeResult` defaults to `false`, preserving lazy root
 results. Consumers that will materialize the result immediately, such as Elm test
 instrumentation, set it to `true` so the final snapshot includes that work.
-Counters exclude compilation and diagnostic serialization; cache-dependent work
-should be compared under a controlled cache policy.
+Evaluation counters exclude compilation and diagnostic serialization. Even execution
+work comparisons require a controlled invocation-cache policy and configuration.
 
 ## Compilation Units and Specializations
 

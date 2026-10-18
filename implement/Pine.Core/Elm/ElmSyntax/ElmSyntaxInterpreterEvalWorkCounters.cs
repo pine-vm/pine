@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace Pine.Core.Elm.ElmSyntax;
 
 /// <summary>
-/// Aggregated performance counters collected during evaluation of an Elm expression by
+/// Aggregated evaluation work counters collected during evaluation of an Elm expression by
 /// <see cref="ElmSyntaxInterpreter"/>. The granularity matches the high-level shape of the
 /// interpreter's CEK-style trampoline rather than the lower-level intermediate VM:
 /// a single trampoline iteration corresponds to either evaluating one sub-expression or
@@ -34,18 +34,18 @@ namespace Pine.Core.Elm.ElmSyntax;
 /// because its module name is one of the recognised Pine pseudo-module names
 /// (<c>Pine_builtin</c> or <c>Pine_kernel</c>).
 /// </param>
-public readonly record struct ElmSyntaxInterpreterPerformanceCounters(
+public readonly record struct ElmSyntaxInterpreterEvalWorkCounters(
     long InstructionLoopCount,
     long DirectFunctionApplicationCount,
     long FunctionValueApplicationCount,
     long PineBuiltinInvocationCount)
 {
     /// <summary>
-    /// Returns the element-wise sum of two <see cref="ElmSyntaxInterpreterPerformanceCounters"/> instances.
+    /// Returns the element-wise sum of two <see cref="ElmSyntaxInterpreterEvalWorkCounters"/> instances.
     /// </summary>
-    public static ElmSyntaxInterpreterPerformanceCounters Add(
-        ElmSyntaxInterpreterPerformanceCounters a,
-        ElmSyntaxInterpreterPerformanceCounters b) =>
+    public static ElmSyntaxInterpreterEvalWorkCounters Add(
+        ElmSyntaxInterpreterEvalWorkCounters a,
+        ElmSyntaxInterpreterEvalWorkCounters b) =>
         new(
             InstructionLoopCount: a.InstructionLoopCount + b.InstructionLoopCount,
             DirectFunctionApplicationCount: a.DirectFunctionApplicationCount + b.DirectFunctionApplicationCount,
@@ -54,25 +54,25 @@ public readonly record struct ElmSyntaxInterpreterPerformanceCounters(
 }
 
 /// <summary>
-/// Formats <see cref="ElmSyntaxInterpreterPerformanceCounters"/> as a human-readable
+/// Formats <see cref="ElmSyntaxInterpreterEvalWorkCounters"/> as a human-readable
 /// multi-line string suitable for use in test assertions and diagnostic output. The format
-/// mirrors <c>Pine.Core.Interpreter.IntermediateVM.PerformanceCountersFormatting</c>: one
+/// mirrors <c>Pine.Core.Interpreter.IntermediateVM.EvalWorkCountersFormatting</c>: one
 /// counter per line, integers rendered using
 /// <see cref="CommandLineInterface.FormatIntegerForDisplay(long)"/>.
 /// </summary>
-public static class ElmSyntaxInterpreterPerformanceCountersFormatting
+public static class ElmSyntaxInterpreterEvalWorkCountersFormatting
 {
     /// <summary>
-    /// Formats the given <see cref="ElmSyntaxInterpreterPerformanceCounters"/> as a multi-line string,
+    /// Formats the given <see cref="ElmSyntaxInterpreterEvalWorkCounters"/> as a multi-line string,
     /// with one counter per line and integers rendered using
     /// <see cref="CommandLineInterface.FormatIntegerForDisplay(long)"/> for readability.
     /// </summary>
-    public static string FormatCounts(ElmSyntaxInterpreterPerformanceCounters counters) =>
+    public static string FormatCounts(ElmSyntaxInterpreterEvalWorkCounters counters) =>
         string.Join(
             "\n",
             EnumerateCountLines(counters));
 
-    private static IEnumerable<string> EnumerateCountLines(ElmSyntaxInterpreterPerformanceCounters counters)
+    private static IEnumerable<string> EnumerateCountLines(ElmSyntaxInterpreterEvalWorkCounters counters)
     {
         yield return "InstructionLoopCount: " + CommandLineInterface.FormatIntegerForDisplay(counters.InstructionLoopCount);
         yield return "DirectFunctionApplicationCount: " + CommandLineInterface.FormatIntegerForDisplay(counters.DirectFunctionApplicationCount);

@@ -124,7 +124,7 @@ public class ElmTestRunCacheSessionTests(ITestOutputHelper output)
         invocationCount.Should().BeGreaterThan(0);
 
         using var secondBudget = new ElmTestInstrumentation(new(), recordDiagnostics: false);
-        secondBudget.GetSummary().Counters.Should().Be(default(PerformanceCounters));
+        secondBudget.GetSummary().Counters.Should().Be(default(EvalWorkCounters));
 
         var second =
             ElmTestRunner.CompileAndRunTests(
@@ -164,7 +164,7 @@ public class ElmTestRunCacheSessionTests(ITestOutputHelper output)
 
         secondBudget.GetSummary().CountersByPhase.Values.Sum(
             origins =>
-            origins.ExpressionTemplatePlanParsing.ExpressionTemplatePlanParseCount).Should().Be(0);
+            origins.CachedWorkCounters.ExpressionTemplatePlanParseCount).Should().Be(0);
 
         var secondCounters = secondBudget.GetSummary();
 

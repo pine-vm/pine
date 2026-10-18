@@ -357,7 +357,7 @@ public static class RunCommand
             var counters = tracker.GetSummary().Counters;
 
             if (counters != default)
-                error.WriteLine(PerformanceCountersFormatting.FormatCounts(counters));
+                error.WriteLine(EvalWorkCountersFormatting.FormatCounts(counters));
 
             return tracker.CancelledByUser ? 130 : 124;
         }

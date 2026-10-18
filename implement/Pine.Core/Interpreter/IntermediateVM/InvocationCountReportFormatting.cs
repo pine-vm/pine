@@ -6,7 +6,7 @@ namespace Pine.Core.Interpreter.IntermediateVM;
 /// <summary>
 /// Formats <see cref="InvocationCountReport"/> as a human-readable multi-line
 /// string suitable for use in test assertions and diagnostic output, mirroring
-/// the conventions of <see cref="PerformanceCountersFormatting"/>.
+/// the conventions of <see cref="EvalWorkCountersFormatting"/>.
 /// </summary>
 public static class InvocationCountReportFormatting
 {

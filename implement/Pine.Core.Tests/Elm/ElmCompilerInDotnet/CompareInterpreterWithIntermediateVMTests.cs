@@ -29,8 +29,8 @@ public class CompareInterpreterWithIntermediateVMTests
 
         repeated.Value.Should().Be(first.Value);
 
-        PerformanceCountersFormatting.FormatCounts(repeated.VmCounters)
-            .ShouldBeWithDiff(PerformanceCountersFormatting.FormatCounts(first.VmCounters));
+        EvalWorkCountersFormatting.FormatCounts(repeated.VmCounters)
+            .ShouldBeWithDiff(EvalWorkCountersFormatting.FormatCounts(first.VmCounters));
     }
 
     /// <summary>
@@ -127,8 +127,8 @@ public class CompareInterpreterWithIntermediateVMTests
 
     /// <summary>
     /// Demonstrates that a Pine_kernel-using function increments the
-    /// <see cref="ElmSyntaxInterpreterPerformanceCounters.PineBuiltinInvocationCount"/> on the
-    /// interpreter side while the VM's <see cref="PerformanceCounters.InstructionCount"/>
+    /// <see cref="ElmSyntaxInterpreterEvalWorkCounters.PineBuiltinInvocationCount"/> on the
+    /// interpreter side while the VM's <see cref="EvalWorkCounters.InstructionCount"/>
     /// reflects the same arithmetic at a much lower level.
     /// </summary>
     [Fact]

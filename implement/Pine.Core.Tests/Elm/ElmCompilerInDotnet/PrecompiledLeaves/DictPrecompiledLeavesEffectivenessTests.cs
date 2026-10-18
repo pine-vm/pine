@@ -136,7 +136,7 @@ public class DictPrecompiledLeavesEffectivenessTests
                 vm);
     }
 
-    private static (ElmValue value, PerformanceCounters counters) ApplyUnary(
+    private static (ElmValue value, EvalWorkCounters counters) ApplyUnary(
         string functionName,
         ElmValue argument,
         Core.Interpreter.IntermediateVM.PineVM vm) =>
@@ -146,10 +146,10 @@ public class DictPrecompiledLeavesEffectivenessTests
             vm);
 
     private static void AssertRecursionShortCircuited(
-        (ElmValue value, PerformanceCounters counters) simpleNoLeaves,
-        (ElmValue value, PerformanceCounters counters) complexNoLeaves,
-        (ElmValue value, PerformanceCounters counters) simpleWithLeaves,
-        (ElmValue value, PerformanceCounters counters) complexWithLeaves,
+        (ElmValue value, EvalWorkCounters counters) simpleNoLeaves,
+        (ElmValue value, EvalWorkCounters counters) complexNoLeaves,
+        (ElmValue value, EvalWorkCounters counters) simpleWithLeaves,
+        (ElmValue value, EvalWorkCounters counters) complexWithLeaves,
         ElmValue expectedSimple,
         ElmValue expectedComplex)
     {

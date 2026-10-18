@@ -21,7 +21,7 @@ namespace Pine.Core.Tests.Interpreter.IntermediateVM;
 public class PineVMWorkProfileTests
 {
     // These tests measure the unoptimized observer and its counterfactual sharing estimates.
-    private static (PineValueInProcess value, PerformanceCounters perfCounts)? BaselineDirect(
+    private static (PineValueInProcess value, EvalWorkCounters evalWorkCounters)? BaselineDirect(
         Expression expression, PineValueInProcess environment) =>
         ProfiledVM.EvalDirect(expression, environment, preserveConstructorSharing: false);
 
@@ -424,7 +424,7 @@ public class PineVMWorkProfileTests
         foreach (var expression in expressions)
         {
             var baseline = BaselineDirect(expression, input.Environment);
-            (PineValueInProcess value, PerformanceCounters perfCounts)? actual;
+            (PineValueInProcess value, EvalWorkCounters evalWorkCounters)? actual;
 
             using (profile.Enter())
                 actual = BaselineDirect(expression, input.Environment);
@@ -433,18 +433,18 @@ public class PineVMWorkProfileTests
 
             if (actual is { } completed && baseline is { } expected)
             {
-                completed.perfCounts.Should().Be(expected.perfCounts);
+                completed.evalWorkCounters.Should().Be(expected.evalWorkCounters);
                 completed.value.Evaluate().Should().Be(expected.value.Evaluate());
             }
         }
 
-        var expectedUnprofiled = BaselineDirect(input.Expression, input.Environment)!.Value.perfCounts;
+        var expectedUnprofiled = BaselineDirect(input.Expression, input.Environment)!.Value.evalWorkCounters;
         var calls = profile[PineVMWorkProfile.Metric.EvalDirectCalls];
 
         using (profile.Enter())
 
         using (PineVMWorkProfile.EnterEvaluation(null, default, null))
-            BaselineDirect(input.Expression, input.Environment)!.Value.perfCounts.Should().Be(expectedUnprofiled);
+            BaselineDirect(input.Expression, input.Environment)!.Value.evalWorkCounters.Should().Be(expectedUnprofiled);
 
         profile[PineVMWorkProfile.Metric.EvalDirectCalls].Should().Be(calls);
         PineVMWorkProfile.Current.Should().BeNull();

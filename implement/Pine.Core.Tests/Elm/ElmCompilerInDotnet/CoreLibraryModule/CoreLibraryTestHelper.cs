@@ -152,33 +152,33 @@ public static class CoreLibraryTestHelper
             .Extract(err => throw new System.Exception("Failed decode as Elm value: " + err));
     }
 
-    public static (ElmValue value, PerformanceCounters report) ApplyAndProfileUnary(
+    public static (ElmValue value, EvalWorkCounters report) ApplyAndProfileUnary(
         PineValue functionValue,
         ElmValue argument,
         Core.Interpreter.IntermediateVM.PineVM vm) =>
         ApplyGenericWithProfiling(functionValue, [argument], vm);
 
-    public static (ElmValue value, PerformanceCounters report) ApplyAndProfileUnary(
+    public static (ElmValue value, EvalWorkCounters report) ApplyAndProfileUnary(
         PineValue functionValue,
         ElmValue argument,
         Core.Interpreter.IntermediateVM.PineVM vm,
         ReportEnteredStackFrame? reportEnteredStackFrame) =>
         ApplyGenericWithProfiling(functionValue, [argument], vm, reportEnteredStackFrame);
 
-    public static (ElmValue value, PerformanceCounters report) ApplyAndProfileBinary(
+    public static (ElmValue value, EvalWorkCounters report) ApplyAndProfileBinary(
         PineValue functionValue,
         ElmValue arg1,
         ElmValue arg2,
         Core.Interpreter.IntermediateVM.PineVM vm) =>
         ApplyGenericWithProfiling(functionValue, [arg1, arg2], vm);
 
-    public static (ElmValue value, PerformanceCounters report) ApplyGenericWithProfiling(
+    public static (ElmValue value, EvalWorkCounters report) ApplyGenericWithProfiling(
         PineValue functionValue,
         ElmValue[] arguments,
         Core.Interpreter.IntermediateVM.PineVM vm) =>
         ApplyGenericWithProfiling(functionValue, arguments, vm, reportEnteredStackFrame: null);
 
-    public static (ElmValue value, PerformanceCounters report) ApplyGenericWithProfiling(
+    public static (ElmValue value, EvalWorkCounters report) ApplyGenericWithProfiling(
         PineValue functionValue,
         ElmValue[] arguments,
         Core.Interpreter.IntermediateVM.PineVM vm,
@@ -203,13 +203,13 @@ public static class CoreLibraryTestHelper
         return (elmValue, report);
     }
 
-    public static (PineValue result, PerformanceCounters report) ApplyGenericPineWithProfiling(
+    public static (PineValue result, EvalWorkCounters report) ApplyGenericPineWithProfiling(
         PineValue functionValue,
         IReadOnlyList<PineValue> arguments,
         Core.Interpreter.IntermediateVM.PineVM vm) =>
         ApplyGenericPineWithProfiling(functionValue, arguments, vm, reportEnteredStackFrame: null);
 
-    public static (PineValue result, PerformanceCounters report) ApplyGenericPineWithProfiling(
+    public static (PineValue result, EvalWorkCounters report) ApplyGenericPineWithProfiling(
         PineValue functionValue,
         IReadOnlyList<PineValue> arguments,
         Core.Interpreter.IntermediateVM.PineVM vm,
@@ -243,7 +243,7 @@ public static class CoreLibraryTestHelper
         }
 
         var aggregated =
-            PerformanceCounters.Aggregate(reports.Select(r => r.Counters));
+            EvalWorkCounters.Aggregate(reports.Select(r => r.Counters));
 
         return (currentValue, aggregated);
     }

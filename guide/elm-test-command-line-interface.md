@@ -124,8 +124,8 @@ Ordinary test options other than `--watch` are accepted, including source, filte
 offline resolution, dependency reports, color and duration reporting. Unlike ordinary `elm test`,
 profiling always executes selected tests serially, regardless of `--workers`. Each test gets a fresh
 VM and fresh invocation, parsing, compilation, encoding and reduction caches, separate from both
-preparation and other tests. This prevents cache warming and scheduling from changing performance
-counters. For fuzz tests, use a fixed `--seed` and `--fuzz` to reproduce the work.
+preparation and other tests. This prevents cache warming and scheduling from changing evaluation
+work counters. For fuzz tests, use a fixed `--seed` and `--fuzz` to reproduce the work.
 
 Terminal statistics, expression rankings and the JSON report aggregate work across all selected
 tests. Preparation is counted once per command and remains separate from execution in
@@ -134,7 +134,14 @@ lists all selected runnable test paths in discovery order; `SelectedTest` remain
 for a single-test selection. Invocation/loop budgets and the timeout still apply to the entire
 command, including preparation, not independently to each test. Timeouts and cancellation can
 stop at different points in the computation; elapsed time and periodic stack samples are not
-deterministic performance counters.
+deterministic evaluation work counters.
+
+`Summary.Counters` and each phase's `Total` are `EvalWorkCounters`, excluding cached
+metadata derivations. `Summary.CachedWorkCounters` aggregates the separate cached
+work in each phase. Currently these count template recognition attempts and their
+direct-interpreter work, not all parsing or compilation. With shared caches,
+cached work attribution depends on cache state and worker races, so it is not a
+deterministic per-VM execution measure.
 
 Diagnostic options include:
 

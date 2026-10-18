@@ -888,7 +888,7 @@ public class ElmLanguageServiceTests
     /// 1. Initialize language service state
     /// 2. Add two workspace files (one module references a function from the other)
     /// 3. Send a TextDocumentReferencesRequest for the referenced function
-    /// 4. Assert on the rendered response and aggregate performance counters
+    /// 4. Assert on the rendered response and aggregate evaluation work counters
     /// <para>
     /// This test is currently skipped because the compile-to-PineVM pipeline produces
     /// malformed bytecode for <c>addWorkspaceFile</c> (the wrapper around
@@ -974,20 +974,19 @@ public class ElmLanguageServiceTests
         responseAsExpression.expressionString.Should().Be(ReferencesScenario_ExpectedResponse);
 
         var aggregateCounters =
-            PerformanceCounters.Aggregate(
+            EvalWorkCounters.Aggregate(
                 reports.Select(r => r.Counters));
 
         var aggregateInvocationCounts =
             InvocationCountReport.Aggregate(invocationCountReports);
 
-        PerformanceCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
+        EvalWorkCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
             """
             InvocationCount: 777
             BuildListCount: 1_535
             BuildListItemCount: 6_487
             LoopIterationCount: 216
             InstructionCount: 23_871
-            ExpressionTemplatePlanParseCount: 68
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 9
             DeferredTemplateValueMaterializationCount: 0
@@ -1439,7 +1438,7 @@ public class ElmLanguageServiceTests
     /// <see cref="References_request_finds_usage_across_modules"/>. It asserts the
     /// same rendered response as the interpreter analog
     /// (<see cref="ChallengingReferencesScenario_ExpectedResponse"/>) and, in
-    /// addition, the aggregated performance-counter snapshots.
+    /// addition, the aggregated evaluation-work-counter snapshots.
     /// </summary>
     [Fact]
     public void References_request_finds_usage_across_modules_challenging()
@@ -1525,20 +1524,19 @@ public class ElmLanguageServiceTests
         responseAsExpression.expressionString.Should().Be(ChallengingReferencesScenario_ExpectedResponse);
 
         var aggregateCounters =
-            PerformanceCounters.Aggregate(
+            EvalWorkCounters.Aggregate(
                 reports.Select(r => r.Counters));
 
         var aggregateInvocationCounts =
             InvocationCountReport.Aggregate(invocationCountReports);
 
-        PerformanceCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
+        EvalWorkCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
             """
             InvocationCount: 2_141
             BuildListCount: 4_113
             BuildListItemCount: 17_747
             LoopIterationCount: 737
             InstructionCount: 62_353
-            ExpressionTemplatePlanParseCount: 111
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 24
             DeferredTemplateValueMaterializationCount: 0
@@ -1587,7 +1585,7 @@ public class ElmLanguageServiceTests
     /// <see cref="Core.Interpreter.IntermediateVM.PineVM"/>, and asserts that the
     /// resulting <c>WorkspaceEdit</c> covers both the declaration site and all
     /// usage sites of <c>helper</c>. It also asserts the aggregated
-    /// performance-counter snapshots.
+    /// evaluation-work-counter snapshots.
     /// </summary>
     [Fact]
     public void Rename_request_renames_usage_across_modules_challenging()
@@ -1670,20 +1668,19 @@ public class ElmLanguageServiceTests
             """TextDocumentRenameResponse [ { edits = [ { newText = "renamedHelper", range = { endColumn = 7, endLineNumber = 12, startColumn = 1, startLineNumber = 12 } }, { newText = "renamedHelper", range = { endColumn = 7, endLineNumber = 13, startColumn = 1, startLineNumber = 13 } }, { newText = "renamedHelper", range = { endColumn = 32, endLineNumber = 1, startColumn = 26, startLineNumber = 1 } } ], filePath = "src/ModuleA.elm" }, { edits = [ { newText = "renamedHelper", range = { endColumn = 19, endLineNumber = 7, startColumn = 13, startLineNumber = 7 } }, { newText = "renamedHelper", range = { endColumn = 38, endLineNumber = 7, startColumn = 32, startLineNumber = 7 } } ], filePath = "src/ModuleB.elm" }, { edits = [ { newText = "renamedHelper", range = { endColumn = 19, endLineNumber = 12, startColumn = 13, startLineNumber = 12 } }, { newText = "renamedHelper", range = { endColumn = 38, endLineNumber = 12, startColumn = 32, startLineNumber = 12 } }, { newText = "renamedHelper", range = { endColumn = 30, endLineNumber = 16, startColumn = 24, startLineNumber = 16 } } ], filePath = "src/ModuleC.elm" } ]""");
 
         var aggregateCounters =
-            PerformanceCounters.Aggregate(
+            EvalWorkCounters.Aggregate(
                 reports.Select(r => r.Counters));
 
         var aggregateInvocationCounts =
             InvocationCountReport.Aggregate(invocationCountReports);
 
-        PerformanceCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
+        EvalWorkCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
             """
             InvocationCount: 2_145
             BuildListCount: 4_126
             BuildListItemCount: 17_818
             LoopIterationCount: 737
             InstructionCount: 62_430
-            ExpressionTemplatePlanParseCount: 112
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 25
             DeferredTemplateValueMaterializationCount: 0
@@ -1878,20 +1875,19 @@ public class ElmLanguageServiceTests
         responseAsExpression.expressionString.Should().Be(ComplexDocumentSymbolsScenario_ExpectedResponse);
 
         var aggregateCounters =
-            PerformanceCounters.Aggregate(
+            EvalWorkCounters.Aggregate(
                 reports.Select(r => r.Counters));
 
         var aggregateInvocationCounts =
             InvocationCountReport.Aggregate(invocationCountReports);
 
-        PerformanceCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
+        EvalWorkCountersFormatting.FormatCounts(aggregateCounters).ShouldBeWithDiff(
             """
             InvocationCount: 4_092
             BuildListCount: 7_379
             BuildListItemCount: 32_662
             LoopIterationCount: 2_740
             InstructionCount: 116_867
-            ExpressionTemplatePlanParseCount: 149
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 35
             DeferredTemplateValueMaterializationCount: 0

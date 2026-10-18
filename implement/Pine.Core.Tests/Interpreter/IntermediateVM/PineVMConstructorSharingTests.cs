@@ -31,7 +31,7 @@ public class PineVMConstructorSharingTests
         var environment = PineValueInProcess.Create(PineValue.Blob([42, 43]));
         var baseline = DirectVM.EvalDirect(expression, environment, preserveConstructorSharing: false)!.Value;
         using var profile = new PineVMWorkProfile();
-        (PineValueInProcess value, PerformanceCounters perfCounts) actual;
+        (PineValueInProcess value, EvalWorkCounters evalWorkCounters) actual;
 
         using (PineVMWorkProfile.EnterEvaluation(profiled ? profile : null, default, null))
             actual = DirectVM.EvalDirect(expression, environment)!.Value;
@@ -40,10 +40,10 @@ public class PineVMConstructorSharingTests
         items[0].Should().BeSameAs(items[1]);
         items[0].ListItemsOrNull()![1].Should().BeSameAs(environment);
         baseline.value.ListItemsOrNull()![0].Should().NotBeSameAs(baseline.value.ListItemsOrNull()![1]);
-        actual.perfCounts.Should().Be(baseline.perfCounts);
-        actual.perfCounts.InstructionCount.Should().Be(7);
-        actual.perfCounts.BuildListCount.Should().Be(3);
-        actual.perfCounts.BuildListItemCount.Should().Be(6);
+        actual.evalWorkCounters.Should().Be(baseline.evalWorkCounters);
+        actual.evalWorkCounters.InstructionCount.Should().Be(7);
+        actual.evalWorkCounters.BuildListCount.Should().Be(3);
+        actual.evalWorkCounters.BuildListItemCount.Should().Be(6);
         FreshObjects(baseline.value, environment).Should().Be(8);
         FreshObjects(actual.value, environment).Should().Be(5);
         actual.value.Evaluate().Should().Be(baseline.value.Evaluate());
@@ -96,7 +96,7 @@ public class PineVMConstructorSharingTests
         items[0].Should().BeSameAs(items[2]).And.NotBeSameAs(items[1]);
         items[0].ListItemsOrNull()![0].Should().NotBeSameAs(items[1].ListItemsOrNull()![0]);
         actual.value.Evaluate().Should().Be(baseline.value.Evaluate());
-        actual.perfCounts.Should().Be(baseline.perfCounts);
+        actual.evalWorkCounters.Should().Be(baseline.evalWorkCounters);
     }
 
     [Fact]
@@ -114,7 +114,7 @@ public class PineVMConstructorSharingTests
         var baseline =
             DirectVM.EvalDirect(tree, PineValueInProcess.EmptyBlob, preserveConstructorSharing: false)!.Value;
 
-        actual.perfCounts.Should().Be(baseline.perfCounts);
+        actual.evalWorkCounters.Should().Be(baseline.evalWorkCounters);
 
         FreshObjects(actual.value, PineValueInProcess.EmptyBlob).Should().Be(
             FreshObjects(baseline.value, PineValueInProcess.EmptyBlob));
@@ -159,7 +159,7 @@ public class PineVMConstructorSharingTests
         items[0].Should().BeSameAs(items[1]);
         items[2].Should().BeSameAs(PineValueInProcess.EmptyList);
         items[3].Should().BeSameAs(PineValueInProcess.EmptyList);
-        actual.perfCounts.Should().Be(baseline.perfCounts);
+        actual.evalWorkCounters.Should().Be(baseline.evalWorkCounters);
         actual.value.Evaluate().Should().Be(baseline.value.Evaluate());
     }
 
@@ -195,8 +195,8 @@ public class PineVMConstructorSharingTests
         {
             using var baselineProfile = new PineVMWorkProfile();
             using var actualProfile = new PineVMWorkProfile();
-            (PineValueInProcess value, PerformanceCounters perfCounts)? baseline;
-            (PineValueInProcess value, PerformanceCounters perfCounts)? actual;
+            (PineValueInProcess value, EvalWorkCounters evalWorkCounters)? baseline;
+            (PineValueInProcess value, EvalWorkCounters evalWorkCounters)? actual;
 
             using (baselineProfile.Enter())
                 baseline =
@@ -209,7 +209,7 @@ public class PineVMConstructorSharingTests
 
             if (actual is { } result)
             {
-                result.perfCounts.Should().Be(baseline!.Value.perfCounts);
+                result.evalWorkCounters.Should().Be(baseline!.Value.evalWorkCounters);
                 result.value.Evaluate().Should().Be(baseline.Value.value.Evaluate());
             }
 
@@ -232,9 +232,9 @@ public class PineVMConstructorSharingTests
             if (completes)
             {
                 var actual = DirectVM.EvalDirect(SharedConstructor(), PineValueInProcess.EmptyBlob)!.Value;
-                actual.perfCounts.InstructionCount.Should().Be(7);
-                actual.perfCounts.BuildListCount.Should().Be(3);
-                actual.perfCounts.BuildListItemCount.Should().Be(6);
+                actual.evalWorkCounters.InstructionCount.Should().Be(7);
+                actual.evalWorkCounters.BuildListCount.Should().Be(3);
+                actual.evalWorkCounters.BuildListItemCount.Should().Be(6);
             }
             else
             {
@@ -392,7 +392,7 @@ public class PineVMConstructorSharingTests
         {
             for (var invocation = 0; invocation < 2; ++invocation)
             {
-                DirectVM.EvalDirect(expression, PineValueInProcess.EmptyBlob)!.Value.perfCounts.InstructionCount
+                DirectVM.EvalDirect(expression, PineValueInProcess.EmptyBlob)!.Value.evalWorkCounters.InstructionCount
                     .Should().Be(7);
             }
 
@@ -470,14 +470,14 @@ public class PineVMConstructorSharingTests
             expression = new Expression.List([expression, expression]);
 
         using var profile = new PineVMWorkProfile();
-        (PineValueInProcess value, PerformanceCounters perfCounts) actual;
+        (PineValueInProcess value, EvalWorkCounters evalWorkCounters) actual;
 
         using (profile.Enter())
             actual = DirectVM.EvalDirect(expression, PineValueInProcess.EmptyBlob)!.Value;
 
-        actual.perfCounts.InstructionCount.Should().Be((1L << (depth + 1)) - 1);
-        actual.perfCounts.BuildListCount.Should().Be((1L << depth) - 1);
-        actual.perfCounts.BuildListItemCount.Should().Be((1L << (depth + 1)) - 2);
+        actual.evalWorkCounters.InstructionCount.Should().Be((1L << (depth + 1)) - 1);
+        actual.evalWorkCounters.BuildListCount.Should().Be((1L << depth) - 1);
+        actual.evalWorkCounters.BuildListItemCount.Should().Be((1L << (depth + 1)) - 2);
         profile[PineVMWorkProfile.Metric.EvalDirectEntries].Should().Be(2 * depth + 1);
         profile[PineVMWorkProfile.Metric.EvalDirectListArrays].Should().Be(depth);
         profile[PineVMWorkProfile.Metric.DirectConstructorMemoHits].Should().Be(depth);

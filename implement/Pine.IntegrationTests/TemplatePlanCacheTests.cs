@@ -32,23 +32,26 @@ public class TemplatePlanCacheTests
         var template = BuildTemplate();
 
         var first = Evaluate(CreateVm(plans), template, 11);
-        first.Counters.ExpressionTemplatePlanParseCount.Should().BeGreaterThan(0);
+        first.CachedWorkCounters.ExpressionTemplatePlanParseCount.Should().BeGreaterThan(0);
         var count = plans.Count;
         count.Should().BeGreaterThan(0);
 
         var second = Evaluate(CreateVm(plans), template, 13);
-        second.Counters.ExpressionTemplatePlanParseCount.Should().Be(0);
+        second.CachedWorkCounters.ExpressionTemplatePlanParseCount.Should().Be(0);
         plans.Count.Should().Be(count);
         second.ReturnValue.Evaluate().Should().NotBe(first.ReturnValue.Evaluate());
 
         var separatePlans = new PineVMExpressionTemplatePlanCache();
         var separate = Evaluate(CreateVm(separatePlans), template, 13);
-        separate.Counters.ExpressionTemplatePlanParseCount.Should().BeGreaterThan(0);
+        separate.CachedWorkCounters.ExpressionTemplatePlanParseCount.Should().BeGreaterThan(0);
         separatePlans.Count.Should().Be(count);
         separate.ReturnValue.Evaluate().Should().Be(second.ReturnValue.Evaluate());
+        separate.Counters.Should().Be(second.Counters);
+        separate.CountersByOrigin.Total.Should().Be(separate.Counters);
+        second.CachedWorkCounters.Should().Be(default(CachedWorkCounters));
 
         var defaultCache = Evaluate(CreateVm(null), template, 13);
-        defaultCache.Counters.ExpressionTemplatePlanParseCount.Should().BeGreaterThan(0);
+        defaultCache.CachedWorkCounters.ExpressionTemplatePlanParseCount.Should().BeGreaterThan(0);
         defaultCache.ReturnValue.Evaluate().Should().Be(second.ReturnValue.Evaluate());
 
         IntermediatePineVM CreateVm(PineVMExpressionTemplatePlanCache? cache) =>
@@ -89,7 +92,7 @@ public class TemplatePlanCacheTests
         }
 
         var warm = Evaluate(SetupVM.Create(expressionTemplatePlanCache: plans), template, 41);
-        warm.Counters.ExpressionTemplatePlanParseCount.Should().Be(0);
+        warm.CachedWorkCounters.ExpressionTemplatePlanParseCount.Should().Be(0);
         plans.Count.Should().Be(count);
     }
 
@@ -116,7 +119,8 @@ public class TemplatePlanCacheTests
                 .Extract(error => throw new InvalidOperationException(error.ToString()));
 
             report.ReturnValue.Evaluate().Should().Be(IntegerEncoding.EncodeSignedInteger(0));
-            report.Counters.ExpressionTemplatePlanParseCount.Should().Be(iteration is 0 ? 1 : 0);
+            report.CachedWorkCounters.ExpressionTemplatePlanParseCount.Should().Be(iteration is 0 ? 1 : 0);
+            report.CountersByOrigin.Total.Should().Be(report.Counters);
         }
 
         plans.Count.Should().Be(1);

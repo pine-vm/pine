@@ -218,12 +218,12 @@ public sealed class CompareInterpreterWithIntermediateVM
     /// returning, so the two paths' results are guaranteed identical.
     /// </param>
     /// <param name="VmCounters">
-    /// Aggregated <see cref="PerformanceCounters"/> from the intermediate VM evaluation —
+    /// Aggregated <see cref="EvalWorkCounters"/> from the intermediate VM evaluation —
     /// the same metric shape returned by
     /// <c>CoreLibraryTestHelper.ApplyAndProfileUnary</c>.
     /// </param>
     /// <param name="InterpreterCounters">
-    /// <see cref="ElmSyntaxInterpreterPerformanceCounters"/> from the syntax-interpreter
+    /// <see cref="ElmSyntaxInterpreterEvalWorkCounters"/> from the syntax-interpreter
     /// evaluation.
     /// </param>
     /// <param name="ApplicationLog">
@@ -233,8 +233,8 @@ public sealed class CompareInterpreterWithIntermediateVM
     /// </param>
     public sealed record EvalReport(
         ElmValue Value,
-        PerformanceCounters VmCounters,
-        ElmSyntaxInterpreterPerformanceCounters InterpreterCounters,
+        EvalWorkCounters VmCounters,
+        ElmSyntaxInterpreterEvalWorkCounters InterpreterCounters,
         IReadOnlyList<ApplicationLogEntry> ApplicationLog);
 
     /// <summary>
@@ -269,7 +269,7 @@ public sealed class CompareInterpreterWithIntermediateVM
         }
 
         PineValue vmResultPine;
-        PerformanceCounters vmCounters;
+        EvalWorkCounters vmCounters;
 
         if (pineArguments.Length is 0)
         {

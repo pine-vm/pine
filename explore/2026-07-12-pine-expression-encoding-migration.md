@@ -38,4 +38,4 @@ For the delegates and caches reachable or injectable via the public API, we forw
 2. Move old encoding and parsing methods to `ExpressionEncoding2024.cs` and add `ExpressionEncoding.cs` with same encoding and parsing entry points for consumers: `ExpressionEncoding.EncodeExpressionAsValue` invokes `ExpressionEncoding2024.EncodeExpressionAsValue` and `ExpressionEncoding.ParseExpressionFromValue` invokes `ExpressionEncoding2024.ParseExpressionFromValue` so that all consumers can remain the same.
 3. Change `ExpressionEncoding.EncodeExpressionAsValue` to invoke `ExpressionEncoding2026.EncodeExpressionAsValue`
 4. Change `FunctionValueBuilder.cs` to emit the 2026 encoding.
-5. Update performance counters in snapshots.
+5. Update evaluation work counters in snapshots.

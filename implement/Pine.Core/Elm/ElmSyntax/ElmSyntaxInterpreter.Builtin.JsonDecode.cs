@@ -21,7 +21,7 @@ namespace Pine.Core.Elm.ElmSyntax;
 /// </para>
 /// <para>
 /// Because the recursion happens entirely in C#, the interpreter only ever dispatches the
-/// top-level application; the interpreter's performance counters therefore do not grow with the
+/// top-level application; the interpreter's evaluation work counters therefore do not grow with the
 /// length of the parsed string, the number of list items, or the magnitude of parsed integers.
 /// </para>
 /// </summary>

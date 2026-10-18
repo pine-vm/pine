@@ -6,7 +6,7 @@ using System.Threading;
 namespace Pine.Core.Tests;
 
 /// <summary>
-/// Helper used to re-record snapshots (e.g. performance-counter snapshots) of tests.
+/// Helper used to re-record snapshots (e.g. evaluation-work-counter snapshots) of tests.
 /// </summary>
 public static class SnapshotRecorder
 {

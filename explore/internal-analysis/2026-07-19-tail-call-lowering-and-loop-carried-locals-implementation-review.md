@@ -115,7 +115,7 @@ function identity and a call occurrence, so removing it was necessary rather
 than merely adding another equality guard.
 
 Re-enabling static inlining immediately restored the three language-service
-compiled-expression counts to 193, 226, and 227. Other performance counters
+compiled-expression counts to 193, 226, and 227. Other evaluation work counters
 changed substantially because the earlier snapshots measured the accidentally
 disabled optimization pipeline. This required treating compiled-expression
 count and runtime instruction/invocation counts as separate measurements rather

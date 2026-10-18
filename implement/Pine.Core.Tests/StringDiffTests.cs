@@ -691,10 +691,10 @@ public class StringDiffTests
     }
 
     [Fact]
-    public void String_diff_snapshot_context_shows_complete_performance_counter_snapshots()
+    public void String_diff_snapshot_context_shows_complete_eval_work_counter_snapshots()
     {
         var counters =
-            new PerformanceCounters(
+            new EvalWorkCounters(
                 long.MaxValue,
                 long.MaxValue,
                 long.MaxValue,
@@ -714,7 +714,7 @@ public class StringDiffTests
                 long.MaxValue);
 
         var interpreterCounters =
-            new ElmSyntaxInterpreterPerformanceCounters(
+            new ElmSyntaxInterpreterEvalWorkCounters(
                 long.MaxValue,
                 long.MaxValue,
                 long.MaxValue,
@@ -722,9 +722,9 @@ public class StringDiffTests
 
         string[] snapshots =
             [
-            PerformanceCountersFormatting.FormatCounts(counters),
-            PerformanceCountersFormatting.FormatAllCounts(counters),
-            ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(interpreterCounters),
+            EvalWorkCountersFormatting.FormatCounts(counters),
+            EvalWorkCountersFormatting.FormatAllCounts(counters),
+            ElmSyntaxInterpreterEvalWorkCountersFormatting.FormatCounts(interpreterCounters),
             InvocationCountReportFormatting.FormatCounts(InvocationCountReport.Empty)
             ];
 

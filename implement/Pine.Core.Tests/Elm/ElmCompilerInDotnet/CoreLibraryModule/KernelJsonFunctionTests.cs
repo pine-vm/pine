@@ -1417,14 +1417,13 @@ public class KernelJsonFunctionTests
             OkOf(
                 new ElmValue.ElmRecord([("age", Integer(42)), ("height", Integer(180)), ("name", String("tom"))])));
 
-        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
+        EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 36
             BuildListCount: 68
             BuildListItemCount: 189
             LoopIterationCount: 25
             InstructionCount: 1_079
-            ExpressionTemplatePlanParseCount: 11
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 26
             DeferredTemplateValueMaterializationCount: 0
@@ -1453,14 +1452,13 @@ public class KernelJsonFunctionTests
 
         value.Should().Be(OkOf(String("v3-data")));
 
-        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
+        EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 15
             BuildListCount: 40
             BuildListItemCount: 108
             LoopIterationCount: 21
             InstructionCount: 649
-            ExpressionTemplatePlanParseCount: 9
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 9
             DeferredTemplateValueMaterializationCount: 0
@@ -1522,7 +1520,7 @@ public class KernelJsonFunctionTests
         value.Should().Be(OkOf(String("hello")));
 
         var formattedCounts =
-            PerformanceCountersFormatting.FormatCounts(report);
+            EvalWorkCountersFormatting.FormatCounts(report);
 
         formattedCounts.ShouldBeWithDiff(
             """
@@ -1531,7 +1529,6 @@ public class KernelJsonFunctionTests
             BuildListItemCount: 129
             LoopIterationCount: 24
             InstructionCount: 741
-            ExpressionTemplatePlanParseCount: 10
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 13
             DeferredTemplateValueMaterializationCount: 0
@@ -1559,7 +1556,7 @@ public class KernelJsonFunctionTests
         value.Should().Be(OkOf(Integer(1)));
 
         var formattedCounts =
-            PerformanceCountersFormatting.FormatCounts(report);
+            EvalWorkCountersFormatting.FormatCounts(report);
 
         formattedCounts.ShouldBeWithDiff(
             """
@@ -1568,7 +1565,6 @@ public class KernelJsonFunctionTests
             BuildListItemCount: 326
             LoopIterationCount: 40
             InstructionCount: 1_464
-            ExpressionTemplatePlanParseCount: 15
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 29
             DeferredTemplateValueMaterializationCount: 0
@@ -1598,14 +1594,13 @@ public class KernelJsonFunctionTests
 
         value.Should().Be(OkOf(String("tom")));
 
-        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
+        EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 14
             BuildListCount: 51
             BuildListItemCount: 138
             LoopIterationCount: 21
             InstructionCount: 743
-            ExpressionTemplatePlanParseCount: 6
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 6
             DeferredTemplateValueMaterializationCount: 0
@@ -1633,14 +1628,13 @@ public class KernelJsonFunctionTests
 
         value.Should().Be(OkOf(Integer(42)));
 
-        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
+        EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 14
             BuildListCount: 51
             BuildListItemCount: 138
             LoopIterationCount: 21
             InstructionCount: 743
-            ExpressionTemplatePlanParseCount: 6
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 6
             DeferredTemplateValueMaterializationCount: 0
@@ -1710,14 +1704,13 @@ public class KernelJsonFunctionTests
 
         value.Should().Be(JustOf(Integer(42)));
 
-        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
+        EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 18
             BuildListCount: 52
             BuildListItemCount: 172
             LoopIterationCount: 13
             InstructionCount: 744
-            ExpressionTemplatePlanParseCount: 8
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 5
             DeferredTemplateValueMaterializationCount: 0
@@ -1744,14 +1737,13 @@ public class KernelJsonFunctionTests
 
         value.Should().Be(Integer(2));
 
-        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
+        EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 15
             BuildListCount: 44
             BuildListItemCount: 142
             LoopIterationCount: 15
             InstructionCount: 696
-            ExpressionTemplatePlanParseCount: 6
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 3
             DeferredTemplateValueMaterializationCount: 0
@@ -1806,14 +1798,13 @@ public class KernelJsonFunctionTests
                     ElmList(Integer(1), Integer(2)),
                     ElmList(Integer(3), Integer(4)))));
 
-        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
+        EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 26
             BuildListCount: 55
             BuildListItemCount: 155
             LoopIterationCount: 2
             InstructionCount: 670
-            ExpressionTemplatePlanParseCount: 5
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 6
             DeferredTemplateValueMaterializationCount: 0
@@ -1865,14 +1856,13 @@ public class KernelJsonFunctionTests
 
         value.Should().Be(OkOf(obj));
 
-        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
+        EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 11
             BuildListCount: 41
             BuildListItemCount: 115
             LoopIterationCount: 23
             InstructionCount: 895
-            ExpressionTemplatePlanParseCount: 4
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 2
             DeferredTemplateValueMaterializationCount: 0

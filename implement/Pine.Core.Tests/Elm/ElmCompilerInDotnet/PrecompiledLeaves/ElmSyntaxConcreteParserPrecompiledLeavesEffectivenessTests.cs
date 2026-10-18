@@ -358,11 +358,11 @@ public class ElmSyntaxConcreteParserPrecompiledLeavesEffectivenessTests
             optimizationParametersSerial: null,
             cacheFileStore: null);
 
-    private static (ElmValue value, PerformanceCounters counters) Apply(
+    private static (ElmValue value, EvalWorkCounters counters) Apply(
         Core.Interpreter.IntermediateVM.PineVM vm) =>
         Apply(vm, s_exerciseFunction.Value);
 
-    private static (ElmValue value, PerformanceCounters counters) Apply(
+    private static (ElmValue value, EvalWorkCounters counters) Apply(
         Core.Interpreter.IntermediateVM.PineVM vm,
         PineValue function,
         ElmValue? argument = null) =>

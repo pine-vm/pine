@@ -58,9 +58,9 @@ public class ElmTestInstrumentationTests
         summary.Counters.BuildListItemCount.Should().Be(9);
         summary.CountersByPhase["preparation"].Total.BuildListItemCount.Should().Be(3);
         summary.CountersByPhase["execution"].Total.BuildListItemCount.Should().Be(6);
-        prepared.CountersByPhase["execution"].Total.Should().Be(default(PerformanceCounters));
+        prepared.CountersByPhase["execution"].Total.Should().Be(default(EvalWorkCounters));
 
-        PerformanceCounters.Aggregate(summary.CountersByPhase.Values.Select(origins => origins.Total))
+        EvalWorkCounters.Aggregate(summary.CountersByPhase.Values.Select(origins => origins.Total))
             .Should().Be(summary.Counters);
 
         summary.CountersByPhase.Values.SelectMany(origins => origins.Enumerate())
@@ -121,8 +121,9 @@ public class ElmTestInstrumentationTests
         origins.DeferredTemplateValueMaterialization.DirectInterpreterEvalCount.Should().Be(0);
         origins.DeferredTemplateValueMaterialization.BuildListItemCount.Should().Be(0);
         origins.Total.Should().Be(summary.Counters);
-        origins.ExpressionTemplatePlanParsing.ExpressionTemplatePlanParseCount.Should().Be(1);
-        origins.ExpressionTemplatePlanParsing.DirectInterpreterExpressionCount.Should().Be(0);
+        origins.CachedWorkCounters.ExpressionTemplatePlanParseCount.Should().Be(1);
+        summary.CachedWorkCounters.Should().Be(origins.CachedWorkCounters);
+        origins.CachedWorkCounters.ExpressionTemplatePlanParsing.DirectInterpreterExpressionCount.Should().Be(0);
         origins.VirtualMachine.DirectInterpreterExpressionCount.Should().Be(0);
         origins.VirtualMachine.InvocationCount.Should().Be(0);
         origins.VirtualMachine.TemplateConsolidatedEvalCount.Should().Be(1);

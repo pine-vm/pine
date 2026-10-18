@@ -45,7 +45,7 @@ Both quota exhaustion and requested cancellation return `EvaluationError`.
 The error reason is a structured variant rather than a pre-rendered message.
 Quota errors identify the exhausted quota and configured limit.
 
-The error also contains performance counters and up to 100 live stack-frame
+The error also contains evaluation work counters and up to 100 live stack-frame
 snapshots, ordered innermost first. Each snapshot retains:
 
 - the frame expression;

@@ -162,7 +162,7 @@ public class JsonDecodePrecompiledLeavesEffectivenessTests
             .Should().Be(simpleWithLeaves.counters.InstructionCount);
     }
 
-    private static (ElmValue value, PerformanceCounters counters) Apply(
+    private static (ElmValue value, EvalWorkCounters counters) Apply(
         string json,
         Core.Interpreter.IntermediateVM.PineVM vm) =>
         CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(

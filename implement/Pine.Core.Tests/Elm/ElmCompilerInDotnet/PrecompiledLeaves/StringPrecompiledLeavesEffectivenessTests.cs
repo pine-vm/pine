@@ -256,7 +256,7 @@ public class StringPrecompiledLeavesEffectivenessTests
             .Should().Be(simpleWithLeaves.counters.InstructionCount);
     }
 
-    private static (ElmValue value, PerformanceCounters counters) ApplyUnary(
+    private static (ElmValue value, EvalWorkCounters counters) ApplyUnary(
         PineValue function,
         ElmValue argument,
         Core.Interpreter.IntermediateVM.PineVM vm) =>

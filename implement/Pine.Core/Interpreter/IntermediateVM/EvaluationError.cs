@@ -84,10 +84,13 @@ public sealed record EvaluationStackTraceFrame(
 public sealed record EvaluationError(
     EvaluationErrorReason Reason,
     IReadOnlyList<EvaluationStackTraceFrame> StackTrace,
-    PerformanceCounters Counters)
+    EvalWorkCounters Counters)
 {
     /// <summary>Disjoint work totals accumulated before evaluation stopped.</summary>
-    public PerformanceCountersByOrigin CountersByOrigin { get; init; }
+    public EvalWorkCountersByOrigin CountersByOrigin { get; init; }
+
+    /// <summary>Cache-derivation work performed before stopping, excluded from <see cref="Counters"/>.</summary>
+    public CachedWorkCounters CachedWorkCounters => CountersByOrigin.CachedWorkCounters;
 
     /// <summary>
     /// Renders an evaluation error for human-readable output. Expression hashing and

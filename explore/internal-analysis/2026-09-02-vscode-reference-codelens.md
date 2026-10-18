@@ -901,7 +901,7 @@ For the extension, run its existing `npm run compile`, `npm run lint`, and
   exactly one implementation declaration and that `false` preserves the
   existing usage-only response.
 - Discovery: adding the Boolean request field and canonical range increases the
-  deterministic VM performance counters for the existing reference scenarios.
+  deterministic VM evaluation work counters for the existing reference scenarios.
   The expected snapshots were refreshed only after confirming that all semantic
   reference assertions still passed.
 - Minor backtracking: the first filtered-test invocation ran from the repository

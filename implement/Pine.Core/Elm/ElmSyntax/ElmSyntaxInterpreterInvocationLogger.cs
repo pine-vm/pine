@@ -15,7 +15,7 @@ public abstract record ApplicationLogEntry
 {
     /// <summary>
     /// A direct (name-based) application. Corresponds to one increment of
-    /// <see cref="ElmSyntaxInterpreterPerformanceCounters.DirectFunctionApplicationCount"/>.
+    /// <see cref="ElmSyntaxInterpreterEvalWorkCounters.DirectFunctionApplicationCount"/>.
     /// </summary>
     /// <param name="Application">
     /// The <see cref="ElmSyntaxInterpreter.Application"/> that the interpreter was
@@ -30,7 +30,7 @@ public abstract record ApplicationLogEntry
     /// <summary>
     /// An application of a previously-evaluated function value (a closure or a
     /// partially-applied top-level function). Corresponds to one increment of
-    /// <see cref="ElmSyntaxInterpreterPerformanceCounters.FunctionValueApplicationCount"/>.
+    /// <see cref="ElmSyntaxInterpreterEvalWorkCounters.FunctionValueApplicationCount"/>.
     /// </summary>
     public sealed record FunctionValue(
         PineValueInProcess Function,
@@ -54,7 +54,7 @@ public interface IInvocationLogger
 {
     /// <summary>
     /// Called once at the top of every iteration of the trampoline loop. Increments
-    /// <see cref="ElmSyntaxInterpreterPerformanceCounters.InstructionLoopCount"/> on
+    /// <see cref="ElmSyntaxInterpreterEvalWorkCounters.InstructionLoopCount"/> on
     /// counting implementations.
     /// </summary>
     void OnInstructionLoop();
@@ -92,7 +92,7 @@ public interface IInvocationLogger
 /// <see cref="IInvocationLogger"/> implementation that combines a counting logger
 /// with a captured log of every <see cref="ApplicationLogEntry"/>. Used by callers
 /// that want both a final
-/// <see cref="ElmSyntaxInterpreterPerformanceCounters"/> snapshot and a trace they
+/// <see cref="ElmSyntaxInterpreterEvalWorkCounters"/> snapshot and a trace they
 /// can search or render.
 /// </summary>
 public sealed class RecordingInvocationLogger : IInvocationLogger
@@ -114,9 +114,9 @@ public sealed class RecordingInvocationLogger : IInvocationLogger
     public IReadOnlyList<ApplicationLogEntry> Entries => _entries;
 
     /// <summary>
-    /// Snapshot of the performance counters accumulated so far.
+    /// Snapshot of the evaluation work counters accumulated so far.
     /// </summary>
-    public ElmSyntaxInterpreterPerformanceCounters Counters =>
+    public ElmSyntaxInterpreterEvalWorkCounters Counters =>
         new(
             InstructionLoopCount: _instructionLoopCount,
             DirectFunctionApplicationCount: _directFunctionApplicationCount,

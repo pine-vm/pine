@@ -20,7 +20,7 @@ public class DirectInterpreter : IPineVM
     private readonly DirectInterpreterCounters _counters;
 
     /// <summary>Work performed by this interpreter since construction, including recursive evaluations.</summary>
-    public IntermediateVM.PerformanceCounters Counters => _counters.Snapshot();
+    public IntermediateVM.EvalWorkCounters Counters => _counters.Snapshot();
 
     private readonly PineVMParseCache _parseCache;
 

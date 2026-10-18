@@ -23,7 +23,7 @@ internal sealed class DirectInterpreterCounters
 
     public long BuildListItemCount;
 
-    public PerformanceCounters Snapshot() =>
+    public EvalWorkCounters Snapshot() =>
         new(
             InvocationCount: 0,
             BuildListCount: ListCount,

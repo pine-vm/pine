@@ -34,7 +34,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
 /// <c>envFunctions</c>).
 /// </description></item>
 /// </list>
-/// In front of the performance-counter assertions, the tests assert (using
+/// In front of the evaluation-work-counter assertions, the tests assert (using
 /// <c>Should().Be(</c>) that all four matrix cells return the expected value.
 /// They then assert that without the leaf the larger input costs strictly more
 /// invocations / loop iterations and instructions, while with the leaf the two
@@ -163,13 +163,13 @@ public class Base64PrecompiledLeavesEffectivenessTests
 
     // ---------- helpers ----------
 
-    private static (ElmValue value, PerformanceCounters counters) ApplyUnary(
+    private static (ElmValue value, EvalWorkCounters counters) ApplyUnary(
         PineValue functionValue,
         ElmValue arg,
         Core.Interpreter.IntermediateVM.PineVM vm) =>
         CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(functionValue, arg, vm);
 
-    private static (PineValue result, PerformanceCounters report) ApplyUnaryPine(
+    private static (PineValue result, EvalWorkCounters report) ApplyUnaryPine(
         PineValue functionValue,
         PineValue arg,
         Core.Interpreter.IntermediateVM.PineVM vm) =>

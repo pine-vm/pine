@@ -22,7 +22,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ApplicationTests;
 /// wrapper functions that exercise the parsers and return
 /// simple values. Each test asserts on the return value
 /// and on the runtime cost snapshot from
-/// <see cref="PerformanceCountersFormatting.FormatCounts"/>.
+/// <see cref="EvalWorkCountersFormatting.FormatCounts"/>.
 /// </summary>
 public class ParserFastTests
 {
@@ -472,10 +472,10 @@ public class ParserFastTests
     /// Applies <paramref name="functionValue"/> to <paramref name="argument"/> with a
     /// fresh VM that captures every function invocation via the
     /// <c>reportFunctionApplication</c> callback. Returns the result, the aggregated
-    /// performance counters, and the list of per-invocation reports so callers can
+    /// evaluation work counters, and the list of per-invocation reports so callers can
     /// inspect which functions were called and how often.
     /// </summary>
-    private static (ElmValue value, PerformanceCounters report, IReadOnlyList<EvaluationReport> invocations)
+    private static (ElmValue value, EvalWorkCounters report, IReadOnlyList<EvaluationReport> invocations)
         ApplyAndRecordInvocations(
         PineValue functionValue,
         ElmValue argument)
@@ -515,14 +515,13 @@ public class ParserFastTests
 
         value.Should().Be(Integer(12));
 
-        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
+        EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 0
             BuildListCount: 0
             BuildListItemCount: 0
             LoopIterationCount: 0
             InstructionCount: 2
-            ExpressionTemplatePlanParseCount: 0
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
@@ -549,14 +548,13 @@ public class ParserFastTests
 
         value.Should().Be(Integer(16));
 
-        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
+        EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 0
             BuildListCount: 0
             BuildListItemCount: 0
             LoopIterationCount: 0
             InstructionCount: 2
-            ExpressionTemplatePlanParseCount: 0
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
@@ -583,14 +581,13 @@ public class ParserFastTests
 
         value.Should().Be(Integer(0));
 
-        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
+        EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 0
             BuildListCount: 0
             BuildListItemCount: 0
             LoopIterationCount: 0
             InstructionCount: 2
-            ExpressionTemplatePlanParseCount: 0
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
@@ -619,14 +616,13 @@ public class ParserFastTests
 
         value.Should().Be(Integer(5));
 
-        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
+        EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 4
             BuildListCount: 1
             BuildListItemCount: 7
             LoopIterationCount: 4
             InstructionCount: 134
-            ExpressionTemplatePlanParseCount: 1
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 4
             DeferredTemplateValueMaterializationCount: 0
@@ -653,14 +649,13 @@ public class ParserFastTests
 
         value.Should().Be(Integer(5));
 
-        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
+        EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 4
             BuildListCount: 1
             BuildListItemCount: 7
             LoopIterationCount: 4
             InstructionCount: 110
-            ExpressionTemplatePlanParseCount: 1
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 4
             DeferredTemplateValueMaterializationCount: 0
@@ -687,14 +682,13 @@ public class ParserFastTests
 
         value.Should().Be(Integer(3));
 
-        PerformanceCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
+        EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
             InvocationCount: 7
             BuildListCount: 5
             BuildListItemCount: 25
             LoopIterationCount: 1
             InstructionCount: 163
-            ExpressionTemplatePlanParseCount: 4
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 7
             DeferredTemplateValueMaterializationCount: 0
@@ -765,14 +759,13 @@ public class ParserFastTests
         report1.LoopIterationCount.Should().BeGreaterThan(0);
         report2.LoopIterationCount.Should().BeGreaterThan(report1.LoopIterationCount);
 
-        PerformanceCountersFormatting.FormatCounts(report1).ShouldBeWithDiff(
+        EvalWorkCountersFormatting.FormatCounts(report1).ShouldBeWithDiff(
             """
             InvocationCount: 26
             BuildListCount: 1
             BuildListItemCount: 7
             LoopIterationCount: 25
             InstructionCount: 690
-            ExpressionTemplatePlanParseCount: 1
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 25
             DeferredTemplateValueMaterializationCount: 0
@@ -787,14 +780,13 @@ public class ParserFastTests
             DirectInterpreterEnvironmentCount: 0
             """);
 
-        PerformanceCountersFormatting.FormatCounts(report2).ShouldBeWithDiff(
+        EvalWorkCountersFormatting.FormatCounts(report2).ShouldBeWithDiff(
             """
             InvocationCount: 52
             BuildListCount: 1
             BuildListItemCount: 7
             LoopIterationCount: 51
             InstructionCount: 1_366
-            ExpressionTemplatePlanParseCount: 1
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 51
             DeferredTemplateValueMaterializationCount: 0

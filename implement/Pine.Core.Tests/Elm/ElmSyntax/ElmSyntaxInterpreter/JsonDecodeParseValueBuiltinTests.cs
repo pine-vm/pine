@@ -25,7 +25,7 @@ namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 /// encodings.
 /// </para>
 /// <para>
-/// A final group of tests asserts that the interpreter's performance counters do not grow with
+/// A final group of tests asserts that the interpreter's evaluation work counters do not grow with
 /// the length of string values, the number of list items, or the magnitude of integers when the
 /// builtin is enabled: the whole recursive descent happens inside the C# builtin, so the
 /// interpreter only ever dispatches the single top-level application.
@@ -312,7 +312,7 @@ public class JsonDecodeParseValueBuiltinTests
         AssertBuiltinMatchesElm(jsonText);
 
     // ============================================================
-    // Performance counters do not grow with input size.
+    // Evaluation work counters do not grow with input size.
     // ============================================================
 
     private static string CountersSnapshotWithBuiltin(string jsonText)
@@ -327,11 +327,11 @@ public class JsonDecodeParseValueBuiltinTests
         // Make sure the scenario actually parsed successfully before comparing counters.
         result.Extract(err => throw new Exception(err.ToString()));
 
-        return ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(counters);
+        return ElmSyntaxInterpreterEvalWorkCountersFormatting.FormatCounts(counters);
     }
 
     [Fact]
-    public void Performance_counters_do_not_increase_with_string_length()
+    public void Eval_work_counters_do_not_increase_with_string_length()
     {
         var shortString = "\"" + new string('a', 5) + "\"";
         var longString = "\"" + new string('a', 5000) + "\"";
@@ -345,7 +345,7 @@ public class JsonDecodeParseValueBuiltinTests
     }
 
     [Fact]
-    public void Performance_counters_do_not_increase_with_number_of_list_items()
+    public void Eval_work_counters_do_not_increase_with_number_of_list_items()
     {
         var shortList = "[" + string.Join(",", Enumerable.Repeat("1", 5)) + "]";
         var longList = "[" + string.Join(",", Enumerable.Repeat("1", 1000)) + "]";
@@ -358,7 +358,7 @@ public class JsonDecodeParseValueBuiltinTests
     }
 
     [Fact]
-    public void Performance_counters_do_not_increase_with_integer_length()
+    public void Eval_work_counters_do_not_increase_with_integer_length()
     {
         var shortInt = "5";
         var longInt = new string('9', 1000);

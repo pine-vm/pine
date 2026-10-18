@@ -1032,8 +1032,8 @@ public static class TestCommand
             CommandLineInterface.FormatIntegerForDisplay(summary.Counters.InstructionCount) +
             ".");
 
-        writer.WriteLine(PerformanceCountersFormatting.FormatCounts(summary.Counters));
-        writer.WriteLine(PerformanceCountersFormatting.FormatCountsByPhase(summary.CountersByPhase));
+        writer.WriteLine(EvalWorkCountersFormatting.FormatCounts(summary.Counters));
+        writer.WriteLine(EvalWorkCountersFormatting.FormatCountsByPhase(summary.CountersByPhase));
 
         writer.WriteLine("Investigate with the profile command:");
 

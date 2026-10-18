@@ -168,7 +168,7 @@ the per-step status notes at the head of each subsection in §7.
     narrower than the original write-up suggests — see the §7.7
     banner.
   - Re-baselined: 4 `DependencyLayoutTests` (members-only layouts);
-    ~22 `PerformanceCountersFormatting`-driven instruction-count
+    ~22 `EvalWorkCountersFormatting`-driven instruction-count
     baselines in `ElmParserExpressionTests`, `ElmParserFileTests`,
     `FunctionApplicationOverheadTests`, `KernelJsonFunctionTests`;
     3 IL-frame snapshots in `List_map_triple_with_function_parameter`
@@ -544,7 +544,7 @@ after commit `b52c8de2` (§7.6b "shrink runtime layout to SCC members;
 literal-inline cross-SCC callees").**
 
 The §7.6b commit re-baselined `KernelJsonFunctionTests` with broadly
-*worse* performance counters for the JSON decode paths. The deltas
+*worse* evaluation work counters for the JSON decode paths. The deltas
 (baseline → new) — every count is for a single decode invocation:
 
 | Test                              | InstructionCount | InvocationCount | BuildListCount |

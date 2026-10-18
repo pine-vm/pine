@@ -70,11 +70,14 @@ public sealed record ElmTestInstrumentationOptions : ElmTestEvaluationOptions
 /// <summary>Cheap snapshot of the outcome, current Elm context, elapsed time and aggregate VM work.</summary>
 public sealed record ElmTestProfileSummary(
     string Outcome, string? StopReason, string Phase, string Context,
-    double ElapsedMilliseconds, PerformanceCounters Counters, string? ProfileFilter = null)
+    double ElapsedMilliseconds, EvalWorkCounters Counters, string? ProfileFilter = null)
 {
+    /// <summary>Cache-derivation work, excluded from evaluation totals and budgets.</summary>
+    public CachedWorkCounters CachedWorkCounters { get; init; }
+
     /// <summary>Phase totals split by the origin of the work; includes pending work in a live evaluation.</summary>
-    public IReadOnlyDictionary<string, PerformanceCountersByOrigin> CountersByPhase { get; init; } =
-        new Dictionary<string, PerformanceCountersByOrigin>();
+    public IReadOnlyDictionary<string, EvalWorkCountersByOrigin> CountersByPhase { get; init; } =
+        new Dictionary<string, EvalWorkCountersByOrigin>();
 }
 
 /// <summary>A captured value's DAG hash or bounded nonmaterializing structural preview.</summary>
@@ -268,16 +271,16 @@ public sealed class ElmTestInstrumentation : IDisposable
 
     private Scope _lastScope = new("initialization", "");
 
-    private PerformanceCounters _completed;
+    private EvalWorkCounters _completed;
 
-    private readonly Dictionary<string, PerformanceCountersByOrigin> _completedByPhase =
+    private readonly Dictionary<string, EvalWorkCountersByOrigin> _completedByPhase =
         new(StringComparer.Ordinal)
         {
             ["preparation"] = default,
             ["execution"] = default
         };
 
-    private Func<PerformanceCountersByOrigin>? _loadCurrentCounters;
+    private Func<EvalWorkCountersByOrigin>? _loadCurrentCounters;
 
     private long _nextSampleTicks;
 
@@ -325,6 +328,7 @@ public sealed class ElmTestInstrumentation : IDisposable
     /// <param name="precompiledLeaves">Explicit native leaves, if supplied.</param>
     /// <param name="precompiledLeavesProvider">Lazy native-leaf provider used when no explicit leaves are supplied.</param>
     /// <param name="recordDiagnostics">False tracks only aggregate work and permits parallel VM execution.</param>
+    /// <param name="workProfile">Optional numeric work-site stream, requiring serial execution and retaining no values.</param>
     public ElmTestInstrumentation(
         ElmTestInstrumentationOptions options,
         IReadOnlyDictionary<PineValue, PrecompiledLeaf>? precompiledLeaves = null,
@@ -404,12 +408,12 @@ public sealed class ElmTestInstrumentation : IDisposable
         lock (_budgetLock)
         {
             var pending = RecordDiagnostics ? _loadCurrentCounters?.Invoke() ?? default : default;
-            var phases = new Dictionary<string, PerformanceCountersByOrigin>(_completedByPhase, StringComparer.Ordinal);
+            var phases = new Dictionary<string, EvalWorkCountersByOrigin>(_completedByPhase, StringComparer.Ordinal);
 
             if (pending != default)
             {
                 phases.TryGetValue(_lastScope.Phase, out var completed);
-                phases[_lastScope.Phase] = PerformanceCountersByOrigin.Add(completed, pending);
+                phases[_lastScope.Phase] = EvalWorkCountersByOrigin.Add(completed, pending);
             }
 
             return
@@ -419,12 +423,15 @@ public sealed class ElmTestInstrumentation : IDisposable
                     _lastScope.Phase,
                     _lastScope.Context,
                     _elapsed.Elapsed.TotalMilliseconds,
-                    PerformanceCounters.Add(
+                    EvalWorkCounters.Add(
                         _completed,
                         pending.Total),
                     _lastScope.ProfileFilter)
                 {
-                    CountersByPhase = phases
+                    CountersByPhase = phases,
+                    CachedWorkCounters =
+                    CachedWorkCounters.Aggregate(
+                        phases.Values.Select(origins => origins.CachedWorkCounters))
                 };
         }
     }
@@ -494,15 +501,15 @@ public sealed class ElmTestInstrumentation : IDisposable
 
     private void ObserveWork(
         string phase,
-        PerformanceCountersByOrigin current,
-        ref PerformanceCountersByOrigin previous)
+        EvalWorkCountersByOrigin current,
+        ref EvalWorkCountersByOrigin previous)
     {
         lock (_budgetLock)
         {
-            var delta = PerformanceCountersByOrigin.Subtract(current, previous);
-            _completed = PerformanceCounters.Add(_completed, delta.Total);
+            var delta = EvalWorkCountersByOrigin.Subtract(current, previous);
+            _completed = EvalWorkCounters.Add(_completed, delta.Total);
             _completedByPhase.TryGetValue(phase, out var completed);
-            _completedByPhase[phase] = PerformanceCountersByOrigin.Add(completed, delta);
+            _completedByPhase[phase] = EvalWorkCountersByOrigin.Add(completed, delta);
             previous = current;
 
             if (Options.InvocationBudget is { } inv && _completed.InvocationCount > inv)
@@ -840,7 +847,7 @@ public sealed class ElmTestInstrumentation : IDisposable
 
         private readonly Dictionary<long, (Entry Entry, long Instructions, long Loops)> _active = [];
 
-        private PerformanceCountersByOrigin _observed;
+        private EvalWorkCountersByOrigin _observed;
 
         private string _phase = "initialization";
 
@@ -907,7 +914,7 @@ public sealed class ElmTestInstrumentation : IDisposable
             }
 
             var entry = _owner.GetEntry(evaluationEvent.Expression);
-            _owner._loadCurrentCounters = () => PerformanceCountersByOrigin.Subtract(loadOrigins(), _observed);
+            _owner._loadCurrentCounters = () => EvalWorkCountersByOrigin.Subtract(loadOrigins(), _observed);
 
             switch (evaluationEvent.Kind)
             {
@@ -1004,7 +1011,7 @@ public sealed class ElmTestInstrumentation : IDisposable
             _observed = default;
             _phase = _owner._scope.Value?.Phase ?? "initialization";
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(_owner.CancellationToken, token);
-            PerformanceCounters completed;
+            EvalWorkCounters completed;
 
             lock (_owner._budgetLock)
             {

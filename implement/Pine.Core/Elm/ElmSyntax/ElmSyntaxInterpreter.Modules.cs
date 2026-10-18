@@ -98,7 +98,7 @@ public partial class ElmSyntaxInterpreter
 
     /// <summary>
     /// As <see cref="InterpretAsElmValue(string, Prepared)"/>, but additionally records an
-    /// <see cref="ElmSyntaxInterpreterPerformanceCounters"/> snapshot, optionally forwards every
+    /// <see cref="ElmSyntaxInterpreterEvalWorkCounters"/> snapshot, optionally forwards every
     /// observed function application to <paramref name="onApplication"/>, and lets the caller
     /// choose whether the interpreter's default builtins (such as the
     /// <c>Basics.compare</c> entry registered by <see cref="BuildBuiltinFunctionResolvers"/>)
@@ -122,7 +122,7 @@ public partial class ElmSyntaxInterpreter
     /// rather than by interpreting the user-defined declaration. When <c>false</c>, builtins
     /// are bypassed and every application resolves against <paramref name="prepared"/>.
     /// </param>
-    public static (Result<ElmInterpretationError, PineValueInProcess> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
+    public static (Result<ElmInterpretationError, PineValueInProcess> Result, ElmSyntaxInterpreterEvalWorkCounters Counters)
         ParseAndInterpretWithCounters(
         string rootExpressionText,
         Prepared prepared,
@@ -140,7 +140,7 @@ public partial class ElmSyntaxInterpreter
     /// Parses and interprets an expression against a prepared program with counters and explicit
     /// evaluation quotas.
     /// </summary>
-    public static (Result<ElmInterpretationError, PineValueInProcess> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
+    public static (Result<ElmInterpretationError, PineValueInProcess> Result, ElmSyntaxInterpreterEvalWorkCounters Counters)
         ParseAndInterpretWithCounters(
         string rootExpressionText,
         Prepared prepared,

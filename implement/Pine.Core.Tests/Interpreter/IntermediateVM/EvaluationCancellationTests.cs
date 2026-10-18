@@ -39,14 +39,13 @@ public class EvaluationCancellationTests
         error!.Reason.Should().Be(new EvaluationErrorReason.CancellationRequested());
         error.StackTrace.Should().BeEmpty();
 
-        PerformanceCountersFormatting.FormatCounts(error.Counters).ShouldBeWithDiff(
+        EvalWorkCountersFormatting.FormatCounts(error.Counters).ShouldBeWithDiff(
             """
             InvocationCount: 0
             BuildListCount: 0
             BuildListItemCount: 0
             LoopIterationCount: 0
             InstructionCount: 0
-            ExpressionTemplatePlanParseCount: 0
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0

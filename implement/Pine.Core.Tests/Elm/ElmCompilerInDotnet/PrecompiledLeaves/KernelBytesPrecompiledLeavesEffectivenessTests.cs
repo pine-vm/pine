@@ -165,7 +165,7 @@ public class KernelBytesPrecompiledLeavesEffectivenessTests
             .Should().Be(simpleWithLeaves.counters.InstructionCount);
     }
 
-    private static (PineValue result, PerformanceCounters counters) ApplyUnary(
+    private static (PineValue result, EvalWorkCounters counters) ApplyUnary(
         PineValue function,
         PineValue argument,
         Core.Interpreter.IntermediateVM.PineVM vm) =>

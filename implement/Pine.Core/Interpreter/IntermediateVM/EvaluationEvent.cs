@@ -30,11 +30,11 @@ public enum EvaluationEventKind
 /// <param name="StackDepth">Number of currently active frames.</param>
 /// <param name="FrameInstructionCount">Instructions executed by this frame, excluding child frames.</param>
 /// <param name="FrameLoopIterationCount">Backward jumps executed by this frame.</param>
-/// <param name="LoadCounters">Queries evaluation-wide counters during the callback.</param>
+/// <param name="LoadCounters">Queries evaluation work only, excluding cached metadata derivations, during the callback.</param>
 /// <param name="LoadStackTrace">Queries live frames lazily, current frame first, during the callback.</param>
 /// <param name="StopReason">Reason for an evaluation-stop event; null for other events.</param>
 /// <param name="Instructions">Compiled body containing the reported instruction pointer.</param>
-/// <param name="LoadCountersByOrigin">Queries disjoint work totals during the callback.</param>
+/// <param name="LoadCountersByOrigin">Queries evaluation origins and separate cached-derivation work during the callback.</param>
 public readonly record struct EvaluationEvent(
     EvaluationEventKind Kind,
     long FrameIndex,
@@ -43,8 +43,8 @@ public readonly record struct EvaluationEvent(
     int StackDepth,
     long FrameInstructionCount,
     long FrameLoopIterationCount,
-    Func<PerformanceCounters> LoadCounters,
+    Func<EvalWorkCounters> LoadCounters,
     Func<IEnumerable<EvaluationStackTraceFrame>> LoadStackTrace,
     EvaluationErrorReason? StopReason = null,
     StackFrameInstructions? Instructions = null,
-    Func<PerformanceCountersByOrigin>? LoadCountersByOrigin = null);
+    Func<EvalWorkCountersByOrigin>? LoadCountersByOrigin = null);

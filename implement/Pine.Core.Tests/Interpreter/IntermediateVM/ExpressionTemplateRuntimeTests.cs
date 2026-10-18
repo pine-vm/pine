@@ -160,7 +160,7 @@ public class ExpressionTemplateRuntimeTests
 
         report.ReturnValue.DeferredTemplateValueOrNull.Should().NotBeNull();
         report.ReturnValue.EvaluatedOrNull.Should().BeNull();
-        report.Counters.ExpressionTemplatePlanParseCount.Should().Be(1);
+        report.CachedWorkCounters.ExpressionTemplatePlanParseCount.Should().Be(1);
         report.Counters.DeferredTemplateValueAllocationCount.Should().Be(1);
         report.Counters.TemplateDirectInvocationCount.Should().Be(0);
         report.Counters.DeferredTemplateValueMaterializationCount.Should().Be(0);
@@ -185,7 +185,7 @@ public class ExpressionTemplateRuntimeTests
         var expected = EvaluateWithDirectInterpreter(expression);
 
         report.ReturnValue.DeferredTemplateValueOrNull.Should().BeNull();
-        report.Counters.ExpressionTemplatePlanParseCount.Should().Be(1);
+        report.CachedWorkCounters.ExpressionTemplatePlanParseCount.Should().Be(1);
         report.Counters.DeferredTemplateValueAllocationCount.Should().Be(0);
         report.Counters.TemplateDirectInvocationCount.Should().Be(1);
         report.Counters.DeferredTemplateValueMaterializationCount.Should().Be(0);
@@ -256,8 +256,11 @@ public class ExpressionTemplateRuntimeTests
         report.Counters.DeferredTemplateValueMaterializationCount.Should().Be(0);
         report.Counters.TemplateDirectInvocationCount.Should().Be(0);
         report.CountersByOrigin.Total.Should().Be(report.Counters);
-        report.CountersByOrigin.ExpressionTemplatePlanParsing.DirectInterpreterInvocationCount.Should().Be(0);
-        report.CountersByOrigin.DeferredTemplateValueMaterialization.Should().Be(default(PerformanceCounters));
+
+        report.CountersByOrigin
+            .CachedWorkCounters.ExpressionTemplatePlanParsing.DirectInterpreterInvocationCount.Should().Be(0);
+
+        report.CountersByOrigin.DeferredTemplateValueMaterialization.Should().Be(default(EvalWorkCounters));
         report.Counters.TemplateConsolidatedEvalCount.Should().Be(1);
         report.Counters.InvocationCount.Should().Be(0);
     }
@@ -485,7 +488,7 @@ public class ExpressionTemplateRuntimeTests
                 provider, PineValue.EmptyList, IntermediatePineVM.EvaluationConfig.Unbounded, cancellationToken: default)
             .IsOkOrNull()!;
 
-        second.Counters.ExpressionTemplatePlanParseCount.Should().Be(0);
+        second.CachedWorkCounters.ExpressionTemplatePlanParseCount.Should().Be(0);
         second.ReturnValue.DeferredTemplateValueOrNull!.TemplatePlan.Should().BeSameAs(plan);
         second.ReturnValue.DeferredTemplateValueOrNull!.Environments.Count.Should().Be(2);
         partial.DeferredTemplateValueOrNull!.Environments.Count.Should().Be(1);
@@ -527,7 +530,7 @@ public class ExpressionTemplateRuntimeTests
                     IntermediatePineVM.EvaluationConfig.Unbounded,
                     cancellationToken: default).IsOkOrNull()!;
 
-            report.Counters.ExpressionTemplatePlanParseCount.Should().Be(index is 0 ? 1 : 0);
+            report.CachedWorkCounters.ExpressionTemplatePlanParseCount.Should().Be(index is 0 ? 1 : 0);
         }
 
         cache.Count.Should().Be(1);
@@ -744,7 +747,7 @@ public class ExpressionTemplateRuntimeTests
 
         report.ReturnValue.DeferredTemplateValueOrNull.Should().NotBeNull();
         report.ReturnValue.EvaluatedOrNull.Should().BeNull();
-        report.Counters.ExpressionTemplatePlanParseCount.Should().Be(0);
+        report.CachedWorkCounters.ExpressionTemplatePlanParseCount.Should().Be(0);
         report.Counters.BuildListCount.Should().Be(0);
         report.Counters.InvocationCount.Should().Be(0);
         report.Counters.TemplateConsolidatedEvalCount.Should().Be(0);
@@ -819,7 +822,7 @@ public class ExpressionTemplateRuntimeTests
             .IsOkOrNull()!;
 
         report.ReturnValue.DeferredTemplateValueOrNull.Should().NotBeNull();
-        report.Counters.ExpressionTemplatePlanParseCount.Should().Be(0);
+        report.CachedWorkCounters.ExpressionTemplatePlanParseCount.Should().Be(0);
         report.Counters.TemplateConsolidatedEvalCount.Should().Be(1);
         report.Counters.InvocationCount.Should().Be(0);
         report.ReturnValue.Evaluate().Should().Be(EvaluateWithDirectInterpreter(expression));
@@ -1184,6 +1187,66 @@ public class ExpressionTemplateRuntimeTests
         parseError.EnvironmentValue.Evaluate().Should().Be(IntegerEncoding.EncodeSignedInteger(41));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Live_events_preserve_separate_cached_work_on_success_and_error(bool fail)
+    {
+        var template =
+            BuildEvalChain(
+                BuildTemplateValue(environmentCount: 3),
+                IntegerEncoding.EncodeSignedInteger(11));
+
+        var expression =
+            fail
+            ?
+            Expression.ListInst(
+                [
+                template,
+                new Expression.Eval(
+                    Expression.LitralInst(PineValue.EmptyBlob),
+                    Expression.LitralInst(PineValue.EmptyList))
+                ])
+            :
+            template;
+
+        var lastCached = default(CachedWorkCounters);
+        var eventCount = 0;
+
+        void Observe(in EvaluationEvent evaluationEvent)
+        {
+            var origins = evaluationEvent.LoadCountersByOrigin!();
+            evaluationEvent.LoadCounters().Should().Be(origins.Total);
+            lastCached = origins.CachedWorkCounters;
+            ++eventCount;
+        }
+
+        var result =
+            CreateVm(reportEvaluationEvent: Observe).EvaluateExpressionOnCustomStack(
+                expression,
+                PineValue.EmptyList,
+                IntermediatePineVM.EvaluationConfig.Unbounded,
+                cancellationToken: default);
+
+        eventCount.Should().BeGreaterThan(0);
+        lastCached.ExpressionTemplatePlanParseCount.Should().BeGreaterThan(0);
+
+        if (fail)
+        {
+            var error = result.IsErrOrNull();
+            error.Should().NotBeNull();
+            error!.CachedWorkCounters.Should().Be(lastCached);
+            error.Counters.Should().Be(error.CountersByOrigin.Total);
+        }
+        else
+        {
+            var report = result.IsOkOrNull();
+            report.Should().NotBeNull();
+            report!.CachedWorkCounters.Should().Be(lastCached);
+            report.Counters.Should().Be(report.CountersByOrigin.Total);
+        }
+    }
+
     [Fact]
     public void Fused_fallback_reports_parse_error_before_later_invocation_quota()
     {
@@ -1256,12 +1319,11 @@ public class ExpressionTemplateRuntimeTests
     public void Default_counter_format_includes_every_counter()
     {
         var counters =
-            new PerformanceCounters(
+            new EvalWorkCounters(
                 InvocationCount: 1,
                 BuildListCount: 2,
                 LoopIterationCount: 3,
                 InstructionCount: 4,
-                ExpressionTemplatePlanParseCount: 5,
                 DeferredTemplateValueAllocationCount: 6,
                 TemplateDirectInvocationCount: 7,
                 DeferredTemplateValueMaterializationCount: 8,
@@ -1276,14 +1338,13 @@ public class ExpressionTemplateRuntimeTests
                 DirectInterpreterEnvironmentCount: 17,
                 TemplateConsolidatedEvalCount: 18);
 
-        PerformanceCountersFormatting.FormatCounts(counters).ShouldBeWithDiff(
+        EvalWorkCountersFormatting.FormatCounts(counters).ShouldBeWithDiff(
             """
             InvocationCount: 1
             BuildListCount: 2
             BuildListItemCount: 9
             LoopIterationCount: 3
             InstructionCount: 4
-            ExpressionTemplatePlanParseCount: 5
             DeferredTemplateValueAllocationCount: 6
             TemplateDirectInvocationCount: 7
             DeferredTemplateValueMaterializationCount: 8
@@ -1298,18 +1359,18 @@ public class ExpressionTemplateRuntimeTests
             DirectInterpreterEnvironmentCount: 17
             """);
 
-        PerformanceCountersFormatting.FormatAllCounts(counters).Should().Contain(
+        EvalWorkCountersFormatting.FormatAllCounts(counters).Should().Contain(
             "DeferredTemplateValueAllocationCount: 6");
 
-        PerformanceCountersFormatting.FormatAllCounts(counters).ShouldBeWithDiff(
-            PerformanceCountersFormatting.FormatCounts(counters));
+        EvalWorkCountersFormatting.FormatAllCounts(counters).ShouldBeWithDiff(
+            EvalWorkCountersFormatting.FormatCounts(counters));
 
         System.Text
             .Json.JsonSerializer.Serialize(counters).Should().Contain("\"BuildListCount\":2,\"BuildListItemCount\":9")
             .And.NotContain("Label");
 
-        PerformanceCounters.Add(counters, counters).Should().Be(PerformanceCounters.Aggregate([counters, counters]));
-        PerformanceCounters.Subtract(PerformanceCounters.Add(counters, counters), counters).Should().Be(counters);
+        EvalWorkCounters.Add(counters, counters).Should().Be(EvalWorkCounters.Aggregate([counters, counters]));
+        EvalWorkCounters.Subtract(EvalWorkCounters.Add(counters, counters), counters).Should().Be(counters);
     }
 
     private static PineValue BuildTemplateValue(int environmentCount)
@@ -1405,7 +1466,8 @@ public class ExpressionTemplateRuntimeTests
         ReportExecutedStackInstruction? reportInstruction = null,
         System.Func<Expression, PineValueInProcess, PineVMParseCache, System.Func<PrecompiledResult>?>? nativeSelector = null,
         IReadOnlyDictionary<PineValue, PrecompiledLeaf>? leaves = null,
-        bool disableDirectInvocation = false) =>
+        bool disableDirectInvocation = false,
+        ReportEvaluationEvent? reportEvaluationEvent = null) =>
         IntermediatePineVM.CreateCustom(
             expressionTemplatePlanCache: templateCache ?? new PineVMExpressionTemplatePlanCache(),
             evalCache: null,
@@ -1428,5 +1490,6 @@ public class ExpressionTemplateRuntimeTests
             reportExecutedStackInstruction:
             reportInstruction,
             expressionCompilationOverrides: compilationOverrides,
-            disableDirectInvocation: disableDirectInvocation);
+            disableDirectInvocation: disableDirectInvocation,
+            reportEvaluationEvent: reportEvaluationEvent);
 }

@@ -14,8 +14,8 @@ namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 
 /// <summary>
 /// Exercises <see cref="ElmInterpreter.ParseAndInterpretWithCounters(string, IReadOnlyDictionary{DeclQualifiedName, SyntaxTypes.Declaration})"/>
-/// and asserts on the resulting <see cref="ElmSyntaxInterpreterPerformanceCounters"/> snapshot,
-/// rendered via <see cref="ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts"/>.
+/// and asserts on the resulting <see cref="ElmSyntaxInterpreterEvalWorkCounters"/> snapshot,
+/// rendered via <see cref="ElmSyntaxInterpreterEvalWorkCountersFormatting.FormatCounts"/>.
 /// This is the <see cref="ElmInterpreter"/> analog of the IR VM
 /// <c>Expression_int_literal</c> snapshot tests in
 /// <c>ElmParserExpressionTests</c>: each scenario asserts both the evaluated value and a
@@ -27,7 +27,7 @@ namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 /// applications of evaluated function values, and Pine_builtin invocations — are visible
 /// in the snapshots.
 /// </summary>
-public class ElmSyntaxInterpreterPerformanceCountersTests
+public class ElmSyntaxInterpreterEvalWorkCountersTests
 {
     /// <summary>
     /// Custom test module: declares <c>mapPositives f xs</c>, a List.map analog that
@@ -37,7 +37,7 @@ public class ElmSyntaxInterpreterPerformanceCountersTests
     /// </summary>
     private const string TestModuleSource =
         """
-        module ElmSyntaxInterpreterPerformanceCountersTestModule exposing (..)
+        module ElmSyntaxInterpreterEvalWorkCountersTestModule exposing (..)
 
 
         mapPositives : (Int -> Int) -> List Int -> List Int
@@ -105,7 +105,7 @@ public class ElmSyntaxInterpreterPerformanceCountersTests
     /// Evaluates the supplied Elm <paramref name="expression"/> against the merged
     /// Basics + List + test-module declarations, returning the rendered Elm-expression
     /// form of the result alongside a formatted snapshot of the
-    /// <see cref="ElmSyntaxInterpreterPerformanceCounters"/> recorded for the run.
+    /// <see cref="ElmSyntaxInterpreterEvalWorkCounters"/> recorded for the run.
     /// </summary>
     private static (string Rendered, string CountersSnapshot) EvaluateAndFormatCounters(string expression)
     {
@@ -117,7 +117,7 @@ public class ElmSyntaxInterpreterPerformanceCountersTests
 
         return
             (ElmInterpreter.RenderAsElmExpression(value).expressionString,
-            ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(counters));
+            ElmSyntaxInterpreterEvalWorkCountersFormatting.FormatCounts(counters));
     }
 
     // ============================================================

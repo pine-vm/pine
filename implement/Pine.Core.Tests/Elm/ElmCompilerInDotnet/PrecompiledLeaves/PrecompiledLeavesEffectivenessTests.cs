@@ -122,7 +122,7 @@ public class PrecompiledLeavesEffectivenessTests
 
     // ---------- helpers ----------
 
-    private static (ElmValue value, PerformanceCounters counters) ApplyUnary(
+    private static (ElmValue value, EvalWorkCounters counters) ApplyUnary(
         PineValue functionValue,
         ElmValue arg0,
         Core.Interpreter.IntermediateVM.PineVM vm) =>

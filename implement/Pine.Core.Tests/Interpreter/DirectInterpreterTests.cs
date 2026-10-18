@@ -38,14 +38,13 @@ public class DirectInterpreterTests
         var interpreter = DirectInterpreter.WithoutEvalCaching(new PineVMParseCache());
         interpreter.EvaluateExpression(expression, PineValue.EmptyList).IsOkOrNull().Should().NotBeNull();
 
-        PerformanceCountersFormatting.FormatCounts(interpreter.Counters).ShouldBeWithDiff(
+        EvalWorkCountersFormatting.FormatCounts(interpreter.Counters).ShouldBeWithDiff(
             """
             InvocationCount: 0
             BuildListCount: 2
             BuildListItemCount: 5
             LoopIterationCount: 0
             InstructionCount: 0
-            ExpressionTemplatePlanParseCount: 0
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
@@ -92,7 +91,7 @@ public class DirectInterpreterTests
         interpreter.EvaluateParseAndEvalExpression(expression, PineValue.EmptyList);
         var first = interpreter.Counters;
         interpreter.EvaluateExpressionDefault(expression, PineValue.EmptyList);
-        var second = PerformanceCounters.Subtract(interpreter.Counters, first);
+        var second = EvalWorkCounters.Subtract(interpreter.Counters, first);
         first.DirectInterpreterExpressionCount.Should().Be(6);
         first.BuildListItemCount.Should().Be(2);
         second.DirectInterpreterInvocationCount.Should().Be(1);

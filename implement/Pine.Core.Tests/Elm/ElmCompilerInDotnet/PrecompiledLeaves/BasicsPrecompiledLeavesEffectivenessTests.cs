@@ -158,7 +158,7 @@ public class BasicsPrecompiledLeavesEffectivenessTests
                 ]),
             vm);
 
-    private static (ElmValue value, PerformanceCounters counters) Apply(
+    private static (ElmValue value, EvalWorkCounters counters) Apply(
         PineValue functionValue,
         ElmValue arg0,
         ElmValue arg1,
@@ -493,7 +493,7 @@ public class BasicsPrecompiledLeavesEffectivenessTests
     /// precompiled leaf even though <c>modBy</c> has no dedicated leaf of its own: its only
     /// variable-cost part is the nested <c>idiv</c> call reached via
     /// <c>modBy -&gt; remainderBy -&gt; idiv</c>. Registering only the <c>idivHelper</c> leaf
-    /// (not a modBy- or eq-specific leaf) already makes the performance counters constant across
+    /// (not a modBy- or eq-specific leaf) already makes the evaluation work counters constant across
     /// small and large inputs.
     /// </summary>
     [Fact]

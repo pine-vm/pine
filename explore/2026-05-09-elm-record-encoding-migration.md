@@ -105,7 +105,7 @@ The migration touches three layers (canonical encoding helpers, the .NET-hosted 
 - [x] **Step 10** — CHANGELOG entry added; `elm-compiler-implementation-guide.md` updated with the flat-layout description.
 - [x] **Step 11** — Final validation: full `Pine.Core.Tests` run = 3172 passed / 0 failed / 10 skipped (~13 min). `Pine.IntegrationTests/ElmValueTests` = 6/6 pass (including the 2 new flat-layout / legacy-decoder tests).
 
-Performance-counter snapshots in 16 tests across `ElmParserExpressionTests`, `KernelJsonFunctionTests`, `ElmParserFileTests`, and `ElmLanguageServiceTests` were rebaselined alongside step 5 because the flat layout removes one level of `PineValue.List` nesting per record (mostly visible as a drop in `BuildListCount`).
+Evaluation-work-counter snapshots in 16 tests across `ElmParserExpressionTests`, `KernelJsonFunctionTests`, `ElmParserFileTests`, and `ElmLanguageServiceTests` were rebaselined alongside step 5 because the flat layout removes one level of `PineValue.List` nesting per record (mostly visible as a drop in `BuildListCount`).
 
 ### 1. Introduce the new tag constant alongside the renamed old one — done
 

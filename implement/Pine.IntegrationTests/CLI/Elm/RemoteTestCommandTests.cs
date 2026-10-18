@@ -708,7 +708,7 @@ public class RemoteTestCommandTests
 
         output.Should().NotContain("helperValue").And.NotContain("private test")
             .And.NotContain("Running").And.NotContain("TEST RUN PASSED")
-            .And.NotContain("Performance counters by phase and work origin:");
+            .And.NotContain("Evaluation work counters by phase and work origin:");
     }
 
     private static Dictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> FixtureFiles() =>
