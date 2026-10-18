@@ -478,7 +478,8 @@ public class AddInferredTypeAnnotationsTests
         inferredType.Should().Be(
             TypeInference.InferredType.Function(
                 argType: TypeInference.InferredType.Int(),
-                returnType: TypeInference.InferredType.Function(
+                returnType:
+                TypeInference.InferredType.Function(
                     argType: TypeInference.InferredType.Int(),
                     returnType: TypeInference.InferredType.Int())));
     }
@@ -511,7 +512,8 @@ public class AddInferredTypeAnnotationsTests
         inferredType.Should().Be(
             TypeInference.InferredType.Function(
                 argType: TypeInference.InferredType.Int(),
-                returnType: TypeInference.InferredType.Function(
+                returnType:
+                TypeInference.InferredType.Function(
                     argType: TypeInference.InferredType.Int(),
                     returnType: TypeInference.InferredType.Int())));
     }
@@ -576,7 +578,8 @@ public class AddInferredTypeAnnotationsTests
         inferredType.Should().Be(
             TypeInference.InferredType.Function(
                 argType: TypeInference.InferredType.Float(),
-                returnType: TypeInference.InferredType.Function(
+                returnType:
+                TypeInference.InferredType.Function(
                     argType: TypeInference.InferredType.Number(),
                     returnType: TypeInference.InferredType.Float())));
     }

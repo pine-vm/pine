@@ -41,7 +41,8 @@ public class DotNetAssembly
             filePaths
             .Aggregate(
                 seed: seed,
-                func: (aggregate, filePath) =>
+                func:
+                (aggregate, filePath) =>
                 aggregate.AndThen(
                     dict =>
                     {

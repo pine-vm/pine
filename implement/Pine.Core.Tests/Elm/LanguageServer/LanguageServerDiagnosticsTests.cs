@@ -26,7 +26,8 @@ public class LanguageServerDiagnosticsTests
 
     private static Diagnostic DiagnosticWithMessage(string message, uint line = 0) =>
         new(
-            Range: new Range(
+            Range:
+            new Range(
                 Start: new Position(Line: line, Character: 0),
                 End: new Position(Line: line, Character: 1)),
             Severity: DiagnosticSeverity.Error,

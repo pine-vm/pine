@@ -268,7 +268,8 @@ public class EvaluationQuotaTests
                 config)
             .Unpack(
                 fromErr: error => error,
-                fromOk: report =>
+                fromOk:
+                report =>
                 throw new InvalidOperationException(
                     "Expected quota exhaustion, but evaluation returned: " +
                     report.ReturnValue.Evaluate()));
@@ -305,7 +306,8 @@ public class EvaluationQuotaTests
                 config)
             .Unpack(
                 fromErr: error => error,
-                fromOk: report =>
+                fromOk:
+                report =>
                 throw new InvalidOperationException(
                     "Expected quota exhaustion, but evaluation returned: " +
                     report.ReturnValue.Evaluate()));

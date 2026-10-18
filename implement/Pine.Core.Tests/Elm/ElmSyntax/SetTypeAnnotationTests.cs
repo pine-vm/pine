@@ -858,7 +858,8 @@ public class SetTypeAnnotationTests
         {
             return
                 new TypeAnnotation.Record(
-                    RecordDefinition: new RecordDefinition(
+                    RecordDefinition:
+                    new RecordDefinition(
                         Fields: new SeparatedSyntaxList<Node<RecordField>>.Empty()));
         }
 
@@ -882,8 +883,10 @@ public class SetTypeAnnotationTests
 
         return
             new TypeAnnotation.Record(
-                RecordDefinition: new RecordDefinition(
-                    Fields: new SeparatedSyntaxList<Node<RecordField>>.NonEmpty(
+                RecordDefinition:
+                new RecordDefinition(
+                    Fields:
+                    new SeparatedSyntaxList<Node<RecordField>>.NonEmpty(
                         MakeNode(firstField, s_rangeZero),
                         restFields)));
     }

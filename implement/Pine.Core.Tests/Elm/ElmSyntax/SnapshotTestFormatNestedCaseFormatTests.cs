@@ -44,13 +44,15 @@ public class SnapshotTestFormatNestedCaseFormatTests
             (SyntaxTypes.Expression)
             new SyntaxTypes.Expression.CaseExpression(
                 new SyntaxTypes.CaseBlock(
-                    Expression: WrapNode(
+                    Expression:
+                    WrapNode(
                         (SyntaxTypes.Expression)
                         new SyntaxTypes.Expression.FunctionOrValue([], "x")),
                     Cases:
                     [
                     new SyntaxTypes.Case(
-                        Pattern: WrapNode(
+                        Pattern:
+                        WrapNode(
                             (SyntaxTypes.Pattern)
                             new SyntaxTypes.Pattern.NamedPattern(
                                 new StilQualifiedNameRef([], "Just"),
@@ -59,17 +61,20 @@ public class SnapshotTestFormatNestedCaseFormatTests
                                     (SyntaxTypes.Pattern)
                                     new SyntaxTypes.Pattern.VarPattern("_"))
                                 ])),
-                        Expression: WrapNode(
+                        Expression:
+                        WrapNode(
                             (SyntaxTypes.Expression)
                             new SyntaxTypes.Expression.Integer(1L))),
 
                     new SyntaxTypes.Case(
-                        Pattern: WrapNode(
+                        Pattern:
+                        WrapNode(
                             (SyntaxTypes.Pattern)
                             new SyntaxTypes.Pattern.NamedPattern(
                                 new StilQualifiedNameRef([], "Nothing"),
                                 [])),
-                        Expression: WrapNode(
+                        Expression:
+                        WrapNode(
                             (SyntaxTypes.Expression)
                             new SyntaxTypes.Expression.Integer(2L))),
                     ]));
@@ -82,7 +87,8 @@ public class SnapshotTestFormatNestedCaseFormatTests
                     Cases:
                     [
                     new SyntaxTypes.Case(
-                        Pattern: WrapNode(
+                        Pattern:
+                        WrapNode(
                             (SyntaxTypes.Pattern)
                             new SyntaxTypes.Pattern.NamedPattern(
                                 new StilQualifiedNameRef([], "Just"),
@@ -91,17 +97,20 @@ public class SnapshotTestFormatNestedCaseFormatTests
                                     (SyntaxTypes.Pattern)
                                     new SyntaxTypes.Pattern.VarPattern("_"))
                                 ])),
-                        Expression: WrapNode(
+                        Expression:
+                        WrapNode(
                             (SyntaxTypes.Expression)
                             new SyntaxTypes.Expression.Integer(10L))),
 
                     new SyntaxTypes.Case(
-                        Pattern: WrapNode(
+                        Pattern:
+                        WrapNode(
                             (SyntaxTypes.Pattern)
                             new SyntaxTypes.Pattern.NamedPattern(
                                 new StilQualifiedNameRef([], "Nothing"),
                                 [])),
-                        Expression: WrapNode(
+                        Expression:
+                        WrapNode(
                             (SyntaxTypes.Expression)
                             new SyntaxTypes.Expression.Integer(20L))),
                     ]));
@@ -150,13 +159,16 @@ public class SnapshotTestFormatNestedCaseFormatTests
         var innerIf =
             (SyntaxTypes.Expression)
             new SyntaxTypes.Expression.IfBlock(
-                Condition: WrapNode(
+                Condition:
+                WrapNode(
                     (SyntaxTypes.Expression)
                     new SyntaxTypes.Expression.FunctionOrValue([], "x")),
-                ThenBlock: WrapNode(
+                ThenBlock:
+                WrapNode(
                     (SyntaxTypes.Expression)
                     new SyntaxTypes.Expression.Integer(1L)),
-                ElseBlock: WrapNode(
+                ElseBlock:
+                WrapNode(
                     (SyntaxTypes.Expression)
                     new SyntaxTypes.Expression.Integer(2L)));
 
@@ -168,10 +180,12 @@ public class SnapshotTestFormatNestedCaseFormatTests
                     Cases:
                     [
                     new SyntaxTypes.Case(
-                        Pattern: WrapNode(
+                        Pattern:
+                        WrapNode(
                             (SyntaxTypes.Pattern)
                             new SyntaxTypes.Pattern.VarPattern("v")),
-                        Expression: WrapNode(
+                        Expression:
+                        WrapNode(
                             (SyntaxTypes.Expression)
                             new SyntaxTypes.Expression.FunctionOrValue([], "v"))),
                     ]));

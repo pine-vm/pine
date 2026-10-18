@@ -220,7 +220,8 @@ public class ElmLanguageServiceTests
                 languageServiceState.HandleRequest(
                     new LanguageServiceInterface.Request.AddWorkspaceFileRequest(
                         FilePath: string.Join("/", file.path),
-                        Blob: new LanguageServiceInterface.FileTreeBlobNode(
+                        Blob:
+                        new LanguageServiceInterface.FileTreeBlobNode(
                             AsBase64: asBase64,
                             AsText: asText)));
 

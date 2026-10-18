@@ -122,7 +122,8 @@ public sealed class ProcessLiveRepresentation : IAsyncDisposable
 
         _notifyTimeHasArrivedTimer =
             new System.Threading.Timer(
-                callback: _ =>
+                callback:
+                _ =>
                 {
                     if (cancellationToken.IsCancellationRequested)
                     {

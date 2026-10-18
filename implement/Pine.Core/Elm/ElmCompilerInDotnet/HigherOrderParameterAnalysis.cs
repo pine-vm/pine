@@ -216,7 +216,8 @@ internal static class HigherOrderParameterAnalysis
                     funcImpl.Expression,
                     letRhsByName: [],
                     bound: [],
-                    onApplication: (app, letRhsByName, bound) =>
+                    onApplication:
+                    (app, letRhsByName, bound) =>
                     {
                         // In the abstract model app.Function is the head and app.Arguments
                         // are the user-visible arguments (no offset-by-one as in the concrete
@@ -727,7 +728,8 @@ internal static class HigherOrderParameterAnalysis
                 fi.Expression,
                 letRhsByName: [],
                 bound: [],
-                onApplication: (app, letRhsByName, bound) =>
+                onApplication:
+                (app, letRhsByName, bound) =>
                 {
                     if (app.Arguments.Count < 1)
                         return;
@@ -1255,7 +1257,8 @@ internal static class HigherOrderParameterAnalysis
                 fi.Expression,
                 letRhsByName: [],
                 bound: [],
-                onApplication: (app, letRhsByName, bound) =>
+                onApplication:
+                (app, letRhsByName, bound) =>
                 {
                     if (app.Arguments.Count < 1)
                         return;

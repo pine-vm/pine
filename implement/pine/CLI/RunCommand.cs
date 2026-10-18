@@ -427,7 +427,8 @@ public static class RunCommand
         var mutatingCliApp =
             new MutatingCommandLineApp(
                 appConfig,
-                environment: new CommandLineAppConfig.CommandLineAppInitEnvironment(
+                environment:
+                new CommandLineAppConfig.CommandLineAppInitEnvironment(
                     CommandLine: Environment.CommandLine,
                     EnvironmentVariables: environmentVariables),
                 pineVM: vm);

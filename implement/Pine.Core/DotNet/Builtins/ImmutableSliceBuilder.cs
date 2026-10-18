@@ -142,7 +142,8 @@ public record ImmutableSliceBuilder(
             new(
                 Original,
                 SkipCount: newSkipCount,
-                TakeCount: remainingTakeCount is { } remaining
+                TakeCount:
+                remainingTakeCount is { } remaining
                 ?
                 System.Math.Min(remaining, clampedTakeCount)
                 :

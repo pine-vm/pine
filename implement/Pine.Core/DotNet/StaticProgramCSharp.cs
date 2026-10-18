@@ -294,7 +294,8 @@ public record StaticProgramCSharp(
             memberDeclarations.Add(
                 SyntaxFactory.FieldDeclaration(
                     attributeLists: SyntaxFactory.List<AttributeListSyntax>(),
-                    modifiers: SyntaxFactory.TokenList(
+                    modifiers:
+                    SyntaxFactory.TokenList(
                         SyntaxFactory.Token(SyntaxKind.PublicKeyword),
                         SyntaxFactory.Token(SyntaxKind.StaticKeyword),
                         SyntaxFactory.Token(SyntaxKind.ReadOnlyKeyword)),
@@ -583,7 +584,8 @@ public record StaticProgramCSharp(
 
             var methodDecl =
                 SyntaxFactory.MethodDeclaration(
-                    returnType: SyntaxFactory.NullableType(
+                    returnType:
+                    SyntaxFactory.NullableType(
                         CompileTypeSyntax.TypeSyntaxFromType(
                             typeof(Internal.PineValueInProcess),
                             declarationSyntaxContext)),
@@ -620,7 +622,8 @@ public record StaticProgramCSharp(
 
         var buildDispatcherMethod =
             SyntaxFactory.MethodDeclaration(
-                returnType: CompileTypeSyntax.TypeSyntaxFromType(
+                returnType:
+                CompileTypeSyntax.TypeSyntaxFromType(
                     typeof(IReadOnlyDictionary<PineValue, PrecompiledLeaf>),
                     context: declarationSyntaxContext),
                 identifier: SyntaxFactory.Identifier("BuildDispatcherDictionary"))

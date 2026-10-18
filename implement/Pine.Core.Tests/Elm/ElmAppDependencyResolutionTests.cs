@@ -582,14 +582,16 @@ public class ElmAppDependencyResolutionTests
             .Add(
                 "author/a",
                 "1.0.0",
-                sources: FileTree.MergeFiles(
+                sources:
+                FileTree.MergeFiles(
                     Source("A", "import Internal.Helper\nvalue = Internal.Helper.value"),
                     Source("Internal.Helper", "value = 1")),
                 exposedModules: ["A"])
             .Add(
                 "author/b",
                 "2.0.0",
-                sources: FileTree.MergeFiles(
+                sources:
+                FileTree.MergeFiles(
                     Source("B", "import Internal.Helper\nvalue = Internal.Helper.value"),
                     Source("Internal.Helper", "value = 2")),
                 exposedModules: ["B"]);
@@ -983,13 +985,15 @@ public class ElmAppDependencyResolutionTests
                 "1.0.0",
                 dependencies: Deps(("author/bytes", "1.0.0 <= v < 2.0.0")),
                 exposedModules: ["Encode"],
-                sources: FileTree.FromSetOfFilesWithStringPath(
+                sources:
+                FileTree.FromSetOfFilesWithStringPath(
                     [(new[] { "src", "Encode.elm" }, (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(codec))]))
             .Add(
                 "author/bytes",
                 "1.0.0",
                 exposedModules: ["Bytes.Encode"],
-                sources: FileTree.FromSetOfFilesWithStringPath(
+                sources:
+                FileTree.FromSetOfFilesWithStringPath(
                     [
                     (new[] { "src", "Bytes", "Encode.elm" }, (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(bytes))
                     ]));
@@ -1232,7 +1236,8 @@ public class ElmAppDependencyResolutionTests
                 "author/a",
                 "1.0.0",
                 dependencies,
-                sources: FileTree.MergeFiles(
+                sources:
+                FileTree.MergeFiles(
                     FileTree.MergeFiles(
                         Source("A", aDeclarations),
                         Source("Internal.Helper", "type Value = Value Int\nvalue = Value 1")),
@@ -1242,7 +1247,8 @@ public class ElmAppDependencyResolutionTests
                 "author/b",
                 "1.0.0",
                 dependencies,
-                sources: FileTree.MergeFiles(
+                sources:
+                FileTree.MergeFiles(
                     FileTree.MergeFiles(
                         Source("B", "import Internal.Helper as Helper\nvalue = Helper.value"),
                         Source("Internal.Helper", "value = 2")),

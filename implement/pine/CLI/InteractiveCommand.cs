@@ -62,8 +62,9 @@ public static class InteractiveCommand
 
         var elmEngineOption =
             new Option<string?>(
-                name: "--elm-engine" + string.Join(", ", Enum.GetNames<ElmEngineTypeCLI>()) + "). Defaults to " +
-                    defaultEngine);
+                name:
+                "--elm-engine" + string.Join(", ", Enum.GetNames<ElmEngineTypeCLI>()) + "). Defaults to " +
+                defaultEngine);
 
         ElmEngineType parseElmEngineTypeFromOption()
         {
@@ -368,7 +369,8 @@ public static class InteractiveCommand
                         .Unpack(
                             fromErr:
                             error => throw new Exception("Failed to load from path '" + contextAppPath + "': " + error),
-                            fromOk: tree =>
+                            fromOk:
+                            tree =>
                             {
                                 if (!tree.EnumerateFilesTransitive().Take(1).Any())
                                     throw new Exception("Found no files under context app path '" + contextAppPath + "'.");
@@ -426,7 +428,8 @@ public static class InteractiveCommand
                         .Unpack(
                             fromErr:
                             error => throw new Exception("Failed to load from path '" + initStepsPath + "': " + error),
-                            fromOk: treeNode =>
+                            fromOk:
+                            treeNode =>
                             {
                                 if (!treeNode.EnumerateFilesTransitive().Take(1).Any())
                                     throw new Exception("Found no files under context app path '" + initStepsPath + "'.");
@@ -435,7 +438,8 @@ public static class InteractiveCommand
                                     treeNode
                                     .Map(
                                         fromFile: _ => throw new Exception("Unexpected blob"),
-                                        fromDirectory: tree =>
+                                        fromDirectory:
+                                        tree =>
                                         tree.Select(
                                             stepDirectory =>
                                             TestElmInteractive.ParseScenarioStep(stepDirectory.itemValue)
@@ -464,12 +468,14 @@ public static class InteractiveCommand
                     return
                         evalResult
                         .Unpack(
-                            fromErr: error =>
+                            fromErr:
+                            error =>
                             {
                                 console.WriteLine("Failed to evaluate: " + error);
                                 return submission;
                             },
-                            fromOk: evalOk =>
+                            fromOk:
+                            evalOk =>
                             {
                                 if (enableInspection)
                                 {

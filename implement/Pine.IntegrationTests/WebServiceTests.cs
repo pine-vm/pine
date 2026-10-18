@@ -364,7 +364,8 @@ public class WebServiceTests
 
         using var testSetup =
             WebHostAdminInterfaceTestSetup.Setup(
-                deployAppAndInitElmState: FileTreeEncoding.Encode(
+                deployAppAndInitElmState:
+                FileTreeEncoding.Encode(
                     FileTree.FromSetOfFilesWithStringPath(deploymentFiles)));
 
         async System.Threading.Tasks.Task<HttpResponseMessage> PostStringContentToPublicAppAsync(
@@ -709,23 +710,27 @@ public class WebServiceTests
 
         using var server =
             testSetup.StartWebHost(
-                processStoreFileStoreMap: originalFileStore =>
+                processStoreFileStoreMap:
+                originalFileStore =>
                 {
                     return
                         new FileStoreFromDelegates(
-                            setFileContent: new Action<IImmutableList<string>, ReadOnlyMemory<byte>>(
+                            setFileContent:
+                            new Action<IImmutableList<string>, ReadOnlyMemory<byte>>(
                                 (path, fileContent) =>
                                 {
                                     runBeforeMutateInFileStore?.Invoke();
                                     originalFileStore.SetFileContent(path, fileContent);
                                 }),
-                            appendFileContent: new Action<IImmutableList<string>, ReadOnlyMemory<byte>>(
+                            appendFileContent:
+                            new Action<IImmutableList<string>, ReadOnlyMemory<byte>>(
                                 (path, fileContent) =>
                                 {
                                     runBeforeMutateInFileStore?.Invoke();
                                     originalFileStore.AppendFileContent(path, fileContent);
                                 }),
-                            deleteFile: new Action<IImmutableList<string>>(
+                            deleteFile:
+                            new Action<IImmutableList<string>>(
                                 path =>
                                 {
                                     runBeforeMutateInFileStore?.Invoke();

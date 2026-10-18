@@ -404,7 +404,8 @@ public class FromFullSyntaxModelTests
                 new FunctionStruct(
                     Documentation: null,
                     Signature: null,
-                    Declaration: new Node<FunctionImplementation>(
+                    Declaration:
+                    new Node<FunctionImplementation>(
                         range,
                         new FunctionImplementation(
                             new Node<string>(range, "test"),

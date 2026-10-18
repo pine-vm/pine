@@ -14,13 +14,16 @@ public class StaticExpressionExtensionsTests
         // Build a tree that contains an Environment node in the true branch.
         var expr =
             StaticExpression<string>.ConditionalInstance(
-                condition: StaticExpression<string>.KernelApplicationInstance(
+                condition:
+                StaticExpression<string>.KernelApplicationInstance(
                     nameof(BuiltinFunction.length),
                     StaticExpression<string>.ListInstance([])),
-                falseBranch: StaticExpression<string>.FunctionApplicationInstance(
+                falseBranch:
+                StaticExpression<string>.FunctionApplicationInstance(
                     "F",
                     StaticExpression<string>.ListInstance([])),
-                trueBranch: StaticExpression<string>.ListInstance(
+                trueBranch:
+                StaticExpression<string>.ListInstance(
                     [
                     StaticExpression<string>.EnvironmentInstance,
                     StaticExpression<string>.LiteralInstance(PineValue.EmptyBlob)
@@ -57,7 +60,8 @@ public class StaticExpressionExtensionsTests
 
         var (mapped, referencesOriginalEnv) =
             StaticExpressionExtension.TransformStaticExpressionWithOptionalReplacement(
-                findReplacement: e => e is StaticExpression<string>.Environment
+                findReplacement:
+                e => e is StaticExpression<string>.Environment
                 ?
                 StaticExpression<string>.LiteralInstance(PineValue.EmptyList)
                 :
@@ -88,7 +92,8 @@ public class StaticExpressionExtensionsTests
 
         var (mapped, referencesOriginalEnv) =
             StaticExpressionExtension.TransformStaticExpressionWithOptionalReplacement(
-                findReplacement: e => e is StaticExpression<string>.Literal
+                findReplacement:
+                e => e is StaticExpression<string>.Literal
                 ?
                 StaticExpression<string>.EnvironmentInstance
                 :
@@ -124,7 +129,8 @@ public class StaticExpressionExtensionsTests
 
         var (mapped, _) =
             StaticExpressionExtension.TransformStaticExpressionWithOptionalReplacement(
-                findReplacement: e =>
+                findReplacement:
+                e =>
                 {
                     visited.Add(e);
 
@@ -156,12 +162,14 @@ public class StaticExpressionExtensionsTests
     {
         var expr =
             new StaticExpression<string>.CrashingParseAndEval(
-                Encoded: StaticExpression<string>.ListInstance(
+                Encoded:
+                StaticExpression<string>.ListInstance(
                     [
                     StaticExpression<string>.EnvironmentInstance,
                     StaticExpression<string>.LiteralInstance(PineValue.EmptyBlob)
                     ]),
-                EnvironmentExpr: StaticExpression<string>.ListInstance(
+                EnvironmentExpr:
+                StaticExpression<string>.ListInstance(
                     [
                     StaticExpression<string>.LiteralInstance(PineValue.EmptyList)
                     ]));

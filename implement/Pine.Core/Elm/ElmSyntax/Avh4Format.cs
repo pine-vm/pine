@@ -3266,7 +3266,8 @@ public class Avh4Format
                     MakeNode(
                         sigRange,
                         new Signature(
-                            Name: MakeNode(
+                            Name:
+                            MakeNode(
                                 currentContext.CurrentLocation(),
                                 afterSigName.CurrentLocation(),
                                 sigName),
@@ -3338,7 +3339,8 @@ public class Avh4Format
                 new FunctionStruct(
                     Documentation: funcDecl.Function.Documentation,
                     Signature: formattedSignature,
-                    Declaration: MakeNode(
+                    Declaration:
+                    MakeNode(
                         currentContext.CurrentLocation(),
                         exprResult.Context.CurrentLocation(),
                         formattedImpl));
@@ -3953,7 +3955,8 @@ public class Avh4Format
 
             var formattedSig =
                 new Signature(
-                    Name: MakeNode(
+                    Name:
+                    MakeNode(
                         afterPort.CurrentLocation(),
                         afterSigName.CurrentLocation(),
                         sigName),
@@ -4765,15 +4768,18 @@ public class Avh4Format
                             // Use the unified method to process the string content
                             Rendering.ProcessTripleQuotedStringContent(
                                 multiline.Value,
-                                onChar: _ =>
+                                onChar:
+                                _ =>
                                 {
                                     literalCtx = literalCtx.Advance(1);
                                 },
-                                onEscapeSequence: escaped =>
+                                onEscapeSequence:
+                                escaped =>
                                 {
                                     literalCtx = literalCtx.Advance(escaped.Length);
                                 },
-                                onNewline: () =>
+                                onNewline:
+                                () =>
                                 {
                                     literalCtx = literalCtx.ResetIndent().NextRowToIndent();
                                 });

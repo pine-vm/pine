@@ -304,7 +304,8 @@ public class ElmTestTests
                 onTestsDiscovered:
                 testCount =>
                 Interlocked.Exchange(ref discoveredTestCount, testCount),
-                onTestsSelected: (testCount, filteredOutCount) =>
+                onTestsSelected:
+                (testCount, filteredOutCount) =>
                 {
                     Interlocked.Exchange(ref selectedTestCount, testCount);
                     Interlocked.Exchange(ref filteredOutTestCount, filteredOutCount);

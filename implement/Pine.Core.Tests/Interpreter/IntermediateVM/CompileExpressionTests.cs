@@ -197,12 +197,14 @@ public class CompileExpressionTests
     public void Compile_single_case_switch_over_list_slice()
     {
         AssertSwitchOverSliceCompilation(
-            firstLiteral: PineValue.List(
+            firstLiteral:
+            PineValue.List(
                 [
                 IntegerEncoding.EncodeSignedInteger(4),
                 IntegerEncoding.EncodeSignedInteger(5),
                 ]),
-            secondLiteral: PineValue.List(
+            secondLiteral:
+            PineValue.List(
                 [
                 IntegerEncoding.EncodeSignedInteger(6),
                 IntegerEncoding.EncodeSignedInteger(7),
@@ -302,7 +304,8 @@ public class CompileExpressionTests
             (Expression)
             Expression.ConditionalInst(
                 condition: EqualTo(firstLiteral),
-                falseBranch: singleCase
+                falseBranch:
+                singleCase
                 ?
                 Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(0))
                 :

@@ -81,7 +81,8 @@ public static partial class ElmModule
                 moduleText =>
                 (moduleText,
                 parsedModule: new ParsedModule(
-                    ModuleName: ParseModuleName(moduleText)
+                    ModuleName:
+                    ParseModuleName(moduleText)
                     .Extract(
                         err =>
                         throw new Exception(
@@ -394,10 +395,12 @@ public static partial class ElmModule
                         return
                             ParseModuleName(blobContentAsString)
                             .Unpack(
-                                fromErr: _ =>
+                                fromErr:
+                                _ =>
                                 Maybe<(IReadOnlyList<string> path, string content)>.nothing(),
 
-                                fromOk: moduleName =>
+                                fromOk:
+                                moduleName =>
                                 (blobPathAndContent.path, blobContentAsString));
                     }
                     catch

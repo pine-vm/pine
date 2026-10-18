@@ -49,7 +49,8 @@ public class ExpressionJsonEncodingTests
                 // Parse-and-eval expression.
                 ("""{"ParseAndEval":[{"Literal":[7]},{"Environment":[]}]}""",
                 new Expression.Eval(
-                    encoded: Expression.LitralInst(
+                    encoded:
+                    Expression.LitralInst(
                         IntegerEncoding.EncodeSignedInteger(7)),
                     environment: Expression.EnvironmentInstance)),
 
@@ -63,9 +64,11 @@ public class ExpressionJsonEncodingTests
                 ("""{"Conditional":[{"Environment":[]},{"Literal":[0]},{"Literal":[1]}]}""",
                 Expression.ConditionalInst(
                     condition: Expression.EnvironmentInstance,
-                    falseBranch: Expression.LitralInst(
+                    falseBranch:
+                    Expression.LitralInst(
                         IntegerEncoding.EncodeSignedInteger(0)),
-                    trueBranch: Expression.LitralInst(
+                    trueBranch:
+                    Expression.LitralInst(
                         IntegerEncoding.EncodeSignedInteger(1)))),
 
                 // String tag expression.
@@ -78,7 +81,8 @@ public class ExpressionJsonEncodingTests
                 ("""{"KernelApplication":["equal",{"List":[[{"KernelApplication":["head",{"Environment":[]}]},{"Literal":[4]}]]}]}""",
                 Expression.BuiltinInst(
                     function: "equal",
-                    input: Expression.ListInst(
+                    input:
+                    Expression.ListInst(
                         [
                         Expression.BuiltinInst(
                             function: "head",
@@ -90,17 +94,23 @@ public class ExpressionJsonEncodingTests
                 // Deeply nested: conditional combining kernel application, parse-and-eval and string tag.
                 ("""{"Conditional":[{"KernelApplication":["equal",{"Environment":[]}]},{"ParseAndEval":[{"Literal":[{"BlobAsString":"F"}]},{"List":[[{"Environment":[]}]]}]},{"StringTag":["branch",{"Literal":[9]}]}]}""",
                 Expression.ConditionalInst(
-                    condition: Expression.BuiltinInst(
+                    condition:
+                    Expression.BuiltinInst(
                         function: "equal",
                         input: Expression.EnvironmentInstance),
-                    falseBranch: new Expression.Eval(
-                        encoded: Expression.LitralInst(
+                    falseBranch:
+                    new Expression.Eval(
+                        encoded:
+                        Expression.LitralInst(
                             StringEncoding.ValueFromString("F")),
-                        environment: Expression.ListInst(
+                        environment:
+                        Expression.ListInst(
                             [Expression.EnvironmentInstance])),
-                    trueBranch: new Expression.Label(
+                    trueBranch:
+                    new Expression.Label(
                         tag: "branch",
-                        tagged: Expression.LitralInst(
+                        tagged:
+                        Expression.LitralInst(
                             IntegerEncoding.EncodeSignedInteger(9))))),
             };
 

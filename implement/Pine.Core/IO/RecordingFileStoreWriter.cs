@@ -177,7 +177,8 @@ public class RecordingFileStoreWriter : IFileStoreWriter
             {
                 return
                     new DelegatingFileStoreReader(
-                        GetFileContentDelegate: filePath =>
+                        GetFileContentDelegate:
+                        filePath =>
                         {
                             if (filePath.SequenceEqual(setFilePath))
                             {
@@ -188,7 +189,8 @@ public class RecordingFileStoreWriter : IFileStoreWriter
 
                             return previousFileContent;
                         },
-                        ListFilesInDirectoryDelegate: directoryPath =>
+                        ListFilesInDirectoryDelegate:
+                        directoryPath =>
                         {
                             var previousFilesInDirectory = previousState.ListFilesInDirectory(directoryPath);
 
@@ -208,7 +210,8 @@ public class RecordingFileStoreWriter : IFileStoreWriter
             {
                 return
                     new DelegatingFileStoreReader(
-                        GetFileContentDelegate: filePath =>
+                        GetFileContentDelegate:
+                        filePath =>
                         {
                             var previousFileContent = previousState.GetFileContent(filePath);
 
@@ -222,7 +225,8 @@ public class RecordingFileStoreWriter : IFileStoreWriter
 
                             return previousFileContent;
                         },
-                        ListFilesInDirectoryDelegate: directoryPath =>
+                        ListFilesInDirectoryDelegate:
+                        directoryPath =>
                         {
                             var previousFilesInDirectory = previousState.ListFilesInDirectory(directoryPath);
 
@@ -242,7 +246,8 @@ public class RecordingFileStoreWriter : IFileStoreWriter
             {
                 return
                     new DelegatingFileStoreReader(
-                        GetFileContentDelegate: filePath =>
+                        GetFileContentDelegate:
+                        filePath =>
                         {
                             if (filePath.SequenceEqual(DeleteFile))
                                 return null;
@@ -250,7 +255,8 @@ public class RecordingFileStoreWriter : IFileStoreWriter
                             return previousState.GetFileContent(filePath);
                         },
 
-                        ListFilesInDirectoryDelegate: directoryPath =>
+                        ListFilesInDirectoryDelegate:
+                        directoryPath =>
                         previousState
                         .ListFilesInDirectory(directoryPath)
                         .Where(

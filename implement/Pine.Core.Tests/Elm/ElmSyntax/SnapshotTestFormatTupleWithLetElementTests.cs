@@ -137,7 +137,8 @@ public class SnapshotTestFormatTupleWithLetElementTests
                 WrapNode(
                     (SyntaxTypes.Expression.LetDeclaration)
                     new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
-                        Pattern: WrapNode(
+                        Pattern:
+                        WrapNode(
                             (SyntaxTypes.Pattern)
                             new SyntaxTypes.Pattern.NamedPattern(
                                 new StilQualifiedNameRef([], "String"),
@@ -146,44 +147,52 @@ public class SnapshotTestFormatTupleWithLetElementTests
                                     (SyntaxTypes.Pattern)
                                     new SyntaxTypes.Pattern.VarPattern("bytes"))
                                 ])),
-                        Expression: WrapNode(
+                        Expression:
+                        WrapNode(
                             (SyntaxTypes.Expression)
                             new SyntaxTypes.Expression.FunctionOrValue([], "x"))))
                 ],
-                Expression: WrapNode(
+                Expression:
+                WrapNode(
                     (SyntaxTypes.Expression)
                     new SyntaxTypes.Expression.FunctionOrValue([], "concat"))));
 
     private static SyntaxTypes.Expression BuildCaseExpression() =>
         new SyntaxTypes.Expression.CaseExpression(
             new SyntaxTypes.CaseBlock(
-                Expression: WrapNode(
+                Expression:
+                WrapNode(
                     (SyntaxTypes.Expression)
                     new SyntaxTypes.Expression.FunctionOrValue([], "scrut")),
                 Cases:
                 [
                 new SyntaxTypes.Case(
-                    Pattern: WrapNode(
+                    Pattern:
+                    WrapNode(
                         (SyntaxTypes.Pattern)
                         new SyntaxTypes.Pattern.NamedPattern(
                             new StilQualifiedNameRef([], "Good"),
                             [
                             WrapNode((SyntaxTypes.Pattern)new SyntaxTypes.Pattern.VarPattern("v")),
                             ])),
-                    Expression: WrapNode(
+                    Expression:
+                    WrapNode(
                         (SyntaxTypes.Expression)
                         new SyntaxTypes.Expression.FunctionOrValue([], "v"))),
                 ]));
 
     private static SyntaxTypes.Expression BuildIfExpression() =>
         new SyntaxTypes.Expression.IfBlock(
-            Condition: WrapNode(
+            Condition:
+            WrapNode(
                 (SyntaxTypes.Expression)
                 new SyntaxTypes.Expression.FunctionOrValue([], "cond")),
-            ThenBlock: WrapNode(
+            ThenBlock:
+            WrapNode(
                 (SyntaxTypes.Expression)
                 new SyntaxTypes.Expression.FunctionOrValue([], "yes")),
-            ElseBlock: WrapNode(
+            ElseBlock:
+            WrapNode(
                 (SyntaxTypes.Expression)
                 new SyntaxTypes.Expression.FunctionOrValue([], "no")));
 

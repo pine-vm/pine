@@ -229,7 +229,8 @@ public class ElmCompilerInElm
             elmModulesForElmCompiler
             .Aggregate(
                 seed: compilerProgramOnlyElmJson,
-                func: (aggregate, elmModule) =>
+                func:
+                (aggregate, elmModule) =>
                 aggregate.SetNodeAtPathSorted(elmModule.path, FileTree.File(elmModule.fileContent)));
 
         return compilerWithPackagesTree;

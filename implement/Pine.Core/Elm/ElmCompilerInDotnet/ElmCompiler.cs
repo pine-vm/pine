@@ -172,7 +172,8 @@ public partial class ElmCompiler
             LowerToElmSyntaxForCompilation<DefaultLoweredResults>(
                 appCodeTree,
                 rootDeclarations,
-                lower: (flatCanonicalized, rootDeclarationNames) =>
+                lower:
+                (flatCanonicalized, rootDeclarationNames) =>
                 {
                     var canonicalizedModulesForLowering =
                         BuildModuleShellsFromFlatDeclarations(flatCanonicalized);
@@ -365,7 +366,8 @@ public partial class ElmCompiler
         var appCodeTreeWithKernelModules =
             FileTree.MergeFiles(
                 left: appCodeTree,
-                right: includeBundledKernelModules
+                right:
+                includeBundledKernelModules
                 ?
                 ElmInElm.BundledFiles.ElmKernelModulesDefault.Value
                 :

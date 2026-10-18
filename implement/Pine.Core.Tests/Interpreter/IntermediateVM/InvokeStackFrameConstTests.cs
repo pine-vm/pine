@@ -867,7 +867,8 @@ public class InvokeStackFrameConstTests
             vm.EvaluateExpressionOnCustomStack(
                 rootExpression: rootExpression,
                 rootEnvironment: rootEnvironment,
-                config: new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(
+                config:
+                new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(
                     InvocationCountLimit: null,
                     LoopIterationCountLimit: null,
                     StackDepthLimit: null))

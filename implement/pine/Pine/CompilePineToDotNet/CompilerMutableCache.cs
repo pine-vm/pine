@@ -40,7 +40,8 @@ public class CompilerMutableCache
         CompileExpressionFunctionParameters parameters) =>
         _compileExpressionCache.GetOrAdd(
             parameters,
-            valueFactory: _ => CompileToCSharp.CompileToCSharpFunctionBlockSyntax(
+            valueFactory:
+            _ => CompileToCSharp.CompileToCSharpFunctionBlockSyntax(
                 parameters.Expression,
                 constrainedEnvId: parameters.ConstrainedEnvId,
                 branchesEnvIds: parameters.BranchesConstrainedEnvIds,

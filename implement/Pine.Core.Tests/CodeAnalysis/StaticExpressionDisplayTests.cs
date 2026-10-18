@@ -305,7 +305,8 @@ public class StaticExpressionDisplayTests
                         InterfaceFromParamCount(1),
                         StaticExpression.KernelApplicationInstance(
                             function: "int_is_sorted_asc",
-                            input: StaticExpression.ListInstance(
+                            input:
+                            StaticExpression.ListInstance(
                                 [
                                 Param_1_0(),
                                 StaticExpression.LiteralInstance(
@@ -373,7 +374,8 @@ public class StaticExpressionDisplayTests
                             [
                             StaticExpression.KernelApplicationInstance(
                                 function: "int_add",
-                                input: StaticExpression.ListInstance(
+                                input:
+                                StaticExpression.ListInstance(
                                     [
                                     Param_1_0(),
                                     StaticExpression.LiteralInstance(
@@ -415,17 +417,21 @@ public class StaticExpressionDisplayTests
                         (Expression.ListInst([]),
                         InterfaceFromParamCount(1),
                         StaticExpression.ConditionalInstance(
-                            condition: StaticExpression.KernelApplicationInstance(
+                            condition:
+                            StaticExpression.KernelApplicationInstance(
                                 function: "int_is_sorted_asc",
-                                input: StaticExpression.ListInstance(
+                                input:
+                                StaticExpression.ListInstance(
                                     [
                                     Param_1_0(),
                                     StaticExpression.LiteralInstance(
                                         ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))
                                     ])),
-                            falseBranch: StaticExpression.KernelApplicationInstance(
+                            falseBranch:
+                            StaticExpression.KernelApplicationInstance(
                                 function: "int_mul",
-                                input: StaticExpression.ListInstance(
+                                input:
+                                StaticExpression.ListInstance(
                                     [
                                     FunctionApplicationInstance(
                                         functionName: "decl_b",
@@ -433,7 +439,8 @@ public class StaticExpressionDisplayTests
                                         [
                                         StaticExpression.KernelApplicationInstance(
                                             function: "int_add",
-                                            input: StaticExpression.ListInstance(
+                                            input:
+                                            StaticExpression.ListInstance(
                                                 [
                                                 Param_1_0(),
                                                 StaticExpression.LiteralInstance(
@@ -593,26 +600,33 @@ public class StaticExpressionDisplayTests
                         (Expression.ListInst([]),
                         InterfaceFromParamCount(1),
                         StaticExpression.ConditionalInstance(
-                            condition: StaticExpression.KernelApplicationInstance(
+                            condition:
+                            StaticExpression.KernelApplicationInstance(
                                 function: "int_is_sorted_asc",
-                                input: StaticExpression.ListInstance(
+                                input:
+                                StaticExpression.ListInstance(
                                     [
                                     Param_1_0(),
                                     StaticExpression.LiteralInstance(
                                         ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(0)))
                                     ])),
-                            falseBranch: StaticExpression.ConditionalInstance(
-                                condition: StaticExpression.KernelApplicationInstance(
+                            falseBranch:
+                            StaticExpression.ConditionalInstance(
+                                condition:
+                                StaticExpression.KernelApplicationInstance(
                                     function: "int_is_sorted_asc",
-                                    input: StaticExpression.ListInstance(
+                                    input:
+                                    StaticExpression.ListInstance(
                                         [
                                         Param_1_0(),
                                         StaticExpression.LiteralInstance(
                                             ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))
                                         ])),
-                                falseBranch: StaticExpression.LiteralInstance(
+                                falseBranch:
+                                StaticExpression.LiteralInstance(
                                     ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(2))),
-                                trueBranch: StaticExpression.LiteralInstance(
+                                trueBranch:
+                                StaticExpression.LiteralInstance(
                                     ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))),
                             trueBranch:
                             StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(0)))),
@@ -654,17 +668,21 @@ public class StaticExpressionDisplayTests
                         StaticExpression.ListInstance(
                             [
                             StaticExpression.ConditionalInstance(
-                                condition: StaticExpression.KernelApplicationInstance(
+                                condition:
+                                StaticExpression.KernelApplicationInstance(
                                     function: "int_is_sorted_asc",
-                                    input: StaticExpression.ListInstance(
+                                    input:
+                                    StaticExpression.ListInstance(
                                         [
                                         Param_1_0(),
                                         StaticExpression.LiteralInstance(
                                             ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))
                                         ])),
-                                falseBranch: StaticExpression.LiteralInstance(
+                                falseBranch:
+                                StaticExpression.LiteralInstance(
                                     ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(2))),
-                                trueBranch: StaticExpression.LiteralInstance(
+                                trueBranch:
+                                StaticExpression.LiteralInstance(
                                     ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))),
                             StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(3)))
                             ]),
@@ -699,9 +717,11 @@ public class StaticExpressionDisplayTests
                         InterfaceFromParamCount(1),
                         StaticExpression.KernelApplicationInstance(
                             function: "head",
-                            input: StaticExpression.KernelApplicationInstance(
+                            input:
+                            StaticExpression.KernelApplicationInstance(
                                 function: "skip",
-                                input: StaticExpression.ListInstance(
+                                input:
+                                StaticExpression.ListInstance(
                                     [
                                     StaticExpression.LiteralInstance(
                                         ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1))),

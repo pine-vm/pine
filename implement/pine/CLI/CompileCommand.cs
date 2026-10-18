@@ -34,7 +34,8 @@ public static class CompileCommand
                 var compileReport = CompileAppAndSaveCompositionToZipArchive(source).report;
 
                 PineCliCommand.WriteReportToFileInReportDirectory(
-                    reportContent: System.Text.Json.JsonSerializer.Serialize(
+                    reportContent:
+                    System.Text.Json.JsonSerializer.Serialize(
                         compileReport,
                         PineCliCommand.ReportJsonSerializerOptions),
                     reportKind: "compile.json");

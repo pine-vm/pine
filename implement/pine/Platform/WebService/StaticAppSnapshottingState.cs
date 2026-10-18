@@ -120,7 +120,8 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
 
         _publicAppState =
             new PublicAppState(
-                serverAndElmAppConfig: new ServerAndElmAppConfig(
+                serverAndElmAppConfig:
+                new ServerAndElmAppConfig(
                     ProcessHttpRequestAsync: _process.ProcessHttpRequestAsync,
                     InitOrMigrateCmds: []),
                 getDateTimeOffset: () => DateTimeOffset.UtcNow);
@@ -234,13 +235,15 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
                                     PosixTimeMilli: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                                     new WebServiceInterface.HttpRequestContext(
                                         ClientAddress: context.Connection.RemoteIpAddress?.ToString()),
-                                    Request: new WebServiceInterface.HttpRequestProperties(
+                                    Request:
+                                    new WebServiceInterface.HttpRequestProperties(
                                         Method: context.Request.Method,
                                         Uri: context.Request.Path,
                                         Body: null,
                                         Headers: [])),
                                 StateChanged: false,
-                                Response: new WebServiceInterface.HttpResponse(
+                                Response:
+                                new WebServiceInterface.HttpResponse(
                                     StatusCode: 500,
                                     Body: System.Text.Encoding.UTF8.GetBytes("Failed to handle HTTP request."),
                                     HeadersToAdd: []));

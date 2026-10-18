@@ -193,7 +193,8 @@ public class TypeInferenceRecordAccessTests
             Abs(application),
             parameterNames: new Dictionary<string, int>(),
             parameterTypes: new Dictionary<string, TypeInference.InferredType>(),
-            localBindingTypes: new Dictionary<string, TypeInference.InferredType>
+            localBindingTypes:
+            new Dictionary<string, TypeInference.InferredType>
             {
                 ["makeState"] = new TypeInference.InferredType.UnknownType()
             },

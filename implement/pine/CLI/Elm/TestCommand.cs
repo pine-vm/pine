@@ -627,7 +627,8 @@ public static class TestCommand
                 return
                     TestWatchRunner.RunAsync(
                         source,
-                        run: token =>
+                        run:
+                        token =>
                         {
                             console.Profile.Out.Writer.WriteLine("Starting test run...");
                             console.Profile.Out.Writer.Flush();
@@ -667,9 +668,11 @@ public static class TestCommand
                                 return 1;
                             }
                         },
-                        onReady: () => console.Profile.Out.Writer.WriteLine(
+                        onReady:
+                        () => console.Profile.Out.Writer.WriteLine(
                             "Watching all files in " + Path.GetFullPath(source) + " recursively. Press Ctrl+C to stop."),
-                        onError: exception => errorConsole.Profile.Out.Writer.WriteLine(
+                        onError:
+                        exception => errorConsole.Profile.Out.Writer.WriteLine(
                             "Error: Cannot watch project directory '" + source + "': " + exception.Message),
                         watchCancellation.Token,
                         createWatcher).GetAwaiter().GetResult();
@@ -756,7 +759,8 @@ public static class TestCommand
                     resolutionConfiguration: resolutionConfiguration,
                     packageProvider: packageProvider,
                     fuzzOptions: new() { Seed = seed, Runs = fuzz },
-                    onDependenciesResolved: report =>
+                    onDependenciesResolved:
+                    report =>
                     {
                         if (dependencyReportPath is not null)
                             File.WriteAllText(dependencyReportPath, report.ToJson());
@@ -772,7 +776,8 @@ public static class TestCommand
                     resolutionConfiguration: resolutionConfiguration,
                     packageProvider: packageProvider,
                     fuzzOptions: new() { Seed = seed, Runs = fuzz },
-                    onDependenciesResolved: report =>
+                    onDependenciesResolved:
+                    report =>
                     {
                         if (dependencyReportPath is not null)
                             File.WriteAllText(dependencyReportPath, report.ToJson());

@@ -101,15 +101,17 @@ public class EvaluationInstrumentationTests
             optimizationParametersSerial: null,
             cacheFileStore: null,
             reportEvaluationEvent: report,
-            expressionCompilationOverrides: new Dictionary<Expression, ExpressionCompilation>
+            expressionCompilationOverrides:
+            new Dictionary<Expression, ExpressionCompilation>
             {
                 [root] =
                 new(
                     new StackFrameInstructions(
                         StaticFunctionInterface.Generic,
                         [
-                        StackInstruction.Local_Get(0), StackInstruction.Eval_Const(
-                                                        ExpressionEncoding.EncodeExpressionAsValue(child)),
+                        StackInstruction.Local_Get(0),
+                        StackInstruction.Eval_Const(
+                            ExpressionEncoding.EncodeExpressionAsValue(child)),
                         StackInstruction.Push_Literal(PineValue.EmptyList), StackInstruction.Pop, StackInstruction.Return
                         ],
                         null),

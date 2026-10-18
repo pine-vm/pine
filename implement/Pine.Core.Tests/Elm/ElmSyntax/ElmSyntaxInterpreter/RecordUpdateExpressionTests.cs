@@ -235,7 +235,8 @@ public class RecordUpdateExpressionTests
                 """);
 
         result.Unpack(
-            fromErr: err =>
+            fromErr:
+            err =>
             {
                 err.Message.Should().Contain("z");
                 return 0;

@@ -262,7 +262,8 @@ public class RunServer
 
         var processHistoryFileStoreRemoteReader =
             new DelegatingFileStoreReader(
-                ListFilesInDirectoryDelegate: directoryPath =>
+                ListFilesInDirectoryDelegate:
+                directoryPath =>
                 {
                     var httpRequestPath =
                         StartupAdminInterface.PathApiProcessHistoryFileStoreListFilesInDirectory + "/" +
@@ -281,7 +282,8 @@ public class RunServer
                         response.Content.ReadAsStringAsync().Result.Split('\n', StringSplitOptions.RemoveEmptyEntries)
                         .Select(path => path.Split('/').ToImmutableList());
                 },
-                GetFileContentDelegate: filePath =>
+                GetFileContentDelegate:
+                filePath =>
                 {
                     var httpRequestPath =
                         StartupAdminInterface.PathApiProcessHistoryFileStoreGetFileContent + "/" +

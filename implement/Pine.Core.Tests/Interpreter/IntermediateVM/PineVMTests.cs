@@ -73,7 +73,8 @@ public class PineVMTests
                                 Expression.BuiltinInst
                                 (
                                     function: "skip",
-                                    input: Expression.ListInst(
+                                    input:
+                                    Expression.ListInst(
                                         [
                                         Expression.LitralInst(
                                             IntegerEncoding.EncodeSignedInteger(1)),
@@ -134,7 +135,8 @@ public class PineVMTests
                                 Expression.BuiltinInst
                                 (
                                     function: "skip",
-                                    input: Expression.ListInst(
+                                    input:
+                                    Expression.ListInst(
                                         [
                                         Expression.LitralInst(
                                             IntegerEncoding.EncodeSignedInteger(1)),
@@ -206,7 +208,8 @@ public class PineVMTests
                                 Expression.BuiltinInst
                                 (
                                     function: "skip",
-                                    input: Expression.ListInst(
+                                    input:
+                                    Expression.ListInst(
                                         [
                                         Expression.LitralInst(
                                             IntegerEncoding.EncodeSignedInteger(1)),

@@ -375,7 +375,8 @@ public class PGOTests
                             " - " +
                             ElmValueEncoding.PineValueAsElmValue(envItem.Value, null, null)
                             .Unpack(
-                                fromErr: _ =>
+                                fromErr:
+                                _ =>
                                 "???",
                                 fromOk:
                                 elmValue =>
@@ -988,7 +989,8 @@ public class PGOTests
                             " - " +
                             ElmValueEncoding.PineValueAsElmValue(envItem.Value, null, null)
                             .Unpack(
-                                fromErr: _ =>
+                                fromErr:
+                                _ =>
                                 "???",
                                 fromOk:
                                 elmValue =>
@@ -1411,7 +1413,8 @@ public class PGOTests
                             " - " +
                             ElmValueEncoding.PineValueAsElmValue(envItem.Value, null, null)
                             .Unpack(
-                                fromErr: _ =>
+                                fromErr:
+                                _ =>
                                 "???",
                                 fromOk:
                                 elmValue =>
@@ -1815,7 +1818,8 @@ public class PGOTests
                             " - " +
                             ElmValueEncoding.PineValueAsElmValue(envItem.Value, null, null)
                             .Unpack(
-                                fromErr: _ =>
+                                fromErr:
+                                _ =>
                                 "???",
                                 fromOk:
                                 elmValue =>

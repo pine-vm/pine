@@ -1972,7 +1972,8 @@ public partial class CoreBasics
             Expression.ConditionalInst(
                 condition: scaledDivisorLeDividend,
                 trueBranch: scalingResult,
-                falseBranch: Expression.ConditionalInst(
+                falseBranch:
+                Expression.ConditionalInst(
                     condition: divisorLeDividend,
                     trueBranch: subtractResult,
                     falseBranch: baseCase));
@@ -2159,7 +2160,8 @@ public partial class CoreBasics
         var recursiveCall =
             new Expression.Eval(
                 encoded: selfExpr,
-                environment: Expression.ListInst(
+                environment:
+                Expression.ListInst(
                     [
                     envFunctionsExpr,
                     Expression.ListInst([bExpr, modByResult])
@@ -3238,7 +3240,8 @@ public partial class CoreBasics
             Expression.ConditionalInst(
                 condition: denominatorIsOne,
                 trueBranch: numerator,
-                falseBranch: Expression.ConditionalInst(
+                falseBranch:
+                Expression.ConditionalInst(
                     condition: dividesEvenly,
                     trueBranch: quotient,
                     falseBranch: floatResult));
@@ -3468,7 +3471,8 @@ public partial class CoreBasics
         var eqHeadCall =
             new Expression.Eval(
                 encoded: leqEqFunc,
-                environment: Expression.ListInst(
+                environment:
+                Expression.ListInst(
                     [
                     Expression.ListInst([leqEqFunc]),
                     Expression.ListInst([leqHeadA, leqHeadB])
@@ -3480,7 +3484,8 @@ public partial class CoreBasics
         var leqRecursiveTailCall =
             new Expression.Eval(
                 encoded: leqSelf,
-                environment: Expression.ListInst(
+                environment:
+                Expression.ListInst(
                     [
                     leqEnvFunctions,
                     Expression.ListInst([leqTailA, leqTailB])
@@ -3490,7 +3495,8 @@ public partial class CoreBasics
             Expression.ConditionalInst(
                 condition: leqListAIsEmpty,
                 trueBranch: s_trueValue,
-                falseBranch: Expression.ConditionalInst(
+                falseBranch:
+                Expression.ConditionalInst(
                     condition: leqHeadsEqualIsTrue,
                     trueBranch: leqRecursiveTailCall,
                     falseBranch: s_falseValue));
@@ -3610,7 +3616,8 @@ public partial class CoreBasics
         var eqListsEqualCall =
             new Expression.Eval(
                 encoded: Expression.LitralInst(leqEncodedBody),
-                environment: Expression.ListInst(
+                environment:
+                Expression.ListInst(
                     [
                     Expression.ListInst(
                         [
@@ -3991,7 +3998,8 @@ public partial class CoreBasics
             Expression.ConditionalInst(
                 condition: rightIsFloat,
                 trueBranch: intFloatCompare,
-                falseBranch: Expression.ConditionalInst(
+                falseBranch:
+                Expression.ConditionalInst(
                     condition: leftIsList,
                     trueBranch: listCompare,
                     falseBranch: intCompare));
@@ -4128,7 +4136,8 @@ public partial class CoreBasics
             Expression.ConditionalInst(
                 condition: charsEqual,
                 trueBranch: recursiveCompare,
-                falseBranch: Expression.ConditionalInst(
+                falseBranch:
+                Expression.ConditionalInst(
                     condition: charALessThanB,
                     trueBranch: s_orderLT,
                     falseBranch: s_orderGT));
@@ -4404,7 +4413,8 @@ public partial class CoreBasics
             Expression.ConditionalInst(
                 condition: directEqual,
                 trueBranch: s_trueValue,
-                falseBranch: Expression.ConditionalInst(
+                falseBranch:
+                Expression.ConditionalInst(
                     condition: BuiltinHelpers.ApplyBuiltinEqualBinary(compareResult, s_orderGT),
                     trueBranch: s_falseValue,
                     falseBranch: s_trueValue));
@@ -4431,7 +4441,8 @@ public partial class CoreBasics
             Expression.ConditionalInst(
                 condition: directEqual,
                 trueBranch: s_trueValue,
-                falseBranch: Expression.ConditionalInst(
+                falseBranch:
+                Expression.ConditionalInst(
                     condition: BuiltinHelpers.ApplyBuiltinEqualBinary(compareResult, s_orderLT),
                     trueBranch: s_falseValue,
                     falseBranch: s_trueValue));

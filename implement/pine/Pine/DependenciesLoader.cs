@@ -25,7 +25,8 @@ public class DependenciesLoader
         var assemblyFromCacheOrLink =
             BlobLibrary.GetBlobWithSHA256Cached(
                 hash,
-                getIfNotCached: () =>
+                getIfNotCached:
+                () =>
                 {
                     if (hintUrls is null)
                         return null;
@@ -33,7 +34,8 @@ public class DependenciesLoader
                     return
                         GetBlobFromHashAndHintUrlsCached(loadedTreesFromUrl, hash, hintUrls)
                         .Unpack(
-                            fromErr: err =>
+                            fromErr:
+                            err =>
                             {
                                 errorFromHintUrl = err;
 
@@ -149,7 +151,8 @@ public class DependenciesLoader
             hintUrls
             .Aggregate(
                 seed: Result<ImmutableDictionary<string, string>, ReadOnlyMemory<byte>>.err([]),
-                func: (aggregate, hintUrl) =>
+                func:
+                (aggregate, hintUrl) =>
                 {
                     return
                         aggregate.Unpack(

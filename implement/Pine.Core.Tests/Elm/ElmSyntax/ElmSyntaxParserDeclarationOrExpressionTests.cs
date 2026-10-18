@@ -85,7 +85,8 @@ public class ElmSyntaxParserDeclarationOrExpressionTests
             new Abstract.Declaration.FunctionDeclaration(
                 new Abstract.FunctionStruct(
                     Signature: null,
-                    Declaration: new Abstract.FunctionImplementation(
+                    Declaration:
+                    new Abstract.FunctionImplementation(
                         "x",
                         [],
                         IntegerExpr(1)))));
@@ -99,7 +100,8 @@ public class ElmSyntaxParserDeclarationOrExpressionTests
             new Abstract.Declaration.FunctionDeclaration(
                 new Abstract.FunctionStruct(
                     Signature: null,
-                    Declaration: new Abstract.FunctionImplementation(
+                    Declaration:
+                    new Abstract.FunctionImplementation(
                         "add",
                         [
                             new Abstract.Pattern.VarPattern("a"),

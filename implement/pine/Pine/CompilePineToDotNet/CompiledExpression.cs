@@ -169,7 +169,8 @@ public record CompiledExpression(
                                 "var",
                                 SyntaxFactory.TriviaList())))
                     .WithVariables(
-                        variables: SyntaxFactory.SingletonSeparatedList(
+                        variables:
+                        SyntaxFactory.SingletonSeparatedList(
                             SyntaxFactory.VariableDeclarator(
                                 SyntaxFactory.Identifier(letBinding.DeclarationName))
                             .WithInitializer(

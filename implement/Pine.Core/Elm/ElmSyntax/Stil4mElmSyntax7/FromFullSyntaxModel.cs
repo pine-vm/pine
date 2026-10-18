@@ -146,7 +146,8 @@ public static class FromFullSyntaxModel
         new(
             ModuleName: import.ModuleName,
             ModuleAlias: import.ModuleAlias?.Alias,
-            ExposingList: import.ExposingList is { } exposingList
+            ExposingList:
+            import.ExposingList is { } exposingList
             ?
             ConvertNode(exposingList.ExposingList, Convert)
             :
@@ -329,7 +330,8 @@ public static class FromFullSyntaxModel
         FullTypes.FunctionStruct functionStruct) =>
         new(
             Documentation: functionStruct.Documentation,
-            Signature: functionStruct.Signature is { } sig
+            Signature:
+            functionStruct.Signature is { } sig
             ?
             ConvertNode(sig, Convert)
             :

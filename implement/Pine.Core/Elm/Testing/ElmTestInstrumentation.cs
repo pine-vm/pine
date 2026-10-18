@@ -358,11 +358,14 @@ public sealed class ElmTestInstrumentation : IDisposable
 
         OnProgress?.Invoke(GetSummary());
         WorkProfile?.SetScenario(phase, context);
-        return new ScopeLease(() =>
-        {
-            _scope.Value = previous;
-            WorkProfile?.SetScenario(previous?.Phase ?? "initialization", previous?.Context ?? "");
-        });
+
+        return
+            new ScopeLease(
+                () =>
+                {
+                    _scope.Value = previous;
+                    WorkProfile?.SetScenario(previous?.Phase ?? "initialization", previous?.Context ?? "");
+                });
     }
 
     /// <summary>Records the selected test's full path for the saved report.</summary>
@@ -384,7 +387,8 @@ public sealed class ElmTestInstrumentation : IDisposable
     }
 
     /// <summary>Announces cancellation observed outside VM evaluation, such as during dependency resolution.</summary>
-    public void NotifyCancellation() => AnnounceStop(_stopReason ?? WorkProfile?.StopReason ?? "Time budget exhausted.");
+    public void NotifyCancellation() =>
+        AnnounceStop(_stopReason ?? WorkProfile?.StopReason ?? "Time budget exhausted.");
 
     /// <summary>Requests user cancellation without serializing or querying VM state.</summary>
     public void Cancel()
@@ -883,6 +887,7 @@ public sealed class ElmTestInstrumentation : IDisposable
         private void Event(in EvaluationEvent evaluationEvent)
         {
             _owner.WorkProfile?.Checkpoint(force: true);
+
             var loadOrigins =
                 evaluationEvent.LoadCountersByOrigin
                 ?? throw new InvalidOperationException("Instrumented evaluation must report work origins.");

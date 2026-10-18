@@ -52,7 +52,8 @@ public static class DeployCommand
                         promptForPasswordOnConsole: true);
 
                 PineCliCommand.WriteReportToFileInReportDirectory(
-                    reportContent: System.Text.Json.JsonSerializer.Serialize(
+                    reportContent:
+                    System.Text.Json.JsonSerializer.Serialize(
                         deployReport,
                         PineCliCommand.ReportJsonSerializerOptions),
                     reportKind: "deploy.json");

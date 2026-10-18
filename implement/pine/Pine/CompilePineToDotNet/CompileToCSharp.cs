@@ -72,16 +72,17 @@ public partial class CompileToCSharp
 
         const string argumentEvalGenericName = "eval_generic";
 
-        var usingDirectivesTypes = new[]
-        {
-            typeof(PineValue),
-            typeof(ImmutableArray),
-            typeof(IReadOnlyDictionary<,>),
-            typeof(Func<,>),
-            typeof(Enumerable),
-            typeof(GenericEvalException),
-            typeof(ParseExpressionException),
-        };
+        var usingDirectivesTypes =
+            new[]
+            {
+                typeof(PineValue),
+                typeof(ImmutableArray),
+                typeof(IReadOnlyDictionary<,>),
+                typeof(Func<,>),
+                typeof(Enumerable),
+                typeof(GenericEvalException),
+                typeof(ParseExpressionException),
+            };
 
         var usingDirectives =
             usingDirectivesTypes
@@ -137,49 +138,59 @@ public partial class CompileToCSharp
 
             var compilationUnitAvailableExpr =
                 expressions
-                .Select(expr =>
-                {
-                    var availableSpecialized =
-                    expressionsUsages
-                    .SelectMany(exprUsage =>
-                    exprUsage.Expression == expr && exprUsage.EnvId is { } envId ? (IReadOnlyList<PineValueClass>)[envId] : [])
-                    .Distinct()
-                    .Select(envConstraint =>
+                .Select(
+                    expr =>
                     {
-                        var envConstraintFunctionInterface =
-                        BuildFunctionSpecializedCompilationInterface(functionInterfaceBase, expr, envConstraint);
+                        var availableSpecialized =
+                            expressionsUsages
+                            .SelectMany(
+                                exprUsage =>
+                                exprUsage.Expression == expr && exprUsage.EnvId is { } envId
+                                ?
+                                (IReadOnlyList<PineValueClass>)[
+                                envId
+                                ]
+                                :
+                                [])
+                            .Distinct()
+                            .Select(
+                                envConstraint =>
+                                {
+                                    var envConstraintFunctionInterface =
+                                        BuildFunctionSpecializedCompilationInterface(functionInterfaceBase, expr, envConstraint);
 
-                        return new KeyValuePair<PineValueClass, ExprFunctionCompilationInterface>(
-                            envConstraint,
-                            envConstraintFunctionInterface);
+                                    return
+                                        new KeyValuePair<PineValueClass, ExprFunctionCompilationInterface>(
+                                            envConstraint,
+                                            envConstraintFunctionInterface);
+                                })
+                            .ToImmutableDictionary();
+
+                        var genericReprInterface =
+                            availableSpecialized.Count is 0
+                            ?
+                            /*
+                             * Since we currently use the generic function representations for entries in the global dictionary,
+                             * we need to keep their interfaces (types) the same.
+                             * */
+                            // BuildFunctionSpecializedCompilationInterface(functionInterfaceBase, expr, envConstraint: null)
+                            functionInterfaceBase
+                            :
+                            /*
+                             * If we will emit any specialized representations for this expression, this implies we will branch
+                             * statements to transition from the general case to the specialized cases.
+                             * The current implementation to build these branch statements depends on the complete environment
+                             * being available as function parameter, therefore do not use a specialized parameter list in this case.
+                             * */
+                            functionInterfaceBase;
+
+                        return
+                            new KeyValuePair<Expression, CompilationUnitEnvExprEntry>(
+                                expr,
+                                new CompilationUnitEnvExprEntry(
+                                    GenericReprInterface: genericReprInterface,
+                                    AvailableSpecialized: availableSpecialized));
                     })
-                    .ToImmutableDictionary();
-
-                    var genericReprInterface =
-                    availableSpecialized.Count is 0
-                    ?
-                    /*
-                     * Since we currently use the generic function representations for entries in the global dictionary,
-                     * we need to keep their interfaces (types) the same.
-                     * */
-                    // BuildFunctionSpecializedCompilationInterface(functionInterfaceBase, expr, envConstraint: null)
-                    functionInterfaceBase
-                    :
-                    /*
-                     * If we will emit any specialized representations for this expression, this implies we will branch
-                     * statements to transition from the general case to the specialized cases.
-                     * The current implementation to build these branch statements depends on the complete environment
-                     * being available as function parameter, therefore do not use a specialized parameter list in this case.
-                     * */
-                    functionInterfaceBase;
-
-                    return
-                    new KeyValuePair<Expression, CompilationUnitEnvExprEntry>(
-                        expr,
-                        new CompilationUnitEnvExprEntry(
-                            GenericReprInterface: genericReprInterface,
-                            AvailableSpecialized: availableSpecialized));
-                })
                 .ToImmutableDictionary();
 
             var compilationUnitEnv =
@@ -706,7 +717,8 @@ public partial class CompileToCSharp
                             createLetBindingsForCse: true)
                         .Unpack(
                             fromErr: _ => dict,
-                            fromOk: compileOk =>
+                            fromOk:
+                            compileOk =>
                             {
                                 var subexpressionValue =
                                     ExpressionEncoding.EncodeExpressionAsValue(subexpression);
@@ -1155,32 +1167,34 @@ public partial class CompileToCSharp
                     parseAndEvalExpr.Environment,
                     environment,
                     createLetBindingsForCse: false)
-                .AndThen(envCompiledExpr =>
-                CompileToCSharpExpression(
-                    parseAndEvalExpr.Encoded,
-                    environment,
-                    createLetBindingsForCse: false)
-                .Map(exprCompiledExpr =>
-                {
-                    var invocationExpression =
-                        PineCSharpSyntaxFactory.GenericInvocationThrowingRuntimeExceptionOnError(
-                            environment.FunctionEnvironment,
-                            NewConstructorOfExpressionVariant(
-                                nameof(Expression.Eval),
-                                NewConstructorOfExpressionVariant(
-                                    nameof(Expression.Litral),
-                                    exprCompiledExpr.Syntax),
-                                NewConstructorOfExpressionVariantWithoutArguments(
-                                    nameof(Expression.Environment))),
-                            environmentExpr: envCompiledExpr.Syntax);
+                .AndThen(
+                    envCompiledExpr =>
+                    CompileToCSharpExpression(
+                        parseAndEvalExpr.Encoded,
+                        environment,
+                        createLetBindingsForCse: false)
+                    .Map(
+                        exprCompiledExpr =>
+                        {
+                            var invocationExpression =
+                                PineCSharpSyntaxFactory.GenericInvocationThrowingRuntimeExceptionOnError(
+                                    environment.FunctionEnvironment,
+                                    NewConstructorOfExpressionVariant(
+                                        nameof(Expression.Eval),
+                                        NewConstructorOfExpressionVariant(
+                                            nameof(Expression.Litral),
+                                            exprCompiledExpr.Syntax),
+                                        NewConstructorOfExpressionVariantWithoutArguments(
+                                            nameof(Expression.Environment))),
+                                    environmentExpr: envCompiledExpr.Syntax);
 
-                    return
-                        CompiledExpression.WithTypeGenericValue(invocationExpression)
-                        .MergeDependencies(envCompiledExpr.Dependencies)
-                        .MergeBindings(envCompiledExpr.LetBindings)
-                        .MergeDependencies(exprCompiledExpr.Dependencies)
-                        .MergeBindings(exprCompiledExpr.LetBindings);
-                }));
+                            return
+                                CompiledExpression.WithTypeGenericValue(invocationExpression)
+                                .MergeDependencies(envCompiledExpr.Dependencies)
+                                .MergeBindings(envCompiledExpr.LetBindings)
+                                .MergeDependencies(exprCompiledExpr.Dependencies)
+                                .MergeBindings(exprCompiledExpr.LetBindings);
+                        }));
         }
 
         Result<string, CompiledExpression> ContinueForKnownExprValue(PineValue innerExpressionValue)
@@ -1190,23 +1204,26 @@ public partial class CompileToCSharp
             return
                 s_parseCache.ParseExpression(innerExpressionValue)
                 .Unpack(
-                    fromErr: err =>
+                    fromErr:
+                    err =>
                     {
                         var messageTitle =
-                        "Failed to parse expression from value " +
-                        innerExprValueId.ExpressionHashBase16[..8] +
-                        ": " + err +
-                        " - expressionValue is " + Core.Interpreter.IntermediateVM.PineVM.DescribeValueForErrorMessage(innerExpressionValue);
+                            "Failed to parse expression from value " +
+                            innerExprValueId.ExpressionHashBase16[..8] +
+                            ": " + err +
+                            " - expressionValue is " +
+                            Core.Interpreter.IntermediateVM.PineVM.DescribeValueForErrorMessage(innerExpressionValue);
 
-                        var throwSyntax = CoreSyntaxFactory.ThrowParseExpressionException(
-                            SyntaxFactory.LiteralExpression(
-                                SyntaxKind.StringLiteralExpression,
-                                SyntaxFactory.Literal(messageTitle)),
-                            declarationSyntaxContext: environment.FunctionEnvironment.DeclarationSyntaxContext);
+                        var throwSyntax =
+                            CoreSyntaxFactory.ThrowParseExpressionException(
+                                SyntaxFactory.LiteralExpression(
+                                    SyntaxKind.StringLiteralExpression,
+                                    SyntaxFactory.Literal(messageTitle)),
+                                declarationSyntaxContext: environment.FunctionEnvironment.DeclarationSyntaxContext);
 
                         return
-                        (Result<string, CompiledExpression>)
-                        CompiledExpression.WithTypeGenericValue(throwSyntax);
+                            (Result<string, CompiledExpression>)
+                            CompiledExpression.WithTypeGenericValue(throwSyntax);
                     },
                     fromOk:
                     innerExpression =>

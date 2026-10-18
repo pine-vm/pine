@@ -207,7 +207,8 @@ public record ElmJsonStructure(
             segmentsStrings
             .Aggregate(
                 seed: initialRecord,
-                func: (aggregate, nextSegment) =>
+                func:
+                (aggregate, nextSegment) =>
                 nextSegment switch
                 {
                     ".." =>

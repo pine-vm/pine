@@ -236,7 +236,8 @@ public sealed class RunCommandTests : IDisposable
                 declaration: null,
                 input: "hello",
                 batchOnly: batchOnly,
-                selectDeclaration: candidates =>
+                selectDeclaration:
+                candidates =>
                 {
                     selected = true;
 
@@ -304,7 +305,8 @@ public sealed class RunCommandTests : IDisposable
             Run(
                 declaration: null,
                 cancellationToken: cancellation.Token,
-                selectDeclaration: candidates =>
+                selectDeclaration:
+                candidates =>
                 {
                     candidates.Should().Contain(
                         item =>
@@ -911,7 +913,8 @@ public sealed class RunCommandTests : IDisposable
             new RunSource.Loader(
                 Cache,
                 TextWriter.Null,
-                openRemote: (_, _, _) =>
+                openRemote:
+                (_, _, _) =>
                 {
                     cancelled.Cancel();
                     return fixture.Open();

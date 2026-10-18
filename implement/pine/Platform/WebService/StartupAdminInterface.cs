@@ -182,12 +182,14 @@ public class StartupAdminInterface
 
                 restoreProcessResult
                     .Unpack(
-                    fromErr: err =>
+                    fromErr:
+                    err =>
                     {
                         logger.LogError(err);
                         return 0;
                     },
-                    fromOk: restoreProcessOk =>
+                    fromOk:
+                    restoreProcessOk =>
                     {
                         var processLiveRepresentation = restoreProcessOk.process;
 
@@ -506,7 +508,8 @@ public class StartupAdminInterface
             [
                 new ApiRoute(
                     path : PathApiGetDeployedAppConfig,
-                    methods : ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
+                    methods :
+                    ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
                     .Add(
                         "get",
                         async (context, publicAppHost) =>
@@ -532,7 +535,8 @@ public class StartupAdminInterface
                                 appConfigTreeResult
                                 .Unpack(
                                     fromErr: _ => throw new Exception("Failed to parse as tree with string path"),
-                                    fromOk: appConfigTree =>
+                                    fromOk:
+                                    appConfigTree =>
                                     ZipArchive.ZipArchiveFromFiles(
                                         FileTreeExtensions.ToFlatDictionaryWithPathComparer(appConfigTree)));
 
@@ -549,7 +553,8 @@ public class StartupAdminInterface
                         })),
                         new ApiRoute(
                             path: PathApiElmAppState,
-                            methods: ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
+                            methods:
+                            ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
                             .Add(
                                 "get",
                                 async (context, publicAppHost) =>
@@ -623,22 +628,26 @@ public class StartupAdminInterface
                                                 totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds,
                                                 testContinueTimeSpentMilli: null,
                                                 logEntries: null,
-                                                result: Result<string, string>.ok(
+                                                result:
+                                                Result<string, string>.ok(
                                                     "Successfully applied this composition event to the process.")));
 
                                     await WriteAsHttpResponse(setAppStateResult);
                                 })),
                         new ApiRoute(
                             path: PathApiDeployAndInitAppState,
-                            methods: ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
+                            methods:
+                            ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
                             .Add("post", async (_, _) => await deployElmApp(initElmAppState: true))),
                         new ApiRoute(
                             path: PathApiDeployAndMigrateAppState,
-                            methods: ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
+                            methods:
+                            ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
                             .Add("post", async (_, _) => await deployElmApp(initElmAppState: false))),
                         new ApiRoute(
                             path: PathApiListDatabaseFunctions,
-                            methods: ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
+                            methods:
+                            ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
                             .Add(
                                 "get",
                                 async (context, _) =>
@@ -660,7 +669,8 @@ public class StartupAdminInterface
                                 })),
                         new ApiRoute(
                             path: PathApiApplyDatabaseFunction,
-                            methods: ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
+                            methods:
+                            ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
                             .Add(
                                 "post",
                                 async (context, _) =>
@@ -693,7 +703,8 @@ public class StartupAdminInterface
                                 })),
                         new ApiRoute(
                             path: PathApiGuiRequest,
-                            methods: ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
+                            methods:
+                            ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
                             .Add(
                                 "post",
                                 async (context, _) =>
@@ -723,7 +734,8 @@ public class StartupAdminInterface
                                 })),
                         new ApiRoute(
                             path: PathApiReplaceProcessHistory,
-                            methods: ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
+                            methods:
+                            ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
                             .Add(
                                 "post",
                                 async (context, _) =>
@@ -908,8 +920,9 @@ public class StartupAdminInterface
                 deleteFilesStopwatch.Stop();
 
                 logger.LogInformation(
-                    message: nameof(truncateProcessHistory) +
-                        ": Deleted {totalDeletedFilesCount} files in {storeReductionDurationMs} ms",
+                    message:
+                    nameof(truncateProcessHistory) +
+                    ": Deleted {totalDeletedFilesCount} files in {storeReductionDurationMs} ms",
                     totalDeletedFilesCount,
                     deleteFilesStopwatch.ElapsedMilliseconds);
 
@@ -1056,7 +1069,8 @@ public class StartupAdminInterface
             var responseBodyString =
                 System.Text.Json.JsonSerializer.Serialize(
                     attemptReport,
-                    options: new System.Text.Json.JsonSerializerOptions
+                    options:
+                    new System.Text.Json.JsonSerializerOptions
                     {
                         WriteIndented = true
                     });
@@ -1140,7 +1154,8 @@ public class StartupAdminInterface
             PersistentProcessLive.TestContinueWithCompositionEvent(
                 compositionLogEvent: compositionLogEvent,
                 fileStoreReader: processStoreFileStore,
-                logger: message =>
+                logger:
+                message =>
                 {
                     logEntries.Add(new StringMessageWithTimeMilli(message, totalStopwatch.ElapsedMilliseconds));
                     testContinueLogger?.Invoke(message);
@@ -1151,7 +1166,8 @@ public class StartupAdminInterface
         return
             testContinueResult
             .Unpack(
-                fromErr: error =>
+                fromErr:
+                error =>
                 (statusCode: 400,
                 new AttemptContinueWithCompositionEventReport(
                     beginTime: beginTime,
@@ -1162,7 +1178,8 @@ public class StartupAdminInterface
                     totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds,
                     logEntries: logEntries,
                     result: Result<string, string>.err(error))),
-                fromOk: testContinueOk =>
+                fromOk:
+                testContinueOk =>
                 {
                     foreach (var (filePath, fileContent) in testContinueOk.ProjectedFiles)
                         processStoreFileStore.SetFileContent(filePath, fileContent);

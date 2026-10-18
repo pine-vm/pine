@@ -63,7 +63,8 @@ public static class ApplyFunctionCommand
                         promptForPasswordOnConsole: true);
 
                 PineCliCommand.WriteReportToFileInReportDirectory(
-                    reportContent: System.Text.Json.JsonSerializer.Serialize(
+                    reportContent:
+                    System.Text.Json.JsonSerializer.Serialize(
                         applyFunctionReport,
                         PineCliCommand.ReportJsonSerializerOptions),
                     reportKind: "apply-function.json");

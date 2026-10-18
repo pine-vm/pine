@@ -36,7 +36,8 @@ public static class TruncateProcessHistoryCommand
                         promptForPasswordOnConsole: true);
 
                 PineCliCommand.WriteReportToFileInReportDirectory(
-                    reportContent: System.Text.Json.JsonSerializer.Serialize(
+                    reportContent:
+                    System.Text.Json.JsonSerializer.Serialize(
                         report,
                         PineCliCommand.ReportJsonSerializerOptions),
                     reportKind: "truncate-process-history.json");

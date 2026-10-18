@@ -581,7 +581,8 @@ public class ElmAppCompilationSnapshotTests
         return
             compilationResult
             .Unpack(
-                fromErr: compilationError =>
+                fromErr:
+                compilationError =>
                 {
                     var errorMessage =
                         "\n" + ElmTime.ElmAppCompilation.CompileCompilationErrorsDisplayText(compilationError) + "\n";

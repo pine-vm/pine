@@ -83,7 +83,8 @@ public static class MakeCommand
         var loadInputDirectoryResult =
             LoadComposition.LoadFromPathResolvingNetworkDependencies(
                 inputDirectory,
-                ignoreFileOnIOException: (filePath, ioException) =>
+                ignoreFileOnIOException:
+                (filePath, ioException) =>
                 {
                     loadInputDirectoryFailedFiles[filePath] = ioException;
                     return true;

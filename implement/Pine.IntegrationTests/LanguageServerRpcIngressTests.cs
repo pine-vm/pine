@@ -36,7 +36,8 @@ public class LanguageServerRpcIngressTests
                 workspace: workspace,
                 elmPackageSource: EmptyElmPackageSource.Instance,
                 diagnosticsProvider: new StubDiagnosticsProvider(),
-                documentFormatter: new DelegateDocumentFormatter(
+                documentFormatter:
+                new DelegateDocumentFormatter(
                     (source, _) =>
                     ValueTask.FromResult(Result<DocumentFormattingError, string>.ok(source.Replace("  0", "    0")))),
                 options: new LanguageServerOptions(serverVersion: "test"),
@@ -146,7 +147,8 @@ public class LanguageServerRpcIngressTests
                 workspace: workspace,
                 elmPackageSource: EmptyElmPackageSource.Instance,
                 diagnosticsProvider: new StubDiagnosticsProvider(),
-                documentFormatter: new DelegateDocumentFormatter(
+                documentFormatter:
+                new DelegateDocumentFormatter(
                     (source, _) =>
                     ValueTask.FromResult(Result<DocumentFormattingError, string>.ok(source.Replace("  0", "    0")))),
                 options: new LanguageServerOptions(serverVersion: "test"),

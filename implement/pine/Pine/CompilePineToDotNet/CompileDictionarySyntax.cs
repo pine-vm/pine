@@ -57,7 +57,8 @@ public static class CompileDictionarySyntax
                 EmptyImmutableDictionaryExpressionSyntax(
                     keyTypeSyntax: keyTypeSyntax,
                     valueTypeSyntax: valueTypeSyntax),
-                func: (dictionaryExpression, dictionaryEntry) =>
+                func:
+                (dictionaryExpression, dictionaryEntry) =>
                 SyntaxFactory.InvocationExpression(
                     SyntaxFactory.MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,

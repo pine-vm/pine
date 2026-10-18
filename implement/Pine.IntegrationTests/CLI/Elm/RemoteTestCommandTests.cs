@@ -68,7 +68,8 @@ public class RemoteTestCommandTests
             console: console,
             errorConsole: console,
             listTests: true,
-            remoteSourceLoader: source =>
+            remoteSourceLoader:
+            source =>
             {
                 called = true;
                 source.Should().Be(PinnedProjectUrl);
@@ -132,7 +133,8 @@ public class RemoteTestCommandTests
             console: console,
             errorConsole: console,
             listTests: true,
-            remoteSourceLoader: _ => throw (
+            remoteSourceLoader:
+            _ => throw (
                 plainException
             ?
             new Exception("secret-token server message")

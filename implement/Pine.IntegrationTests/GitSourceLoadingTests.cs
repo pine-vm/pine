@@ -225,7 +225,8 @@ public sealed class GitSourceLoadingTests : IDisposable
         new(
             _directory,
             TextWriter.Null,
-            openRemote: (_, commit, _) =>
+            openRemote:
+            (_, commit, _) =>
             {
                 commit.Should().Be(fixture.Commit);
                 return fixture.Open();

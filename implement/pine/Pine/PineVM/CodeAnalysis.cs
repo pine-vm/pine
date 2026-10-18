@@ -166,13 +166,16 @@ public class CodeAnalysis
         {
             mutatedCache.AddOrUpdate(
                 expression,
-                addValueFactory: _ =>
+                addValueFactory:
+                _ =>
                 new ExprAnalysis(
-                    EnvDict: ImmutableDictionary.CreateRange(
+                    EnvDict:
+                    ImmutableDictionary.CreateRange(
                         [
                         new KeyValuePair<PineValueClass, RecursiveAnalysisResult>(environment, recursiveAnalysisResult)
                         ])),
-                updateValueFactory: (expr, oldAnalysis) =>
+                updateValueFactory:
+                (expr, oldAnalysis) =>
                 new ExprAnalysis(oldAnalysis.EnvDict.SetItem(environment, recursiveAnalysisResult)));
 
             return recursiveAnalysisResult;
@@ -240,7 +243,8 @@ public class CodeAnalysis
                     .EvaluateExpressionOnCustomStack(
                         parseSubExpr.ParseAndEvalExpr.Environment,
                         PineValueClassExtensions.CreateMinimalValue(environment),
-                        config: new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(
+                        config:
+                        new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(
                             InvocationCountLimit: 100,
                             LoopIterationCountLimit: null,
                             StackDepthLimit: null))

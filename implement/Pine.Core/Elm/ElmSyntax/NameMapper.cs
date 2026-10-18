@@ -110,7 +110,8 @@ public class NameMapper
         return
             new FunctionStruct(
                 Documentation: func.Documentation,
-                Signature: func.Signature is { } sig
+                Signature:
+                func.Signature is { } sig
                 ?
                 new Node<Signature>(sig.Range, MapSignature(sig.Value, mapQualifiedName))
                 :
@@ -201,7 +202,8 @@ public class NameMapper
                 new TypeAnnotation.GenericRecord(
                     GenericName: genericRecord.GenericName,
                     PipeLocation: genericRecord.PipeLocation,
-                    RecordDefinition: new Node<RecordDefinition>(
+                    RecordDefinition:
+                    new Node<RecordDefinition>(
                         genericRecord.RecordDefinition.Range,
                         MapRecordDefinition(genericRecord.RecordDefinition.Value, mapQualifiedName))),
 

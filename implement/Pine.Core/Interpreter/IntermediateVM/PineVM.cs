@@ -686,11 +686,13 @@ public class PineVM : ICancellablePineVM
         PerformanceCountersByOrigin CurrentCountersByOrigin() =>
             new(
                 VirtualMachine: CurrentVmCounters(),
-                ExpressionTemplatePlanParsing: planParsingCounters.Snapshot() with
+                ExpressionTemplatePlanParsing:
+                planParsingCounters.Snapshot() with
                 {
                     ExpressionTemplatePlanParseCount = expressionTemplatePlanParseCount
                 },
-                DeferredTemplateValueMaterialization: materializationAccounting.Counters.Snapshot() with
+                DeferredTemplateValueMaterialization:
+                materializationAccounting.Counters.Snapshot() with
                 {
                     DeferredTemplateValueMaterializationCount = materializationAccounting.MaterializationCount
                 });

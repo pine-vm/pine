@@ -146,7 +146,8 @@ public class ElmLanguageServerTests
                 Edits:
                 [
                     new TextEdit(
-                        Range: new Core.LanguageServerProtocol.Range(
+                        Range:
+                        new Core.LanguageServerProtocol.Range(
                             Start: new Position(Line: 0, Character: 0),
                             End: new Position(Line: 0, Character: 1)),
                         NewText: "h")
@@ -159,7 +160,8 @@ public class ElmLanguageServerTests
                 Edits:
                 [
                     new TextEdit(
-                        Range: new Core.LanguageServerProtocol.Range(
+                        Range:
+                        new Core.LanguageServerProtocol.Range(
                             Start: new Position(Line: 0, Character: 5),
                             End: new Position(Line: 0, Character: 5)),
                         NewText: " Beautiful")
@@ -172,7 +174,8 @@ public class ElmLanguageServerTests
                 Edits:
                 [
                     new TextEdit(
-                        Range: new Core.LanguageServerProtocol.Range(
+                        Range:
+                        new Core.LanguageServerProtocol.Range(
                             Start: new Position(Line: 0, Character: 6),
                             End: new Position(Line: 0, Character: 11)),
                         NewText: "Pine")
@@ -185,7 +188,8 @@ public class ElmLanguageServerTests
                 Edits:
                 [
                     new TextEdit(
-                        Range: new Core.LanguageServerProtocol.Range(
+                        Range:
+                        new Core.LanguageServerProtocol.Range(
                             Start: new Position(Line: 1, Character: 5),
                             End: new Position(Line: 1, Character: 6)),
                         NewText: "Two")
@@ -198,7 +202,8 @@ public class ElmLanguageServerTests
                 Edits:
                 [
                     new TextEdit(
-                        Range: new Core.LanguageServerProtocol.Range(
+                        Range:
+                        new Core.LanguageServerProtocol.Range(
                             Start: new Position(Line: 0, Character: 4),
                             End: new Position(Line: 2, Character: 4)),
                         NewText: " X\nNew Line")
@@ -211,12 +216,14 @@ public class ElmLanguageServerTests
                 Edits:
                 [
                 new TextEdit(
-                    Range: new Core.LanguageServerProtocol.Range(
+                    Range:
+                    new Core.LanguageServerProtocol.Range(
                         Start: new Position(Line: 0, Character: 3),
                         End: new Position(Line: 0, Character: 3)),
                     NewText: "X"),
                 new TextEdit(
-                    Range: new Core.LanguageServerProtocol.Range(
+                    Range:
+                    new Core.LanguageServerProtocol.Range(
                         Start: new Position(Line: 0, Character: 0),
                         End: new Position(Line: 0, Character: 1)),
                     NewText: "Z")
@@ -229,7 +236,8 @@ public class ElmLanguageServerTests
                 Edits:
                 [
                     new TextEdit(
-                        Range: new Core.LanguageServerProtocol.Range(
+                        Range:
+                        new Core.LanguageServerProtocol.Range(
                             Start: new Position(Line: 0, Character: 5),
                             End: new Position(Line: 0, Character: 15)),
                         NewText: "")
@@ -242,7 +250,8 @@ public class ElmLanguageServerTests
                 Edits:
                 [
                     new TextEdit(
-                        Range: new Core.LanguageServerProtocol.Range(
+                        Range:
+                        new Core.LanguageServerProtocol.Range(
                             Start: new Position(Line: 0, Character: 0),
                             End: new Position(Line: 0, Character: 0)),
                         NewText: "Hello ")
@@ -255,7 +264,8 @@ public class ElmLanguageServerTests
                 Edits:
                 [
                     new TextEdit(
-                        Range: new Core.LanguageServerProtocol.Range(
+                        Range:
+                        new Core.LanguageServerProtocol.Range(
                             Start: new Position(Line: 0, Character: 5),
                             End: new Position(Line: 0, Character: 5)),
                         NewText: " World")
@@ -304,7 +314,8 @@ public class ElmLanguageServerTests
                 ExpectedEdits:
                 [
                     new TextEdit(
-                        Range: new Core.LanguageServerProtocol.Range(
+                        Range:
+                        new Core.LanguageServerProtocol.Range(
                             Start: new Position(Line: 0, Character: 0),
                             End: new Position(Line: 0, Character: 10)),
                         NewText: "new line 1")
@@ -316,7 +327,8 @@ public class ElmLanguageServerTests
                 ExpectedEdits:
                 [
                     new TextEdit(
-                        Range: new Core.LanguageServerProtocol.Range(
+                        Range:
+                        new Core.LanguageServerProtocol.Range(
                             Start: new Position(Line: 1, Character: 0),
                             End: new Position(Line: 1, Character: 10)),
                         NewText: "new line 2")
@@ -328,7 +340,8 @@ public class ElmLanguageServerTests
                 ExpectedEdits:
                 [
                     new TextEdit(
-                        Range: new Core.LanguageServerProtocol.Range(
+                        Range:
+                        new Core.LanguageServerProtocol.Range(
                             Start: new Position(Line: 2, Character: 0),
                             End: new Position(Line: 2, Character: 10)),
                         NewText: "new line 3")
@@ -340,7 +353,8 @@ public class ElmLanguageServerTests
                 ExpectedEdits:
                 [
                     new TextEdit(
-                        Range: new Core.LanguageServerProtocol.Range(
+                        Range:
+                        new Core.LanguageServerProtocol.Range(
                             Start: new Position(Line: 1, Character: 0),
                             End: new Position(Line: 2, Character: 10)),
                         NewText: "new line 2\nnew line 3")
@@ -352,7 +366,8 @@ public class ElmLanguageServerTests
                 ExpectedEdits:
                 [
                     new TextEdit(
-                        Range: new Core.LanguageServerProtocol.Range(
+                        Range:
+                        new Core.LanguageServerProtocol.Range(
                             Start: new Position(Line: 0, Character: 0),
                             End: new Position(Line: 1, Character: 10)),
                         NewText: "new line 1\nnew line 2")
@@ -364,7 +379,8 @@ public class ElmLanguageServerTests
                 ExpectedEdits:
                 [
                     new TextEdit(
-                        Range: new Core.LanguageServerProtocol.Range(
+                        Range:
+                        new Core.LanguageServerProtocol.Range(
                             Start: new Position(Line: 1, Character: 6),
                             End: new Position(Line: 1, Character: 6)),
                         NewText: "\nline 3")
@@ -376,7 +392,8 @@ public class ElmLanguageServerTests
                 ExpectedEdits:
                 [
                     new TextEdit(
-                        Range: new Core.LanguageServerProtocol.Range(
+                        Range:
+                        new Core.LanguageServerProtocol.Range(
                             Start: new Position(Line: 1, Character: 6),
                             End: new Position(Line: 2, Character: 6)),
                         NewText: "")

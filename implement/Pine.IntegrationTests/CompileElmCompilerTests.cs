@@ -397,7 +397,8 @@ public class CompileElmCompilerTests
             elmModulesForElmCompiler
             .Aggregate(
                 seed: compilerProgramOnlyElmJson,
-                func: (aggregate, elmModule) =>
+                func:
+                (aggregate, elmModule) =>
                 aggregate.SetNodeAtPathSorted(elmModule.path, FileTree.File(elmModule.fileContent)));
 
         using var compilerInteractiveSession =

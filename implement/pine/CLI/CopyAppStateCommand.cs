@@ -61,7 +61,8 @@ public static class CopyAppStateCommand
                     };
 
                 PineCliCommand.WriteReportToFileInReportDirectory(
-                    reportContent: System.Text.Json.JsonSerializer.Serialize(
+                    reportContent:
+                    System.Text.Json.JsonSerializer.Serialize(
                         report,
                         PineCliCommand.ReportJsonSerializerOptions),
                     reportKind: "copy-app-state.json");

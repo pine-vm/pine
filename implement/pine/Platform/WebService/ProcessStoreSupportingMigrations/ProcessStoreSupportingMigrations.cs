@@ -78,14 +78,16 @@ public interface IProcessStoreReader
 
         var projectedFileStoreReader =
             new DelegatingFileStoreReader(
-                GetFileContentDelegate: filePath =>
+                GetFileContentDelegate:
+                filePath =>
                 {
                     if (projectedFiles.TryGetValue(filePath, out var projectFileContent))
                         return projectFileContent;
 
                     return originalFileStore.GetFileContent(filePath);
                 },
-                ListFilesInDirectoryDelegate: directoryPath =>
+                ListFilesInDirectoryDelegate:
+                directoryPath =>
                 {
                     var fromProjectedFiles =
                         projectedFiles.Keys
@@ -382,7 +384,8 @@ public class ProcessStoreReaderInFileStore(
                 })
             .Unpack(
                 fromErr: error => throw new Exception("Failed to load component " + componentHashBase16 + ": " + error),
-                fromOk: loadComponentResult =>
+                fromOk:
+                loadComponentResult =>
                 {
                     if (Convert.ToHexStringLower(_hashCache.GetHash(loadComponentResult).Span) != componentHashBase16)
                     {

@@ -772,7 +772,8 @@ public class StaticProgramParser
 
                 var inlinedExpression =
                     new Expression.Eval(
-                        encoded: Expression.LitralInst(
+                        encoded:
+                        Expression.LitralInst(
                             ExpressionEncoding.EncodeExpressionAsValue(innerFunctionRecord.InnerFunction)),
                         environment: inlinedEnvironment);
 

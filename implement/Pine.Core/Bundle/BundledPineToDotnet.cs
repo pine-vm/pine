@@ -47,7 +47,8 @@ public record BundledPineToDotnet(
         Assembly assembly) =>
         LoadEmbedded(assembly)
         .Unpack<BundledPineToDotnet?>(
-            fromErr: err =>
+            fromErr:
+            err =>
             {
                 Console.WriteLine("Failed loading from embedded resource: " + err);
 

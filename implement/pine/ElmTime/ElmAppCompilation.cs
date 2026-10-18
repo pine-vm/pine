@@ -188,7 +188,8 @@ namespace ElmTime
             return
                 compilationResult
                 .Unpack(
-                    fromOk: compilationSuccess =>
+                    fromOk:
+                    compilationSuccess =>
                     {
                         return
                             CompilationResult.ok(
@@ -197,7 +198,8 @@ namespace ElmTime
                                     stack.Select(frame => frame.IterationReport).ToImmutableList().Add(
                                         currentIterationReport)));
                     },
-                    fromErr: compilationErrors =>
+                    fromErr:
+                    compilationErrors =>
                     {
                         var compilationErrorsMissingElmMakeDependencies =
                             compilationErrors
@@ -352,7 +354,8 @@ namespace ElmTime
                                 newDependenciesWithError.Select(
                                     dep => new LocatedCompilationError(
                                         location: null,
-                                        error: new CompilationError(
+                                        error:
+                                        new CompilationError(
                                             DependencyError:
                                             dep.Item2.Report.DependencyKeySummary + " " +
                                             dep.Item1.result.Unpack(
@@ -591,11 +594,13 @@ namespace ElmTime
                     err =>
                     CompilationIterationResult.err(ParseLocatedCompilationErrors(err, elmCompilerCache)),
 
-                    ok: loweringOk =>
+                    ok:
+                    loweringOk =>
                     (CompilationIterationResult)
                     ParseCompilationSuccess(loweringOk, elmCompilerCache),
 
-                    invalid: err =>
+                    invalid:
+                    err =>
                     throw new Exception("Invalid result shape: " + err));
         }
 

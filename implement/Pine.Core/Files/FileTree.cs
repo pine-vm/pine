@@ -649,7 +649,8 @@ public abstract record FileTree : IEquatable<FileTree>
         return
             filesWithPath.Aggregate(
                 seed: EmptyTree,
-                func: (tree, filePathAndContent) =>
+                func:
+                (tree, filePathAndContent) =>
                 tree.SetNodeAtPathSorted(
                     filePathAndContent.path,
                     File(filePathAndContent.fileContent)));

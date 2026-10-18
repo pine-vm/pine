@@ -23,7 +23,8 @@ public class VolatileProcess
         var executableFileFromCacheOrLink =
             BlobLibrary.GetBlobWithSHA256Cached(
                 hash,
-                getIfNotCached: () =>
+                getIfNotCached:
+                () =>
                 {
                     if (hintUrls is null)
                         return null;
@@ -31,7 +32,8 @@ public class VolatileProcess
                     return
                         DependenciesLoader.GetBlobFromHashAndHintUrlsCached(loadedTreesFromUrl, hash, hintUrls)
                         .Unpack(
-                            fromErr: err =>
+                            fromErr:
+                            err =>
                             {
                                 errorFromHintUrl = err;
 

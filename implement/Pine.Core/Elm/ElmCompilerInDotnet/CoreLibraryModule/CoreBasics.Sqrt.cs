@@ -37,7 +37,8 @@ public partial class CoreBasics
                 Expression.ConditionalInst(
                     condition: BuiltinHelpers.ApplyBuiltinEqualBinary(ChoiceTagName(arg), s_elmFloatTypeTagNameLiteral),
                     falseBranch: s_falseValue,
-                    trueBranch: Expression.ConditionalInst(
+                    trueBranch:
+                    Expression.ConditionalInst(
                         condition: BuiltinHelpers.ApplyBuiltinEqualBinary(ChoiceArgument(arg, 1), LiteralInt(0)),
                         trueBranch: result,
                         falseBranch: s_falseValue)));
@@ -116,7 +117,8 @@ public partial class CoreBasics
             Expression.ConditionalInst(
                 condition: BuiltinHelpers.ApplyBuiltinEqualBinary(inputNumerator, LiteralInt(0)),
                 trueBranch: LiteralInt(0),
-                falseBranch: Internal_Generic_Mul(
+                falseBranch:
+                Internal_Generic_Mul(
                     NormalizeFloatResult(root, LiteralInt(1L << 52)),
                     Internal_Generic_Pow(LiteralInt(2), exponent)));
 
@@ -127,7 +129,8 @@ public partial class CoreBasics
                 Expression.ConditionalInst(
                     condition: BuiltinIntIsSortedAsc(inputNumerator, LiteralInt(-1)),
                     trueBranch: nan,
-                    falseBranch: Expression.ConditionalInst(
+                    falseBranch:
+                    Expression.ConditionalInst(
                         condition: BuiltinHelpers.ApplyBuiltinEqualBinary(denominator, LiteralInt(0)),
                         trueBranch: arg,
                         falseBranch: finite)));
@@ -159,15 +162,19 @@ public partial class CoreBasics
                 Expression.ConditionalInst(
                     condition: BuiltinIntIsSortedAsc(numerator, LiteralInt(0)),
                     trueBranch: Expression.ListInst([value, exponent]),
-                    falseBranch: Expression.ConditionalInst(
+                    falseBranch:
+                    Expression.ConditionalInst(
                         condition: BuiltinHelpers.ApplyBuiltinEqualBinary(denominator, LiteralInt(0)),
                         trueBranch: Expression.ListInst([value, exponent]),
-                        falseBranch: Expression.ConditionalInst(
+                        falseBranch:
+                        Expression.ConditionalInst(
                             condition: Generic_Lt(value, LiteralInt(1)),
-                            trueBranch: Recurse(
+                            trueBranch:
+                            Recurse(
                                 Internal_Generic_Mul(value, LiteralInt(4)),
                                 BuiltinAdd(exponent, LiteralInt(-1))),
-                            falseBranch: Expression.ConditionalInst(
+                            falseBranch:
+                            Expression.ConditionalInst(
                                 condition: Generic_Le(LiteralInt(4), value),
                                 trueBranch:
                                 Recurse(Internal_Float_div(value, LiteralInt(4)), BuiltinAdd(exponent, LiteralInt(1))),
@@ -186,7 +193,8 @@ public partial class CoreBasics
                 Expression.ConditionalInst(
                     condition: BuiltinIntIsSortedAsc(n, LiteralInt(1)),
                     trueBranch: n,
-                    falseBranch: Expression.ConditionalInst(
+                    falseBranch:
+                    Expression.ConditionalInst(
                         condition: BuiltinIntIsSortedAsc(current, next),
                         trueBranch: current,
                         falseBranch:

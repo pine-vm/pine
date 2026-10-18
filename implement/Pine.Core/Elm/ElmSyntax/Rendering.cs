@@ -342,17 +342,20 @@ public class Rendering
         {
             ProcessTripleQuotedStringContent(
                 value,
-                onChar: ch =>
+                onChar:
+                ch =>
                 {
                     Output.Append(ch);
                     CurrentColumn++;
                 },
-                onEscapeSequence: escaped =>
+                onEscapeSequence:
+                escaped =>
                 {
                     Output.Append(escaped);
                     CurrentColumn += escaped.Length;
                 },
-                onNewline: () =>
+                onNewline:
+                () =>
                 {
                     // Use the configured linebreak style for newlines in triple-quoted strings
                     // These are literal characters inside the string, so they should be output
@@ -500,17 +503,20 @@ public class Rendering
 
         ProcessTripleQuotedStringContent(
             value,
-            onChar: _ =>
+            onChar:
+            _ =>
             {
                 totalLength++;
                 lastLineLength++;
             },
-            onEscapeSequence: escaped =>
+            onEscapeSequence:
+            escaped =>
             {
                 totalLength += escaped.Length;
                 lastLineLength += escaped.Length;
             },
-            onNewline: () =>
+            onNewline:
+            () =>
             {
                 // Newline itself counts as 1 character in the output
                 totalLength++;

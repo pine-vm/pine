@@ -362,7 +362,8 @@ public class AstToIrLoweringTests
             CurrentFunctionName: "select",
             LocalBindings: null,
             DependencyLayout: [],
-            ModuleCompilationContext: new ModuleCompilationContext(
+            ModuleCompilationContext:
+            new ModuleCompilationContext(
                 AllFunctions:
                 new Dictionary<DeclQualifiedName, (string moduleName, string functionName, IR.Declaration.FunctionDeclaration declaration)>(),
                 CompiledFunctionsCache: [],

@@ -231,7 +231,8 @@ public class TestElmInteractive
                     testReport: TestElmInteractiveScenario(
                         scenario,
                         interactiveSessionFromAppCode,
-                        asyncLogDelegate: scenarioEntry =>
+                        asyncLogDelegate:
+                        scenarioEntry =>
                         asyncLogDelegate?.Invoke(new TestInteractiveScenariosLogEntry.ScenarioLogEntry(
                     new TestInteractiveScenariosLogEntry.ScenarioLogEntryStruct(
                         ScenarioName: scenarioName,
@@ -307,7 +308,8 @@ public class TestElmInteractive
                                 submissionResult
                                 .Unpack(
                                     fromErr: err => ContinueWithErrorMessage("Submission result has error: " + err),
-                                    fromOk: submissionResultOk =>
+                                    fromOk:
+                                    submissionResultOk =>
                                     {
                                         if (sessionStep.step.ExpectedResponse is { } expectedResponse)
                                         {
@@ -392,7 +394,8 @@ public class TestElmInteractive
                 not null =>
                 stepsDirectory.Map(
                     fromFile: _ => throw new Exception(nameof(stepsDirectory) + " is blob"),
-                    fromDirectory: tree =>
+                    fromDirectory:
+                    tree =>
                     0 < tree.Count
                     ?
                     tree

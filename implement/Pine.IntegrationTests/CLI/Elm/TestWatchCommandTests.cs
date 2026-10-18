@@ -147,7 +147,8 @@ public class TestWatchCommandTests
             console: console,
             errorConsole: console,
             watch: true,
-            remoteSourceLoader: _ =>
+            remoteSourceLoader:
+            _ =>
             {
                 loaded = true;
                 throw new InvalidOperationException("Must not load");
@@ -289,7 +290,8 @@ public class TestWatchCommandTests
             },
             exception => throw new InvalidOperationException("Watcher failed", exception),
             cancellation.Token,
-            createWatcher: path =>
+            createWatcher:
+            path =>
             {
                 path.Should().Be(Path.GetFullPath(directory.Path));
                 return watcher;
@@ -823,7 +825,8 @@ public class TestWatchCommandTests
                     workers: 2,
                     cancellationToken: cancellation.Token,
                     createWatcher: _ => watcher,
-                    onCacheSession: session => sessions.Writer.TryWrite(
+                    onCacheSession:
+                    session => sessions.Writer.TryWrite(
                         (session,
                         session.VmCaches.EncodedExpressions.Count,
                         session.VmCaches.ReducedExpressions.Count,

@@ -33,25 +33,37 @@ public class EncodePineExpressionAsJsonTests
 
             // Function 'isPineList' from the core libraries.
             Expression.BuiltinInst(
-            input: Expression.ListInst(
-                [Expression.BuiltinInst(
-                    input: Expression.ListInst(
-                        [Expression.LitralInst(
-                            IntegerEncoding.EncodeSignedInteger(0)),
+                input:
+                Expression.ListInst(
+                    [
                         Expression.BuiltinInst(
-                            input: Expression.BuiltinInst(
-                                input: Expression.BuiltinInst(
-                                    input: Expression.ListInst(
-                                        [Expression.LitralInst(
-                                            IntegerEncoding.EncodeSignedInteger(
-                                                1)), Expression.EnvironmentInstance]),
-                                    function: "skip"),
-                                function: "head"),
-                            function: "head")]),
-                    function: "take"), Expression.LitralInst(
-                    PineValue.EmptyList)]),
-            function: "equal")
-
+                            input:
+                            Expression.ListInst(
+                                [
+                                    Expression.LitralInst(
+                                        IntegerEncoding.EncodeSignedInteger(0)),
+                                    Expression.BuiltinInst(
+                                        input:
+                                        Expression.BuiltinInst(
+                                            input:
+                                            Expression.BuiltinInst(
+                                                input:
+                                                Expression.ListInst(
+                                                    [
+                                                        Expression.LitralInst(
+                                                            IntegerEncoding.EncodeSignedInteger(
+                                                                1)),
+                                                        Expression.EnvironmentInstance
+                                                    ]),
+                                                function: "skip"),
+                                            function: "head"),
+                                        function: "head")
+                                ]),
+                            function: "take"),
+                        Expression.LitralInst(
+                            PineValue.EmptyList)
+                    ]),
+                function: "equal")
             ];
 
         for (var i = 0; i < testCases.Count; i++)
@@ -74,12 +86,15 @@ public class EncodePineExpressionAsJsonTests
             [Expression.EnvironmentInstance],
             [Expression.ListInst([])],
 
-            [Expression.LitralInst(
-                IntegerEncoding.EncodeSignedInteger(1))],
+            [
+            Expression.LitralInst(
+                IntegerEncoding.EncodeSignedInteger(1))
+            ],
 
-            [Expression.LitralInst(
-                StringEncoding.ValueFromString("Hello world!"))],
-
+            [
+            Expression.LitralInst(
+                StringEncoding.ValueFromString("Hello world!"))
+            ],
             ];
 
         for (var i = 0; i < testCases.Count; i++)

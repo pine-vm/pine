@@ -171,7 +171,8 @@ public static class RecordRuntime
         var recurseAfterMatch =
             new Expression.Eval(
                 encoded: selfExpr,
-                environment: Expression.ListInst(
+                environment:
+                Expression.ListInst(
                     [
                     selfExpr,
                     restUpdates,
@@ -194,7 +195,8 @@ public static class RecordRuntime
         var recurseWithOriginal =
             new Expression.Eval(
                 encoded: selfExpr,
-                environment: Expression.ListInst(
+                environment:
+                Expression.ListInst(
                     [
                     selfExpr,
                     updatesExpr,
@@ -210,7 +212,8 @@ public static class RecordRuntime
             Expression.ConditionalInst(
                 condition: updatesIsEmpty,
                 trueBranch: recurseWithOriginal, // no more updates, keep original
-                falseBranch: Expression.ConditionalInst(
+                falseBranch:
+                Expression.ConditionalInst(
                     condition: namesMatch,
                     trueBranch: recurseAfterMatch, // use update
                     falseBranch: recurseWithOriginal)); // keep original (field comes before update alphabetically)
@@ -307,7 +310,8 @@ public static class RecordRuntime
         var recurseExpr =
             new Expression.Eval(
                 encoded: selfExpr,
-                environment: Expression.ListInst(
+                environment:
+                Expression.ListInst(
                     [
                     selfExpr,
                     targetFieldNameExpr,

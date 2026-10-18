@@ -72,11 +72,13 @@ public class ModuleCompilationContextTests
                 new Dictionary<DeclQualifiedName, (string moduleName, string functionName, IR.Declaration.FunctionDeclaration declaration)>(),
                 CompiledFunctionsCache: [],
                 PineKernelModuleNames: FrozenSet.Create<string>([]),
-                ChoiceConstructorArities: new Dictionary<DeclQualifiedName, int>
+                ChoiceConstructorArities:
+                new Dictionary<DeclQualifiedName, int>
                 {
                     [constructorName] = 2
                 },
-                RecordTypeAliasConstructors: new Dictionary<DeclQualifiedName, IReadOnlyList<string>>
+                RecordTypeAliasConstructors:
+                new Dictionary<DeclQualifiedName, IReadOnlyList<string>>
                 {
                     [recordConstructorName] = ["fieldA", "fieldB"]
                 });

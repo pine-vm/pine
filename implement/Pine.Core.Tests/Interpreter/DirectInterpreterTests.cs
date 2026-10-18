@@ -24,7 +24,8 @@ public class DirectInterpreterTests
                     Expression.EnvironmentInstance,
                     new Expression.Conditional(
                         condition: Expression.LitralInst(PineKernelValues.TrueValue),
-                        trueBranch: Expression.BuiltinInst(
+                        trueBranch:
+                        Expression.BuiltinInst(
                             nameof(BuiltinFunction.length),
                             Expression.ListInst(
                                 [

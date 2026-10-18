@@ -117,7 +117,8 @@ public class CompileToAssembly
                 originalDictionary
                 .ToImmutableDictionary(
                     keySelector: kv => kv.Key,
-                    elementSelector: kv => new Func<EvalExprDelegate, PineValue, Result<string, PineValue>>(
+                    elementSelector:
+                    kv => new Func<EvalExprDelegate, PineValue, Result<string, PineValue>>(
                         (evalDelegate, envValue) => kv.Value(evalDelegate, envValue)));
 
             return dictionaryWithEvalReturnTypeResult;

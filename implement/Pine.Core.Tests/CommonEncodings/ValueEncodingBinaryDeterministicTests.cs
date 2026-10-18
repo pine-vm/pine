@@ -229,10 +229,10 @@ public class ValueEncodingBinaryDeterministicTests
 
         encoded.Should().Equal(
         [
-            0, 0, 0, 1,    // tag = TagBlob
-            0, 0, 0, 1,    // length = 1
-            0x42,          // payload
-            0, 0, 0,       // 3 padding bytes (len % 4 == 1)
+            0, 0, 0, 1, // tag = TagBlob
+            0, 0, 0, 1, // length = 1
+            0x42, // payload
+            0, 0, 0, // 3 padding bytes (len % 4 == 1)
         ]);
     }
 

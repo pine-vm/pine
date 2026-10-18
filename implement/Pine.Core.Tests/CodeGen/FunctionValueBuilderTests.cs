@@ -1250,11 +1250,13 @@ public class FunctionValueBuilderTests
         var innerExpr =
             Expression.BuiltinInst(
                 function: nameof(KernelFunction.int_add),
-                input: Expression.ListInst(
+                input:
+                Expression.ListInst(
                     [
                     Expression.BuiltinInst(
                         function: nameof(KernelFunction.int_mul),
-                        input: Expression.ListInst(
+                        input:
+                        Expression.ListInst(
                             [
                             BuildExpressionForPathInEnvironment([1]),
                             Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(17))
@@ -1314,11 +1316,13 @@ public class FunctionValueBuilderTests
         var innerExpr =
             Expression.BuiltinInst(
                 function: nameof(KernelFunction.int_add),
-                input: Expression.ListInst(
+                input:
+                Expression.ListInst(
                     [
                     Expression.BuiltinInst(
                         function: nameof(KernelFunction.int_mul),
-                        input: Expression.ListInst(
+                        input:
+                        Expression.ListInst(
                             [
                             BuildExpressionForPathInEnvironment([1]),
                             Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(17))
@@ -1419,11 +1423,13 @@ public class FunctionValueBuilderTests
         var innerExpr =
             Expression.BuiltinInst(
                 function: nameof(KernelFunction.int_add),
-                input: Expression.ListInst(
+                input:
+                Expression.ListInst(
                     [
                     Expression.BuiltinInst(
                         function: nameof(KernelFunction.int_mul),
-                        input: Expression.ListInst(
+                        input:
+                        Expression.ListInst(
                             [
                             BuildExpressionForPathInEnvironment([1]),
                             Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(17))
@@ -1492,11 +1498,13 @@ public class FunctionValueBuilderTests
         var innerExpr =
             Expression.BuiltinInst(
                 function: nameof(KernelFunction.int_add),
-                input: Expression.ListInst(
+                input:
+                Expression.ListInst(
                     [
                     Expression.BuiltinInst(
                         function: nameof(KernelFunction.int_mul),
-                        input: Expression.ListInst(
+                        input:
+                        Expression.ListInst(
                             [
                             BuildExpressionForPathInEnvironment([1]),
                             Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(17))
@@ -2014,7 +2022,8 @@ public class FunctionValueBuilderTests
             terms.Add(
                 Expression.BuiltinInst(
                     function: nameof(KernelFunction.int_mul),
-                    input: Expression.ListInst(
+                    input:
+                    Expression.ListInst(
                         [
                         BuildExpressionForPathInEnvironment([1 + i]),
                         Expression.LitralInst(
@@ -2027,7 +2036,8 @@ public class FunctionValueBuilderTests
             terms.Add(
                 Expression.BuiltinInst(
                     function: nameof(KernelFunction.int_mul),
-                    input: Expression.ListInst(
+                    input:
+                    Expression.ListInst(
                         [
                         BuildExpressionForPathInEnvironment([0, 0]),
                         Expression.LitralInst(
@@ -2347,7 +2357,8 @@ public class FunctionValueBuilderTests
             vm.EvaluateExpressionOnCustomStack(
                 expression,
                 environment,
-                config: new PineVM.EvaluationConfig(
+                config:
+                new PineVM.EvaluationConfig(
                     InvocationCountLimit: invocationCountLimit,
                     LoopIterationCountLimit: null,
                     StackDepthLimit: null))

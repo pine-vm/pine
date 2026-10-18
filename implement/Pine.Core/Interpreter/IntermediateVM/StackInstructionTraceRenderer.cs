@@ -413,7 +413,8 @@ public static class StackInstructionTraceRenderer
         return
             StackInstruction.RenderInstructionDisplay(
                 instruction,
-                literalDisplayString: value =>
+                literalDisplayString:
+                value =>
                 RenderLiteral(
                     value,
                     blobRepresentations: blobRepresentations,

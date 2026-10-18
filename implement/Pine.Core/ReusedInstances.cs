@@ -535,7 +535,8 @@ public record ReusedInstances(
                 Expressions
                 .OfType<Expression.Conditional>()
                 .ToFrozenDictionary(
-                    keySelector: conditional => new Expression.Conditional.ConditionalStruct(
+                    keySelector:
+                    conditional => new Expression.Conditional.ConditionalStruct(
                         condition: conditional.Condition,
                         falseBranch: conditional.FalseBranch,
                         trueBranch: conditional.TrueBranch),

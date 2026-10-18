@@ -31,7 +31,8 @@ public class ElmCommandLineAppTests
         var mutatingCliApp =
             new MutatingCommandLineApp(
                 appConfig,
-                environment: new CommandLineAppConfig.CommandLineAppInitEnvironment(
+                environment:
+                new CommandLineAppConfig.CommandLineAppInitEnvironment(
                     CommandLine: "fake command line",
                     EnvironmentVariables: []));
 

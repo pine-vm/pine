@@ -196,7 +196,8 @@ public sealed class GitBranchResolutionCacheTests : IDisposable
                 new RunSource.Loader(
                     _directory,
                     output,
-                    openRemote: (url, pinned, _) =>
+                    openRemote:
+                    (url, pinned, _) =>
                     {
                         url.Should().Be(repository + ".git");
                         pinned.Should().Be(new string('a', 40));

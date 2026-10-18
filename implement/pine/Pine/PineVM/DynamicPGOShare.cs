@@ -324,7 +324,8 @@ public class DynamicPGOShare : IDisposable
         var dictionary =
             compileToAssemblyResult
             .Unpack(
-                fromErr: err =>
+                fromErr:
+                err =>
                 Result<string, IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>>
                 .err("Failed to compile to assembly: " + err),
                 fromOk:

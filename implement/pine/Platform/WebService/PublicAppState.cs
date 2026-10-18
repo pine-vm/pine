@@ -151,7 +151,8 @@ public class PublicAppState(
                 return
                     new WebServiceInterface.HttpResponse(
                         StatusCode: 500,
-                        Body: System.Text.Encoding.UTF8.GetBytes(
+                        Body:
+                        System.Text.Encoding.UTF8.GetBytes(
                             "The app did not return an HTTP response within " +
                             (int)waitForHttpResponseClock.Elapsed.TotalSeconds +
                             " seconds."),

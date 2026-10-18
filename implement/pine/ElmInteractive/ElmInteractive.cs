@@ -423,7 +423,8 @@ public class ElmInteractive
                 dictionaryEntries
                 .Aggregate(
                     seed: dictionary ?? [],
-                    func: (dictionary, entry) =>
+                    func:
+                    (dictionary, entry) =>
                     dictionary.Add(entry.key, ParsePineValueFromJson(entry.value, dictionary)));
         }
 
@@ -535,7 +536,8 @@ public class ElmInteractive
         return
             compilationResult
             .Unpack(
-                fromErr: compilationError =>
+                fromErr:
+                compilationError =>
                 {
                     var errorMessage =
                         "\n" + ElmAppCompilation.CompileCompilationErrorsDisplayText(compilationError) + "\n";

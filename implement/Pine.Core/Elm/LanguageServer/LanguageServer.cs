@@ -327,7 +327,8 @@ public class LanguageServer(
 
         var response =
             new InitializeResult(
-                Capabilities: new ServerCapabilities
+                Capabilities:
+                new ServerCapabilities
                 {
                     TextDocumentSync =
                     new TextDocumentSyncOptions(
@@ -365,7 +366,8 @@ public class LanguageServer(
                         new WorkspaceFoldersServerCapabilities(Supported: true, ChangeNotifications: true),
                     }
                 },
-                ServerInfo: new ParticipentInfo(
+                ServerInfo:
+                new ParticipentInfo(
                     Name: "Pine language server",
                     Version: options.ServerVersion));
 
@@ -386,7 +388,8 @@ public class LanguageServer(
                     new Registration(
                         Id : "workspace/didChangeWatchedFiles",
                         Method : "workspace/didChangeWatchedFiles",
-                        RegisterOptions : new DidChangeWatchedFilesRegistrationOptions(
+                        RegisterOptions :
+                        new DidChangeWatchedFilesRegistrationOptions(
                             Watchers:
                             [
                                 new FileSystemWatcher(
@@ -2307,18 +2310,24 @@ public class LanguageServer(
                     Name: documentSymbol.Name,
                     Detail: null,
                     Kind: MapSymbolKind(documentSymbol.Kind),
-                    Range: new Range(
-                        Start: new Position(
+                    Range:
+                    new Range(
+                        Start:
+                        new Position(
                             Line: (uint)documentSymbol.Range.StartLineNumber - 1,
                             Character: (uint)documentSymbol.Range.StartColumn - 1),
-                        End: new Position(
+                        End:
+                        new Position(
                             Line: (uint)documentSymbol.Range.EndLineNumber - 1,
                             Character: (uint)documentSymbol.Range.EndColumn - 1)),
-                    SelectionRange: new Range(
-                        Start: new Position(
+                    SelectionRange:
+                    new Range(
+                        Start:
+                        new Position(
                             Line: (uint)documentSymbol.SelectionRange.StartLineNumber - 1,
                             Character: (uint)documentSymbol.SelectionRange.StartColumn - 1),
-                        End: new Position(
+                        End:
+                        new Position(
                             Line: (uint)documentSymbol.SelectionRange.EndLineNumber - 1,
                             Character: (uint)documentSymbol.SelectionRange.EndColumn - 1)),
                     Children:
@@ -2622,11 +2631,14 @@ public class LanguageServer(
                         .Select(
                             edit =>
                             new Protocol.TextEdit(
-                                Range: new Range(
-                                    Start: new Position(
+                                Range:
+                                new Range(
+                                    Start:
+                                    new Position(
                                         Line: (uint)edit.Range.StartLineNumber - 1,
                                         Character: (uint)edit.Range.StartColumn - 1),
-                                    End: new Position(
+                                    End:
+                                    new Position(
                                         Line: (uint)edit.Range.EndLineNumber - 1,
                                         Character: (uint)edit.Range.EndColumn - 1)),
                                 NewText: edit.NewText));
@@ -3091,7 +3103,8 @@ public class LanguageServer(
 
                     return
                         new Diagnostic(
-                            Range: new Range(
+                            Range:
+                            new Range(
                                 Start: new Position(Line: (uint)startLine, Character: (uint)startChar),
                                 End: new Position(Line: (uint)endLine, Character: (uint)endChar)),
                             Severity: DiagnosticSeverity.Error,
@@ -3461,10 +3474,12 @@ public class LanguageServer(
                         new Location(
                             uri,
                             new Range(
-                                Start: new Position(
+                                Start:
+                                new Position(
                                     Line: (uint)location.Range.StartLineNumber - 1,
                                     Character: (uint)location.Range.StartColumn - 1),
-                                End: new Position(
+                                End:
+                                new Position(
                                     Line: (uint)location.Range.EndLineNumber - 1,
                                     Character: (uint)location.Range.EndColumn - 1)))
                         ];
@@ -3832,7 +3847,8 @@ public class LanguageServer(
             var range =
                 new Range(
                     Start: new Position(Line: (uint)firstChangedLine, Character: 0),
-                    End: new Position(
+                    End:
+                    new Position(
                         Line: (uint)lastChangedLineInOriginal,
                         Character: (uint)originalLines[lastChangedLineInOriginal].Length));
 

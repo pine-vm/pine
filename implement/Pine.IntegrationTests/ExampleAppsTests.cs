@@ -70,9 +70,11 @@ public class ExampleAppsTests
                 new WebServiceInterface.HttpRequestEventStruct(
                     HttpRequestId: "1",
                     PosixTimeMilli: 0,
-                    RequestContext: new WebServiceInterface.HttpRequestContext(
+                    RequestContext:
+                    new WebServiceInterface.HttpRequestContext(
                         ClientAddress: null),
-                    Request: new WebServiceInterface.HttpRequestProperties(
+                    Request:
+                    new WebServiceInterface.HttpRequestProperties(
                         Method: "GET",
                         Uri: "/",
                         Body: null,
@@ -163,9 +165,11 @@ public class ExampleAppsTests
                 new WebServiceInterface.HttpRequestEventStruct(
                     HttpRequestId: "1",
                     PosixTimeMilli: 0,
-                    RequestContext: new WebServiceInterface.HttpRequestContext(
+                    RequestContext:
+                    new WebServiceInterface.HttpRequestContext(
                         ClientAddress: null),
-                    Request: new WebServiceInterface.HttpRequestProperties(
+                    Request:
+                    new WebServiceInterface.HttpRequestProperties(
                         Method: "POST",
                         Uri: "http://demohost/api",
                         Body: null,
@@ -188,9 +192,11 @@ public class ExampleAppsTests
             new WebServiceInterface.HttpRequestEventStruct(
                 HttpRequestId: formatHttpRequestId,
                 PosixTimeMilli: 0,
-                RequestContext: new WebServiceInterface.HttpRequestContext(
+                RequestContext:
+                new WebServiceInterface.HttpRequestContext(
                     ClientAddress: null),
-                Request: new WebServiceInterface.HttpRequestProperties(
+                Request:
+                new WebServiceInterface.HttpRequestProperties(
                     Method: "POST",
                     Uri: "http://demohost/api",
                     Body:

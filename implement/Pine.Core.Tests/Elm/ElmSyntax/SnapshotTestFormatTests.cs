@@ -38,10 +38,12 @@ public class SnapshotTestFormatTests
                 NodeWithRangeZero<Module>(
                     new Module.NormalModule(
                         ModuleTokenLocation: s_fakeLocationZero,
-                        ModuleData: new DefaultModuleData(
+                        ModuleData:
+                        new DefaultModuleData(
                             ModuleName: NodeWithRangeZero((IReadOnlyList<string>)["Test"]),
                             ExposingTokenLocation: s_fakeLocationZero,
-                            ExposingList: NodeWithRangeZero<Exposing>(
+                            ExposingList:
+                            NodeWithRangeZero<Exposing>(
                                 new Exposing.All(s_fakeRangeZero))))),
                 Imports: [],
                 Declarations: [],

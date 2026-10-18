@@ -67,9 +67,11 @@ public class ElmWebServiceUsingVolatileProcessNativeTest
             new WebServiceInterface.HttpRequestEventStruct(
                 HttpRequestId: formatHttpRequestId,
                 PosixTimeMilli: posixTimeMilli(),
-                RequestContext: new WebServiceInterface.HttpRequestContext(
+                RequestContext:
+                new WebServiceInterface.HttpRequestContext(
                     ClientAddress: null),
-                Request: new WebServiceInterface.HttpRequestProperties(
+                Request:
+                new WebServiceInterface.HttpRequestProperties(
                     Method: "POST",
                     Uri: "http://demohost/api",
                     Body:

@@ -1196,7 +1196,8 @@ public partial class Canonicalization
                 (canonicalizedSignature, canonicalizedImpl) => new FunctionStruct(
                     Documentation: func.Documentation,
                     Signature: canonicalizedSignature,
-                    Declaration: new Node<FunctionImplementation>(
+                    Declaration:
+                    new Node<FunctionImplementation>(
                         func.Declaration.Range,
                         canonicalizedImpl)));
     }
@@ -2754,7 +2755,8 @@ public partial class Canonicalization
 
         var canonicalizedNamedPattern =
             new Pattern.NamedPattern(
-                Name: new QualifiedNameRef(
+                Name:
+                new QualifiedNameRef(
                     ModuleName: resolvedModuleName,
                     Name: qualifiedName.Name),
                 Arguments: canonicalizedArguments);

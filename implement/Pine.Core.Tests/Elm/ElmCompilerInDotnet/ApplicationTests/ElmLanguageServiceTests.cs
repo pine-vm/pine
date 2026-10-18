@@ -583,7 +583,8 @@ public class ElmLanguageServiceTests
                 evalArgs.expression,
                 evalArgs.environment,
                 config: ElmCompilerTestHelper.DefaultTestEvaluationConfig,
-                reportEnteredStackFrame: (in EnteredStackFrame frame) =>
+                reportEnteredStackFrame:
+                (in EnteredStackFrame frame) =>
                 {
                     invocationCountsBuilder.Add(in frame);
                     reportGenericRecordInvocation?.Invoke(in frame);
@@ -613,7 +614,8 @@ public class ElmLanguageServiceTests
             ElmCompilerTestHelper.PineVMForProfiling(
                 _ => { },
                 enableTailRecursionOptimization: true,
-                skipInlineForExpression: expression =>
+                skipInlineForExpression:
+                expression =>
                 expression == s_accessExpression || expression == s_updateExpression);
 
         public void Record(in EnteredStackFrame frame)

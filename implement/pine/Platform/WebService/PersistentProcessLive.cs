@@ -423,7 +423,8 @@ public sealed class PersistentProcessLive : IAsyncDisposable
         var recordingReader =
             new DelegatingFileStoreReader(
                 ListFilesInDirectoryDelegate: fileStoreReader.ListFilesInDirectory,
-                GetFileContentDelegate: filePath =>
+                GetFileContentDelegate:
+                filePath =>
                 {
                     var fileContent = fileStoreReader.GetFileContent(filePath);
 
@@ -652,7 +653,8 @@ public sealed class PersistentProcessLive : IAsyncDisposable
         var aggregateLogRecordsResult =
             compositionLogRecords.Aggregate(
                 seed: Result<string, PersistentProcessLiveRepresentationDuringRestore>.ok(initialProcessRepresentation),
-                func: (intermediateResult, compositionLogRecord) =>
+                func:
+                (intermediateResult, compositionLogRecord) =>
                 intermediateResult.AndThen(
                     intermediateOk =>
                     integrateCompositionLogRecord(intermediateOk, compositionLogRecord)));

@@ -21,7 +21,8 @@ public static class PineCSharpSyntaxFactory
     {
         var branchInvocation =
             CompileToCSharp.InvocationExpressionForCompiledExpressionFunction(
-                currentEnv: new ExpressionCompilationEnvironment(
+                currentEnv:
+                new ExpressionCompilationEnvironment(
                     FunctionEnvironment: compilationEnv,
                     LetBindings: ImmutableDictionary<Expression, LetBinding>.Empty,
                     ParentEnvironment: null,

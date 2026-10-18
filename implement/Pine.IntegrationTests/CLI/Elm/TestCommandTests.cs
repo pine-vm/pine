@@ -26,13 +26,22 @@ public class TestCommandTests
     public void Work_profile_constructor_comparison_options_parse_and_require_a_work_profile()
     {
         var command = TestCommand.Create();
-        var parsed = command.Parse([
-            ".", "--work-profile", "diagnostics.ndjson",
-            "--work-profile-constructor-budget", "39388", "--work-profile-no-constructor-sharing"]);
+
+        var parsed =
+            command.Parse(
+                [
+                ".", "--work-profile", "diagnostics.ndjson",
+                "--work-profile-constructor-budget", "39388", "--work-profile-no-constructor-sharing"
+                ]);
+
         parsed.Errors.Should().BeEmpty();
-        parsed.GetValue(command.Options.OfType<Option<long?>>()
+
+        parsed.GetValue(
+            command.Options.OfType<Option<long?>>()
             .Single(option => option.Name == "--work-profile-constructor-budget")).Should().Be(39388);
-        parsed.GetValue(command.Options.OfType<Option<bool>>()
+
+        parsed.GetValue(
+            command.Options.OfType<Option<bool>>()
             .Single(option => option.Name == "--work-profile-no-constructor-sharing")).Should().BeTrue();
 
         foreach (var arguments in new[]
@@ -53,9 +62,13 @@ public class TestCommandTests
     public void Work_profile_constructor_comparison_rejects_nonpositive_budget(string budget)
     {
         using var error = new StringWriter();
-        TestCommand.Create().Parse([
-            "--work-profile", "diagnostics.ndjson", "--work-profile-constructor-budget", budget])
+
+        TestCommand.Create().Parse(
+            [
+            "--work-profile", "diagnostics.ndjson", "--work-profile-constructor-budget", budget
+            ])
             .Invoke(new InvocationConfiguration { Error = error }).Should().Be(1);
+
         error.ToString().Should().Contain("positive optional profiling limits");
     }
 
@@ -1338,7 +1351,8 @@ public class TestCommandTests
             "does-not-exist",
             console: console,
             errorConsole: console,
-            evaluationOptions: new()
+            evaluationOptions:
+            new()
             {
                 InvocationBudget = 1_234_567,
                 LoopBudget = 2_345_678,

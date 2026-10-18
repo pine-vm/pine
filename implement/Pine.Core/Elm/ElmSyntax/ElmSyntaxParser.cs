@@ -3332,7 +3332,8 @@ public class ElmSyntaxParser
                         new Node<SyntaxTypes.TypeAnnotation>(
                             range,
                             new SyntaxTypes.TypeAnnotation.Tupled(
-                                TypeAnnotations: new SeparatedSyntaxList<Node<SyntaxTypes.TypeAnnotation>>.NonEmpty(
+                                TypeAnnotations:
+                                new SeparatedSyntaxList<Node<SyntaxTypes.TypeAnnotation>>.NonEmpty(
                                     First: firstTypeAnnotation,
                                     Rest: restItems)));
                 }
@@ -3347,7 +3348,8 @@ public class ElmSyntaxParser
                         new Node<SyntaxTypes.TypeAnnotation>(
                             range,
                             new SyntaxTypes.TypeAnnotation.Tupled(
-                                TypeAnnotations: new SeparatedSyntaxList<Node<SyntaxTypes.TypeAnnotation>>.NonEmpty(
+                                TypeAnnotations:
+                                new SeparatedSyntaxList<Node<SyntaxTypes.TypeAnnotation>>.NonEmpty(
                                     First: firstTypeAnnotation,
                                     Rest: [])));
                 }
@@ -3414,7 +3416,8 @@ public class ElmSyntaxParser
                             new Node<SyntaxTypes.RecordField>(
                                 MakeRange(firstIdentifier.Start, fieldRangeEnd),
                                 new SyntaxTypes.RecordField(
-                                    FieldName: new Node<string>(
+                                    FieldName:
+                                    new Node<string>(
                                         firstIdentifier.Range,
                                         firstIdentifier.Lexeme),
                                     ColonLocation: colonToken.Start,
@@ -3455,7 +3458,8 @@ public class ElmSyntaxParser
                                 new Node<SyntaxTypes.RecordField>(
                                     MakeRange(nextFieldNameToken.Start, nextFieldRangeEnd),
                                     new SyntaxTypes.RecordField(
-                                        FieldName: new Node<string>(
+                                        FieldName:
+                                        new Node<string>(
                                             nextFieldNameToken.Range,
                                             nextFieldNameToken.Lexeme),
                                         ColonLocation: nextColonToken.Start,
@@ -3498,7 +3502,8 @@ public class ElmSyntaxParser
                             new Node<SyntaxTypes.RecordField>(
                                 MakeRange(fieldNameToken.Start, fieldRangeEnd),
                                 new SyntaxTypes.RecordField(
-                                    FieldName: new Node<string>(
+                                    FieldName:
+                                    new Node<string>(
                                         fieldNameToken.Range,
                                         fieldNameToken.Lexeme),
                                     ColonLocation: colonToken.Start,
@@ -3539,7 +3544,8 @@ public class ElmSyntaxParser
                                 new Node<SyntaxTypes.RecordField>(
                                     MakeRange(nextFieldNameToken.Start, nextFieldRangeEnd),
                                     new SyntaxTypes.RecordField(
-                                        FieldName: new Node<string>(
+                                        FieldName:
+                                        new Node<string>(
                                             nextFieldNameToken.Range,
                                             nextFieldNameToken.Lexeme),
                                         ColonLocation: nextColonToken.Start,
@@ -3577,11 +3583,13 @@ public class ElmSyntaxParser
                         new Node<SyntaxTypes.TypeAnnotation>(
                             range,
                             new SyntaxTypes.TypeAnnotation.GenericRecord(
-                                GenericName: new Node<string>(
+                                GenericName:
+                                new Node<string>(
                                     genericName.Range,
                                     genericName.Lexeme),
                                 PipeLocation: pipeLocation,
-                                RecordDefinition: new Node<SyntaxTypes.RecordDefinition>(
+                                RecordDefinition:
+                                new Node<SyntaxTypes.RecordDefinition>(
                                     MakeRange(
                                         genericName.Range.End with
                                         {
@@ -4346,7 +4354,8 @@ public class ElmSyntaxParser
 
                     var tupledExpr =
                         new SyntaxTypes.Expression.TupledExpression(
-                            Elements: new SeparatedSyntaxList<Node<SyntaxTypes.Expression>>.NonEmpty(
+                            Elements:
+                            new SeparatedSyntaxList<Node<SyntaxTypes.Expression>>.NonEmpty(
                                 First: firstItemExpr,
                                 Rest: furtherItems));
 
@@ -4716,7 +4725,8 @@ public class ElmSyntaxParser
                     new SyntaxTypes.Pattern.AsPattern(
                         Pattern: lessUncons,
                         AsTokenLocation: asToken.Start,
-                        Name: new Node<string>(
+                        Name:
+                        new Node<string>(
                             MakeRange(nameToken.Start, nameToken.End),
                             nameToken.Lexeme));
 
@@ -4873,7 +4883,8 @@ public class ElmSyntaxParser
 
                     var tupledPattern =
                         new SyntaxTypes.Pattern.TuplePattern(
-                            Elements: new SeparatedSyntaxList<Node<SyntaxTypes.Pattern>>.NonEmpty(
+                            Elements:
+                            new SeparatedSyntaxList<Node<SyntaxTypes.Pattern>>.NonEmpty(
                                 firstPattern,
                                 furtherPatternsWithCommas));
 
@@ -5257,7 +5268,8 @@ public class ElmSyntaxParser
                         new Node<SyntaxTypes.Expression>(
                             range,
                             new SyntaxTypes.Expression.RecordExpr(
-                                Fields: new SeparatedSyntaxList<RecordExprField>.NonEmpty(
+                                Fields:
+                                new SeparatedSyntaxList<RecordExprField>.NonEmpty(
                                     First: recordFirstField,
                                     Rest: recordRestFields)));
                 }
@@ -5361,7 +5373,8 @@ public class ElmSyntaxParser
             {
                 var recordUpdateExpr =
                     new SyntaxTypes.Expression.RecordUpdateExpression(
-                        RecordName: new Node<string>(
+                        RecordName:
+                        new Node<string>(
                             updatedRecord.Range,
                             updatedRecord.Lexeme),
                         PipeLocation: pipeLocation,

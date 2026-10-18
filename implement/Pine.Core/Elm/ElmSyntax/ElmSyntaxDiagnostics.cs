@@ -571,7 +571,8 @@ internal static class ElmSyntaxDiagnostics
                 s.Fail(
                     SyntaxErrorBranch.ExpectedToken,
                     s.Previous.Start,
-                    problem: new ElmSyntaxProblem.AnnotationNameMismatch(
+                    problem:
+                    new ElmSyntaxProblem.AnnotationNameMismatch(
                         new LocatedIdentifier(name.Text, name.Range),
                         s.Previous.Text)))
             .AndThen(
@@ -759,7 +760,8 @@ internal static class ElmSyntaxDiagnostics
                     s.Fail(
                         op.Text is "?" ? SyntaxErrorBranch.ModuleBadChar : SyntaxErrorBranch.ExprOperatorRight,
                         s.Previous.End,
-                        problem: new ElmSyntaxProblem.Grammar(
+                        problem:
+                        new ElmSyntaxProblem.Grammar(
                             op.Text is "?" ? SyntaxErrorBranch.ModuleBadChar : SyntaxErrorBranch.ExprOperatorRight,
                             op.Found,
                             s.Site)))

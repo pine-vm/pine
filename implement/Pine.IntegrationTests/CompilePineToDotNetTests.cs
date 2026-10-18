@@ -269,7 +269,8 @@ public class CompilePineToDotNetTests
                     new ExprFunctionCompilationInterface(
                         EnvItemsParamNames: [([], "environment")],
                         ArgumentEvalGenericName: "eval"),
-                    CompilationUnit: new CompilationUnitEnv(
+                    CompilationUnit:
+                    new CompilationUnitEnv(
                         AvailableExpr: ImmutableDictionary<Expression, CompilationUnitEnvExprEntry>.Empty,
                         DefaultInterface:
                         new ExprFunctionCompilationInterface(EnvItemsParamNames: [], ArgumentEvalGenericName: "eval")),
@@ -380,7 +381,8 @@ public class CompilePineToDotNetTests
                         input:
                         Expression.BuiltinInst(
                             function:"skip",
-                            input: Expression.ListInst(
+                            input:
+                            Expression.ListInst(
                                 [
                                 Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(13)),
                                 new Expression.Environment()

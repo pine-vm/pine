@@ -59,7 +59,8 @@ public class SnapshotTestFormat
                 {
                     Declaration.FunctionDeclaration funcDecl =>
                     new Declaration.FunctionDeclaration(
-                        Function: new FunctionStruct(
+                        Function:
+                        new FunctionStruct(
                             Documentation: funcDecl.Function.Documentation,
                             Signature: funcDecl.Function.Signature,
                             Declaration: FormatFunctionImplementation(funcDecl.Function.Declaration))),
@@ -150,14 +151,16 @@ public class SnapshotTestFormat
                 new ExpressionSyntax.RecordUpdateExpression(
                     RecordName: recUpdate.RecordName,
                     PipeLocation: recUpdate.PipeLocation,
-                    Fields: MapSeparatedList(
+                    Fields:
+                    MapSeparatedList(
                         recUpdate.Fields,
                         f =>
                         new RecordExprField(f.FieldName, f.EqualsLocation, FormatExpression(f.ValueExpr)))),
 
                 ExpressionSyntax.LetExpression letExpr =>
                 new ExpressionSyntax.LetExpression(
-                    Value: new ExpressionSyntax.LetBlock(
+                    Value:
+                    new ExpressionSyntax.LetBlock(
                         LetTokenLocation: letExpr.Value.LetTokenLocation,
                         Declarations:
                         [
@@ -169,7 +172,8 @@ public class SnapshotTestFormat
                                 {
                                     ExpressionSyntax.LetDeclaration.LetFunction letFunc =>
                                     new ExpressionSyntax.LetDeclaration.LetFunction(
-                                        Function: letFunc.Function with
+                                        Function:
+                                        letFunc.Function with
                                         {
                                             Declaration =
                                             letFunc.Function.Declaration with
@@ -747,7 +751,8 @@ public class SnapshotTestFormat
         // Place the body on a row significantly later to signal multiline formatting
         var bodyWithLocation =
             new Node<ExpressionSyntax>(
-                Range: new Range(
+                Range:
+                new Range(
                     Start: new Location(Row: futureRow, Column: 1),
                     End: new Location(Row: futureRow + 10, Column: 1)),
                 Value: formattedBodyValue);
@@ -1093,10 +1098,12 @@ public class SnapshotTestFormat
                 s_dummyRange,
                 new Module.NormalModule(
                     ModuleTokenLocation: s_dummyLocation,
-                    ModuleData: new DefaultModuleData(
+                    ModuleData:
+                    new DefaultModuleData(
                         ModuleName: new Node<IReadOnlyList<string>>(s_dummyRange, ["_Dummy"]),
                         ExposingTokenLocation: s_dummyLocation,
-                        ExposingList: new Node<Exposing>(
+                        ExposingList:
+                        new Node<Exposing>(
                             s_dummyRange,
                             new Exposing.All(s_dummyRange)))));
 
@@ -1385,9 +1392,11 @@ public class SnapshotTestFormat
         {
             Declaration.FunctionDeclaration funcDecl =>
             new Declaration.FunctionDeclaration(
-                Function: new FunctionStruct(
+                Function:
+                new FunctionStruct(
                     Documentation: funcDecl.Function.Documentation,
-                    Signature: funcDecl.Function.Signature is { } sig
+                    Signature:
+                    funcDecl.Function.Signature is { } sig
                     ?
                     sig with
                     {
@@ -1399,7 +1408,8 @@ public class SnapshotTestFormat
                     }
                     :
                     null,
-                    Declaration: funcDecl.Function.Declaration with
+                    Declaration:
+                    funcDecl.Function.Declaration with
                     {
                         Value =
                         funcDecl.Function.Declaration.Value with
@@ -1410,14 +1420,16 @@ public class SnapshotTestFormat
 
             Declaration.ChoiceTypeDeclaration typeDecl =>
             new Declaration.ChoiceTypeDeclaration(
-                TypeDeclaration: typeDecl.TypeDeclaration with
+                TypeDeclaration:
+                typeDecl.TypeDeclaration with
                 {
                     Name = typeDecl.TypeDeclaration.Name with { Value = qualifiedName }
                 }),
 
             Declaration.AliasDeclaration aliasDecl =>
             new Declaration.AliasDeclaration(
-                TypeAlias: aliasDecl.TypeAlias with
+                TypeAlias:
+                aliasDecl.TypeAlias with
                 {
                     Name = aliasDecl.TypeAlias.Name with { Value = qualifiedName }
                 }),
@@ -1425,14 +1437,16 @@ public class SnapshotTestFormat
             Declaration.PortDeclaration portDecl =>
             new Declaration.PortDeclaration(
                 PortTokenLocation: portDecl.PortTokenLocation,
-                Signature: portDecl.Signature with
+                Signature:
+                portDecl.Signature with
                 {
                     Name = portDecl.Signature.Name with { Value = qualifiedName }
                 }),
 
             Declaration.InfixDeclaration infixDecl =>
             new Declaration.InfixDeclaration(
-                Infix: infixDecl.Infix with
+                Infix:
+                infixDecl.Infix with
                 {
                     Operator = infixDecl.Infix.Operator with { Value = qualifiedName }
                 }),

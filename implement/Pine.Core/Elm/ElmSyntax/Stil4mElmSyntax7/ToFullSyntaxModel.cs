@@ -158,12 +158,14 @@ public static class ToFullSyntaxModel
         new(
             ImportTokenLocation: s_defaultLocation,
             ModuleName: ConvertNodePreserveValue(import.ModuleName),
-            ModuleAlias: import.ModuleAlias is { } alias
+            ModuleAlias:
+            import.ModuleAlias is { } alias
             ?
             (s_defaultLocation, ConvertNodePreserveValue(alias))
             :
             null,
-            ExposingList: import.ExposingList is { } exposingList
+            ExposingList:
+            import.ExposingList is { } exposingList
             ?
             (s_defaultLocation, ConvertNode(exposingList, Convert))
             :
@@ -330,7 +332,8 @@ public static class ToFullSyntaxModel
         FunctionStruct functionStruct) =>
         new(
             Documentation: functionStruct.Documentation is { } doc ? ConvertNodePreserveValue(doc) : null,
-            Signature: functionStruct.Signature is { } sig
+            Signature:
+            functionStruct.Signature is { } sig
             ?
             ConvertNode(sig, Convert)
             :
@@ -726,7 +729,8 @@ public static class ToFullSyntaxModel
 
         var tupled =
             new FullTypes.TypeAnnotation.Tupled(
-                TypeAnnotations: new SeparatedSyntaxList<Node<FullTypes.TypeAnnotation>>.NonEmpty(
+                TypeAnnotations:
+                new SeparatedSyntaxList<Node<FullTypes.TypeAnnotation>>.NonEmpty(
                     innerNode,
                     []));
 

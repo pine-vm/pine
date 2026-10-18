@@ -30,7 +30,8 @@ public class PopularExpression
         return
             exprFiles
             .Aggregate(
-                func: (aggregate, nextFile) =>
+                func:
+                (aggregate, nextFile) =>
                 {
                     if (nextFile.Key.Count is not 1)
                         return aggregate;
@@ -66,7 +67,8 @@ public class PopularExpression
         return
             exprFiles
             .Aggregate(
-                func: (aggregate, nextFile) =>
+                func:
+                (aggregate, nextFile) =>
                 {
                     if (nextFile.Key.Count is not 1)
                         return aggregate;

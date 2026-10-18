@@ -188,7 +188,8 @@ public class PineControlFlowGraphInliningTests
 
         var vm =
             CreateVM(
-                overrides: new Dictionary<Expression, ExpressionCompilation>
+                overrides:
+                new Dictionary<Expression, ExpressionCompilation>
                 {
                     [leaf] = overrideCompilation
                 });
@@ -298,7 +299,8 @@ public class PineControlFlowGraphInliningTests
             ExpressionCompilation.ControlFlowGraphFromExpression(
                 countdown,
                 rootExprAlternativeForms: [],
-                envClass: PineValueClass.Create(
+                envClass:
+                PineValueClass.Create(
                     [new KeyValuePair<IReadOnlyList<int>, PineValue>([0], encoded)]),
                 parametersAsLocals: StaticFunctionInterface.FromExpression(countdown),
                 parseCache: new(),

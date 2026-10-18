@@ -265,11 +265,14 @@ public sealed class ElmMakeDiagnosticsProvider(
 
     private static Diagnostic ToDiagnostic(ElmMakeReportCompileErrorsErrorProblem problem) =>
         new(
-            Range: new LspRange(
-                Start: new Position(
+            Range:
+            new LspRange(
+                Start:
+                new Position(
                     Line: (uint)Math.Max(0, problem.Region.Start.Line - 1),
                     Character: (uint)Math.Max(0, problem.Region.Start.Column - 1)),
-                End: new Position(
+                End:
+                new Position(
                     Line: (uint)Math.Max(0, problem.Region.End.Line - 1),
                     Character: (uint)Math.Max(0, problem.Region.End.Column - 1))),
             Severity: DiagnosticSeverity.Error,

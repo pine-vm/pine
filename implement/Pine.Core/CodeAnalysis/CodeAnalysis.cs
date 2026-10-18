@@ -271,7 +271,8 @@ public class CodeAnalysis
             mergedFunctions
             .ToFrozenDictionary(
                 keySelector: entry => entry.Key,
-                elementSelector: entry =>
+                elementSelector:
+                entry =>
                 new StaticProgramFunctionMetadata(
                     entry.Value.origExpr,
                     entry.Value.interf,
@@ -1329,7 +1330,8 @@ public class CodeAnalysis
                 {
                     var bodyInlined =
                         StaticExpressionExtension.TransformStaticExpressionWithOptionalReplacement(
-                            findReplacement: node =>
+                            findReplacement:
+                            node =>
                             {
                                 if (node is StaticExpression<FunctionIdentifier>.FunctionApplication app)
                                 {
@@ -1634,7 +1636,8 @@ public class CodeAnalysis
     {
         var (mapped, _) =
             StaticExpressionExtension.TransformStaticExpressionWithOptionalReplacement(
-                findReplacement: node =>
+                findReplacement:
+                node =>
                 {
                     var path =
                         StaticExpressionExtension.TryParseAsPathToExpression(

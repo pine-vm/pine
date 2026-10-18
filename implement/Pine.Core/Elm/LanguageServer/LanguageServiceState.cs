@@ -423,7 +423,8 @@ public class LanguageServiceState(
         var langServiceResponseOk =
             ElmValueInterop.ParseElmResultValue(
                 requestResponseResultValue,
-                err: err =>
+                err:
+                err =>
                 {
                     throw new System.Exception("Failed to parse request response result: " + err);
                 },

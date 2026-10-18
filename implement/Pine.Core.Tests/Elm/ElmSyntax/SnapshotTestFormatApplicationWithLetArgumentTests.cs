@@ -71,13 +71,15 @@ public class SnapshotTestFormatApplicationWithLetArgumentTests
             (SyntaxTypes.Expression)
             new SyntaxTypes.Expression.CaseExpression(
                 new SyntaxTypes.CaseBlock(
-                    Expression: WrapNode(
+                    Expression:
+                    WrapNode(
                         (SyntaxTypes.Expression)
                         new SyntaxTypes.Expression.FunctionOrValue([], "scrut")),
                     Cases:
                     [
                     new SyntaxTypes.Case(
-                        Pattern: WrapNode(
+                        Pattern:
+                        WrapNode(
                             (SyntaxTypes.Pattern)
                             new SyntaxTypes.Pattern.NamedPattern(
                                 new StilQualifiedNameRef([], "Good"),
@@ -88,12 +90,14 @@ public class SnapshotTestFormatApplicationWithLetArgumentTests
                         Expression: WrapNode(innerApplication)),
 
                     new SyntaxTypes.Case(
-                        Pattern: WrapNode(
+                        Pattern:
+                        WrapNode(
                             (SyntaxTypes.Pattern)
                             new SyntaxTypes.Pattern.NamedPattern(
                                 new StilQualifiedNameRef([], "Bad"),
                                 [])),
-                        Expression: WrapNode(
+                        Expression:
+                        WrapNode(
                             (SyntaxTypes.Expression)
                             new SyntaxTypes.Expression.FunctionOrValue([], "fallback"))),
                     ]));
@@ -107,14 +111,16 @@ public class SnapshotTestFormatApplicationWithLetArgumentTests
                     Cases:
                     [
                     new SyntaxTypes.Case(
-                        Pattern: WrapNode(
+                        Pattern:
+                        WrapNode(
                             (SyntaxTypes.Pattern)
                             new SyntaxTypes.Pattern.NamedPattern(
                                 new StilQualifiedNameRef([], "Good"),
                                 [
                                 WrapNode((SyntaxTypes.Pattern)new SyntaxTypes.Pattern.VarPattern("v")),
                                 ])),
-                        Expression: WrapNode(
+                        Expression:
+                        WrapNode(
                             (SyntaxTypes.Expression)
                             new SyntaxTypes.Expression.FunctionOrValue([], "v"))),
                     ]));
@@ -140,7 +146,8 @@ public class SnapshotTestFormatApplicationWithLetArgumentTests
                     WrapNode(
                         (SyntaxTypes.Expression.LetDeclaration)
                         new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
-                            Pattern: WrapNode(
+                            Pattern:
+                            WrapNode(
                                 (SyntaxTypes.Pattern)
                                 new SyntaxTypes.Pattern.NamedPattern(
                                     new StilQualifiedNameRef([], "String"),
@@ -149,11 +156,13 @@ public class SnapshotTestFormatApplicationWithLetArgumentTests
                                         (SyntaxTypes.Pattern)
                                         new SyntaxTypes.Pattern.VarPattern("bytes"))
                                     ])),
-                            Expression: WrapNode(
+                            Expression:
+                            WrapNode(
                                 (SyntaxTypes.Expression)
                                 new SyntaxTypes.Expression.FunctionOrValue([], "a"))))
                     ],
-                    Expression: WrapNode(
+                    Expression:
+                    WrapNode(
                         (SyntaxTypes.Expression)
                         new SyntaxTypes.Expression.FunctionOrValue([], "concat"))));
 

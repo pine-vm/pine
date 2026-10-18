@@ -39,7 +39,8 @@ public record BundledDeclarations(
         System.Reflection.Assembly assembly) =>
         LoadEmbedded(assembly)
         .Unpack<BundledDeclarations?>(
-            fromErr: err =>
+            fromErr:
+            err =>
             {
                 Console.WriteLine("Failed loading from embedded resource: " + err);
 
