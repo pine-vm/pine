@@ -1468,7 +1468,7 @@ public class PineVM : ICancellablePineVM
                         StackFrameDepth: stack.Count,
                         Instructions: frameInstructions,
                         FrameExpression: newFrame.Expression,
-                        LoadFrameInput: () => newFrame.InputValues);
+                        LoadFrameInput: newFrame.InputValues.DiagnosticLoader);
 
                 reportEnteredStackFrameLocal(in enteredStackFrame);
             }
@@ -1774,7 +1774,7 @@ public class PineVM : ICancellablePineVM
                             EvaluationStackDepth: currentFrame.StackPointer,
                             Instruction: currentInstruction,
                             FrameExpression: currentFrame.Expression,
-                            LoadFrameInput: () => currentFrame.InputValues,
+                            LoadFrameInput: currentFrame.InputValues.DiagnosticLoader,
                             FrameInstructions: currentFrame.Instructions,
                             FrameIndex: currentFrame.FrameIndex);
 

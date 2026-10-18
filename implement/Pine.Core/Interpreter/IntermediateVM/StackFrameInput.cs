@@ -31,6 +31,24 @@ public record StackFrameInput
 
     private int? _hashCode;
 
+    private Func<StackFrameInput>? _diagnosticLoader;
+
+    // Reuse the loader without capturing a VM frame or materializing its arguments.
+    internal Func<StackFrameInput> DiagnosticLoader => _diagnosticLoader ??= LoadForDiagnostics;
+
+    private StackFrameInput LoadForDiagnostics() => this;
+
+    /// <summary>
+    /// Copies the input without copying a diagnostic delegate bound to the original instance.
+    /// </summary>
+    protected StackFrameInput(StackFrameInput original)
+    {
+        Parameters = original.Parameters;
+        Arguments = original.Arguments;
+        _evaluatedArguments = original._evaluatedArguments;
+        _hashCode = original._hashCode;
+    }
+
     private StackFrameInput(
         StaticFunctionInterface parameters,
         IReadOnlyList<PineValueInProcess> arguments)
