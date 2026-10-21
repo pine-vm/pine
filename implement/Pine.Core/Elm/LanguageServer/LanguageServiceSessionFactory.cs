@@ -20,6 +20,8 @@ public class LanguageServiceSessionFactory : ILanguageServiceSessionFactory
 
     private readonly Action<string>? _logDelegate;
 
+    private readonly Func<ContinuousInvocationCacheLearning>? _createCacheLearning;
+
     /// <summary>
     /// Creates a factory using VMs that do not consume the supplied shared-cache access.
     /// </summary>
@@ -66,13 +68,15 @@ public class LanguageServiceSessionFactory : ILanguageServiceSessionFactory
     public LanguageServiceSessionFactory(
         Func<IInvocationCacheAccess, PineVMSharedCaches, IPineVM> pineVMFactory,
         IFileStore? compilationCache = null,
-        Action<string>? logDelegate = null)
+        Action<string>? logDelegate = null,
+        Func<ContinuousInvocationCacheLearning>? createCacheLearning = null)
     {
         ArgumentNullException.ThrowIfNull(pineVMFactory);
 
         _pineVMFactory = pineVMFactory;
         _compilationCache = compilationCache;
         _logDelegate = logDelegate;
+        _createCacheLearning = createCacheLearning;
     }
 
     /// <inheritdoc/>
@@ -85,25 +89,45 @@ public class LanguageServiceSessionFactory : ILanguageServiceSessionFactory
 
         var sharedCache = new GenerationalInvocationCache(options.InvocationCacheOptions);
         var sharedPineVMCaches = new PineVMSharedCaches();
+        var cacheStatistics = new InvocationCacheStatistics();
+        var cacheLearning = _createCacheLearning?.Invoke();
 
         InvocationCacheExecutionContext<IPineVM> CreateWorker() =>
             new(
                 sharedCache,
-                buffer => _pineVMFactory(buffer, sharedPineVMCaches),
-                onCompleted: () => _ = RequestInvocationCacheMaintenance(sharedCache, _logDelegate));
+                buffer =>
+                {
+                    var vm = _pineVMFactory(buffer, sharedPineVMCaches);
+                    return cacheLearning?.Wrap(vm) ?? vm;
+                },
+                onCompleted: () => _ = RequestInvocationCacheMaintenance(sharedCache, _logDelegate),
+                statistics: cacheStatistics,
+                getPolicy: cacheLearning is null ? null : () => cacheLearning.CurrentPolicy);
 
         var firstWorker = CreateWorker();
 
-        var programResult =
-            firstWorker.Run(
-                pineVM =>
-                LanguageServiceState.CompileLanguageServiceProgram(
-                    pineVM,
-                    _compilationCache,
-                    _logDelegate));
+        Result<string, LanguageServiceState.LanguageServiceProgram> programResult;
+
+        try
+        {
+            programResult =
+                firstWorker.Run(
+                    pineVM =>
+                    LanguageServiceState.CompileLanguageServiceProgram(
+                        pineVM,
+                        _compilationCache,
+                        _logDelegate));
+        }
+        catch
+        {
+            cacheLearning?.Dispose();
+            throw;
+        }
 
         if (programResult.IsErrOrNull() is { } err)
         {
+            cacheLearning?.Dispose();
+
             return
                 ValueTask.FromResult(
                     Result<string, ILanguageServiceSession>.err(err));
@@ -111,6 +135,8 @@ public class LanguageServiceSessionFactory : ILanguageServiceSessionFactory
 
         if (programResult.IsOkOrNull() is not { } program)
         {
+            cacheLearning?.Dispose();
+
             throw new InvalidOperationException(
                 "Unexpected language service program result type: " + programResult.GetType());
         }
@@ -121,7 +147,8 @@ public class LanguageServiceSessionFactory : ILanguageServiceSessionFactory
                 options.MaxConcurrencyCount,
                 firstWorker,
                 CreateWorker,
-                _logDelegate);
+                _logDelegate,
+                cacheLearning);
 
         return
             ValueTask.FromResult(

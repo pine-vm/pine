@@ -612,6 +612,8 @@ public record LanguageServerRpcTarget(
     {
         shutdown = true;
 
+        Server.Dispose();
+
         Log("Shutdown");
     }
 

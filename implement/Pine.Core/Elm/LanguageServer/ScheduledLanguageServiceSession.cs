@@ -14,10 +14,25 @@ internal sealed class ScheduledLanguageServiceSession(
     int maxConcurrencyCount,
     InvocationCacheExecutionContext<IPineVM> firstWorker,
     Func<InvocationCacheExecutionContext<IPineVM>> createWorker,
-    Action<string>? logDelegate) : ILanguageServiceSession
+    Action<string>? logDelegate,
+    ContinuousInvocationCacheLearning? cacheLearning = null) : ILanguageServiceSession
 {
+    /// <inheritdoc/>
+    public void Dispose() => cacheLearning?.Dispose();
+
+    /// <inheritdoc/>
+    public InvocationCacheLearningState? GetInvocationCacheLearningState() => cacheLearning?.State;
+
     internal InvocationCacheGenerationStatistics? InvocationCacheStatistics =>
         (firstWorker.SharedCache as GenerationalInvocationCache)?.GetStatistics();
+
+    /// <inheritdoc/>
+    public InvocationCacheStatisticsSnapshot? GetInvocationCacheStatistics() =>
+        firstWorker.Statistics?.GetSnapshot() is { } snapshot
+        ?
+        snapshot with { SharedCacheGenerations = InvocationCacheStatistics }
+        :
+        null;
 
     private readonly RevisionedOperationScheduler<
         PineValue,

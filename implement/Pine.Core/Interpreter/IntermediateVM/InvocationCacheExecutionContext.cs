@@ -18,8 +18,13 @@ public sealed class InvocationCacheExecutionContext<TVM>
 
     private readonly Action? _onCompleted;
 
+    private readonly Func<InvocationCachePolicy>? _getPolicy;
+
     /// <summary>The shared invocation tier; metadata caches can be captured separately by the factory.</summary>
     public IInvocationCacheAccess SharedCache { get; }
+
+    /// <summary>Optional operation counters shared by all executions of this context.</summary>
+    public InvocationCacheStatistics? Statistics { get; }
 
     /// <summary>
     /// Creates an execution context. Callbacks must not retain the VM or buffer after returning.
@@ -30,7 +35,9 @@ public sealed class InvocationCacheExecutionContext<TVM>
         IInvocationCacheAccess sharedCache,
         Func<IInvocationCacheAccess, TVM> createVM,
         int maxBufferedEntries = int.MaxValue,
-        Action? onCompleted = null)
+        Action? onCompleted = null,
+        InvocationCacheStatistics? statistics = null,
+        Func<InvocationCachePolicy>? getPolicy = null)
     {
         ArgumentNullException.ThrowIfNull(sharedCache);
         ArgumentNullException.ThrowIfNull(createVM);
@@ -40,6 +47,8 @@ public sealed class InvocationCacheExecutionContext<TVM>
         _createVM = createVM;
         _maxBufferedEntries = maxBufferedEntries;
         _onCompleted = onCompleted;
+        Statistics = statistics;
+        _getPolicy = getPolicy;
     }
 
     /// <summary>Runs a synchronous request, publishing its buffer only after the callback exits.</summary>
@@ -50,7 +59,7 @@ public sealed class InvocationCacheExecutionContext<TVM>
 
         try
         {
-            return execute(_createVM(buffer));
+            return execute(_createVM(ConfigureCache(buffer)));
         }
         finally
         {
@@ -68,12 +77,18 @@ public sealed class InvocationCacheExecutionContext<TVM>
 
         try
         {
-            return await execute(_createVM(buffer)).ConfigureAwait(false);
+            return await execute(_createVM(ConfigureCache(buffer))).ConfigureAwait(false);
         }
         finally
         {
             Complete(buffer);
         }
+    }
+
+    private IInvocationCacheAccess ConfigureCache(BufferedInvocationCacheAccess buffer)
+    {
+        var cache = _getPolicy?.Invoke().Apply(buffer) ?? buffer;
+        return Statistics?.Observe(cache) ?? cache;
     }
 
     private void Complete(BufferedInvocationCacheAccess buffer)

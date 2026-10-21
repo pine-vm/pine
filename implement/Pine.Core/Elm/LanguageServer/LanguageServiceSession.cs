@@ -8,8 +8,20 @@ namespace Pine.Core.Elm.LanguageServer;
 /// <summary>
 /// Stateful language-service session, holding the workspace known to the language service.
 /// </summary>
-public interface ILanguageServiceSession
+public interface ILanguageServiceSession : System.IDisposable
 {
+    /// <summary>Stops session-owned background learning, when supported.</summary>
+    void System.IDisposable.Dispose() { }
+
+    /// <summary>Returns the current policy and incremental learning evidence, when available.</summary>
+    Interpreter.IntermediateVM.InvocationCacheLearningState? GetInvocationCacheLearningState() => null;
+
+    /// <summary>
+    /// Returns cumulative VM-facing cache operations, or null when instrumentation is unavailable.
+    /// Includes initialization and all worker attempts, including cancelled or speculative attempts.
+    /// </summary>
+    Interpreter.IntermediateVM.InvocationCacheStatisticsSnapshot? GetInvocationCacheStatistics() => null;
+
     /// <summary>
     /// Adds or replaces the contents of a workspace file.
     /// </summary>

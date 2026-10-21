@@ -9,6 +9,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Pine.Elm.LanguageServerAdapters;
 
@@ -76,14 +78,62 @@ public static class LanguageServerComposition
                 expressionTemplatePlanCache: sharedCaches.ExpressionTemplatePlans,
                 invocationCacheConfiguration: s_defaultInvocationCacheConfiguration),
             CreateDefaultCompilationCache(pineAppVersionId),
-            logDelegate);
+            logDelegate,
+            createCacheLearning: () => CreateCacheLearning(logDelegate));
 
-    private static readonly InvocationCacheConfiguration s_defaultInvocationCacheConfiguration =
-        new(
-            frameCostThreshold: 10_000,
-            stackFrameCost: 100,
-            entrySpacingCostThreshold: 10_000,
-            evalCost: 100);
+    internal static ContinuousInvocationCacheLearning CreateCacheLearning(
+        Action<string>? logDelegate = null,
+        ContinuousInvocationCacheLearningOptions? options = null,
+        TimeSpan? learningTimeout = null)
+    {
+        var timeout = learningTimeout ?? TimeSpan.FromMinutes(2);
+
+        if (timeout <= TimeSpan.Zero || timeout.TotalMilliseconds > uint.MaxValue - 1)
+            throw new ArgumentOutOfRangeException(nameof(learningTimeout));
+
+        var sharedCaches = new PineVMSharedCaches();
+
+        var learner =
+            new InvocationCachePolicyLearner(
+                invocationCache =>
+                IntermediateVM.SetupVM.Create(
+                    invocationCache: invocationCache,
+                    parseCache: sharedCaches.ParsedExpressions,
+                    tryGetExpressionCompilation: sharedCaches.ExpressionCompilations.TryGet,
+                    getOrAddExpressionCompilation: sharedCaches.ExpressionCompilations.GetOrAdd,
+                    expressionEncodingCache: sharedCaches.EncodedExpressions,
+                    reducedExpressionCache: sharedCaches.ReducedExpressions,
+                    expressionTemplatePlanCache: sharedCaches.ExpressionTemplatePlans,
+                    invocationCacheConfiguration: s_defaultInvocationCacheConfiguration),
+                options: new() { MaximumCandidateEvaluations = 4 });
+
+        return
+            new(
+                LearnAsync,
+                log: logDelegate,
+                options: options ?? new(SampleCapacity: 8, PendingCapacity: 16));
+
+        Task<InvocationCacheLearningState> LearnAsync(
+            InvocationCacheLearningState state,
+            IReadOnlyList<InvocationCacheLearningRequest> requests,
+            CancellationToken cancellationToken)
+        {
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            deadline.CancelAfter(timeout);
+
+            try
+            {
+                return Task.FromResult(learner.Learn(state, requests, deadline.Token));
+            }
+            catch (OperationCanceledException exception)
+                when (!cancellationToken.IsCancellationRequested && deadline.IsCancellationRequested)
+            {
+                throw new TimeoutException("Invocation-cache learning exceeded its deadline.", exception);
+            }
+        }
+    }
+
+    private static readonly InvocationCacheConfiguration s_defaultInvocationCacheConfiguration = new(0, 0, 0, 0);
 
     /// <summary>
     /// Directories searched for the Elm packages referenced from <c>elm.json</c> files.

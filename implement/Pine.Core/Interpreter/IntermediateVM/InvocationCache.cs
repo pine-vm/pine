@@ -334,6 +334,12 @@ public sealed class PersistentInvocationCacheAccess : IInvocationCacheAccess
 public interface IInvocationCacheAccess
 {
     /// <summary>
+    /// Checks expression admission before the VM materializes the cache key or return value.
+    /// Numeric work thresholds still apply after this check. Existing caches admit all expressions.
+    /// </summary>
+    bool ShouldAdmitExpression(PineValue expressionValue) => true;
+
+    /// <summary>
     /// Returns whether this cache may contain an entry for the given expression.
     /// </summary>
     bool MayContainExpression(PineValue expressionValue);

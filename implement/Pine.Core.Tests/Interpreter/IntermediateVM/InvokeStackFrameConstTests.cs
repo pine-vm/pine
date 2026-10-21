@@ -701,6 +701,7 @@ public class InvokeStackFrameConstTests
     public void Invoke_stack_frame_const_uses_invocation_cache_entry()
     {
         var trace = new List<ExecutedStackInstruction>();
+        var statistics = new InvocationCacheStatistics();
         var rootExpression = Expression.EnvironmentInstance;
         var targetExpression = EnvironmentPathExpression([0]);
         var targetExpressionEncoded = ExpressionEncoding.EncodeExpressionAsValue(targetExpression);
@@ -757,16 +758,21 @@ public class InvokeStackFrameConstTests
                 {
                     [rootExpression] = new(Generic: rootInstructions, Specialized: [])
                 },
-                evalCache: invocationCache);
+                invocationCache: statistics.Observe(new InvocationCacheAccessFromDictionary(invocationCache)));
 
         report.ReturnValue.Evaluate().Should().Be(cachedValue);
         trace.Should().NotContain(item => item.FrameExpression == targetExpression);
+        var counters = statistics.GetSnapshot().PerExpression[targetExpressionEncoded];
+        counters.LookupCount.Should().Be(1);
+        counters.HitCount.Should().Be(1);
+        counters.AdmissionCount.Should().Be(0);
     }
 
     [Fact]
     public void Invoke_stack_frame_const_creates_invocation_cache_entry()
     {
         var trace = new List<ExecutedStackInstruction>();
+        var statistics = new InvocationCacheStatistics();
         var rootExpression = Expression.EnvironmentInstance;
         var targetExpression = EnvironmentPathExpression([0]);
         var targetExpressionEncoded = ExpressionEncoding.EncodeExpressionAsValue(targetExpression);
@@ -812,7 +818,7 @@ public class InvokeStackFrameConstTests
                 {
                     [rootExpression] = new(Generic: rootInstructions, Specialized: [])
                 },
-                evalCache: invocationCache,
+                invocationCache: statistics.Observe(new InvocationCacheAccessFromDictionary(invocationCache)),
                 invocationCacheConfiguration:
                 new(
                     frameCostThreshold: 0,
@@ -831,6 +837,10 @@ public class InvokeStackFrameConstTests
 
         invocationCache.TryGetValue(cacheKey, out var valueFromCache).Should().BeTrue();
         valueFromCache.Should().Be(expectedReturnValue);
+        var counters = statistics.GetSnapshot().PerExpression[targetExpressionEncoded];
+        counters.AdmissionCount.Should().Be(1);
+        counters.SkippedLookupCount.Should().Be(1);
+        counters.LookupCount.Should().Be(0);
     }
 
     private static EvaluationReport EvaluateExpressionWithInjectedCompilation(
@@ -839,7 +849,8 @@ public class InvokeStackFrameConstTests
         PineValue rootEnvironment,
         IReadOnlyDictionary<Expression, ExpressionCompilation> expressionCompilationOverrides,
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
-        InvocationCacheConfiguration? invocationCacheConfiguration = null)
+        InvocationCacheConfiguration? invocationCacheConfiguration = null,
+        IInvocationCacheAccess? invocationCache = null)
     {
         var vm =
             Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
@@ -861,6 +872,7 @@ public class InvokeStackFrameConstTests
                 (in executedStackInstruction) =>
                 trace.Add(executedStackInstruction),
                 expressionCompilationOverrides: expressionCompilationOverrides,
+                invocationCache: invocationCache,
                 invocationCacheConfiguration: invocationCacheConfiguration);
 
         return

@@ -1503,6 +1503,7 @@ public class PineVM : ICancellablePineVM
                     instructionCount - lastCacheEntryInstructionCount;
 
                 if (_invocationCache is { } invocationCache &&
+                    invocationCache.ShouldAdmitExpression(currentFrameExprValue) &&
                     _invocationCacheConfiguration.ShouldOfferEntry(
                         frameInstructionCount: frameTotalInstructionCount,
                         frameStackFrameCount: frameStackFrameCount,

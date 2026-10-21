@@ -38,6 +38,7 @@ namespace Pine.Core.Elm.LanguageServer;
 /// Optional provider used after formatting a document. Production composition uses the syntax-only
 /// provider here to avoid running a compiler on every formatting request.
 /// </param>
+/// <param name="timeProvider">Optional clock for periodic cache-statistics logging.</param>
 public class LanguageServer(
     ILanguageServiceSessionFactory sessionFactory,
     ILanguageServerWorkspace workspace,
@@ -46,9 +47,18 @@ public class LanguageServer(
     IDocumentFormatter documentFormatter,
     LanguageServerOptions options,
     System.Action<string>? logDelegate = null,
-    IDiagnosticsProvider? formattingDiagnosticsProvider = null)
-    : IDocumentTextSource
+    IDiagnosticsProvider? formattingDiagnosticsProvider = null,
+    System.TimeProvider? timeProvider = null)
+    : IDocumentTextSource, System.IDisposable
 {
+    private readonly Lock _statisticsLogLock = new();
+
+    private InvocationCacheStatisticsLog? _statisticsLog;
+
+    private ILanguageServiceSession? _ownedSession;
+
+    private bool _disposed;
+
     private readonly ConcurrentDictionary<string, string> _allSeenDocumentUris = new();
 
     private readonly ConcurrentDictionary<string, string> _clientTextDocumentContents = new();
@@ -258,6 +268,38 @@ public class LanguageServer(
     /// this task to complete before using the language-service session.
     /// </summary>
     public Task? WorkspaceInitializationTask => _languageServiceStateTask;
+
+    /// <summary>
+    /// Returns cache statistics after workspace initialization, or null if not available.
+    /// Does not wait for initialization or schedule a language-service request.
+    /// </summary>
+    public Interpreter.IntermediateVM.InvocationCacheStatisticsSnapshot? GetInvocationCacheStatistics() =>
+        _languageServiceStateTask is { IsCompletedSuccessfully: true } task
+        ?
+        task.Result.IsOkOrNull()?.GetInvocationCacheStatistics()
+        :
+        null;
+
+    /// <summary>Returns the current learned policy and latest-run evidence after initialization, when available.</summary>
+    public Interpreter.IntermediateVM.InvocationCacheLearningState? GetInvocationCacheLearningState() =>
+        _languageServiceStateTask is { IsCompletedSuccessfully: true } task
+        ?
+        task.Result.IsOkOrNull()?.GetInvocationCacheLearningState()
+        :
+        null;
+
+    /// <summary>Stops logging and disposes the session. Safe during initialization or repeated calls.</summary>
+    public void Dispose()
+    {
+        lock (_statisticsLogLock)
+        {
+            _disposed = true;
+            _statisticsLog?.Dispose();
+            _statisticsLog = null;
+            _ownedSession?.Dispose();
+            _ownedSession = null;
+        }
+    }
 
     /// <summary>
     /// Sets the channel used to publish diagnostics to the client.
@@ -492,6 +534,30 @@ public class LanguageServer(
         {
             throw new System.NotImplementedException(
                 "Unexpected language service state result type: " + initResult.GetType());
+        }
+
+        lock (_statisticsLogLock)
+        {
+            if (_disposed)
+            {
+                languageServiceState.Dispose();
+            }
+            else
+            {
+                _ownedSession?.Dispose();
+                _ownedSession = languageServiceState;
+
+                if (_logDelegate is { } logStatistics)
+                {
+                    _statisticsLog?.Dispose();
+
+                    _statisticsLog =
+                        new(
+                            languageServiceState.GetInvocationCacheStatistics,
+                            logStatistics,
+                            timeProvider);
+                }
+            }
         }
 
         _elmJsonDirectDependencies.Clear();

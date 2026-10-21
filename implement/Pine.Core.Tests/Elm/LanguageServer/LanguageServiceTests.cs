@@ -139,15 +139,19 @@ public class LanguageServiceTests
     {
         var vmCreationCount = 0;
         var sharedInvocationCache = new ConcurrentInvocationCache();
+        var statistics = new InvocationCacheStatistics();
+        var expression = PineValue.Blob([42]);
 
         InvocationCacheExecutionContext<IPineVM> CreateWorker() =>
             new(
                 sharedInvocationCache,
-                _ =>
+                cache =>
                 {
                     vmCreationCount++;
+                    cache.MayContainExpression(expression);
                     return new WorkspaceSummaryResponsePineVM();
-                });
+                },
+                statistics: statistics);
 
         var function =
             new FunctionRecord(
@@ -170,6 +174,9 @@ public class LanguageServiceTests
             .Should().BeOfType<Result<string, Response.WorkspaceSummaryResponse>.Ok>();
 
         vmCreationCount.Should().Be(2);
+        ILanguageServiceSession publicSession = session;
+        publicSession.GetInvocationCacheStatistics()!.Totals.ExpressionCheckCount.Should().Be(2);
+        publicSession.GetInvocationCacheStatistics()!.PerExpression[expression].SkippedLookupCount.Should().Be(2);
     }
 
     [Fact]
