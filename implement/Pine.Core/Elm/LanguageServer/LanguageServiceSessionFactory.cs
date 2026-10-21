@@ -83,29 +83,24 @@ public class LanguageServiceSessionFactory : ILanguageServiceSessionFactory
         ArgumentNullException.ThrowIfNull(options);
         cancellationToken.ThrowIfCancellationRequested();
 
-        var sharedCache = new ConcurrentInvocationCache();
+        var sharedCache = new GenerationalInvocationCache(options.InvocationCacheOptions);
         var sharedPineVMCaches = new PineVMSharedCaches();
 
-        ScheduledLanguageServiceSession.Worker CreateWorker()
-        {
-            var workerCache = new BufferedInvocationCacheAccess(sharedCache);
-
-            return
-                new ScheduledLanguageServiceSession.Worker(
-                    CreatePineVM: () => _pineVMFactory(workerCache, sharedPineVMCaches),
-                    InvocationCache: workerCache);
-        }
+        InvocationCacheExecutionContext<IPineVM> CreateWorker() =>
+            new(
+                sharedCache,
+                buffer => _pineVMFactory(buffer, sharedPineVMCaches),
+                onCompleted: () => _ = RequestInvocationCacheMaintenance(sharedCache, _logDelegate));
 
         var firstWorker = CreateWorker();
-        var initializationPineVM = firstWorker.CreatePineVM();
 
         var programResult =
-            LanguageServiceState.CompileLanguageServiceProgram(
-                initializationPineVM,
-                _compilationCache,
-                _logDelegate);
-
-        firstWorker.InvocationCache.MergeIntoShared();
+            firstWorker.Run(
+                pineVM =>
+                LanguageServiceState.CompileLanguageServiceProgram(
+                    pineVM,
+                    _compilationCache,
+                    _logDelegate));
 
         if (programResult.IsErrOrNull() is { } err)
         {
@@ -131,5 +126,27 @@ public class LanguageServiceSessionFactory : ILanguageServiceSessionFactory
         return
             ValueTask.FromResult(
                 Result<string, ILanguageServiceSession>.ok(session));
+    }
+
+    internal static Task RequestInvocationCacheMaintenance(
+        GenerationalInvocationCache cache,
+        Action<string>? logDelegate = null)
+    {
+        if (cache.NewestGenerationEntryCount < cache.Options.RotationEntryCount)
+            return Task.CompletedTask;
+
+        return ObserveMaintenance(cache.MaintainAsync());
+
+        async Task ObserveMaintenance(Task maintenance)
+        {
+            try
+            {
+                await maintenance.ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                logDelegate?.Invoke("Invocation-cache maintenance failed: " + exception);
+            }
+        }
     }
 }

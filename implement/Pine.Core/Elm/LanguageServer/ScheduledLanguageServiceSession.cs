@@ -12,19 +12,18 @@ namespace Pine.Core.Elm.LanguageServer;
 internal sealed class ScheduledLanguageServiceSession(
     LanguageServiceState.LanguageServiceProgram program,
     int maxConcurrencyCount,
-    ScheduledLanguageServiceSession.Worker firstWorker,
-    Func<ScheduledLanguageServiceSession.Worker> createWorker,
+    InvocationCacheExecutionContext<IPineVM> firstWorker,
+    Func<InvocationCacheExecutionContext<IPineVM>> createWorker,
     Action<string>? logDelegate) : ILanguageServiceSession
 {
-    internal sealed record Worker(
-        Func<IPineVM> CreatePineVM,
-        BufferedInvocationCacheAccess InvocationCache);
+    internal InvocationCacheGenerationStatistics? InvocationCacheStatistics =>
+        (firstWorker.SharedCache as GenerationalInvocationCache)?.GetStatistics();
 
     private readonly RevisionedOperationScheduler<
         PineValue,
         Request,
         Result<string, Response>,
-        Worker>
+        InvocationCacheExecutionContext<IPineVM>>
         _scheduler =
         new(
             initialState: program.InitialState,
@@ -38,33 +37,27 @@ internal sealed class ScheduledLanguageServiceSession(
             createWorker(),
             execute:
             (worker, request, state, cancellationToken) =>
-            {
-                var pineVM = worker.CreatePineVM();
+            ValueTask.FromResult(
+                worker.Run(
+                    pineVM =>
+                    {
+                        var transition =
+                            LanguageServiceState.ApplyRequest(
+                                program,
+                                pineVM,
+                                state,
+                                request,
+                                cancellationToken);
 
-                var transition =
-                    LanguageServiceState.ApplyRequest(
-                        program,
-                        pineVM,
-                        state,
-                        request,
-                        cancellationToken);
-
-                return
-                    ValueTask.FromResult(
-                        new RevisionedOperationAttempt<
+                        return
+                            new RevisionedOperationAttempt<
                             PineValue,
                             Result<string, Response>>(
-                            transition.State,
-                            transition.Response,
-                            CanCompleteSpeculatively: state.Equals(transition.State)));
-            },
+                                transition.State,
+                                transition.Response,
+                                CanCompleteSpeculatively: state.Equals(transition.State));
+                    })),
             statesEqual: (left, right) => left.Equals(right),
-            finalizeAttempt:
-            worker =>
-            {
-                worker.InvocationCache.MergeIntoShared();
-                return ValueTask.CompletedTask;
-            },
             reportEvent:
             schedulerEvent =>
             logDelegate?.Invoke(

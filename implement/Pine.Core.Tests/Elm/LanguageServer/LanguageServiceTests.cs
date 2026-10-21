@@ -11,6 +11,9 @@ using Pine.Core.PineVM;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace Pine.Core.Tests.Elm.LanguageServer;
@@ -119,6 +122,9 @@ public class LanguageServiceTests
         new LanguageServerOptions(serverVersion: "test")
             .MaxConcurrencyCount.Should().Be(4);
 
+        new LanguageServerOptions(serverVersion: "test")
+            .InvocationCacheOptions.Should().Be(InvocationCacheGenerationOptions.Default);
+
         var constructWithInvalidConcurrency =
             () =>
             new LanguageServerOptions(
@@ -134,15 +140,14 @@ public class LanguageServiceTests
         var vmCreationCount = 0;
         var sharedInvocationCache = new ConcurrentInvocationCache();
 
-        ScheduledLanguageServiceSession.Worker CreateWorker() =>
+        InvocationCacheExecutionContext<IPineVM> CreateWorker() =>
             new(
-                CreatePineVM:
-                () =>
+                sharedInvocationCache,
+                _ =>
                 {
                     vmCreationCount++;
                     return new WorkspaceSummaryResponsePineVM();
-                },
-                InvocationCache: new BufferedInvocationCacheAccess(sharedInvocationCache));
+                });
 
         var function =
             new FunctionRecord(
@@ -180,21 +185,15 @@ public class LanguageServiceTests
 
         var cachedValue = PineValue.Blob([1]);
 
-        ScheduledLanguageServiceSession.Worker CreateWorker()
-        {
-            var workerCache = new BufferedInvocationCacheAccess(sharedInvocationCache);
-
-            return
-                new ScheduledLanguageServiceSession.Worker(
-                    CreatePineVM:
-                    () =>
-                    new CacheProgressPineVM(
-                        workerCache,
-                        cacheKey,
-                        cachedValue,
-                        shouldFail: vmCreationCount++ is 0),
-                    InvocationCache: workerCache);
-        }
+        InvocationCacheExecutionContext<IPineVM> CreateWorker() =>
+            new(
+                sharedInvocationCache,
+                workerCache =>
+                new CacheProgressPineVM(
+                    workerCache,
+                    cacheKey,
+                    cachedValue,
+                    shouldFail: vmCreationCount++ is 0));
 
         var function =
             new FunctionRecord(
@@ -224,6 +223,65 @@ public class LanguageServiceTests
 
         session.DeleteFile("file:///workspace/Main.elm")
             .Should().BeOfType<Result<string, Response.WorkspaceSummaryResponse>.Ok>();
+    }
+
+    [Fact]
+    public async Task Scheduled_session_requests_background_maintenance_without_waiting_for_rotation()
+    {
+        var shared = new GenerationalInvocationCache(new(2, 1));
+        var maintenance = Task.CompletedTask;
+
+        LanguageServiceSessionFactory.RequestInvocationCacheMaintenance(shared)
+            .IsCompletedSuccessfully.Should().BeTrue();
+
+        shared.GetStatistics().Rotations.Should().Be(0);
+
+        shared.TryAdd(
+            new EvalCacheEntryKey(
+                PineValue.EmptyList,
+                StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyList)),
+            PineValue.EmptyList);
+
+        InvocationCacheExecutionContext<IPineVM> CreateWorker() =>
+            new(
+                shared,
+                _ => new WorkspaceSummaryResponsePineVM(),
+                onCompleted:
+                () =>
+                maintenance = LanguageServiceSessionFactory.RequestInvocationCacheMaintenance(shared));
+
+        var function =
+            new FunctionRecord(
+                Expression.EnvironmentInstance,
+                2,
+                ReadOnlyMemory<PineValue>.Empty,
+                ReadOnlyMemory<PineValue>.Empty);
+
+        var session =
+            new ScheduledLanguageServiceSession(
+                new LanguageServiceState.LanguageServiceProgram(
+                    new LanguageServiceInterfaceStruct(function, function),
+                    PineValue.EmptyList),
+                1,
+                CreateWorker(),
+                CreateWorker,
+                null);
+
+        var gate =
+            (Lock)typeof(GenerationalInvocationCache)
+            .GetField("_lock", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(shared)!;
+
+        lock (gate)
+        {
+            session.DeleteFile("file:///workspace/Main.elm")
+                .Should().BeOfType<Result<string, Response.WorkspaceSummaryResponse>.Ok>();
+
+            maintenance.IsCompleted.Should().BeFalse();
+            session.InvocationCacheStatistics!.Rotations.Should().Be(0);
+        }
+
+        await maintenance.WaitAsync(TimeSpan.FromSeconds(30));
+        session.InvocationCacheStatistics!.Rotations.Should().Be(1);
     }
 
 

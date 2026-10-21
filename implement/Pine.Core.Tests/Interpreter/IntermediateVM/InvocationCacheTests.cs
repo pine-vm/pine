@@ -4,6 +4,7 @@ using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.IO;
 using Pine.Core.PineVM;
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -155,6 +156,119 @@ public class InvocationCacheTests
         worker.TryGet(key, out var result).Should().BeTrue();
         result.Should().Be(value);
         worker.BufferedEntryCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Completed_buffer_drops_its_expression_index_when_shared_entries_expire()
+    {
+        var shared = new GenerationalInvocationCache();
+        var worker = new BufferedInvocationCacheAccess(shared, maxEntryCount: 1);
+        var key = BuildKey(1);
+        worker.TryAdd(key, PineValue.EmptyList).Should().BeTrue();
+        worker.TryAdd(BuildKey(2), PineValue.EmptyList).Should().BeFalse();
+        worker.MergeIntoShared();
+        await shared.AdvanceGenerationAsync(1);
+        worker.BufferedEntryCount.Should().Be(0);
+        worker.MayContainExpression(key.ExprValue).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Buffer_publishes_one_batch_instead_of_individual_shared_insertions()
+    {
+        var shared = new BatchOnlyCache();
+        var buffer = new BufferedInvocationCacheAccess(shared);
+        buffer.TryAdd(BuildKey(1), PineValue.EmptyList);
+        buffer.TryAdd(BuildKey(2), PineValue.EmptyList);
+        buffer.MergeIntoShared();
+        shared.MergeCount.Should().Be(1);
+        shared.EntryCount.Should().Be(2);
+        buffer.BufferedEntryCount.Should().Be(0);
+        buffer.MergeIntoShared();
+        shared.MergeCount.Should().Be(1, "an empty buffer must not acquire a shared-cache lock");
+    }
+
+    [Fact]
+    public void Persistent_tier_forwards_the_whole_batch_to_the_memory_cache()
+    {
+        var memory = new BatchOnlyCache();
+        var files = new FileStoreFromConcurrentDictionary();
+        var key = BuildKey(1);
+
+        var persistent =
+            new PersistentInvocationCacheAccess(
+                memory,
+                files,
+                PersistentOptimizationForExpression(key.ExprValue));
+
+        var worker = new BufferedInvocationCacheAccess(persistent);
+        worker.TryAdd(key, PineValue.Blob([3]));
+        worker.TryAdd(BuildKey(2), PineValue.Blob([4]));
+
+        worker.MergeIntoShared();
+
+        memory.MergeCount.Should().Be(1);
+        memory.EntryCount.Should().Be(2);
+        files.ListFilesInDirectory([]).Should().HaveCount(2);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Concurrent_batch_merge_preserves_all_entries_and_first_writer(bool generational)
+    {
+        IInvocationCacheAccess cache =
+            generational
+            ?
+            new GenerationalInvocationCache(new(2, 1))
+            :
+            new ConcurrentInvocationCache();
+
+        var key = BuildKey(1);
+        var first = PineValue.Blob([3]);
+        cache.TryAdd(key, first);
+
+        Parallel.For(
+            0,
+            10,
+            index =>
+            {
+                cache.Merge(
+                    new Dictionary<EvalCacheEntryKey, PineValue>
+                    {
+                        [key] = PineValue.Blob([4]),
+                        [BuildKey(index + 2)] = PineValue.EmptyList
+                    });
+            });
+
+        cache.TryGet(key, out var value).Should().BeTrue();
+        value.Should().Be(first);
+
+        for (var index = 2; index < 12; ++index)
+            cache.TryGet(BuildKey(index), out _).Should().BeTrue();
+    }
+
+    private sealed class BatchOnlyCache : IInvocationCacheAccess
+    {
+        public int MergeCount { get; private set; }
+
+        public int EntryCount { get; private set; }
+
+        public bool MayContainExpression(PineValue expressionValue) => false;
+
+        public bool TryGet(EvalCacheEntryKey key, out PineValue value)
+        {
+            value = null!;
+            return false;
+        }
+
+        public bool TryAdd(EvalCacheEntryKey key, PineValue value) =>
+            throw new InvalidOperationException("The buffer must use batch merge.");
+
+        public void Merge(IReadOnlyDictionary<EvalCacheEntryKey, PineValue> entries)
+        {
+            ++MergeCount;
+            EntryCount += entries.Count;
+        }
     }
 
     [Fact]

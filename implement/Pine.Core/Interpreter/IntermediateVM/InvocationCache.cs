@@ -85,6 +85,22 @@ public sealed class ConcurrentInvocationCache : IInvocationCacheAccess
             return true;
         }
     }
+
+    /// <inheritdoc/>
+    public void Merge(IReadOnlyDictionary<EvalCacheEntryKey, PineValue> entries)
+    {
+        foreach (var entry in entries)
+            entry.Key.StackFrameInput.Materialize();
+
+        lock (_lock)
+        {
+            foreach (var entry in entries)
+            {
+                if (_entries.TryAdd(entry.Key, entry.Value))
+                    _expressionsWithEntries.Add(entry.Key.ExprValue);
+            }
+        }
+    }
 }
 
 /// <summary>
@@ -98,14 +114,18 @@ public sealed class BufferedInvocationCacheAccess : IInvocationCacheAccess
 
     private readonly InvocationCacheAccessFromDictionary _localCache;
 
+    private readonly int _maxEntryCount;
+
     /// <summary>
     /// Creates a worker-owned buffer over the supplied shared cache.
     /// </summary>
-    public BufferedInvocationCacheAccess(IInvocationCacheAccess sharedCache)
+    public BufferedInvocationCacheAccess(IInvocationCacheAccess sharedCache, int maxEntryCount = int.MaxValue)
     {
         ArgumentNullException.ThrowIfNull(sharedCache);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxEntryCount, 1);
 
         _sharedCache = sharedCache;
+        _maxEntryCount = maxEntryCount;
         _localCache = new InvocationCacheAccessFromDictionary(_localEntries);
     }
 
@@ -138,7 +158,7 @@ public sealed class BufferedInvocationCacheAccess : IInvocationCacheAccess
     {
         key.StackFrameInput.Materialize();
 
-        return _localCache.TryAdd(key, value);
+        return _localEntries.Count < _maxEntryCount && _localCache.TryAdd(key, value);
     }
 
     /// <summary>
@@ -147,12 +167,16 @@ public sealed class BufferedInvocationCacheAccess : IInvocationCacheAccess
     /// </summary>
     public void MergeIntoShared()
     {
-        foreach (var entry in _localEntries)
+        try
         {
-            _sharedCache.TryAdd(entry.Key, entry.Value);
+            if (_localEntries.Count > 0)
+                _sharedCache.Merge(_localEntries);
         }
-
-        _localEntries.Clear();
+        finally
+        {
+            _localEntries.Clear();
+            _localCache.RefreshExpressionIndex();
+        }
     }
 }
 
@@ -234,10 +258,24 @@ public sealed class PersistentInvocationCacheAccess : IInvocationCacheAccess
     {
         var addedToMemory = _memoryCache?.TryAdd(key, value) ?? false;
 
+        var persisted = Persist(key, value);
+
+        return _memoryCache is null ? persisted : addedToMemory;
+    }
+
+    /// <inheritdoc/>
+    public void Merge(IReadOnlyDictionary<EvalCacheEntryKey, PineValue> entries)
+    {
+        _memoryCache?.Merge(entries);
+
+        foreach (var entry in entries)
+            Persist(entry.Key, entry.Value);
+    }
+
+    private bool Persist(EvalCacheEntryKey key, PineValue value)
+    {
         if (BuildPersistentFileName(key) is not { } fileName)
-        {
-            return addedToMemory;
-        }
+            return false;
 
         using var stream = new MemoryStream();
 
@@ -247,7 +285,7 @@ public sealed class PersistentInvocationCacheAccess : IInvocationCacheAccess
             path: [fileName],
             fileContent: stream.ToArray());
 
-        return _memoryCache is null || addedToMemory;
+        return true;
     }
 
     private OptimizationParametersSerial.ExpressionConfig? PersistentConfigurationForExpression(
@@ -313,6 +351,17 @@ public interface IInvocationCacheAccess
     bool TryAdd(
         EvalCacheEntryKey key,
         PineValue value);
+
+    /// <summary>
+    /// Publishes a stable request-owned batch using first-writer-wins insertion.
+    /// Shared dictionary implementations override this to take their lock once for the whole batch.
+    /// The caller must not modify the batch until this method returns.
+    /// </summary>
+    void Merge(IReadOnlyDictionary<EvalCacheEntryKey, PineValue> entries)
+    {
+        foreach (var entry in entries)
+            TryAdd(entry.Key, entry.Value);
+    }
 }
 
 /// <summary>
@@ -361,7 +410,7 @@ public sealed class InvocationCacheAccessFromDictionary(
         return added;
     }
 
-    private void RefreshExpressionIndex()
+    internal void RefreshExpressionIndex()
     {
         if (_indexedEntryCount == _dictionary.Count)
         {

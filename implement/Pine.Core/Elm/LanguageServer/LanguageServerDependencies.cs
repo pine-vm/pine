@@ -224,14 +224,20 @@ public sealed record LanguageServerOptions
     /// </summary>
     /// <param name="serverVersion">Version reported to the client in the <c>initialize</c> response.</param>
     /// <param name="maxConcurrencyCount">Maximum number of exclusively leased language-service workers.</param>
+    /// <param name="invocationCacheOptions">Optional invocation-generation limits; other VM caches are unchanged.</param>
     public LanguageServerOptions(
         string serverVersion,
-        int maxConcurrencyCount = 4)
+        int maxConcurrencyCount = 4,
+        Interpreter.IntermediateVM.InvocationCacheGenerationOptions? invocationCacheOptions = null)
     {
         System.ArgumentOutOfRangeException.ThrowIfLessThan(maxConcurrencyCount, 1);
 
         ServerVersion = serverVersion;
         MaxConcurrencyCount = maxConcurrencyCount;
+
+        InvocationCacheOptions =
+            invocationCacheOptions ??
+            Interpreter.IntermediateVM.InvocationCacheGenerationOptions.Default;
     }
 
     /// <summary>
@@ -243,4 +249,7 @@ public sealed record LanguageServerOptions
     /// Gets the maximum number of language-service workers that may be leased at the same time.
     /// </summary>
     public int MaxConcurrencyCount { get; }
+
+    /// <summary>Gets the background invocation-cache maintenance policy shared by this session's workers.</summary>
+    public Interpreter.IntermediateVM.InvocationCacheGenerationOptions InvocationCacheOptions { get; }
 }
