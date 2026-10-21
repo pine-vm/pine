@@ -111,8 +111,10 @@ public class ElmTestInstrumentationTests
             () => new(new(instructions, []), new string('0', 64), null));
 
         using (profile.EnterScope("preparation", "deferred template"))
+        {
             profile.CreateVm(new ConcurrentInvocationCache(), caches)
                 .EvaluateExpression(intermediateExpression, PineValue.EmptyList).IsOkOrNull().Should().NotBeNull();
+        }
 
         var summary = profile.GetSummary();
         var origins = summary.CountersByPhase["preparation"];

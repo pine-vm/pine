@@ -1755,8 +1755,8 @@ public static class FormatCSharpFile
     private static bool HeaderSpansMultipleLines(SyntaxNode owner, SyntaxToken start, SyntaxToken end) =>
         SpansMultipleLines(owner.ToString()[(start.SpanStart - owner.SpanStart)..(end.Span.End - owner.SpanStart)]);
 
-    /// <summary>Formats a loop body, requiring braces when the header or body spans multiple lines.</summary>
-    private static StatementSyntax FormatLoopBody(
+    /// <summary>Formats a loop or using body, requiring braces when the header or body spans multiple lines.</summary>
+    private static StatementSyntax FormatMultilineStatementBody(
         StatementSyntax statement,
         FormatContext ctx,
         bool multilineHeader)
@@ -1791,7 +1791,7 @@ public static class FormatCSharpFile
                             related.SpanStart < statement.FullSpan.Start))))
             {
                 throw new NotSupportedException(
-                    "Cannot safely add loop body braces across conditional-compilation boundaries. " +
+                    "Cannot safely add body braces across conditional-compilation boundaries. " +
                     "Add explicit braces in each configuration before formatting.");
             }
 
@@ -1810,6 +1810,14 @@ public static class FormatCSharpFile
                     SyntaxFactory.Block(bodyStatement.WithLeadingTrivia(leading.Skip(lastDirective + 1)))
                     .WithLeadingTrivia(leading.Take(lastDirective + 1));
             }
+
+            var first = block.Statements[0];
+
+            block =
+                block.WithStatements(
+                    SyntaxFactory.SingletonList(
+                        first.WithLeadingTrivia(
+                            first.GetLeadingTrivia().SkipWhile(t => IsWhitespace(t) || IsLineBreak(t)))));
         }
 
         var body = EnsureBraceNewline(FormatBlock(block, ctx), ctx.IndentLevel);
@@ -1839,7 +1847,10 @@ public static class FormatCSharpFile
 
         return
             r.WithStatement(
-                FormatLoopBody(node.Statement, ctx, HeaderSpansMultipleLines(r, r.GetFirstToken(), r.CloseParenToken)));
+                FormatMultilineStatementBody(
+                    node.Statement,
+                    ctx,
+                    HeaderSpansMultipleLines(r, r.GetFirstToken(), r.CloseParenToken)));
     }
 
     /// <summary>Formats a for statement with correct keyword and brace placement.</summary>
@@ -1855,7 +1866,10 @@ public static class FormatCSharpFile
 
         return
             r.WithStatement(
-                FormatLoopBody(node.Statement, ctx, HeaderSpansMultipleLines(r, r.GetFirstToken(), r.CloseParenToken)));
+                FormatMultilineStatementBody(
+                    node.Statement,
+                    ctx,
+                    HeaderSpansMultipleLines(r, r.GetFirstToken(), r.CloseParenToken)));
     }
 
     /// <summary>Formats a foreach statement with correct keyword and brace placement.</summary>
@@ -1901,7 +1915,10 @@ public static class FormatCSharpFile
 
         return
             r.WithStatement(
-                FormatLoopBody(node.Statement, ctx, HeaderSpansMultipleLines(r, r.GetFirstToken(), r.CloseParenToken)));
+                FormatMultilineStatementBody(
+                    node.Statement,
+                    ctx,
+                    HeaderSpansMultipleLines(r, r.GetFirstToken(), r.CloseParenToken)));
     }
 
     /// <summary>Joins the foreach variable and in keyword unless comments or directives require a line break.</summary>
@@ -1950,14 +1967,17 @@ public static class FormatCSharpFile
 
         return
             r.WithStatement(
-                FormatLoopBody(node.Statement, ctx, HeaderSpansMultipleLines(r, r.GetFirstToken(), r.CloseParenToken)));
+                FormatMultilineStatementBody(
+                    node.Statement,
+                    ctx,
+                    HeaderSpansMultipleLines(r, r.GetFirstToken(), r.CloseParenToken)));
     }
 
     /// <summary>Formats a do-while statement with correct keyword placement.</summary>
     private static DoStatementSyntax FormatDoStatement(DoStatementSyntax node, FormatContext ctx)
     {
         var body =
-            FormatLoopBody(
+            FormatMultilineStatementBody(
                 node.Statement,
                 ctx,
                 HeaderSpansMultipleLines(node, node.WhileKeyword, node.CloseParenToken));
@@ -2000,9 +2020,16 @@ public static class FormatCSharpFile
         var r =
             node
             .WithUsingKeyword(node.UsingKeyword.WithTrailingTrivia(s_space))
-            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia());
+            .WithCloseParenToken(
+                node.CloseParenToken.WithLeadingTrivia()
+                .WithTrailingTrivia(EnsureSpaceBeforeComments(StripWhitespace(node.CloseParenToken.TrailingTrivia))));
 
-        return r.WithStatement(FormatEmbeddedStatement(node.Statement, r, r.CloseParenToken, ctx));
+        return
+            r.WithStatement(
+                FormatMultilineStatementBody(
+                    node.Statement,
+                    ctx,
+                    HeaderSpansMultipleLines(r, r.GetFirstToken(), r.CloseParenToken)));
     }
 
     /// <summary>Formats a fixed statement with correct keyword and body placement.</summary>

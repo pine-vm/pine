@@ -199,8 +199,10 @@ public class PineVMConstructorSharingTests
             (PineValueInProcess value, EvalWorkCounters evalWorkCounters)? actual;
 
             using (baselineProfile.Enter())
+            {
                 baseline =
                     DirectVM.EvalDirect(expression, PineValueInProcess.EmptyBlob, preserveConstructorSharing: false);
+            }
 
             using (actualProfile.Enter())
                 actual = DirectVM.EvalDirect(expression, PineValueInProcess.EmptyBlob);

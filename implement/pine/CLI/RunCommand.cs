@@ -180,6 +180,7 @@ public static class RunCommand
             RunCompilation compiled;
 
             using (tracker.EnterScope("compilation", entryPoint))
+            {
                 compiled =
                     RunCompilation.Compile(
                         sourceLoader.Read(entryPoint, inputDirectory, token),
@@ -194,6 +195,7 @@ public static class RunCommand
                             Console.IsInputRedirected,
                             batchOnly,
                             token)));
+            }
 
             compilationDuration = stopwatch.Elapsed;
             executionStarted = true;

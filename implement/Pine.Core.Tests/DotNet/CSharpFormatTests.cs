@@ -4065,6 +4065,9 @@ public class CSharpFormatTests
     [InlineData("if (condition)")]
     [InlineData("if (condition) // Header comment")]
     [InlineData("using (var resource = GetResource())")]
+    [InlineData("await using (var resource = GetResource())")]
+    [InlineData("using (var resource = GetResource()) // Header comment")]
+    [InlineData("await using (var resource = GetResource()) // Header comment")]
     [InlineData("fixed (int* pointer = GetPointer())")]
     [InlineData("fixed (int* pointer = GetPointer()) // Header comment")]
     [InlineData("fixed /* Header comment */ (int* pointer = GetPointer())")]
@@ -4076,6 +4079,281 @@ public class CSharpFormatTests
 
         AssertFormattedSyntax(input, input, scriptMode: true);
         AssertFormattedSyntax("// Leading comment\n" + input, "// Leading comment\n" + input, scriptMode: true);
+    }
+
+    [Theory]
+    [InlineData("using")]
+    [InlineData("await using")]
+    public void Multiline_using_body_requires_braces(string keyword)
+    {
+        var input =
+            $$"""
+            {{keyword}} (var resource = GetResource()) // Header comment
+                // Before body
+                DoSomething(
+                    first,
+                    second); // After body
+            """;
+
+        var expected =
+            $$"""
+            {{keyword}} (var resource = GetResource()) // Header comment
+            {
+                // Before body
+                DoSomething(
+                    first,
+                    second); // After body
+            }
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+        AssertFormattedSyntax(input, expected, scriptMode: false);
+    }
+
+    [Theory]
+    [InlineData("using")]
+    [InlineData("await using")]
+    public void Using_body_wrapped_by_formatter_requires_braces(string keyword)
+    {
+        var input =
+            $$"""
+            {{keyword}} (var resource = GetResource())
+                DoSomething(firstArgumentWithAVeryLongDescriptiveName, secondArgumentWithAVeryLongDescriptiveName, thirdArgumentWithAVeryLongDescriptiveName);
+            """;
+
+        var expected =
+            $$"""
+            {{keyword}} (var resource = GetResource())
+            {
+                DoSomething(
+                    firstArgumentWithAVeryLongDescriptiveName,
+                    secondArgumentWithAVeryLongDescriptiveName,
+                    thirdArgumentWithAVeryLongDescriptiveName);
+            }
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+        AssertFormattedSyntax(input, expected, scriptMode: false);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Nested_using_statements_get_braces_and_blank_line_separation(bool blankLineBeforeBody)
+    {
+        var input =
+            """
+            class Example
+            {
+                void Check()
+                {
+                    var calls = profile[PineVMWorkProfile.Metric.EvalDirectCalls];
+                    using (profile.Enter())
+
+                        using (PineVMWorkProfile.EnterEvaluation(null, default, null))
+                            BaselineDirect(input.Expression, input.Environment)!.Value.evalWorkCounters.Should().Be(expectedUnprofiled);
+                    profile[PineVMWorkProfile.Metric.EvalDirectCalls].Should().Be(calls);
+                    PineVMWorkProfile.Current.Should().BeNull();
+                }
+            }
+            """;
+
+        if (!blankLineBeforeBody)
+            input = input.Replace("using (profile.Enter())\n\n", "using (profile.Enter())\n");
+
+        var expected =
+            """
+            class Example
+            {
+                void Check()
+                {
+                    var calls = profile[PineVMWorkProfile.Metric.EvalDirectCalls];
+
+                    using (profile.Enter())
+                    {
+                        using (PineVMWorkProfile.EnterEvaluation(null, default, null))
+                        {
+                            BaselineDirect(input.Expression, input.Environment)!.Value.evalWorkCounters.Should().Be(
+                                expectedUnprofiled);
+                        }
+                    }
+
+                    profile[PineVMWorkProfile.Metric.EvalDirectCalls].Should().Be(calls);
+                    PineVMWorkProfile.Current.Should().BeNull();
+                }
+            }
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+        AssertFormattedSyntax(input, expected, scriptMode: false);
+    }
+
+    [Theory]
+    [InlineData("using (GetResource())", false)]
+    [InlineData("await using (GetResource())", false)]
+    [InlineData("while (condition)", false)]
+    [InlineData("using (GetResource())", true)]
+    [InlineData("await using (GetResource())", true)]
+    [InlineData("while (condition)", true)]
+    [InlineData("using (GetResource(\n    first,\n    second))", true)]
+    public void Inserted_body_braces_do_not_retain_leading_blank_lines(string header, bool hasComment)
+    {
+        var comment = hasComment ? "    // Before body\n\n" : "";
+
+        var input =
+            header + "\n\n\n" + comment +
+            """
+                DoSomething(
+                    first,
+                    second);
+            """;
+
+        var expected =
+            header + "\n{\n" + comment +
+            """
+                DoSomething(
+                    first,
+                    second);
+            }
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+        AssertFormattedSyntax(input, expected, scriptMode: false);
+    }
+
+    [Fact]
+    public void Inserted_using_body_braces_do_not_retain_blank_lines_after_directives()
+    {
+        var input =
+            """
+            using (GetResource())
+            #if FEATURE
+
+                First(
+                    first,
+                    second);
+            #else
+
+                Second(
+                    first,
+                    second);
+            #endif
+            """;
+
+        var expected =
+            """
+            using (GetResource())
+            #if FEATURE
+
+                First(
+                    first,
+                    second);
+            #else
+            {
+                Second(
+                    first,
+                    second);
+            }
+            #endif
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+        AssertFormattedSyntax(input, expected, scriptMode: false);
+    }
+
+    [Fact]
+    public void Existing_using_body_block_preserves_leading_blank_line()
+    {
+        var input =
+            """
+            using (GetResource())
+            {
+
+                DoSomething(
+                    first,
+                    second);
+            }
+            """;
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+        AssertFormattedSyntax(input, input, scriptMode: false);
+    }
+
+    [Theory]
+    [InlineData("using")]
+    [InlineData("await using")]
+    public void Using_body_braces_preserve_conditional_compilation(string keyword)
+    {
+        var input =
+            $$"""
+            {{keyword}} (var resource = GetResource()) // Header comment
+            #if FEATURE
+                First(
+                    first,
+                    second); // Trailing comment
+            #else
+                Second(
+                    first,
+                    second);
+            #endif
+            """;
+
+        foreach (var defineFeature in new[] { false, true })
+        {
+            var source = (defineFeature ? "#define FEATURE\n" : "") + input;
+            var formatted = FormatCSharpScriptOrThrow(source);
+
+            foreach (var symbols in new[] { Array.Empty<string>(), new[] { "FEATURE" } })
+            {
+                var tree =
+                    CSharpSyntaxTree.ParseText(
+                        formatted.Replace("#define FEATURE\n", ""),
+                        new CSharpParseOptions(kind: SourceCodeKind.Script, preprocessorSymbols: symbols));
+
+                tree.GetDiagnostics().Should().BeEmpty();
+            }
+
+            StripWhitespace(formatted.Replace("{", "").Replace("}", "")).Should().Be(StripWhitespace(source));
+            formatted.Should().Contain("\n{\n");
+            formatted.Should().Contain(" // Header comment");
+            formatted.Should().Contain(" // Trailing comment");
+            AssertFormattedSyntax(formatted, formatted, scriptMode: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("using", false)]
+    [InlineData("await using", false)]
+    [InlineData("using", true)]
+    [InlineData("await using", true)]
+    public void Using_body_braces_reject_conditional_compilation_boundaries(string keyword, bool internalDirective)
+    {
+        var input =
+            internalDirective
+            ?
+            $$"""
+            {{keyword}} (var resource = GetResource())
+                DoSomething(
+            #if FEATURE
+                    first,
+            #endif
+                    second);
+            """
+            :
+            $$"""
+            #define FEATURE
+            #if FEATURE
+            {{keyword}} (var resource = GetResource())
+            #endif
+                DoSomething(
+                    first,
+                    second);
+            """;
+
+        var format = () => FormatCSharpScriptOrThrow(input);
+
+        format.Should().Throw<NotSupportedException>()
+            .WithMessage("*conditional-compilation boundaries*");
     }
 
     [Theory]

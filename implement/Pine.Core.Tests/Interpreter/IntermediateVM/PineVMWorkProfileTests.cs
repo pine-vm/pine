@@ -442,9 +442,13 @@ public class PineVMWorkProfileTests
         var calls = profile[PineVMWorkProfile.Metric.EvalDirectCalls];
 
         using (profile.Enter())
-
-        using (PineVMWorkProfile.EnterEvaluation(null, default, null))
-            BaselineDirect(input.Expression, input.Environment)!.Value.evalWorkCounters.Should().Be(expectedUnprofiled);
+        {
+            using (PineVMWorkProfile.EnterEvaluation(null, default, null))
+            {
+                BaselineDirect(input.Expression, input.Environment)!.Value.evalWorkCounters.Should().Be(
+                    expectedUnprofiled);
+            }
+        }
 
         profile[PineVMWorkProfile.Metric.EvalDirectCalls].Should().Be(calls);
         PineVMWorkProfile.Current.Should().BeNull();

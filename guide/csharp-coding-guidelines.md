@@ -195,7 +195,8 @@ If a return statement spans multiple lines, the expression must start on a new l
 
 ### Braces for Multi-Line Statements
 
-For any statement in an `if` or `else` body that spans multiple lines, the statement must be wrapped in a block (braces `{ }`).
+For any statement in an `if`, `else`, `using`, or `await using` body that spans multiple lines, including line breaks introduced by formatting, the statement must be wrapped in a block (braces `{ }`).
+This includes nested `using` statements: an inner `using` statement with its body spans multiple lines and therefore requires braces in the outer body.
 If the header of an `if`, `using`, or `fixed` statement spans multiple lines, its body must be wrapped in a block, even when the body contains only a single-line statement.
 This also applies to `else if` and `await using` statements, and to headers made multiline by formatting.
 The header extends from the statement's keyword through its closing parenthesis, excluding preceding comments and the body.
@@ -243,7 +244,7 @@ Loop headers exclude preceding comments and the body. For a `do` loop, the trail
 
 In a `do` loop, the `while` keyword must start on the line immediately after the body statement or its closing brace, unless comments intervene. Preserve intervening comments and preprocessor directives.
 
-When braces are required, if an unbraced loop body contains internal conditional-compilation directives, or a conditional-compilation boundary separates its header from its body, the formatter rejects automatic brace insertion rather than risk changing statement boundaries or variable scope in another configuration. Add explicit braces in each configuration before formatting such code.
+When braces are required, if an unbraced loop or `using` body contains internal conditional-compilation directives, or a conditional-compilation boundary separates its header from its body, the formatter rejects automatic brace insertion rather than risk changing statement boundaries or variable scope in another configuration. Add explicit braces in each configuration before formatting such code.
 
 ### Comments Before Content on a Line
 
