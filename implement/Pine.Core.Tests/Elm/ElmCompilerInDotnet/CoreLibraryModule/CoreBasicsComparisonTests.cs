@@ -153,7 +153,7 @@ public class CoreBasicsComparisonTests
         foreach (var names in new[]
         {
             new[] { "A", "B", "Broken", "Main" },
-            new[] { "Main", "Broken", "B", "A" },
+            ["Main", "Broken", "B", "A"],
         })
         {
             CoreLibraryTestHelper.ApplyUnary(function, Strings(names), vm).Should().Be(

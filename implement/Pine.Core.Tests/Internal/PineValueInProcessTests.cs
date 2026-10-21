@@ -377,7 +377,7 @@ public class PineValueInProcessTests
         current.GetElementAt(0).Should().BeSameAs(selected);
         environmentItems.ObservationCount.Should().Be(1);
 
-        PineValue concrete = value.Evaluate();
+        var concrete = value.Evaluate();
 
         for (var depth = 0; depth < 18; ++depth)
         {
@@ -471,7 +471,7 @@ public class PineValueInProcessTests
                 (PineValueInProcess.CreateFromTemplateRecipe(
                     TemplateValueRecipe.BuildList([shared]),
                     environments),
-                unused.ToArray(),
+                [.. unused],
                 new(required));
         }
 
@@ -518,7 +518,7 @@ public class PineValueInProcessTests
             unused.Add(new(sibling));
         }
 
-        return (parent.GetElementAt(0), unused.ToArray(), new(required));
+        return (parent.GetElementAt(0), [.. unused], new(required));
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]

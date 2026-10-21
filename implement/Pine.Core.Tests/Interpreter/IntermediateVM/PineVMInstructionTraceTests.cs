@@ -383,7 +383,7 @@ public class PineVMInstructionTraceTests
 
         var result =
             evalResult
-            .Extract(err => throw new System.Exception(EvaluationError.RenderDisplayString(err)));
+            .Extract(err => throw new Exception(EvaluationError.RenderDisplayString(err)));
 
         result.ReturnValue.Evaluate().Should().Be(nestedEnvironment);
 

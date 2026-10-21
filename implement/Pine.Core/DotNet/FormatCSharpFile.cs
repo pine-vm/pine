@@ -1994,8 +1994,7 @@ public static class FormatCSharpFile
         var whileLeading =
             hasInterveningTrivia
             ?
-            new SyntaxTriviaList(Enumerable.Repeat(s_lineFeed, bodyTrailingBreaks))
-            .AddRange(node.WhileKeyword.LeadingTrivia)
+            [.. Enumerable.Repeat(s_lineFeed, bodyTrailingBreaks), .. node.WhileKeyword.LeadingTrivia]
             :
             new SyntaxTriviaList(s_lineFeed);
 

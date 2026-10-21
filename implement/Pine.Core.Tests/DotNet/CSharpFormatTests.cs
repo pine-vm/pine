@@ -4303,7 +4303,7 @@ public class CSharpFormatTests
             var source = (defineFeature ? "#define FEATURE\n" : "") + input;
             var formatted = FormatCSharpScriptOrThrow(source);
 
-            foreach (var symbols in new[] { Array.Empty<string>(), new[] { "FEATURE" } })
+            foreach (var symbols in new[] { Array.Empty<string>(), ["FEATURE"] })
             {
                 var tree =
                     CSharpSyntaxTree.ParseText(
@@ -4575,7 +4575,7 @@ public class CSharpFormatTests
 
             foreach (var symbols in new[]
             {
-                Array.Empty<string>(), new[] { "FEATURE" }, new[] { "INNER" }, new[] { "FEATURE", "INNER" }
+                [], new[] { "FEATURE" }, ["INNER"], ["FEATURE", "INNER"]
             })
             {
                 var parsed =
@@ -4654,7 +4654,7 @@ public class CSharpFormatTests
             var source = (defineFeature ? "#define FEATURE\n" : "") + input;
             var formatted = FormatCSharpScriptOrThrow(source);
 
-            foreach (var symbols in new[] { Array.Empty<string>(), new[] { "FEATURE" } })
+            foreach (var symbols in new[] { [], new[] { "FEATURE" } })
             {
                 var tree =
                     CSharpSyntaxTree.ParseText(

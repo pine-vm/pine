@@ -241,7 +241,7 @@ public class ExpressionTemplatePlanTests
     [InlineData(true)]
     public void An_invariant_constructor_can_be_the_terminal_computation(bool identity)
     {
-        Expression terminal =
+        var terminal =
             identity
             ?
             Expression.EnvironmentInstance

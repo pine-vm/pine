@@ -112,7 +112,7 @@ public class ElmSyntaxParser
                 ranges.RemoveRange(mergedRangeCount, ranges.Count - mergedRangeCount);
         }
 
-        IReadOnlyList<Range> maskedRanges = maskedRangeBuilder ?? (IReadOnlyList<Range>)Array.Empty<Range>();
+        var maskedRanges = maskedRangeBuilder ?? (IReadOnlyList<Range>)[];
 
         var treeSource = elmModuleText;
 

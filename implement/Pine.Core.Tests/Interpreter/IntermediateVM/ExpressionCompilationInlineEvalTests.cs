@@ -56,7 +56,7 @@ public class ExpressionCompilationInlineEvalTests
             :
             ExpressionCompilation.InlineStaticInvocationsAndReduceRecursive(
                 call,
-                ImmutableStack<Expression>.Empty,
+                [],
                 maxDepth: 4,
                 maxSubexpressionCount: 4_000,
                 parseCache,
@@ -105,7 +105,7 @@ public class ExpressionCompilationInlineEvalTests
             :
             ExpressionCompilation.InlineStaticInvocationsAndReduceRecursive(
                 call,
-                ImmutableStack<Expression>.Empty,
+                [],
                 maxDepth: 4,
                 maxSubexpressionCount: 4_000,
                 parseCache,

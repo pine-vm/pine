@@ -359,7 +359,7 @@ internal sealed record RunSource(FileTree Tree, string[] FilePath, string? Decla
                 FileTree.FromSetOfFilesWithStringPath(
                     files.Select(
                         file =>
-                        ((IReadOnlyList<string>)file.Key.Skip(root.Length).ToArray(), file.Value))),
+                        ((IReadOnlyList<string>)[.. file.Key.Skip(root.Length)], file.Value))),
                 path[root.Length..],
                 declaration,
                 line,

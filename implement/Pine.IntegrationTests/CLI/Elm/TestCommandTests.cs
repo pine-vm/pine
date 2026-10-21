@@ -47,7 +47,7 @@ public class TestCommandTests
         foreach (var arguments in new[]
         {
             new[] { "--work-profile-constructor-budget", "2" },
-            new[] { "--work-profile-no-constructor-sharing" }
+            ["--work-profile-no-constructor-sharing"]
         })
         {
             using var error = new StringWriter();
@@ -1343,7 +1343,7 @@ public class TestCommandTests
         var command = TestCommand.Create();
         var output = new StringWriter();
         var errors = new StringWriter();
-        var arguments = profile ? new[] { "profile", "--help" } : new[] { "--help" };
+        var arguments = profile ? new[] { "profile", "--help" } : ["--help"];
         command.Parse(arguments).Invoke(new InvocationConfiguration { Output = output, Error = errors }).Should().Be(0);
         output.ToString().Should().Contain("[default: 100_000]").And.NotContain("[default: 100000]");
         errors.ToString().Should().BeEmpty();
@@ -1840,7 +1840,7 @@ public class TestCommandTests
             ?
             new[] { "profile", ".", "--filter", "one", "--budget", "20", "--loop-budget", "30", "--timeout", "2", "--max-stack-depth", "200" }
             :
-            new[] { ".", "--budget", "20", "--loop-budget", "30", "--timeout", "2", "--max-stack-depth", "200" };
+            [".", "--budget", "20", "--loop-budget", "30", "--timeout", "2", "--max-stack-depth", "200"];
 
         var parsed = command.Parse(arguments);
         parsed.Errors.Should().BeEmpty();

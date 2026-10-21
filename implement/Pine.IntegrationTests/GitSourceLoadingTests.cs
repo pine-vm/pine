@@ -52,7 +52,7 @@ public sealed class GitSourceLoadingTests : IDisposable
 
         var cached =
             FileTreeExtensions.ToFlatDictionaryWithPathComparer(
-                new[] { ((IReadOnlyList<string>)new[] { "src", "A.elm" }, (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes("cached")) });
+                new[] { ((IReadOnlyList<string>)["src", "A.elm"], (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes("cached")) });
 
         var result = Load(fixture, "tree", "src", cached);
         result.IsErrOrNull().Should().BeNull();
@@ -99,7 +99,7 @@ public sealed class GitSourceLoadingTests : IDisposable
 
         var cached =
             FileTreeExtensions.ToFlatDictionaryWithPathComparer(
-                new[] { ((IReadOnlyList<string>)new[] { "selected.txt" }, (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes("corrupt")) });
+                new[] { ((IReadOnlyList<string>)["selected.txt"], (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes("corrupt")) });
 
         Load(fixture, "blob", "selected.txt", cached).IsErrOrNull().Should().Contain("integrity check failed");
         fixture.Requests.Should().BeEmpty();

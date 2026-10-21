@@ -58,7 +58,7 @@ internal sealed class GitRepositoryFixture
                 hashes =>
                 {
                     BeforeFetch?.Invoke();
-                    Requests.Add(hashes.ToArray());
+                    Requests.Add([.. hashes]);
 
                     foreach (var hash in hashes)
                     {

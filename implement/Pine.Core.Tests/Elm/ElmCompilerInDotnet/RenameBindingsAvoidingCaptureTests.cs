@@ -26,7 +26,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 /// </summary>
 public class RenameBindingsAvoidingCaptureTests
 {
-    private static SyntaxTypes.File ParseModuleText(string moduleText)
+    private static File ParseModuleText(string moduleText)
     {
         var concreteSyntax =
             ElmSyntaxParser.ParseModuleText(moduleText)
@@ -51,7 +51,7 @@ public class RenameBindingsAvoidingCaptureTests
             .Select(
                 declaration =>
                 {
-                    if (declaration is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+                    if (declaration is not Declaration.FunctionDeclaration funcDecl)
                         return declaration;
 
                     var impl = funcDecl.Function.Declaration;
@@ -68,7 +68,7 @@ public class RenameBindingsAvoidingCaptureTests
                             Declaration = renamedImpl
                         };
 
-                    return new SyntaxTypes.Declaration.FunctionDeclaration(newFunc);
+                    return new Declaration.FunctionDeclaration(newFunc);
                 })
             .ToImmutableArray();
 
@@ -564,8 +564,8 @@ public class RenameBindingsAvoidingCaptureTests
     {
         var input = ParseModuleText("module Test exposing (..)\n\nfoo = (\\x -> x) x");
         var expected = ParseModuleText("module Test exposing (..)\n\nfoo = (\\x_0 -> x_0) x");
-        var inputFunction = (SyntaxTypes.Declaration.FunctionDeclaration)input.Declarations[0];
-        var expectedFunction = (SyntaxTypes.Declaration.FunctionDeclaration)expected.Declarations[0];
+        var inputFunction = (Declaration.FunctionDeclaration)input.Declarations[0];
+        var expectedFunction = (Declaration.FunctionDeclaration)expected.Declarations[0];
 
         var renamed =
             ElmSyntaxAbstractTransformations.RenameBindingsAvoidingCapture(
@@ -581,13 +581,13 @@ public class RenameBindingsAvoidingCaptureTests
     {
         var originalBody = SyntaxTypes.Expression.Identifier.Create([], "original");
         var rewrittenBody = SyntaxTypes.Expression.Identifier.Create([], "rewritten");
-        var implementation = new SyntaxTypes.FunctionImplementation("value", [], originalBody);
+        var implementation = new FunctionImplementation("value", [], originalBody);
 
         var expression =
             new SyntaxTypes.Expression.LetExpression(
                 [
-                new SyntaxTypes.LetDeclaration.LetFunction(
-                    new SyntaxTypes.FunctionStruct(null, implementation))
+                new LetDeclaration.LetFunction(
+                    new FunctionStruct(null, implementation))
                 ],
                 SyntaxTypes.Expression.Identifier.Create([], "value"));
 
@@ -596,8 +596,8 @@ public class RenameBindingsAvoidingCaptureTests
                 expression,
                 child => ReferenceEquals(child, originalBody) ? rewrittenBody : child);
 
-        var rewrittenFunction = (SyntaxTypes.LetDeclaration.LetFunction)rewritten.Declarations[0];
-        var expected = new SyntaxTypes.FunctionImplementation("value", [], rewrittenBody);
+        var rewrittenFunction = (LetDeclaration.LetFunction)rewritten.Declarations[0];
+        var expected = new FunctionImplementation("value", [], rewrittenBody);
 
         rewrittenFunction.Function.Declaration.Should().Be(expected);
         rewrittenFunction.Function.Declaration.GetHashCode().Should().Be(expected.GetHashCode());

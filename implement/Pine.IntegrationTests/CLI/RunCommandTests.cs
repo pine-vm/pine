@@ -784,8 +784,8 @@ public sealed class RunCommandTests : IDisposable
             FileTree.FromSetOfFilesWithStringPath(
                 new[]
                 {
-                    ((IReadOnlyList<string>)new[] { "src", "Batch.elm" }, (ReadOnlyMemory<byte>)File.ReadAllBytes(Module)),
-                    ((IReadOnlyList<string>)new[] { "input.txt" }, (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes("hello"))
+                    ((IReadOnlyList<string>)["src", "Batch.elm"], (ReadOnlyMemory<byte>)File.ReadAllBytes(Module)),
+                    ((IReadOnlyList<string>)["input.txt"], (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes("hello"))
                 });
 
         var fixture = new GitRepositoryFixture(tree);
@@ -907,7 +907,7 @@ public sealed class RunCommandTests : IDisposable
         var fixture =
             new GitRepositoryFixture(
                 FileTree.FromSetOfFilesWithStringPath(
-                    new[] { ((IReadOnlyList<string>)new[] { "Batch.elm" }, (ReadOnlyMemory<byte>)File.ReadAllBytes(Module)) }));
+                    new[] { ((IReadOnlyList<string>)["Batch.elm"], (ReadOnlyMemory<byte>)File.ReadAllBytes(Module)) }));
 
         var loader =
             new RunSource.Loader(

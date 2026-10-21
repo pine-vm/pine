@@ -142,7 +142,7 @@ internal sealed class GitRemoteRepository
             ?
             FileTree.FromSetOfFilesWithStringPath(
                 files.Select(
-                    file => ((IReadOnlyList<string>)file.Key.Skip(path.Count).ToArray(), file.Value)))
+                    file => ((IReadOnlyList<string>)[.. file.Key.Skip(path.Count)], file.Value)))
             :
             FileTree.File(files.Single().Value);
     }

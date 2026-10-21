@@ -129,7 +129,7 @@ internal static class RunValues
                 return Constructor(identifier, []);
 
             case AST.Expression.Application { Function: AST.Expression.Identifier identifier } application:
-                return Constructor(identifier, application.Arguments.Select(Literal).ToArray());
+                return Constructor(identifier, [.. application.Arguments.Select(Literal)]);
 
             case AST.Expression.Negation:
             case AST.Expression.Application:

@@ -146,7 +146,7 @@ public class InvocationCacheExecutionContextTests
         var context = new InvocationCacheExecutionContext<IInvocationCacheAccess>(shared, buffer => buffer);
 
         var run =
-            async () => await context.RunAsync<int>(
+            async () => await context.RunAsync(
                 async buffer =>
                 {
                     buffer.TryAdd(key, PineValue.EmptyList);

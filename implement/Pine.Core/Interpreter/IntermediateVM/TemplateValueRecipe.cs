@@ -80,7 +80,7 @@ internal abstract record TemplateValueRecipe
     /// </summary>
     public TemplateValueRecipe Project(IReadOnlyList<int> path)
     {
-        TemplateValueRecipe current = this;
+        var current = this;
 
         for (var offset = 0; offset < path.Count; ++offset)
         {
