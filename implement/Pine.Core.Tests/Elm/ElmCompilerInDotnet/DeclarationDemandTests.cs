@@ -311,6 +311,7 @@ public class DeclarationDemandTests
     [InlineData("type alias Payload = { value : String }", "Payload", "{ value = 0 }")]
     [InlineData("", "List String", "[ 1 ]")]
     [InlineData("type String = CustomString", "String", "\"hello\"")]
+    [InlineData("type String = String Int", "String", "\"hello\"")]
     public void Declaration_demand_analysis_preserves_real_type_mismatches(
         string typeDeclaration,
         string type,
@@ -327,6 +328,95 @@ public class DeclarationDemandTests
 
         ElmCompiler.AnalyzeApplication(sources).Should().ContainSingle()
             .Which.Code.Should().Be("elm-type");
+    }
+
+    [Theory]
+    [InlineData("String", "\"hello\"")]
+    [InlineData("Int", "42")]
+    public void Declaration_demand_analysis_consumes_arguments_returned_by_point_free_functions(
+        string type,
+        string value)
+    {
+        var sources =
+            Sources(
+                $$"""
+                module Main exposing (..)
+
+                identity : a -> a
+                identity input = input
+
+                pointFree : {{type}} -> {{type}}
+                pointFree = identity
+
+                partiallyApplied : Int -> {{type}} -> {{type}}
+                partiallyApplied ignored = identity
+
+                applied : {{type}}
+                applied = pointFree {{value}}
+
+                fullyApplied : {{type}}
+                fullyApplied = partiallyApplied 0 {{value}}
+                """);
+
+        ElmCompiler.AnalyzeApplication(sources).Should().BeEmpty();
+
+        foreach (var name in new[] { "applied", "fullyApplied" })
+        {
+            ElmCompiler.QueryDeclaration(sources, Name("Main", name))
+                .Extract(error => throw new Exception(error))
+                .Diagnostics.Should().BeEmpty();
+        }
+    }
+
+    [Fact]
+    public void Declaration_demand_analysis_checks_bundled_compiler_sources_without_false_type_errors()
+    {
+        var diagnostics =
+            ElmCompiler.AnalyzeApplication(
+                Core.Elm.ElmInElm.BundledFiles.CompilerSourceContainerFilesDefault.Value);
+
+        var typeErrors = diagnostics.Where(diagnostic => diagnostic.Code is "elm-type").ToArray();
+
+        typeErrors.Should().BeEmpty(
+            "bundled compiler sources are valid: {0}",
+            string.Join("\n", typeErrors.Select(error => error.Declaration + ": " + error.Message)));
+    }
+
+    [Theory]
+    [InlineData("ParserFast")]
+    [InlineData("Elm.Parser.Tokens")]
+    public void Declaration_demand_analysis_preserves_custom_strings_in_compiler_module_names(string moduleName)
+    {
+        var sources =
+            Sources(
+                $$"""
+                module {{moduleName}} exposing (..)
+                type String = CustomString
+                wrong : String
+                wrong = "hello"
+                """);
+
+        ElmCompiler.AnalyzeApplication(sources).Should().ContainSingle()
+            .Which.Code.Should().Be("elm-type");
+    }
+
+    [Fact]
+    public void Declaration_demand_analysis_preserves_mismatches_after_applying_point_free_functions()
+    {
+        var sources =
+            Sources(
+                """
+                module Main exposing (..)
+                identity : a -> a
+                identity input = input
+                pointFree : String -> String
+                pointFree = identity
+                wrong : Int
+                wrong = pointFree "hello"
+                """);
+
+        ElmCompiler.AnalyzeApplication(sources).Should().ContainSingle()
+            .Which.Declaration.Should().Be(Name("Main", "wrong"));
     }
 
     [Fact]

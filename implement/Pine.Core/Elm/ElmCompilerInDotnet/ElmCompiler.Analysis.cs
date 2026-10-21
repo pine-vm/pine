@@ -353,7 +353,7 @@ public partial class ElmCompiler
                 })
             .ToImmutableDictionary();
 
-        // Bundled modules redeclare the runtime String tag to inspect its representation.
+        // Bundled kernel and compiler modules redeclare the runtime String tag to inspect its representation.
         // These declarations are intrinsic strings, unlike user-defined types with the same name.
         if (bundledModuleNames is not null)
         {
@@ -362,7 +362,14 @@ public partial class ElmCompiler
                     declarations.Where(
                         entry => entry.Key.DeclName is "String" &&
                             bundledModuleNames.Contains(string.Join(".", entry.Key.Namespaces)) &&
-                            entry.Value is Abstract.Declaration.ChoiceTypeDeclaration)
+                            entry.Value is Abstract.Declaration.ChoiceTypeDeclaration
+                            {
+                                TypeDeclaration.Generics.Count: 0,
+                                TypeDeclaration.Constructors: [var constructor, ..]
+                            } &&
+                            constructor.Name is "String" &&
+                            constructor.Arguments is [var payload] &&
+                            TypeInference.TypeAnnotationToInferredType(payload) is TypeInference.InferredType.IntType)
                     .Select(
                         entry => KeyValuePair.Create(
                             entry.Key,
@@ -435,18 +442,37 @@ public partial class ElmCompiler
         return diagnostics;
     }
 
+    private static readonly Lazy<HashSet<string>> s_bundledCompilerRuntimeStringModules =
+        new(
+            () => ElmInElm.BundledFiles.CompilerSourceContainerFilesDefault.Value.EnumerateFilesTransitive()
+            .Where(source => source.path[^1].EndsWith(".elm", StringComparison.Ordinal))
+            .Select(
+                source => ElmSyntaxParser.ParseModuleText(Encoding.UTF8.GetString(source.fileContent.Span)).IsOkOrNull())
+            .Where(
+                file => file is not null &&
+                    file.Declarations.Any(
+                        declaration => declaration.Value is Syntax.Declaration.ChoiceTypeDeclaration
+                        {
+                            TypeDeclaration.Name.Value: "String"
+                        }))
+            .Select(file => string.Join(".", Syntax.Module.GetModuleName(file!.ModuleDefinition.Value).Value))
+            .ToHashSet(StringComparer.Ordinal));
+
     private static HashSet<string> BundledModuleNames() =>
         ElmInElm.BundledFiles.ElmKernelModulesDefault.Value.EnumerateFilesTransitive()
         .Where(source => source.path[^1].EndsWith(".elm", StringComparison.Ordinal))
         .Select(
             source => string.Join(".", source.path.Take(source.path.Count - 1).Append(source.path[^1][..^4])))
+        .Concat(s_bundledCompilerRuntimeStringModules.Value)
         .ToHashSet(StringComparer.Ordinal);
 
     private static HashSet<string> BundledModuleNames(ElmResolvedBuild build) =>
         build.CompilerModuleOrigins
         .Where(
-            entry => entry.Value is ElmModuleOrigin.Substitution substitution &&
-                substitution.ImplementationId == "pine-bundled:" + substitution.ReplacedPackage.Name)
+            entry =>
+            entry.Value is ElmModuleOrigin.Substitution substitution &&
+            substitution.ImplementationId == "pine-bundled:" + substitution.ReplacedPackage.Name ||
+            s_bundledCompilerRuntimeStringModules.Value.Contains(entry.Value.ModuleName))
         .Select(entry => entry.Key).ToHashSet(StringComparer.Ordinal);
 
     private static bool HasNamingErrors(DeclQualifiedName root, DeclarationCanonicalizationResult canonicalized) =>

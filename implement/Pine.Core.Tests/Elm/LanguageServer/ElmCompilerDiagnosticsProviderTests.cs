@@ -78,8 +78,14 @@ public class ElmCompilerDiagnosticsProviderTests
         public string? TryGetDocumentText(string documentUri) => Texts.GetValueOrDefault(documentUri);
     }
 
-    [Fact]
-    public async Task Declaration_demand_compiler_diagnostics_accept_substituted_json_string_encoder()
+    [Theory]
+    [InlineData("List String -> Value", "JE.list JE.string")]
+    [InlineData("String -> Value", "JE.string")]
+    [InlineData("Value", "JE.string \"hello\"")]
+    [InlineData("Value", "JE.object [ ( \"name\", JE.string \"hello\" ) ]")]
+    public async Task Declaration_demand_compiler_diagnostics_accept_substituted_json_encoders(
+        string type,
+        string expression)
     {
         var (workspace, _) =
             VirtualWorkspace.Create(
@@ -89,12 +95,12 @@ public class ElmCompilerDiagnosticsProviderTests
                         "\"elm/core\": \"1.0.5\"",
                         "\"elm/core\": \"1.0.5\", \"elm/json\": \"1.1.3\"")),
                     (["src", "Main.elm"],
-                    """
+                    $$"""
                     module Main exposing (..)
                     import Json.Encode as JE exposing (Value)
 
-                    encode : List String -> Value
-                    encode = JE.list JE.string
+                    encode : {{type}}
+                    encode = {{expression}}
                     """)
                 ]);
 
@@ -121,6 +127,55 @@ public class ElmCompilerDiagnosticsProviderTests
         diagnostics.Should().ContainSingle().Which.Diagnostics.Should().BeEmpty();
 
         ElmCompiler.QueryDeclaration(preparedBuild!, DeclQualifiedName.Create(["Main"], "encode"))
+            .Extract(error => throw new System.Exception(error))
+            .Diagnostics.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("ParserFast")]
+    [InlineData("Elm.Parser.Tokens")]
+    public async Task Declaration_demand_compiler_diagnostics_normalize_bootstrap_runtime_strings(string moduleName)
+    {
+        var (workspace, _) =
+            VirtualWorkspace.Create(
+                [
+                    (["elm.json"], Manifest),
+                    (["src", "Main.elm"],
+                    $$"""
+                    module {{moduleName}} exposing (..)
+                    type String = String Int
+
+                    identity : String -> String
+                    identity input = input
+
+                    value : String
+                    value = identity "hello"
+                    """)
+                ]);
+
+        ElmResolvedBuild? preparedBuild = null;
+
+        var provider =
+            new ElmCompilerDiagnosticsProvider(
+                workspace,
+                new DocumentTexts(),
+                async (sources, manifestPath, token) => preparedBuild =
+                    await ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(
+                        sources,
+                        manifestPath,
+                        [],
+                        ElmPackageSubstitutions.DefaultBuild.Value,
+                        cancellationToken: token));
+
+        var diagnostics =
+            (await provider.GetDiagnosticsAsync(
+                VirtualWorkspace.DocumentUri("src", "Main.elm"),
+                CancellationToken.None))
+            .Extract(error => throw new System.Exception(error.Message));
+
+        diagnostics.Should().ContainSingle().Which.Diagnostics.Should().BeEmpty();
+
+        ElmCompiler.QueryDeclaration(preparedBuild!, DeclQualifiedName.Create(moduleName.Split('.'), "value"))
             .Extract(error => throw new System.Exception(error))
             .Diagnostics.Should().BeEmpty();
     }

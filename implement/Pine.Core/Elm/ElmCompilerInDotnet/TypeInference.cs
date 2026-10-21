@@ -1756,14 +1756,16 @@ public static partial class TypeInference
                     // Build a substitution map from type variables to concrete types
                     var substitution = new Dictionary<string, InferredType>();
 
-                    var appliedArgCount =
-                        Math.Min(
-                            application.Arguments.Count,
-                            functionTypeInfo.ParameterTypes.Count);
+                    var resultType =
+                        BuildFunctionTypeFromList(
+                            [.. functionTypeInfo.ParameterTypes, functionTypeInfo.ReturnType]);
 
-                    for (var i = 0; i < appliedArgCount; i++)
+                    foreach (var argExpr in application.Arguments)
                     {
-                        var argExpr = application.Arguments[i];
+                        if (resultType is not InferredType.FunctionType functionType)
+                        {
+                            return s_unknownType;
+                        }
 
                         var actualArgType =
                             InferExpressionType(
@@ -1777,22 +1779,12 @@ public static partial class TypeInference
                         if (actualArgType is not InferredType.UnknownType)
                         {
                             CollectTypeVariableSubstitutions(
-                                functionTypeInfo.ParameterTypes[i],
+                                functionType.ArgumentType,
                                 actualArgType,
                                 substitution);
                         }
-                    }
 
-                    var resultType = functionTypeInfo.ReturnType;
-
-                    for (var i = functionTypeInfo.ParameterTypes.Count - 1;
-                        i >= appliedArgCount;
-                        i--)
-                    {
-                        resultType =
-                            new InferredType.FunctionType(
-                                functionTypeInfo.ParameterTypes[i],
-                                resultType);
+                        resultType = functionType.ReturnType;
                     }
 
                     return ApplyTypeSubstitutions(resultType, substitution);
