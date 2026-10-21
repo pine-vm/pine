@@ -107,6 +107,24 @@ another attempt. Press Ctrl+C to stop.
 
 With `--report-durations`, each completed run prints its own timings. They describe the latest run, not time spent waiting for edits or accumulated time since watch mode started.
 
+Watch mode retains compilation caches, a generational invocation-result cache, and a learned caching
+policy across reruns. Successful evaluations from preparation and test execution feed bounded
+background learning within the same process. Learning uses isolated PineVM instances and separate
+caches; it does not consume the test run's execution budget.
+
+The invocation cache retains up to three generations, rotating after completed evaluations when the
+newest generation reaches 5,000 entries. Hits promote older entries. Admission and lookup use an
+expression policy learned from an initially empty set; policy changes keep existing entries, and
+each evaluation finishes with its captured policy. These limits govern invocation results, not
+source-parsing or compilation metadata.
+
+Learning retains eight recent evaluations and up to sixteen pending samples, tries up to four
+policy changes per round, and runs no more often than every thirty seconds with a two-minute
+cooperative deadline. Policy-switch diagnostics include content identifiers, additions/removals,
+estimated costs, and churn counters. Stopping watch mode cancels its learning; training errors do
+not stop tests or replace the last successful policy. One-shot runs and diagnostic profiles do not
+enable watch-session learning.
+
 Watch mode requires a local project directory; remote tree URLs are not watchable. It is an ordinary `elm test` option, not a profiling mode.
 `--dependency-report` cannot be combined with `--watch`, because writing reports could itself trigger repeated reruns. Other ordinary test options apply to each run; execution budgets and timeouts start fresh for each run. Use `--seed` to keep the fuzz seed fixed across reruns; without it each run chooses a fresh seed.
 

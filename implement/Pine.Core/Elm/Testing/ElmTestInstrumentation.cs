@@ -459,10 +459,13 @@ public sealed class ElmTestInstrumentation : IDisposable
     }
 
     /// <summary>Creates a VM sharing this run's limits and optional recording; profiling VMs must execute serially.</summary>
-    public IPineVM CreateVm(IInvocationCacheAccess invocationCache, PineVMSharedCaches caches)
+    public IPineVM CreateVm(
+        IInvocationCacheAccess invocationCache,
+        PineVMSharedCaches caches,
+        InvocationCacheConfiguration? invocationCacheConfiguration = null)
     {
         ThrowIfStopped();
-        var vm = new EvaluationContext(this, invocationCache, caches);
+        var vm = new EvaluationContext(this, invocationCache, caches, invocationCacheConfiguration);
         ThrowIfStopped();
         return vm;
     }
@@ -851,7 +854,11 @@ public sealed class ElmTestInstrumentation : IDisposable
 
         private string _phase = "initialization";
 
-        public EvaluationContext(ElmTestInstrumentation owner, IInvocationCacheAccess cache, PineVMSharedCaches caches)
+        public EvaluationContext(
+            ElmTestInstrumentation owner,
+            IInvocationCacheAccess cache,
+            PineVMSharedCaches caches,
+            InvocationCacheConfiguration? invocationCacheConfiguration)
         {
             _owner = owner;
 
@@ -873,6 +880,7 @@ public sealed class ElmTestInstrumentation : IDisposable
                     optimizationParametersSerial: null,
                     cacheFileStore: null,
                     invocationCache: owner.Options.DisableInvocationCache ? null : cache,
+                    invocationCacheConfiguration: invocationCacheConfiguration,
                     tryGetExpressionCompilation: caches.ExpressionCompilations.TryGet,
                     getOrAddExpressionCompilation: caches.ExpressionCompilations.GetOrAdd,
                     expressionEncodingCache: caches.EncodedExpressions,

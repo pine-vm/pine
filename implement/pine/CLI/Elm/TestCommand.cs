@@ -23,6 +23,35 @@ public static class TestCommand
     private static readonly IntermediatePineVM.EvaluationConfig s_testEvaluationConfigDefault =
         ElmTestRunner.DefaultEvaluationConfig;
 
+    internal static ElmTestRunCacheSession CreateWatchCacheSession(
+        Action<string>? logDelegate = null,
+        InvocationCacheGenerationOptions? generationOptions = null,
+        ContinuousInvocationCacheLearningOptions? learningOptions = null,
+        TimeSpan? learningTimeout = null)
+    {
+        var learning =
+            IntermediateVM.InvocationCacheLearning.Create(
+                evaluationConfig: s_testEvaluationConfigDefault,
+                precompiledLeaves: IntermediateVM.SetupVM.DefaultPrecompiledLeaves,
+                logDelegate: logDelegate,
+                options: learningOptions,
+                learningTimeout: learningTimeout);
+
+        try
+        {
+            return
+                new(
+                    IntermediateVM.SetupVM.DefaultPrecompiledLeaves,
+                    generationOptions: generationOptions ?? InvocationCacheGenerationOptions.Default,
+                    cacheLearning: learning);
+        }
+        catch
+        {
+            learning.Dispose();
+            throw;
+        }
+    }
+
     public static Command Create()
     {
         var command =
@@ -525,7 +554,8 @@ public static class TestCommand
         CancellationToken cancellationToken = default,
         ElmTestRunCacheSession? cacheSession = null,
         Action<ElmTestRunCacheSession>? onCacheSession = null,
-        Func<string, ITestWatcher>? createWatcher = null)
+        Func<string, ITestWatcher>? createWatcher = null,
+        Func<ElmTestRunCacheSession>? createWatchCacheSession = null)
     {
         CommandLineColorMode resolvedColorMode;
 
@@ -610,7 +640,16 @@ public static class TestCommand
                 return 1;
             }
 
-            cacheSession ??= new ElmTestRunCacheSession(IntermediateVM.SetupVM.DefaultPrecompiledLeaves);
+            using var ownedCacheSession =
+                cacheSession is null
+                ?
+                createWatchCacheSession?.Invoke() ??
+                CreateWatchCacheSession(
+                    TextWriter.Synchronized(errorConsole.Profile.Out.Writer).WriteLine)
+                :
+                null;
+
+            cacheSession ??= ownedCacheSession!;
 
             using var watchCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 

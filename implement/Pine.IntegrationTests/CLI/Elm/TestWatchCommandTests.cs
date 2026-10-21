@@ -3,6 +3,7 @@ using Pine.CLI.Elm;
 using Pine.Core;
 using Pine.Core.CLI;
 using Pine.Core.Elm.Testing;
+using Pine.Core.Interpreter.IntermediateVM;
 using Spectre.Console;
 using System;
 using System.Collections.Generic;
@@ -20,6 +21,189 @@ namespace Pine.IntegrationTests.CLI.Elm;
 public class TestWatchCommandTests
 {
     private static readonly TimeSpan s_wait = TimeSpan.FromSeconds(60);
+
+    [Fact]
+    public async Task Watch_factory_uses_generational_storage_and_starts_learning_with_empty_policy()
+    {
+        var configured = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        await using var session =
+            TestCommand.CreateWatchCacheSession(
+                message =>
+                {
+                    if (message.StartsWith("Invocation-cache learning configured:", StringComparison.Ordinal))
+                        configured.TrySetResult(message);
+                });
+
+        session.GenerationalInvocations.Should().NotBeNull();
+        session.InvocationCache.Should().BeSameAs(session.GenerationalInvocations);
+        session.GenerationalInvocations!.Options.MaximumGenerationCount.Should().Be(3);
+        session.GenerationalInvocations.Options.RotationEntryCount.Should().Be(5_000);
+        session.InvocationResults.Count.Should().Be(0);
+        session.CacheLearning.Should().NotBeNull();
+        session.CacheLearning!.CurrentPolicy.Should().BeSameAs(InvocationCachePolicy.Empty);
+        var snapshot = session.CacheLearning.GetSnapshot();
+        snapshot.AcceptedCount.Should().Be(0);
+        snapshot.RunCount.Should().Be(0);
+        snapshot.SwitchCount.Should().Be(0);
+        snapshot.IsDisposed.Should().BeFalse();
+
+        (await configured.Task.WaitAsync(s_wait)).Should()
+            .Contain("interval-ms=30000").And.Contain("sample-capacity=8").And.Contain("pending-capacity=16");
+    }
+
+    [Fact]
+    public void One_shot_runs_keep_unbounded_cache_without_creating_watch_learning()
+    {
+        using var directory = new TestDirectory();
+        Directory.CreateDirectory(Path.Combine(directory.Path, "tests"));
+        File.WriteAllText(Path.Combine(directory.Path, "elm.json"), ElmJson);
+        File.WriteAllText(Path.Combine(directory.Path, "tests", "Tests.elm"), FuzzTests);
+        var output = new StringWriter();
+        var console = CreateConsole(output);
+        ElmTestRunCacheSession? captured = null;
+
+        TestCommand.ExecuteCore(
+            directory.Path,
+            watch: false,
+            console: console,
+            errorConsole: console,
+            offline: true,
+            filter: "selected",
+            seed: 42,
+            fuzz: 3,
+            workers: 1,
+            onCacheSession: session => captured = session,
+            createWatchCacheSession:
+            () => throw new InvalidOperationException("One-shot must not create watch learning"))
+            .Should().Be(0);
+
+        output.ToString().Should().Contain("TEST RUN PASSED");
+        captured.Should().NotBeNull();
+        using var session = captured!;
+        session.InvocationCache.Should().BeSameAs(session.InvocationResults);
+        session.InvocationResults.Count.Should().BeGreaterThan(0);
+        session.GenerationalInvocations.Should().BeNull();
+        session.CacheLearning.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("cancel")]
+    [InlineData("overflow")]
+    [InlineData("start-failure")]
+    public async Task Watch_disposes_its_owned_cache_session_on_cancellation_and_watcher_errors(string stop)
+    {
+        using var directory = new TestDirectory();
+        Directory.CreateDirectory(Path.Combine(directory.Path, "tests"));
+        File.WriteAllText(Path.Combine(directory.Path, "elm.json"), ElmJson);
+        File.WriteAllText(Path.Combine(directory.Path, "tests", "Tests.elm"), "not a valid Elm module");
+        using var session = CreateSmallWatchCacheSession();
+        using var cancellation = new CancellationTokenSource(s_wait);
+        var output = new NotifyingWriter();
+        var console = CreateConsole(output);
+
+        var watcher =
+            new FakeTestWatcher(
+                onStart: stop == "start-failure" ? () => throw new IOException("Simulated watcher start failure") : null);
+
+        var factoryCalls = 0;
+
+        var watching =
+            Task.Run(
+                () => TestCommand.ExecuteCore(
+                    directory.Path,
+                    watch: true,
+                    console: console,
+                    errorConsole: console,
+                    offline: true,
+                    cancellationToken: cancellation.Token,
+                    createWatcher: _ => watcher,
+                    createWatchCacheSession:
+                    () =>
+                    {
+                        Interlocked.Increment(ref factoryCalls);
+                        return session;
+                    }));
+
+        try
+        {
+            if (stop != "start-failure")
+            {
+                await output.NextContaining("Failed parsing Elm test module");
+                session.CacheLearning!.GetSnapshot().IsDisposed.Should().BeFalse();
+
+                if (stop == "cancel")
+                    cancellation.Cancel();
+
+                else
+                    watcher.RaiseError(new InternalBufferOverflowException("Simulated watcher buffer overflow"));
+            }
+
+            (await watching.WaitAsync(s_wait)).Should().Be(stop == "cancel" ? 130 : 1);
+            factoryCalls.Should().Be(1);
+            watcher.IsDisposed.Should().BeTrue();
+            session.CacheLearning!.GetSnapshot().IsDisposed.Should().BeTrue();
+            session.CacheLearning.GetSnapshot().IsLearning.Should().BeFalse();
+        }
+        finally
+        {
+            cancellation.Cancel();
+            await watching.WaitAsync(s_wait);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Watch_preserves_caller_owned_cache_session_after_shutdown(bool watcherError)
+    {
+        using var directory = new TestDirectory();
+        Directory.CreateDirectory(Path.Combine(directory.Path, "tests"));
+        File.WriteAllText(Path.Combine(directory.Path, "elm.json"), ElmJson);
+        File.WriteAllText(Path.Combine(directory.Path, "tests", "Tests.elm"), "not a valid Elm module");
+        await using var session = CreateSmallWatchCacheSession();
+        using var cancellation = new CancellationTokenSource(s_wait);
+        var output = new NotifyingWriter();
+        var console = CreateConsole(output);
+        var watcher = new FakeTestWatcher();
+
+        var watching =
+            Task.Run(
+                () => TestCommand.ExecuteCore(
+                    directory.Path,
+                    watch: true,
+                    console: console,
+                    errorConsole: console,
+                    offline: true,
+                    cancellationToken: cancellation.Token,
+                    cacheSession: session,
+                    createWatcher: _ => watcher,
+                    createWatchCacheSession: () => throw new InvalidOperationException("Caller supplied the session")));
+
+        try
+        {
+            await output.NextContaining("Failed parsing Elm test module");
+
+            if (watcherError)
+                watcher.RaiseError(new IOException("Simulated watcher failure"));
+
+            else
+                cancellation.Cancel();
+
+            (await watching.WaitAsync(s_wait)).Should().Be(watcherError ? 1 : 130);
+            session.CacheLearning!.GetSnapshot().IsDisposed.Should().BeFalse();
+
+            session.CacheLearning.Record(
+                new(Expression.LitralInst(PineValue.EmptyList), PineValue.EmptyList)).Should().BeTrue();
+
+            watcher.IsDisposed.Should().BeTrue();
+        }
+        finally
+        {
+            cancellation.Cancel();
+            await watching.WaitAsync(s_wait);
+        }
+    }
 
     [Fact]
     public void Template_cache_factory_preserves_existing_explicit_null_cache_and_configuration_calls()
@@ -808,7 +992,9 @@ public class TestWatchCommandTests
         var watcher = new FakeTestWatcher();
 
         var sessions =
-            Channel.CreateUnbounded<(ElmTestRunCacheSession Session, int Encoded, int Reduced, int Parsed, int Compiled, int Templates, int Invocations, int Sources, int Canonical)>();
+            Channel.CreateUnbounded<(ElmTestRunCacheSession Session, int Encoded, int Reduced, int Parsed, int Compiled, int Templates, int Sources, int Canonical, ContinuousInvocationCacheLearningSnapshot Learning)>();
+
+        var factoryCalls = 0;
 
         var watching =
             Task.Run(
@@ -833,9 +1019,15 @@ public class TestWatchCommandTests
                         session.VmCaches.ParsedExpressions.Count,
                         session.VmCaches.ExpressionCompilations.Count,
                         session.VmCaches.ExpressionTemplatePlans.Count,
-                        session.InvocationResults.Count,
                         session.SourceParsing.Count,
-                        session.DeclarationCanonicalization.Count))));
+                        session.DeclarationCanonicalization.Count,
+                        session.CacheLearning!.GetSnapshot())),
+                    createWatchCacheSession:
+                    () =>
+                    {
+                        Interlocked.Increment(ref factoryCalls);
+                        return TestCommand.CreateWatchCacheSession();
+                    }));
 
         try
         {
@@ -848,7 +1040,13 @@ public class TestWatchCommandTests
             first.Templates.Should().BeGreaterThan(0);
             first.Sources.Should().BeGreaterThan(0);
             first.Canonical.Should().BeGreaterThan(0);
-            first.Invocations.Should().BeGreaterThan(0);
+            first.Session.GenerationalInvocations.Should().NotBeNull();
+            first.Session.InvocationCache.Should().BeSameAs(first.Session.GenerationalInvocations);
+            first.Session.InvocationResults.Count.Should().Be(0);
+            first.Learning.AcceptedCount.Should().BeGreaterThan(0);
+            first.Learning.PendingCount.Should().BeLessThanOrEqualTo(16);
+            first.Learning.SampleCount.Should().BeLessThanOrEqualTo(8);
+            first.Learning.IsDisposed.Should().BeFalse();
             File.WriteAllText(Path.Combine(directory.Path, "unrelated.txt"), "trigger without changing tests");
             watcher.RaiseChange();
             var second = await sessions.Reader.ReadAsync().AsTask().WaitAsync(s_wait);
@@ -861,7 +1059,92 @@ public class TestWatchCommandTests
             second.Templates.Should().Be(first.Templates);
             second.Sources.Should().Be(first.Sources);
             second.Canonical.Should().Be(first.Canonical);
-            second.Invocations.Should().BeGreaterThanOrEqualTo(first.Invocations);
+            second.Session.InvocationResults.Count.Should().Be(0);
+            second.Learning.AcceptedCount.Should().BeGreaterThanOrEqualTo(first.Learning.AcceptedCount);
+
+            (second.Learning.AcceptedCount + second.Learning.DroppedCount).Should()
+                .BeGreaterThan(first.Learning.AcceptedCount + first.Learning.DroppedCount);
+
+            second.Learning.RunCount.Should().BeGreaterThanOrEqualTo(first.Learning.RunCount);
+            second.Learning.IsDisposed.Should().BeFalse();
+            factoryCalls.Should().Be(1);
+        }
+        finally
+        {
+            cancellation.Cancel();
+            (await watching.WaitAsync(s_wait)).Should().Be(130);
+        }
+    }
+
+    [Fact]
+    public async Task Command_watch_learns_from_real_Elm_evaluations_and_reuses_learned_invocations()
+    {
+        using var directory = new TestDirectory();
+        Directory.CreateDirectory(Path.Combine(directory.Path, "tests"));
+        File.WriteAllText(Path.Combine(directory.Path, "elm.json"), ElmJson);
+        File.WriteAllText(Path.Combine(directory.Path, "tests", "Tests.elm"), LearningTests);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        var output = new NotifyingWriter();
+        var console = CreateConsole(output);
+        var watcher = new FakeTestWatcher();
+        var switched = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        await using var session =
+            TestCommand.CreateWatchCacheSession(
+                message =>
+                {
+                    if (message.StartsWith("Invocation-cache policy switch:", StringComparison.Ordinal))
+                        switched.TrySetResult(message);
+                },
+                generationOptions: new(maximumGenerationCount: 2, rotationEntryCount: 64),
+                learningOptions:
+                new(
+                    MinimumInterval: TimeSpan.FromMilliseconds(100),
+                    SampleCapacity: 2,
+                    PendingCapacity: 16),
+                learningTimeout: TimeSpan.FromSeconds(30));
+
+        var completed = Channel.CreateUnbounded<ElmTestRunCacheSession>();
+
+        var watching =
+            Task.Run(
+                () => TestCommand.ExecuteCore(
+                    directory.Path,
+                    watch: true,
+                    colorMode: CommandLineColorMode.Never,
+                    console: console,
+                    errorConsole: console,
+                    offline: true,
+                    seed: 42,
+                    fuzz: 3,
+                    workers: 1,
+                    cancellationToken: cancellation.Token,
+                    onCacheSession: current => completed.Writer.TryWrite(current),
+                    createWatcher: _ => watcher,
+                    createWatchCacheSession: () => session));
+
+        try
+        {
+            (await completed.Reader.ReadAsync().AsTask().WaitAsync(s_wait)).Should().BeSameAs(session);
+            (await output.NextRun()).Should().Contain("TEST RUN PASSED").And.Contain("Passed:   1");
+            (await switched.Task.WaitAsync(s_wait)).Should().Contain("baseline-cost=").And.Contain("selected-cost=");
+            var state = session.CacheLearning!.State;
+            state.Policy.Expressions.Should().NotBeEmpty();
+            state.LastRun.Should().NotBeNull();
+            state.LastRun!.SelectedCost.Should().BeLessThanOrEqualTo(state.LastRun.BaselineCost);
+            session.CacheLearning.GetSnapshot().SwitchCount.Should().BeGreaterThan(0);
+            var hitsBeforeReruns = session.GetCacheStatisticsSnapshot().Totals.HitCount;
+
+            for (var run = 0; run < 2; ++run)
+            {
+                watcher.RaiseChange();
+                (await completed.Reader.ReadAsync().AsTask().WaitAsync(s_wait)).Should().BeSameAs(session);
+                (await output.NextRun()).Should().Contain("TEST RUN PASSED").And.Contain("Passed:   1");
+            }
+
+            session.GetCacheStatisticsSnapshot().Totals.HitCount.Should().BeGreaterThan(hitsBeforeReruns);
+            session.GenerationalInvocations!.GetStatistics().PhysicalEntryCount.Should().BeGreaterThan(0);
+            session.InvocationResults.Count.Should().Be(0);
         }
         finally
         {
@@ -957,6 +1240,12 @@ public class TestWatchCommandTests
         rendered.Should().Contain("  compilation:").And.Contain("  preparation:").And.Contain("  execution:");
         rendered.Split("VM calls (sum):").Should().HaveCount(3);
     }
+
+    private static ElmTestRunCacheSession CreateSmallWatchCacheSession() =>
+        TestCommand.CreateWatchCacheSession(
+            generationOptions: new(maximumGenerationCount: 2, rotationEntryCount: 1),
+            learningOptions: new(MinimumInterval: TimeSpan.FromMilliseconds(10), SampleCapacity: 2, PendingCapacity: 2),
+            learningTimeout: TimeSpan.FromSeconds(5));
 
     private static Task<int> Start(
         string directory, CancellationToken token, Func<CancellationToken, int> run, ITestWatcher? watcher = null) =>
@@ -1127,5 +1416,21 @@ public class TestWatchCommandTests
         import Test
         spin n = spin (n + 1)
         suite = Test.test "looping test" (\_ -> spin 0)
+        """;
+
+    private const string LearningTests =
+        """
+        module Tests exposing (suite)
+        import Expect
+        import Fuzz
+        import Test
+        total count accumulated =
+            if count <= 0 then
+                accumulated
+            else
+                total (count - 1) (accumulated + count)
+        suite =
+            Test.fuzz (Fuzz.constant 100) "repeated work"
+                (\value -> Expect.equal 5050 (total value 0))
         """;
 }

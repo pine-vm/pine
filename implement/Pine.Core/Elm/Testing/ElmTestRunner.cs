@@ -442,20 +442,35 @@ public static class ElmTestRunner
             testDeclarationNames.Add(DeclQualifiedName.Create(bridgeName.Split('.'), "prepare"));
 
         var preparationCaches = cacheSession?.VmCaches ?? new PineVMSharedCaches();
-        var preparationInvocationCache = cacheSession?.InvocationResults ?? new ConcurrentInvocationCache();
+        var preparationInvocationCache = cacheSession?.InvocationCache ?? new ConcurrentInvocationCache();
         var preparationVmTimings = new VmCallTimings();
         var executionVmTimings = new VmCallTimings();
 
-        var preparationVm =
+        IPineVM CreatePreparationVm(IInvocationCacheAccess invocations) =>
             preparationVmTimings.Wrap(
                 instrumentation is not null
                 ?
-                instrumentation.CreateVm(preparationInvocationCache, preparationCaches)
+                instrumentation.CreateVm(
+                    invocations,
+                    preparationCaches,
+                    invocationCacheConfiguration: cacheSession?.InvocationCacheConfiguration)
                 :
                 CreatePineVm(
-                    preparationInvocationCache,
+                    invocations,
                     preparationCaches,
-                    cacheSession?.PrecompiledLeaves ?? SetupVM.DefaultPrecompiledLeaves));
+                    cacheSession?.PrecompiledLeaves ?? SetupVM.DefaultPrecompiledLeaves,
+                    invocationCacheConfiguration: cacheSession?.InvocationCacheConfiguration));
+
+        var preparationContext =
+            cacheSession?.CreateExecutionContext(CreatePreparationVm)
+            ?? new InvocationCacheExecutionContext<IPineVM>(preparationInvocationCache, CreatePreparationVm);
+
+        // Diagnostic profiles retain their original VM/cache boundaries and evaluation accounting.
+        var diagnosticPreparationVm =
+            instrumentation is { RecordDiagnostics: true } ? CreatePreparationVm(preparationInvocationCache) : null;
+
+        TResult RunPreparation<TResult>(Func<IPineVM, TResult> evaluate) =>
+            diagnosticPreparationVm is { } vm ? evaluate(vm) : preparationContext.Run(evaluate);
 
         var (compiledEnvironment, _) =
             ElmCompiler.CompileResolvedEnvironment(
@@ -519,10 +534,12 @@ public static class ElmTestRunner
                 }
 
                 var declarationValue =
-                    ElmSourceCompilation.EvaluateZeroParameterRoot(
-                        declarationWrapper,
-                        preparationVm,
-                        preparationCaches.ParsedExpressions)
+                    RunPreparation(
+                        vm =>
+                        ElmSourceCompilation.EvaluateZeroParameterRoot(
+                            declarationWrapper,
+                            vm,
+                            preparationCaches.ParsedExpressions))
                     .Extract(
                         error => throw new InvalidOperationException("Failed constructing Elm test value: " + error));
 
@@ -530,13 +547,15 @@ public static class ElmTestRunner
                     continue;
 
                 var prepared =
-                    ElmInteractiveEnvironment.ApplyFunction(
-                        preparationVm,
-                        prepareFunction,
-                        [
-                        IntegerEncoding.EncodeSignedInteger(executionSettings.FuzzRuns),
-                        IntegerEncoding.EncodeSignedInteger(executionSettings.Seed), declarationValue
-                        ])
+                    RunPreparation(
+                        vm =>
+                        ElmInteractiveEnvironment.ApplyFunction(
+                            vm,
+                            prepareFunction,
+                            [
+                            IntegerEncoding.EncodeSignedInteger(executionSettings.FuzzRuns),
+                            IntegerEncoding.EncodeSignedInteger(executionSettings.Seed), declarationValue
+                            ]))
                     .Extract(error => throw new InvalidOperationException("Failed preparing Elm tests: " + error));
 
                 var (preparedTag, preparedArguments) = ParseTaggedValue(prepared);
@@ -737,7 +756,7 @@ public static class ElmTestRunner
         }
         else
         {
-            var sharedInvocationCache = cacheSession?.InvocationResults ?? new ConcurrentInvocationCache();
+            var sharedInvocationCache = cacheSession?.InvocationCache ?? new ConcurrentInvocationCache();
             var sharedPineVMCaches = cacheSession?.VmCaches ?? new PineVMSharedCaches();
             var completedTestsByIndex = new CompletedTest[discoveredTests.Count];
             var nextTestIndex = -1;
@@ -746,7 +765,23 @@ public static class ElmTestRunner
 
             pineVmFactory ??=
                 (invocations, caches) =>
-                CreatePineVm(invocations, caches, cacheSession?.PrecompiledLeaves ?? SetupVM.DefaultPrecompiledLeaves);
+                CreatePineVm(
+                    invocations,
+                    caches,
+                    cacheSession?.PrecompiledLeaves ?? SetupVM.DefaultPrecompiledLeaves,
+                    invocationCacheConfiguration: cacheSession?.InvocationCacheConfiguration);
+
+            IPineVM CreateTestVm(IInvocationCacheAccess invocations) =>
+                executionVmTimings.Wrap(
+                    instrumentation?.CreateVm(
+                        invocations,
+                        sharedPineVMCaches,
+                        invocationCacheConfiguration: cacheSession?.InvocationCacheConfiguration)
+                    ?? pineVmFactory(invocations, sharedPineVMCaches));
+
+            var executionContext =
+                cacheSession?.CreateExecutionContext(CreateTestVm)
+                ?? new InvocationCacheExecutionContext<IPineVM>(sharedInvocationCache, CreateTestVm);
 
             var workerTasks =
                 Enumerable.Range(0, workerCount)
@@ -755,35 +790,20 @@ public static class ElmTestRunner
                     Task.Run(
                         () =>
                         {
-                            var invocationCache =
-                                new BufferedInvocationCacheAccess(sharedInvocationCache);
-
-                            try
+                            while (Interlocked.Increment(ref nextTestIndex) is var testIndex &&
+                                testIndex < discoveredTests.Count)
                             {
-                                while (Interlocked.Increment(ref nextTestIndex) is var testIndex &&
-                                    testIndex < discoveredTests.Count)
-                                {
-                                    using var executionScope =
-                                        instrumentation?.EnterScope("execution", ToListedTest(discoveredTests[testIndex]).FullPath,
-                                            ExactFilter(discoveredTests[testIndex]));
+                                using var executionScope =
+                                    instrumentation?.EnterScope("execution", ToListedTest(discoveredTests[testIndex]).FullPath,
+                                        ExactFilter(discoveredTests[testIndex]));
 
-                                    var testPineVm =
-                                        executionVmTimings.Wrap(
-                                            instrumentation?.CreateVm(invocationCache, sharedPineVMCaches)
-                                            ?? pineVmFactory(invocationCache, sharedPineVMCaches));
-
-                                    completedTestsByIndex[testIndex] =
+                                completedTestsByIndex[testIndex] =
+                                    executionContext.Run(
+                                        testPineVm =>
                                         RunTest(
                                             discoveredTests[testIndex],
                                             testPineVm,
-                                            sharedPineVMCaches.ParsedExpressions);
-
-                                    invocationCache.MergeIntoShared();
-                                }
-                            }
-                            finally
-                            {
-                                invocationCache.MergeIntoShared();
+                                            sharedPineVMCaches.ParsedExpressions));
                             }
                         }))
                 .ToArray();
@@ -1332,7 +1352,8 @@ public static class ElmTestRunner
     private static IntermediatePineVM CreatePineVm(
         IInvocationCacheAccess invocationCache,
         PineVMSharedCaches sharedCaches,
-        IReadOnlyDictionary<PineValue, PrecompiledLeaf> precompiledLeaves) =>
+        IReadOnlyDictionary<PineValue, PrecompiledLeaf> precompiledLeaves,
+        InvocationCacheConfiguration? invocationCacheConfiguration = null) =>
         IntermediatePineVM.CreateCustom(
             expressionTemplatePlanCache: sharedCaches.ExpressionTemplatePlans,
             evalCache: null,
@@ -1350,6 +1371,7 @@ public static class ElmTestRunner
             optimizationParametersSerial: null,
             cacheFileStore: null,
             invocationCache: invocationCache,
+            invocationCacheConfiguration: invocationCacheConfiguration,
             tryGetExpressionCompilation: sharedCaches.ExpressionCompilations.TryGet,
             getOrAddExpressionCompilation: sharedCaches.ExpressionCompilations.GetOrAdd,
             expressionEncodingCache: sharedCaches.EncodedExpressions,
