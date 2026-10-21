@@ -3,12 +3,10 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using System;
 using System.Collections.Frozen;
-using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Reflection;
 using Xunit;
-
-using IR = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -61,31 +59,21 @@ public class ModuleCompilationContextTests
     }
 
     [Fact]
-    public void Declaration_name_keyed_metadata_is_available_via_existing_string_helpers()
+    public void Constructor_metadata_has_one_qualified_identity()
     {
         var constructorName = DeclQualifiedName.Create(["Test"], "TagAlfa");
         var recordConstructorName = DeclQualifiedName.Create(["Test"], "RecordAlias");
 
         var context =
             new ModuleCompilationContext(
-                AllFunctions:
-                new Dictionary<DeclQualifiedName, (string moduleName, string functionName, IR.Declaration.FunctionDeclaration declaration)>(),
-                CompiledFunctionsCache: [],
                 PineKernelModuleNames: FrozenSet.Create<string>([]),
                 ChoiceConstructorArities:
-                new Dictionary<DeclQualifiedName, int>
-                {
-                    [constructorName] = 2
-                },
+                ImmutableDictionary<DeclQualifiedName, int>.Empty.Add(constructorName, 2),
                 RecordTypeAliasConstructors:
-                new Dictionary<DeclQualifiedName, IReadOnlyList<string>>
-                {
-                    [recordConstructorName] = ["fieldA", "fieldB"]
-                });
+                ImmutableDictionary<DeclQualifiedName, Core.Elm.ElmCompilerInDotnet.CompilerModel.ValueList<string>>.Empty
+                .Add(recordConstructorName, ["fieldA", "fieldB"]));
 
         context.TryGetChoiceTypeConstructorArgumentCount(constructorName).Should().Be(2);
-        context.TryGetChoiceTypeConstructorArgumentCount("Test.TagAlfa").Should().Be(2);
         context.TryGetRecordConstructorFieldNames(recordConstructorName).Should().Equal("fieldA", "fieldB");
-        context.TryGetRecordConstructorFieldNames("Test.RecordAlias").Should().Equal("fieldA", "fieldB");
     }
 }

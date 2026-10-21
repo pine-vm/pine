@@ -1,3 +1,4 @@
+using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -12,7 +13,19 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// </summary>
 public abstract record StructuralType
 {
+    private protected long cachedHashCode;
+
     private StructuralType() { }
+
+    /// <summary>Copies a type without its memoized hash.</summary>
+    protected StructuralType(StructuralType original) { }
+
+    /// <inheritdoc/>
+    public virtual bool Equals(StructuralType? other) =>
+        other is not null && EqualityContract == other.EqualityContract;
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => EqualityContract.GetHashCode();
 
     /// <summary>Integer type.</summary>
     public sealed record IntType : StructuralType
@@ -20,10 +33,8 @@ public abstract record StructuralType
         /// <summary>Singleton instance.</summary>
         public static readonly IntType Instance = new();
 
-        private readonly int _hashCode = typeof(IntType).GetHashCode();
-
         /// <inheritdoc/>
-        public override int GetHashCode() => _hashCode;
+        public override int GetHashCode() => typeof(IntType).GetHashCode();
     }
 
     /// <summary>Float type.</summary>
@@ -32,10 +43,8 @@ public abstract record StructuralType
         /// <summary>Singleton instance.</summary>
         public static readonly FloatType Instance = new();
 
-        private readonly int _hashCode = typeof(FloatType).GetHashCode();
-
         /// <inheritdoc/>
-        public override int GetHashCode() => _hashCode;
+        public override int GetHashCode() => typeof(FloatType).GetHashCode();
     }
 
     /// <summary>String type.</summary>
@@ -44,10 +53,8 @@ public abstract record StructuralType
         /// <summary>Singleton instance.</summary>
         public static readonly StringType Instance = new();
 
-        private readonly int _hashCode = typeof(StringType).GetHashCode();
-
         /// <inheritdoc/>
-        public override int GetHashCode() => _hashCode;
+        public override int GetHashCode() => typeof(StringType).GetHashCode();
     }
 
     /// <summary>Char type.</summary>
@@ -56,10 +63,8 @@ public abstract record StructuralType
         /// <summary>Singleton instance.</summary>
         public static readonly CharType Instance = new();
 
-        private readonly int _hashCode = typeof(CharType).GetHashCode();
-
         /// <inheritdoc/>
-        public override int GetHashCode() => _hashCode;
+        public override int GetHashCode() => typeof(CharType).GetHashCode();
     }
 
     /// <summary>Boolean type.</summary>
@@ -68,10 +73,8 @@ public abstract record StructuralType
         /// <summary>Singleton instance.</summary>
         public static readonly BoolType Instance = new();
 
-        private readonly int _hashCode = typeof(BoolType).GetHashCode();
-
         /// <inheritdoc/>
-        public override int GetHashCode() => _hashCode;
+        public override int GetHashCode() => typeof(BoolType).GetHashCode();
     }
 
     /// <summary>
@@ -80,10 +83,9 @@ public abstract record StructuralType
     /// </summary>
     public sealed record TypeVariable(int Index) : StructuralType
     {
-        private readonly int _hashCode = HashCode.Combine(typeof(TypeVariable), Index);
-
         /// <inheritdoc/>
-        public override int GetHashCode() => _hashCode;
+        public override int GetHashCode() =>
+            StructuralHash.GetOrCompute(ref cachedHashCode, typeof(TypeVariable), Index);
     }
 
     /// <summary>
@@ -110,10 +112,9 @@ public abstract record StructuralType
         int Index,
         TypeConstraint Constraint) : StructuralType
     {
-        private readonly int _hashCode = HashCode.Combine(typeof(ConstrainedVariable), Index, Constraint);
-
         /// <inheritdoc/>
-        public override int GetHashCode() => _hashCode;
+        public override int GetHashCode() =>
+            StructuralHash.GetOrCompute(ref cachedHashCode, typeof(ConstrainedVariable), Index, Constraint);
     }
 
     /// <summary>
@@ -123,10 +124,9 @@ public abstract record StructuralType
         StructuralType ArgumentType,
         StructuralType ReturnType) : StructuralType
     {
-        private readonly int _hashCode = HashCode.Combine(typeof(FunctionType), ArgumentType, ReturnType);
-
         /// <inheritdoc/>
-        public override int GetHashCode() => _hashCode;
+        public override int GetHashCode() =>
+            StructuralHash.GetOrCompute(ref cachedHashCode, typeof(FunctionType), ArgumentType, ReturnType);
     }
 
     /// <summary>
@@ -134,10 +134,9 @@ public abstract record StructuralType
     /// </summary>
     public sealed record ListType(StructuralType ElementType) : StructuralType
     {
-        private readonly int _hashCode = HashCode.Combine(typeof(ListType), ElementType);
-
         /// <inheritdoc/>
-        public override int GetHashCode() => _hashCode;
+        public override int GetHashCode() =>
+            StructuralHash.GetOrCompute(ref cachedHashCode, typeof(ListType), ElementType);
     }
 
     /// <summary>
@@ -152,12 +151,9 @@ public abstract record StructuralType
         /// </summary>
         public ImmutableList<StructuralType> ElementTypes { get; }
 
-        private readonly int _hashCode;
-
         internal TupleType(ImmutableList<StructuralType> elementTypes)
         {
             ElementTypes = elementTypes;
-            _hashCode = ComputeHash(elementTypes);
         }
 
         /// <summary>
@@ -193,7 +189,13 @@ public abstract record StructuralType
         }
 
         /// <inheritdoc/>
-        public override int GetHashCode() => _hashCode;
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref cachedHashCode, out var hash))
+                return hash;
+
+            return SyntaxHashCache.Store(ref cachedHashCode, ComputeHash(ElementTypes));
+        }
 
         private static int ComputeHash(ImmutableList<StructuralType> elements)
         {
@@ -220,12 +222,9 @@ public abstract record StructuralType
         /// </summary>
         public ImmutableDictionary<string, StructuralType> Fields { get; }
 
-        private readonly int _hashCode;
-
         internal ClosedRecord(ImmutableDictionary<string, StructuralType> fields)
         {
             Fields = fields;
-            _hashCode = ComputeHash(fields);
         }
 
         /// <summary>
@@ -272,7 +271,13 @@ public abstract record StructuralType
         }
 
         /// <inheritdoc/>
-        public override int GetHashCode() => _hashCode;
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref cachedHashCode, out var hash))
+                return hash;
+
+            return SyntaxHashCache.Store(ref cachedHashCode, ComputeHash(Fields));
+        }
 
         private static int ComputeHash(ImmutableDictionary<string, StructuralType> fields)
         {
@@ -301,8 +306,6 @@ public abstract record StructuralType
         ImmutableDictionary<string, StructuralType> Fields,
         int RowVariableIndex) : StructuralType
     {
-        private readonly int _hashCode = ComputeHash(Fields, RowVariableIndex);
-
         /// <inheritdoc/>
         public bool Equals(OpenRecord? other)
         {
@@ -330,7 +333,13 @@ public abstract record StructuralType
         }
 
         /// <inheritdoc/>
-        public override int GetHashCode() => _hashCode;
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref cachedHashCode, out var hash))
+                return hash;
+
+            return SyntaxHashCache.Store(ref cachedHashCode, ComputeHash(Fields, RowVariableIndex));
+        }
 
         private static int ComputeHash(
             ImmutableDictionary<string, StructuralType> fields,
@@ -365,12 +374,9 @@ public abstract record StructuralType
         /// </summary>
         public ImmutableDictionary<string, ImmutableList<StructuralType>> Tags { get; }
 
-        private readonly int _hashCode;
-
         internal ChoiceType(ImmutableDictionary<string, ImmutableList<StructuralType>> tags)
         {
             Tags = tags;
-            _hashCode = ComputeHash(tags);
         }
 
         /// <summary>
@@ -431,7 +437,13 @@ public abstract record StructuralType
         }
 
         /// <inheritdoc/>
-        public override int GetHashCode() => _hashCode;
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref cachedHashCode, out var hash))
+                return hash;
+
+            return SyntaxHashCache.Store(ref cachedHashCode, ComputeHash(Tags));
+        }
 
         private static int ComputeHash(
             ImmutableDictionary<string, ImmutableList<StructuralType>> tags)
@@ -466,10 +478,8 @@ public abstract record StructuralType
         /// <summary>Singleton instance.</summary>
         public static readonly Self Instance = new();
 
-        private readonly int _hashCode = typeof(Self).GetHashCode();
-
         /// <inheritdoc/>
-        public override int GetHashCode() => _hashCode;
+        public override int GetHashCode() => typeof(Self).GetHashCode();
     }
 
     /// <summary>
@@ -486,8 +496,6 @@ public abstract record StructuralType
         StructuralType GenericType,
         ImmutableList<StructuralType> Arguments) : StructuralType
     {
-        private readonly int _hashCode = ComputeHash(GenericType, Arguments);
-
         /// <inheritdoc/>
         public bool Equals(TypeApplication? other)
         {
@@ -510,7 +518,13 @@ public abstract record StructuralType
         }
 
         /// <inheritdoc/>
-        public override int GetHashCode() => _hashCode;
+        public override int GetHashCode()
+        {
+            if (SyntaxHashCache.TryGet(ref cachedHashCode, out var hash))
+                return hash;
+
+            return SyntaxHashCache.Store(ref cachedHashCode, ComputeHash(GenericType, Arguments));
+        }
 
         private static int ComputeHash(
             StructuralType genericType,

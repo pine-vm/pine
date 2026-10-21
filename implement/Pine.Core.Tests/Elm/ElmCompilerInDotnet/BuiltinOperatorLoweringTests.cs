@@ -1635,16 +1635,17 @@ public class BuiltinOperatorLoweringTests
             BuiltinOperatorLowering.Apply(flatDecls)
             .Extract(err => throw new Exception("Failed builtin operator lowering: " + err));
 
-        var loweredModules =
-            ElmCompiler.ReconstructModulesFromFlatDict(
-                loweredDecls,
-                orderedCanonicalizedModulesAbstract);
-
         var moduleAbstract =
-            loweredModules
+            orderedCanonicalizedModulesAbstract
             .Single(
                 m =>
-                Core.Elm.ElmSyntax.ElmSyntaxAbstract.Module.GetModuleName(m.ModuleDefinition).SequenceEqual(["Test"]));
+                Core.Elm.ElmSyntax.ElmSyntaxAbstract.Module.GetModuleName(m.ModuleDefinition).SequenceEqual(["Test"]))
+            with
+            {
+                Declarations =
+                loweredDecls.Where(entry => entry.Key.Namespaces.SequenceEqual(["Test"]))
+                .OrderBy(entry => entry.Key).Select(entry => entry.Value).ToArray()
+            };
 
         return
             SyntaxTypes.FromFullSyntaxModel.Convert(

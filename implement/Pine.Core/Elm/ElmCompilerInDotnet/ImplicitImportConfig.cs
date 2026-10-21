@@ -22,10 +22,19 @@ public sealed class ImportedModule : IEquatable<ImportedModule>
     /// </summary>
     public string? Alias { get; }
 
+    private readonly int hashCode;
+
     private ImportedModule(ModuleName moduleName, string? alias)
     {
         ModuleName = moduleName;
         Alias = alias;
+        var hash = new HashCode();
+
+        foreach (var part in moduleName)
+            hash.Add(part);
+
+        hash.Add(alias);
+        hashCode = hash.ToHashCode();
     }
 
     /// <summary>
@@ -59,17 +68,7 @@ public sealed class ImportedModule : IEquatable<ImportedModule>
         Equals(obj as ImportedModule);
 
     /// <inheritdoc/>
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-
-        foreach (var part in ModuleName)
-            hash.Add(part);
-
-        hash.Add(Alias);
-
-        return hash.ToHashCode();
-    }
+    public override int GetHashCode() => hashCode;
 }
 
 /// <summary>

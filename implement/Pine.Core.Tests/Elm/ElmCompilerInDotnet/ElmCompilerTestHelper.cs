@@ -14,12 +14,9 @@ using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Text;
 
 using Stil4mElmSyntax7 = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 using ConcreteSyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
-using AbstractSyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
-using IR = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -29,7 +26,7 @@ public class ElmCompilerTestHelper
     /// Preserves value-oriented test fixtures by explicitly selecting source declarations
     /// and executing their zero-parameter exports after compilation.
     /// </summary>
-    public static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults<DefaultLoweredResults> pipelineStageResults)>
+    public static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults pipelineStageResults)>
         CompileInteractiveEnvironmentFromFiles(
         FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
@@ -154,10 +151,9 @@ public class ElmCompilerTestHelper
 
     /// <summary>
     /// Compiles Elm modules and returns the parsed environment together with intermediate pipeline stage results.
-    /// The <see cref="CompilationPipelineStageResults"/> contain the Elm syntax trees after each compiler stage
-    /// (canonicalization, specialization, inlining, etc.), enabling inspection and debugging of the pipeline.
+    /// The <see cref="CompilationPipelineStageResults"/> contain canonical source and the actual compiler-owned lowering result.
     /// </summary>
-    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, CompilationPipelineStageResults<DefaultLoweredResults> pipelineStageResults)
+    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, CompilationPipelineStageResults pipelineStageResults)
         CompileElmModules(
         IReadOnlyList<string> elmModulesTexts,
         bool disableInlining)
@@ -213,7 +209,7 @@ public class ElmCompilerTestHelper
             };
     }
 
-    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram<DeclQualifiedName> staticProgram, CompilationPipelineStageResults<DefaultLoweredResults> pipelineStageResults)
+    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram<DeclQualifiedName> staticProgram, CompilationPipelineStageResults pipelineStageResults)
         StaticProgramFromElmModules(
         IReadOnlyList<string> elmModulesTexts,
         bool disableInlining,
@@ -231,7 +227,7 @@ public class ElmCompilerTestHelper
                 parseCache);
     }
 
-    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram<DeclQualifiedName> staticProgram, CompilationPipelineStageResults<DefaultLoweredResults> pipelineStageResults)
+    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram<DeclQualifiedName> staticProgram, CompilationPipelineStageResults pipelineStageResults)
         StaticProgramFromTestCase(
         TestCase testCase,
         bool disableInlining,
@@ -273,106 +269,36 @@ public class ElmCompilerTestHelper
     /// </summary>
     /// <param name="elmModuleText">The Elm module source text.</param>
     /// <returns>Dictionary mapping qualified function names to their dependency layouts.</returns>
-    public static IReadOnlyDictionary<string, IReadOnlyList<string>> ComputeDependencyLayoutsFromModule(
+    public static IReadOnlyDictionary<Core.Elm.ElmCompilerInDotnet.CompilerModel.FunctionId,
+        IReadOnlyList<Core.Elm.ElmCompilerInDotnet.CompilerModel.FunctionId>> ComputeDependencyLayoutsFromModule(
         string elmModuleText)
     {
-        var testCase = TestCase.DefaultAppWithoutPackages([elmModuleText]);
-        var appCodeTree = testCase.AsFileTree();
+        var tree = TestCase.DefaultAppWithoutPackages([elmModuleText]).AsFileTree();
 
-        // Parse the modules
-        var elmModuleFiles =
-            appCodeTree.EnumerateFilesTransitive()
-            .Where(file => file.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
-            .ToImmutableArray();
+        var paths =
+            tree.EnumerateFilesTransitive().Where(file => file.path[^1].EndsWith(".elm"))
+            .Select(file => file.path).ToArray();
 
-        var parsedModulesBeforeCanonicalize =
-            new List<ConcreteSyntaxTypes.File>();
+        var pipeline =
+            ElmCompiler.LowerToCompilerModel(tree, ElmSourceCompilation.EnumerateRootDeclarations(tree, paths))
+            .Extract(error => throw new InvalidOperationException(error));
 
-        foreach (var moduleFile in elmModuleFiles)
-        {
-            var moduleText = Encoding.UTF8.GetString(moduleFile.fileContent.Span);
-            var parseResult = ElmSyntaxParser.ParseModuleText(moduleText);
+        var layouts =
+            new Dictionary<Core.Elm.ElmCompilerInDotnet.CompilerModel.FunctionId,
+            IReadOnlyList<Core.Elm.ElmCompilerInDotnet.CompilerModel.FunctionId>>();
 
-            if (parseResult.IsErrOrNullable() is { } err)
+        Core.Elm.ElmCompilerInDotnet.CompilerModel.Compilation.Compile(
+            pipeline.CompilerProgram,
+            compileScc:
+            input =>
             {
-                throw new Exception(err.ToString());
-            }
+                var layout = input.IsRecursive ? input.Members.Select(entry => entry.Key).ToArray() : [];
 
-            if (parseResult.IsOkOrNull() is not { } parseModuleOk)
-            {
-                throw new Exception("Unexpected parse result type");
-            }
+                foreach (var (id, _) in input.Members)
+                    layouts.Add(id, layout);
 
-            parsedModulesBeforeCanonicalize.Add(parseModuleOk);
-        }
-
-        var canonicalizationResult =
-            Canonicalization.CanonicalizeOrThrow(parsedModulesBeforeCanonicalize);
-
-        if (canonicalizationResult.IsErrOrNull() is { } canonErr)
-        {
-            throw new Exception(canonErr);
-        }
-
-        if (canonicalizationResult.IsOkOrNull() is not { } canonicalizedModulesDict)
-        {
-            throw new Exception("Unexpected canonicalization result type");
-        }
-
-        var canonicalizedModules =
-            canonicalizedModulesDict
-            .Select(kvp => kvp.Value.IsOkOrNull())
-            .Where(m => m is not null)
-            .Select(m => m!)
-            .ToList();
-
-        var lambdaLiftedModules =
-            canonicalizedModules
-            .Select(
-                module =>
-                LambdaLifting.LiftLambdas(
-                    AbstractSyntaxTypes.ConvertFromConcrete.FromFile(module)))
-            .ToList();
-
-        // Collect all functions
-        var allFunctions =
-            new Dictionary<DeclQualifiedName, (string moduleName, string functionName, AbstractSyntaxTypes.Declaration.FunctionDeclaration declaration)>();
-
-        foreach (var elmModuleSyntax in lambdaLiftedModules)
-        {
-            var moduleName =
-                AbstractSyntaxTypes.Module.GetModuleName(elmModuleSyntax.ModuleDefinition);
-
-            var moduleNameFlattened = string.Join(".", moduleName);
-
-            var declarations =
-                elmModuleSyntax.Declarations
-                .OfType<AbstractSyntaxTypes.Declaration.FunctionDeclaration>();
-
-            foreach (var declaration in declarations)
-            {
-                var functionName = declaration.Function.Declaration.Name;
-                var qualifiedName = DeclQualifiedName.Create(moduleName, functionName);
-                allFunctions[qualifiedName] = (moduleNameFlattened, functionName, declaration);
-            }
-        }
-
-        // Create initial context
-        var initialContext =
-            new ModuleCompilationContext(
-                AllFunctions:
-                allFunctions.ToDictionary(
-                    kvp => kvp.Key,
-                    kvp =>
-                    (kvp.Value.moduleName,
-                    kvp.Value.functionName,
-                    (IR.Declaration.FunctionDeclaration)IR.ConvertFromAbstractSyntax.FromDeclaration(kvp.Value.declaration))),
-                CompiledFunctionsCache: [],
-                PineKernelModuleNames: s_pineBuiltinModuleNamesDefault);
-
-        // Compute and return dependency layouts
-        var (layouts, _, _) =
-            ElmCompiler.ComputeDependencyLayoutsAndSccs(allFunctions, initialContext);
+                return Core.Elm.ElmCompilerInDotnet.CompilerModel.Compilation.CompileScc(input);
+            }).Extract(error => throw new InvalidOperationException(error.ToString()));
 
         return layouts;
     }

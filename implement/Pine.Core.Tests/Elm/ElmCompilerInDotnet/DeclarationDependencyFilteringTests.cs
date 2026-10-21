@@ -2,10 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Tests.Elm.ElmCompilerTests;
-using System.Collections.Immutable;
 using Xunit;
-
-using ElmSyntaxAbstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -38,16 +35,13 @@ public class DeclarationDependencyFilteringTests
             .AsFileTree();
 
         var result =
-            ElmCompiler.LowerToElmSyntaxForCompilation<
-                ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>>(
+            ElmCompiler.LowerToCompilerModel(
                 appCodeTree,
-                rootDeclarations: [DeclQualifiedName.Create(["Main"], "main")],
-                lower: (declarations, _) => declarations,
-                extractFilteredDeclarations: declarations => declarations)
+                rootDeclarations: [DeclQualifiedName.Create(["Main"], "main")])
             .Extract(error => throw new System.Exception(error));
 
-        result.Lowered.Keys.Should().Contain(DeclQualifiedName.Create(["Main"], "main"));
-        result.Lowered.Keys.Should().Contain(DeclQualifiedName.Create(["Supporting"], "used"));
-        result.Lowered.Keys.Should().NotContain(DeclQualifiedName.Create(["Supporting"], "unused"));
+        result.CanonicalDeclarations.Keys.Should().Contain(DeclQualifiedName.Create(["Main"], "main"));
+        result.CanonicalDeclarations.Keys.Should().Contain(DeclQualifiedName.Create(["Supporting"], "used"));
+        result.CanonicalDeclarations.Keys.Should().NotContain(DeclQualifiedName.Create(["Supporting"], "unused"));
     }
 }

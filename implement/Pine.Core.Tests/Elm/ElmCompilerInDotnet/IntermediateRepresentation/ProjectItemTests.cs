@@ -12,26 +12,37 @@ using Xunit;
 
 using Abstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 using IR = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
+using Model = Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 
 public class ProjectItemTests
 {
+    private static readonly Model.FunctionId Owner =
+        new Model.FunctionId.Source(DeclQualifiedName.Create(["Test"], "value"));
+
+    private static Model.BindingId Id(int slot) => new Model.BindingId.Local(Owner, slot);
+
+    private static IR.Expression Local(int slot) => new IR.Expression.Identifier(new Model.Reference.Local(Id(slot)));
+
+    private static IR.Expression String(string value) =>
+        new IR.Expression.LiteralValue(ElmValueEncoding.StringAsPineValue(value));
+
     private static IR.Expression Integer(int value) =>
-        new IR.Expression.IntegerLiteral(value, IntegerEncoding.EncodeSignedInteger(value));
+        new IR.Expression.LiteralValue(IntegerEncoding.EncodeSignedInteger(value));
 
     [Fact]
     public void ProjectItem_has_structural_equality_and_hashing()
     {
-        var first = new IR.Expression.ProjectItem(new IR.Expression.TupledExpression([Integer(1), Integer(2)]), 1);
-        var equal = new IR.Expression.ProjectItem(new IR.Expression.TupledExpression([Integer(1), Integer(2)]), 1);
+        var first = new IR.Expression.ProjectItem(new IR.Expression.ListExpr([Integer(1), Integer(2)]), 1);
+        var equal = new IR.Expression.ProjectItem(new IR.Expression.ListExpr([Integer(1), Integer(2)]), 1);
 
         first.Should().Be(equal);
         first.GetHashCode().Should().Be(equal.GetHashCode());
         first.Should().NotBe(new IR.Expression.ProjectItem(first.Value, 0));
 
         first.Should().NotBe(
-            new IR.Expression.ProjectItem(new IR.Expression.TupledExpression([Integer(1), Integer(3)]), 1));
+            new IR.Expression.ProjectItem(new IR.Expression.ListExpr([Integer(1), Integer(3)]), 1));
     }
 
     [Fact]
@@ -49,10 +60,10 @@ public class ProjectItemTests
     {
         IR.Expression projection =
             new IR.Expression.ProjectItem(
-                new IR.Expression.TupledExpression([Integer(1), IR.Expression.StringLiteral.Create("second")]),
+                new IR.Expression.ListExpr([Integer(1), String("second")]),
                 1);
 
-        var options = Abstract.ElmSyntaxAbstractJson.JsonSerializerOptions;
+        var options = Model.CompilerModelJson.CreateOptions();
         var json = JsonSerializer.Serialize(projection, options);
 
         json.Should().Contain("\"ProjectItem\"");
@@ -67,7 +78,7 @@ public class ProjectItemTests
     {
         var projection =
             new IR.Expression.ProjectItem(
-                new IR.Expression.TupledExpression([Integer(11), Integer(22), Integer(33)]),
+                new IR.Expression.ListExpr([Integer(11), Integer(22), Integer(33)]),
                 index);
 
         Evaluate(projection).Should().Be(IntegerEncoding.EncodeSignedInteger(expected));
@@ -78,7 +89,7 @@ public class ProjectItemTests
     {
         var record =
             IR.Expression.RecordExpr.CreateSorted(
-                [("name", IR.Expression.StringLiteral.Create("Ada")), ("age", Integer(42))]);
+                [("name", String("Ada")), ("age", Integer(42))]);
 
         Evaluate(new IR.Expression.ProjectItem(record, 4)).Should().Be(ElmValueEncoding.StringAsPineValue("Ada"));
     }
@@ -87,10 +98,10 @@ public class ProjectItemTests
     public void ProjectItem_supports_nested_physical_projections()
     {
         var tuple =
-            new IR.Expression.TupledExpression(
+            new IR.Expression.ListExpr(
                 [
                 Integer(1),
-                new IR.Expression.TupledExpression([IR.Expression.StringLiteral.Create("second"), Integer(3)])
+                new IR.Expression.ListExpr([String("second"), Integer(3)])
                 ]);
 
         var projection = new IR.Expression.ProjectItem(new IR.Expression.ProjectItem(tuple, 1), 0);
@@ -104,22 +115,10 @@ public class ProjectItemTests
         var expression =
             new IR.Expression.LetExpression(
                 [
-                new IR.LetDeclaration.LetFunction(
-                    new IR.FunctionStruct(
-                        null,
-                        new IR.FunctionImplementation(
-                            "selected",
-                            [],
-                            new IR.Expression.ProjectItem(IR.Expression.Identifier.Create([], "tuple"), 1)))),
-                new IR.LetDeclaration.LetFunction(
-                    new IR.FunctionStruct(
-                        null,
-                        new IR.FunctionImplementation(
-                            "tuple",
-                            [],
-                            new IR.Expression.TupledExpression([Integer(1), Integer(2)]))))
+                    new(new Model.Pattern.VarPattern(Id(0)), new IR.Expression.ProjectItem(Local(1), 1)),
+                    new(new Model.Pattern.VarPattern(Id(1)), new IR.Expression.ListExpr([Integer(1), Integer(2)]))
                 ],
-                IR.Expression.Identifier.Create([], "selected"));
+                Local(0));
 
         Evaluate(expression).Should().Be(IntegerEncoding.EncodeSignedInteger(2));
     }
@@ -129,7 +128,7 @@ public class ProjectItemTests
     {
         var result =
             ExpressionCompiler.Compile(
-                new IR.Expression.ProjectItem(IR.Expression.Identifier.Create([], "missing"), 0),
+                new IR.Expression.ProjectItem(Local(99), 0),
                 CompilationContext());
 
         result.IsErrOrNull().Should().BeOfType<CompilationError.UnresolvedReference>();
@@ -141,35 +140,42 @@ public class ProjectItemTests
         var callerName = DeclQualifiedName.Create(["Test"], "caller");
         var calleeName = DeclQualifiedName.Create(["Test"], "callee");
 
+        var caller = new Model.FunctionId.Source(callerName);
+        var callee = new Model.FunctionId.Source(calleeName);
+
         var functions =
-            new Dictionary<DeclQualifiedName, (string moduleName, string functionName, IR.Declaration.FunctionDeclaration declaration)>
+            System.Collections.Immutable.ImmutableDictionary<Model.FunctionId, Model.Function>.Empty
+            .Add(
+                caller,
+                new(
+                    [],
+                    new Model.Expression.Project(
+                        new Model.Expression.ReferenceExpression(new Model.Reference.Function(callee)),
+                        0)))
+            .Add(
+                callee,
+                new(
+                    [],
+                    new Model.Expression.List([new Model.Expression.Literal(IntegerEncoding.EncodeSignedInteger(1))])));
+
+        var program =
+            new Model.Program(
+                functions,
+                []);
+
+        var requests = new List<Model.SccCompilationInput>();
+
+        Model.Compilation.Compile(
+            program,
+            compileScc:
+            request =>
             {
-                [callerName] =
-                ("Test",
-                "caller",
-                new IR.Declaration.FunctionDeclaration(
-                    new IR.FunctionStruct(
-                        null,
-                        new IR.FunctionImplementation(
-                            "caller",
-                            [],
-                            new IR.Expression.ProjectItem(IR.Expression.Identifier.Create(["Test"], "callee"), 0))))),
-                [calleeName] =
-                ("Test",
-                "callee",
-                new IR.Declaration.FunctionDeclaration(
-                    new IR.FunctionStruct(
-                        null,
-                        new IR.FunctionImplementation(
-                            "callee",
-                            [],
-                            new IR.Expression.TupledExpression([Integer(1), Integer(2)])))))
-            };
+                requests.Add(request);
+                return Model.Compilation.CompileScc(request);
+            }).Extract(error => throw new InvalidOperationException(error.ToString()));
 
-        var context = CompilationContext().ModuleCompilationContext with { AllFunctions = functions };
-        var (_, functionToScc, _) = ElmCompiler.ComputeDependencyLayoutsAndSccs(functions, context);
-
-        functionToScc["Test.caller"].AdditionalDependencies.Should().Contain("Test.callee");
+        requests.Single(request => request.Members.Any(member => member.Key == caller))
+            .ExternalFunctions.Should().ContainKey(callee);
     }
 
     [Fact]
@@ -195,12 +201,15 @@ public class ProjectItemTests
 
         environment.Modules.Should().Contain(module => module.moduleName == "Test");
 
-        var options = Abstract.ElmSyntaxAbstractJson.JsonSerializerOptions;
-        var declarations = pipeline.DeclarationsForEmission;
+        var options = Model.CompilerModelJson.CreateOptions();
+        var declarations = pipeline.FunctionsForEmission;
 
-        declarations.Should().HaveCount(pipeline.ModulesForCompilation.Sum(module => module.Declarations.Count));
+        declarations.Should().HaveCount(pipeline.CompilerProgram.Functions.Count);
 
-        var select = declarations[DeclQualifiedName.Create(["Test"], "select")];
+        var select =
+            declarations[new Model.FunctionId.Source(
+            DeclQualifiedName.Create(["Test"], "select"))];
+
         var json = JsonSerializer.Serialize(select, options);
         json.Should().NotContain("\"RecordAccess\"");
         json.Should().Contain("\"TuplePattern\"");
@@ -232,18 +241,20 @@ public class ProjectItemTests
                     []))
             .ToArray();
 
-        var pipeline = new CompilationPipelineStageResults<int>([], 0, modules);
-        var declarations = pipeline.DeclarationsForEmission;
+        var canonical = ElmCompiler.FlattenModulesToDeclarationDictionary(modules);
+        var program = Core.Elm.ElmCompilerInDotnet.CompilerModel.FromCanonicalSyntax.Convert(canonical);
+        var pipeline = new CompilationPipelineStageResults([], canonical, program);
+        var declarations = pipeline.FunctionsForEmission;
 
         declarations.Keys.Should().BeEquivalentTo(
             [
-            DeclQualifiedName.Create(["First"], "value"),
-            DeclQualifiedName.Create(["Second"], "value")
+            new Model.FunctionId.Source(DeclQualifiedName.Create(["First"], "value")),
+            new Model.FunctionId.Source(DeclQualifiedName.Create(["Second"], "value"))
             ]);
 
-        declarations.Values.Should().AllBeOfType<IR.Declaration.FunctionDeclaration>();
-        pipeline.ModulesForCompilation.Should().BeSameAs(modules);
-        typeof(IR.Declaration).Assembly.GetType(typeof(IR.Declaration).Namespace + ".File").Should().BeNull();
+        declarations.Values.Should().AllBeOfType<IR.FunctionStruct>();
+        pipeline.CompilerProgram.Should().BeSameAs(program);
+        typeof(IR.Expression).Assembly.GetType(typeof(IR.Expression).Namespace + ".File").Should().BeNull();
     }
 
     private static PineValue Evaluate(IR.Expression expression)
@@ -260,17 +271,17 @@ public class ProjectItemTests
 
     private static ExpressionCompilationContext CompilationContext() =>
         new(
-            ParameterNames: new Dictionary<string, int>(),
-            CurrentModuleName: "Test",
-            CurrentFunctionName: "value",
-            LocalBindings: null,
-            DependencyLayout: [],
-            ModuleCompilationContext:
+            new Dictionary<Model.BindingId, int>(),
+            new Dictionary<Model.BindingId, Expression>(),
+            new Model.SccCompilationContext(
+                [],
+                [],
+                []),
             new ModuleCompilationContext(
-                AllFunctions:
-                new Dictionary<DeclQualifiedName, (string moduleName, string functionName, IR.Declaration.FunctionDeclaration declaration)>(),
-                CompiledFunctionsCache: [],
-                PineKernelModuleNames: FrozenSet.Create(["Pine_builtin", "Pine_kernel"])),
-            ParseCache: new PineVMParseCache(),
-            ReducedExpressionCache: null);
+                FrozenSet.Create(["Pine_builtin", "Pine_kernel"]),
+                [],
+                []),
+            "Test",
+            new PineVMParseCache(),
+            null);
 }

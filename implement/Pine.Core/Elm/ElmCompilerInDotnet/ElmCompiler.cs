@@ -1,6 +1,4 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CodeGen;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Files;
 using System;
 using System.Collections.Frozen;
@@ -16,47 +14,18 @@ using IrTypes = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
 /// <summary>
-/// Holds the intermediate results of each stage in the Elm compilation pipeline.
-/// The <see cref="Canonicalized"/> stage keeps the per-module representation; the
-/// <typeparamref name="LoweredT"/> payload captures whatever lowering result a caller
-/// produces from the canonicalized declaration dictionary (e.g. the standard
-/// lambda-lift + specialize + inline pipeline output via
-/// <see cref="DefaultLoweredResults"/>, or any alternative lowering wired in via the
-/// generic overload of
-/// <see cref="ElmCompiler.LowerToElmSyntaxForCompilation{LoweredT}"/>). The final
-/// <see cref="ModulesForCompilation"/> retains source module grouping and ordering;
-/// <see cref="DeclarationsForEmission"/> supplies qualified IR declarations to the backend.
+/// Canonical source syntax for diagnostics and the actual compiler-owned result consumed by emission.
 /// </summary>
-/// <typeparam name="LoweredT">
-/// Caller-defined lowering payload produced by the lowering delegate passed to
-/// <see cref="ElmCompiler.LowerToElmSyntaxForCompilation{LoweredT}"/>.
-/// </typeparam>
-/// <param name="Canonicalized">
-/// Modules after canonicalization: all names are resolved to fully-qualified forms.
-/// </param>
-/// <param name="Lowered">
-/// The caller-defined lowering payload. Replaces the previous <c>LambdaLifted</c>
-/// and <c>Specialized</c> properties; the standard pipeline surfaces those
-/// individual stages via <see cref="DefaultLoweredResults"/>.
-/// </param>
-/// <param name="ModulesForCompilation">
-/// The final list of source modules, reconstructed
-/// from the flat declaration dictionary returned by the caller-provided
-/// <c>extractFilteredDeclarations</c> delegate.
-/// </param>
-public record CompilationPipelineStageResults<LoweredT>(
+public record CompilationPipelineStageResults(
     IReadOnlyList<SyntaxModelTypes.File> Canonicalized,
-    LoweredT Lowered,
-    IReadOnlyList<ElmSyntaxAbstract.File> ModulesForCompilation)
+    ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> CanonicalDeclarations,
+    CompilerModel.Program CompilerProgram)
 {
     /// <summary>
-    /// Maps the final abstract syntax declarations to the distinct IR consumed by Pine emission.
-    /// Selects numeric/append implementations and lowers closed record reads, including record-pattern reads, to projections.
+    /// Projects the actual optimized functions to emission IR without repeating any lowering or name resolution.
     /// </summary>
-    public ImmutableDictionary<DeclQualifiedName, IrTypes.Declaration> DeclarationsForEmission =>
-        LowerToIntermediateRepresentation.Lower(
-            ElmCompiler.FlattenModulesToDeclarationDictionary(ModulesForCompilation))
-        .Declarations;
+    public ImmutableDictionary<CompilerModel.FunctionId, IrTypes.FunctionStruct> FunctionsForEmission =>
+        CompilerModel.ToIntermediateRepresentation.Convert(CompilerProgram);
 
     /// <summary>
     /// Fully qualified declarations selected as compilation roots before dependency filtering.
@@ -74,31 +43,6 @@ public record CompilationPipelineStageResults<LoweredT>(
 }
 
 /// <summary>
-/// Standard lowering payload produced by the back-compat overload of
-/// <see cref="ElmCompiler.LowerToElmSyntaxForCompilation"/>. Surfaces the
-/// pre-optimization <see cref="LambdaLifted"/> module list.
-/// </summary>
-/// <param name="LambdaLifted">
-/// Modules after the initial lambda lifting pass: closures are transformed into top-level functions.
-/// </param>
-/// <param name="FilteredDeclarations">
-/// Flat declaration dictionary handed to the compilation backend after
-/// reachability-filtering from the root declarations. Surfaced here so the
-/// back-compat overload can return it from the
-/// <c>extractFilteredDeclarations</c> delegate.
-/// </param>
-public record DefaultLoweredResults(
-    IReadOnlyList<ElmSyntaxAbstract.File> LambdaLifted,
-    ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> FilteredDeclarations);
-
-/// <summary>
-/// Holds the intermediate results of each stage within a single optimization iteration.
-/// </summary>
-public record OptimizationIterationStageResults(
-    int Round,
-    OptimizedElmSyntaxDeclarations AfterSpecialization);
-
-/// <summary>
 /// Methods for compiling Elm source code and environments into Pine values, using the standard packaging for
 /// Elm functions and modules as found at
 /// <see href="https://github.com/pine-vm/pine/blob/391100e6734a50d2bede29ee49bca1afc8868fed/implement/pine/Elm/elm-compiler/src/FirCompiler.elm#L2179-L2242"></see>
@@ -112,9 +56,11 @@ public partial class ElmCompiler
 {
     private sealed record CanonicalizationBoundaryResult(
         IReadOnlyList<SyntaxModelTypes.File> ConcreteModules,
-        IReadOnlyList<ElmSyntaxAbstract.File> LoweringModules,
         IReadOnlySet<DeclQualifiedName> RootDeclarations)
     {
+        public ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> CanonicalDeclarations { get; init; } =
+            [];
+
         public IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<DeclarationReference>> References { get; init; } =
             ImmutableDictionary<DeclQualifiedName, IReadOnlyList<DeclarationReference>>.Empty;
 
@@ -126,13 +72,6 @@ public partial class ElmCompiler
     /// </summary>
     public static readonly ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled SyntaxOptimizationConfigDefault =
         new();
-
-    private static readonly FrozenSet<string> s_pineKernelModuleNamesDefault =
-        FrozenSet.Create(
-            [
-            "Pine_builtin",
-            "Pine_kernel",
-            ]);
 
     /// <summary>
     /// Names of Elm modules that are implemented natively in the .NET assembly and must not be
@@ -150,140 +89,17 @@ public partial class ElmCompiler
     /// <summary>
     /// Compiles an interactive Elm environment from the given source tree.
     /// </summary>
-    public static Result<string, CompilationPipelineStageResults<DefaultLoweredResults>> LowerToElmSyntaxForCompilation(
+    public static Result<string, CompilationPipelineStageResults> LowerToCompilerModel(
         FileTree appCodeTree,
         IReadOnlyList<DeclQualifiedName> rootDeclarations,
         ElmSyntaxOptimizationConfig? syntaxOptimization = null,
         bool includeBundledKernelModules = true,
         IDictionary<string, Result<ElmSyntax.ElmSyntaxParseError, SyntaxModelTypes.File>>? sourceParseCache = null,
-        IDictionary<(SyntaxModelTypes.Node<SyntaxModelTypes.Declaration> Declaration, string Scope),
-            DeclarationCanonicalizationCacheEntry>? canonicalizationCache = null,
+        Canonicalization.DeclarationCache? canonicalizationCache = null,
         IReadOnlyDictionary<string, SyntaxModelTypes.File>? parsedSources = null)
     {
         syntaxOptimization ??= new ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled();
-        // Capture per-round optimization snapshots and the post-lambda-lift module list
-        // from inside the lowering delegate so the back-compat overload can promote
-        // them onto the final result (the generic overload itself leaves
-        // OptimizationIterations null and reconstructs ModulesForCompilation from the
-        // canonicalized module shells).
-        IReadOnlyList<ElmSyntaxAbstract.File>? capturedLambdaLifted = null;
 
-        var genericResult =
-            LowerToElmSyntaxForCompilation<DefaultLoweredResults>(
-                appCodeTree,
-                rootDeclarations,
-                lower:
-                (flatCanonicalized, rootDeclarationNames) =>
-                {
-                    var canonicalizedModulesForLowering =
-                        BuildModuleShellsFromFlatDeclarations(flatCanonicalized);
-
-                    var standardResult =
-                        RunStandardLoweringPipeline(
-                            canonicalizedModulesForLowering,
-                            syntaxOptimization);
-
-                    if (standardResult.IsErrOrNull() is { } stdErr)
-                        return stdErr;
-
-                    if (standardResult.IsOkOrNull() is not { } stdOk)
-                    {
-                        throw new NotImplementedException(
-                            "Unexpected result type: " + standardResult.GetType().Name);
-                    }
-
-                    capturedLambdaLifted = stdOk.LambdaLifted;
-
-                    return stdOk;
-                },
-                extractFilteredDeclarations: lowered => lowered.FilteredDeclarations,
-                includeBundledKernelModules: includeBundledKernelModules,
-                sourceParseCache: sourceParseCache,
-                canonicalizationCache: canonicalizationCache,
-                parsedSources: parsedSources);
-
-        if (genericResult.IsErrOrNull() is { } genericErr)
-            return genericErr;
-
-        if (genericResult.IsOkOrNull() is not { } genericOk)
-        {
-            throw new NotImplementedException(
-                "Unexpected result type: " + genericResult.GetType().Name);
-        }
-
-        // Use the lambda-lifted module list as the reconstruction shell to preserve
-        // historical behaviour: function declarations that are not reachable from the
-        // roots (and so were dropped from FilteredDeclarations) are kept as their
-        // post-lift form rather than reverting to the canonicalized pre-lift form.
-        // The generic overload defaults to using the canonicalized module list as the
-        // shell, so we replace ModulesForCompilation here.
-        var modulesForCompilation =
-            capturedLambdaLifted is null
-            ?
-            genericOk.ModulesForCompilation
-            :
-            ReconstructModulesFromFlatDict(
-                genericOk.Lowered.FilteredDeclarations,
-                capturedLambdaLifted);
-
-        return
-            genericOk with
-            {
-                ModulesForCompilation = modulesForCompilation
-            };
-    }
-
-    /// <summary>
-    /// Generic lowering overload. Performs the parse + canonicalization stages, then
-    /// hands control to the caller-supplied <paramref name="lower"/> delegate, which
-    /// receives the flat canonicalized declaration dictionary together with the set
-    /// of root-declaration qualified names (so it can decide which specializations
-    /// to emit for the applications inside the root declarations). The returned
-    /// <typeparamref name="LoweredT"/> is then projected back to a flat declaration
-    /// dictionary via <paramref name="extractFilteredDeclarations"/>; the resulting
-    /// declarations are reconstructed into the per-module shape expected by the
-    /// compilation backend.
-    /// </summary>
-    /// <typeparam name="LoweredT">
-    /// Caller-defined lowering payload returned by <paramref name="lower"/>.
-    /// </typeparam>
-    /// <param name="appCodeTree">
-    /// Source tree containing the application's Elm files. The bundled elm-core
-    /// kernel modules are merged in automatically.
-    /// </param>
-    /// <param name="rootDeclarations">
-    /// Explicit declaration roots. Only their semantic dependencies are canonicalized.
-    /// </param>
-    /// <param name="lower">
-    /// Delegate that lowers the canonicalized declaration dictionary into a
-    /// caller-defined <typeparamref name="LoweredT"/>. Receives the set of
-    /// fully-qualified names of the requested root declarations, so
-    /// the lowering can decide which specializations need to be created for the
-    /// applications appearing in the root declarations.
-    /// </param>
-    /// <param name="extractFilteredDeclarations">
-    /// Delegate projecting <typeparamref name="LoweredT"/> to the flat declaration
-    /// dictionary that should be reconstructed into the per-module shape handed to
-    /// the compilation backend.
-    /// </param>
-    /// <param name="includeBundledKernelModules">False for resolved builds whose replacement sources are already explicit.</param>
-    /// <param name="sourceParseCache">Caller-owned source-text parsing memoization.</param>
-    /// <param name="canonicalizationCache">Caller-owned memoization of declaration bodies and their consulted scopes.</param>
-    /// <param name="parsedSources">Optional compiler-qualified source syntax retaining original source ranges.</param>
-    public static Result<string, CompilationPipelineStageResults<LoweredT>> LowerToElmSyntaxForCompilation<LoweredT>(
-        FileTree appCodeTree,
-        IReadOnlyList<DeclQualifiedName> rootDeclarations,
-        Func<
-            ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>,
-            IReadOnlySet<DeclQualifiedName>,
-            Result<string, LoweredT>> lower,
-        Func<LoweredT, ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>> extractFilteredDeclarations,
-        bool includeBundledKernelModules = true,
-        IDictionary<string, Result<ElmSyntax.ElmSyntaxParseError, SyntaxModelTypes.File>>? sourceParseCache = null,
-        IDictionary<(SyntaxModelTypes.Node<SyntaxModelTypes.Declaration> Declaration, string Scope),
-            DeclarationCanonicalizationCacheEntry>? canonicalizationCache = null,
-        IReadOnlyDictionary<string, SyntaxModelTypes.File>? parsedSources = null)
-    {
         var canonicalizationResult =
             ParseAndCanonicalizeForLowering(
                 appCodeTree,
@@ -293,74 +109,59 @@ public partial class ElmCompiler
                 canonicalizationCache,
                 parsedSources);
 
-        if (canonicalizationResult.IsErrOrNull() is { } canonErr)
-            return canonErr.ToString();
+        if (canonicalizationResult.IsErrOrNull() is { } error)
+            return error.ToString();
 
-        if (canonicalizationResult.IsOkOrNull() is not { } canonicalizationOk)
+        var canonicalized =
+            canonicalizationResult.Extract(error => throw new InvalidOperationException(error.ToString()));
+
+        var flat = canonicalized.CanonicalDeclarations;
+        var prepared = flat;
+
+        if (syntaxOptimization is ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled enabled)
         {
-            throw new NotImplementedException(
-                "Unexpected result type: " + canonicalizationResult.GetType().Name);
+            var lowering =
+                BuiltinOperatorLowering.Apply(
+                    prepared,
+                    new BuiltinOperatorLowering.Configuration(LowerBuiltinOperators: true, LowerElmCoreBasics: true));
+
+            if (lowering.IsErrOrNull() is { } lowerError)
+                return lowerError;
+
+            prepared = lowering.Extract(error => throw new InvalidOperationException(error));
+
+            if (enabled.RemoveDebugLogApplications)
+            {
+                prepared =
+                    prepared.ToImmutableDictionary(
+                        entry => entry.Key,
+                        entry => DebugLogRemoval.RewriteDeclaration(entry.Value));
+            }
         }
 
-        var canonicalizedModules = canonicalizationOk.ConcreteModules;
-        var modulesForLowering = canonicalizationOk.LoweringModules;
-
-        var flatCanonicalized =
-            FlattenModulesToDeclarationDictionary(modulesForLowering);
-
-        var rootDeclarationNames = canonicalizationOk.RootDeclarations;
-
-        var lowerResult = lower(flatCanonicalized, rootDeclarationNames);
-
-        if (lowerResult.IsErrOrNull() is { } lowerErr)
-        {
-            return "Failed lowering: " + lowerErr;
-        }
-
-        if (lowerResult is not Result<string, LoweredT>.Ok loweredOk)
-        {
-            throw new NotImplementedException(
-                "Unexpected result type: " + lowerResult.GetType().Name);
-        }
-
-        var loweredValue = loweredOk.Value;
-
-        var filteredDeclarations = extractFilteredDeclarations(loweredValue);
-
-        var modulesForCompilation =
-            ReconstructModulesFromFlatDict(
-                filteredDeclarations,
-                modulesForLowering);
+        var program = CompilerModel.LambdaLifting.Lift(CompilerModel.FromCanonicalSyntax.Convert(prepared));
+        CompilerModel.ProgramValidation.Validate(program);
 
         return
-            new CompilationPipelineStageResults<LoweredT>(
-                Canonicalized: canonicalizedModules,
-                Lowered: loweredValue,
-                ModulesForCompilation: modulesForCompilation)
+            new CompilationPipelineStageResults(canonicalized.ConcreteModules, flat, program)
             {
-                RootDeclarationNames = rootDeclarationNames,
-                SourceReferences = canonicalizationOk.References,
-                SourceFilePaths = canonicalizationOk.FilePaths
+                RootDeclarationNames = canonicalized.RootDeclarations,
+                SourceReferences = canonicalized.References,
+                SourceFilePaths = canonicalized.FilePaths
             };
     }
 
-    /// <summary>
-    /// Parses source scopes and canonicalizes the semantic closure of explicit declarations.
-    /// Shared between the back-compat and generic overloads of
-    /// <see cref="LowerToElmSyntaxForCompilation"/>.
-    /// </summary>
     private static Result<CompilationError, CanonicalizationBoundaryResult>
         ParseAndCanonicalizeForLowering(
         FileTree appCodeTree,
         IReadOnlyList<DeclQualifiedName> rootDeclarations,
         bool includeBundledKernelModules,
         IDictionary<string, Result<ElmSyntax.ElmSyntaxParseError, SyntaxModelTypes.File>>? sourceParseCache,
-        IDictionary<(SyntaxModelTypes.Node<SyntaxModelTypes.Declaration> Declaration, string Scope),
-            DeclarationCanonicalizationCacheEntry>? canonicalizationCache,
+        Canonicalization.DeclarationCache? canonicalizationCache,
         IReadOnlyDictionary<string, SyntaxModelTypes.File>? parsedSources)
     {
         if (rootDeclarations.Count is 0)
-            return new CanonicalizationBoundaryResult([], [], ImmutableHashSet<DeclQualifiedName>.Empty);
+            return new CanonicalizationBoundaryResult([], ImmutableHashSet<DeclQualifiedName>.Empty);
 
         // Resolved builds already supply the replacement sources selected by their configuration.
         var appCodeTreeWithKernelModules =
@@ -548,17 +349,15 @@ public partial class ElmCompiler
             .Where(source => source.Declarations.Count > 0)
             .ToList();
 
-        var modulesForLowering =
-            canonicalizedModules
-            .Select(module => ElmSyntaxAbstract.ConvertFromConcrete.FromFile(module with { Imports = [] }))
-            .ToList();
-
         return
             new CanonicalizationBoundaryResult(
                 ConcreteModules: canonicalizedModules,
-                LoweringModules: modulesForLowering,
                 RootDeclarations: rootDeclarations.ToImmutableHashSet())
             {
+                CanonicalDeclarations =
+                canonicalizedDeclarations.Declarations.ToImmutableDictionary(
+                    entry => entry.Key,
+                    entry => ElmSyntaxAbstract.ConvertFromConcrete.FromDeclaration(entry.Value.Value.Value)),
                 References = canonicalizedDeclarations.References,
                 FilePaths = moduleNameToFilePath
             };
@@ -713,108 +512,24 @@ public partial class ElmCompiler
     }
 
     /// <summary>
-    /// Standard lowering pipeline used by the back-compat overload of
-    /// <see cref="LowerToElmSyntaxForCompilation"/>. Runs the canonical
-    /// lambda-lift + specialize + inline + (optional) operator-lowering pipeline on
-    /// <paramref name="canonicalizedModules"/> and returns a
-    /// <see cref="DefaultLoweredResults"/> capturing the post-lambda-lift module
-    /// list, the post-specialization snapshot, and the reachability-filtered
-    /// declaration dictionary.
-    /// </summary>
-    private static Result<string, DefaultLoweredResults>
-        RunStandardLoweringPipeline(
-        List<ElmSyntaxAbstract.File> canonicalizedModules,
-        ElmSyntaxOptimizationConfig syntaxOptimization)
-    {
-        // Lambda lifting stage: Transform closures into top-level functions.
-        // The experimental knob `RunSpecializationBeforeLambdaLifting` interposes a single
-        // combined specialization+inlining round on the canonicalized (pre-lifting) flat
-        // declaration dictionary; the inner pass internally re-runs LambdaLifting as one of
-        // its post-passes, so its output is already in the same lambda-lifted shape that
-        // the standard `Select(LiftLambdas)` would have produced — but with anonymous-lambda
-        // arguments to higher-order callees already substituted into `__specialized__N`
-        // siblings before the lift packs their captured environment into a tuple parameter.
-        List<ElmSyntaxAbstract.File> lambdaLiftedModules;
-
-        if (syntaxOptimization is ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled optimizationConfig)
-        {
-            var loweredBeforeLambdaLifting =
-                BuiltinOperatorLowering.Apply(
-                    FlattenModulesToDeclarationDictionary(canonicalizedModules),
-                    new BuiltinOperatorLowering.Configuration(
-                        LowerBuiltinOperators: true,
-                        LowerElmCoreBasics: true));
-
-            if (loweredBeforeLambdaLifting.IsErrOrNull() is { } builtinLowerErr)
-                return "Operator lowering before lambda lifting failed: " + builtinLowerErr;
-
-            canonicalizedModules =
-                ReconstructModulesFromFlatDict(
-                    loweredBeforeLambdaLifting.Extract(err => throw new NotImplementedException(err)),
-                    canonicalizedModules);
-
-            if (optimizationConfig.RemoveDebugLogApplications)
-            {
-                canonicalizedModules =
-                    [.. canonicalizedModules.Select(DebugLogRemoval.RewriteFile)];
-            }
-        }
-
-        lambdaLiftedModules =
-            [.. canonicalizedModules.Select(LambdaLifting.LiftLambdas)];
-
-        if (ValidateStage(lambdaLiftedModules, "Lambda lifting (initial)") is { } lambdaLiftErr)
-            return lambdaLiftErr;
-
-        OptimizationPipelineStageResults? optimizationResults = null;
-
-        if (syntaxOptimization is not ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled optimizationEnabled)
-        {
-            return
-                new DefaultLoweredResults(
-                    LambdaLifted: lambdaLiftedModules,
-                    FilteredDeclarations: FlattenModulesToDeclarationDictionary(lambdaLiftedModules));
-        }
-
-        var pipelineResult =
-            ApplyOptimizationPipelineWithStageResults(
-                lambdaLiftedModules);
-
-        if (pipelineResult.IsErrOrNull() is { } pipelineErr)
-            return pipelineErr;
-
-        optimizationResults =
-            pipelineResult.Extract(err => throw new NotImplementedException());
-
-        var declarationsAfterLowering =
-            optimizationResults.AfterLowering.RenderAsFlatDictionary();
-
-        return
-            new DefaultLoweredResults(
-                LambdaLifted: lambdaLiftedModules,
-                FilteredDeclarations: declarationsAfterLowering);
-    }
-
-    /// <summary>
     /// Compiles explicit declaration roots without evaluating their values.
-    /// Caller-owned parsing and canonicalization dictionaries can reuse unchanged work.
-    /// Callers must synchronize access when sharing dictionaries across concurrent operations.
+    /// Caller-owned parsing dictionaries and declaration caches can reuse unchanged work.
+    /// Parsing dictionaries require caller synchronization; DeclarationCache supports concurrent callers.
     /// </summary>
-    public static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults<DefaultLoweredResults> pipelineStageResults)> CompileInteractiveEnvironment(
+    public static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults pipelineStageResults)> CompileInteractiveEnvironment(
         FileTree appCodeTree,
         IReadOnlyList<DeclQualifiedName> rootDeclarations,
         ElmSyntaxOptimizationConfig? syntaxOptimization = null,
         bool disableGenericApplicationChainConsolidation = false,
         bool includeBundledKernelModules = true,
         IDictionary<string, Result<ElmSyntax.ElmSyntaxParseError, SyntaxModelTypes.File>>? sourceParseCache = null,
-        IDictionary<(SyntaxModelTypes.Node<SyntaxModelTypes.Declaration> Declaration, string Scope),
-            DeclarationCanonicalizationCacheEntry>? canonicalizationCache = null,
+        Canonicalization.DeclarationCache? canonicalizationCache = null,
         IReadOnlyDictionary<string, SyntaxModelTypes.File>? parsedSources = null)
     {
         syntaxOptimization ??= SyntaxOptimizationConfigDefault;
 
         var loweringResult =
-            LowerToElmSyntaxForCompilation(
+            LowerToCompilerModel(
                 appCodeTree,
                 rootDeclarations,
                 syntaxOptimization,
@@ -830,18 +545,19 @@ public partial class ElmCompiler
             throw new NotImplementedException("Unexpected result type: " + loweringResult.GetType().Name);
 
         return
-            EmitCompiledEnvironmentFromPipelineResults(
+            EmitCompilerProgram(
+                pipelineStageResults.CompilerProgram ??
+                throw new InvalidOperationException("Missing compiler-owned lowering result."),
                 pipelineStageResults,
-                disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
+                disableGenericApplicationChainConsolidation);
     }
 
     /// <summary>Compiles sources prepared with project-scoped resolution and import visibility validation.</summary>
-    public static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults<DefaultLoweredResults> pipelineStageResults)> CompileResolvedEnvironment(
+    public static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults pipelineStageResults)> CompileResolvedEnvironment(
         ElmResolvedBuild build,
         IReadOnlyList<DeclQualifiedName> rootDeclarations,
         IDictionary<string, Result<ElmSyntax.ElmSyntaxParseError, SyntaxModelTypes.File>>? sourceParseCache = null,
-        IDictionary<(SyntaxModelTypes.Node<SyntaxModelTypes.Declaration> Declaration, string Scope),
-            DeclarationCanonicalizationCacheEntry>? canonicalizationCache = null)
+        Canonicalization.DeclarationCache? canonicalizationCache = null)
     {
         var result =
             CompileInteractiveEnvironment(
@@ -872,253 +588,6 @@ public partial class ElmCompiler
                     package =>
                     "  " + package.Identity + " -> " + package.SubstitutionImplementationId)) +
             "\nMissing replacement APIs are not automatically searched upstream.";
-    }
-
-    /// <summary>
-    /// Shared emission helper: takes the post-lowering
-    /// <see cref="CompilationPipelineStageResults{LoweredT}"/> and produces the compiled
-    /// <see cref="PineValue"/> interactive environment. Used by both the back-compat
-    /// and generic <c>CompileInteractiveEnvironment</c> overloads so the
-    /// emission/encoding logic exists in exactly one place.
-    /// </summary>
-    private static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults<LoweredT> pipelineStageResults)>
-        EmitCompiledEnvironmentFromPipelineResults<LoweredT>(
-        CompilationPipelineStageResults<LoweredT> pipelineStageResults,
-        bool disableGenericApplicationChainConsolidation)
-    {
-        var declarationsForCompilation = pipelineStageResults.DeclarationsForEmission;
-
-        var allFunctions =
-            new Dictionary<DeclQualifiedName, (string moduleName, string functionName, IrTypes.Declaration.FunctionDeclaration declaration)>();
-
-        foreach (var (qualifiedName, declaration) in declarationsForCompilation)
-        {
-            if (declaration is IrTypes.Declaration.FunctionDeclaration function)
-            {
-                allFunctions[qualifiedName] =
-                    (string.Join(".", qualifiedName.Namespaces), qualifiedName.DeclName, function);
-            }
-        }
-
-        var choiceConstructorArities = new Dictionary<DeclQualifiedName, int>();
-
-        foreach (var (name, declaration) in declarationsForCompilation)
-        {
-            if (declaration is IrTypes.Declaration.ChoiceTypeDeclaration choice)
-            {
-                foreach (var constructor in choice.TypeDeclaration.Constructors)
-                {
-                    choiceConstructorArities.Add(
-                        DeclQualifiedName.Create(name.Namespaces, constructor.Name),
-                        constructor.Arguments.Count);
-                }
-            }
-        }
-
-        // Build record type alias constructors dictionary
-        // A type alias for a record type creates an implicit constructor function
-        // where argument order matches the field order in the type alias declaration
-        var recordTypeAliasConstructors = new Dictionary<DeclQualifiedName, IReadOnlyList<string>>();
-
-        foreach (var (name, declaration) in declarationsForCompilation)
-        {
-            if (declaration is IrTypes.Declaration.AliasDeclaration aliasDecl)
-            {
-                var typeAnnotation = aliasDecl.TypeAlias.TypeAnnotation;
-
-                // Check if the type alias is for a record type
-                if (typeAnnotation is IrTypes.TypeAnnotation.Record recordType)
-                {
-                    // Extract field names in declaration order
-                    var fieldNames =
-                        recordType.RecordDefinition.Fields
-                        .Select(f => f.FieldName)
-                        .ToList();
-
-                    recordTypeAliasConstructors[name] = fieldNames;
-                }
-            }
-        }
-
-        // Create initial compilation context with all available functions
-        var initialContext =
-            new ModuleCompilationContext(
-                allFunctions,
-                CompiledFunctionsCache: [],
-                PineKernelModuleNames: s_pineKernelModuleNamesDefault,
-                RecordTypeAliasConstructors: recordTypeAliasConstructors,
-                ChoiceConstructorArities: choiceConstructorArities);
-
-        // Pre-compute dependency layouts and SCCs for all functions BEFORE compilation
-        var directDependencies =
-            AnalyzeDirectFunctionDependencies(allFunctions, initialContext);
-
-        var (dependencyLayouts, functionToScc, sccsInDependencyOrder) =
-            ComputeDependencyLayoutsAndSccsFromDirectDependencies(
-                directDependencies);
-
-        // Create compilation context with pre-computed layouts and SCCs
-        var compilationContext =
-            initialContext
-            .WithDependencyLayouts(dependencyLayouts);
-
-        var reducedExpressionCache =
-            new Dictionary<(Expression, ReductionConfig), Expression>();
-
-        var expressionEncodingCache = new PineExpressionEncodingCache();
-
-        // Second pass: Compile all SCCs in dependency order
-        // This ensures all dependencies are compiled before they are needed
-        foreach (var scc in sccsInDependencyOrder)
-        {
-            // Skip if all members are already compiled
-            if (scc.Members.All(m => compilationContext.TryGetCompiledFunctionValue(m) is not null))
-                continue;
-
-            var sharedLayout = scc.GetLayout();
-            var sccMembersSet = new HashSet<string>(scc.Members);
-
-            // Skip explicitly if any layout dependency outside this SCC was not compiled.
-            // This happens when a transitive dependency was excluded from the compilation roots.
-            var allLayoutDepsCompiled =
-                sharedLayout
-                .Where(dep => !sccMembersSet.Contains(dep))
-                .All(dep => compilationContext.TryGetCompiledFunctionValue(dep) is not null);
-
-            if (!allLayoutDepsCompiled)
-                continue;
-
-            var compileSccResult =
-                CompileSCC(
-                    scc,
-                    compilationContext,
-                    reducedExpressionCache,
-                    expressionEncodingCache,
-                    disableGenericApplicationChainConsolidation);
-
-            if (compileSccResult.IsErrOrNull() is { } compileSccErr)
-            {
-                if (compileSccErr is CompilationError.InDeclaration inDeclaration)
-                {
-                    var rootDeclarationNames =
-                        pipelineStageResults.RootDeclarationNames
-                        .Select(QualifiedNameHelper.ToQualifiedNameString)
-                        .ToHashSet(StringComparer.Ordinal);
-
-                    var dependencyChain =
-                        FindDeclarationDependencyChain(
-                            rootDeclarationNames,
-                            inDeclaration.DeclarationName,
-                            directDependencies);
-
-                    dependencyChain =
-                        BuildSourceDependencyChain(
-                            [
-                            .. dependencyChain.Select(
-                                item => QualifiedNameHelper.FromQualifiedNameString(item.DeclarationName))
-                            ],
-                            pipelineStageResults.Canonicalized,
-                            pipelineStageResults.SourceFilePaths,
-                            pipelineStageResults.SourceReferences);
-
-                    return
-                        new CompilationError.DeclarationCompilationDiagnostic(
-                            inDeclaration.DeclarationName,
-                            scc.Members,
-                            inDeclaration.InnerError,
-                            dependencyChain)
-                        .ToString();
-                }
-
-                return
-                    "Failed to compile SCC [" + string.Join(", ", scc.Members) + "]: " + compileSccErr;
-            }
-
-            if (compileSccResult.IsOkOrNull() is not { } compileSccOk)
-            {
-                throw new NotImplementedException(
-                    "Unexpected result type: " + compileSccResult.GetType());
-            }
-
-            compilationContext = compileSccOk;
-        }
-
-        // Third pass: Build module values from compiled functions
-        var compiledModuleEntries = new List<PineValue>();
-
-        foreach (var parsedModule in pipelineStageResults.ModulesForCompilation)
-        {
-            var moduleName = ElmSyntaxAbstract.Module.GetModuleName(parsedModule.ModuleDefinition);
-
-            var moduleNameFlattened =
-                string.Join('.', moduleName);
-
-            var exportedDeclarations =
-                parsedModule.Declarations
-                .Select(declaration => GetDeclarationName(declaration))
-                .OfType<string>()
-                .Select(name => DeclQualifiedName.Create(moduleName, name))
-                .Where(pipelineStageResults.RootDeclarationNames.Contains)
-                .Select(name => declarationsForCompilation[name])
-                .ToArray();
-
-            if (exportedDeclarations.Length is 0)
-                continue;
-
-            var moduleValue = BuildModuleValue(exportedDeclarations, moduleNameFlattened, compilationContext);
-
-            var namedModuleEntry =
-                PineValue.List(
-                    [
-                    StringEncoding.ValueFromString(moduleNameFlattened),
-                    moduleValue
-                    ]);
-
-            compiledModuleEntries.Add(namedModuleEntry);
-        }
-
-        var compiledEnvValue =
-            PineValue.List(
-                [
-                ..compiledModuleEntries
-                ]);
-
-        return (compiledEnvValue, pipelineStageResults);
-    }
-
-    /// <summary>
-    /// Finds each declaration's direct dependencies that are available for compilation.
-    /// </summary>
-    /// <param name="allFunctions">Dictionary of all functions keyed by qualified name.</param>
-    /// <param name="context">The module compilation context.</param>
-    private static ImmutableDictionary<string, IReadOnlySet<string>>
-        AnalyzeDirectFunctionDependencies(
-        IReadOnlyDictionary<DeclQualifiedName, (string moduleName, string functionName, IrTypes.Declaration.FunctionDeclaration declaration)> allFunctions,
-        ModuleCompilationContext context)
-    {
-        var allQualifiedFunctionNames =
-            allFunctions.Keys
-            .Select(QualifiedNameHelper.ToQualifiedNameString)
-            .ToHashSet(StringComparer.Ordinal);
-
-        return
-            allFunctions
-            .ToImmutableDictionary(
-                entry => QualifiedNameHelper.ToQualifiedNameString(entry.Key),
-                entry =>
-                {
-                    var (moduleName, _, declaration) = entry.Value;
-
-                    IReadOnlySet<string> dependencies =
-                        AnalyzeFunctionDependencies(
-                            declaration.Function.Declaration.Expression,
-                            moduleName,
-                            context)
-                        .Where(allQualifiedFunctionNames.Contains)
-                        .ToHashSet(StringComparer.Ordinal);
-
-                    return dependencies;
-                });
     }
 
     private static IReadOnlyList<CompilationError.DeclarationDependencyChainItem>
@@ -1173,732 +642,6 @@ public partial class ElmCompiler
                     ReferencedBy: index is 0 ? null : names[index - 1],
                     IsCompilationRoot: index is 0))
             ];
-    }
-
-    /// <summary>
-    /// Pre-computes dependency layouts and SCC mappings.
-    /// </summary>
-    public static (IReadOnlyDictionary<string, IReadOnlyList<string>> layouts, IReadOnlyDictionary<string, FunctionScc> functionToScc, IReadOnlyList<FunctionScc> sccsInDependencyOrder)
-        ComputeDependencyLayoutsAndSccs(
-        IReadOnlyDictionary<DeclQualifiedName, (string moduleName, string functionName, ElmSyntaxAbstract.Declaration.FunctionDeclaration declaration)> allFunctions,
-        ModuleCompilationContext context) =>
-        ComputeDependencyLayoutsAndSccs(
-            allFunctions.ToDictionary(
-                entry => entry.Key,
-                entry => (entry.Value.moduleName,
-                entry.Value.functionName,
-                (IrTypes.Declaration.FunctionDeclaration)IrTypes.ConvertFromAbstractSyntax.FromDeclaration(entry.Value.declaration))),
-            context);
-
-    /// <summary>Pre-computes dependency layouts and SCC mappings for IR functions.</summary>
-    public static (IReadOnlyDictionary<string, IReadOnlyList<string>> layouts, IReadOnlyDictionary<string, FunctionScc> functionToScc, IReadOnlyList<FunctionScc> sccsInDependencyOrder)
-        ComputeDependencyLayoutsAndSccs(
-        IReadOnlyDictionary<DeclQualifiedName, (string moduleName, string functionName, IrTypes.Declaration.FunctionDeclaration declaration)> allFunctions,
-        ModuleCompilationContext context) =>
-        ComputeDependencyLayoutsAndSccsFromDirectDependencies(
-            AnalyzeDirectFunctionDependencies(allFunctions, context));
-
-    private static (IReadOnlyDictionary<string, IReadOnlyList<string>> layouts, IReadOnlyDictionary<string, FunctionScc> functionToScc, IReadOnlyList<FunctionScc> sccsInDependencyOrder)
-        ComputeDependencyLayoutsAndSccsFromDirectDependencies(
-        ImmutableDictionary<string, IReadOnlySet<string>> directDependencies)
-    {
-        // Detect strongly connected components (SCCs) - groups of mutually recursive functions
-        // Tarjan's algorithm returns SCCs in topological order (dependencies first)
-        var sccsFromTarjan = FindStronglyConnectedComponents([.. directDependencies.Keys], directDependencies);
-
-        // Build FunctionScc records - SCCs are already in dependency order from Tarjan
-        var sccsInDependencyOrder = new List<FunctionScc>();
-
-        // Compute transitive dependencies for each function
-        var transitiveDependencies =
-            directDependencies
-            .ToDictionary(
-                kvp => kvp.Key,
-                kvp => ComputeTransitiveDependencies(kvp.Key, directDependencies));
-
-        // Build SCCs and layouts
-        var dependencyLayouts = new Dictionary<string, IReadOnlyList<string>>();
-
-        var functionToScc = new Dictionary<string, FunctionScc>();
-
-        foreach (var scc in sccsFromTarjan)
-        {
-            // Sort SCC members alphabetically for consistent ordering
-            var sortedSccMembers =
-                scc
-                .Order(StringComparer.Ordinal)
-                .ToImmutableList();
-
-            // Compute the additional dependencies for this SCC
-            // These are transitive dependencies that are not SCC members
-            var allOtherDeps = new HashSet<string>();
-
-            foreach (var member in scc)
-            {
-                if (transitiveDependencies.TryGetValue(member, out var deps))
-                {
-                    foreach (var d in deps)
-                    {
-                        if (!scc.Contains(d))
-                        {
-                            allOtherDeps.Add(d);
-                        }
-                    }
-                }
-            }
-
-            var sortedOtherDeps =
-                allOtherDeps
-                .Order(StringComparer.Ordinal)
-                .ToImmutableList();
-
-            // Determine recursion: a multi-member SCC is always recursive
-            // (mutual recursion). A single-member SCC is recursive iff its
-            // member directly references itself.
-            //
-            // Non-recursive single-member SCCs still use the uniform
-            // WithEnvFunctions wrapper shape (Approach A1), but the runtime
-            // env-functions list is empty (per §7.6b).
-            bool isRecursive;
-
-            if (sortedSccMembers.Count > 1)
-            {
-                isRecursive = true;
-            }
-            else
-            {
-                var soleMember = sortedSccMembers[0];
-
-                isRecursive =
-                    directDependencies.TryGetValue(soleMember, out var soleMemberDeps)
-                    && soleMemberDeps.Contains(soleMember);
-            }
-
-            // Create SCC with members and additional dependencies.
-            // §7.6b: the runtime layout is members-only (see FunctionScc.GetLayout).
-            // AdditionalDependencies is retained on the record for compilation
-            // ordering only (Tarjan already gives us topological order, but we
-            // keep the data for diagnostics and for the audit history).
-            var sccRecord = new FunctionScc(sortedSccMembers, sortedOtherDeps, isRecursive);
-
-            var sharedLayout = sccRecord.GetLayout();
-
-            foreach (var member in scc)
-            {
-                functionToScc[member] = sccRecord;
-                dependencyLayouts[member] = sharedLayout;
-            }
-
-            sccsInDependencyOrder.Add(sccRecord);
-        }
-
-        // No need to reverse - Tarjan already returns SCCs in dependency order
-
-        return (dependencyLayouts, functionToScc, sccsInDependencyOrder);
-    }
-
-    /// <summary>
-    /// Finds strongly connected components (SCCs) in the function call graph.
-    /// Uses Tarjan's algorithm.
-    /// </summary>
-    private static List<HashSet<string>> FindStronglyConnectedComponents(
-        IReadOnlyList<string> functions,
-        ImmutableDictionary<string, IReadOnlySet<string>> dependencies)
-    {
-        var index = 0;
-        var stack = new Stack<string>();
-        var indices = new Dictionary<string, int>();
-        var lowLinks = new Dictionary<string, int>();
-        var onStack = new HashSet<string>();
-        var sccs = new List<HashSet<string>>();
-
-        void StrongConnect(string v)
-        {
-            indices[v] = index;
-            lowLinks[v] = index;
-            index++;
-            stack.Push(v);
-            onStack.Add(v);
-
-            // Consider successors
-            if (dependencies.TryGetValue(v, out var deps))
-            {
-                foreach (var w in deps)
-                {
-                    // Only consider functions we know about
-                    if (!functions.Contains(w))
-                        continue;
-
-                    if (!indices.TryGetValue(w, out var value))
-                    {
-                        // Successor w has not yet been visited; recurse on it
-                        StrongConnect(w);
-
-                        lowLinks[v] = Math.Min(lowLinks[v], lowLinks[w]);
-                    }
-                    else if (onStack.Contains(w))
-                    {
-                        // Successor w is in stack S and hence in the current SCC
-                        lowLinks[v] = Math.Min(lowLinks[v], value);
-                    }
-                }
-            }
-
-            // If v is a root node, pop the stack and generate an SCC
-            if (lowLinks[v] == indices[v])
-            {
-                var scc = new HashSet<string>();
-                string w;
-
-                do
-                {
-                    w = stack.Pop();
-                    onStack.Remove(w);
-                    scc.Add(w);
-                }
-                while (w != v);
-
-                sccs.Add(scc);
-            }
-        }
-
-        foreach (var v in functions)
-        {
-            if (!indices.ContainsKey(v))
-            {
-                StrongConnect(v);
-            }
-        }
-
-        return sccs;
-    }
-
-    /// <summary>
-    /// Computes the transitive closure of dependencies for a function.
-    /// This includes all functions that the function directly or indirectly calls,
-    /// excluding the function itself (which is handled separately as index 0).
-    /// </summary>
-    private static HashSet<string> ComputeTransitiveDependencies(
-        string functionName,
-        ImmutableDictionary<string, IReadOnlySet<string>> directDependencies)
-    {
-        var visited = new HashSet<string>();
-        var result = new HashSet<string>();
-        var stack = new Stack<string>();
-
-        // Mark self as visited to avoid including it in transitive dependencies
-        // (self is always at index 0 in the layout)
-        visited.Add(functionName);
-
-        // Start with direct dependencies of the function
-        if (directDependencies.TryGetValue(functionName, out var directDeps))
-        {
-            foreach (var dep in directDeps)
-            {
-                // Skip self-references
-                if (dep != functionName)
-                {
-                    stack.Push(dep);
-                }
-            }
-        }
-
-        while (stack.Count > 0)
-        {
-            var current = stack.Pop();
-
-            if (!visited.Add(current))
-            {
-                continue;
-            }
-
-            result.Add(current);
-
-            // Add dependencies of this function
-            if (directDependencies.TryGetValue(current, out var currentDeps))
-            {
-                foreach (var dep in currentDeps)
-                {
-                    if (!visited.Contains(dep))
-                    {
-                        stack.Push(dep);
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Builds the module value from already-compiled functions.
-    /// All functions should have been compiled in the SCC compilation pass.
-    /// </summary>
-    private static PineValue BuildModuleValue(
-        IReadOnlyList<IrTypes.Declaration> moduleDeclarations,
-        string currentModuleName,
-        ModuleCompilationContext context)
-    {
-        // Get declarations in this module (for building the final module value)
-        var declarations =
-            moduleDeclarations
-            .OfType<IrTypes.Declaration.FunctionDeclaration>()
-            .ToList();
-
-        // Collect compiled functions for this module (in declaration order)
-        var compiledFunctions = new List<(string, PineValue)>();
-
-        foreach (var declaration in declarations)
-        {
-            var funcName = declaration.Function.Declaration.Name;
-
-            var qualifiedName = currentModuleName + "." + funcName;
-
-            var compiledValue =
-                context.TryGetCompiledFunctionValue(qualifiedName)
-                ?? throw new InvalidOperationException($"Function {qualifiedName} was not compiled.");
-
-            compiledFunctions.Add((funcName, compiledValue));
-        }
-
-        var compiledFunctionDeclaration =
-            new ElmModuleInCompilation(
-                FunctionDeclarations: compiledFunctions);
-
-        return EmitModuleValue(compiledFunctionDeclaration);
-    }
-
-    /*
-    type alias ElmModuleInCompilation =
-        { functionDeclarations : List ( String, Pine.Value )
-        , typeDeclarations : List ( String, ElmModuleTypeDeclaration )
-        }
-     * */
-
-    private record ElmModuleInCompilation(
-        IReadOnlyList<(string declName, PineValue)> FunctionDeclarations);
-
-    /// <summary>
-    /// Compiles all functions in a strongly connected component (SCC) together.
-    /// This ensures that all mutually recursive functions share the same envFunctionsList
-    /// with correct references to each other.
-    /// 
-    /// Since SCCs are compiled in dependency order, all dependencies of the current SCC
-    /// are already compiled and can be retrieved from the context.
-    /// </summary>
-    private static Result<CompilationError, ModuleCompilationContext> CompileSCC(
-        FunctionScc scc,
-        ModuleCompilationContext context,
-        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache,
-        PineExpressionEncodingCache expressionEncodingCache,
-        bool disableGenericApplicationChainConsolidation = false)
-    {
-        var sharedLayout = scc.GetLayout();
-        var sccMembers = scc.Members;
-
-        // Phase 1 of Approach A1: always use WithEnvFunctions layout.
-        // All functions — recursive and non-recursive — have parameters at
-        // env[1+i], with env[0] holding the SCC-members env-functions list
-        // (empty for non-recursive single-member SCCs per §7.6b).
-
-        // Pre-compute index lookup for efficient access
-        var layoutIndexMap = new Dictionary<string, int>();
-
-        for (var i = 0; i < sharedLayout.Count; i++)
-        {
-            layoutIndexMap[sharedLayout[i]] = i;
-        }
-
-        var parseCache = new PineVMParseCache();
-
-        // Phase 1: Compile all function bodies in the SCC (without building wrappers yet)
-        var compiledBodies = new Dictionary<string, (Expression body, int paramCount)>();
-
-        foreach (var memberName in sccMembers)
-        {
-            if (context.TryGetFunctionInfo(memberName) is not { } funcInfo)
-                continue;
-
-            var declaration = funcInfo.declaration;
-            var moduleName = funcInfo.moduleName;
-            var functionBody = declaration.Function.Declaration.Expression;
-            var arguments = declaration.Function.Declaration.Arguments;
-            var paramCount = arguments.Count;
-
-            // Build parameter mappings
-            var parameterNames = new Dictionary<string, int>();
-
-            var localBindings = new Dictionary<string, Expression>();
-
-            for (var i = 0; i < arguments.Count; i++)
-            {
-                var argPattern = arguments[i];
-
-                if (argPattern is IrTypes.Pattern.VarPattern varPattern)
-                {
-                    parameterNames[varPattern.Name] = i;
-                }
-                else
-                {
-                    var paramExpr = BuiltinHelpers.BuildPathToParameter(i);
-
-                    var analysis =
-                        PatternCompiler.AnalyzePattern(
-                            argPattern,
-                            paramExpr);
-
-                    foreach (var kvp in analysis.Bindings)
-                    {
-                        localBindings[kvp.Key] = kvp.Value;
-                    }
-                }
-            }
-
-            // Create expression context
-            var expressionContext =
-                new ExpressionCompilationContext(
-                    ParameterNames: parameterNames,
-                    CurrentModuleName: moduleName,
-                    CurrentFunctionName: declaration.Function.Declaration.Name,
-                    LocalBindings: localBindings.Count > 0 ? localBindings : null,
-                    DependencyLayout: sharedLayout,
-                    ModuleCompilationContext: context,
-                    ParseCache: parseCache,
-                    ReducedExpressionCache: reducedExpressionCache);
-
-            // Compile the body
-            var compileBodyResult = ExpressionCompiler.Compile(functionBody, expressionContext);
-
-            if (compileBodyResult.IsErrOrNull() is { } compileErr)
-            {
-                return new CompilationError.InDeclaration(memberName, compileErr);
-            }
-
-            if (compileBodyResult.IsOkOrNull() is not { } compiledBody)
-            {
-                throw new NotImplementedException(
-                    "Unexpected result type: " + compileBodyResult.GetType());
-            }
-
-            compiledBody =
-                ReducePineExpression.ReduceExpressionBottomUp(
-                    compiledBody,
-                    ReductionConfig.Default with
-                    {
-                        DisableGenericApplicationChainConsolidation = disableGenericApplicationChainConsolidation
-                    },
-                    parseCache,
-                    reducedExpressionCache: reducedExpressionCache);
-
-            compiledBodies[memberName] = (compiledBody, paramCount);
-        }
-
-        var encodedBodies =
-            compiledBodies
-            .ToDictionary(
-                kvp => kvp.Key,
-                kvp => ExpressionEncoding.EncodeExpressionAsValue(kvp.Value.body, expressionEncodingCache));
-
-        // Phase 2: Build the envFunctionsList for SCC members.
-        // §7.6b: for recursive SCCs sharedLayout is the member list, so
-        // envFunctionsList contains the encoded bodies of the members in the
-        // same order. Cross-SCC dependencies are fetched at the *call sites*
-        // via Literal(callee.EncodedBody) and Literal(List(callee.EnvFunctions)),
-        // not threaded through current_env[0] of every transitive caller.
-        // For non-recursive single-member SCCs sharedLayout is empty, so
-        // envFunctionsList is empty too — but the wrapper still uses the
-        // uniform WithEnvFunctions shape with env[0] holding the empty list
-        // (Approach A1).
-        var envFunctionsList =
-            sharedLayout
-            .Select(
-                (declName, depIndex) =>
-                {
-                    if (encodedBodies.TryGetValue(declName, out var encodedBodyDep))
-                    {
-                        return encodedBodyDep;
-                    }
-
-                    // Defensive: every entry of sharedLayout is an SCC member,
-                    // and we just compiled all members above. If we ever reach
-                    // this branch the layout/SCC bookkeeping is out of sync.
-                    throw new InvalidOperationException(
-                        $"SCC member {declName} missing encoded body when compiling SCC " +
-                        $"{string.Join(", ", scc.Members)}. " +
-                        "All SCC members should be compiled in Phase 1 before reaching Phase 2.");
-                })
-            .ToList();
-
-        // Phase 3: Build final wrappers and cache all compiled functions
-        foreach (var memberName in sccMembers)
-        {
-            if (!compiledBodies.TryGetValue(memberName, out var bodyInfo))
-                continue;
-
-            PineValue BuildWrapper()
-            {
-                if (bodyInfo.paramCount is 0)
-                {
-                    return
-                        FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
-                            bodyInfo.body,
-                            bodyInfo.paramCount,
-                            envFunctionsList,
-                            encodeExprCache: expressionEncodingCache);
-                }
-
-                return
-                    FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(
-                        bodyInfo.body,
-                        bodyInfo.paramCount,
-                        envFunctionsList,
-                        encodeExprCache: expressionEncodingCache)
-                    ??
-                    throw new NotImplementedException(
-                        "Failed to build curried function value for " + memberName + ".");
-            }
-
-            // Phase 1 of Approach A1: always emit WithEnvFunctions wrapper.
-            // For non-recursive single-member SCCs, envFunctionsList is empty
-            // (per §7.6b), so this produces a wrapper with env[0] = List([]).
-            var wrapper = BuildWrapper();
-
-            var encodedBody = encodedBodies[memberName];
-
-            context =
-                context.WithCompiledFunction(
-                    memberName,
-                    wrapper,
-                    encodedBody,
-                    sharedLayout,
-                    parameterCount: bodyInfo.paramCount,
-                    envFunctions: envFunctionsList);
-        }
-
-        return context;
-    }
-
-    private static IReadOnlySet<string> AnalyzeFunctionDependencies(
-        IrTypes.Expression expression,
-        string currentModuleName,
-        ModuleCompilationContext context)
-    {
-        var dependencies = new HashSet<string>();
-
-        void AnalyzeExpression(IrTypes.Expression expr)
-        {
-            switch (expr)
-            {
-                case IrTypes.Expression.Application application:
-
-                    if (application.Arguments.Count >= 1 &&
-                        application.Function is IrTypes.Expression.Identifier funcRef)
-                    {
-                        // Skip Pine_kernel functions
-                        if (funcRef.QualifiedName.Namespaces.Count is 1 &&
-                            context.IsPineKernelModule(funcRef.QualifiedName.Namespaces[0]))
-                        {
-                            // Still recurse into arguments
-                            foreach (var arg in application.Arguments)
-                            {
-                                AnalyzeExpression(arg);
-                            }
-
-                            break;
-                        }
-
-                        // Skip choice type tag constructors
-                        if (ElmValueEncoding.StringIsValidTagName(funcRef.QualifiedName.DeclName))
-                        {
-                            // Still recurse into arguments
-                            foreach (var arg in application.Arguments)
-                            {
-                                AnalyzeExpression(arg);
-                            }
-
-                            break;
-                        }
-
-                        // Determine qualified name
-                        string qualifiedName;
-
-                        if (funcRef.QualifiedName.Namespaces.Count > 0)
-                        {
-                            qualifiedName = funcRef.QualifiedName.FullName;
-                        }
-                        else
-                        {
-                            qualifiedName = currentModuleName + "." + funcRef.QualifiedName.DeclName;
-                        }
-
-                        dependencies.Add(qualifiedName);
-                    }
-
-                    AnalyzeExpression(application.Function);
-
-                    // Recurse into arguments
-                    foreach (var arg in application.Arguments)
-                    {
-                        AnalyzeExpression(arg);
-                    }
-
-                    break;
-
-                case IrTypes.Expression.OperatorApplication operatorApp:
-                    AnalyzeExpression(operatorApp.Left);
-                    AnalyzeExpression(operatorApp.Right);
-                    return;
-
-                case IrTypes.Expression.IfBlock ifBlock:
-                    AnalyzeExpression(ifBlock.Condition);
-                    AnalyzeExpression(ifBlock.ThenBlock);
-                    AnalyzeExpression(ifBlock.ElseBlock);
-                    return;
-
-                case IrTypes.Expression.LetExpression letExpr:
-                    foreach (var decl in letExpr.Declarations)
-                    {
-                        switch (decl)
-                        {
-                            case IrTypes.LetDeclaration.LetFunction letFunc:
-                                AnalyzeExpression(letFunc.Function.Declaration.Expression);
-                                break;
-
-                            case IrTypes.LetDeclaration.LetDestructuring letDestr:
-                                AnalyzeExpression(letDestr.Expression);
-                                break;
-
-                            default:
-                                throw new NotImplementedException(
-                                    $"{nameof(AnalyzeFunctionDependencies)} does not handle let declaration variant: {decl.GetType().Name}");
-                        }
-                    }
-
-                    AnalyzeExpression(letExpr.Expression);
-                    return;
-
-                case IrTypes.Expression.ListExpr listExpr:
-                    foreach (var elem in listExpr.Elements)
-                    {
-                        AnalyzeExpression(elem);
-                    }
-
-                    return;
-
-                case IrTypes.Expression.Negation negation:
-                    AnalyzeExpression(negation.Expression);
-                    return;
-
-                case IrTypes.Expression.CaseExpression caseExpr:
-                    AnalyzeExpression(caseExpr.Expression);
-
-                    foreach (var caseItem in caseExpr.Cases)
-                    {
-                        AnalyzeExpression(caseItem.Expression);
-                    }
-
-                    return;
-
-                case IrTypes.Expression.TupledExpression tupledExpr:
-                    foreach (var elem in tupledExpr.Elements)
-                    {
-                        AnalyzeExpression(elem);
-                    }
-
-                    return;
-
-                case IrTypes.Expression.RecordExpr recordExpr:
-                    foreach (var field in recordExpr.Fields)
-                    {
-                        AnalyzeExpression(field.Value);
-                    }
-
-                    return;
-
-                case IrTypes.Expression.RecordUpdateExpression recordUpdateExpr:
-                    foreach (var setter in recordUpdateExpr.Fields)
-                    {
-                        AnalyzeExpression(setter.Value);
-                    }
-
-                    return;
-
-                case IrTypes.Expression.RecordAccess recordAccess:
-                    AnalyzeExpression(recordAccess.Record);
-                    return;
-
-                case IrTypes.Expression.ProjectItem projection:
-                    AnalyzeExpression(projection.Value);
-                    return;
-
-                case IrTypes.Expression.LambdaExpression lambdaExpr:
-                    AnalyzeExpression(lambdaExpr.Expression);
-                    return;
-
-                case IrTypes.Expression.Identifier funcOrValue:
-
-                    if (funcOrValue.QualifiedName.DeclName.Length < 0)
-                    {
-                        throw new InvalidOperationException(
-                            "Function or value name cannot be empty.");
-                    }
-
-                    if (char.IsUpper(funcOrValue.QualifiedName.DeclName[0]))
-                    {
-                        // This must be a choice type tag constructor or record constructor - cannot contribute to dependencies
-                        return;
-                    }
-
-                    {
-                        // Handle standalone function references (escaping functions)
-                        // This is when a function is used as a value, not applied
-
-                        string qualifiedName;
-
-                        if (funcOrValue.QualifiedName.Namespaces.Count > 0)
-                        {
-                            // Skip Pine_kernel module functions
-                            if (funcOrValue.QualifiedName.Namespaces.Count is 1 &&
-                                context.IsPineKernelModule(funcOrValue.QualifiedName.Namespaces[0]))
-                            {
-                                return;
-                            }
-
-                            qualifiedName = funcOrValue.QualifiedName.FullName;
-                        }
-                        else
-                        {
-                            qualifiedName = currentModuleName + "." + funcOrValue.QualifiedName.DeclName;
-                        }
-
-                        // Only add if it's a known function (not a local variable)
-                        if (context.TryGetFunctionInfo(qualifiedName) is not null)
-                        {
-                            dependencies.Add(qualifiedName);
-                        }
-                    }
-
-                    return;
-
-                case IrTypes.Expression.PrefixOperator:
-                case IrTypes.Expression.UnitExpr:
-                case IrTypes.Expression.StringLiteral:
-                case IrTypes.Expression.IntegerLiteral:
-                case IrTypes.Expression.CharLiteral:
-                case IrTypes.Expression.FloatLiteral:
-                case IrTypes.Expression.RecordAccessFunction:
-                case IrTypes.Expression.GLSLExpression:
-                    return;
-
-                default:
-                    throw new NotImplementedException(
-                        $"{nameof(AnalyzeFunctionDependencies)} does not handle expression variant: {expr.GetType().Name}");
-            }
-        }
-
-        AnalyzeExpression(expression);
-
-        return dependencies;
     }
 
     internal static ImmutableDictionary<string, TypeInference.InferredType> ExtractParameterTypes(
@@ -1982,293 +725,6 @@ public partial class ElmCompiler
         }
 
         return parameterTypes;
-    }
-
-    private static PineValue EmitModuleValue(
-        ElmModuleInCompilation compiledModule)
-    {
-        /*
-        emitModuleValue : ElmModuleInCompilation -> Pine.Value
-        emitModuleValue parsedModule =
-            let
-                typeDescriptions : List ( String, Pine.Value )
-                typeDescriptions =
-                    List.foldr
-                        (\( typeName, typeDeclaration ) aggregate ->
-                            ( typeName, emitTypeDeclarationValue typeDeclaration ) :: aggregate
-                        )
-                        []
-                        parsedModule.typeDeclarations
-            in
-            Pine.ListValue
-                (List.map Pine.valueFromContextExpansionWithName
-                    (List.concat [ parsedModule.functionDeclarations, typeDescriptions ])
-                )
-         * */
-
-        IReadOnlyList<(string declName, PineValue declValue)> typeDescriptions = [];
-
-        PineValue[] entries =
-            [
-            .. compiledModule.FunctionDeclarations
-            .Concat(typeDescriptions)
-            .Select(tuple => ValueFromContextExpansionWithName(tuple.declName, tuple.Item2))
-            ];
-
-        return PineValue.List(entries);
-    }
-
-    private static PineValue ValueFromContextExpansionWithName(
-        string name,
-        PineValue pineValue)
-    {
-        /*
-        valueFromContextExpansionWithName : ( String, Value ) -> Value
-        valueFromContextExpansionWithName ( declName, declValue ) =
-            ListValue [ computeValueFromString declName, declValue ]
-         * */
-
-        return PineValue.List([StringEncoding.ValueFromString(name), pineValue]);
-    }
-
-    private static Result<string, OptimizationPipelineStageResults> ApplyOptimizationPipelineWithStageResults(
-        List<ElmSyntaxAbstract.File> lambdaLiftedModules)
-    {
-        // Flatten the input modules into a declaration dictionary and lift into the
-        // optimization-stage record. The pipeline operates on this structured representation
-        // throughout — each downstream flat-dict stage is invoked by rendering through
-        // `RenderAsFlatDictionary` and re-lifting the result via `FromFlatDictionary`.
-        var initialFlat = FlattenModulesToDeclarationDictionary(lambdaLiftedModules);
-
-        var currentDecls =
-            OptimizedElmSyntaxDeclarations.FromFlatDictionary(
-                initialFlat);
-
-        {
-            var result =
-                BuiltinOperatorLowering.Apply(
-                    currentDecls.RenderAsFlatDictionary(),
-                    new BuiltinOperatorLowering.Configuration(
-                        LowerBuiltinOperators: true,
-                        LowerElmCoreBasics: true));
-
-            if (result.IsErrOrNull() is { } builtinLowerErr)
-                return "Operator lowering failed: " + builtinLowerErr;
-
-            if (result.IsOkOrNull() is not { } lowerDict)
-                throw new NotImplementedException("Unexpected result type");
-
-            currentDecls =
-                OptimizedElmSyntaxDeclarations.FromFlatDictionary(
-                    lowerDict);
-        }
-
-        {
-            if (CheckForNamingErrors(currentDecls, "Operator lowering") is { } lowerShadowErr)
-                return lowerShadowErr;
-
-            return
-                new OptimizationPipelineStageResults(
-                    AfterLowering: currentDecls);
-        }
-    }
-
-    /// <summary>
-    /// <see cref="OptimizedElmSyntaxDeclarations"/>-flavoured overload of
-    /// <see cref="CheckForNamingErrors(ImmutableDictionary{DeclQualifiedName, ElmSyntaxAbstract.Declaration}, string)"/>.
-    /// </summary>
-    private static string? CheckForNamingErrors(
-        OptimizedElmSyntaxDeclarations declarations,
-        string stageName) =>
-        CheckForNamingErrors(
-            declarations.RenderAsFlatDictionary(),
-            stageName);
-
-    /// <summary>
-    /// Checks for naming clashes and shadowings in a flat declaration dictionary
-    /// by running naming error detection directly on the declarations without
-    /// reconstructing module files or running full canonicalization.
-    /// Returns an error message if any problems are found, or null if the declarations are clean.
-    /// Problems in the output of a compilation stage indicate a defect in that stage
-    /// (e.g., inlining introduced a naming conflict).
-    /// </summary>
-    private static string? CheckForNamingErrors(
-        ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> declarations,
-        string stageName)
-    {
-        var (errors, shadowings) =
-            NamingErrorDetection.DetectNamingErrorsInFlatDict(
-                declarations.ToImmutableDictionary(
-                    item => item.Key,
-                    item => ElmSyntaxAbstract.ConvertToConcrete.ToDeclaration(item.Value)));
-
-        return FormatNamingErrorProblems(errors, shadowings, stageName);
-    }
-
-    /// <summary>
-    /// Checks for naming clashes and shadowings in a list of module files
-    /// by running naming error detection directly on the declarations without
-    /// running full canonicalization.
-    /// Returns an error message if any problems are found, or null if the declarations are clean.
-    /// Problems in the output of a compilation stage indicate a defect in that stage
-    /// (e.g., lambda lifting introduced a naming conflict).
-    /// </summary>
-    private static string? CheckForNamingErrors(
-        IReadOnlyList<ElmSyntaxAbstract.File> modules,
-        string stageName)
-    {
-        var flatDecls = FlattenModulesToDeclarationDictionary(modules);
-
-        return CheckForNamingErrors(flatDecls, stageName);
-    }
-
-    /// <summary>
-    /// Checks that declarations do not contain syntax nodes that are disallowed in the
-    /// optimization pipeline (e.g., lambda expressions and let-functions that should have
-    /// been lifted to top-level functions).
-    /// Returns an error message if any disallowed nodes are found, or null if clean.
-    /// </summary>
-    private static string? CheckForSyntaxNodesDisallowedInOptimization(
-        ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> declarations,
-        string stageName)
-    {
-        var disallowedLocations = new List<(DeclQualifiedName DeclName, string Detail)>();
-
-        foreach (var (qualifiedName, abstractDecl) in declarations)
-        {
-            var decl = ElmSyntaxAbstract.ConvertToConcrete.ToDeclaration(abstractDecl);
-
-            SyntaxModelTypes.ReportSyntaxNodes.ReportViaCallback(
-                decl,
-                reportLambda:
-                _ =>
-                disallowedLocations.Add((qualifiedName, "lambda expression")),
-                reportLetBlock:
-                _ => { },
-                reportLetFunction:
-                letFunc =>
-                {
-                    // Only flag LetFunction nodes that have parameters (actual function declarations).
-                    // Zero-parameter LetFunction nodes represent value bindings that should not be lifted.
-                    if (letFunc.Function.Declaration.Value.Arguments.Count > 0)
-                    {
-                        disallowedLocations.Add(
-                            (qualifiedName, "let-function '" + letFunc.Function.Declaration.Value.Name.Value + "'"));
-                    }
-                });
-        }
-
-        if (disallowedLocations.Count is 0)
-            return null;
-
-        var grouped =
-            disallowedLocations
-            .GroupBy(loc => loc.DeclName)
-            .OrderBy(g => g.Key)
-            .Select(
-                g =>
-                {
-                    var lambdaCount = g.Count(loc => loc.Detail is "lambda expression");
-                    var letFuncCount = g.Count(loc => loc.Detail.StartsWith("let-function", StringComparison.Ordinal));
-                    var parts = new List<string>();
-
-                    if (lambdaCount > 0)
-                        parts.Add(lambdaCount + " lambda expression(s)");
-
-                    if (letFuncCount > 0)
-                        parts.Add(letFuncCount + " let-function(s)");
-
-                    return
-                        g.Key.DeclName + " in " + string.Join(".", g.Key.Namespaces) +
-                        ": " + string.Join(", ", parts);
-                });
-
-        return
-            stageName + " produced declarations containing " +
-            disallowedLocations.Count + " disallowed node(s):\n" +
-            string.Join("\n", grouped);
-    }
-
-    /// <summary>
-    /// Checks that module declarations do not contain syntax nodes that are disallowed after
-    /// lambda lifting.
-    /// Returns an error message if any disallowed nodes are found, or null if clean.
-    /// </summary>
-    private static string? CheckForSyntaxNodesDisallowedInOptimization(
-        IReadOnlyList<ElmSyntaxAbstract.File> modules,
-        string stageName)
-    {
-        var flatDecls = FlattenModulesToDeclarationDictionary(modules);
-
-        return CheckForSyntaxNodesDisallowedInOptimization(flatDecls, stageName);
-    }
-
-    /// <summary>
-    /// Module-list flavoured overload of
-    /// <see cref="ValidateStage"/>.
-    /// </summary>
-    private static string? ValidateStage(
-        IReadOnlyList<ElmSyntaxAbstract.File> modules,
-        string stageName)
-    {
-        if (CheckForNamingErrors(modules, stageName) is { } namingErr)
-            return namingErr;
-
-        if (CheckForSyntaxNodesDisallowedInOptimization(modules, stageName) is { } disallowedErr)
-            return disallowedErr;
-
-        return null;
-    }
-
-    /// <summary>
-    /// Formats naming errors and shadowings into a human-readable problem string.
-    /// Returns null if there are no problems.
-    /// </summary>
-    private static string? FormatNamingErrorProblems(
-        IReadOnlyList<CanonicalizationError> errors,
-        ImmutableDictionary<string, ShadowingLocation> shadowings,
-        string stageName)
-    {
-        var problems = new List<string>();
-
-        // Check for shadowings
-        if (shadowings.Count > 0)
-        {
-            var allShadowedNames = shadowings.Keys.ToList();
-
-            problems.Add(
-                stageName + " produced " + allShadowedNames.Count +
-                " shadowing(s): " + string.Join(", ", allShadowedNames));
-        }
-
-        // Check for all error types using the typed error hierarchy.
-        {
-            var allNamingClashes = new List<string>();
-
-            foreach (var error in errors)
-            {
-                switch (error)
-                {
-                    case CanonicalizationError.NamingClash clash:
-                        allNamingClashes.Add(clash.Name);
-                        break;
-                }
-            }
-
-            if (allNamingClashes.Count > 0)
-            {
-                var distinctNames = allNamingClashes.Distinct().OrderBy(n => n);
-
-                problems.Add(
-                    stageName + " produced " + allNamingClashes.Count +
-                    " naming clash(es): " + string.Join(", ", distinctNames));
-            }
-        }
-
-        if (problems.Count is 0)
-            return null;
-
-        return string.Join("\n", problems);
     }
 
     /// <summary>
@@ -2410,143 +866,6 @@ public partial class ElmCompiler
                 declaration.Value is not ElmSyntaxAbstract.Declaration.FunctionDeclaration ||
                 includedFunctions.Contains(declaration.Key))
             .ToImmutableDictionary();
-    }
-
-    /// <summary>
-    /// Builds a minimal set of module shells (one per distinct namespace appearing in
-    /// <paramref name="flatDecls"/>) suitable as input to the per-module lambda-lifting
-    /// and optimization stages. The synthesized shells contain only the declarations
-    /// from <paramref name="flatDecls"/> in deterministic <see cref="DeclQualifiedName"/>
-    /// order — imports, comments and exposing lists are left empty because the
-    /// downstream stages do not consult them.
-    /// </summary>
-    internal static List<ElmSyntaxAbstract.File> BuildModuleShellsFromFlatDeclarations(
-        ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> flatDecls)
-    {
-        var declsByNamespace =
-            new Dictionary<IReadOnlyList<string>, List<KeyValuePair<DeclQualifiedName, ElmSyntaxAbstract.Declaration>>>(
-                EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
-
-        foreach (var entry in flatDecls.OrderBy(kvp => kvp.Key))
-        {
-            if (!declsByNamespace.TryGetValue(entry.Key.Namespaces, out var bucket))
-            {
-                bucket = [];
-                declsByNamespace[entry.Key.Namespaces] = bucket;
-            }
-
-            bucket.Add(entry);
-        }
-
-        var orderedNamespaces =
-            declsByNamespace.Keys
-            .OrderBy(ns => string.Join('.', ns), StringComparer.Ordinal)
-            .ToList();
-
-        var result = new List<ElmSyntaxAbstract.File>(orderedNamespaces.Count);
-
-        foreach (var ns in orderedNamespaces)
-        {
-            var moduleDefinition =
-                new ElmSyntaxAbstract.Module.NormalModule(
-                    new ElmSyntaxAbstract.DefaultModuleData(
-                        ModuleName: ns,
-                        ExposingList: new ElmSyntaxAbstract.Exposing.All()));
-
-            var declarations =
-                declsByNamespace[ns]
-                .Select(kvp => kvp.Value)
-                .ToList();
-
-            result.Add(
-                new ElmSyntaxAbstract.File(
-                    ModuleDefinition: moduleDefinition,
-                    Imports: [],
-                    Declarations: declarations));
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Reconstructs a list of module files from a flat declaration dictionary and the original
-    /// module shells. For each original module, the declarations list is rebuilt by replacing
-    /// function declarations with those from the flat dictionary (which may have been transformed
-    /// by optimization passes) while preserving type declarations, alias declarations, and other
-    /// non-function declarations from the original modules.
-    /// New declarations that were added by the pipeline (e.g., specializations) are appended
-    /// to their respective module.
-    /// </summary>
-    internal static List<ElmSyntaxAbstract.File> ReconstructModulesFromFlatDict(
-        ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> flatDecls,
-        IReadOnlyList<ElmSyntaxAbstract.File> originalModules)
-    {
-        // Track which declarations from the flat dict we've placed into a module.
-        var placedKeys = new HashSet<DeclQualifiedName>();
-
-        var result = new List<ElmSyntaxAbstract.File>(originalModules.Count);
-
-        foreach (var originalModule in originalModules)
-        {
-            var moduleName = ElmSyntaxAbstract.Module.GetModuleName(originalModule.ModuleDefinition);
-
-            var newDeclarations = new List<ElmSyntaxAbstract.Declaration>();
-
-            // Walk the original declarations in order, replacing function declarations
-            // from the flat dict and keeping non-function declarations as-is.
-            foreach (var decl in originalModule.Declarations)
-            {
-                var declName = GetDeclarationName(decl);
-
-                if (declName is null)
-                    continue;
-
-                var qualifiedName =
-                    DeclQualifiedName.Create(
-                        moduleName,
-                        declName);
-
-                if (flatDecls.TryGetValue(qualifiedName, out var replacementDecl))
-                {
-                    newDeclarations.Add(replacementDecl);
-                    placedKeys.Add(qualifiedName);
-                    continue;
-                }
-
-                if (decl is ElmSyntaxAbstract.Declaration.FunctionDeclaration)
-                {
-                    // Function declarations are only kept if appearing in the dependency tree from the entry points.
-                    continue;
-                }
-
-                // Declaration not in the flat dict (e.g., was removed or is unknown type).
-                // Keep the original.
-                newDeclarations.Add(decl);
-            }
-
-            // Append any new declarations for this module that weren't in the original.
-            // Sort by declaration name for deterministic ordering in snapshot tests.
-            var newModuleDecls =
-                flatDecls
-                .Where(kvp => !placedKeys.Contains(kvp.Key) && kvp.Key.Namespaces.SequenceEqual(moduleName))
-                .OrderBy(kvp => kvp.Key)
-                .ToList();
-
-            foreach (var (key, decl) in newModuleDecls)
-            {
-                newDeclarations.Add(decl);
-
-                placedKeys.Add(key);
-            }
-
-            result.Add(
-                originalModule with
-                {
-                    Declarations = newDeclarations
-                });
-        }
-
-        return result;
     }
 
     /// <summary>

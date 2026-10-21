@@ -1561,10 +1561,10 @@ public class KernelJsonFunctionTests
         formattedCounts.ShouldBeWithDiff(
             """
             InvocationCount: 43
-            BuildListCount: 118
-            BuildListItemCount: 326
+            BuildListCount: 116
+            BuildListItemCount: 322
             LoopIterationCount: 40
-            InstructionCount: 1_464
+            InstructionCount: 1_463
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 29
             DeferredTemplateValueMaterializationCount: 0

@@ -304,10 +304,10 @@ public class ElmParserExpressionTests
         // optimization opportunities.
         ElmSyntaxInterpreterEvalWorkCountersFormatting.FormatCounts(report.InterpreterCounters).ShouldBeWithDiff(
             """
-            InstructionLoopCount: 1_975
-            DirectFunctionApplicationCount: 300
+            InstructionLoopCount: 2_139
+            DirectFunctionApplicationCount: 327
             FunctionValueApplicationCount: 0
-            PineBuiltinInvocationCount: 133
+            PineBuiltinInvocationCount: 141
             """);
     }
 
@@ -363,7 +363,7 @@ public class ElmParserExpressionTests
             BuildListCount: 72
             BuildListItemCount: 343
             LoopIterationCount: 1
-            InstructionCount: 803
+            InstructionCount: 802
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
@@ -378,16 +378,13 @@ public class ElmParserExpressionTests
             DirectInterpreterEnvironmentCount: 0
             """);
 
-        // Snapshot of the Elm syntax interpreter's metrics for the same root expression.
-        // See the comment on Expression_char_literal: the interpreter's counts capture work
-        // done at the Elm-source level and are useful as a baseline against which to read the
-        // VM's optimized cost.
+        // The independent interpreter measures canonical source, not optimized compiler expressions.
         ElmSyntaxInterpreterEvalWorkCountersFormatting.FormatCounts(report.InterpreterCounters).ShouldBeWithDiff(
             """
-            InstructionLoopCount: 3_413
-            DirectFunctionApplicationCount: 504
+            InstructionLoopCount: 4_044
+            DirectFunctionApplicationCount: 611
             FunctionValueApplicationCount: 0
-            PineBuiltinInvocationCount: 216
+            PineBuiltinInvocationCount: 263
             """);
     }
 
@@ -413,7 +410,7 @@ public class ElmParserExpressionTests
             BuildListCount: 441
             BuildListItemCount: 2_089
             LoopIterationCount: 12
-            InstructionCount: 4_641
+            InstructionCount: 4_640
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
@@ -450,7 +447,7 @@ public class ElmParserExpressionTests
             BuildListCount: 327
             BuildListItemCount: 1_539
             LoopIterationCount: 45
-            InstructionCount: 3_658
+            InstructionCount: 3_656
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 2
             DeferredTemplateValueMaterializationCount: 0
@@ -488,7 +485,7 @@ public class ElmParserExpressionTests
             BuildListCount: 1_671
             BuildListItemCount: 7_909
             LoopIterationCount: 122
-            InstructionCount: 17_911
+            InstructionCount: 17_910
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
@@ -533,7 +530,7 @@ public class ElmParserExpressionTests
             BuildListCount: 1_839
             BuildListItemCount: 8_693
             LoopIterationCount: 190
-            InstructionCount: 20_147
+            InstructionCount: 20_142
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0

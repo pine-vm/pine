@@ -10,9 +10,6 @@ using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
-using Syntax = Pine.Core.Elm.ElmSyntax.SyntaxModel;
-using Abstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
-
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
 public class DeclarationDemandTests
@@ -54,18 +51,8 @@ public class DeclarationDemandTests
             .Extract(error => throw new Exception(error));
 
         var expectedExports =
-            result.pipelineStageResults.ModulesForCompilation
-            .Select(
-                module =>
-                (Module: string.Join(".", Abstract.Module.GetModuleName(module.ModuleDefinition)),
-                Names: module.Declarations.OfType<Abstract.Declaration.FunctionDeclaration>()
-                .Select(function => function.Function.Declaration.Name)
-                .Where(
-                    name =>
-                    roots.Contains(
-                        Name(string.Join(".", Abstract.Module.GetModuleName(module.ModuleDefinition)), name)))
-                .ToArray()))
-            .Where(module => module.Names.Length > 0)
+            roots.Order().GroupBy(name => string.Join(".", name.Namespaces))
+            .Select(group => (Module: group.Key, Names: group.Select(name => name.DeclName).ToArray()))
             .ToArray();
 
         environment.Modules.Select(module => module.moduleName)
@@ -85,7 +72,8 @@ public class DeclarationDemandTests
             exportedNames.Should().Equal(names);
         }
 
-        result.pipelineStageResults.DeclarationsForEmission.Should().ContainKey(Name("Supporting", "hidden"));
+        result.pipelineStageResults.CompilerProgram.Functions.Should().ContainKey(
+            new Core.Elm.ElmCompilerInDotnet.CompilerModel.FunctionId.Source(Name("Supporting", "hidden")));
 
         environment.Modules.SelectMany(module => module.moduleContent.FunctionDeclarations.Keys).Should().NotContain(
             "hidden");
@@ -124,7 +112,7 @@ public class DeclarationDemandTests
         rootModule.moduleContent.FunctionDeclarations.Should().ContainSingle()
             .Which.Key.Should().Be("root");
 
-        result.pipelineStageResults.Lowered.FilteredDeclarations.Keys.Should()
+        result.pipelineStageResults.CanonicalDeclarations.Keys.Should()
             .NotContain(name => name.Equals(Name("Supporting", "unused")));
 
         var parseCache = new PineVMParseCache();
@@ -184,10 +172,10 @@ public class DeclarationDemandTests
                 """);
 
         var result =
-            ElmCompiler.LowerToElmSyntaxForCompilation(sources, [Name("Main", "root")])
+            ElmCompiler.LowerToCompilerModel(sources, [Name("Main", "root")])
             .Extract(error => throw new Exception(error));
 
-        var names = result.Lowered.FilteredDeclarations.Keys;
+        var names = result.CompilerProgram.SourceDeclarations.Keys;
         names.Should().Contain(Name("Supporting", "Status"));
         names.Should().Contain(Name("Supporting", "Payload"));
         names.Should().NotContain(Name("Supporting", "Unused"));
@@ -398,10 +386,10 @@ public class DeclarationDemandTests
                 """);
 
         var result =
-            ElmCompiler.LowerToElmSyntaxForCompilation(sources, [Name("Main", "root")])
+            ElmCompiler.LowerToCompilerModel(sources, [Name("Main", "root")])
             .Extract(error => throw new Exception(error));
 
-        result.Lowered.FilteredDeclarations.Keys.Should().Contain(Name("Supporting", "Payload"))
+        result.CompilerProgram.SourceDeclarations.Keys.Should().Contain(Name("Supporting", "Payload"))
             .And.NotContain(Name("Main", "Tree"));
     }
 
@@ -432,9 +420,7 @@ public class DeclarationDemandTests
                 "module Main exposing (..)\nroot = missing\nother = 42")
             .Extract(error => throw new Exception(error.ToString()));
 
-        var cache =
-            new Dictionary<(Syntax.Node<Syntax.Declaration> Declaration, string Scope),
-            DeclarationCanonicalizationCacheEntry>();
+        var cache = new Canonicalization.DeclarationCache();
 
         var first =
             Canonicalization.CanonicalizeDeclarations([original], [Name("Main", "root")], cache: cache)

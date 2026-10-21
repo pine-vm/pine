@@ -1,12 +1,10 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
-using Pine.Core.Elm.ElmCompilerInDotnet;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using System.Text.Json;
 using Xunit;
 
 using Abstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
@@ -15,7 +13,7 @@ using InfixDirection = Pine.Core.Elm.ElmSyntax.SyntaxModel.InfixDirection;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 
-public class ConvertFromAbstractSyntaxTests
+public class FromCanonicalSyntaxTests
 {
     private static Abstract.Expression Integer(int value) =>
         new Abstract.Expression.IntegerLiteral(value, IntegerEncoding.EncodeSignedInteger(value));
@@ -184,181 +182,98 @@ public class ConvertFromAbstractSyntaxTests
         return annotations.Select(annotation => new object[] { annotation });
     }
 
-    public static IEnumerable<object[]> Declarations()
+    private static Core.Elm.ElmCompilerInDotnet.CompilerModel.Program ConvertExpression(Abstract.Expression body)
     {
-        Abstract.Declaration[] declarations =
-            [
-            new Abstract.Declaration.FunctionDeclaration(s_function),
-            new Abstract.Declaration.ChoiceTypeDeclaration(
-                new Abstract.ChoiceTypeStruct(
-                    "Choice",
-                    ["a"],
-                    [
-                    Abstract.ValueConstructor.Create("Empty", []),
-                    Abstract.ValueConstructor.Create(
-                        "Pair",
-                        [
-                        s_generic,
-                        new Abstract.TypeAnnotation.Record(s_recordDefinition)
-                        ])
-                    ])),
-            new Abstract.Declaration.AliasDeclaration(
-                new Abstract.TypeAlias(
-                    "Alias",
-                    [
-                    "a",
-                    "row"
-                    ],
-                    new Abstract.TypeAnnotation.GenericRecord("row", s_recordDefinition))),
-            new Abstract.Declaration.PortDeclaration(
-                new Abstract.Signature(
-                    "send",
-                    new Abstract.TypeAnnotation.FunctionTypeAnnotation(s_generic, new Abstract.TypeAnnotation.Unit()))),
-            new Abstract.Declaration.InfixDeclaration(new Abstract.Infix(InfixDirection.Right, 7, "<?>", "function"))
-            ];
+        var name = DeclQualifiedName.Create(["Test"], "root");
 
-        return declarations.Select(declaration => new object[] { declaration });
+        var function =
+            new Abstract.Declaration.FunctionDeclaration(
+                new(
+                    null,
+                    new Abstract.FunctionImplementation(
+                        "root",
+                        [
+                            new Abstract.Pattern.VarPattern("f"),
+                            new Abstract.Pattern.VarPattern("x"), new Abstract.Pattern.VarPattern("record")
+                        ],
+                        body)));
+
+        return
+            Core.Elm.ElmCompilerInDotnet.CompilerModel.FromCanonicalSyntax.Convert(
+                new Dictionary<DeclQualifiedName, Abstract.Declaration> { [name] = function });
     }
 
     [Theory]
     [MemberData(nameof(Expressions))]
-    public void Expression_mapping_preserves_every_field_without_lowering(Abstract.Expression source) =>
-        AssertMapping(source, IR.ConvertFromAbstractSyntax.FromExpression(source));
-
-    [Theory]
-    [MemberData(nameof(Expressions))]
-    public void IR_reference_and_parameter_analysis_handle_every_expression_variant(Abstract.Expression source)
+    public void Source_expression_conversion_resolves_every_variant(Abstract.Expression source)
     {
-        var expression = IR.ConvertFromAbstractSyntax.FromExpression(source);
-        var references = new HashSet<string>();
+        var model = Core.Elm.ElmCompilerInDotnet.CompilerModel.LambdaLifting.Lift(ConvertExpression(source));
+        Core.Elm.ElmCompilerInDotnet.CompilerModel.ProgramValidation.Validate(model);
+        var emitted = Core.Elm.ElmCompilerInDotnet.CompilerModel.ToIntermediateRepresentation.Convert(model);
+        emitted.Should().NotBeEmpty();
 
-        ExpressionCompiler.CollectExpressionReferences(expression, references);
-
-        TypeInference.InferParameterTypesFromUsage(
-            source,
-            new Dictionary<string, int>(),
-            new Dictionary<string, TypeInference.InferredType>());
-
-        TypeInference.ExtractTypeConstraintsFromTagApplications(
-            source,
-            new Dictionary<DeclQualifiedName, IReadOnlyList<TypeInference.InferredType>>(),
-            []);
-
-        TypeInference.ExtractTypeConstraintsFromFunctionApplications(
-            source,
-            new Dictionary<DeclQualifiedName, FunctionTypeInfo>(),
-            "Test",
-            []);
+        foreach (var expression in emitted.Values.SelectMany(function => IR.ExpressionTraversal.Enumerate(function.Expression)))
+        {
+            if (expression is IR.Expression.Identifier identifier)
+                identifier.Reference.Should().NotBeNull();
+        }
     }
 
     [Theory]
     [MemberData(nameof(Patterns))]
-    public void Pattern_mapping_preserves_every_field_without_lowering(Abstract.Pattern source) =>
-        AssertMapping(source, IR.ConvertFromAbstractSyntax.FromPattern(source));
+    public void Source_patterns_are_resolved_or_lowered_without_name_annotations(Abstract.Pattern source)
+    {
+        var name = DeclQualifiedName.Create(["Test"], "root");
+
+        var function =
+            new Abstract.Declaration.FunctionDeclaration(
+                new(
+                    null,
+                    new Abstract.FunctionImplementation("root", [source], Integer(0))));
+
+        var model =
+            Core.Elm.ElmCompilerInDotnet.CompilerModel.FromCanonicalSyntax.Convert(
+                new Dictionary<DeclQualifiedName, Abstract.Declaration> { [name] = function });
+
+        Core.Elm.ElmCompilerInDotnet.CompilerModel.ProgramValidation.Validate(model);
+        model.Functions.Should().ContainSingle();
+    }
 
     [Theory]
     [MemberData(nameof(TypeAnnotations))]
-    public void Type_annotation_mapping_preserves_every_field(Abstract.TypeAnnotation source) =>
-        AssertMapping(source, IR.ConvertFromAbstractSyntax.FromTypeAnnotation(source));
-
-    [Theory]
-    [MemberData(nameof(Declarations))]
-    public void Declaration_mapping_preserves_every_field(Abstract.Declaration source) =>
-        AssertMapping(source, IR.ConvertFromAbstractSyntax.FromDeclaration(source));
-
-    [Fact]
-    public void Mapping_fixtures_cover_every_source_variant()
+    public void Source_type_annotations_are_consumed_before_backend_emission(Abstract.TypeAnnotation type)
     {
-        AssertVariantsCovered(typeof(Abstract.Expression), Expressions());
-        AssertVariantsCovered(typeof(Abstract.Pattern), Patterns());
-        AssertVariantsCovered(typeof(Abstract.TypeAnnotation), TypeAnnotations());
-        AssertVariantsCovered(typeof(Abstract.Declaration), Declarations());
+        var name = DeclQualifiedName.Create(["Test"], "root");
+
+        var function =
+            new Abstract.Declaration.FunctionDeclaration(
+                new(
+                    new Abstract.Signature("root", type),
+                    new Abstract.FunctionImplementation("root", [], Integer(0))));
+
+        var model =
+            Core.Elm.ElmCompilerInDotnet.CompilerModel.FromCanonicalSyntax.Convert(
+                new Dictionary<DeclQualifiedName, Abstract.Declaration> { [name] = function });
+
+        model.Functions.Should().ContainSingle();
+        typeof(IR.FunctionStruct).GetProperty("Signature").Should().BeNull();
     }
 
     [Fact]
-    public void Mapping_preserves_precomputed_values_and_qualified_name_instances()
+    public void Conversion_fixtures_cover_every_expression_and_pattern_variant()
     {
-        var encoded = PineValue.List([IntegerEncoding.EncodeSignedInteger(123)]);
-        var qualifiedName = DeclQualifiedName.Create(["Some", "Module"], "value");
+        Expressions().Select(row => row[0].GetType()).Should().BeEquivalentTo(
+            typeof(Abstract.Expression).GetNestedTypes());
 
-        var integer = new Abstract.Expression.IntegerLiteral(42, encoded);
-
-        ((IR.Expression.IntegerLiteral)IR.ConvertFromAbstractSyntax.FromExpression(integer))
-            .ValueAsPineValue.Should().BeSameAs(encoded);
-
-        var named = new Abstract.Pattern.NamedPattern(new Abstract.QualifiedNameRef(["Test"], "Tag"), [], encoded);
-
-        ((IR.Pattern.NamedPattern)IR.ConvertFromAbstractSyntax.FromPattern(named)).TagNameAsPineValue.Should().BeSameAs(
-            encoded);
-
-        var record =
-            new Abstract.Expression.RecordAccess(new Abstract.Expression.Identifier(qualifiedName), "field", encoded);
-
-        var mapped = (IR.Expression.RecordAccess)IR.ConvertFromAbstractSyntax.FromExpression(record);
-        mapped.FieldNameValue.Should().BeSameAs(encoded);
-        ((IR.Expression.Identifier)mapped.Record).QualifiedName.Should().BeSameAs(qualifiedName);
-
-        var constructor = new Abstract.ValueConstructor("Tag", encoded, []);
-        IR.ConvertFromAbstractSyntax.FromValueConstructor(constructor).NameValue.Should().BeSameAs(encoded);
+        Patterns().Select(row => row[0].GetType()).Should().BeEquivalentTo(typeof(Abstract.Pattern).GetNestedTypes());
     }
 
     [Fact]
-    public void Mapping_rejects_unknown_source_variants_explicitly()
+    public void Conversion_rejects_unknown_expression_variants_explicitly()
     {
-        Action[] mappings =
-            [
-            () => IR.ConvertFromAbstractSyntax.FromExpression(new UnknownExpression()),
-            () => IR.ConvertFromAbstractSyntax.FromPattern(new UnknownPattern()),
-            () => IR.ConvertFromAbstractSyntax.FromTypeAnnotation(new UnknownTypeAnnotation()),
-            () => IR.ConvertFromAbstractSyntax.FromDeclaration(new UnknownDeclaration()),
-            () => IR.ConvertFromAbstractSyntax.FromLetDeclaration(new UnknownLetDeclaration())
-            ];
-
-        foreach (var mapping in mappings)
-            mapping.Should().Throw<NotImplementedException>().WithMessage("*does not handle*Unknown*");
+        var convert = () => ConvertExpression(new UnknownExpression());
+        convert.Should().Throw<NotImplementedException>().WithMessage("*does not handle*Unknown*");
     }
-
-    private static void AssertMapping<TSource, TTarget>(TSource source, TTarget target)
-        where TSource : class
-        where TTarget : class
-    {
-        target.Should().NotBeSameAs(source);
-        target.GetType().Name.Should().Be(source.GetType().Name);
-
-        var options = Abstract.ElmSyntaxAbstractJson.JsonSerializerOptions;
-        JsonSerializer.Serialize(target, options).Should().Be(JsonSerializer.Serialize(source, options));
-
-        var restored = JsonSerializer.Deserialize<TTarget>(JsonSerializer.Serialize(target, options), options);
-        restored.Should().Be(target);
-    }
-
-    private static void AssertVariantsCovered(Type hierarchy, IEnumerable<object[]> fixtures) =>
-        fixtures.Select(row => row[0].GetType()).Should().BeEquivalentTo(hierarchy.GetNestedTypes());
-
-    private static Type[] ModelRecords(string modelNamespace) =>
-        [
-        .. typeof(Abstract.File).Assembly.GetTypes()
-        .Where(
-            type =>
-            type.Namespace == modelNamespace &&
-            type.IsVisible &&
-            type.GetMethod("<Clone>$") is not null &&
-            (type.DeclaringType is null || type.DeclaringType.GetMethod("<Clone>$") is not null))
-        ];
 
     private sealed record UnknownExpression : Abstract.Expression;
-
-    private sealed record UnknownPattern : Abstract.Pattern;
-
-    private sealed record UnknownTypeAnnotation : Abstract.TypeAnnotation;
-
-    private sealed record UnknownDeclaration : Abstract.Declaration;
-
-    private sealed record UnknownModule : Abstract.Module;
-
-    private sealed record UnknownExposing : Abstract.Exposing;
-
-    private sealed record UnknownExpose : Abstract.TopLevelExpose;
-
-    private sealed record UnknownLetDeclaration : Abstract.LetDeclaration;
 }

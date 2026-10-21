@@ -7,6 +7,8 @@ using System.Collections.Immutable;
 using System.Linq;
 using Xunit;
 
+using Syntax = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
+
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
 public class OptimizationOpportunityFinderTests
@@ -642,10 +644,24 @@ public class OptimizationOpportunityFinderTests
         // prefix-matching behaviour without depending on the inliner.
         var hotKey = DeclQualifiedName.FromString("Test.hot");
         var specializedKey = DeclQualifiedName.FromString("Test.hot_specialized_1");
+        var hot = ((Syntax.Declaration.FunctionDeclaration)declarations[hotKey]).Function;
+
+        var specialized =
+            new Syntax.Declaration.FunctionDeclaration(
+                new Syntax.FunctionStruct(
+                    hot.Signature is null
+                    ?
+                    null
+                    :
+                    new Syntax.Signature(specializedKey.DeclName, hot.Signature.TypeAnnotation),
+                    new Syntax.FunctionImplementation(
+                        specializedKey.DeclName,
+                        hot.Declaration.Arguments,
+                        hot.Declaration.Expression)));
 
         var withSpecialized =
             ImmutableDictionary.CreateRange(declarations)
-            .Add(specializedKey, declarations[hotKey]);
+            .Add(specializedKey, specialized);
 
         var opportunities =
             OptimizationOpportunityFinder.FindOptimizationOpportunities(
@@ -2150,7 +2166,7 @@ public class OptimizationOpportunityFinderTests
     }
 
     [Fact]
-    public void Reports_all_opportunities_remaining_in_language_service_and_syntax_parser()
+    public void Reports_source_opportunities_and_no_generic_reads_in_compiled_language_service_and_syntax_parser()
     {
         var compilerSources = BundledFiles.CompilerSourceContainerFilesDefault.Value;
         var sourceTree = BundledFiles.ElmKernelModulesDefault.Value;
@@ -2181,14 +2197,14 @@ public class OptimizationOpportunityFinderTests
             .ToList();
 
         var pipelineResults =
-            ElmCompiler.LowerToElmSyntaxForCompilation(
+            ElmCompiler.LowerToCompilerModel(
                 sourceTree,
                 Pine.Core.Elm.ElmSourceCompilation.EnumerateRootDeclarations(sourceTree, rootFilePaths))
             .Extract(error => throw new System.Exception("Failed lowering: " + error));
 
         var opportunities =
             OptimizationOpportunityFinder.FindOptimizationOpportunities(
-                pipelineResults.Lowered.FilteredDeclarations)
+                pipelineResults.CanonicalDeclarations)
             .Where(
                 opportunity =>
                 opportunity.ContainingDecl.Namespaces.SequenceEqual(["LanguageService"]) ||
@@ -2209,30 +2225,56 @@ public class OptimizationOpportunityFinderTests
                 group.Key.Module + ": " + group.Key.Category + ": " + group.Count());
 
         var renderedCounts = string.Join("\n", countsByModuleAndCategory);
-        var lowered = LowerToIntermediateRepresentation.Lower(pipelineResults.Lowered.FilteredDeclarations);
-        lowered.GenericAccessEvidence.Should().BeEmpty();
 
-        renderedCounts.Should().Be(
+        OptimizationOpportunityFinder.FindGenericRecordAccessOpportunities(pipelineResults.CompilerProgram)
+            .Should().BeEmpty();
+
+        renderedCounts.ShouldBeWithDiff(
             """
-            ElmSyntax.Abstract.ConvertFromConcrete: BasicsCompare: 1
+            ElmSyntax.Abstract.ConvertFromConcrete: BasicsArithmetic: 6
+            ElmSyntax.Abstract.ConvertFromConcrete: BasicsCompare: 4
+            ElmSyntax.Abstract.ConvertFromConcrete: BasicsEq: 1
             ElmSyntax.Abstract.ConvertFromConcrete: RootLevelChoiceTagWrapper: 6
             ElmSyntax.Concrete.Node: HigherOrderParameter_Direct: 2
             ElmSyntax.Concrete.Node: RootLevelChoiceTagWrapper: 8
+            ElmSyntax.Concrete.Parser.FromString: BasicsArithmetic: 155
+            ElmSyntax.Concrete.Parser.FromString: BasicsCompare: 18
+            ElmSyntax.Concrete.Parser.FromString: BasicsEq: 39
+            ElmSyntax.Concrete.Parser.FromString: BasicsAppend: 52
             ElmSyntax.Concrete.Parser.FromString: RootLevelChoiceTagWrapper: 113
+            ElmSyntax.Concrete.Parser.StringParsing: BasicsArithmetic: 22
+            ElmSyntax.Concrete.Parser.StringParsing: BasicsCompare: 1
+            ElmSyntax.Concrete.Parser.StringParsing: BasicsEq: 5
+            ElmSyntax.Concrete.Parser.StringParsing: BasicsAppend: 1
             ElmSyntax.Concrete.Parser.StringParsing: RootLevelChoiceTagWrapper: 36
+            ElmSyntax.Concrete.Parser.TokensFromString: BasicsArithmetic: 14
+            ElmSyntax.Concrete.Parser.TokensFromString: BasicsCompare: 4
+            ElmSyntax.Concrete.Parser.TokensFromString: BasicsEq: 5
+            ElmSyntax.Concrete.Parser.TokensFromString: BasicsAppend: 4
             ElmSyntax.Concrete.Parser.TokensFromString: RootLevelChoiceTagWrapper: 17
+            ElmSyntax.Concrete.Range: BasicsCompare: 1
+            ElmSyntax.Concrete.Range: BasicsEq: 1
+            ElmSyntax.Concrete.SourceLookup: BasicsArithmetic: 18
+            ElmSyntax.Concrete.SourceLookup: BasicsCompare: 1
+            ElmSyntax.Concrete.SourceLookup: BasicsEq: 7
+            ElmSyntax.Concrete.SourceLookup: BasicsAppend: 1
             ElmSyntax.Concrete.SourceLookup: RootLevelChoiceTagWrapper: 15
+            ElmSyntax.Path: BasicsEq: 1
+            ElmSyntax.Path: BasicsAppend: 1
             LanguageService: RecordUpdate: 4
-            LanguageService: BasicsCompare: 3
+            LanguageService: BasicsArithmetic: 6
+            LanguageService: BasicsCompare: 9
+            LanguageService: BasicsEq: 29
+            LanguageService: BasicsAppend: 12
+            LanguageService: PartialApplication: 5
             LanguageService: RootLevelChoiceTagWrapper: 32
+            LanguageServiceAnalysis: BasicsArithmetic: 20
+            LanguageServiceAnalysis: BasicsCompare: 1
+            LanguageServiceAnalysis: BasicsEq: 4
+            LanguageServiceAnalysis: BasicsAppend: 24
+            LanguageServiceAnalysis: PartialApplication: 2
             LanguageServiceAnalysis: RootLevelChoiceTagWrapper: 7
             """.Trim());
-
-        opportunities.Should().NotContain(
-            opportunity => opportunity.Category == OpportunityCategory.BasicsEq);
-
-        opportunities.Should().NotContain(
-            opportunity => opportunity.Category == OpportunityCategory.BasicsAppend);
 
     }
 
@@ -2299,7 +2341,7 @@ public class OptimizationOpportunityFinderTests
         return false;
     }
 
-    private static System.Collections.Generic.IReadOnlyDictionary<DeclQualifiedName, Core.Elm.ElmSyntax.ElmSyntaxAbstract.Declaration>
+    private static System.Collections.Generic.IReadOnlyDictionary<DeclQualifiedName, Syntax.Declaration>
         ParseAndCanonicalize(string elmModuleText)
     {
         var parsed =

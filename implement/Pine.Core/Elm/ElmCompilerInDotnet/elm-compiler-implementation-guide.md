@@ -411,7 +411,38 @@ The [frontend design contract](../../../../explore/internal-analysis/2026-10-07-
 + Reuse unchanged work based on the consulted inputs, including scope changes and failed lookups, while preserving cross-declaration optimization.
 + Do not introduce compiler-level snapshots or program revisions. Editor coordination and Interactive history belong to callers.
 
-`Canonicalization.CanonicalizeDeclarations` indexes source scopes, resolves references in demanded bodies, and demands their owning declarations. Its distinct type/value indexes handle shared spellings without false naming clashes. Caller-owned parse dictionaries reuse unchanged source texts; canonicalization dictionaries reuse source declarations against consulted scope metadata and retain their dependency names. No cache key is a program revision.
+`Canonicalization.CanonicalizeDeclarations` indexes source scopes, resolves references in demanded bodies, and demands their owning declarations. Its distinct type/value indexes handle shared spellings without false naming clashes. Caller-owned parse dictionaries reuse unchanged source texts. A caller-owned `Canonicalization.DeclarationCache` memoizes canonicalization over concrete declaration syntax, its module identity, and only the immutable resolution facts actually consulted. No cache key is a program revision.
+
+On a miss, the cache retains typed input observations: module-name membership
+(including shadowing checks), consulted type/value imports, aliases, operator
+targets, resolved symbol owners or ambiguity, and negative-lookup availability.
+On a hit, it compares these facts directly against the current resolution inputs;
+it neither serializes a scope nor constructs a temporary projected-scope object.
+Unrelated exports, declarations, imports, and dependency bodies do not invalidate
+a declaration whose consulted facts remain equal. Changed or formerly missing
+facts invalidate it, including constructor ownership and diagnostic details.
+Intrinsic compiler implementations are constants, not caller-supplied inputs.
+
+Cache entries contain immutable input snapshots and results, not resolver
+delegates, source-context closures, or the compilation driver's mutable state.
+Dependency names and source references survive hits so demand traversal and
+diagnostics remain current. Concrete syntax includes ranges: a moved declaration
+does not reuse stale source locations.
+
+Retain one `Canonicalization.DeclarationCache` for the desired application scope
+and pass it via `canonicalizationCache` to compilation, analysis, or query entry
+points. `ElmTestRunCacheSession` owns one for repeated test/watch runs; the language
+server owns one for repeated diagnostics. The cache supports concurrent callers,
+deduplicates equal input versions on insertion, exposes retained-entry `Count`,
+and releases entries through `Clear`. In-flight calls may publish results after
+a clear. Different historical input combinations remain reusable until cleared
+or the cache is discarded.
+
+The declaration lookup uses a value-type key with cached hashing. Its syntax-node
+and immutable module-sequence components also memoize structural hashes, as do
+qualified declaration names and imported-module identities. Input-observation
+lookup keys cache their hashes as well. Repeated cache lookup does not rebuild
+or recursively rehash the syntax or resolution scope.
 
 `AnalyzeApplication` checks application declarations and import/exposing diagnostics without lowering or emission. `QueryDeclaration` uses the same demand logic for definition and partial type information. These operations return source-located diagnostics, including unavailable dependencies rather than treating incomplete analysis as clean.
 
@@ -430,7 +461,7 @@ At a high level, the compiler processes demanded declarations in the following o
 7. Run builtin-operator lowering on the optimized Elm syntax.
 8. Compile the resulting Elm expressions and declarations to Pine values.
 
-Some transformations still accept source-shaped files or synthesized namespace groupings as adapters. These do not select compilation units or demand every declaration in a source module. Emission groups the requested exports by namespace for existing environment consumers, but does not export dependency declarations.
+Source-oriented analysis APIs still accept source syntax. The compilation pipeline does not synthesize module shells after canonicalization. Emission groups the requested exports by namespace for existing environment consumers, but does not export dependency declarations.
 
 The specialization and inlining stages therefore work on already-canonicalized, already-lambda-lifted Elm syntax. They are still operating on Elm syntax trees at this point; they do not work on Pine expressions yet.
 
@@ -744,28 +775,135 @@ The Elm syntax interpreter complements this by reporting metrics keyed at Elm-so
 + `ElmSyntaxInterpreterEvalWorkCounters` exposes counts of trampoline iterations, direct (named) function applications, function-value (closure) applications, and Pine builtin invocations.
 + `IInvocationLogger` (and its `RecordingInvocationLogger` implementation) lets callers append a per-application entry — qualified function name and rendered arguments — to a log they can later search or render. The newer `ParseAndInterpretWithCounters` overload accepts a delegate for the same purpose; the existing `InvocationCounter` constructs from this delegate to forward control flow.
 
-The `CompareInterpreterWithIntermediateVM` test framework wires these two paths together: it compiles a set of Elm modules once, then for each root expression both invokes the compiled function on the intermediate VM (the same `ApplyAndProfileUnary`-style call path used by `ElmParserExpressionTests.Expression_char_literal`) and re-evaluates the expression through the syntax interpreter against `CompilationPipelineStageResults.ModulesForCompilation`. It asserts the two paths agree on the resulting `ElmValue` (compared via `RenderAsElmExpression(...).expressionString`) and returns both metric snapshots plus the application log. Because the same `maxOptimizationRounds` setting feeds both paths, the framework can be used to bisect *which* of the optimization rounds increased a particular VM-side counter and *which Elm-source declarations* are still being dispatched at runtime under that setting — exactly the data needed to find the next high-leverage optimization opportunity.
+`CompareInterpreterWithIntermediateVM` compiles a source corpus once, then compares
+the emitted VM function with an independent interpretation of its canonical source.
+The syntax interpreter does not consume optimized compiler expressions and does not
+rerun an alternate lowering pipeline. Its counters and application log describe the
+source-level reference computation, not the lowered call graph. Structural tests
+inspect `CompilationPipelineStageResults.CompilerProgram` and `FunctionsForEmission`
+to verify the actual lowered program.
+
+## Compiler-Owned Optimization Model
+
+The standard pipeline converts canonical source declarations to the immutable
+model in `CompilerModel`. Functions are indexed by `FunctionId`, not generated
+Elm names:
+
+- `Source` identifies a qualified source declaration, independently of its body.
+- `Lifted` identifies a local function site within an owning function.
+- `Specialized` identifies an original function and normalized assumptions on its
+  original parameter slots. Known callable code and complete structural record
+  constraints are represented explicitly; creating these identities does not
+  itself perform specialization.
+
+Specialization construction combines compatible nested requests, removes repeated
+assumptions, and rejects conflicting assumptions. Caller identities and discovery
+order are not part of specialization identity. Fixing callable code does not fix
+its captured runtime values.
+
+Lexical references use owner-local `BindingId` slots. Record-pattern receivers use
+the disjoint `BindingId.Temporary` variant, allocated without strings or name
+scanning, including in the source-facing type-lowering prelude. They cannot collide with
+source spellings, generated function identities, or bindings in another function.
+Lambdas and local functions receive site identities during conversion, before
+lambda lifting. Binding spellings are retained separately for diagnostics.
+There is no generated-name parser, canonical string identity, global numbering,
+or cross-declaration representative selection in this pipeline.
+
+`CompilerModel.LambdaLifting` operates directly on these expressions. It passes
+captures explicitly, using a tuple for multiple captures, and computes transitive
+capture requirements for mutually recursive local functions. Structural reference
+substitution does not rely on string renaming. Source type/constructor metadata
+remains separate from function bodies; no module shells are needed for lifting,
+SCC planning, or emission.
+
+`CompilerModel.FromCanonicalSyntax` selects numeric/append implementations,
+establishes record projections, and resolves lexical references directly while
+consulting the existing AST-facing inference routines. It never manufactures an
+unresolved IR. Source spellings exist only in the source-scoped conversion context
+and the separate diagnostic name table. The final conversion to emission IR copies
+resolved references and patterns without resolving or naming them again.
+
+`CompilerModel.Pattern` is the phase-neutral resolved pattern model shared by
+optimization and emission. Variable and alias patterns require a `BindingId` in
+their constructors; they have no `Name` property or nullable identity annotation.
+Record patterns are lowered at conversion and cannot occur in this model.
+Record updates have one receiver expression, not a string name plus an optional
+binding. Local functions are lambda values in ordinary lexical bindings, rather
+than bindings with independently supplied nullable function metadata.
+
+`CompilerModel.Compilation` schedules SCCs with structural identities.
+`CompileScc` accepts only member implementations, directly referenced external
+callable artifacts, referenced constructor metadata, and emission options. It
+returns only that SCC's callable artifacts. Its request has structural equality;
+parse/reduction/encoding caches are local implementation details, not semantic
+inputs. Recursion is derived from the member bodies rather than supplied as a
+second, potentially inconsistent flag. `IdentityComparer` defines deterministic structural layout order without
+rendering identities as strings.
+
+The SCC input and its transitive semantic values memoize structural hashes:
+functions, expressions, patterns, bindings/branches/fields, structured identities,
+specialization constraints and structural types, and compiled callable artifacts.
+Immutable `ValueList` sequences and Pine values already retain their hashes.
+SCC hashing explicitly includes both member identities and implementations, not
+the potentially shallow default hash of a `KeyValuePair`. Map hashing includes
+keys and values, independently of enumeration/insertion
+order; equality still checks the complete inputs and requires matching map-key
+comparers, so hash collisions never establish equality.
+
+Hash memoization is not semantic data: hash history is excluded from equality
+and JSON. Record copy constructors reset lazy hash state so a `with` update
+cannot retain a hash for old fields. Publication uses the same atomic encoding
+as concrete-syntax hashes; concurrent first readers may compute the same pure
+hash, while subsequent reads return the stored value without traversing children
+or maps. Fieldless variants use their constant type hash.
+This is preparation for memoizing `CompileScc`; it does not install an SCC cache
+or change application cache lifetime.
+
+`ElmCompiler.LowerToCompilerModel` returns `CompilationPipelineStageResults`.
+`CompilerProgram` is the actual lowering result; `FunctionsForEmission` projects
+those same implementations to emission IR without repeating lowering or resolution.
+`CanonicalDeclarations` and the original canonical files remain available for source
+analysis and diagnostics. There are no lazy compatibility snapshots, legacy lifter,
+or module-reconstruction helpers. Final environment packaging groups selected
+source roots in ordinal namespace/declaration order.
+
+`ProgramValidation` checks for residual lambdas/local functions, free lexical
+references, repeated definitions of a lexical identity, and missing function
+declarations using structural identities. Source metadata cannot contain a
+competing executable function implementation.
+`DisplayNames.Create` assigns unique output-scoped ASCII names without parsing or
+altering identity. `Rendering.Render` uses this separate table for readable compiler
+output. Textual backends can choose their own naming policy; output names and
+diagnostic spellings are never compilation inputs or cache identities.
+
+`CompilerModelJson` preserves all semantic constructor fields, including binding
+and function identities. Immutable sequences have explicit JSON support. Program
+maps are encoded as entry sequences so structural keys are not converted to
+generated string names. Derived encodings of labels are excluded: a field has one
+authoritative name, and its Pine encoding is computed from that name.
 
 ## Elm Compiler Intermediate Representation
 
-Pine emission consumes the distinct model in `IntermediateRepresentation`, not
-`ElmSyntaxAbstract`. The IR copies the abstract syntax records except `File`, including
-normalized literals, precomputed Pine values, and structural equality, and adds
-`Expression.ProjectItem(Value, Index)`.
+Pine emission consumes the resolved model in `IntermediateRepresentation`, not
+source syntax. Its only identifier variant is `Expression.Identifier(Reference)`;
+there is no alternative string-bound identifier or unresolved binding identity.
+Literal values have one normalized Pine encoding. Float literals retain their exact
+arbitrary-precision numerator and denominator; lowering never rounds them through
+`double`. `FunctionStruct` contains only
+parameters and a body: function identities belong to program maps, not duplicate
+implementation-name fields. Let bindings contain a resolved pattern and value;
+unlifted functions and lambdas are absent from emission IR.
 
-`ConvertFromAbstractSyntax` maps declarations recursively without lowering or changing
-their encodings. IR programs are dictionaries keyed by `DeclQualifiedName`, not source
-files. `CompilationPipelineStageResults.ModulesForCompilation` retains the abstract
-syntax used by existing transformation and reporting APIs, including module grouping
-and declaration order for packaging the emitted environment.
-`DeclarationsForEmission` runs `LowerToIntermediateRepresentation` on the AST declarations.
-This conversion traverses AST expressions and patterns, queries the AST-facing inference
-entry points, and emits explicit record projections and numeric/append implementations.
-It never infers types from the IR it generates.
+`CompilerModel.ToIntermediateRepresentation` is a pure projection of the actual
+optimized program. The convenience `LowerToIntermediateRepresentation.Lower`
+performs source resolution and lifting before returning that projection; it never
+returns source-shaped or partially resolved IR. Source-level opportunity analysis
+uses `FromCanonicalSyntax.Lower` and its explicit source type evidence.
 Imports, source paths, and root/export selection remain outside the IR program.
 Expression compilation, pattern compilation, and dependency analysis operate on IR nodes.
 Type inference operates exclusively on `ElmSyntaxAbstract`; it has no IR entry points
-or AST-to-IR adapters. Expression and pattern emission have no semantic type contexts.
+or IR-to-AST adapters. Expression and pattern emission have no semantic type contexts.
 Only calling-convention and encoding metadata, such as constructor arities and record
 constructor field order, remains in the backend. The AST data model is unchanged; source
 locations can be mapped by structured AST paths, without source-origin or AST-to-IR

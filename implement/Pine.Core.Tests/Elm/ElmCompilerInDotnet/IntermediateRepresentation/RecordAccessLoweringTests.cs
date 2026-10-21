@@ -13,6 +13,7 @@ using Xunit;
 
 using Abstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 using IR = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
+using Model = Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 
@@ -30,9 +31,9 @@ public class RecordAccessLoweringTests
                 """);
 
         var body =
-            ((IR.Declaration.FunctionDeclaration)lowered.Declarations[Name("select")]).Function.Declaration.Expression;
+            Function(lowered, "select").Expression;
 
-        body.Should().BeOfType<IR.Expression.TupledExpression>();
+        body.Should().BeOfType<IR.Expression.ListExpr>();
         Expressions(lowered, "select").OfType<IR.Expression.RecordUpdateExpression>().Should().BeEmpty();
 
         Expressions(lowered, "select").OfType<IR.Expression.ProjectItem>().Select(projection => projection.Index)
@@ -88,11 +89,13 @@ public class RecordAccessLoweringTests
         result.Should().Be(
             new ElmValue.ElmRecord([("age", ElmValue.Integer(42)), ("name", ElmValue.StringInstance("Bob"))]));
 
-        var declaration = (IR.Declaration.FunctionDeclaration)pipeline.DeclarationsForEmission[Name("select")];
+        var declaration =
+            pipeline.FunctionsForEmission[
+            new Model.FunctionId.Source(Name("select"))];
 
         var updates =
             IR.ExpressionTraversal
-            .Enumerate(declaration.Function.Declaration.Expression).OfType<IR.Expression.RecordUpdateExpression>();
+            .Enumerate(declaration.Expression).OfType<IR.Expression.RecordUpdateExpression>();
 
         updates.Any().Should().Be(!closed);
         (count > 0).Should().Be(!closed);
@@ -499,10 +502,12 @@ public class RecordAccessLoweringTests
                 select record__projection_0 { name } = ( record__projection_0, name )
                 """);
 
-        var function = (IR.Declaration.FunctionDeclaration)lowered.Declarations[Name("select")];
+        var function = Function(lowered, "select");
 
-        function.Function.Declaration.Arguments.OfType<IR.Pattern.VarPattern>().Select(pattern => pattern.Name)
-            .Should().Equal("record__projection_0", "record__projection_1");
+        var parameters = function.Arguments.OfType<Model.Pattern.VarPattern>().ToArray();
+        lowered.Program.BindingNames[parameters[0].Binding].Should().Be("record__projection_0");
+        parameters[0].Binding.Should().BeOfType<Model.BindingId.Local>();
+        parameters[1].Binding.Should().BeOfType<Model.BindingId.Temporary>();
 
         Generic(lowered).Should().BeEmpty();
     }
@@ -525,20 +530,23 @@ public class RecordAccessLoweringTests
     [Fact]
     public void The_finder_reports_an_unlowered_IR_read_even_when_its_receiver_is_a_closed_literal()
     {
-        var receiver = IR.Expression.RecordExpr.CreateSorted([("name", IR.Expression.StringLiteral.Create("Ada"))]);
+        var receiver =
+            new Model.Expression.Record(
+                [
+                new(
+                    "name",
+                    new Model.Expression.Literal(ElmValueEncoding.StringAsPineValue("Ada")))
+                ]);
 
-        var read =
-            new IR.Expression.RecordAccess(
-                receiver,
-                "name",
-                Core.CommonEncodings.StringEncoding.ValueFromString("name"));
+        var read = new Model.Expression.RecordAccess(receiver, "name");
 
-        var declaration = new IR.Declaration.FunctionDeclaration(new(null, new("select", [], read)));
+        var program =
+            new Model.Program(
+                ImmutableDictionary<Model.FunctionId, Model.Function>.Empty
+                .Add(new Model.FunctionId.Source(Name("select")), new([], read)),
+                []);
 
-        var declarations =
-            ImmutableDictionary<DeclQualifiedName, IR.Declaration>.Empty.Add(Name("select"), declaration);
-
-        OptimizationOpportunityFinder.FindGenericRecordAccessOpportunities(declarations).Should().ContainSingle();
+        OptimizationOpportunityFinder.FindGenericRecordAccessOpportunities(program).Should().ContainSingle();
         Generic(Lower("module Test exposing (..)\nselect = { name = \"Ada\" }.name")).Should().BeEmpty();
     }
 
@@ -554,8 +562,8 @@ public class RecordAccessLoweringTests
 
         var lowered = Lower(source);
         var second = Lower(source);
-        var firstFunction = (IR.Declaration.FunctionDeclaration)lowered.Declarations[Name("select")];
-        var secondFunction = (IR.Declaration.FunctionDeclaration)second.Declarations[Name("select")];
+        var firstFunction = Function(lowered, "select");
+        var secondFunction = Function(second, "select");
 
         firstFunction.Should().Be(secondFunction);
         firstFunction.GetHashCode().Should().Be(secondFunction.GetHashCode());
@@ -588,7 +596,7 @@ public class RecordAccessLoweringTests
                 """);
 
         OptimizationOpportunityFinder.FindGenericRecordAccessOpportunities(
-            lowered.Declarations,
+            lowered.Program,
             [Name("root")],
             lowered.GenericAccessEvidence)
             .Should().ContainSingle().Which.ContainingDecl.Should().Be(Name("read"));
@@ -640,7 +648,7 @@ public class RecordAccessLoweringTests
         result.Should().Be(ElmValue.StringInstance("Ada"));
 
         var opportunities =
-            OptimizationOpportunityFinder.FindGenericRecordAccessOpportunities(pipeline.DeclarationsForEmission);
+            OptimizationOpportunityFinder.FindGenericRecordAccessOpportunities(pipeline.CompilerProgram);
 
         if (closed)
         {
@@ -656,18 +664,21 @@ public class RecordAccessLoweringTests
 
     private static DeclQualifiedName Name(string name) => DeclQualifiedName.Create(["Test"], name);
 
+    private static IR.FunctionStruct Function(Model.SourceLoweringResult lowered, string name) =>
+        Model.ToIntermediateRepresentation.Convert(Model.LambdaLifting.Lift(lowered.Program))[new Model.FunctionId.Source(Name(name))];
+
     private static IEnumerable<IR.Expression> Expressions(
-        IntermediateRepresentationLoweringResult lowered,
+        Model.SourceLoweringResult lowered,
         string name) =>
         IR.ExpressionTraversal.Enumerate(
-            ((IR.Declaration.FunctionDeclaration)lowered.Declarations[Name(name)]).Function.Declaration.Expression);
+            Function(lowered, name).Expression);
 
-    private static ImmutableHashSet<Opportunity> Generic(IntermediateRepresentationLoweringResult lowered) =>
+    private static ImmutableHashSet<Opportunity> Generic(Model.SourceLoweringResult lowered) =>
         OptimizationOpportunityFinder.FindGenericRecordAccessOpportunities(
-            lowered.Declarations,
+            lowered.Program,
             typeEvidence: lowered.GenericAccessEvidence);
 
-    private static IntermediateRepresentationLoweringResult Lower(params string[] sources)
+    private static Model.SourceLoweringResult Lower(params string[] sources)
     {
         var declarations = ImmutableDictionary.CreateBuilder<DeclQualifiedName, Abstract.Declaration>();
 
@@ -700,6 +711,6 @@ public class RecordAccessLoweringTests
             }
         }
 
-        return LowerToIntermediateRepresentation.Lower(declarations.ToImmutable());
+        return Model.FromCanonicalSyntax.Lower(declarations.ToImmutable());
     }
 }

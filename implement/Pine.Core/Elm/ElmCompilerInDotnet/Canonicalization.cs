@@ -26,7 +26,7 @@ public partial class Canonicalization
     /// <param name="TypeExports">Set of exported type names (choice types and type aliases).</param>
     /// <param name="ValueExports">Set of exported value names (functions and constructors).</param>
     /// <param name="TypeConstructors">Mapping from type names to their associated value constructors.</param>
-    private record ModuleExports(
+    internal record ModuleExports(
         ImmutableHashSet<string> TypeExports,
         ImmutableHashSet<string> ValueExports,
         ImmutableDictionary<string, ImmutableList<string>> TypeConstructors);
@@ -34,8 +34,8 @@ public partial class Canonicalization
     /// <summary>
     /// Encapsulates the context required for canonicalization, including imports, aliases, and declaration scopes.
     /// </summary>
-    private record CanonicalizationContext(
-        ModuleName CurrentModuleName,
+    internal record CanonicalizationContext(
+        CompilerModel.ValueList<string> CurrentModuleName,
         ImmutableDictionary<string, ImmutableList<ModuleName>> TypeImportMap,
         ImmutableDictionary<string, ImmutableList<ModuleName>> ValueImportMap,
         ImmutableDictionary<string, ModuleName> AliasMap,
@@ -46,8 +46,60 @@ public partial class Canonicalization
         Func<ModuleName, string, bool, Range, IReadOnlyList<CanonicalizationError>>? ResolveReference = null,
         ImmutableHashSet<string>? ModuleLevelTypes = null,
         ImmutableHashSet<string>? ModuleLevelValues = null,
-        Func<ModuleName, string, bool, string>? DescribeUnavailableReference = null)
+        Func<ModuleName, string, bool, string>? DescribeUnavailableReference = null,
+        Func<CodeAnalysis.DeclQualifiedName, bool, SymbolResolution>? LookupSymbol = null,
+        Func<CodeAnalysis.DeclQualifiedName, bool, SymbolAvailability>? LookupAvailability = null,
+        InputObservations? Inputs = null)
     {
+        public bool ContainsModuleDeclaration(string name, bool? typeReference = null)
+        {
+            var value = ModuleDeclarations(typeReference).Contains(name);
+            Inputs?.Record(new ModuleDeclarationInput(name, typeReference, value));
+            return value;
+        }
+
+        internal ImmutableHashSet<string> ModuleDeclarations(bool? typeReference) =>
+            typeReference switch
+            {
+                true => ModuleLevelTypes ?? ModuleLevelDeclarations,
+                false => ModuleLevelValues ?? ModuleLevelDeclarations,
+                null => ModuleLevelDeclarations
+            };
+
+        public bool TryGetImport(bool typeReference, string name, out IReadOnlyList<ModuleName> modules)
+        {
+            var value = GetImport(typeReference, name);
+            Inputs?.Record(new ImportInput(typeReference, name, value));
+            modules = value!;
+            return value is not null;
+        }
+
+        internal IReadOnlyList<ModuleName>? GetImport(bool typeReference, string name) =>
+            (typeReference ? TypeImportMap : ValueImportMap).TryGetValue(name, out var modules) ? modules : null;
+
+        public bool TryGetAlias(string name, out ModuleName module)
+        {
+            var value = AliasMap.GetValueOrDefault(name);
+            Inputs?.Record(new AliasInput(name, value));
+            module = value!;
+            return value is not null;
+        }
+
+        public bool TryGetOperator(string name, out (ModuleName ModuleName, string FunctionName) function)
+        {
+            var found = OperatorToFunction.TryGetValue(name, out function);
+
+            if (Inputs is { } inputs)
+            {
+                var expected =
+                    found ? CodeAnalysis.DeclQualifiedName.Create(function.ModuleName, function.FunctionName) : null;
+
+                inputs.Record(new OperatorInput(name, expected));
+            }
+
+            return found;
+        }
+
         /// <summary>
         /// Creates a new context with additional local declarations added.
         /// Used when entering scopes that introduce new bindings (function parameters, let expressions, patterns).
@@ -463,7 +515,7 @@ public partial class Canonicalization
 
         return
             new CanonicalizationContext(
-                moduleName,
+                new(moduleName),
                 types,
                 values,
                 aliases,
@@ -1217,7 +1269,7 @@ public partial class Canonicalization
         foreach (var arg in impl.Arguments)
         {
             // Check against both other parameters and module-level declarations
-            var existingScope = context.ModuleLevelDeclarations.Union(parameterVariables);
+            var existingScope = parameterVariables;
 
             var (collectedVars, errors, argShadowings) =
                 CollectPatternVariablesWithShadowCheck(
@@ -1225,7 +1277,8 @@ public partial class Canonicalization
                     arg.Range,
                     existingScope,
                     parameterVariables,
-                    context.DeclarationPath);
+                    context.DeclarationPath,
+                    name => context.ContainsModuleDeclaration(name));
 
             parameterVariables = parameterVariables.Union(collectedVars);
             shadowErrors.AddRange(errors);
@@ -1390,6 +1443,7 @@ public partial class Canonicalization
     /// <param name="existingVariables">Variables already in scope that would be shadowed.</param>
     /// <param name="collectedVariables">Variables collected so far in this pattern.</param>
     /// <param name="declarationPath">The declaration path for recording shadowings.</param>
+    /// <param name="moduleContains">Optional lookup of module bindings, separate from lexical bindings.</param>
     /// <returns>A tuple of (collected variables, shadowing errors, detected shadowings).</returns>
     internal static (ImmutableHashSet<string> Variables, IReadOnlyList<CanonicalizationError> Errors, ImmutableDictionary<string, ShadowingLocation> Shadowings)
         CollectPatternVariablesWithShadowCheck(
@@ -1397,7 +1451,8 @@ public partial class Canonicalization
         Range patternRange,
         ImmutableHashSet<string> existingVariables,
         ImmutableHashSet<string> collectedVariables,
-        ImmutableList<string> declarationPath)
+        ImmutableList<string> declarationPath,
+        Func<string, bool>? moduleContains = null)
     {
         var errors = new List<CanonicalizationError>();
         var shadowings = ImmutableDictionary<string, ShadowingLocation>.Empty;
@@ -1415,7 +1470,7 @@ public partial class Canonicalization
 
             case Pattern.VarPattern varPattern:
                 {
-                    if (existingVariables.Contains(varPattern.Name))
+                    if (existingVariables.Contains(varPattern.Name) || moduleContains?.Invoke(varPattern.Name) is true)
                     {
                         errors.Add(
                             new CanonicalizationError.NamingClash(
@@ -1446,7 +1501,8 @@ public partial class Canonicalization
                                 elem.Range,
                                 existingVariables.Union(result),
                                 result,
-                                declarationPath);
+                                declarationPath,
+                                moduleContains);
 
                         result = newVars;
                         errors.AddRange(newErrors);
@@ -1460,7 +1516,7 @@ public partial class Canonicalization
                 {
                     foreach (var field in recordPattern.Fields)
                     {
-                        if (existingVariables.Contains(field.Value))
+                        if (existingVariables.Contains(field.Value) || moduleContains?.Invoke(field.Value) is true)
                         {
                             errors.Add(
                                 new CanonicalizationError.NamingClash(
@@ -1488,7 +1544,8 @@ public partial class Canonicalization
                             unCons.Head.Range,
                             existingVariables,
                             collectedVariables,
-                            declarationPath);
+                            declarationPath,
+                            moduleContains);
 
                     var (tailVars, tailErrors, tailShadowings) =
                         CollectPatternVariablesWithShadowCheck(
@@ -1496,7 +1553,8 @@ public partial class Canonicalization
                             unCons.Tail.Range,
                             existingVariables.Union(headVars),
                             headVars,
-                            declarationPath);
+                            declarationPath,
+                            moduleContains);
 
                     errors.AddRange(headErrors);
                     errors.AddRange(tailErrors);
@@ -1516,7 +1574,8 @@ public partial class Canonicalization
                                 elem.Range,
                                 existingVariables.Union(result),
                                 result,
-                                declarationPath);
+                                declarationPath,
+                                moduleContains);
 
                         result = newVars;
                         errors.AddRange(newErrors);
@@ -1538,7 +1597,8 @@ public partial class Canonicalization
                                 arg.Range,
                                 existingVariables.Union(result),
                                 result,
-                                declarationPath);
+                                declarationPath,
+                                moduleContains);
 
                         result = newVars;
                         errors.AddRange(newErrors);
@@ -1556,12 +1616,14 @@ public partial class Canonicalization
                             asPattern.Pattern.Range,
                             existingVariables,
                             collectedVariables,
-                            declarationPath);
+                            declarationPath,
+                            moduleContains);
 
                     errors.AddRange(patternErrors);
                     shadowings = patternShadowings;
 
-                    if (existingVariables.Contains(asPattern.Name.Value))
+                    if (existingVariables.Contains(asPattern.Name.Value) ||
+                        moduleContains?.Invoke(asPattern.Name.Value) is true)
                     {
                         errors.Add(
                             new CanonicalizationError.NamingClash(
@@ -1587,7 +1649,8 @@ public partial class Canonicalization
                         parenPattern.Pattern.Range,
                         existingVariables,
                         collectedVariables,
-                        declarationPath);
+                        declarationPath,
+                        moduleContains);
 
             default:
                 throw new NotImplementedException(
@@ -1758,14 +1821,9 @@ public partial class Canonicalization
                 moduleName,
                 name,
                 typed.TypeName.Range,
-                context.CurrentModuleName,
-                context.TypeImportMap,
-                context.AliasMap,
                 localVariables,
-                context.ModuleLevelTypes ?? context.ModuleLevelDeclarations,
-                context.ResolveReference,
-                typeReference: true,
-                describeUnavailableReference: context.DescribeUnavailableReference);
+                context,
+                typeReference: true);
 
         var canonicalizedTypeName =
             new Node<(ModuleName, string)>(
@@ -2003,11 +2061,11 @@ public partial class Canonicalization
         var rightResult = CanonicalizeExpressionNode(opApp.Right, context);
 
         // Look up the operator in the operator-to-function mapping
-        if (context.OperatorToFunction.TryGetValue(opApp.Operator.Value, out var funcMapping))
+        if (context.TryGetOperator(opApp.Operator.Value, out var funcMapping))
         {
             if (context.ResolveReference is not null &&
-                !context.ModuleLevelDeclarations.Contains(opApp.Operator.Value) &&
-                context.ValueImportMap.TryGetValue(opApp.Operator.Value, out var importingModules) &&
+                !context.ContainsModuleDeclaration(opApp.Operator.Value) &&
+                context.TryGetImport(false, opApp.Operator.Value, out var importingModules) &&
                 importingModules.Count > 1)
             {
                 return
@@ -2050,7 +2108,7 @@ public partial class Canonicalization
         }
 
         // Also check if the current module declares this operator via its own infix declarations
-        if (context.ModuleLevelDeclarations.Contains(opApp.Operator.Value))
+        if (context.ContainsModuleDeclaration(opApp.Operator.Value))
         {
             // The operator is declared in this module; resolve using the function name from local scope.
             // This handles the case where a module uses its own infix operators.
@@ -2077,7 +2135,7 @@ public partial class Canonicalization
         if (context.ResolveReference is null)
             return NoErrors((SyntaxTypes.Expression)prefix);
 
-        if (!context.OperatorToFunction.TryGetValue(prefix.Operator, out var function))
+        if (!context.TryGetOperator(prefix.Operator, out var function))
             return new(prefix, [new CanonicalizationError.UnresolvedReference(range, prefix.Operator)]);
 
         return
@@ -2174,8 +2232,8 @@ public partial class Canonicalization
 
     private static bool IsNameInScope(string name, CanonicalizationContext context) =>
         context.LocalDeclarations.Contains(name) ||
-        context.ModuleLevelDeclarations.Contains(name) ||
-        context.ValueImportMap.ContainsKey(name);
+        context.ContainsModuleDeclaration(name) ||
+        context.TryGetImport(false, name, out _);
 
     private static CanonicalizationResult<SyntaxTypes.Expression.Identifier> CanonicalizeFunctionOrValue(
         SyntaxTypes.Expression.Identifier funcOrValue,
@@ -2187,13 +2245,8 @@ public partial class Canonicalization
                 funcOrValue.ModuleName,
                 funcOrValue.Name,
                 range,
-                context.CurrentModuleName,
-                context.ValueImportMap,
-                context.AliasMap,
                 context.LocalDeclarations,
-                context.ModuleLevelValues ?? context.ModuleLevelDeclarations,
-                context.ResolveReference,
-                describeUnavailableReference: context.DescribeUnavailableReference);
+                context);
 
         var canonicalizedFuncOrValue =
             new SyntaxTypes.Expression.Identifier(
@@ -2206,10 +2259,9 @@ public partial class Canonicalization
     private static CanonicalizationResult<ModuleName> ResolveModuleName(
         string name,
         Range range,
-        ModuleName currentModuleName,
-        ImmutableDictionary<string, ImmutableList<ModuleName>> importMap,
         ImmutableHashSet<string> localVariables,
-        ImmutableHashSet<string> localDeclarations)
+        CanonicalizationContext context,
+        bool typeReference)
     {
         // Don't resolve local variables - they should keep empty module names
         if (localVariables.Contains(name))
@@ -2218,13 +2270,13 @@ public partial class Canonicalization
         }
 
         // Check if it's declared in the current module - module-level declarations shadow imported names
-        if (localDeclarations.Contains(name))
+        if (context.ContainsModuleDeclaration(name, typeReference))
         {
-            return new CanonicalizationResult<ModuleName>(currentModuleName, []);
+            return new CanonicalizationResult<ModuleName>(context.CurrentModuleName, []);
         }
 
         // Check if this name is imported
-        if (importMap.TryGetValue(name, out var importedFrom) && importedFrom.Count > 0)
+        if (context.TryGetImport(typeReference, name, out var importedFrom) && importedFrom.Count > 0)
         {
             // Check for import clashes - only report error when the name is actually referenced
             if (importedFrom.Count > 1)
@@ -2243,7 +2295,7 @@ public partial class Canonicalization
         // Name not found - report an error
         return
             new CanonicalizationResult<ModuleName>(
-                currentModuleName,
+                context.CurrentModuleName,
                 [new CanonicalizationError.UnresolvedReference(range, name)]);
     }
 
@@ -2252,14 +2304,9 @@ public partial class Canonicalization
         ModuleName qualifiedModuleName,
         string name,
         Range range,
-        ModuleName currentModuleName,
-        ImmutableDictionary<string, ImmutableList<ModuleName>> importMap,
-        ImmutableDictionary<string, ModuleName> aliasMap,
         ImmutableHashSet<string> localVariables,
-        ImmutableHashSet<string> localDeclarations,
-        Func<ModuleName, string, bool, Range, IReadOnlyList<CanonicalizationError>>? resolveReference = null,
-        bool typeReference = false,
-        Func<ModuleName, string, bool, string>? describeUnavailableReference = null)
+        CanonicalizationContext context,
+        bool typeReference = false)
     {
         var resolved = Resolve();
 
@@ -2286,10 +2333,10 @@ public partial class Canonicalization
                 };
         }
 
-        if (resolved.Value.Count is 0 || resolveReference is null)
+        if (resolved.Value.Count is 0 || context.ResolveReference is null)
             return resolved;
 
-        return resolved with { Errors = resolveReference(resolved.Value, name, typeReference, range) };
+        return resolved with { Errors = context.ResolveReference(resolved.Value, name, typeReference, range) };
 
         CanonicalizationResult<ModuleName> Resolve()
         {
@@ -2298,22 +2345,25 @@ public partial class Canonicalization
             {
                 var moduleNameStr = string.Join(".", qualifiedModuleName);
 
-                if (aliasMap.TryGetValue(
+                if (context.TryGetAlias(
                     (typeReference ? "type:" : "value:") + moduleNameStr + "." + name,
                     out var exportedModule))
                 {
                     return new CanonicalizationResult<ModuleName>(exportedModule, []);
                 }
 
-                if (resolveReference is null && aliasMap.TryGetValue(moduleNameStr + "." + name, out var legacyExport))
+                if (context.ResolveReference is null &&
+                    context.TryGetAlias(moduleNameStr + "." + name, out var legacyExport))
+                {
                     return new CanonicalizationResult<ModuleName>(legacyExport, []);
+                }
 
-                if (resolveReference is not null &&
-                    !qualifiedModuleName.SequenceEqual(currentModuleName) &&
+                if (context.ResolveReference is not null &&
+                    !qualifiedModuleName.SequenceEqual(context.CurrentModuleName) &&
                     moduleNameStr is not ("Basics" or "Debug" or "Pine_kernel" or "Pine_builtin") &&
                     !(moduleNameStr is "List" && name is "List"))
                 {
-                    var imported = aliasMap.TryGetValue("module:" + moduleNameStr, out var targetModule);
+                    var imported = context.TryGetAlias("module:" + moduleNameStr, out var targetModule);
                     var target = imported ? targetModule! : qualifiedModuleName;
 
                     return
@@ -2327,7 +2377,7 @@ public partial class Canonicalization
                                 ResolutionDetail =
                                 imported
                                 ?
-                                describeUnavailableReference?.Invoke(target, name, typeReference) ??
+                                context.DescribeUnavailableReference?.Invoke(target, name, typeReference) ??
                                 $"The imported module does not expose a {(typeReference ? "type" : "value")} named '{name}'."
                                 :
                                 $"Qualifier '{moduleNameStr}' is not an explicit or implicit import in this source scope. Add the required import or correct the qualifier."
@@ -2335,7 +2385,7 @@ public partial class Canonicalization
                             ]);
                 }
 
-                if (aliasMap.TryGetValue(moduleNameStr, out var resolvedModuleName))
+                if (context.TryGetAlias(moduleNameStr, out var resolvedModuleName))
                 {
                     return new CanonicalizationResult<ModuleName>(resolvedModuleName, []);
                 }
@@ -2344,7 +2394,7 @@ public partial class Canonicalization
             }
 
             // Resolve unqualified name
-            return ResolveModuleName(name, range, currentModuleName, importMap, localVariables, localDeclarations);
+            return ResolveModuleName(name, range, localVariables, context, typeReference);
         }
     }
 
@@ -2437,7 +2487,7 @@ public partial class Canonicalization
     {
         // Collect pattern variables while checking for shadowing against both
         // module-level declarations and local declarations
-        var existingScope = context.ModuleLevelDeclarations.Union(context.LocalDeclarations);
+        var existingScope = context.LocalDeclarations;
 
         var (collectedVars, shadowErrors, patternShadowings) =
             CollectPatternVariablesWithShadowCheck(
@@ -2445,7 +2495,8 @@ public partial class Canonicalization
                 caseItem.Pattern.Range,
                 existingScope,
                 [],
-                context.DeclarationPath);
+                context.DeclarationPath,
+                name => context.ContainsModuleDeclaration(name));
 
         var extendedLocalDeclarations = context.LocalDeclarations.Union(collectedVars);
         var contextWithPatternVars = context.WithLocalDeclarations(extendedLocalDeclarations);
@@ -2486,7 +2537,7 @@ public partial class Canonicalization
         var letShadowings = ImmutableDictionary<string, ShadowingLocation>.Empty;
 
         // The existing scope includes module-level declarations and outer local declarations
-        var existingScope = context.ModuleLevelDeclarations.Union(context.LocalDeclarations);
+        var existingScope = context.LocalDeclarations;
 
         foreach (var decl in letBlock.Declarations)
         {
@@ -2499,7 +2550,7 @@ public partial class Canonicalization
                     continue;
 
                 // Check if let function name shadows existing declarations
-                if (existingScope.Contains(funcName))
+                if (existingScope.Contains(funcName) || context.ContainsModuleDeclaration(funcName))
                 {
                     shadowErrors.Add(
                         new CanonicalizationError.NamingClash(
@@ -2526,7 +2577,8 @@ public partial class Canonicalization
                         letDestr.Pattern.Range,
                         existingScope,
                         [],
-                        context.DeclarationPath);
+                        context.DeclarationPath,
+                        name => context.ContainsModuleDeclaration(name));
 
                 shadowErrors.AddRange(errors);
                 letShadowings = CanonicalizationResult<object>.MergeShadowings(letShadowings, destrShadowings);
@@ -2734,13 +2786,8 @@ public partial class Canonicalization
                 qualifiedName.ModuleName,
                 qualifiedName.Name,
                 range,
-                context.CurrentModuleName,
-                context.ValueImportMap,
-                context.AliasMap,
                 context.LocalDeclarations,
-                context.ModuleLevelValues ?? context.ModuleLevelDeclarations,
-                context.ResolveReference,
-                describeUnavailableReference: context.DescribeUnavailableReference);
+                context);
 
         var argumentResults =
             namedPattern.Arguments

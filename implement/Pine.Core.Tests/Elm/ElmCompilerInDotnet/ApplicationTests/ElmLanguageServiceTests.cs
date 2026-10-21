@@ -339,7 +339,7 @@ public class ElmLanguageServiceTests
     /// </summary>
     private static ElmInteractiveEnvironment.ParsedInteractiveEnvironment BuildLanguageServiceEnv(
         bool disableInlining,
-        Action<CompilationPipelineStageResults<DefaultLoweredResults>>? reportPipeline = null)
+        Action<CompilationPipelineStageResults>? reportPipeline = null)
     {
         var bundledTree =
             BundledFiles.CompilerSourceContainerFilesDefault.Value;
@@ -1024,16 +1024,17 @@ public class ElmLanguageServiceTests
     {
         var invocations = ExerciseReferencesRequestAndCountGenericRecordOperations();
         invocations.AccessCount.Should().Be(0);
-        CompilationPipelineStageResults<DefaultLoweredResults>? pipeline = null;
+        CompilationPipelineStageResults? pipeline = null;
         BuildLanguageServiceEnv(disableInlining: false, result => pipeline = result);
         pipeline.Should().NotBeNull();
 
-        var declarations = pipeline!.DeclarationsForEmission;
-        var opportunities = OptimizationOpportunityFinder.FindGenericRecordAccessOpportunities(declarations);
+        var opportunities =
+            OptimizationOpportunityFinder.FindGenericRecordAccessOpportunities(pipeline!.CompilerProgram);
+
         opportunities.Should().BeEmpty();
 
         var sourceOpportunities =
-            OptimizationOpportunityFinder.FindOptimizationOpportunities(pipeline.Lowered.FilteredDeclarations)
+            OptimizationOpportunityFinder.FindOptimizationOpportunities(pipeline.CanonicalDeclarations)
             .Where(opportunity => opportunity.Category is OpportunityCategory.RecordAccess);
 
         sourceOpportunities.Select(
@@ -1536,7 +1537,7 @@ public class ElmLanguageServiceTests
             BuildListCount: 4_113
             BuildListItemCount: 17_747
             LoopIterationCount: 737
-            InstructionCount: 62_353
+            InstructionCount: 62_357
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 24
             DeferredTemplateValueMaterializationCount: 0
@@ -1680,7 +1681,7 @@ public class ElmLanguageServiceTests
             BuildListCount: 4_126
             BuildListItemCount: 17_818
             LoopIterationCount: 737
-            InstructionCount: 62_430
+            InstructionCount: 62_434
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 25
             DeferredTemplateValueMaterializationCount: 0

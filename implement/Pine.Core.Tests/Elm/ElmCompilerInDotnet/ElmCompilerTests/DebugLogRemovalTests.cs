@@ -123,7 +123,7 @@ public class DebugLogRemovalTests
         var testCase = TestCase.DefaultAppWithoutPackages([elmModuleText]);
 
         var loweringResult =
-            ElmCompiler.LowerToElmSyntaxForCompilation(
+            ElmCompiler.LowerToCompilerModel(
                 testCase.AsFileTree(),
                 rootDeclarations: [Pine.Core.CodeAnalysis.DeclQualifiedName.Create(["Test"], "logged")],
                 syntaxOptimization:
@@ -134,20 +134,21 @@ public class DebugLogRemovalTests
             .Extract(err => throw new Exception(err));
 
         var loggedDeclaration =
-            loweringResult.Lowered.LambdaLifted
-            .SelectMany(module => module.Declarations)
-            .OfType<SyntaxTypes.Declaration.FunctionDeclaration>()
-            .Single(declaration => declaration.Function.Declaration.Name is "logged");
+            loweringResult.CompilerProgram.Functions[
+            new Core.Elm.ElmCompilerInDotnet.CompilerModel.FunctionId.Source(
+                Pine.Core.CodeAnalysis.DeclQualifiedName.Create(["Test"], "logged"))];
 
         var application =
-            loggedDeclaration.Function.Declaration.Expression
-            .Should().BeOfType<SyntaxTypes.Expression.Application>().Subject;
+            loggedDeclaration.Body
+            .Should().BeOfType<Core.Elm.ElmCompilerInDotnet.CompilerModel.Expression.Application>().Subject;
 
         var identifier =
             application.Function
-            .Should().BeOfType<SyntaxTypes.Expression.Identifier>().Subject;
+            .Should().BeOfType<Core.Elm.ElmCompilerInDotnet.CompilerModel.Expression.ReferenceExpression>().Subject;
 
-        identifier.QualifiedName.FullName.Should().Be("Debug.log");
+        identifier.Reference.Should().BeOfType<Core.Elm.ElmCompilerInDotnet.CompilerModel.Reference.Native>()
+            .Which.Name.FullName.Should().Be("Debug.log");
+
         application.Arguments.Should().HaveCount(2);
     }
 }

@@ -5,6 +5,7 @@ using System.Collections.Immutable;
 using System.Linq;
 
 using SyntaxTypes = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
+using Pattern = Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel.Pattern;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -45,7 +46,7 @@ public class PatternCompiler
     /// Result of analyzing a pattern: bindings and condition.
     /// </summary>
     public record PatternAnalysis(
-        ImmutableDictionary<string, Expression> Bindings,
+        ImmutableDictionary<CompilerModel.BindingId, Expression> Bindings,
         PatternCondition Condition)
     {
         /// <summary>Empty analysis with no bindings and always-matching condition.</summary>
@@ -57,8 +58,10 @@ public class PatternCompiler
             new([], condition);
 
         /// <summary>Creates an analysis with a single binding and always-matching condition.</summary>
-        public static PatternAnalysis WithBinding(string name, Expression value) =>
-            new(ImmutableDictionary<string, Expression>.Empty.Add(name, value), new PatternCondition.Always());
+        public static PatternAnalysis WithBinding(CompilerModel.BindingId name, Expression value) =>
+            new(
+                ImmutableDictionary<CompilerModel.BindingId, Expression>.Empty.Add(name, value),
+                new PatternCondition.Always());
     }
 
     /// <summary>
@@ -243,17 +246,17 @@ public class PatternCompiler
     {
         // Find out which bindings are used and must be forwarded
 
-        var bindingsNames = ImmutableHashSet<string>.Empty;
+        var bindingsNames = ImmutableHashSet<CompilerModel.BindingId>.Empty;
 
         for (var caseIndex = 0; caseIndex < cases.Count; caseIndex++)
         {
             var caseItem = cases[caseIndex];
 
-            var caseExpressionRefs = new HashSet<string>();
-            ExpressionCompiler.CollectExpressionReferences(caseItem.Expression, caseExpressionRefs);
+            var caseExpressionRefs = new HashSet<CompilerModel.BindingId>();
+            ExpressionCompiler.CollectBindingReferences(caseItem.Expression, caseExpressionRefs);
 
-            var casePatternNames = new HashSet<string>();
-            CollectPatternNames(caseItem.Pattern, casePatternNames);
+            var casePatternNames = new HashSet<CompilerModel.BindingId>();
+            CollectPatternBindings(caseItem.Pattern, casePatternNames);
 
             bindingsNames =
                 bindingsNames.Union(
@@ -267,7 +270,7 @@ public class PatternCompiler
 
         var bindingsNamesSorted =
             bindingsNames
-            .OrderBy(name => name)
+            .OrderBy(name => name, CompilerModel.IdentityComparer.Instance)
             .ToImmutableList();
 
         /*
@@ -292,8 +295,8 @@ public class PatternCompiler
             var name = bindingsNamesSorted[i];
 
             var nameExprResult =
-                ExpressionCompiler.CompileFunctionOrValue(
-                    SyntaxTypes.Expression.Identifier.Create(moduleName: [], name),
+                ExpressionCompiler.CompileResolvedReference(
+                    new CompilerModel.Reference.Local(name),
                     outerContext);
 
             if (nameExprResult.IsErrOrNull() is { } nameExprErr)
@@ -325,7 +328,9 @@ public class PatternCompiler
 
         var innerContext =
             outerContext
-            .WithReplacedLocalBindings(innerBindings);
+            .WithReplacedLocalBindings(innerBindings)
+            with
+            { ParameterNames = new Dictionary<CompilerModel.BindingId, int>() };
 
         Expression? invokedBodyExpr = null;
 
@@ -396,64 +401,61 @@ public class PatternCompiler
     /// <param name="pattern">The pattern being analyzed.</param>
     /// <param name="scrutinee">An expression for the value being matched.</param>
     public static PatternAnalysis AnalyzePattern(
-        SyntaxTypes.Pattern pattern,
+        Pattern pattern,
         Expression scrutinee) =>
         AnalyzePatternRecursive(
             pattern,
             scrutinee);
 
     private static PatternAnalysis AnalyzePatternRecursive(
-        SyntaxTypes.Pattern pattern,
+        Pattern pattern,
         Expression scrutinee)
     {
         return pattern switch
         {
-            SyntaxTypes.Pattern.AllPattern => PatternAnalysis.Empty,
+            Pattern.AllPattern => PatternAnalysis.Empty,
 
-            SyntaxTypes.Pattern.VarPattern varPattern =>
-            PatternAnalysis.WithBinding(varPattern.Name, scrutinee),
+            Pattern.VarPattern varPattern =>
+            PatternAnalysis.WithBinding(varPattern.Binding, scrutinee),
 
-            SyntaxTypes.Pattern.IntPattern intPattern =>
+            Pattern.IntPattern intPattern =>
             PatternAnalysis.WithCondition(
                 new PatternCondition.ValueEquals(
                     Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(intPattern.Value)))),
 
-            SyntaxTypes.Pattern.CharPattern charPattern =>
+            Pattern.CharPattern charPattern =>
             PatternAnalysis.WithCondition(
                 new PatternCondition.ValueEquals(
                     Expression.LitralInst(ElmValueEncoding.ElmCharAsPineValue(charPattern.Value)))),
 
-            SyntaxTypes.Pattern.StringPattern stringPattern =>
+            Pattern.StringPattern stringPattern =>
             PatternAnalysis.WithCondition(
                 new PatternCondition.ValueEquals(
                     Expression.LitralInst(ElmValueEncoding.StringAsPineValue(stringPattern.Value)))),
 
-            SyntaxTypes.Pattern.AsPattern asPattern =>
+            Pattern.AsPattern asPattern =>
             AnalyzeAsPattern(
                 asPattern,
                 scrutinee),
 
-            SyntaxTypes.Pattern.ListPattern listPattern =>
+            Pattern.ListPattern listPattern =>
             AnalyzeListPattern(listPattern, scrutinee),
 
-            SyntaxTypes.Pattern.UnConsPattern unConsPattern =>
+            Pattern.UnConsPattern unConsPattern =>
             AnalyzeUnConsPattern(
                 unConsPattern,
                 scrutinee),
 
-            SyntaxTypes.Pattern.TuplePattern tuplePattern =>
+            Pattern.TuplePattern tuplePattern =>
             AnalyzeTuplePattern(tuplePattern, scrutinee),
 
-            SyntaxTypes.Pattern.NamedPattern namedPattern =>
+            Pattern.NamedPattern namedPattern =>
             AnalyzeNamedPattern(namedPattern, scrutinee),
 
-            SyntaxTypes.Pattern.RecordPattern =>
-            throw new InvalidOperationException("Record patterns must be lowered before Pine emission."),
-
-            SyntaxTypes.Pattern.UnitPattern =>
+            Pattern.UnitPattern =>
             PatternAnalysis.WithCondition(new PatternCondition.LengthEquals(0)),
 
-            SyntaxTypes.Pattern.FloatPattern =>
+            Pattern.FloatPattern =>
             throw new NotImplementedException($"Pattern type not yet supported: {pattern.GetType().Name}"),
 
             _ =>
@@ -463,7 +465,7 @@ public class PatternCompiler
     }
 
     private static PatternAnalysis AnalyzeListPattern(
-        SyntaxTypes.Pattern.ListPattern listPattern,
+        Pattern.ListPattern listPattern,
         Expression scrutinee)
     {
         if (listPattern.Elements.Count is 0)
@@ -484,7 +486,7 @@ public class PatternCompiler
                 new PatternCondition.LengthEquals(listPattern.Elements.Count)
             };
 
-        var allBindings = ImmutableDictionary<string, Expression>.Empty;
+        var allBindings = ImmutableDictionary<CompilerModel.BindingId, Expression>.Empty;
 
         for (var i = 0; i < listPattern.Elements.Count; i++)
         {
@@ -520,7 +522,7 @@ public class PatternCompiler
     }
 
     private static PatternAnalysis AnalyzeUnConsPattern(
-        SyntaxTypes.Pattern.UnConsPattern unConsPattern,
+        Pattern.UnConsPattern unConsPattern,
         Expression scrutinee)
     {
         var headExpr = BuiltinHelpers.ApplyBuiltinHead(scrutinee);
@@ -537,7 +539,7 @@ public class PatternCompiler
                 tailExpr);
 
         var allBindings =
-            ImmutableDictionary<string, Expression>.Empty
+            ImmutableDictionary<CompilerModel.BindingId, Expression>.Empty
             .SetItems(headAnalysis.Bindings)
             .SetItems(tailAnalysis.Bindings);
 
@@ -574,7 +576,7 @@ public class PatternCompiler
     }
 
     private static PatternAnalysis AnalyzeTuplePattern(
-        SyntaxTypes.Pattern.TuplePattern tuplePattern,
+        Pattern.TuplePattern tuplePattern,
         Expression scrutinee)
     {
         if (AsConstantPattern(tuplePattern) is { } constantValue)
@@ -590,7 +592,7 @@ public class PatternCompiler
                 new PatternCondition.LengthEquals(tuplePattern.Elements.Count)
             };
 
-        var allBindings = ImmutableDictionary<string, Expression>.Empty;
+        var allBindings = ImmutableDictionary<CompilerModel.BindingId, Expression>.Empty;
 
         for (var i = 0; i < tuplePattern.Elements.Count; i++)
         {
@@ -626,10 +628,10 @@ public class PatternCompiler
     }
 
     private static PatternAnalysis AnalyzeNamedPattern(
-        SyntaxTypes.Pattern.NamedPattern namedPattern,
+        Pattern.NamedPattern namedPattern,
         Expression scrutinee)
     {
-        var tagName = namedPattern.Name.Name;
+        var tagName = namedPattern.Name.DeclName;
 
         if (AsConstantPattern(namedPattern) is { } constantValue)
         {
@@ -648,7 +650,7 @@ public class PatternCompiler
                     new PatternCondition.ValueEquals(expectedTagName))
             };
 
-        var allBindings = ImmutableDictionary<string, Expression>.Empty;
+        var allBindings = ImmutableDictionary<CompilerModel.BindingId, Expression>.Empty;
 
         if (namedPattern.Arguments.Count > 0)
         {
@@ -687,7 +689,7 @@ public class PatternCompiler
     }
 
     private static PatternAnalysis AnalyzeAsPattern(
-        SyntaxTypes.Pattern.AsPattern asPattern,
+        Pattern.AsPattern asPattern,
         Expression scrutinee)
     {
         // First, analyze the inner pattern
@@ -697,7 +699,7 @@ public class PatternCompiler
                 scrutinee);
 
         // Add the "as" binding - this binds the entire scrutinee to the alias name
-        var bindings = innerAnalysis.Bindings.Add(asPattern.Name, scrutinee);
+        var bindings = innerAnalysis.Bindings.Add(asPattern.Binding, scrutinee);
 
         return new PatternAnalysis(bindings, innerAnalysis.Condition);
     }
@@ -775,8 +777,8 @@ public class PatternCompiler
     /// </summary>
     /// <param name="pattern">The pattern to extract bindings for.</param>
     /// <param name="scrutinee">An expression for the value being matched.</param>
-    public static IReadOnlyDictionary<string, Expression> ExtractPatternBindings(
-        SyntaxTypes.Pattern pattern,
+    public static IReadOnlyDictionary<CompilerModel.BindingId, Expression> ExtractPatternBindings(
+        Pattern pattern,
         Expression scrutinee)
     {
         var analysis = AnalyzePattern(pattern, scrutinee);
@@ -787,7 +789,7 @@ public class PatternCompiler
     /// Compiles a pattern's condition by analyzing it and converting the condition tree to an Expression.
     /// </summary>
     public static Expression? CompilePatternCondition(
-        SyntaxTypes.Pattern pattern,
+        Pattern pattern,
         Expression scrutinee)
     {
         var analysis =
@@ -820,47 +822,44 @@ public class PatternCompiler
     /// <param name="pattern">The pattern to analyze.</param>
     /// <returns>The constant PineValue if the pattern is constant, or null if it contains variables.</returns>
     /// <exception cref="NotImplementedException">Thrown for unsupported pattern types.</exception>
-    public static PineValue? AsConstantPattern(SyntaxTypes.Pattern pattern)
+    public static PineValue? AsConstantPattern(Pattern pattern)
     {
         return pattern switch
         {
-            SyntaxTypes.Pattern.IntPattern intPattern =>
+            Pattern.IntPattern intPattern =>
             IntegerEncoding.EncodeSignedInteger(intPattern.Value),
 
-            SyntaxTypes.Pattern.CharPattern charPattern =>
+            Pattern.CharPattern charPattern =>
             ElmValueEncoding.ElmCharAsPineValue(charPattern.Value),
 
-            SyntaxTypes.Pattern.StringPattern stringPattern =>
+            Pattern.StringPattern stringPattern =>
             ElmValueEncoding.StringAsPineValue(stringPattern.Value),
 
-            SyntaxTypes.Pattern.AllPattern =>
+            Pattern.AllPattern =>
             null, // Wildcard pattern contains no constant value
 
-            SyntaxTypes.Pattern.VarPattern =>
+            Pattern.VarPattern =>
             null, // Variable pattern is not constant
 
-            SyntaxTypes.Pattern.ListPattern listPattern =>
+            Pattern.ListPattern listPattern =>
             AsConstantListPattern(listPattern),
 
-            SyntaxTypes.Pattern.TuplePattern tuplePattern =>
+            Pattern.TuplePattern tuplePattern =>
             AsConstantTuplePattern(tuplePattern),
 
-            SyntaxTypes.Pattern.NamedPattern namedPattern =>
+            Pattern.NamedPattern namedPattern =>
             AsConstantNamedPattern(namedPattern),
 
-            SyntaxTypes.Pattern.UnConsPattern =>
+            Pattern.UnConsPattern =>
             null, // UnCons pattern always binds variables
 
-            SyntaxTypes.Pattern.RecordPattern =>
-            null, // Record pattern always binds variables
-
-            SyntaxTypes.Pattern.AsPattern =>
+            Pattern.AsPattern =>
             null, // As pattern always binds a variable
 
-            SyntaxTypes.Pattern.UnitPattern =>
+            Pattern.UnitPattern =>
             PineValue.EmptyList, // Unit is the empty list
 
-            SyntaxTypes.Pattern.FloatPattern =>
+            Pattern.FloatPattern =>
             throw new NotImplementedException(
                 $"Pattern type not yet supported for constant analysis: {pattern.GetType().Name}"),
 
@@ -870,7 +869,7 @@ public class PatternCompiler
         };
     }
 
-    private static PineValue? AsConstantListPattern(SyntaxTypes.Pattern.ListPattern listPattern)
+    private static PineValue? AsConstantListPattern(Pattern.ListPattern listPattern)
     {
         var elements = new PineValue[listPattern.Elements.Count];
 
@@ -887,7 +886,7 @@ public class PatternCompiler
         return PineValue.List(elements);
     }
 
-    private static PineValue? AsConstantTuplePattern(SyntaxTypes.Pattern.TuplePattern tuplePattern)
+    private static PineValue? AsConstantTuplePattern(Pattern.TuplePattern tuplePattern)
     {
         var elements = new PineValue[tuplePattern.Elements.Count];
 
@@ -904,16 +903,16 @@ public class PatternCompiler
         return PineValue.List(elements);
     }
 
-    private static PineValue? AsConstantNamedPattern(SyntaxTypes.Pattern.NamedPattern namedPattern)
+    private static PineValue? AsConstantNamedPattern(Pattern.NamedPattern namedPattern)
     {
         // Special handling for Bool constructors: True and False use the kernel
         // representation (Blob([4]) and Blob([2])) rather than the generic tag representation.
         if (namedPattern.Arguments.Count is 0)
         {
-            if (namedPattern.Name.Name is "True")
+            if (namedPattern.Name.DeclName is "True")
                 return ExpressionCompiler.EmitBooleanLiteral(true);
 
-            if (namedPattern.Name.Name is "False")
+            if (namedPattern.Name.DeclName is "False")
                 return ExpressionCompiler.EmitBooleanLiteral(false);
         }
 
@@ -929,75 +928,68 @@ public class PatternCompiler
             arguments[i] = argValue;
         }
 
-        return ElmValueEncoding.TagAsPineValue(namedPattern.Name.Name, arguments);
+        return ElmValueEncoding.TagAsPineValue(namedPattern.Name.DeclName, arguments);
     }
 
     /// <summary>
     /// Collects pattern names (variables bound by the pattern).
     /// </summary>
-    public static void CollectPatternNames(
-        SyntaxTypes.Pattern pattern,
-        HashSet<string> names)
+    public static void CollectPatternBindings(
+        Pattern pattern,
+        HashSet<CompilerModel.BindingId> names)
     {
         switch (pattern)
         {
-            case SyntaxTypes.Pattern.VarPattern varPattern:
-                names.Add(varPattern.Name);
+            case Pattern.VarPattern varPattern:
+                names.Add(varPattern.Binding);
                 break;
 
-            case SyntaxTypes.Pattern.TuplePattern tuplePattern:
+            case Pattern.TuplePattern tuplePattern:
                 foreach (var elem in tuplePattern.Elements)
                 {
-                    CollectPatternNames(elem, names);
+                    CollectPatternBindings(elem, names);
                 }
 
                 break;
 
-            case SyntaxTypes.Pattern.ListPattern listPattern:
+            case Pattern.ListPattern listPattern:
                 foreach (var elem in listPattern.Elements)
                 {
-                    CollectPatternNames(elem, names);
+                    CollectPatternBindings(elem, names);
                 }
 
                 break;
 
-            case SyntaxTypes.Pattern.UnConsPattern unConsPattern:
-                CollectPatternNames(unConsPattern.Head, names);
-                CollectPatternNames(unConsPattern.Tail, names);
+            case Pattern.UnConsPattern unConsPattern:
+                CollectPatternBindings(unConsPattern.Head, names);
+                CollectPatternBindings(unConsPattern.Tail, names);
                 break;
 
-            case SyntaxTypes.Pattern.AsPattern asPattern:
-                names.Add(asPattern.Name);
-                CollectPatternNames(asPattern.Pattern, names);
+            case Pattern.AsPattern asPattern:
+                names.Add(asPattern.Binding);
+                CollectPatternBindings(asPattern.Pattern, names);
                 break;
 
-            case SyntaxTypes.Pattern.NamedPattern namedPattern:
+            case Pattern.NamedPattern namedPattern:
                 foreach (var arg in namedPattern.Arguments)
                 {
-                    CollectPatternNames(arg, names);
+                    CollectPatternBindings(arg, names);
                 }
 
                 break;
 
-            case SyntaxTypes.Pattern.RecordPattern recordPattern:
-                foreach (var field in recordPattern.Fields)
-                {
-                    names.Add(field.FieldName);
-                }
-
-                break;
-
-            case SyntaxTypes.Pattern.AllPattern:
-            case SyntaxTypes.Pattern.UnitPattern:
-            case SyntaxTypes.Pattern.CharPattern:
-            case SyntaxTypes.Pattern.StringPattern:
-            case SyntaxTypes.Pattern.IntPattern:
-            case SyntaxTypes.Pattern.FloatPattern:
+            case Pattern.AllPattern:
+            case Pattern.UnitPattern:
+            case Pattern.CharPattern:
+            case Pattern.StringPattern:
+            case Pattern.IntPattern:
+            case Pattern.FloatPattern:
                 break;
 
             default:
                 throw new NotImplementedException(
-                    $"{nameof(CollectPatternNames)} does not handle pattern variant: {pattern.GetType().Name}");
+                    $"{nameof(CollectPatternBindings)} does not handle pattern variant: {pattern.GetType().Name}");
         }
     }
+
 }

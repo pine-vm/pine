@@ -41,8 +41,7 @@ public partial class ElmCompiler
         FileTree sources,
         bool includeBundledKernelModules = true,
         IDictionary<string, Result<ElmSyntaxParseError, Syntax.File>>? sourceParseCache = null,
-        IDictionary<(Syntax.Node<Syntax.Declaration> Declaration, string Scope),
-            DeclarationCanonicalizationCacheEntry>? canonicalizationCache = null) =>
+        Canonicalization.DeclarationCache? canonicalizationCache = null) =>
         AnalyzeSources(
             sources,
             sources.EnumerateFilesTransitive()
@@ -56,8 +55,7 @@ public partial class ElmCompiler
     public static IReadOnlyList<ElmCompilerDiagnostic> AnalyzeApplication(
         ElmResolvedBuild build,
         IDictionary<string, Result<ElmSyntaxParseError, Syntax.File>>? sourceParseCache = null,
-        IDictionary<(Syntax.Node<Syntax.Declaration> Declaration, string Scope),
-            DeclarationCanonicalizationCacheEntry>? canonicalizationCache = null)
+        Canonicalization.DeclarationCache? canonicalizationCache = null)
     {
         var applicationPaths =
             build.ProjectSources.EnumerateFilesTransitive()
@@ -93,8 +91,7 @@ public partial class ElmCompiler
         DeclQualifiedName name,
         bool includeBundledKernelModules = true,
         IDictionary<string, Result<ElmSyntaxParseError, Syntax.File>>? sourceParseCache = null,
-        IDictionary<(Syntax.Node<Syntax.Declaration> Declaration, string Scope),
-            DeclarationCanonicalizationCacheEntry>? canonicalizationCache = null,
+        Canonicalization.DeclarationCache? canonicalizationCache = null,
         IReadOnlyDictionary<string, Syntax.File>? parsedSources = null,
         IReadOnlySet<string>? bundledModuleNames = null)
     {
@@ -176,8 +173,7 @@ public partial class ElmCompiler
         ElmResolvedBuild build,
         DeclQualifiedName name,
         IDictionary<string, Result<ElmSyntaxParseError, Syntax.File>>? sourceParseCache = null,
-        IDictionary<(Syntax.Node<Syntax.Declaration> Declaration, string Scope),
-            DeclarationCanonicalizationCacheEntry>? canonicalizationCache = null) =>
+        Canonicalization.DeclarationCache? canonicalizationCache = null) =>
         QueryDeclaration(
             build.Sources,
             name,
@@ -192,8 +188,7 @@ public partial class ElmCompiler
         IReadOnlySet<string> applicationPaths,
         bool includeBundledKernelModules,
         IDictionary<string, Result<ElmSyntaxParseError, Syntax.File>>? sourceParseCache,
-        IDictionary<(Syntax.Node<Syntax.Declaration> Declaration, string Scope),
-            DeclarationCanonicalizationCacheEntry>? canonicalizationCache,
+        Canonicalization.DeclarationCache? canonicalizationCache,
         IReadOnlyDictionary<string, Syntax.File>? parsedSources = null,
         bool validateSourceImports = true,
         IReadOnlySet<string>? bundledModuleNames = null)
@@ -343,11 +338,19 @@ public partial class ElmCompiler
         var diagnostics = new List<ElmCompilerDiagnostic>();
 
         var aliases =
-            BuildModuleShellsFromFlatDeclarations(declarations)
-            .SelectMany(
-                file => TypeInference.BuildTypeAliasDefinitions(
-                    file,
-                    string.Join(".", Abstract.Module.GetModuleName(file.ModuleDefinition))))
+            declarations.Where(entry => entry.Value is Abstract.Declaration.AliasDeclaration)
+            .Select(
+                entry =>
+                {
+                    var alias = (Abstract.Declaration.AliasDeclaration)entry.Value;
+
+                    return
+                        KeyValuePair.Create(
+                            entry.Key,
+                            new TypeInference.TypeAliasDefinition(
+                                alias.TypeAlias.Generics,
+                                TypeInference.TypeAnnotationToInferredType(alias.TypeAlias.TypeAnnotation)));
+                })
             .ToImmutableDictionary();
 
         // Bundled modules redeclare the runtime String tag to inspect its representation.

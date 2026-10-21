@@ -1,435 +1,268 @@
 using AwesomeAssertions;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
-using Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
+using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Tests.Elm.ElmCompilerTests;
+using System;
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
 using System.Numerics;
+using System.Text.Json;
 using Xunit;
+
+using Model = Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
+using IR = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
+using Shape = Pine.Core.Elm.ElmCompilerInDotnet.StructuralType;
+using InfixDirection = Pine.Core.Elm.ElmSyntax.SyntaxModel.InfixDirection;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 
-// 'Expression' is also defined as Pine.Core.Expression in an enclosing namespace; alias to the abstract model.
-using InfixDirection = Core.Elm.ElmSyntax.SyntaxModel.InfixDirection;
-using Expression = Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation.Expression;
-
-/// <summary>
-/// Tests verifying value-equality and <see cref="object.GetHashCode"/> semantics of the abstract
-/// Elm compiler IR over all kinds of composite structures.
-/// </summary>
 public class ModelTests
 {
-    private static Expression.IntegerLiteral IntExpr(int value) =>
-        new(value, IntegerEncoding.EncodeSignedInteger(value));
+    private static readonly Model.FunctionId Owner =
+        new Model.FunctionId.Source(DeclQualifiedName.Create(["Test"], "root"));
 
-    private static void AssertValueEqual(object a, object b)
+    private static Model.BindingId Id(int slot) => new Model.BindingId.Local(Owner, slot);
+
+    private static IR.Expression Integer(int value) =>
+        new IR.Expression.LiteralValue(IntegerEncoding.EncodeSignedInteger(value));
+
+    private static IR.Expression Local(int slot) => new IR.Expression.Identifier(new Model.Reference.Local(Id(slot)));
+
+    public static IEnumerable<object[]> Expressions()
     {
-        a.Should().Be(b);
-        b.Should().Be(a);
-        a.GetHashCode().Should().Be(b.GetHashCode(), "structurally equal values must share a hash code");
+        IR.Expression[] values =
+            [
+                Integer(42),
+                Local(0),
+                new IR.Expression.Negation(Local(0)),
+                new IR.Expression.ListExpr([Local(0), Integer(2)]),
+                new IR.Expression.IfBlock(Local(0), Integer(1), Integer(2)),
+                new IR.Expression.PrefixOperator("+"),
+                new IR.Expression.Application(Local(0), [Integer(1)]),
+                new IR.Expression.OperatorApplication("+", InfixDirection.Left, Local(0), Integer(1)),
+                new IR.Expression.ProjectItem(Local(0), 1),
+                new IR.Expression.CaseExpression(Local(0), [new(new Model.Pattern.VarPattern(Id(1)), Local(1))]),
+                new IR.Expression.LetExpression([new(new Model.Pattern.VarPattern(Id(1)), Local(0))], Local(1)),
+                new IR.Expression.RecordExpr([new("field", Integer(1))]),
+                new IR.Expression.RecordAccess(Local(0), "field"),
+                new IR.Expression.RecordAccessFunction("field"),
+                new IR.Expression.RecordUpdateExpression(Local(0), [new("field", Integer(1))]),
+                new IR.Expression.GLSLExpression("shader")
+            ];
+
+        return values.Select(value => new object[] { value });
     }
 
-    private static void AssertNotEqual(object a, object b)
+    public static IEnumerable<object[]> Patterns()
     {
-        a.Should().NotBe(b);
-        b.Should().NotBe(a);
+        Model.Pattern[] values =
+            [
+                new Model.Pattern.AllPattern(),
+                new Model.Pattern.VarPattern(Id(0)),
+                new Model.Pattern.UnitPattern(),
+                new Model.Pattern.CharPattern(0x1F600),
+                new Model.Pattern.StringPattern("text\n"),
+                new Model.Pattern.IntPattern(BigInteger.One << 100),
+                new Model.Pattern.FloatPattern(1.25),
+                new Model.Pattern.TuplePattern(
+                    [new Model.Pattern.VarPattern(Id(0)), new Model.Pattern.VarPattern(Id(1))]),
+                new Model.Pattern.ListPattern([new Model.Pattern.VarPattern(Id(0))]),
+                new Model.Pattern.UnConsPattern(
+                    new Model.Pattern.VarPattern(Id(0)),
+                    new Model.Pattern.VarPattern(Id(1))),
+                new Model.Pattern.NamedPattern(
+                    DeclQualifiedName.Create(["Test"], "Tag"),
+                    [
+                    new Model.Pattern.VarPattern(Id(0))
+                    ]),
+                new Model.Pattern.AsPattern(new Model.Pattern.VarPattern(Id(0)), Id(1))
+            ];
+
+        return values.Select(value => new object[] { value });
     }
 
-    [Fact]
-    public void Integer_literal_equality_uses_value_and_pine_value()
+    [Theory]
+    [MemberData(nameof(Patterns))]
+    public void Every_resolved_pattern_round_trips_all_semantic_fields(Model.Pattern value)
     {
-        // Two independently encoded PineValue instances of the same integer compare equal.
-        var a = new Expression.IntegerLiteral(42, IntegerEncoding.EncodeSignedInteger(42));
-        var b = new Expression.IntegerLiteral(42, IntegerEncoding.EncodeSignedInteger(42));
-
-        AssertValueEqual(a, b);
-
-        AssertNotEqual(a, new Expression.IntegerLiteral(43, IntegerEncoding.EncodeSignedInteger(43)));
+        var options = Model.CompilerModelJson.CreateOptions();
+        var restored = JsonSerializer.Deserialize<Model.Pattern>(JsonSerializer.Serialize(value, options), options);
+        restored.Should().Be(value);
+        restored!.GetHashCode().Should().Be(value.GetHashCode());
     }
 
-    [Fact]
-    public void Floatable_equality_uses_numerator_and_denominator()
+    [Theory]
+    [MemberData(nameof(Expressions))]
+    public void Resolved_IR_round_trips_every_variant_and_preserves_structural_equality(IR.Expression value)
     {
-        AssertValueEqual(
-            new Expression.FloatLiteral(3, 2),
-            new Expression.FloatLiteral(3, 2));
-
-        AssertNotEqual(
-            new Expression.FloatLiteral(3, 2),
-            new Expression.FloatLiteral(3, 4));
-    }
-
-    [Fact]
-    public void String_literal_equality()
-    {
-        AssertValueEqual(
-            Expression.StringLiteral.Create("alfa\nbeta"),
-            Expression.StringLiteral.Create("alfa\nbeta"));
-
-        AssertNotEqual(
-            Expression.StringLiteral.Create("alfa"),
-            Expression.StringLiteral.Create("beta"));
-    }
-
-    [Fact]
-    public void FunctionOrValue_equality_compares_module_name_by_value()
-    {
-        AssertValueEqual(
-            Expression.Identifier.Create(["Basics"], "always"),
-            Expression.Identifier.Create(["Basics"], "always"));
-
-        AssertNotEqual(
-            Expression.Identifier.Create(["Basics"], "always"),
-            Expression.Identifier.Create(["List"], "always"));
-
-        AssertNotEqual(
-            Expression.Identifier.Create(["Basics"], "always"),
-            Expression.Identifier.Create([], "always"));
-    }
-
-    [Fact]
-    public void ListExpr_equality_compares_elements_by_value()
-    {
-        AssertValueEqual(
-            new Expression.ListExpr([IntExpr(1), IntExpr(2), IntExpr(3)]),
-            new Expression.ListExpr([IntExpr(1), IntExpr(2), IntExpr(3)]));
-
-        AssertNotEqual(
-            new Expression.ListExpr([IntExpr(1), IntExpr(2)]),
-            new Expression.ListExpr([IntExpr(1), IntExpr(2), IntExpr(3)]));
-
-        AssertNotEqual(
-            new Expression.ListExpr([IntExpr(1), IntExpr(2)]),
-            new Expression.ListExpr([IntExpr(1), IntExpr(3)]));
-    }
-
-    [Fact]
-    public void Application_equality_compares_function_and_arguments()
-    {
-        var function = Expression.Identifier.Create([], "f");
-
-        AssertValueEqual(
-            new Expression.Application(function, [IntExpr(1), IntExpr(2)]),
-            new Expression.Application(function, [IntExpr(1), IntExpr(2)]));
-
-        AssertNotEqual(
-            new Expression.Application(function, [IntExpr(1), IntExpr(2)]),
-            new Expression.Application(function, [IntExpr(1)]));
-
-        AssertNotEqual(
-            new Expression.Application(function, [IntExpr(1)]),
-            new Expression.Application(Expression.Identifier.Create([], "g"), [IntExpr(1)]));
+        var options = Model.CompilerModelJson.CreateOptions();
+        var json = JsonSerializer.Serialize(value, options);
+        var restored = JsonSerializer.Deserialize<IR.Expression>(json, options);
+        restored.Should().Be(value);
+        restored!.GetHashCode().Should().Be(value.GetHashCode());
     }
 
     [Fact]
-    public void TupledExpression_equality()
-    {
-        AssertValueEqual(
-            new Expression.TupledExpression([IntExpr(1), IntExpr(2)]),
-            new Expression.TupledExpression([IntExpr(1), IntExpr(2)]));
+    public void Expression_fixtures_cover_every_backend_variant() =>
+        Expressions().Select(row => row[0].GetType()).Should().BeEquivalentTo(typeof(IR.Expression).GetNestedTypes());
 
-        AssertNotEqual(
-            new Expression.TupledExpression([IntExpr(1), IntExpr(2)]),
-            new Expression.TupledExpression([IntExpr(2), IntExpr(1)]));
+    [Fact]
+    public void Pattern_fixtures_cover_every_resolved_variant() =>
+        Patterns().Select(row => row[0].GetType()).Should().BeEquivalentTo(typeof(Model.Pattern).GetNestedTypes());
+
+    [Fact]
+    public void Binding_identity_is_mandatory_and_has_no_competing_name()
+    {
+        var first = new Model.Pattern.VarPattern(Id(0));
+        var second = new Model.Pattern.VarPattern(Id(1));
+        first.Should().NotBe(second);
+        new Model.Pattern.VarPattern(Id(0)).Should().Be(first);
+        typeof(Model.Pattern.VarPattern).GetProperty("Name").Should().BeNull();
+        typeof(Model.Pattern.AsPattern).GetProperty("Name").Should().BeNull();
+        typeof(IR.Expression.RecordUpdateExpression).GetProperty("RecordName").Should().BeNull();
+        typeof(IR.FunctionStruct).GetProperty("Name").Should().BeNull();
+        typeof(Model.BindingId).GetNestedType("Unresolved").Should().BeNull();
     }
 
     [Fact]
-    public void RecordAccess_equality_includes_field_name_value()
+    public void JSON_distinguishes_bindings_and_preserves_aliases_and_record_receivers()
     {
-        AssertValueEqual(
-            new Expression.RecordAccess(
-                Expression.Identifier.Create([], "r"),
-                "field",
-                StringEncoding.ValueFromString("field")),
-            new Expression.RecordAccess(
-                Expression.Identifier.Create([], "r"),
-                "field",
-                StringEncoding.ValueFromString("field")));
+        var options = Model.CompilerModelJson.CreateOptions();
+        Model.Pattern first = new Model.Pattern.VarPattern(Id(0));
+        Model.Pattern second = new Model.Pattern.VarPattern(Id(1));
+        JsonSerializer.Serialize(first, options).Should().NotBe(JsonSerializer.Serialize(second, options));
+        Model.Pattern alias = new Model.Pattern.AsPattern(first, new Model.BindingId.Temporary(Owner, 2));
+        JsonSerializer.Deserialize<Model.Pattern>(JsonSerializer.Serialize(alias, options), options).Should().Be(alias);
+        IR.Expression update = new IR.Expression.RecordUpdateExpression(Local(1), [new("field", Local(0))]);
 
-        AssertNotEqual(
-            new Expression.RecordAccess(
-                Expression.Identifier.Create([], "r"),
-                "field",
-                StringEncoding.ValueFromString("field")),
-            new Expression.RecordAccess(
-                Expression.Identifier.Create([], "r"),
-                "other",
-                StringEncoding.ValueFromString("other")));
+        JsonSerializer.Deserialize<IR.Expression>(JsonSerializer.Serialize(update, options), options).Should().Be(
+            update);
     }
 
     [Fact]
-    public void RecordAccessFunction_equality()
+    public void Nested_specialization_identities_round_trip_without_generated_names()
     {
-        AssertValueEqual(
-            new Expression.RecordAccessFunction("field", StringEncoding.ValueFromString("field")),
-            new Expression.RecordAccessFunction("field", StringEncoding.ValueFromString("field")));
+        var constraints =
+            new Model.ParameterConstraint[]
+            {
+                new Model.ParameterConstraint.KnownFunction(0, new Model.FunctionId.Lifted(Owner, 2)),
+                new Model.ParameterConstraint.ClosedRecord(
+                    1,
+                    Shape.ClosedRecord.Create(
+                        ImmutableDictionary<string, Shape>.Empty.Add("name", Shape.StringType.Instance)))
+            };
 
-        AssertNotEqual(
-            new Expression.RecordAccessFunction("field", StringEncoding.ValueFromString("field")),
-            new Expression.RecordAccessFunction("other", StringEncoding.ValueFromString("other")));
+        var id = Model.FunctionId.Specialized.Create(Owner, constraints);
+        Model.BindingId binding = new Model.BindingId.Local(id, 3);
+        var options = Model.CompilerModelJson.CreateOptions();
+        var restored = JsonSerializer.Deserialize<Model.BindingId>(JsonSerializer.Serialize(binding, options), options);
+        restored.Should().Be(binding);
+        restored!.GetHashCode().Should().Be(binding.GetHashCode());
     }
 
     [Fact]
-    public void RecordExpr_equality_compares_setters_by_value()
+    public void Copying_and_rewriting_nodes_preserves_hash_contracts()
     {
-        static RecordSetter Setter(string name, int value) =>
-            new(name, StringEncoding.ValueFromString(name), IntExpr(value));
-
-        AssertValueEqual(
-            new Expression.RecordExpr([Setter("a", 1), Setter("b", 2)]),
-            new Expression.RecordExpr([Setter("a", 1), Setter("b", 2)]));
-
-        AssertNotEqual(
-            new Expression.RecordExpr([Setter("a", 1), Setter("b", 2)]),
-            new Expression.RecordExpr([Setter("a", 1), Setter("b", 3)]));
+        var first = new IR.Expression.RecordUpdateExpression(Local(0), [new("field", Integer(1))]);
+        var rewritten = first with { Fields = [new("other", Integer(2))] };
+        var constructed = new IR.Expression.RecordUpdateExpression(Local(0), [new("other", Integer(2))]);
+        rewritten.Should().Be(constructed);
+        rewritten.GetHashCode().Should().Be(constructed.GetHashCode());
+        new HashSet<IR.Expression> { rewritten }.Should().Contain(constructed);
     }
 
     [Fact]
-    public void RecordUpdateExpression_equality()
+    public void Encoded_labels_are_derived_from_one_authoritative_field_name()
     {
-        static RecordSetter Setter(string name, int value) =>
-            new(name, StringEncoding.ValueFromString(name), IntExpr(value));
-
-        AssertValueEqual(
-            new Expression.RecordUpdateExpression("rec", [Setter("a", 1)]),
-            new Expression.RecordUpdateExpression("rec", [Setter("a", 1)]));
-
-        AssertNotEqual(
-            new Expression.RecordUpdateExpression("rec", [Setter("a", 1)]),
-            new Expression.RecordUpdateExpression("other", [Setter("a", 1)]));
-
-        AssertNotEqual(
-            new Expression.RecordUpdateExpression("rec", [Setter("a", 1)]),
-            new Expression.RecordUpdateExpression("rec", [Setter("a", 2)]));
+        var field = new IR.RecordSetter("first", Integer(1));
+        var renamed = field with { FieldName = "second" };
+        renamed.FieldNameValue.Should().Be(StringEncoding.ValueFromString("second"));
+        typeof(IR.RecordSetter).GetProperty("FieldNameValue")!.SetMethod.Should().BeNull();
     }
 
     [Fact]
-    public void IfBlock_equality()
+    public void Missing_identities_and_negative_slots_are_rejected_at_construction()
     {
-        AssertValueEqual(
-            new Expression.IfBlock(IntExpr(1), IntExpr(2), IntExpr(3)),
-            new Expression.IfBlock(IntExpr(1), IntExpr(2), IntExpr(3)));
+        Action[] invalid =
+            [
+                () => new Model.Pattern.VarPattern(null!),
+                () => new Model.Pattern.AsPattern(new Model.Pattern.AllPattern(), null!),
+                () => new Model.Reference.Local(null!),
+                () => new Model.BindingId.Local(Owner, -1),
+                () => new Model.BindingId.Temporary(Owner, -1),
+                () => new Model.FunctionId.Lifted(Owner, -1),
+                () => new Model.ParameterConstraint.KnownFunction(-1, Owner)
+            ];
 
-        AssertNotEqual(
-            new Expression.IfBlock(IntExpr(1), IntExpr(2), IntExpr(3)),
-            new Expression.IfBlock(IntExpr(1), IntExpr(2), IntExpr(4)));
+        foreach (var construct in invalid)
+            construct.Should().Throw<ArgumentException>();
+
+        typeof(Model.Pattern.VarPattern).GetProperty("Binding")!.SetMethod.Should().BeNull();
     }
 
     [Fact]
-    public void OperatorApplication_equality()
+    public void Source_identities_do_not_retain_mutable_namespace_lists_or_inconsistent_names()
     {
-        AssertValueEqual(
-            new Expression.OperatorApplication("+", InfixDirection.Left, IntExpr(1), IntExpr(2)),
-            new Expression.OperatorApplication("+", InfixDirection.Left, IntExpr(1), IntExpr(2)));
+        var namespaces = new[] { "Test" };
+        var id = new Model.FunctionId.Source(DeclQualifiedName.Create(namespaces, "root"));
+        var hash = id.GetHashCode();
+        namespaces[0] = "Changed";
+        id.Name.Namespaces.Should().Equal("Test");
+        id.GetHashCode().Should().Be(hash);
 
-        AssertNotEqual(
-            new Expression.OperatorApplication("+", InfixDirection.Left, IntExpr(1), IntExpr(2)),
-            new Expression.OperatorApplication("-", InfixDirection.Left, IntExpr(1), IntExpr(2)));
+        var invalid = () => new Model.FunctionId.Source(id.Name with { DeclName = "different" });
+        invalid.Should().Throw<ArgumentException>();
     }
 
     [Fact]
-    public void LambdaExpression_equality()
+    public void Source_metadata_cannot_provide_a_competing_function_implementation()
     {
-        AssertValueEqual(
-            new Expression.LambdaExpression(
-                [new Pattern.VarPattern("x"), new Pattern.VarPattern("y")],
-                Expression.Identifier.Create([], "x")),
-            new Expression.LambdaExpression(
-                [new Pattern.VarPattern("x"), new Pattern.VarPattern("y")],
-                Expression.Identifier.Create([], "x")));
+        var declaration =
+            new Core.Elm.ElmSyntax.ElmSyntaxAbstract.Declaration.FunctionDeclaration(
+                new(null, new("root", [], Core.Elm.ElmSyntax.ElmSyntaxAbstract.Expression.UnitExpr.Instance)));
 
-        AssertNotEqual(
-            new Expression.LambdaExpression(
-                [new Pattern.VarPattern("x")],
-                Expression.Identifier.Create([], "x")),
-            new Expression.LambdaExpression(
-                [new Pattern.VarPattern("x"), new Pattern.VarPattern("y")],
-                Expression.Identifier.Create([], "x")));
+        var construct =
+            () => new Model.Program(
+                [],
+                ImmutableDictionary<DeclQualifiedName, Core.Elm.ElmSyntax.ElmSyntaxAbstract.Declaration>.Empty
+                .Add(DeclQualifiedName.Create(["Test"], "root"), declaration));
+
+        construct.Should().Throw<ArgumentException>();
     }
 
     [Fact]
-    public void CaseExpression_equality()
+    public void Whole_program_JSON_uses_structural_entries_and_preserves_compilation()
     {
-        var caseA =
-            new Expression.CaseExpression(
-                Expression.Identifier.Create([], "x"),
-                [
-                    new Case(new Pattern.IntPattern(0), IntExpr(1)),
-                    new Case(new Pattern.AllPattern(), IntExpr(2)),
-                ]);
+        var program =
+            ElmCompiler.LowerToCompilerModel(
+                TestCase.DefaultAppWithoutPackages(
+                    [
+                    """
+                    module Test exposing (root)
+                    type alias Person = { age : Int }
+                    root : Person -> Int
+                    root { age } = (\extra -> age + extra) 2
+                    """
+                    ]).AsFileTree(),
+                [DeclQualifiedName.Create(["Test"], "root")])
+            .Extract(error => throw new InvalidOperationException(error)).CompilerProgram;
 
-        var caseB =
-            new Expression.CaseExpression(
-                Expression.Identifier.Create([], "x"),
-                [
-                    new Case(new Pattern.IntPattern(0), IntExpr(1)),
-                    new Case(new Pattern.AllPattern(), IntExpr(2)),
-                ]);
+        var options = Model.CompilerModelJson.CreateOptions();
+        var json = JsonSerializer.Serialize(program, options);
+        var restored = JsonSerializer.Deserialize<Model.Program>(json, options)!;
+        restored.Functions.Should().BeEquivalentTo(program.Functions);
+        restored.BindingNames.Should().BeEquivalentTo(program.BindingNames);
+        Model.ProgramValidation.Validate(restored);
 
-        AssertValueEqual(caseA, caseB);
+        var expected =
+            Model.Compilation.Compile(program).Extract(error => throw new InvalidOperationException(error.ToString()));
 
-        AssertNotEqual(
-            caseA,
-            new Expression.CaseExpression(
-                Expression.Identifier.Create([], "x"),
-                [
-                    new Case(new Pattern.IntPattern(0), IntExpr(1)),
-                ]));
-    }
+        var actual =
+            Model.Compilation.Compile(restored).Extract(error => throw new InvalidOperationException(error.ToString()));
 
-    [Fact]
-    public void LetExpression_equality()
-    {
-        static LetDeclaration Binding(string name, int value) =>
-            new LetDeclaration.LetDestructuring(new Pattern.VarPattern(name), IntExpr(value));
-
-        AssertValueEqual(
-            new Expression.LetExpression([Binding("a", 1)], Expression.Identifier.Create([], "a")),
-            new Expression.LetExpression([Binding("a", 1)], Expression.Identifier.Create([], "a")));
-
-        AssertNotEqual(
-            new Expression.LetExpression([Binding("a", 1)], Expression.Identifier.Create([], "a")),
-            new Expression.LetExpression([Binding("a", 2)], Expression.Identifier.Create([], "a")));
-    }
-
-    [Fact]
-    public void Nested_composite_expression_equality()
-    {
-        static Expression Build() =>
-            new Expression.Application(
-                Expression.Identifier.Create(["List"], "map"),
-                [
-                    new Expression.LambdaExpression(
-                        [new Pattern.VarPattern("x")],
-                        new Expression.OperatorApplication(
-                            "+",
-                            InfixDirection.Left,
-                            Expression.Identifier.Create([], "x"),
-                            IntExpr(1))),
-                    new Expression.ListExpr([IntExpr(1), IntExpr(2), IntExpr(3)]),
-                ]);
-
-        AssertValueEqual(Build(), Build());
-    }
-
-    [Fact]
-    public void Pattern_equality_over_composite_structures()
-    {
-        AssertValueEqual(
-            new Pattern.NamedPattern(
-                new QualifiedNameRef(["Maybe"], "Just"),
-                [new Pattern.VarPattern("x")]),
-            new Pattern.NamedPattern(
-                new QualifiedNameRef(["Maybe"], "Just"),
-                [new Pattern.VarPattern("x")]));
-
-        AssertNotEqual(
-            new Pattern.NamedPattern(
-                new QualifiedNameRef(["Maybe"], "Just"),
-                [new Pattern.VarPattern("x")]),
-            new Pattern.NamedPattern(
-                new QualifiedNameRef([], "Just"),
-                [new Pattern.VarPattern("x")]));
-
-        AssertValueEqual(
-            new Pattern.TuplePattern([new Pattern.VarPattern("a"), new Pattern.VarPattern("b")]),
-            new Pattern.TuplePattern([new Pattern.VarPattern("a"), new Pattern.VarPattern("b")]));
-
-        AssertValueEqual(
-            Pattern.RecordPattern.Create(["a", "b"]),
-            Pattern.RecordPattern.Create(["a", "b"]));
-
-        AssertNotEqual(
-            Pattern.RecordPattern.Create(["a", "b"]),
-            Pattern.RecordPattern.Create(["a", "c"]));
-
-        AssertValueEqual(
-            new Pattern.UnConsPattern(new Pattern.VarPattern("h"), new Pattern.VarPattern("t")),
-            new Pattern.UnConsPattern(new Pattern.VarPattern("h"), new Pattern.VarPattern("t")));
-    }
-
-    [Fact]
-    public void IntPattern_normalizes_hex_and_decimal()
-    {
-        // Hex and decimal int patterns are merged into IntPattern in the abstract model.
-        AssertValueEqual(
-            new Pattern.IntPattern(255),
-            new Pattern.IntPattern(new BigInteger(0xFF)));
-    }
-
-    [Fact]
-    public void QualifiedNameRef_equality_compares_module_name_by_value()
-    {
-        AssertValueEqual(
-            new QualifiedNameRef(["A", "B"], "C"),
-            new QualifiedNameRef(["A", "B"], "C"));
-
-        AssertNotEqual(
-            new QualifiedNameRef(["A", "B"], "C"),
-            new QualifiedNameRef(["A"], "C"));
-    }
-
-    [Fact]
-    public void TypeAnnotation_equality_over_composite_structures()
-    {
-        AssertValueEqual(
-            new TypeAnnotation.Typed(["List"], "List", [new TypeAnnotation.GenericType("a")]),
-            new TypeAnnotation.Typed(["List"], "List", [new TypeAnnotation.GenericType("a")]));
-
-        AssertNotEqual(
-            new TypeAnnotation.Typed(["List"], "List", [new TypeAnnotation.GenericType("a")]),
-            new TypeAnnotation.Typed([], "List", [new TypeAnnotation.GenericType("a")]));
-
-        AssertValueEqual(
-            new TypeAnnotation.Tupled([new TypeAnnotation.Unit(), new TypeAnnotation.GenericType("a")]),
-            new TypeAnnotation.Tupled([new TypeAnnotation.Unit(), new TypeAnnotation.GenericType("a")]));
-
-        AssertValueEqual(
-            new TypeAnnotation.FunctionTypeAnnotation(
-                new TypeAnnotation.GenericType("a"),
-                new TypeAnnotation.GenericType("b")),
-            new TypeAnnotation.FunctionTypeAnnotation(
-                new TypeAnnotation.GenericType("a"),
-                new TypeAnnotation.GenericType("b")));
-
-        AssertValueEqual(
-            new TypeAnnotation.Record(
-                new RecordDefinition([RecordField.Create("x", new TypeAnnotation.GenericType("a"))])),
-            new TypeAnnotation.Record(
-                new RecordDefinition([RecordField.Create("x", new TypeAnnotation.GenericType("a"))])));
-    }
-
-    [Fact]
-    public void Declaration_equality_over_composite_structures()
-    {
-        static Declaration FunctionDecl(int bodyValue) =>
-            new Declaration.FunctionDeclaration(
-                new FunctionStruct(
-                    Signature: null,
-                    new FunctionImplementation(
-                        "f",
-                        [new Pattern.VarPattern("x")],
-                        IntExpr(bodyValue))));
-
-        AssertValueEqual(FunctionDecl(1), FunctionDecl(1));
-
-        AssertNotEqual(FunctionDecl(1), FunctionDecl(2));
-
-        AssertValueEqual(
-            new Declaration.ChoiceTypeDeclaration(
-                new ChoiceTypeStruct(
-                    "T",
-                    ["a"],
-                    [ValueConstructor.Create("Ctor", [new TypeAnnotation.GenericType("a")])])),
-            new Declaration.ChoiceTypeDeclaration(
-                new ChoiceTypeStruct(
-                    "T",
-                    ["a"],
-                    [ValueConstructor.Create("Ctor", [new TypeAnnotation.GenericType("a")])])));
-    }
-
-    [Fact]
-    public void Distinct_expression_cases_are_not_equal()
-    {
-        AssertNotEqual(new Expression.UnitExpr(), Expression.StringLiteral.Create(""));
-        AssertNotEqual(IntExpr(1), Expression.StringLiteral.Create("1"));
-        AssertNotEqual(Expression.CharLiteral.Create(65), IntExpr(65));
+        foreach (var (id, artifact) in expected)
+            actual[id].Should().Be(artifact);
     }
 }

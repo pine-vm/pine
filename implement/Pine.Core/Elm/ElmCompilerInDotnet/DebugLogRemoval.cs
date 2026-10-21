@@ -56,7 +56,8 @@ public static class DebugLogRemoval
         return withRewrittenChildren;
     }
 
-    private static SyntaxTypes.Declaration RewriteDeclaration(
+    /// <summary>Rewrites one declaration without a module container.</summary>
+    public static SyntaxTypes.Declaration RewriteDeclaration(
         SyntaxTypes.Declaration declaration)
     {
         if (declaration is not SyntaxTypes.Declaration.FunctionDeclaration functionDeclaration)

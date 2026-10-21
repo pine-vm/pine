@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Tests.Elm.ElmCompilerInDotnet.CoreLibraryModule;
@@ -8,16 +9,23 @@ using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Numerics;
 using Xunit;
 
 using AST = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 using IR = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 using InfixDirection = Pine.Core.Elm.ElmSyntax.SyntaxModel.InfixDirection;
+using FunctionId = Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel.FunctionId;
+using Model = Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 
 public class AstToIrLoweringTests
 {
+    private static readonly FunctionId Owner = new FunctionId.Source(DeclQualifiedName.Create(["Test"], "select"));
+
+    private static Model.BindingId Id(int slot) => new Model.BindingId.Local(Owner, slot);
+
     [Fact]
     public void Canonical_list_annotations_do_not_lose_element_types_or_conflate_other_modules()
     {
@@ -54,15 +62,8 @@ public class AstToIrLoweringTests
     }
 
     [Fact]
-    public void Emission_rejects_unlowered_record_patterns_instead_of_hiding_generic_reads()
-    {
-        Action analyze =
-            () => PatternCompiler.AnalyzePattern(
-                IR.Pattern.RecordPattern.Create(["name"]),
-                Expression.EnvironmentInstance);
-
-        analyze.Should().Throw<InvalidOperationException>().WithMessage("*must be lowered*");
-    }
+    public void Resolved_patterns_cannot_represent_unlowered_record_patterns() =>
+        typeof(Model.Pattern).GetNestedType("RecordPattern").Should().BeNull();
 
     private static IEnumerable<Type> TypeComponents(Type type)
     {
@@ -76,9 +77,83 @@ public class AstToIrLoweringTests
     }
 
     [Theory]
-    [MemberData(nameof(ConvertFromAbstractSyntaxTests.Expressions), MemberType = typeof(ConvertFromAbstractSyntaxTests))]
+    [MemberData(nameof(FromCanonicalSyntaxTests.Expressions), MemberType = typeof(FromCanonicalSyntaxTests))]
     public void AST_to_IR_lowering_handles_every_expression_variant(AST.Expression expression) =>
         Lower(expression, new AST.TypeAnnotation.GenericType("a")).Should().NotBeNull();
+
+    public static IEnumerable<object[]> ExactFloatFractions()
+    {
+        var huge = BigInteger.Pow(10, 400);
+        var beyondDoublePrecision = (BigInteger.One << 53) + 1;
+        yield return [new BigInteger(29), new BigInteger(100), new BigInteger(29), new BigInteger(100)];
+        yield return [BigInteger.One, new BigInteger(3), BigInteger.One, new BigInteger(3)];
+        yield return [beyondDoublePrecision, BigInteger.One, beyondDoublePrecision, BigInteger.One];
+        yield return [huge, BigInteger.One, huge, BigInteger.One];
+        yield return [BigInteger.One, huge, BigInteger.One, huge];
+        yield return [huge + 1, huge + 3, huge + 1, huge + 3];
+        yield return [new BigInteger(6), new BigInteger(-8), new BigInteger(-3), new BigInteger(4)];
+        yield return [new BigInteger(-6), new BigInteger(-8), new BigInteger(3), new BigInteger(4)];
+        yield return [BigInteger.Zero, BigInteger.One, BigInteger.Zero, BigInteger.One];
+        yield return [new BigInteger(-29), new BigInteger(100), new BigInteger(-29), new BigInteger(100)];
+        yield return [-huge - 1, huge + 3, -huge - 1, huge + 3];
+    }
+
+    [Theory]
+    [MemberData(nameof(ExactFloatFractions))]
+    public void Float_literal_lowering_preserves_exact_rational_values(
+        BigInteger numerator, BigInteger denominator, BigInteger expectedNumerator, BigInteger expectedDenominator)
+    {
+        var body =
+            Lower(
+                new AST.Expression.FloatLiteral(numerator, denominator),
+                new AST.TypeAnnotation.Typed(["Basics"], "Float", []));
+
+        body.Should().BeOfType<IR.Expression.LiteralValue>().Which.Value.Should().Be(
+            ElmValueEncoding.TagAsPineValue(
+                ElmValue.ElmFloatTypeTagName,
+                [
+                IntegerEncoding.EncodeSignedInteger(expectedNumerator),
+                IntegerEncoding.EncodeSignedInteger(expectedDenominator)
+                ]));
+    }
+
+    public static IEnumerable<object[]> ExactFloatSources()
+    {
+        (string Literal, string Numerator, string Denominator)[] decimals =
+            [
+                ("0.29", "29", "100"),
+                ("-0.29", "-29", "100"),
+                ("9007199254740993.0", "9007199254740993", "1"),
+                ("0.12345678901234567890123456789", "12345678901234567890123456789", "100000000000000000000000000000"),
+                ("6.022e23", "602200000000000000000000", "1"),
+                ("1.6e-19", "1", "6250000000000000000")
+            ];
+
+        foreach (var (literal, numerator, denominator) in decimals)
+        {
+            yield return [literal, BigInteger.Parse(numerator, System.Globalization.CultureInfo.InvariantCulture),
+                BigInteger.Parse(denominator, System.Globalization.CultureInfo.InvariantCulture)];
+        }
+
+        yield return ["1.0e400", BigInteger.Pow(10, 400), BigInteger.One];
+        yield return ["1.0e-400", BigInteger.One, BigInteger.Pow(10, 400)];
+    }
+
+    [Theory]
+    [MemberData(nameof(ExactFloatSources))]
+    public void Compiled_float_literals_preserve_exact_source_values(
+        string literal, BigInteger numerator, BigInteger denominator)
+    {
+        var (environment, _) =
+            ElmCompilerTestHelper.CompileElmModules(
+                ["module Test exposing (value)\nvalue = " + literal],
+                disableInlining: false);
+
+        environment.Modules.Single().moduleContent.FunctionDeclarations["value"].Should().Be(
+            ElmValueEncoding.TagAsPineValue(
+                ElmValue.ElmFloatTypeTagName,
+                [IntegerEncoding.EncodeSignedInteger(numerator), IntegerEncoding.EncodeSignedInteger(denominator)]));
+    }
 
     [Theory]
     [InlineData("+", "add", "int_add")]
@@ -194,7 +269,7 @@ public class AstToIrLoweringTests
                 ],
                 disableInlining: disableOptimization);
 
-        var declarations = pipeline.DeclarationsForEmission;
+        var declarations = pipeline.FunctionsForEmission;
 
         var functions =
             environment.Modules.Single(module => module.moduleName is "Test").moduleContent.FunctionDeclarations;
@@ -202,9 +277,9 @@ public class AstToIrLoweringTests
         foreach (var name in new[] { "add", "sub", "mul", "appendString", "appendList", "fromRecord" })
         {
             var declaration =
-                (IR.Declaration.FunctionDeclaration)declarations[DeclQualifiedName.Create(["Test"], name)];
+                declarations[new FunctionId.Source(DeclQualifiedName.Create(["Test"], name))];
 
-            References(declaration.Function.Declaration.Expression).Should().NotContain(
+            References(declaration.Expression).Should().NotContain(
                 reference => reference == "Basics.add" || reference == "Basics.sub" ||
                     reference == "Basics.mul" || reference == "Basics.append");
         }
@@ -253,13 +328,19 @@ public class AstToIrLoweringTests
         string operation,
         string functionName)
     {
-        var left = IR.Expression.Identifier.Create([], "left");
-        var right = IR.Expression.Identifier.Create([], "right");
+        var left = new IR.Expression.Identifier(new Model.Reference.Local(Id(0)));
+        var right = new IR.Expression.Identifier(new Model.Reference.Local(Id(1)));
 
         IR.Expression[] expressions =
             [
             new IR.Expression.OperatorApplication(operation, InfixDirection.Left, left, right),
-            new IR.Expression.Application(IR.Expression.Identifier.Create(["Basics"], functionName), [left, right])
+            new IR.Expression.Application(
+                new IR.Expression.Identifier(
+                    new Model.Reference.Native(DeclQualifiedName.Create(["Basics"], functionName))),
+                [
+                left,
+                right
+                ])
             ];
 
         foreach (var expression in expressions)
@@ -286,15 +367,15 @@ public class AstToIrLoweringTests
             environment.Modules.Single(module => module.moduleName is "Test").moduleContent.FunctionDeclarations;
 
         var add =
-            (IR.Declaration.FunctionDeclaration)pipeline.DeclarationsForEmission[DeclQualifiedName.Create(["Test"], "add")];
+            pipeline.FunctionsForEmission[new FunctionId.Source(DeclQualifiedName.Create(["Test"], "add"))];
 
         var append =
-            (IR.Declaration.FunctionDeclaration)pipeline.DeclarationsForEmission[DeclQualifiedName.Create(["Test"], "append")];
+            pipeline.FunctionsForEmission[new FunctionId.Source(DeclQualifiedName.Create(["Test"], "append"))];
 
-        References(add.Function.Declaration.Expression).Should().Contain("Basics.add");
-        References(add.Function.Declaration.Expression).Should().NotContain("Pine_builtin.int_add");
-        References(append.Function.Declaration.Expression).Should().Contain("Basics.append");
-        References(append.Function.Declaration.Expression).Should().NotContain("Pine_builtin.concat");
+        References(add.Expression).Should().Contain("Basics.add");
+        References(add.Expression).Should().NotContain("Pine_builtin.int_add");
+        References(append.Expression).Should().Contain("Basics.append");
+        References(append.Expression).Should().NotContain("Pine_builtin.concat");
 
         var vm = ElmCompilerTestHelper.PineVMForProfiling(_ => { });
 
@@ -348,26 +429,26 @@ public class AstToIrLoweringTests
             LowerToIntermediateRepresentation.Lower(
                 ImmutableDictionary<DeclQualifiedName, AST.Declaration>.Empty.Add(name, declaration));
 
-        return ((IR.Declaration.FunctionDeclaration)lowered.Declarations[name]).Function.Declaration.Expression;
+        return lowered[new FunctionId.Source(name)].Expression;
     }
 
     private static IEnumerable<string> References(IR.Expression expression) =>
         IR.ExpressionTraversal.Enumerate(expression).OfType<IR.Expression.Identifier>()
-        .Select(identifier => identifier.QualifiedName.FullName);
+        .Select(identifier => identifier.Reference).OfType<Model.Reference.Native>().Select(native => native.Name.FullName);
 
     private static ExpressionCompilationContext Context() =>
         new(
-            ParameterNames: new Dictionary<string, int> { ["left"] = 0, ["right"] = 1 },
-            CurrentModuleName: "Test",
-            CurrentFunctionName: "select",
-            LocalBindings: null,
-            DependencyLayout: [],
-            ModuleCompilationContext:
+            new Dictionary<Model.BindingId, int> { [Id(0)] = 0, [Id(1)] = 1 },
+            new Dictionary<Model.BindingId, Expression>(),
+            new Model.SccCompilationContext(
+                [],
+                [],
+                []),
             new ModuleCompilationContext(
-                AllFunctions:
-                new Dictionary<DeclQualifiedName, (string moduleName, string functionName, IR.Declaration.FunctionDeclaration declaration)>(),
-                CompiledFunctionsCache: [],
-                PineKernelModuleNames: FrozenSet.Create(["Pine_builtin", "Pine_kernel"])),
-            ParseCache: new PineVMParseCache(),
-            ReducedExpressionCache: null);
+                FrozenSet.Create(["Pine_builtin", "Pine_kernel"]),
+                [],
+                []),
+            "Test",
+            new PineVMParseCache(),
+            null);
 }

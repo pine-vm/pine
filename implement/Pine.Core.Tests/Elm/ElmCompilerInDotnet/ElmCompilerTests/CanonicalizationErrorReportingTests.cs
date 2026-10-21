@@ -32,9 +32,7 @@ public class CanonicalizationErrorReportingTests
 
         var parsing = new Dictionary<string, Result<Core.Elm.ElmSyntax.ElmSyntaxParseError, SyntaxTypes.File>>();
 
-        var cache =
-            new Dictionary<(SyntaxTypes.Node<SyntaxTypes.Declaration> Declaration, string Scope),
-            DeclarationCanonicalizationCacheEntry>();
+        var cache = new Canonicalization.DeclarationCache();
 
         var cold =
             ElmCompiler.CompileInteractiveEnvironment(
@@ -164,9 +162,7 @@ public class CanonicalizationErrorReportingTests
     [Fact]
     public void Cached_lookup_details_change_when_a_previously_missing_module_becomes_available()
     {
-        var cache =
-            new Dictionary<(SyntaxTypes.Node<SyntaxTypes.Declaration> Declaration, string Scope),
-            DeclarationCanonicalizationCacheEntry>();
+        var cache = new Canonicalization.DeclarationCache();
 
         var main = "module Main exposing (root)\nimport Missing\nroot = Missing.value";
         var absent = TestCase.FileTreeFromElmModulesWithoutPackages([main]);

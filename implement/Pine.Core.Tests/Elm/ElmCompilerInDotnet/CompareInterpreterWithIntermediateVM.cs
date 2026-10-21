@@ -26,21 +26,15 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 /// <para>
 /// Both paths involve some expensive preparation (compiling the Elm modules, canonicalizing
 /// declarations into the form the interpreter understands, etc.). This class is constructed
-/// once via <see cref="Prepare(FileTree, IReadOnlyList{IReadOnlyList{string}}, IReadOnlyList{DeclQualifiedName}, int)"/>
-/// or <see cref="Prepare(IReadOnlyList{string}, IReadOnlyList{DeclQualifiedName}, int)"/>
+/// once via <see cref="Prepare(FileTree, IReadOnlyList{IReadOnlyList{string}}, IReadOnlyList{DeclQualifiedName})"/>
+/// or <see cref="Prepare(IReadOnlyList{string}, IReadOnlyList{DeclQualifiedName})"/>
 /// and then used to evaluate many root expressions, amortizing that preparation across
 /// the test methods.
 /// Each evaluation uses a fresh profiling VM so cache warmup in earlier evaluations
 /// does not change subsequent counter snapshots.
 /// </para>
-/// <para>
-/// The <see cref="MaxOptimizationRounds"/> setting affects both paths: it is forwarded to
-/// <see cref="ElmCompilerTestHelper.CompileInteractiveEnvironmentFromFiles"/>
-/// (so the VM path runs against the bytecode emitted from that round count) and
-/// <see cref="CompilationPipelineStageResults.ModulesForCompilation"/> from the same
-/// invocation is fed into the syntax interpreter (so both paths see the same post-optimization
-/// declarations).
-/// </para>
+/// <para>The syntax interpreter is an independent canonical-source oracle. The VM executes the
+/// actual compiler-owned lowering result; no alternate source lowering is rerun.</para>
 /// </summary>
 public sealed class CompareInterpreterWithIntermediateVM
 {
@@ -50,25 +44,19 @@ public sealed class CompareInterpreterWithIntermediateVM
 
     private readonly IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> _interpreterDeclarations;
 
-    /// <summary>
-    /// The post-optimization Elm module list — the exact input the bytecode-emission backend
-    /// consumes (<see cref="CompilationPipelineStageResults.ModulesForCompilation"/>).
-    /// Tests can render or inspect these to see how declarations look after the optimization
-    /// pipeline (specialization, higher-order inlining, size-based inlining), which is the
-    /// same shape the syntax interpreter dispatches against.
-    /// </summary>
-    public IReadOnlyList<Core.Elm.ElmSyntax.ElmSyntaxAbstract.File> PostOptimizationModules { get; }
+    /// <summary>The actual lowered program used to compile the VM entry points.</summary>
+    public Core.Elm.ElmCompilerInDotnet.CompilerModel.Program CompilerProgram { get; }
 
     private CompareInterpreterWithIntermediateVM(
         IReadOnlyDictionary<DeclQualifiedName, PineValue> entryFunctionValuesByQualifiedName,
         IReadOnlyDictionary<string, DeclQualifiedName> entryQualifiedNameBySimpleName,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> interpreterDeclarations,
-        IReadOnlyList<Core.Elm.ElmSyntax.ElmSyntaxAbstract.File> postOptimizationModules)
+        Core.Elm.ElmCompilerInDotnet.CompilerModel.Program compilerProgram)
     {
         _entryFunctionValuesByQualifiedName = entryFunctionValuesByQualifiedName;
         _entryQualifiedNameBySimpleName = entryQualifiedNameBySimpleName;
         _interpreterDeclarations = interpreterDeclarations;
-        PostOptimizationModules = postOptimizationModules;
+        CompilerProgram = compilerProgram;
     }
 
     /// <summary>
@@ -78,7 +66,7 @@ public sealed class CompareInterpreterWithIntermediateVM
     /// fully-qualified name) for the given <paramref name="entryPoints"/>. Both paths are
     /// produced from a single
     /// <see cref="ElmCompilerTestHelper.CompileInteractiveEnvironmentFromFiles"/>
-    /// invocation so they observe the same <paramref name="maxOptimizationRounds"/>.
+    /// invocation so source interpretation and VM compilation use the same canonical declarations.
     /// </summary>
     /// <param name="appCodeTree">
     /// The full Elm source tree (kernel modules, libraries, user modules) the compiler should
@@ -89,12 +77,6 @@ public sealed class CompareInterpreterWithIntermediateVM
     /// Fully-qualified names of the top-level declarations that root expressions are allowed to
     /// invoke. A root expression like <c>parseCharLiteral "'&amp;'"</c> resolves the unqualified
     /// <c>parseCharLiteral</c> to the matching entry point.
-    /// </param>
-    /// <param name="maxOptimizationRounds">
-    /// Number of inlining/specialization rounds the optimization pipeline runs. Forwarded to
-    /// <see cref="ElmCompilerTestHelper.CompileInteractiveEnvironmentFromFiles"/>
-    /// and reflected in the syntax-interpreter declaration dictionary
-    /// (<see cref="CompilationPipelineStageResults.ModulesForCompilation"/>).
     /// </param>
     public static CompareInterpreterWithIntermediateVM Prepare(
         FileTree appCodeTree,
@@ -178,7 +160,7 @@ public sealed class CompareInterpreterWithIntermediateVM
                 entryFunctionValuesByQualifiedName: entryFunctionValuesByQualifiedName,
                 entryQualifiedNameBySimpleName: entryQualifiedNameBySimpleName,
                 interpreterDeclarations: interpreterDeclarations,
-                postOptimizationModules: pipelineStageResults.ModulesForCompilation);
+                compilerProgram: pipelineStageResults.CompilerProgram);
     }
 
     /// <summary>
@@ -247,7 +229,7 @@ public sealed class CompareInterpreterWithIntermediateVM
     /// </summary>
     public EvalReport Eval(string rootExpressionText)
     {
-        var (entryPointName, argumentValues) = DecomposeRootExpression(rootExpressionText);
+        var (entryPointName, argumentValues, interpreterExpression) = DecomposeRootExpression(rootExpressionText);
 
         if (!_entryFunctionValuesByQualifiedName.TryGetValue(entryPointName, out var functionValue))
         {
@@ -309,10 +291,11 @@ public sealed class CompareInterpreterWithIntermediateVM
         var entries = new List<ApplicationLogEntry>();
 
         var (interpResult, interpCounters) =
-            ElmSyntaxInterpreter.ParseAndInterpretWithCounters(
-                rootExpressionText,
+            ElmSyntaxInterpreter.InterpretWithCounters(
+                interpreterExpression,
                 _interpreterDeclarations,
-                entries.Add);
+                entries.Add,
+                ElmSyntaxInterpreter.EvaluationConfig.Default);
 
         var interpValue =
             interpResult.Extract(
@@ -349,7 +332,7 @@ public sealed class CompareInterpreterWithIntermediateVM
     /// argument expressions are interpreted against the framework's full declaration
     /// dictionary so any literal-style or simple constructor arguments are supported.
     /// </summary>
-    private (DeclQualifiedName Name, IReadOnlyList<ElmValue> Arguments)
+    private (DeclQualifiedName Name, IReadOnlyList<ElmValue> Arguments, SyntaxModel.Expression InterpreterExpression)
         DecomposeRootExpression(string rootExpressionText)
     {
         var parseResult =
@@ -365,7 +348,8 @@ public sealed class CompareInterpreterWithIntermediateVM
         switch (innerExpression)
         {
             case SyntaxModel.Expression.Identifier zeroArgRef:
-                return (ResolveEntryPointName(zeroArgRef), []);
+                var zeroArgName = ResolveEntryPointName(zeroArgRef);
+                return (zeroArgName, [], new SyntaxModel.Expression.Identifier(zeroArgName.Namespaces, zeroArgName.DeclName));
 
             case SyntaxModel.Expression.Application application:
                 {
@@ -388,7 +372,15 @@ public sealed class CompareInterpreterWithIntermediateVM
                             EvaluateArgumentExpression(application.Arguments[i].Value);
                     }
 
-                    return (qualifiedName, arguments);
+                    var qualifiedExpression =
+                        application with
+                        {
+                            Function =
+                            application.Function with
+                            { Value = new SyntaxModel.Expression.Identifier(qualifiedName.Namespaces, qualifiedName.DeclName) }
+                        };
+
+                    return (qualifiedName, arguments, qualifiedExpression);
                 }
 
             default:
@@ -450,58 +442,16 @@ public sealed class CompareInterpreterWithIntermediateVM
                 "CompareInterpreterWithIntermediateVM: failed evaluating argument expression as ElmValue: "
                 + err));
 
-    /// <summary>
-    /// Builds the declaration dictionary the syntax interpreter uses, by overlaying all
-    /// bundled kernel-module declarations (e.g. <c>Basics</c>, <c>List</c>, <c>Char</c>) on
-    /// the bottom — these are needed because the compiler may strip natively-implemented
-    /// modules from the post-pipeline output but the syntax interpreter still needs to
-    /// resolve calls like <c>Basics.mul</c> or <c>List.cons</c> — and then layering the
-    /// post-optimization module list (<see cref="CompilationPipelineStageResults.ModulesForCompilation"/>)
-    /// on top so the interpreter sees the same optimized declarations as the bytecode-emission
-    /// backend.
-    /// </summary>
+    /// <summary>Overlays canonical source declarations on bundled native-module source implementations.</summary>
     private static IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration>
-        BuildInterpreterDeclarations(
-        FileTree appCodeTree,
-        CompilationPipelineStageResults<DefaultLoweredResults> pipelineStageResults)
+        BuildInterpreterDeclarations(FileTree appCodeTree, CompilationPipelineStageResults pipelineStageResults)
     {
-        var declarations = new Dictionary<DeclQualifiedName, SyntaxModel.Declaration>();
+        var declarations =
+            EnumerateBundledKernelModuleDeclarations(appCodeTree)
+            .ToDictionary(entry => entry.Name, entry => entry.Declaration);
 
-        // Step 1: overlay bundled kernel-module declarations as a low-priority baseline so
-        // calls to declarations stripped from the post-pipeline output still resolve.
-        foreach (var (qualifiedName, declaration) in EnumerateBundledKernelModuleDeclarations(appCodeTree))
-        {
-            declarations[qualifiedName] = declaration;
-        }
-
-        // Step 2: overlay the post-optimization module list. ModulesForCompilation is the
-        // exact input the bytecode-emission backend consumes, so the declarations the
-        // interpreter sees are aligned with the declarations the VM emitted bytecode for.
-        foreach (var abstractFile in pipelineStageResults.ModulesForCompilation)
-        {
-            var fullModuleFile = Core.Elm.ElmSyntax.ElmSyntaxAbstract.ConvertToConcrete.FromFile(abstractFile);
-
-            var moduleNameParts =
-                SyntaxModel.Module.GetModuleName(fullModuleFile.ModuleDefinition.Value).Value;
-
-            foreach (var declNode in fullModuleFile.Declarations)
-            {
-                if (declNode.Value is SyntaxModel.Declaration.InfixDeclaration infixDecl)
-                {
-                    declarations[DeclQualifiedName.Create(moduleNameParts, infixDecl.Infix.Operator.Value)] =
-                        declNode.Value;
-
-                    continue;
-                }
-
-                var declName = DeclarationSimpleName(declNode.Value);
-
-                if (declName is null)
-                    continue;
-
-                declarations[DeclQualifiedName.Create(moduleNameParts, declName)] = declNode.Value;
-            }
-        }
+        foreach (var (name, declaration) in pipelineStageResults.CanonicalDeclarations)
+            declarations[name] = Core.Elm.ElmSyntax.ElmSyntaxAbstract.ConvertToConcrete.ToDeclaration(declaration);
 
         return declarations;
     }

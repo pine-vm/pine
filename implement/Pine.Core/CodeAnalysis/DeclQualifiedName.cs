@@ -9,6 +9,16 @@ namespace Pine.Core.CodeAnalysis;
 public record DeclQualifiedName
     : System.IComparable<DeclQualifiedName>, System.IEquatable<DeclQualifiedName>
 {
+    private long cachedHashCode;
+
+    /// <summary>Copies a name without carrying over a memoized hash.</summary>
+    protected DeclQualifiedName(DeclQualifiedName original)
+    {
+        Namespaces = original.Namespaces;
+        DeclName = original.DeclName;
+        FullName = original.FullName;
+    }
+
     /// <summary>
     /// Ordered list of namespace identifiers from outermost to innermost. Can be empty for global namespace.
     /// </summary>
@@ -29,7 +39,7 @@ public record DeclQualifiedName
         string declName,
         string fullName)
     {
-        Namespaces = namespaces;
+        Namespaces = System.Collections.Immutable.ImmutableArray.CreateRange(namespaces);
         DeclName = declName;
         FullName = fullName;
     }
@@ -72,14 +82,20 @@ public record DeclQualifiedName
     /// <inheritdoc/>
     public override int GetHashCode()
     {
-        var hash = new System.HashCode();
+        var encoded = System.Threading.Volatile.Read(ref cachedHashCode);
 
+        if (encoded != 0)
+            return unchecked((int)(encoded - 1));
+
+        var hash = new System.HashCode();
         hash.Add(DeclName);
 
-        foreach (var ns in Namespaces)
-            hash.Add(ns);
+        foreach (var part in Namespaces)
+            hash.Add(part);
 
-        return hash.ToHashCode();
+        var value = hash.ToHashCode();
+        System.Threading.Volatile.Write(ref cachedHashCode, (long)unchecked((uint)value) + 1);
+        return value;
     }
 
     /// <summary>
@@ -130,4 +146,3 @@ public record DeclQualifiedName
         return string.Compare(FullName, other.FullName, System.StringComparison.Ordinal);
     }
 }
-

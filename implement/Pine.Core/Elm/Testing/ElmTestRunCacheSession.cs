@@ -27,11 +27,8 @@ public sealed class ElmTestRunCacheSession(IReadOnlyDictionary<PineValue, Precom
     public IDictionary<string, Result<ElmSyntaxParseError, Syntax.File>> SourceParsing { get; } =
         new ConcurrentDictionary<string, Result<ElmSyntaxParseError, Syntax.File>>(StringComparer.Ordinal);
 
-    /// <summary>Declaration canonicalization keyed by structural declaration and its consulted scope.</summary>
-    public IDictionary<(Syntax.Node<Syntax.Declaration> Declaration, string Scope), DeclarationCanonicalizationCacheEntry>
-        DeclarationCanonicalization
-    { get; } =
-        new ConcurrentDictionary<(Syntax.Node<Syntax.Declaration>, string), DeclarationCanonicalizationCacheEntry>();
+    /// <summary>Declaration canonicalization memoized over structural syntax and consulted resolution inputs.</summary>
+    public Canonicalization.DeclarationCache DeclarationCanonicalization { get; } = new();
 
     internal Result<ElmSyntaxParseError, Syntax.File> ParseSource(string text)
     {

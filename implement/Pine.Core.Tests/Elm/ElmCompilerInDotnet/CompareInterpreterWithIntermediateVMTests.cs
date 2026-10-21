@@ -20,6 +20,22 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 public class CompareInterpreterWithIntermediateVMTests
 {
     [Fact]
+    public void Both_execution_paths_use_the_registered_entry_point_despite_same_named_library_functions()
+    {
+        var framework =
+            CompareInterpreterWithIntermediateVM.Prepare(
+                [
+                "module Library exposing (select)\nselect x = x + 100",
+                "module Entry exposing (select)\nselect x = x + 1"
+                ],
+                [DeclQualifiedName.Create(["Entry"], "select")]);
+
+        var report = framework.Eval("select 41");
+        report.Value.Should().Be(ElmValue.Integer(42));
+        framework.Eval("Entry.select 41").InterpreterCounters.Should().Be(report.InterpreterCounters);
+    }
+
+    [Fact]
     public void Repeated_evaluations_keep_identical_counters_after_other_workloads()
     {
         var first = s_framework.Value.Eval("mapWithLambda [ 1, 2, 3 ]");

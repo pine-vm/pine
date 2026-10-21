@@ -94,7 +94,7 @@ public static class ElmSourceCompilation
     }
 
     /// <summary>Expands a caller's source selection into explicit roots, without evaluating any exports.</summary>
-    public static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults<DefaultLoweredResults> pipelineStageResults)>
+    public static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults pipelineStageResults)>
         CompileInteractiveEnvironmentFromFiles(
         FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
@@ -102,8 +102,7 @@ public static class ElmSourceCompilation
         bool disableGenericApplicationChainConsolidation = false,
         bool includeBundledKernelModules = true,
         IDictionary<string, Result<ElmSyntaxParseError, SyntaxTypes.File>>? sourceParseCache = null,
-        IDictionary<(SyntaxTypes.Node<SyntaxTypes.Declaration> Declaration, string Scope),
-            DeclarationCanonicalizationCacheEntry>? canonicalizationCache = null) =>
+        Canonicalization.DeclarationCache? canonicalizationCache = null) =>
         ElmCompiler.CompileInteractiveEnvironment(
             appCodeTree,
             EnumerateRootDeclarations(appCodeTree, rootFilePaths, sourceParseCache),

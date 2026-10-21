@@ -399,17 +399,18 @@ public class ElmCoreBasicsLoweringTests
             BuiltinOperatorLowering.Apply(flatDecls, configuration))
             .Extract(err => throw new Exception("Failed Elm core Basics lowering: " + err));
 
-        var loweredModules =
-            ElmCompiler.ReconstructModulesFromFlatDict(
-                loweredDecls,
-                orderedCanonicalizedModulesAbstract);
-
         var moduleAbstract =
-            loweredModules
+            orderedCanonicalizedModulesAbstract
             .Single(
                 module =>
                 Core.Elm.ElmSyntax.ElmSyntaxAbstract.Module.GetModuleName(module.ModuleDefinition)
-                .SequenceEqual(["Test"]));
+                .SequenceEqual(["Test"]))
+            with
+            {
+                Declarations =
+                loweredDecls.Where(entry => entry.Key.Namespaces.SequenceEqual(["Test"]))
+                .OrderBy(entry => entry.Key).Select(entry => entry.Value).ToArray()
+            };
 
         return
             SyntaxTypes.FromFullSyntaxModel.Convert(

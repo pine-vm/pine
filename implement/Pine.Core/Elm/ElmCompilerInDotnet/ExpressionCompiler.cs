@@ -13,7 +13,7 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// Compiles Elm compiler IR expressions to Pine expressions.
 /// Uses recursive mapping for type-safe expression handling.
 /// </summary>
-public class ExpressionCompiler
+public partial class ExpressionCompiler
 {
     /// <summary>
     /// Compiles an Elm expression to a Pine expression.
@@ -26,32 +26,17 @@ public class ExpressionCompiler
         ExpressionCompilationContext context) =>
         expression switch
         {
-            SyntaxTypes.Expression.UnitExpr =>
-            Expression.LitralInst(PineValue.EmptyList),
-
-            SyntaxTypes.Expression.IntegerLiteral expr =>
-            CompileInteger(expr),
-
-            SyntaxTypes.Expression.FloatLiteral expr =>
-            CompileFloatLiteral(expr),
-
-            SyntaxTypes.Expression.StringLiteral expr =>
-            CompileLiteral(expr),
-
-            SyntaxTypes.Expression.CharLiteral expr =>
-            CompileCharLiteral(expr),
-
             SyntaxTypes.Expression.Identifier expr =>
-            CompileFunctionOrValue(expr, context),
+            CompileResolvedReference(expr.Reference, context),
+
+            SyntaxTypes.Expression.LiteralValue expr =>
+            Expression.LitralInst(expr.Value),
 
             SyntaxTypes.Expression.Application expr =>
             CompileApplication(expr, context),
 
             SyntaxTypes.Expression.ListExpr expr =>
             CompileListExpr(expr, context),
-
-            SyntaxTypes.Expression.TupledExpression expr =>
-            CompileTupledExpression(expr, context),
 
             SyntaxTypes.Expression.ProjectItem expr =>
             CompileProjectItem(expr, context),
@@ -86,9 +71,6 @@ public class ExpressionCompiler
             SyntaxTypes.Expression.RecordAccessFunction expr =>
             CompileRecordAccessFunction(expr),
 
-            SyntaxTypes.Expression.LambdaExpression =>
-            CompilationError.UnsupportedExpression(expression.GetType().Name),
-
             SyntaxTypes.Expression.GLSLExpression =>
             CompilationError.UnsupportedExpression(expression.GetType().Name),
 
@@ -102,639 +84,6 @@ public class ExpressionCompiler
         ExpressionCompilationContext context) =>
         Compile(projection.Value, context)
         .Map(value => BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(projection.Index, value)));
-
-    private static Result<CompilationError, Expression> CompileInteger(
-        SyntaxTypes.Expression.IntegerLiteral expr) =>
-        Expression.LitralInst(EmitIntegerLiteral(expr.Value));
-
-    private static Result<CompilationError, Expression> CompileFloatLiteral(
-        SyntaxTypes.Expression.FloatLiteral expr)
-    {
-        var floatValue =
-            ElmValue.ElmFloat.Convert(
-                (double)expr.Numerator / (double)expr.Denominator);
-
-        var pineValue =
-            ElmValueEncoding.ElmValueAsPineValue(floatValue);
-
-        return Expression.LitralInst(pineValue);
-    }
-
-    private static Result<CompilationError, Expression> CompileLiteral(
-        SyntaxTypes.Expression.StringLiteral expr) =>
-        Expression.LitralInst(EmitStringLiteral(expr.Value));
-
-    private static Result<CompilationError, Expression> CompileCharLiteral(
-        SyntaxTypes.Expression.CharLiteral expr) =>
-        Expression.LitralInst(EmitCharLiteral(expr.Value));
-
-    internal static Result<CompilationError, Expression> CompileFunctionOrValue(
-        SyntaxTypes.Expression.Identifier expr,
-        ExpressionCompilationContext context)
-    {
-        if (expr.QualifiedName.Namespaces.Count is 0)
-        {
-            // Check if it's a local binding from pattern matching first
-            if (context.TryGetLocalBinding(expr.QualifiedName.DeclName) is { } bindingExpr)
-            {
-                return bindingExpr;
-            }
-
-            // Check if it's a parameter reference
-            if (context.TryGetParameterIndex(expr.QualifiedName.DeclName) is { } paramIndex)
-            {
-                return BuiltinHelpers.BuildPathToParameter(paramIndex);
-            }
-        }
-
-        if (expr.QualifiedName.Namespaces.Count is 1 && expr.QualifiedName.Namespaces[0] is "Basics")
-        {
-            if (expr.QualifiedName.DeclName is "True")
-            {
-                return Expression.LitralInst(EmitBooleanLiteral(true));
-            }
-
-            if (expr.QualifiedName.DeclName is "False")
-            {
-                return Expression.LitralInst(EmitBooleanLiteral(false));
-            }
-        }
-
-        // Check if this is a record type alias constructor used as a function value
-        // Record constructors also have uppercase names, so check this before the tag name check
-        {
-            if (context.ModuleCompilationContext.TryGetRecordConstructorFieldNames(expr.QualifiedName.FullName) is { } fieldNamesInDeclOrder)
-            {
-                // Record constructor used as a function value (no application yet)
-                // Build a function value that accepts all field arguments and constructs the record
-                return EmitRecordConstructorFunctionValue(fieldNamesInDeclOrder);
-            }
-        }
-
-        // After canonicalization, tags have a module name but are still recognized
-        // by having an uppercase first letter
-        if (ElmValueEncoding.StringIsValidTagName(expr.QualifiedName.DeclName))
-        {
-            var qualifiedConstructorName =
-                expr.QualifiedName.Namespaces.Count > 0
-                ?
-                expr.QualifiedName.FullName
-                :
-                QualifiedNameHelper.ToQualifiedNameString([context.CurrentModuleName], expr.QualifiedName.DeclName);
-
-            var expectedArgCount =
-                context.ModuleCompilationContext.TryGetChoiceTypeConstructorArgumentCount(qualifiedConstructorName);
-
-            if (expectedArgCount is null || expectedArgCount.Value is 0)
-            {
-                // Zero-argument tag: emit as a literal value
-                return Expression.LitralInst(ElmValueEncoding.TagAsPineValue(expr.QualifiedName.DeclName, []));
-            }
-
-            // Tag with arguments used as a function value (no application yet)
-            // Build a function value that accepts all arguments
-            return EmitChoiceTypeTagFunctionValue(expr.QualifiedName.DeclName, expectedArgCount.Value);
-        }
-
-        // Check if this is a reference to a top-level function (function value without application)
-        // This happens when a function is returned as a value, like in:
-        //   case x of
-        //     1 -> functionA
-        //     _ -> functionB
-        {
-            var qualifiedFunctionName =
-                expr.QualifiedName.Namespaces.Count > 0
-                ?
-                expr.QualifiedName.FullName
-                :
-                context.CurrentModuleName + "." + expr.QualifiedName.DeclName;
-
-            if (context.GetFunctionIndexInLayout(qualifiedFunctionName) is { } functionIndex)
-            {
-                // Same-SCC reference: build the function value via the
-                // env-relative encoded body and env-functions list.
-                return CompileFunctionReference(qualifiedFunctionName, functionIndex, context);
-            }
-
-            // §7.6b: cross-SCC reference. The callee is not in the caller's
-            // (members-only) layout but it has already been compiled (SCCs
-            // are processed in dependency order).
-            //
-            // For functions with paramCount > 0 the callee's WrapperValue
-            // *is* the function value, and inlining it as a literal is the
-            // direct counterpart of the same-SCC `CompileFunctionReference`
-            // path. For zero-parameter declarations the callee's wrapper
-            // value is an *encoded ParseAndEval that, when evaluated, yields
-            // the value*; the consumer expects the value itself, not the
-            // wrapper, so we evaluate the wrapper here by emitting the same
-            // literal-based ParseAndEval that `CompileFunctionReference`
-            // emits for paramCount <= 0.
-            if (context.ModuleCompilationContext.TryGetCompiledFunctionInfo(
-                qualifiedFunctionName) is { } crossSccCalleeInfo)
-            {
-                if (crossSccCalleeInfo.ParameterCount <= 0)
-                {
-                    // Phase 1 of Approach A1: all callees use WithEnvFunctions
-                    // layout. The body always expects [envFunctionsList], which
-                    // may be empty for non-recursive single-member SCCs.
-                    var crossSccEnvFuncsLiteral =
-                        Expression.LitralInst(
-                            PineValue.List([.. crossSccCalleeInfo.EnvFunctions]));
-
-                    var crossSccCallEnvironment =
-                        Expression.ListInst([crossSccEnvFuncsLiteral]);
-
-                    return
-                        (Result<CompilationError, Expression>)new Expression.Eval(
-                            encoded: Expression.LitralInst(crossSccCalleeInfo.EncodedBody),
-                            environment: crossSccCallEnvironment);
-                }
-
-                // For functions with paramCount > 0 the callee's function value
-                // can be emitted either as the cached wrapper (Form-B) or as the
-                // direct-evaluation template (the same shape produced by
-                // TryBuildCurriedFunctionValueAsTemplate). We prefer the template
-                // when it can be built, since the static encoded body and env
-                // functions are available here, and fall back to the wrapper
-                // otherwise.
-                if (FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplateFromEncodedBody(
-                    crossSccCalleeInfo.EncodedBody,
-                    crossSccCalleeInfo.ParameterCount,
-                    crossSccCalleeInfo.EnvFunctions) is { } crossSccTemplateValue)
-                {
-                    return Expression.LitralInst(crossSccTemplateValue);
-                }
-
-                return Expression.LitralInst(crossSccCalleeInfo.CompiledValue);
-            }
-        }
-
-        // Handle references to natively-implemented Basics functions used as values
-        // (e.g., passing `min` or `max` as an argument to a higher-order function like `foldl`)
-        if (expr.QualifiedName.Namespaces.Count is 1 && expr.QualifiedName.Namespaces[0] is "Basics")
-        {
-            if (CoreLibraryModule.CoreBasics.GetFunctionValue(expr.QualifiedName.DeclName) is { } basicsFunctionValue)
-            {
-                return Expression.LitralInst(basicsFunctionValue);
-            }
-        }
-
-        if (expr.QualifiedName.Namespaces.Count is 1 &&
-            expr.QualifiedName.Namespaces[0] is "Debug" &&
-            expr.QualifiedName.DeclName is "toString")
-        {
-            return Expression.LitralInst(CoreLibraryModule.CoreDebug.ToString_FunctionValue());
-        }
-
-        // Handle List.cons used as a value reference (the :: operator after canonicalization)
-        // This handles cases like passing (::) as a function value: `applyFunc (::) 1 [2, 3]`
-        if (expr.QualifiedName.Namespaces.Count is 1 && expr.QualifiedName.Namespaces[0] is "List" &&
-            expr.QualifiedName.DeclName is "cons")
-        {
-            return Expression.LitralInst(s_consFunction.Value);
-        }
-
-        return new CompilationError.UnresolvedReference(expr.QualifiedName.DeclName, context.CurrentModuleName);
-    }
-
-    private static Result<CompilationError, Expression> CompileApplication(
-        SyntaxTypes.Expression.Application expr,
-        ExpressionCompilationContext context)
-    {
-        if (expr.Arguments.Count < 1)
-        {
-            return new CompilationError.ApplicationTooFewArguments(expr.Arguments.Count + 1);
-        }
-
-        var functionExpr = expr.Function;
-
-        // Check if this is a Pine_kernel application
-        if (functionExpr is SyntaxTypes.Expression.Identifier kernelFunc &&
-            kernelFunc.QualifiedName.Namespaces.Count is 1 &&
-            context.ModuleCompilationContext.IsPineKernelModule(kernelFunc.QualifiedName.Namespaces[0]))
-        {
-            var kernelInput = expr.Arguments[0];
-            var compiledInputResult = Compile(kernelInput, context);
-
-            if (compiledInputResult.IsErrOrNull() is { } err)
-            {
-                return err;
-            }
-
-            return
-                Expression.BuiltinInst(
-                    kernelFunc.QualifiedName.DeclName,
-                    compiledInputResult.IsOkOrNull()!);
-        }
-
-        // Compile all arguments
-        var compiledArguments = new Expression[expr.Arguments.Count];
-
-        for (var i = 0; i < expr.Arguments.Count; i++)
-        {
-            var argResult = Compile(expr.Arguments[i], context);
-
-            if (argResult.IsErrOrNull() is { } argErr)
-            {
-                return argErr;
-            }
-
-            if (argResult.IsOkOrNull() is not { } argOk)
-            {
-                throw new NotImplementedException(
-                    "Unexpected result type when compiling application argument: " + argResult.GetType());
-            }
-
-            compiledArguments[i] = argOk;
-        }
-
-        // Check if this is a prefix operator application with 2 arguments (e.g., (&&) x y)
-        // For and/or/xor, emit conditionals directly instead of function application
-        if (functionExpr is SyntaxTypes.Expression.PrefixOperator prefixOp && compiledArguments.Length is 2)
-        {
-            var left = compiledArguments[0];
-            var right = compiledArguments[1];
-
-            if (prefixOp.Operator is "&&")
-            {
-                return CoreLibraryModule.CoreBasics.Generic_And(left, right);
-            }
-
-            if (prefixOp.Operator is "||")
-            {
-                return CoreLibraryModule.CoreBasics.Generic_Or(left, right);
-            }
-        }
-
-        // Check if this is a function application or choice type tag application
-        if (functionExpr is SyntaxTypes.Expression.Identifier funcRef)
-        {
-            if (funcRef.QualifiedName.Namespaces.Count is 1 &&
-                funcRef.QualifiedName.Namespaces[0] is "Debug" &&
-                funcRef.QualifiedName.DeclName is "toString" &&
-                compiledArguments.Length is 1)
-            {
-                return CoreLibraryModule.CoreDebug.ToString(compiledArguments[0]);
-            }
-
-            // Check if this is a record type alias constructor application
-            // Record type alias constructors also have uppercase names, so check this first
-            var qualifiedConstructorName =
-                funcRef.QualifiedName.Namespaces.Count > 0
-                ?
-                funcRef.QualifiedName.FullName
-                :
-                context.CurrentModuleName + "." + funcRef.QualifiedName.DeclName;
-
-            if (context.ModuleCompilationContext.TryGetRecordConstructorFieldNames(qualifiedConstructorName) is { } fieldNamesInDeclOrder)
-            {
-                // This is a record type alias constructor application
-                // Arguments are in declaration order (same as fieldNamesInDeclOrder)
-                // We need to construct a record with fields sorted alphabetically
-
-                var argumentCount = expr.Arguments.Count; // First arg is the constructor itself
-
-                if (argumentCount < fieldNamesInDeclOrder.Count)
-                {
-                    // Partial application: fewer arguments than fields
-                    // Build a function value that captures the provided arguments and
-                    // accepts the remaining ones
-                    return
-                        EmitRecordConstructorPartialApplicationExpression(
-                            fieldNamesInDeclOrder,
-                            compiledArguments);
-                }
-
-                // Create pairs of (fieldName, argExpression) in declaration order
-                var fieldArgPairs =
-                    fieldNamesInDeclOrder
-                    .Select((fieldName, index) => (fieldName, expr: compiledArguments[index]))
-                    .ToList();
-
-                // Sort pairs alphabetically by field name for the record representation
-                var sortedPairs =
-                    fieldArgPairs
-                    .OrderBy(pair => pair.fieldName, StringComparer.Ordinal)
-                    .ToList();
-
-                // Build the record field expressions interleaved as
-                // [name0, value0, name1, value1, ...] for the new flat layout.
-                var recordFieldItems = new List<Expression>(sortedPairs.Count * 2);
-
-                foreach (var pair in sortedPairs)
-                {
-                    recordFieldItems.Add(
-                        Expression.LitralInst(StringEncoding.ValueFromString(pair.fieldName)));
-
-                    recordFieldItems.Add(pair.expr);
-                }
-
-                // Build the record: [ElmRecordTag, name0, value0, name1, value1, ...]
-                return
-                    Expression.ListInst(
-                        [
-                        Expression.LitralInst(ElmValue.ElmRecordTypeTagNameAsValue),
-                        ..recordFieldItems
-                        ]);
-            }
-
-            // Check if this is a choice type tag application
-            if (ElmValueEncoding.StringIsValidTagName(funcRef.QualifiedName.DeclName))
-            {
-                var tagNameValue =
-                    Expression.LitralInst(StringEncoding.ValueFromString(funcRef.QualifiedName.DeclName));
-
-                var qualifiedTagName =
-                    funcRef.QualifiedName.Namespaces.Count > 0
-                    ?
-                    funcRef.QualifiedName.FullName
-                    :
-                    QualifiedNameHelper.ToQualifiedNameString(
-                        [
-                        context.CurrentModuleName
-                        ],
-                        funcRef.QualifiedName.DeclName);
-
-                var expectedArgCount =
-                    context.ModuleCompilationContext.TryGetChoiceTypeConstructorArgumentCount(qualifiedTagName);
-
-                // If we know the expected argument count and have all arguments, build the value directly
-                if (expectedArgCount is null || compiledArguments.Length >= expectedArgCount.Value)
-                {
-                    // Full application: build the choice type value directly
-                    return
-                        Expression.ListInst(
-                            [
-                            Expression.LitralInst(ElmValue.ElmChoiceTypeTagNameAsValue),
-                            tagNameValue,
-                            ..compiledArguments
-                            ]);
-                }
-
-                // Partial application: we have fewer arguments than expected
-                // Build an expression that evaluates to a function value
-                return
-                    EmitChoiceTypeTagPartialApplicationExpression(
-                        funcRef.QualifiedName.DeclName,
-                        expectedArgCount.Value,
-                        compiledArguments);
-            }
-
-            // Check if the function is a parameter or local binding (higher-order function application)
-            // This handles cases like: `applyTwoArgs func a b = func a b`
-            // where `func` is a parameter that holds a function value
-            if (funcRef.QualifiedName.Namespaces.Count is 0)
-            {
-                if (context.TryGetLocalBinding(funcRef.QualifiedName.DeclName) is { } bindingExpr)
-                {
-                    // Apply arguments to the function value from local binding using generic application
-                    return CompileGenericFunctionApplication(bindingExpr, compiledArguments);
-                }
-
-                if (context.TryGetParameterIndex(funcRef.QualifiedName.DeclName) is { } paramIndex)
-                {
-                    // Apply arguments to the function value from parameter using generic application
-                    var funcExpr = BuiltinHelpers.BuildPathToParameter(paramIndex);
-
-                    return CompileGenericFunctionApplication(funcExpr, compiledArguments);
-                }
-            }
-
-            // Handle Basics module functions that are implemented in BasicArithmetic
-            // Check using the structured module name list rather than string manipulation
-            if (funcRef.QualifiedName.Namespaces.Count is 1 && funcRef.QualifiedName.Namespaces[0] is "Basics" &&
-                CoreLibraryModule.CoreBasics.GetBasicsFunctionInfo(funcRef.QualifiedName.DeclName) is { } basicsFuncInfo &&
-                basicsFuncInfo.ParameterCount == compiledArguments.Length)
-            {
-                return basicsFuncInfo.CompileApplication(compiledArguments);
-            }
-
-            // Determine qualified function name
-            var qualifiedFunctionName =
-                funcRef.QualifiedName.Namespaces.Count > 0
-                ?
-                funcRef.QualifiedName.FullName
-                :
-                context.CurrentModuleName + "." + funcRef.QualifiedName.DeclName;
-
-            // Resolve callee in the compiled-functions cache. After §7.6b the
-            // caller's layout contains only its SCC members, so a cross-SCC
-            // callee will not appear in the layout but will be in the cache
-            // (because SCCs are compiled in dependency order).
-            var functionIndexOpt = context.GetFunctionIndexInLayout(qualifiedFunctionName);
-            CompiledFunctionInfo? cachedCalleeInfo = null;
-
-            if (functionIndexOpt is null)
-            {
-                cachedCalleeInfo =
-                    context.ModuleCompilationContext.TryGetCompiledFunctionInfo(
-                        qualifiedFunctionName);
-            }
-
-            if (functionIndexOpt is null && cachedCalleeInfo is null)
-            {
-                // Handle references to natively-implemented Basics functions
-                // that are partially applied or not in the dependency layout
-                if (funcRef.QualifiedName.Namespaces.Count is 1 && funcRef.QualifiedName.Namespaces[0] is "Basics" &&
-                    CoreLibraryModule.CoreBasics.GetFunctionValue(funcRef.QualifiedName.DeclName) is { } basicsFuncValue)
-                {
-                    return
-                        CompileGenericFunctionApplication(
-                            Expression.LitralInst(basicsFuncValue),
-                            compiledArguments);
-                }
-
-                // Handle List.cons (the :: operator after canonicalization)
-                if (funcRef.QualifiedName.Namespaces.Count is 1 && funcRef.QualifiedName.Namespaces[0] is "List" &&
-                    funcRef.QualifiedName.DeclName is "cons")
-                {
-                    if (compiledArguments.Length >= 2)
-                    {
-                        // Full application: cons head tail  ==>  concat([[head], tail])
-                        var singletonList = Expression.ListInst([compiledArguments[0]]);
-
-                        var consResult =
-                            BuiltinHelpers.ApplyBuiltinConcat(
-                                [singletonList, compiledArguments[1]]);
-
-                        // Handle over-application (unlikely but consistent)
-                        if (compiledArguments.Length > 2)
-                        {
-                            return
-                                CompileGenericFunctionApplication(
-                                    consResult,
-                                    compiledArguments[2..]);
-                        }
-
-                        return consResult;
-                    }
-
-                    // Partial or no application: return the cons function value
-                    return
-                        CompileGenericFunctionApplication(
-                            Expression.LitralInst(s_consFunction.Value),
-                            compiledArguments);
-                }
-
-                return new CompilationError.FunctionNotInDependencyLayout(qualifiedFunctionName);
-            }
-
-            // Get function info to determine parameter count
-            if (context.ModuleCompilationContext.TryGetFunctionInfo(qualifiedFunctionName) is not { } funcInfo)
-            {
-                // Function exists in dependency layout but info is not available
-                // This shouldn't happen if the function is properly registered
-                return new CompilationError.UnresolvedReference(funcRef.QualifiedName.DeclName, context.CurrentModuleName);
-            }
-
-            var paramCount = funcInfo.declaration.Function.Declaration.Arguments.Count;
-            var argCount = compiledArguments.Length;
-
-            if (argCount >= paramCount && paramCount > 0)
-            {
-                // Full or over-application: use optimized [envFuncs, arg0, arg1, ...] flat structure
-                // for the first paramCount arguments.
-                //
-                // §7.6b: pick env-relative or literal-based references based on
-                // whether the callee is same-SCC (in caller's members-only layout)
-                // or cross-SCC (only in the compiled-functions cache).
-                Expression functionRef;
-                Expression callEnvFunctions;
-
-                if (functionIndexOpt is { } functionIndex)
-                {
-                    // Same-SCC callee — read the encoded body from the caller's
-                    // runtime env at [0, functionIndex], and forward the entire
-                    // env-functions list (env[0]) as a whole.
-                    //
-                    // All members of an SCC share the same env-functions list
-                    // layout (the SCC member list, in stable order). The caller
-                    // is itself an SCC member, so its env[0] is exactly the
-                    // env-functions list the callee expects. Forwarding env[0]
-                    // as a single value avoids materialising a fresh list with
-                    // one Build_List + N path-reads per call.
-                    functionRef =
-                        ExpressionBuilder.BuildExpressionForPathInExpression(
-                            [0, functionIndex],
-                            Expression.EnvironmentInstance);
-
-                    callEnvFunctions =
-                        ExpressionBuilder.BuildExpressionForPathInExpression(
-                            [0],
-                            Expression.EnvironmentInstance);
-                }
-                else
-                {
-                    // §7.6b: cross-SCC callee — inline the cached encoded
-                    // body and env-functions list as literals. No reads from
-                    // the caller's env at index 0.
-                    //
-                    // Phase 1 of Approach A1: all callees use WithEnvFunctions
-                    // layout. Always emit [envFunctionsList, arg0, ..., argN-1]
-                    // as the call environment (the env-functions list may be
-                    // empty for non-recursive single-member SCCs).
-                    var cachedInfo = cachedCalleeInfo!;
-
-                    functionRef = Expression.LitralInst(cachedInfo.EncodedBody);
-
-                    callEnvFunctions =
-                        Expression.LitralInst(
-                            PineValue.List([.. cachedInfo.EnvFunctions]));
-                }
-
-                // Use only the first paramCount arguments for the optimized full application
-                var fullApplicationArgs = compiledArguments.Take(paramCount).ToList();
-
-                var callEnvironment =
-                    Expression.ListInst(
-                        [callEnvFunctions, .. fullApplicationArgs]);
-
-                Expression fullApplicationResult =
-                    new Expression.Eval(
-                        encoded: functionRef,
-                        environment: callEnvironment);
-
-                // If there are remaining arguments (over-application), apply them generically
-                if (argCount > paramCount)
-                {
-                    var remainingArgs = compiledArguments.Skip(paramCount).ToList();
-                    return CompileGenericFunctionApplication(fullApplicationResult, remainingArgs);
-                }
-
-                return fullApplicationResult;
-            }
-
-            // Partial application (0 < argCount < paramCount): emit a compact
-            // template-based function value that nests only the remaining
-            // parameters and embeds the already-provided (leading) arguments
-            // directly, instead of falling back to the generic path that wraps
-            // the function value in one ParseAndEval per argument.
-            if (paramCount > 0)
-            {
-                if (cachedCalleeInfo is not null)
-                {
-                    // Cross-SCC callee case: the static encoded body and
-                    // env-functions list are available from the cached
-                    // compiled-function info, so embed them directly as
-                    // literals.
-
-                    return
-                        FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgsFromEncodedBody(
-                            cachedCalleeInfo.EncodedBody,
-                            paramCount,
-                            compiledArguments,
-                            cachedCalleeInfo.EnvFunctions);
-                }
-
-                if (functionIndexOpt is { } functionIndex)
-                {
-                    // Same-SCC callee case: the encoded body and env-functions
-                    // list are not available as static values; read them from
-                    // the caller's runtime env (the encoded body at
-                    // [0, functionIndex], the shared env-functions list at [0])
-                    // and embed those runtime values into the emitted template.
-                    var encodedBodyExpression =
-                        ExpressionBuilder.BuildExpressionForPathInExpression(
-                            [0, functionIndex],
-                            Expression.EnvironmentInstance);
-
-                    var envFunctionsExpression =
-                        ExpressionBuilder.BuildExpressionForPathInExpression(
-                            [0],
-                            Expression.EnvironmentInstance);
-
-                    return
-                        FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgsFromEncodedBodyExpression(
-                            encodedBodyExpression,
-                            paramCount,
-                            compiledArguments,
-                            envFunctionsExpression);
-                }
-            }
-        }
-
-        {
-            var compileFunctionExprResult = Compile(functionExpr, context);
-
-            if (compileFunctionExprResult.IsErrOrNull() is { } funcErr)
-            {
-                return
-                    CompilationError.Scoped(
-                        "When compiling function part of application",
-                        funcErr);
-            }
-
-            if (compileFunctionExprResult.IsOkOrNull() is not { } funcOk)
-            {
-                throw new NotImplementedException(
-                    "Unexpected result type when compiling function part of application: " +
-                    compileFunctionExprResult.GetType());
-            }
-
-            // Apply provided arguments using generic application
-            return CompileGenericFunctionApplication(funcOk, compiledArguments);
-        }
-    }
 
     private static Result<CompilationError, Expression> CompileListExpr(
         SyntaxTypes.Expression.ListExpr expr,
@@ -760,39 +109,6 @@ public class ExpressionCompiler
             {
                 throw new NotImplementedException(
                     "Unexpected result type when compiling list element [" + i + "]: " + item.GetType());
-            }
-
-            compiledItems[i] = itemOk;
-        }
-
-        return Expression.ListInst(compiledItems);
-    }
-
-    private static Result<CompilationError, Expression> CompileTupledExpression(
-        SyntaxTypes.Expression.TupledExpression expr,
-        ExpressionCompilationContext context)
-    {
-        // A tuple in Elm is represented as a list in Pine
-        var compiledItems = new Expression[expr.Elements.Count];
-
-        for (var i = 0; i < expr.Elements.Count; i++)
-        {
-            var item = expr.Elements[i];
-
-            var itemResult = Compile(item, context);
-
-            if (itemResult.IsErrOrNull() is { } err)
-            {
-                return
-                    CompilationError.Scoped(
-                        "When compiling tuple element [" + i + "]",
-                        err);
-            }
-
-            if (itemResult.IsOkOrNull() is not { } itemOk)
-            {
-                throw new NotImplementedException(
-                    "Unexpected result type when compiling tuple element [" + i + "]: " + item.GetType());
             }
 
             compiledItems[i] = itemOk;
@@ -845,24 +161,12 @@ public class ExpressionCompiler
         SyntaxTypes.Expression.RecordUpdateExpression expr,
         ExpressionCompilationContext context)
     {
-        // Get the original record value from the record name variable
-        var recordName = expr.RecordName;
+        var receiver = Compile(expr.Receiver, context);
 
-        Expression recordExpr;
-        // Check if it's a local binding first
-        if (context.TryGetLocalBinding(recordName) is { } bindingExpr)
-        {
-            recordExpr = bindingExpr;
-        }
-        // Check if it's a parameter reference
-        else if (context.TryGetParameterIndex(recordName) is { } paramIndex)
-        {
-            recordExpr = BuiltinHelpers.BuildPathToParameter(paramIndex);
-        }
-        else
-        {
-            return new CompilationError.UnresolvedReference(recordName, context.CurrentModuleName);
-        }
+        if (receiver.IsErrOrNull() is { } receiverError)
+            return receiverError;
+
+        var recordExpr = receiver.Extract(error => throw new InvalidOperationException(error.ToString()));
 
         // Compile each field update and sort by field name alphabetically.
         // This ordering is required because the runtime update function relies on both 
@@ -1059,11 +363,6 @@ public class ExpressionCompiler
         SyntaxTypes.Expression.Negation expr,
         ExpressionCompilationContext context)
     {
-        if (expr.Expression is SyntaxTypes.Expression.IntegerLiteral intLiteral)
-        {
-            return Expression.LitralInst(EmitIntegerLiteral(-intLiteral.Value));
-        }
-
         var innerResult = Compile(expr.Expression, context);
 
         if (innerResult.IsErrOrNull() is { } err)
@@ -1117,335 +416,90 @@ public class ExpressionCompiler
         CompileLetExpressionBody(expr, context);
 
     private static Result<CompilationError, Expression> CompileLetExpressionBody(
-        SyntaxTypes.Expression.LetExpression letBlock,
-        ExpressionCompilationContext context)
+        SyntaxTypes.Expression.LetExpression letBlock, ExpressionCompilationContext context)
     {
-        var newBindings = new Dictionary<string, Expression>();
+        var bindings = new Dictionary<CompilerModel.BindingId, Expression>(context.LocalBindings);
 
-        if (context.LocalBindings is { } existingBindings)
+        var infos =
+            letBlock.Declarations.Select(
+                (declaration, index) =>
+                {
+                    var names = new HashSet<CompilerModel.BindingId>();
+                    PatternCompiler.CollectPatternBindings(declaration.Pattern, names);
+                    var dependencies = new HashSet<CompilerModel.BindingId>();
+                    CollectBindingReferences(declaration.Expression, dependencies);
+                    return (index, names, dependencies);
+                }).ToList();
+
+        var sorted = TopologicalSortDeclarations(infos);
+
+        if (sorted.IsErrOrNull() is { } error)
+            return error;
+
+        var inner = context.WithReplacedLocalBindings(bindings);
+
+        foreach (var index in sorted.Extract(error => throw new InvalidOperationException(error.ToString())))
         {
-            foreach (var kvp in existingBindings)
+            var declaration = letBlock.Declarations[index];
+            var result = Compile(declaration.Expression, inner);
+
+            if (result.IsErrOrNull() is { } compileError)
+                return compileError;
+
+            foreach (var (id, value) in PatternCompiler.ExtractPatternBindings(
+                declaration.Pattern,
+                result.Extract(error => throw new InvalidOperationException(error.ToString()))))
             {
-                newBindings[kvp.Key] = kvp.Value;
+                bindings[id] = value;
             }
         }
 
-        var declarations = letBlock.Declarations;
-        var declarationInfos = new List<(int index, HashSet<string> names, HashSet<string> deps)>();
-
-        for (var i = 0; i < declarations.Count; i++)
-        {
-            var decl = declarations[i];
-            var names = new HashSet<string>();
-            var deps = new HashSet<string>();
-
-            switch (decl)
-            {
-                case SyntaxTypes.LetDeclaration.LetFunction letFunc:
-                    var funcName = letFunc.Function.Declaration.Name;
-                    names.Add(funcName);
-                    CollectExpressionReferences(letFunc.Function.Declaration.Expression, deps);
-                    break;
-
-                case SyntaxTypes.LetDeclaration.LetDestructuring letDestructuring:
-                    PatternCompiler.CollectPatternNames(letDestructuring.Pattern, names);
-                    CollectExpressionReferences(letDestructuring.Expression, deps);
-                    break;
-
-                default:
-                    throw new NotImplementedException(
-                        $"{nameof(CompileLetExpressionBody)} does not handle let declaration variant: {decl.GetType().Name}");
-            }
-
-            declarationInfos.Add((i, names, deps));
-        }
-
-        var allBoundNames = new HashSet<string>();
-
-        foreach (var info in declarationInfos)
-        {
-            foreach (var name in info.names)
-            {
-                allBoundNames.Add(name);
-            }
-        }
-
-        var sortedIndicesResult = TopologicalSortDeclarations(declarationInfos);
-
-        if (sortedIndicesResult.IsErrOrNull() is { } sortErr)
-        {
-            return sortErr;
-        }
-
-        if (sortedIndicesResult.IsOkOrNull() is not { } sortedIndices)
-        {
-            throw new NotImplementedException(
-                "Unexpected type of result from TopologicalSortDeclarations: " + sortedIndicesResult.GetType().FullName);
-        }
-
-        var letContext = context.WithReplacedLocalBindings(newBindings);
-
-        foreach (var idx in sortedIndices)
-        {
-            var decl = declarations[idx];
-
-            switch (decl)
-            {
-                case SyntaxTypes.LetDeclaration.LetFunction letFunc:
-                    var funcName = letFunc.Function.Declaration.Name;
-                    var funcBody = letFunc.Function.Declaration.Expression;
-                    var funcArgs = letFunc.Function.Declaration.Arguments;
-
-                    if (funcArgs.Count is 0)
-                    {
-                        var compiledBodyResult = Compile(funcBody, letContext);
-
-                        if (compiledBodyResult.IsErrOrNull() is { } bodyErr)
-                        {
-                            return bodyErr;
-                        }
-
-                        newBindings[funcName] = compiledBodyResult.IsOkOrNull()!;
-                    }
-                    else
-                    {
-                        return new CompilationError.UnsupportedLetFunctionWithParameters(funcName);
-                    }
-
-                    break;
-
-                case SyntaxTypes.LetDeclaration.LetDestructuring letDestructuring:
-
-                    var destructuredResult = Compile(letDestructuring.Expression, letContext);
-
-                    if (destructuredResult.IsErrOrNull() is { } destrErr)
-                    {
-                        return destrErr;
-                    }
-
-                    if (destructuredResult.IsOkOrNull() is not { } destrExpr)
-                    {
-                        throw new NotImplementedException(
-                            "Unexpected type of result from Compile: " + destructuredResult.GetType().FullName);
-                    }
-
-                    var patternBindings =
-                        PatternCompiler.ExtractPatternBindings(
-                            letDestructuring.Pattern,
-                            destrExpr);
-
-                    foreach (var kvp in patternBindings)
-                    {
-                        newBindings[kvp.Key] = kvp.Value;
-                    }
-
-                    // Update the let context with the new bindings
-                    letContext = letContext.WithReplacedLocalBindings(newBindings);
-
-                    break;
-
-                default:
-                    throw new NotImplementedException(
-                        $"{nameof(CompileLetExpressionBody)} does not handle let declaration variant: {decl.GetType().Name}");
-            }
-        }
-
-        return Compile(letBlock.Expression, letContext);
+        return Compile(letBlock.Expression, inner);
     }
 
-    #region Helper Methods
-
-    internal static void CollectExpressionReferences(
+    internal static void CollectBindingReferences(
         SyntaxTypes.Expression expression,
-        HashSet<string> refs)
+        HashSet<CompilerModel.BindingId> refs)
     {
-        switch (expression)
+        if (expression is SyntaxTypes.Expression.Identifier { Reference: CompilerModel.Reference.Local local })
         {
-            case SyntaxTypes.Expression.Identifier funcOrVal:
-                if (funcOrVal.QualifiedName.Namespaces.Count is 0)
-                {
-                    refs.Add(funcOrVal.QualifiedName.DeclName);
-                }
-
-                break;
-
-            case SyntaxTypes.Expression.Application app:
-                CollectExpressionReferences(app.Function, refs);
-
-                foreach (var arg in app.Arguments)
-                {
-                    CollectExpressionReferences(arg, refs);
-                }
-
-                break;
-
-            case SyntaxTypes.Expression.ListExpr listExpr:
-                foreach (var elem in listExpr.Elements)
-                {
-                    CollectExpressionReferences(elem, refs);
-                }
-
-                break;
-
-            case SyntaxTypes.Expression.OperatorApplication opApp:
-                CollectExpressionReferences(opApp.Left, refs);
-                CollectExpressionReferences(opApp.Right, refs);
-                break;
-
-            case SyntaxTypes.Expression.Negation neg:
-                CollectExpressionReferences(neg.Expression, refs);
-                break;
-
-            case SyntaxTypes.Expression.IfBlock ifBlock:
-                CollectExpressionReferences(ifBlock.Condition, refs);
-                CollectExpressionReferences(ifBlock.ThenBlock, refs);
-                CollectExpressionReferences(ifBlock.ElseBlock, refs);
-                break;
-
-            case SyntaxTypes.Expression.LetExpression letExpr:
-                var localNames = new HashSet<string>();
-
-                foreach (var decl in letExpr.Declarations)
-                {
-                    switch (decl)
-                    {
-                        case SyntaxTypes.LetDeclaration.LetFunction letFunc:
-                            localNames.Add(letFunc.Function.Declaration.Name);
-                            break;
-
-                        case SyntaxTypes.LetDeclaration.LetDestructuring letDestr:
-                            PatternCompiler.CollectPatternNames(letDestr.Pattern, localNames);
-                            break;
-
-                        default:
-                            throw new NotImplementedException(
-                                $"{nameof(CollectExpressionReferences)} does not handle let declaration variant: {decl.GetType().Name}");
-                    }
-                }
-
-                var innerRefs = new HashSet<string>();
-
-                foreach (var decl in letExpr.Declarations)
-                {
-                    switch (decl)
-                    {
-                        case SyntaxTypes.LetDeclaration.LetFunction letFunc:
-                            CollectExpressionReferences(letFunc.Function.Declaration.Expression, innerRefs);
-                            break;
-
-                        case SyntaxTypes.LetDeclaration.LetDestructuring letDestr:
-                            CollectExpressionReferences(letDestr.Expression, innerRefs);
-                            break;
-
-                        default:
-                            throw new NotImplementedException(
-                                $"{nameof(CollectExpressionReferences)} does not handle let declaration variant: {decl.GetType().Name}");
-                    }
-                }
-
-                CollectExpressionReferences(letExpr.Expression, innerRefs);
-
-                foreach (var innerRef in innerRefs)
-                {
-                    if (!localNames.Contains(innerRef))
-                    {
-                        refs.Add(innerRef);
-                    }
-                }
-
-                break;
-
-            case SyntaxTypes.Expression.RecordExpr recordExpr:
-                foreach (var field in recordExpr.Fields)
-                {
-                    CollectExpressionReferences(field.Value, refs);
-                }
-
-                break;
-
-            case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
-                refs.Add(recordUpdate.RecordName);
-
-                foreach (var field in recordUpdate.Fields)
-                {
-                    CollectExpressionReferences(field.Value, refs);
-                }
-
-                break;
-
-            case SyntaxTypes.Expression.RecordAccess recordAccess:
-                CollectExpressionReferences(recordAccess.Record, refs);
-                break;
-
-            case SyntaxTypes.Expression.ProjectItem projection:
-                CollectExpressionReferences(projection.Value, refs);
-                break;
-
-            case SyntaxTypes.Expression.CaseExpression caseExpr:
-                CollectExpressionReferences(caseExpr.Expression, refs);
-
-                foreach (var caseItem in caseExpr.Cases)
-                {
-                    var caseLocalNames = new HashSet<string>();
-                    PatternCompiler.CollectPatternNames(caseItem.Pattern, caseLocalNames);
-
-                    var caseRefs = new HashSet<string>();
-                    CollectExpressionReferences(caseItem.Expression, caseRefs);
-
-                    foreach (var caseRef in caseRefs)
-                    {
-                        if (!caseLocalNames.Contains(caseRef))
-                        {
-                            refs.Add(caseRef);
-                        }
-                    }
-                }
-
-                break;
-
-            case SyntaxTypes.Expression.TupledExpression tupled:
-                foreach (var elem in tupled.Elements)
-                {
-                    CollectExpressionReferences(elem, refs);
-                }
-
-                break;
-
-            case SyntaxTypes.Expression.LambdaExpression lambdaExpr:
-                var lambdaParamNames = new HashSet<string>();
-
-                foreach (var param in lambdaExpr.Arguments)
-                {
-                    PatternCompiler.CollectPatternNames(param, lambdaParamNames);
-                }
-
-                var lambdaRefs = new HashSet<string>();
-                CollectExpressionReferences(lambdaExpr.Expression, lambdaRefs);
-
-                foreach (var lambdaRef in lambdaRefs)
-                {
-                    if (!lambdaParamNames.Contains(lambdaRef))
-                    {
-                        refs.Add(lambdaRef);
-                    }
-                }
-
-                break;
-
-            case SyntaxTypes.Expression.UnitExpr:
-            case SyntaxTypes.Expression.StringLiteral:
-            case SyntaxTypes.Expression.CharLiteral:
-            case SyntaxTypes.Expression.IntegerLiteral:
-            case SyntaxTypes.Expression.FloatLiteral:
-            case SyntaxTypes.Expression.PrefixOperator:
-            case SyntaxTypes.Expression.RecordAccessFunction:
-            case SyntaxTypes.Expression.GLSLExpression:
-                break;
-
-            default:
-                throw new NotImplementedException(
-                    $"{nameof(CollectExpressionReferences)} does not handle expression variant: {expression.GetType().Name}");
+            refs.Add(local.Binding);
+            return;
         }
+
+        if (expression is SyntaxTypes.Expression.LetExpression let)
+        {
+            var free = new HashSet<CompilerModel.BindingId>();
+
+            foreach (var declaration in let.Declarations)
+                CollectBindingReferences(declaration.Expression, free);
+
+            CollectBindingReferences(let.Expression, free);
+
+            foreach (var declaration in let.Declarations)
+                free.ExceptWith(CompilerModel.ExpressionTransform.PatternBindings(declaration.Pattern));
+
+            refs.UnionWith(free);
+            return;
+        }
+
+        if (expression is SyntaxTypes.Expression.CaseExpression match)
+        {
+            CollectBindingReferences(match.Expression, refs);
+
+            foreach (var branch in match.Cases)
+            {
+                var free = new HashSet<CompilerModel.BindingId>();
+                CollectBindingReferences(branch.Expression, free);
+                free.ExceptWith(CompilerModel.ExpressionTransform.PatternBindings(branch.Pattern));
+                refs.UnionWith(free);
+            }
+
+            return;
+        }
+
+        foreach (var child in SyntaxTypes.ExpressionTraversal.Children(expression))
+            CollectBindingReferences(child, refs);
     }
 
     /// <summary>
@@ -1453,7 +507,7 @@ public class ExpressionCompiler
     /// Returns a Result with either the sorted indices or a CyclicDependency error.
     /// </summary>
     private static Result<CompilationError, List<int>> TopologicalSortDeclarations(
-        List<(int index, HashSet<string> names, HashSet<string> deps)> declarations)
+        List<(int index, HashSet<CompilerModel.BindingId> names, HashSet<CompilerModel.BindingId> deps)> declarations)
     {
         var (result, cycleNames) = TopologicalSortDeclarationsCore(declarations);
 
@@ -1470,7 +524,7 @@ public class ExpressionCompiler
     /// Throws InvalidOperationException if a cycle is detected.
     /// </summary>
     internal static List<int> TopologicalSortDeclarationsOrThrow(
-        List<(int index, HashSet<string> names, HashSet<string> deps)> declarations)
+        List<(int index, HashSet<CompilerModel.BindingId> names, HashSet<CompilerModel.BindingId> deps)> declarations)
     {
         var (result, cycleNames) = TopologicalSortDeclarationsCore(declarations);
 
@@ -1484,7 +538,7 @@ public class ExpressionCompiler
     }
 
     private static (List<int> result, IReadOnlyList<string>? cycleNames) TopologicalSortDeclarationsCore(
-        List<(int index, HashSet<string> names, HashSet<string> deps)> declarations)
+        List<(int index, HashSet<CompilerModel.BindingId> names, HashSet<CompilerModel.BindingId> deps)> declarations)
     {
         var declarationCount = declarations.Count;
         var inDegree = new int[declarationCount];
@@ -1547,6 +601,7 @@ public class ExpressionCompiler
                 declarations
                 .Where((_, i) => !result.Contains(i))
                 .SelectMany(d => d.names)
+                .Select(name => name.ToString())
                 .ToList();
 
             return (result, cycleNames);
@@ -1562,84 +617,6 @@ public class ExpressionCompiler
     /// - Passing a function as an argument
     /// - Storing a function in a data structure
     /// </summary>
-    private static Result<CompilationError, Expression> CompileFunctionReference(
-        string qualifiedFunctionName,
-        int functionIndex,
-        ExpressionCompilationContext context)
-    {
-        // Get the function's info to determine parameter count
-        if (context.ModuleCompilationContext.TryGetFunctionInfo(qualifiedFunctionName) is not { } funcInfo)
-        {
-            return new CompilationError.UnresolvedReference(qualifiedFunctionName, context.CurrentModuleName);
-        }
-
-        var paramCount = funcInfo.declaration.Function.Declaration.Arguments.Count;
-
-        // Get the encoded body from the environment.
-        // For declarations compiled with env functions, the root environment uses the flat layout
-        // [envFunctions, arg0, arg1, ...], so the encoded bodies are in the env-functions list at [0][i].
-        var encodedBodyExpr =
-            ExpressionBuilder.BuildExpressionForPathInExpression(
-                [0, functionIndex],
-                Expression.EnvironmentInstance);
-
-        // Build the env functions list expressions based on the function's dependency layout
-        var envFunctionsExprs = new List<Expression>();
-
-        if (context.ModuleCompilationContext.TryGetDependencyLayout(qualifiedFunctionName) is { } funcLayout)
-        {
-            foreach (var depName in funcLayout)
-            {
-                if (context.GetFunctionIndexInLayout(depName) is { } depIndex)
-                {
-                    // Get this dependency from the current environment
-                    var depRef =
-                        ExpressionBuilder.BuildExpressionForPathInExpression(
-                            [0, depIndex],
-                            Expression.EnvironmentInstance);
-
-                    envFunctionsExprs.Add(depRef);
-                }
-                else
-                {
-                    return new CompilationError.FunctionNotInDependencyLayout(depName);
-                }
-            }
-        }
-
-        var envFuncsListExpr = Expression.ListInst(envFunctionsExprs);
-
-        if (paramCount <= 0)
-        {
-            // Zero-parameter value declaration: invoke the body immediately
-            // to produce the actual value rather than returning an unevaluated function wrapper.
-
-            var callEnvironment =
-                Expression.ListInst([envFuncsListExpr]);
-
-            return
-                new Expression.Eval(
-                    encoded: encodedBodyExpr,
-                    environment: callEnvironment);
-        }
-
-        // Emit the function value expression using FunctionValueBuilder
-        return
-            FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgsFromEncodedBodyExpression(
-                encodedBodyExpr,
-                paramCount,
-                leadingArgExpressions: [],
-                envFuncsListExpr);
-    }
-
-    /// <summary>
-    /// Emits an expression that, when evaluated, produces a function value for a partially applied 
-    /// choice type tag. The captured arguments are evaluated at runtime and stored in the function value's closure.
-    /// </summary>
-    /// <param name="tagName">The name of the choice type tag.</param>
-    /// <param name="totalArgCount">The total number of arguments the tag expects.</param>
-    /// <param name="capturedArgExpressions">Expressions for arguments already provided (to be evaluated at runtime).</param>
-    /// <returns>An expression that evaluates to a function value.</returns>
     private static Expression EmitChoiceTypeTagPartialApplicationExpression(
         string tagName,
         int totalArgCount,
@@ -1900,5 +877,4 @@ public class ExpressionCompiler
     internal static PineValue EmitBooleanLiteral(bool value) =>
         BuiltinFunction.ValueFromBool(value);
 
-    #endregion
 }

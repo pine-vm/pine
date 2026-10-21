@@ -28,9 +28,7 @@ public sealed class ElmCompilerDiagnosticsProvider(
 
     private readonly Dictionary<string, Result<ElmSyntaxParseError, Syntax.File>> _sourceParseCache = [];
 
-    private readonly Dictionary<(Syntax.Node<Syntax.Declaration> Declaration, string Scope),
-        DeclarationCanonicalizationCacheEntry>
-        _canonicalizationCache = [];
+    private readonly Canonicalization.DeclarationCache _canonicalizationCache = new();
 
     /// <inheritdoc/>
     public Result<DiagnosticsProviderError, string> GetApplicationUri(string documentUri)

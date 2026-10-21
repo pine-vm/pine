@@ -330,13 +330,13 @@ public static partial class OptimizationOpportunityFinder
         IReadOnlyCollection<DeclQualifiedName>? restrictToReachableFromEntryPoints = null)
     {
         var lowered =
-            LowerToIntermediateRepresentation.Lower(declarations);
+            CompilerModel.FromCanonicalSyntax.Lower(declarations);
 
         return
             [
                 .. FindSourceOptimizationOpportunities(declarations, restrictToReachableFromEntryPoints),
                 .. FindGenericRecordAccessOpportunities(
-                    lowered.Declarations,
+                    lowered.Program,
                     restrictToReachableFromEntryPoints,
                     lowered.GenericAccessEvidence),
             ];

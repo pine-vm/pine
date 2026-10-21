@@ -976,6 +976,16 @@ public partial class ElmSyntaxInterpreter
                 "Unexpected parse result type: " + parseResult.GetType().FullName);
         }
 
+        return InterpretWithCounters(rootExpression, declarations, onApplication, evaluationConfig);
+    }
+
+    internal static (Result<ElmInterpretationError, PineValueInProcess> Result, ElmSyntaxInterpreterEvalWorkCounters Counters)
+        InterpretWithCounters(
+        SyntaxModel.Expression rootExpression,
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations,
+        System.Action<ApplicationLogEntry> onApplication,
+        EvaluationConfig evaluationConfig)
+    {
         var invocationCounter = new InvocationCounter(onApplication);
 
         var combined =

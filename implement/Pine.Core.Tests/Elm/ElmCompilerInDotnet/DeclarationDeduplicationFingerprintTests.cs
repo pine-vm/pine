@@ -212,7 +212,7 @@ public class DeclarationDeduplicationFingerprintTests
     }
 
     [Fact]
-    public void Structural_fingerprint_lets_lambda_lifting_reuse_the_first_equivalent_declaration()
+    public void Lambda_lifting_keeps_owner_local_identity_instead_of_selecting_an_unrelated_representative()
     {
         var alphaName = DeclQualifiedName.Create(["Example"], "alpha");
         var betaName = DeclQualifiedName.Create(["Example"], "beta");
@@ -224,16 +224,21 @@ public class DeclarationDeduplicationFingerprintTests
             .Add(valueName, ParseFunction(@"value = \x -> Example.helper x"))
             .Add(alphaName, ParseFunction("alpha x = Example.helper x"));
 
-        var lifted = LambdaLifting.LiftLambdas(declarations);
+        var original = Core.Elm.ElmCompilerInDotnet.CompilerModel.FromCanonicalSyntax.Convert(declarations);
+        var lifted = Core.Elm.ElmCompilerInDotnet.CompilerModel.LambdaLifting.Lift(original);
 
-        lifted.Keys.Should().BeEquivalentTo(declarations.Keys);
+        lifted.Functions.Should().HaveCount(4);
 
-        var value = (Abstract.Declaration.FunctionDeclaration)lifted[valueName];
+        var id = new Core.Elm.ElmCompilerInDotnet.CompilerModel.FunctionId.Source(valueName);
+        var value = lifted.Functions[id];
 
-        value.Function.Declaration.Expression.Should().Be(
-            new Abstract.Expression.Identifier(alphaName));
+        value.Body.Should().Be(
+            new Core.Elm.ElmCompilerInDotnet.CompilerModel.Expression.ReferenceExpression(
+                new Core.Elm.ElmCompilerInDotnet.CompilerModel.Reference.Function(
+                    new Core.Elm.ElmCompilerInDotnet.CompilerModel.FunctionId.Lifted(id, 0))));
 
-        LambdaLifting.LiftLambdas(lifted).Should().BeEquivalentTo(lifted);
+        Core.Elm.ElmCompilerInDotnet.CompilerModel.LambdaLifting.Lift(lifted).Functions.Should().BeEquivalentTo(
+            lifted.Functions);
     }
 
     [Fact]

@@ -1,6 +1,9 @@
 using AwesomeAssertions;
+using Pine.Core.CodeAnalysis;
 using System.Linq;
 using Xunit;
+
+using FunctionId = Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel.FunctionId;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 
@@ -22,6 +25,8 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 /// </summary>
 public class DependencyLayoutTests
 {
+    private static FunctionId Source(string name) => new FunctionId.Source(DeclQualifiedName.FromString(name));
+
     /// <summary>
     /// Tests that a simple function with no dependencies has only itself in its layout.
     /// </summary>
@@ -38,10 +43,10 @@ public class DependencyLayoutTests
 
         var layouts = ElmCompilerTestHelper.ComputeDependencyLayoutsFromModule(elmModuleText);
 
-        layouts.Should().ContainKey("Test.identity");
+        layouts.Should().ContainKey(Source("Test.identity"));
         // §7.6b: non-recursive single-member SCC → empty env-functions layout
         // (still wrapped in the uniform WithEnvFunctions shape per Approach A1).
-        layouts["Test.identity"].Should().BeEmpty();
+        layouts[Source("Test.identity")].Should().BeEmpty();
     }
 
     /// <summary>
@@ -64,10 +69,10 @@ public class DependencyLayoutTests
 
         var layouts = ElmCompilerTestHelper.ComputeDependencyLayoutsFromModule(elmModuleText);
 
-        layouts.Should().ContainKey("Test.factorial");
+        layouts.Should().ContainKey(Source("Test.factorial"));
         // Self-recursive function has only itself at index 0
         // Self-recursion is handled by referencing index 0
-        layouts["Test.factorial"].Should().Equal(["Test.factorial"]);
+        layouts[Source("Test.factorial")].Should().Equal([Source("Test.factorial")]);
     }
 
     /// <summary>
@@ -101,15 +106,15 @@ public class DependencyLayoutTests
 
         var layouts = ElmCompilerTestHelper.ComputeDependencyLayoutsFromModule(elmModuleText);
 
-        layouts.Should().ContainKey("Test.isEven");
-        layouts.Should().ContainKey("Test.isOdd");
+        layouts.Should().ContainKey(Source("Test.isEven"));
+        layouts.Should().ContainKey(Source("Test.isOdd"));
 
         // For mutual recursion, both functions share the same layout order
         // (alphabetically sorted as per the implementation guide)
         // Layout is [isEven, isOdd] for both functions
-        layouts["Test.isEven"].Should().Equal(["Test.isEven", "Test.isOdd"]);
+        layouts[Source("Test.isEven")].Should().Equal([Source("Test.isEven"), Source("Test.isOdd")]);
 
-        layouts["Test.isOdd"].Should().Equal(["Test.isEven", "Test.isOdd"]);
+        layouts[Source("Test.isOdd")].Should().Equal([Source("Test.isEven"), Source("Test.isOdd")]);
     }
 
     /// <summary>
@@ -131,15 +136,15 @@ public class DependencyLayoutTests
 
         var layouts = ElmCompilerTestHelper.ComputeDependencyLayoutsFromModule(elmModuleText);
 
-        layouts.Should().ContainKey("Test.double");
-        layouts.Should().ContainKey("Test.quadruple");
+        layouts.Should().ContainKey(Source("Test.double"));
+        layouts.Should().ContainKey(Source("Test.quadruple"));
 
         // §7.6b/§7.7: non-recursive single-member SCCs have empty layouts.
-        layouts["Test.double"].Should().BeEmpty();
+        layouts[Source("Test.double")].Should().BeEmpty();
 
         // quadruple is also a non-recursive single-member SCC (its only call is
         // to a cross-SCC dep `double`, inlined as a literal at the call site).
-        layouts["Test.quadruple"].Should().BeEmpty();
+        layouts[Source("Test.quadruple")].Should().BeEmpty();
     }
 
     /// <summary>
@@ -162,9 +167,9 @@ public class DependencyLayoutTests
 
         var layouts = ElmCompilerTestHelper.ComputeDependencyLayoutsFromModule(elmModuleText);
 
-        layouts.Should().ContainKey("Test.addAndMultiply");
+        layouts.Should().ContainKey(Source("Test.addAndMultiply"));
         // §7.7: non-recursive single-member SCC → empty layout.
-        layouts["Test.addAndMultiply"].Should().BeEmpty();
+        layouts[Source("Test.addAndMultiply")].Should().BeEmpty();
     }
 
     /// <summary>
@@ -187,12 +192,12 @@ public class DependencyLayoutTests
 
         var layouts = ElmCompilerTestHelper.ComputeDependencyLayoutsFromModule(elmModuleText);
 
-        layouts.Should().ContainKey("Test.returnTrue");
-        layouts.Should().ContainKey("Test.returnFalse");
+        layouts.Should().ContainKey(Source("Test.returnTrue"));
+        layouts.Should().ContainKey(Source("Test.returnFalse"));
         // §7.7: both are non-recursive single-member SCCs → empty layouts.
-        layouts["Test.returnTrue"].Should().BeEmpty();
+        layouts[Source("Test.returnTrue")].Should().BeEmpty();
 
-        layouts["Test.returnFalse"].Should().BeEmpty();
+        layouts[Source("Test.returnFalse")].Should().BeEmpty();
     }
 
     /// <summary>
@@ -215,10 +220,10 @@ public class DependencyLayoutTests
 
         var layouts = ElmCompilerTestHelper.ComputeDependencyLayoutsFromModule(elmModuleText);
 
-        layouts.Should().ContainKey("Test.caller");
+        layouts.Should().ContainKey(Source("Test.caller"));
 
         // §7.7: caller is a non-recursive single-member SCC → empty layout.
-        layouts["Test.caller"].Should().BeEmpty();
+        layouts[Source("Test.caller")].Should().BeEmpty();
     }
 
     /// <summary>
@@ -241,13 +246,13 @@ public class DependencyLayoutTests
 
         // §7.7: every function above is a non-recursive single-member SCC →
         // empty layouts. Cross-SCC deps are inlined as literals at call sites.
-        layouts["Test.funcA"].Should().BeEmpty();
+        layouts[Source("Test.funcA")].Should().BeEmpty();
 
-        layouts["Test.funcB"].Should().BeEmpty();
+        layouts[Source("Test.funcB")].Should().BeEmpty();
 
-        layouts["Test.funcC"].Should().BeEmpty();
+        layouts[Source("Test.funcC")].Should().BeEmpty();
 
-        layouts["Test.funcD"].Should().BeEmpty();
+        layouts[Source("Test.funcD")].Should().BeEmpty();
     }
 
     /// <summary>
@@ -271,10 +276,10 @@ public class DependencyLayoutTests
 
         var layouts = ElmCompilerTestHelper.ComputeDependencyLayoutsFromModule(elmModuleText);
 
-        layouts.Should().ContainKey("Test.caller");
+        layouts.Should().ContainKey(Source("Test.caller"));
 
         // §7.7: caller is a non-recursive single-member SCC → empty layout.
-        layouts["Test.caller"].Should().BeEmpty();
+        layouts[Source("Test.caller")].Should().BeEmpty();
     }
 
     /// <summary>
@@ -298,15 +303,15 @@ public class DependencyLayoutTests
 
         var layouts = ElmCompilerTestHelper.ComputeDependencyLayoutsFromModule(elmModuleText);
 
-        layouts.Should().ContainKey("Test.caller");
+        layouts.Should().ContainKey(Source("Test.caller"));
 
         // After lambda lifting, the lambda becomes a top-level function that references helper.
         // §7.7: every function in this program (caller, helper, the lifted lambda) is a
         // non-recursive single-member SCC → empty layouts.
-        layouts["Test.caller"].Should().BeEmpty();
+        layouts[Source("Test.caller")].Should().BeEmpty();
 
         var liftedFuncName =
-            layouts.Keys.FirstOrDefault(n => n.Contains("__lifted__"));
+            layouts.Keys.FirstOrDefault(n => n is FunctionId.Lifted);
 
         liftedFuncName.Should().NotBeNull("a lifted lambda function should be present in the program");
 

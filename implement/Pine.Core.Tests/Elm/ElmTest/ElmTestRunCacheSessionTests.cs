@@ -112,7 +112,7 @@ public class ElmTestRunCacheSessionTests(ITestOutputHelper output)
         var compiledCount = caches.ExpressionCompilations.Count;
         var templateCount = caches.ExpressionTemplatePlans.Count;
         var sourceParsing = session.SourceParsing.ToArray();
-        var canonicalization = session.DeclarationCanonicalization.ToArray();
+        var canonicalization = session.DeclarationCanonicalization.Count;
         var invocationCount = invocations.Count;
         encodedCount.Should().BeGreaterThan(0);
         reducedCount.Should().BeGreaterThan(0);
@@ -120,7 +120,7 @@ public class ElmTestRunCacheSessionTests(ITestOutputHelper output)
         compiledCount.Should().BeGreaterThan(0);
         templateCount.Should().BeGreaterThan(0);
         sourceParsing.Should().NotBeEmpty();
-        canonicalization.Should().NotBeEmpty();
+        canonicalization.Should().BeGreaterThan(0);
         invocationCount.Should().BeGreaterThan(0);
 
         using var secondBudget = new ElmTestInstrumentation(new(), recordDiagnostics: false);
@@ -145,13 +145,11 @@ public class ElmTestRunCacheSessionTests(ITestOutputHelper output)
         caches.ExpressionCompilations.Count.Should().Be(compiledCount);
         caches.ExpressionTemplatePlans.Count.Should().Be(templateCount);
         session.SourceParsing.Count.Should().Be(sourceParsing.Length);
-        session.DeclarationCanonicalization.Count.Should().Be(canonicalization.Length);
+        session.DeclarationCanonicalization.Count.Should().Be(canonicalization);
 
         foreach (var entry in sourceParsing)
             session.SourceParsing[entry.Key].Should().BeSameAs(entry.Value);
 
-        foreach (var entry in canonicalization)
-            session.DeclarationCanonicalization[entry.Key].Should().BeSameAs(entry.Value);
         // Cost-based admission can add different completed frames after inner calls become cache hits.
         invocations.Count.Should().BeGreaterThanOrEqualTo(invocationCount);
         secondBudget.GetSummary().Counters.InstructionCount.Should().BeLessThan(firstCounters.Counters.InstructionCount);

@@ -4,7 +4,6 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Text.Json;
 
 using File = Pine.Core.Elm.ElmSyntax.SyntaxModel.File;
 using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
@@ -50,7 +49,7 @@ public partial class Canonicalization
         IReadOnlyList<File> sources,
         IReadOnlyCollection<DeclQualifiedName> roots,
         ImplicitImportConfig? implicitImports = null,
-        IDictionary<(Node<Declaration> Declaration, string Scope), DeclarationCanonicalizationCacheEntry>? cache = null)
+        DeclarationCache? cache = null)
     {
         if (roots.Count is 0)
         {
@@ -133,6 +132,35 @@ public partial class Canonicalization
             }
         }
 
+        var native = new SymbolResolution.Native();
+        var ambiguous = new SymbolResolution.Ambiguous();
+
+        var missing =
+            Enum.GetValues<SymbolAvailability>().ToDictionary(
+                availability => availability,
+                availability => new SymbolResolution.Missing(availability));
+
+        var resolvedSymbols =
+            symbols.ToDictionary(
+                entry => entry.Key,
+                entry =>
+                entry.Value.Count is not 1 || duplicateScopes.Contains(string.Join(".", entry.Key.Name.Namespaces))
+                ?
+                (SymbolResolution)ambiguous
+                :
+                new SymbolResolution.Declaration(
+                    DeclQualifiedName.Create(
+                        entry.Key.Name.Namespaces,
+                        GetDeclarationName(entry.Value[0].declaration.Value))));
+
+        var moduleNames = files.Select(file => Module.GetModuleName(file.ModuleDefinition.Value).Value).ToArray();
+
+        foreach (var file in files)
+        {
+            contexts[file] =
+                contexts[file] with { LookupSymbol = LookupSymbol, LookupAvailability = LookupAvailability };
+        }
+
         var pending = new Queue<DeclQualifiedName>();
         var chains = new Dictionary<DeclQualifiedName, IReadOnlyList<DeclQualifiedName>>();
         var results = new Dictionary<DeclQualifiedName, CanonicalizationResult<Node<Declaration>>>();
@@ -156,19 +184,9 @@ public partial class Canonicalization
         while (pending.TryDequeue(out var name))
         {
             var (file, declaration) = declarations[name][0];
-            var dependencies = new HashSet<DeclQualifiedName>();
-            var resolvedReferences = new List<DeclarationReference>();
+            var context = contexts[file];
 
-            var context =
-                contexts[file] with
-                {
-                    ResolveReference = ResolveReference,
-                    DescribeUnavailableReference = DescribeUnavailableReference
-                };
-
-            var scope = cache is null ? "" : ScopeKey(context);
-
-            if (cache is not null && cache.TryGetValue((declaration, scope), out var cached))
+            if (cache is not null && cache.TryGet(declaration, context, out var cached))
             {
                 results[name] = cached.Result;
                 references[name] = cached.Dependencies;
@@ -176,70 +194,60 @@ public partial class Canonicalization
 
                 foreach (var dependency in cached.Dependencies)
                     Demand(dependency, [.. chains[name], dependency]);
-            }
-            else
-            {
-                results[name] = CanonicalizeDeclaration(declaration, context);
-                references[name] = [.. dependencies.Order()];
-                sourceReferences[name] = resolvedReferences;
 
-                cache?[(declaration, scope)] =
-                        new(results[name], references[name]) { References = resolvedReferences };
+                continue;
             }
+
+            var dependencies = new HashSet<DeclQualifiedName>();
+            var resolvedReferences = new List<DeclarationReference>();
+            var inputs = cache is null ? null : new InputObservations();
+
+            context =
+                context with
+                {
+                    ResolveReference = ResolveReference,
+                    DescribeUnavailableReference = DescribeUnavailableReference,
+                    Inputs = inputs
+                };
+
+            results[name] = CanonicalizeDeclaration(declaration, context);
+            references[name] = dependencies.Order().ToImmutableArray();
+            sourceReferences[name] = resolvedReferences.ToImmutableArray();
+
+            cache?.Add(declaration, context,
+                new(results[name], references[name]) { References = sourceReferences[name] }, inputs!);
 
             IReadOnlyList<CanonicalizationError> ResolveReference(
                 IReadOnlyList<string> moduleName, string referencedName, bool typeReference, Range range)
             {
                 var reference = DeclQualifiedName.Create(moduleName, referencedName);
 
-                if (IsNativeReference(reference))
+                var resolution = LookupSymbol(reference, typeReference);
+
+                if (inputs is not null && !IsIntrinsicReference(reference, typeReference))
+                    inputs.Record(new SymbolInput(reference, typeReference, resolution));
+
+                switch (resolution)
                 {
-                    var nativeModule = string.Join(".", moduleName);
+                    case SymbolResolution.Native:
+                        return [];
 
-                    var available =
-                        nativeModule switch
-                        {
-                            "Basics" =>
-                            symbols.ContainsKey((reference, typeReference)) ||
-                            (typeReference
-                            ?
-                            referencedName is "Int" or "Float" or "Bool" or "Never" or "Order"
-                            :
-                            implicitImports.ValueImports.TryGetValue(referencedName, out var implicitModule) &&
-                            implicitModule.Length is 1 && implicitModule[0] is "Basics" ||
-                            CoreLibraryModule.CoreBasics.GetBasicsFunctionInfo(referencedName) is not null ||
-                            CoreLibraryModule.CoreBasics.GetFunctionValue(referencedName) is not null ||
-                            referencedName is "True" or "False" or "LT" or "EQ" or "GT"),
+                    case SymbolResolution.Missing:
+                        return [MissingReference(reference, typeReference, range)];
 
-                            "Debug" => !typeReference && referencedName is "log" or "todo" or "toString",
-                            "List" => typeReference && referencedName is "List",
-                            "Pine_kernel" or "Pine_builtin" => true,
+                    case SymbolResolution.Ambiguous:
+                        return [new CanonicalizationError.NamingClash(range, reference.FullName)];
 
-                            _ =>
-                            throw new NotImplementedException(
-                                $"{nameof(ResolveReference)} does not handle native namespace: {nativeModule}")
-                        };
+                    case SymbolResolution.Declaration resolved:
+                        dependencies.Add(resolved.Owner);
+                        resolvedReferences.Add(new(resolved.Owner, reference, range, typeReference));
+                        Demand(resolved.Owner, [.. chains[name], resolved.Owner]);
+                        return [];
 
-                    return available ? [] : [MissingReference(reference, typeReference, range)];
+                    default:
+                        throw new NotImplementedException(
+                            $"{nameof(ResolveReference)} does not handle resolution variant: {resolution.GetType().Name}");
                 }
-
-                if (!symbols.TryGetValue((reference, typeReference), out var candidates))
-                    return [MissingReference(reference, typeReference, range)];
-
-                if (candidates.Count is not 1 || duplicateScopes.Contains(string.Join(".", reference.Namespaces)))
-                    return [new CanonicalizationError.NamingClash(range, reference.FullName)];
-
-                var candidate = candidates[0];
-
-                var ownerName =
-                    DeclQualifiedName.Create(
-                        moduleName,
-                        GetDeclarationName(candidate.declaration.Value));
-
-                dependencies.Add(ownerName);
-                resolvedReferences.Add(new(ownerName, reference, range, typeReference));
-                Demand(ownerName, [.. chains[name], ownerName]);
-                return [];
             }
 
             CanonicalizationError.UnresolvedReference MissingReference(
@@ -258,14 +266,16 @@ public partial class Canonicalization
                 var reference = DeclQualifiedName.Create(moduleName, symbol);
                 var kind = typeReference ? "type" : "value";
 
-                if (symbols.ContainsKey((reference, typeReference)))
+                var availability = LookupAvailability(reference, typeReference);
+                inputs?.Record(new AvailabilityInput(reference, typeReference, availability));
+
+                if (availability is SymbolAvailability.Declared)
                     return $"Module '{namespaceName}' declares {kind} '{symbol}', but does not expose it. Correct the reference or the declaring module's exposing list.";
 
-                if (symbols.ContainsKey((reference, !typeReference)))
+                if (availability is SymbolAvailability.OtherNamespace)
                     return $"'{namespaceName}.{symbol}' exists in the {(typeReference ? "value" : "type")} namespace, not the {kind} namespace.";
 
-                if (!files.Any(source => Module.GetModuleName(source.ModuleDefinition.Value).Value.SequenceEqual(moduleName)) &&
-                    namespaceName is not ("Basics" or "Debug" or "Pine_kernel" or "Pine_builtin"))
+                if (availability is SymbolAvailability.MissingModule)
                 {
                     return $"Module '{namespaceName}' is unavailable in the supplied sources. Check the import, declared dependencies, and configured package replacements.";
                 }
@@ -273,55 +283,6 @@ public partial class Canonicalization
                 return $"The supplied module '{namespaceName}' has no {kind} declaration named '{symbol}'. Check the spelling and the API provided by the selected package or replacement.";
             }
 
-            string ScopeKey(CanonicalizationContext scopeContext)
-            {
-                var namespaces =
-                    file.Imports
-                    .Select(import => string.Join(".", import.Value.ModuleName.Value))
-                    .Concat(implicitImports.ModuleImports.Select(import => string.Join(".", import.ModuleName)))
-                    .Concat(implicitImports.TypeImports.Values.Select(module => string.Join(".", module)))
-                    .Concat(implicitImports.ValueImports.Values.Select(module => string.Join(".", module)))
-                    .Append(string.Join(".", scopeContext.CurrentModuleName))
-                    .ToHashSet(StringComparer.Ordinal);
-
-                return
-                    JsonSerializer.Serialize(
-                        new
-                        {
-                            Current = scopeContext.CurrentModuleName,
-                            Local = scopeContext.ModuleLevelDeclarations.Order(StringComparer.Ordinal),
-                            Types =
-                            scopeContext.TypeImportMap.OrderBy(entry => entry.Key, StringComparer.Ordinal)
-                            .Select(
-                                entry =>
-                                new { entry.Key, Modules = entry.Value.Select(module => string.Join(".", module)).Order() }),
-                            Values =
-                            scopeContext.ValueImportMap.OrderBy(entry => entry.Key, StringComparer.Ordinal)
-                            .Select(
-                                entry =>
-                                new { entry.Key, Modules = entry.Value.Select(module => string.Join(".", module)).Order() }),
-                            Aliases =
-                            scopeContext.AliasMap.OrderBy(entry => entry.Key, StringComparer.Ordinal)
-                            .Select(entry => new { entry.Key, Module = string.Join(".", entry.Value) }),
-                            Operators =
-                            scopeContext.OperatorToFunction.OrderBy(entry => entry.Key, StringComparer.Ordinal)
-                            .Select(
-                                entry =>
-                                new { entry.Key, Module = string.Join(".", entry.Value.ModuleName), entry.Value.FunctionName }),
-                            Candidates =
-                            symbols.Where(entry => namespaces.Contains(string.Join(".", entry.Key.Name.Namespaces)))
-                            .OrderBy(entry => entry.Key.Name).ThenBy(entry => entry.Key.Type)
-                            .Select(
-                                entry =>
-                                new { Name = entry.Key.Name.FullName, entry.Key.Type, Count = entry.Value.Count }),
-                            DuplicateScopes = duplicateScopes.Where(namespaces.Contains).Order(StringComparer.Ordinal),
-                            AvailableModules =
-                            files.Select(
-                                source =>
-                                string.Join(".", Module.GetModuleName(source.ModuleDefinition.Value).Value))
-                            .Where(namespaces.Contains).Distinct().Order(StringComparer.Ordinal)
-                        });
-            }
         }
 
         return
@@ -335,6 +296,77 @@ public partial class Canonicalization
         {
             if (chains.TryAdd(name, chain))
                 pending.Enqueue(name);
+        }
+
+        SymbolAvailability LookupAvailability(DeclQualifiedName reference, bool typeReference)
+        {
+            if (symbols.ContainsKey((reference, typeReference)))
+                return SymbolAvailability.Declared;
+
+            if (symbols.ContainsKey((reference, !typeReference)))
+                return SymbolAvailability.OtherNamespace;
+
+            if (reference.Namespaces.Count is 1 &&
+                reference.Namespaces[0] is "Basics" or "Debug" or "Pine_kernel" or "Pine_builtin")
+            {
+                return SymbolAvailability.MissingName;
+            }
+
+            foreach (var moduleName in moduleNames)
+            {
+                if (ModuleNameComparer.Equal(moduleName, reference.Namespaces))
+                    return SymbolAvailability.MissingName;
+            }
+
+            return SymbolAvailability.MissingModule;
+        }
+
+        SymbolResolution LookupSymbol(DeclQualifiedName reference, bool typeReference)
+        {
+            if (!IsNativeReference(reference))
+            {
+                return
+                    resolvedSymbols.TryGetValue((reference, typeReference), out var resolved)
+                    ?
+                    resolved
+                    :
+                    missing[LookupAvailability(reference, typeReference)];
+            }
+
+            var available =
+                IsIntrinsicReference(reference, typeReference) ||
+                reference.Namespaces[0] is "Basics" &&
+                (symbols.ContainsKey((reference, typeReference)) ||
+                !typeReference &&
+                implicitImports.ValueImports.TryGetValue(reference.DeclName, out var implicitModule) &&
+                implicitModule.Length is 1 && implicitModule[0] is "Basics");
+
+            return available ? native : missing[LookupAvailability(reference, typeReference)];
+        }
+
+        bool IsIntrinsicReference(DeclQualifiedName reference, bool typeReference)
+        {
+            if (!IsNativeReference(reference))
+                return false;
+
+            return reference.Namespaces[0] switch
+            {
+                "Basics" =>
+                typeReference
+                ?
+                reference.DeclName is "Int" or "Float" or "Bool" or "Never" or "Order"
+                :
+                CoreLibraryModule.CoreBasics.GetBasicsFunctionInfo(reference.DeclName) is not null ||
+                CoreLibraryModule.CoreBasics.GetFunctionValue(reference.DeclName) is not null ||
+                reference.DeclName is "True" or "False" or "LT" or "EQ" or "GT",
+
+                "Debug" => !typeReference && reference.DeclName is "log" or "todo" or "toString",
+                "List" => typeReference && reference.DeclName is "List",
+                "Pine_kernel" or "Pine_builtin" => true,
+
+                _ =>
+                throw new NotImplementedException($"Unexpected native namespace: {reference.Namespaces[0]}")
+            };
         }
     }
 
@@ -490,6 +522,6 @@ public partial class Canonicalization
     }
 
     private static bool IsNativeReference(DeclQualifiedName name) =>
-        string.Join(".", name.Namespaces) is "Basics" or "Debug" or "Pine_kernel" or "Pine_builtin" ||
+        name.Namespaces.Count is 1 && name.Namespaces[0] is "Basics" or "Debug" or "Pine_kernel" or "Pine_builtin" ||
         name.FullName is "List.List";
 }
