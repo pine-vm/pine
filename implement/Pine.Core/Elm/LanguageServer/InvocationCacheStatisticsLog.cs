@@ -1,5 +1,5 @@
 using Pine.Core.Addressing;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Linq;
 using System.Text;

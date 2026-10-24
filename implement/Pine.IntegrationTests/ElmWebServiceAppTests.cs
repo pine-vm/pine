@@ -1,8 +1,8 @@
 using AwesomeAssertions;
 using MoreLinq;
-using Pine.Core;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
 using Pine.Core.Files;
+using Pine.Core.PineLanguage;
 using System;
 using System.Linq;
 using System.Text;
@@ -95,7 +95,7 @@ public class ElmWebServiceAppTests
                 var httpResponse =
                     await client.PostAsync(
                         "",
-                        new System.Net.Http.StringContent(serializedEvent, System.Text.Encoding.UTF8));
+                        new System.Net.Http.StringContent(serializedEvent, Encoding.UTF8));
 
                 var httpResponseContent =
                     await httpResponse.Content.ReadAsStringAsync();

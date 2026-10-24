@@ -1,6 +1,9 @@
 using Pine.Core.CLI;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.DotNet;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
@@ -50,7 +53,11 @@ public record BundledPineToDotnet(
             fromErr:
             err =>
             {
+                /*
+                 * TODO: Probably we should again train in the release process and then ship them with the bundle.
+                 * 
                 Console.WriteLine("Failed loading from embedded resource: " + err);
+                */
 
                 return null;
             },

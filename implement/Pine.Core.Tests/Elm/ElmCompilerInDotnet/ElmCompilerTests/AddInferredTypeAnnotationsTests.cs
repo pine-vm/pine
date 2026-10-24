@@ -1,12 +1,12 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
 using Pine.Core.Tests.Elm.ElmCompilerTests;
 using System;
 using System.Collections.Generic;
 using Xunit;
 
-using ConcreteSyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using ConcreteSyntaxTypes = Pine.Core.Elm.Syntax.Concrete;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 

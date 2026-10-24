@@ -326,8 +326,8 @@ public class FileStoreHttpServer(IFileStore fileStore)
 
     private static string ComputeETag(ReadOnlyMemory<byte> content)
     {
-        using var sha256 = SHA256.Create();
-        var hash = sha256.ComputeHash(content.ToArray());
+        var hash = SHA256.HashData(content.ToArray());
+
         return Convert.ToHexStringLower(hash)[..16]; // Use first 16 characters for brevity
     }
 

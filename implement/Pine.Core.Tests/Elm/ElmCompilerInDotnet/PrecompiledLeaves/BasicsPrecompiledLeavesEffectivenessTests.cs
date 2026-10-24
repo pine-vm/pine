@@ -4,7 +4,9 @@ using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
+using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -17,7 +19,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
 /// <summary>
 /// Tests verifying the effectiveness of the <c>Basics</c>-related precompiled leaves
 /// (<see cref="CoreBasicsPrecompiledLeaves"/>) on the
-/// <see cref="Core.Interpreter.IntermediateVM.PineVM"/>.
+/// <see cref="Runtime.IntermediateVM.PineVM"/>.
 /// <para>
 /// See <see cref="PrecompiledLeavesEffectivenessTests"/> for the general description of the
 /// precompiled-leaves mechanism and the shared test structure this file follows.
@@ -119,9 +121,9 @@ public class BasicsPrecompiledLeavesEffectivenessTests
 
     // ---------- VM construction ----------
 
-    private static Core.Interpreter.IntermediateVM.PineVM CreateVM(
+    private static Core.Runtime.IntermediateVM.PineVM CreateVM(
         IReadOnlyDictionary<PineValue, PrecompiledLeaf> precompiledLeaves) =>
-        Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
+        Core.Runtime.IntermediateVM.PineVM.CreateCustom(
             evalCache: null,
             evaluationConfigDefault: null,
             reportFunctionApplication: _ => { },
@@ -144,12 +146,12 @@ public class BasicsPrecompiledLeavesEffectivenessTests
 
     private static ElmValue IntDictList(
         IEnumerable<long> items,
-        Core.Interpreter.IntermediateVM.PineVM vm) =>
+        Core.Runtime.IntermediateVM.PineVM vm) =>
         ElmValue.ListInstance([.. items.Select(item => IntDict(item, vm))]);
 
     private static ElmValue IntDict(
         long value,
-        Core.Interpreter.IntermediateVM.PineVM vm) =>
+        Core.Runtime.IntermediateVM.PineVM vm) =>
         CoreLibraryModule.CoreLibraryTestHelper.ApplyUnary(
             GetDictFunction("fromList"),
             ElmValue.ListInstance(
@@ -162,7 +164,7 @@ public class BasicsPrecompiledLeavesEffectivenessTests
         PineValue functionValue,
         ElmValue arg0,
         ElmValue arg1,
-        Core.Interpreter.IntermediateVM.PineVM vm) =>
+        Core.Runtime.IntermediateVM.PineVM vm) =>
         CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileBinary(
             functionValue,
             arg0,

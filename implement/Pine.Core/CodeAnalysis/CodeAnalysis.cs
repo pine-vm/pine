@@ -1,6 +1,8 @@
 using Pine.Core.Addressing;
-using Pine.Core.CommonEncodings;
+using Pine.Core.Encodings;
+using Pine.Core.Functional;
 using Pine.Core.Internal;
+using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
@@ -388,11 +390,11 @@ public class CodeAnalysis
     private const int AnalysisThreadMaxStackSize = 64 * 1024 * 1024;
 
     [ThreadStatic]
-    private static bool t_isOnLargeStackThread;
+    private static bool s_isOnLargeStackThread;
 
     private static T RunOnLargeStackThread<T>(Func<T> func)
     {
-        if (t_isOnLargeStackThread)
+        if (s_isOnLargeStackThread)
         {
             // Already running on a dedicated large-stack thread; avoid spawning another one.
             return func();
@@ -406,7 +408,7 @@ public class CodeAnalysis
             new System.Threading.Thread(
                 () =>
                 {
-                    t_isOnLargeStackThread = true;
+                    s_isOnLargeStackThread = true;
 
                     try
                     {

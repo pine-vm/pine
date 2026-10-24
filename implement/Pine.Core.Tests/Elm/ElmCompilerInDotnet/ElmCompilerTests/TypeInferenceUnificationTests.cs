@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Functional;
 using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;

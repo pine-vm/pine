@@ -1,7 +1,8 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
+using Pine.Core.Encodings;
+using Pine.Core.PineLanguage;
 using System;
 using System.Linq;
 using Xunit;

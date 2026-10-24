@@ -2,6 +2,10 @@ using AwesomeAssertions;
 using Pine.Core.Elm;
 using Pine.Core.Elm.Testing;
 using Pine.Core.Files;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
+using Pine.Core.Testing;
 using Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 using System;
 using System.Collections.Concurrent;
@@ -556,7 +560,7 @@ public class ElmTestTests
     }
 
 
-    private sealed class FirstEvaluationFailsPineVm : PineVM.IPineVM
+    private sealed class FirstEvaluationFailsPineVm : IPineVM
     {
         private int evaluationCount;
 

@@ -1,6 +1,7 @@
-using Pine.Core;
-using Pine.Core.Interpreter.IntermediateVM;
-using Pine.Core.PineVM;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
+using Pine.Core.Runtime.IntermediateVM;
 using Pine.IntermediateVM;
 
 namespace Pine.PineVM;
@@ -11,7 +12,7 @@ namespace Pine.PineVM;
 /// </summary>
 public class PineVMResettingCache : IPineVM
 {
-    private readonly Core.Interpreter.IntermediateVM.PineVM _pineVM;
+    private readonly Core.Runtime.IntermediateVM.PineVM _pineVM;
 
     private readonly InvocationCache _pineVMCache;
 

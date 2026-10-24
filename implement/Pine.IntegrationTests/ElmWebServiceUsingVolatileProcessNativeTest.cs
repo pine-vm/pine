@@ -1,7 +1,7 @@
 using AwesomeAssertions;
-using Pine.Core;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
+using Pine.Core.Encodings;
+using Pine.Core.PineLanguage;
 using Pine.Elm.Platform;
 using System;
 using System.Linq;
@@ -121,7 +121,7 @@ public class ElmWebServiceUsingVolatileProcessNativeTest
             200,
             "Response status code should be OK.\nresponseContentAsString:\n" + formatResponseContentAsString);
 
-        Core.Elm.ElmSyntax.ElmModule.ModuleLines(formatResponseContentAsString)
+        Core.Elm.Syntax.ElmModule.ModuleLines(formatResponseContentAsString)
             .First().Should().Be("[1,3,4]", "Response content should match the expected JSON format.");
     }
 }

@@ -1,6 +1,8 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using Pine.Core;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -144,7 +146,7 @@ public class CompileToAssembly
                 typeof(Func<>),
                 typeof(BigInteger),
                 typeof(IImmutableList<>),
-                typeof(Core.Interpreter.IntermediateVM.PineVM)
+                typeof(Core.Runtime.IntermediateVM.PineVM)
             };
 
         var typesAssembliesLocations =

@@ -1,10 +1,12 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Encodings;
 using Pine.Core.Files;
+using Pine.Core.Functional;
+using Pine.Core.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -17,7 +19,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
-using Syntax = Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using ConcreteSyntax = Pine.Core.Elm.Syntax.Concrete;
 
 namespace Pine.Core.Tests.Elm;
 
@@ -915,46 +917,50 @@ public class ElmAppDependencyResolutionTests
 
         var root = Function(syntax, "root");
         var originalRoot = Function(parsedOriginal, "root");
-        var signature = (Syntax.TypeAnnotation.Typed)root.Signature!.Value.TypeAnnotation.Value;
+        var signature = (ConcreteSyntax.TypeAnnotation.Typed)root.Signature!.Value.TypeAnnotation.Value;
         signature.TypeName.Value.ModuleName.Should().Equal(compilerNamespace);
         root.Signature.Value.TypeAnnotation.Range.Should().Be(originalRoot.Signature!.Value.TypeAnnotation.Range);
 
         signature.TypeName.Range.Should().Be(
-            ((Syntax.TypeAnnotation.Typed)originalRoot.Signature.Value.TypeAnnotation.Value).TypeName.Range);
+            ((ConcreteSyntax.TypeAnnotation.Typed)originalRoot.Signature.Value.TypeAnnotation.Value).TypeName.Range);
 
-        var body = (Syntax.Expression.CaseExpression)root.Declaration.Value.Expression.Value;
-        var originalBody = (Syntax.Expression.CaseExpression)originalRoot.Declaration.Value.Expression.Value;
-        ((Syntax.Expression.Identifier)body.CaseBlock.Expression.Value).ModuleName.Should().Equal(compilerNamespace);
+        var body = (ConcreteSyntax.Expression.CaseExpression)root.Declaration.Value.Expression.Value;
+        var originalBody = (ConcreteSyntax.Expression.CaseExpression)originalRoot.Declaration.Value.Expression.Value;
+
+        ((ConcreteSyntax.Expression.Identifier)body.CaseBlock.Expression.Value).ModuleName.Should().Equal(
+            compilerNamespace);
+
         body.CaseBlock.Expression.Range.Should().Be(originalBody.CaseBlock.Expression.Range);
         var branch = body.CaseBlock.Cases.Single();
-        ((Syntax.Pattern.NamedPattern)branch.Pattern.Value).Name.ModuleName.Should().Equal(compilerNamespace);
-        ((Syntax.Expression.Identifier)branch.Expression.Value).ModuleName.Should().Equal(compilerNamespace);
+        ((ConcreteSyntax.Pattern.NamedPattern)branch.Pattern.Value).Name.ModuleName.Should().Equal(compilerNamespace);
+        ((ConcreteSyntax.Expression.Identifier)branch.Expression.Value).ModuleName.Should().Equal(compilerNamespace);
         branch.Pattern.Range.Should().Be(originalBody.CaseBlock.Cases.Single().Pattern.Range);
         branch.Expression.Range.Should().Be(originalBody.CaseBlock.Cases.Single().Expression.Range);
 
-        var make = (Syntax.Expression.Application)Function(syntax, "make").Declaration.Value.Expression.Value;
-        ((Syntax.Expression.Identifier)make.Function.Value).ModuleName.Should().Equal(compilerNamespace);
+        var make = (ConcreteSyntax.Expression.Application)Function(syntax, "make").Declaration.Value.Expression.Value;
+        ((ConcreteSyntax.Expression.Identifier)make.Function.Value).ModuleName.Should().Equal(compilerNamespace);
 
         var nested =
-            syntax.Declarations.Select(node => node.Value).OfType<Syntax.Declaration.ChoiceTypeDeclaration>()
+            syntax.Declarations.Select(node => node.Value).OfType<ConcreteSyntax.Declaration.ChoiceTypeDeclaration>()
             .Single(declaration => declaration.TypeDeclaration.Name.Value == "Nested");
 
-        ((Syntax.TypeAnnotation.Typed)nested.TypeDeclaration.Constructors.Single().Value.Arguments.Single().Value)
+        ((ConcreteSyntax.TypeAnnotation.Typed)nested.TypeDeclaration.Constructors.Single().Value.Arguments.Single().Value)
             .TypeName.Value.ModuleName.Should().Equal(compilerNamespace);
 
         syntax.Declarations.Select(declaration => declaration.Range)
             .Should().Equal(parsedOriginal.Declarations.Select(declaration => declaration.Range));
 
-        ((Syntax.Module.NormalModule)syntax.ModuleDefinition.Value).ModuleData.ExposingList
-            .Should().Be(((Syntax.Module.NormalModule)parsedOriginal.ModuleDefinition.Value).ModuleData.ExposingList);
+        ((ConcreteSyntax.Module.NormalModule)syntax.ModuleDefinition.Value).ModuleData.ExposingList
+            .Should().Be(((ConcreteSyntax.Module.NormalModule)parsedOriginal.ModuleDefinition.Value).ModuleData.ExposingList);
 
         Function(syntax, "message").Should().Be(Function(parsedOriginal, "message"));
         syntax.Comments.Should().Equal(parsedOriginal.Comments);
         build.ImportDiagnostics.Should().ContainSingle();
         build.ImportDiagnostics[0].Message.Should().Contain("'Fuzzer(..)'").And.Contain("does not expose");
 
-        static Syntax.FunctionStruct Function(Syntax.File file, string name) =>
-            file.Declarations.Select(declaration => declaration.Value).OfType<Syntax.Declaration.FunctionDeclaration>()
+        static ConcreteSyntax.FunctionStruct Function(ConcreteSyntax.File file, string name) =>
+            file.Declarations
+            .Select(declaration => declaration.Value).OfType<ConcreteSyntax.Declaration.FunctionDeclaration>()
             .Single(declaration => declaration.Function.Declaration.Value.Name.Value == name).Function;
     }
 
@@ -1016,13 +1022,13 @@ public class ElmAppDependencyResolutionTests
 
         var functions =
             syntax.Declarations.Select(node => node.Value)
-            .OfType<Syntax.Declaration.FunctionDeclaration>()
+            .OfType<ConcreteSyntax.Declaration.FunctionDeclaration>()
             .ToDictionary(function => function.Function.Declaration.Value.Name.Value, function => function.Function);
 
-        var signature = (Syntax.TypeAnnotation.Typed)functions["value"].Signature!.Value.TypeAnnotation.Value;
+        var signature = (ConcreteSyntax.TypeAnnotation.Typed)functions["value"].Signature!.Value.TypeAnnotation.Value;
         signature.TypeName.Value.ModuleName.Should().Equal("Encode");
-        var expression = (Syntax.Expression.Application)functions["read"].Declaration.Value.Expression.Value;
-        ((Syntax.Expression.Identifier)expression.Function.Value).ModuleName.Should().Equal("Encode");
+        var expression = (ConcreteSyntax.Expression.Application)functions["read"].Declaration.Value.Expression.Value;
+        ((ConcreteSyntax.Expression.Identifier)expression.Function.Value).ModuleName.Should().Equal("Encode");
         syntax.Imports.Single().Value.ModuleAlias!.Value.Alias.Value.Should().Equal("Encode");
 
         syntax.Imports.Single().Value.ModuleName.Value.Should().Equal(
@@ -1285,7 +1291,7 @@ public class ElmAppDependencyResolutionTests
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(
                 ElmSourceCompilation.EvaluateZeroParameterRoots(
                     compilation.Extract(error => throw new InvalidOperationException(error)).compiledEnvValue,
-                    Pine.Core.Interpreter.DirectInterpreter.WithLocalEvalCache(new PineVMParseCache()))
+                    DirectInterpreter.WithLocalEvalCache(new PineVMParseCache()))
                 .Extract(error => throw new InvalidOperationException(error)))
             .Extract(error => throw new InvalidOperationException(error));
 
@@ -1452,7 +1458,7 @@ public class ElmAppDependencyResolutionTests
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(
                 ElmSourceCompilation.EvaluateZeroParameterRoots(
                     compilation.Extract(error => throw new InvalidOperationException(error)).compiledEnvValue,
-                    Pine.Core.Interpreter.DirectInterpreter.WithLocalEvalCache(new PineVMParseCache()))
+                    DirectInterpreter.WithLocalEvalCache(new PineVMParseCache()))
                 .Extract(error => throw new InvalidOperationException(error)))
             .Extract(error => throw new InvalidOperationException(error));
 
@@ -1504,7 +1510,7 @@ public class ElmAppDependencyResolutionTests
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(
                 ElmSourceCompilation.EvaluateZeroParameterRoots(
                     compiled.compiledEnvValue,
-                    Pine.Core.Interpreter.DirectInterpreter.WithLocalEvalCache(new PineVMParseCache()))
+                    DirectInterpreter.WithLocalEvalCache(new PineVMParseCache()))
                 .Extract(error => throw new InvalidOperationException(error)))
             .Extract(error => throw new InvalidOperationException(error));
 
@@ -1517,7 +1523,7 @@ public class ElmAppDependencyResolutionTests
         string manifest, Provider provider, ElmDependencyResolutionConfiguration? configuration = null) =>
         ElmDependencyResolver.ResolveAsync(Tree(manifest), ["elm.json"], configuration ?? new(), provider);
 
-    private static Syntax.File PreparedSource(ElmResolvedBuild build, string[] path) =>
+    private static ConcreteSyntax.File PreparedSource(ElmResolvedBuild build, string[] path) =>
         ElmSyntaxParser.ParseModuleText(
             Encoding.UTF8.GetString(((FileTree.FileNode)build.Sources.GetNodeAtPath(path)!).Bytes.Span))
         .Extract(error => throw new InvalidOperationException(error.ToString()));

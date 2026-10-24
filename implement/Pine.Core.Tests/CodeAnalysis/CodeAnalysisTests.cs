@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Pine.Core.PineLanguage;
 using Xunit;
 
 namespace Pine.Core.Tests.CodeAnalysis;
@@ -13,7 +14,7 @@ public class CodeAnalysisTests
                 "target",
                 Expression.LitralInst(PineValue.Blob([1])));
 
-        Pine.Core.CodeAnalysis.CodeAnalysis.CountOccurrencesInSelfAndDescendants(
+        Core.CodeAnalysis.CodeAnalysis.CountOccurrencesInSelfAndDescendants(
             expression,
             expression)
             .Should().Be(1);
@@ -42,7 +43,7 @@ public class CodeAnalysisTests
                 new Expression.Label("wrapper", target)
                 ]);
 
-        Pine.Core.CodeAnalysis.CodeAnalysis.CountOccurrencesInSelfAndDescendants(
+        Core.CodeAnalysis.CodeAnalysis.CountOccurrencesInSelfAndDescendants(
             expression,
             target)
             .Should().Be(8);
@@ -72,7 +73,7 @@ public class CodeAnalysisTests
                 structurallyEqual
                 ]);
 
-        Pine.Core.CodeAnalysis.CodeAnalysis.CountOccurrencesInSelfAndDescendants(
+        Core.CodeAnalysis.CodeAnalysis.CountOccurrencesInSelfAndDescendants(
             expression,
             target)
             .Should().Be(3);
@@ -86,12 +87,12 @@ public class CodeAnalysisTests
                 "target",
                 Expression.LitralInst(PineValue.Blob([4])));
 
-        Pine.Core.CodeAnalysis.CodeAnalysis.CountOccurrencesInSelfAndDescendants(
+        Core.CodeAnalysis.CodeAnalysis.CountOccurrencesInSelfAndDescendants(
             Expression.EnvironmentInstance,
             searchedExpression)
             .Should().Be(0);
 
-        Pine.Core.CodeAnalysis.CodeAnalysis.CountOccurrencesInSelfAndDescendants(
+        Core.CodeAnalysis.CodeAnalysis.CountOccurrencesInSelfAndDescendants(
             Expression.LitralInst(PineValue.Blob([5])),
             searchedExpression)
             .Should().Be(0);
@@ -156,7 +157,7 @@ public class CodeAnalysisTests
 
         foreach (var (current, searched) in testCases)
         {
-            Pine.Core.CodeAnalysis.CodeAnalysis.CountOccurrencesInSelfAndDescendants(
+            Core.CodeAnalysis.CodeAnalysis.CountOccurrencesInSelfAndDescendants(
                 current,
                 searched)
                 .Should().Be(0);

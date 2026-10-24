@@ -1,5 +1,5 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using Pine.Core.Elm.Syntax.Concrete;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;

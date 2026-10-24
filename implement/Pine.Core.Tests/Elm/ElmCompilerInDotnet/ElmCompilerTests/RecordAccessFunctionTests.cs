@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
+using Pine.Core.PineLanguage;
 using System.Linq;
 using Xunit;
 
@@ -28,7 +29,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 /// </summary>
 public class RecordAccessFunctionTests
 {
-    private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
+    private static readonly Core.Runtime.IntermediateVM.PineVM s_vm =
         ElmCompilerTestHelper.PineVMForProfiling(_ => { });
 
     private static ElmInteractiveEnvironment.ParsedInteractiveEnvironment CompileModule(

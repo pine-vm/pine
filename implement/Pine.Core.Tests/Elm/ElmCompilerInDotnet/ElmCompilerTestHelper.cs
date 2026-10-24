@@ -1,12 +1,14 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax;
-using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7;
+using Pine.Core.Elm.Syntax.Concrete;
 using Pine.Core.Files;
-using Pine.Core.Interpreter;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
+using Pine.Core.Runtime.IntermediateVM;
 using Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 using Pine.Core.Tests.Elm.ElmCompilerTests;
 using System;
@@ -15,8 +17,8 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
-using Stil4mElmSyntax7 = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
-using ConcreteSyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using ConcreteSyntaxTypes = Pine.Core.Elm.Syntax.Concrete;
+using PineExpression = Pine.Core.PineLanguage.Expression;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -34,7 +36,7 @@ public class ElmCompilerTestHelper
         bool disableGenericApplicationChainConsolidation = false,
         IDictionary<DirectInterpreter.EvalCacheEntryKey, PineValue>? directInterpreterEvalCache = null,
         bool includeBundledKernelModules = true,
-        PineVM.IPineVM? evaluationVm = null) =>
+        IPineVM? evaluationVm = null) =>
         ElmSourceCompilation.CompileInteractiveEnvironmentFromFiles(
             appCodeTree,
             rootFilePaths,
@@ -306,15 +308,15 @@ public class ElmCompilerTestHelper
     /// <summary>
     /// Create a VM with all optimizations disabled, to support repeatable profiling.
     /// </summary>
-    public static Core.Interpreter.IntermediateVM.PineVM PineVMForProfiling(
+    public static Core.Runtime.IntermediateVM.PineVM PineVMForProfiling(
         Action<EvaluationReport> reportFunctionApplication,
         bool enableTailRecursionOptimization = false,
         ReportExecutedStackInstruction? reportExecutedStackInstruction = null,
-        Func<Expression, bool>? skipInlineForExpression = null,
+        Func<PineExpression, bool>? skipInlineForExpression = null,
         PineVMWorkProfile? workProfile = null)
     {
         var vm =
-            Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
+            Core.Runtime.IntermediateVM.PineVM.CreateCustom(
                 evalCache: null,
                 evaluationConfigDefault: null,
                 reportFunctionApplication: reportFunctionApplication,
@@ -338,7 +340,7 @@ public class ElmCompilerTestHelper
     /// <summary>
     /// Default evaluation configuration for tests, with both invocation and loop iteration limits set to 10 million.
     /// </summary>
-    public static readonly Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig DefaultTestEvaluationConfig =
+    public static readonly Core.Runtime.IntermediateVM.PineVM.EvaluationConfig DefaultTestEvaluationConfig =
         new(InvocationCountLimit: 10_000_000, LoopIterationCountLimit: 10_000_000, StackDepthLimit: 100_000);
 
     /// <summary>
@@ -346,7 +348,7 @@ public class ElmCompilerTestHelper
     /// </summary>
     public static (EvaluationReport evalReport, IReadOnlyList<EvaluationReport> invocations)
         EvaluateWithProfiling(
-        Expression expression,
+        PineExpression expression,
         PineValue environment) =>
         EvaluateWithProfiling(expression, environment, DefaultTestEvaluationConfig);
 
@@ -355,9 +357,9 @@ public class ElmCompilerTestHelper
     /// </summary>
     public static (EvaluationReport evalReport, IReadOnlyList<EvaluationReport> invocations)
         EvaluateWithProfiling(
-        Expression expression,
+        PineExpression expression,
         PineValue environment,
-        Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig config)
+        Core.Runtime.IntermediateVM.PineVM.EvaluationConfig config)
     {
         var invocationReports = new List<EvaluationReport>();
         var vm = PineVMForProfiling(invocationReports.Add);
@@ -378,7 +380,7 @@ public class ElmCompilerTestHelper
     public static PineValue ApplyGenericPine(
         PineValue functionValue,
         IReadOnlyList<PineValue> arguments,
-        Core.Interpreter.IntermediateVM.PineVM vm) =>
+        Core.Runtime.IntermediateVM.PineVM vm) =>
         ApplyGenericPine(functionValue, arguments, vm, DefaultTestEvaluationConfig);
 
     /// <summary>
@@ -387,17 +389,17 @@ public class ElmCompilerTestHelper
     public static PineValue ApplyGenericPine(
         PineValue functionValue,
         IReadOnlyList<PineValue> arguments,
-        Core.Interpreter.IntermediateVM.PineVM vm,
-        Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig evaluationConfig)
+        Core.Runtime.IntermediateVM.PineVM vm,
+        Core.Runtime.IntermediateVM.PineVM.EvaluationConfig evaluationConfig)
     {
         var currentValue = functionValue;
 
         for (var i = 0; i < arguments.Count; i++)
         {
             var asIndependent =
-                new Expression.Eval(
-                    encoded: Expression.LitralInst(currentValue),
-                    environment: Expression.LitralInst(arguments[i]));
+                new PineExpression.Eval(
+                    encoded: PineExpression.LitralInst(currentValue),
+                    environment: PineExpression.LitralInst(arguments[i]));
 
             var currentResult =
                 vm.EvaluateExpressionOnCustomStack(
@@ -621,7 +623,7 @@ public class ElmCompilerTestHelper
                 var abstractArguments =
                     funcDecl.Function.Declaration.Value.Arguments
                     .Select(
-                        arg => new Node<Stil4mElmSyntax7.Pattern>(
+                        arg => new Node<Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7.Pattern>(
                             arg.Range,
                             FromFullSyntaxModel.Convert(arg.Value)))
                     .ToList();
@@ -647,7 +649,7 @@ public class ElmCompilerTestHelper
     }
 
     // Helper to extract a canonicalized module by name from the result dictionary
-    public static Stil4mElmSyntax7.File GetCanonicalizedModule(
+    public static Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7.File GetCanonicalizedModule(
         Result<string, IReadOnlyDictionary<IReadOnlyList<string>, Result<string, ConcreteSyntaxTypes.File>>> canonicalizeResult,
         string[] moduleName)
     {
@@ -671,7 +673,7 @@ public class ElmCompilerTestHelper
         return FromFullSyntaxModel.Convert(concreteFile with { Imports = [] });
     }
 
-    public static Stil4mElmSyntax7.File CanonicalizeAndGetSingleModule(
+    public static Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7.File CanonicalizeAndGetSingleModule(
         IReadOnlyList<string> elmModulesTexts,
         IReadOnlyList<string> moduleName)
     {

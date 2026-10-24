@@ -3,7 +3,9 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.IntermediateVM;
+using Pine.Core.Tests.Testing;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -496,10 +498,10 @@ public class KernelJsonFunctionTests
         .First(m => m.moduleName is "JsonTest")
         .moduleContent.FunctionDeclarations[name];
 
-    private readonly Core.Interpreter.IntermediateVM.PineVM _profilingVm =
+    private readonly Core.Runtime.IntermediateVM.PineVM _profilingVm =
         ElmCompilerTestHelper.PineVMForProfiling(_ => { });
 
-    private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
+    private static readonly Core.Runtime.IntermediateVM.PineVM s_vm =
         ElmCompilerTestHelper.PineVMForProfiling(_ => { });
 
     private static ElmValue ApplyUnary(PineValue functionValue, ElmValue argument) =>

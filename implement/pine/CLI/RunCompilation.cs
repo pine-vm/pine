@@ -1,13 +1,14 @@
-using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Concrete;
+using Pine.Core.Encodings;
 using Pine.Core.Files;
 using Pine.Core.IO;
 using Pine.Core.Json;
+using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -18,8 +19,6 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 
-using AST = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
-using Syntax = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using Type = Pine.Core.Elm.ElmCompilerInDotnet.TypeInference.InferredType;
 
 namespace Pine.CLI;
@@ -53,8 +52,10 @@ internal sealed record RunCompilation(
 
         var functions =
             syntax.Declarations
-            .Where(node => node.Value is Syntax.Declaration.FunctionDeclaration)
-            .Select(node => (node.Range, Function: ((Syntax.Declaration.FunctionDeclaration)node.Value).Function))
+            .Where(node => node.Value is Core.Elm.Syntax.Concrete.Declaration.FunctionDeclaration)
+            .Select(
+                node =>
+                (node.Range, Function: ((Core.Elm.Syntax.Concrete.Declaration.FunctionDeclaration)node.Value).Function))
             .ToArray();
 
         var declaration = source.Declaration;
@@ -114,7 +115,7 @@ internal sealed record RunCompilation(
         }
 
         token.ThrowIfCancellationRequested();
-        var moduleName = string.Join(".", Syntax.Module.GetModuleName(syntax.ModuleDefinition.Value).Value);
+        var moduleName = string.Join(".", Module.GetModuleName(syntax.ModuleDefinition.Value).Value);
         var tree = source.Tree;
         var manifest = ElmAppDependencyResolution.FindElmJsonForEntryPoint(tree, source.FilePath);
         ElmResolvedBuild? build = null;
@@ -159,12 +160,13 @@ internal sealed record RunCompilation(
                 syntax.Imports.Select(node => node.Value)
                 .FirstOrDefault(item => string.Join(".", item.ModuleName.Value) == sourceName);
 
-            if (import?.ExposingList?.ExposingList.Value is Syntax.Exposing.All ||
-                import?.ExposingList?.ExposingList.Value is Syntax.Exposing.Explicit exposed &&
+            if (import?.ExposingList?.ExposingList.Value is Core.Elm.Syntax.Concrete.Exposing.All ||
+                import?.ExposingList?.ExposingList.Value is Core.Elm.Syntax.Concrete.Exposing.Explicit exposed &&
                 exposed.Nodes.Any(
                     node =>
-                    node.Value is Syntax.TopLevelExpose.TypeOrAliasExpose type && type.Name == choice.TypeName ||
-                    node.Value is Syntax.TopLevelExpose.TypeExpose openType &&
+                    node.Value is Core.Elm.Syntax.Concrete.TopLevelExpose.TypeOrAliasExpose type &&
+                    type.Name == choice.TypeName ||
+                    node.Value is Core.Elm.Syntax.Concrete.TopLevelExpose.TypeExpose openType &&
                     openType.ExposedType.Name == choice.TypeName))
             {
                 return choice.TypeName;
@@ -201,11 +203,11 @@ internal sealed record RunCompilation(
 
         var cachePath = Path.Combine(cacheDirectory, "run", key);
 
-        if (File.Exists(cachePath))
+        if (System.IO.File.Exists(cachePath))
         {
             try
             {
-                var values = StringNamedPineValueBinaryEncoding.Decode(File.ReadAllBytes(cachePath)).decls;
+                var values = StringNamedPineValueBinaryEncoding.Decode(System.IO.File.ReadAllBytes(cachePath)).decls;
 
                 var types =
                     JsonSerializer.Deserialize<TypeInformation>(
@@ -249,9 +251,11 @@ internal sealed record RunCompilation(
         return Compilation(environment, information);
     }
 
-    private static TypeInformation InferTypes(IReadOnlyList<Syntax.File> modules, DeclQualifiedName root)
+    private static TypeInformation InferTypes(
+        IReadOnlyList<Core.Elm.Syntax.Concrete.File> modules,
+        DeclQualifiedName root)
     {
-        var abstractModules = modules.Select(AST.ConvertFromConcrete.FromFile).ToArray();
+        var abstractModules = modules.Select(Core.Elm.Syntax.Abstract.ConvertFromConcrete.FromFile).ToArray();
         var declarations = ElmCompiler.FlattenModulesToDeclarationDictionary(abstractModules);
 
         var aliases =
@@ -259,7 +263,7 @@ internal sealed record RunCompilation(
                 module =>
                 TypeInference.BuildTypeAliasDefinitions(
                     module,
-                    string.Join(".", AST.Module.GetModuleName(module.ModuleDefinition))))
+                    string.Join(".", Core.Elm.Syntax.Abstract.Module.GetModuleName(module.ModuleDefinition))))
             .ToImmutableDictionary();
 
         var signatures =
@@ -267,11 +271,11 @@ internal sealed record RunCompilation(
                 module =>
                 TypeInference.BuildFunctionSignaturesMap(
                     module,
-                    string.Join(".", AST.Module.GetModuleName(module.ModuleDefinition)),
+                    string.Join(".", Core.Elm.Syntax.Abstract.Module.GetModuleName(module.ModuleDefinition)),
                     aliases))
             .ToImmutableDictionary();
 
-        var function = ((AST.Declaration.FunctionDeclaration)declarations[root]).Function;
+        var function = ((Core.Elm.Syntax.Abstract.Declaration.FunctionDeclaration)declarations[root]).Function;
         Type type;
 
         if (function.Signature is { } signature)
@@ -291,7 +295,7 @@ internal sealed record RunCompilation(
             foreach (var argument in function.Declaration.Arguments.Reverse())
             {
                 var parameter =
-                    argument is AST.Pattern.VarPattern variable &&
+                    argument is Core.Elm.Syntax.Abstract.Pattern.VarPattern variable &&
                     inferred.parameterTypes.TryGetValue(variable.Name, out var known)
                     ?
                     known
@@ -310,15 +314,19 @@ internal sealed record RunCompilation(
                 entry.Value with
                 {
                     Constructors =
-                    entry.Value.Constructors.Select(
+                    [
+                    .. entry.Value.Constructors.Select(
                         constructor =>
                         constructor with
                         {
                             ArgumentTypes =
-                            constructor.ArgumentTypes
+                            [
+                            .. constructor.ArgumentTypes
                             .Select(
-                                argument => TypeInference.ExpandTypeAliases(argument, aliases, entry.Key.Namespaces)).ToArray()
-                        }).ToArray()
+                                argument => TypeInference.ExpandTypeAliases(argument, aliases, entry.Key.Namespaces))
+                            ]
+                        })
+                    ]
                 });
 
         return new(TypeInference.ExpandTypeAliases(type, aliases, root.Namespaces), choices);

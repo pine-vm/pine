@@ -1,10 +1,10 @@
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Elm.Syntax.Abstract;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
@@ -152,24 +152,24 @@ public static class OptimizationOpportunityRenderer
         int parameterIndex,
         string? parameterName,
         OptimizationOpportunityFinder.SingleTagShapeInfo shape,
-        IReadOnlyList<SyntaxTypes.TypeAnnotation>? substitutedTypes) =>
+        IReadOnlyList<TypeAnnotation>? substitutedTypes) =>
         "parameter[" + parameterIndex + "] " + (parameterName ?? "_") + ": " +
         shape.ConstructorName.FullName + " -> " +
         ParenIfTopLevelArrow(RenderUnwrappedTypes(shape, substitutedTypes));
 
     internal static string RenderRootLevelWrapperReturnDescription(
         OptimizationOpportunityFinder.SingleTagShapeInfo shape,
-        IReadOnlyList<SyntaxTypes.TypeAnnotation>? substitutedTypes) =>
+        IReadOnlyList<TypeAnnotation>? substitutedTypes) =>
         "return: " + shape.ConstructorName.FullName + " -> " +
         ParenIfTopLevelArrow(RenderUnwrappedTypes(shape, substitutedTypes));
 
     private static string RenderUnwrappedTypes(
         OptimizationOpportunityFinder.SingleTagShapeInfo shape,
-        IReadOnlyList<SyntaxTypes.TypeAnnotation>? substitutedTypes) =>
+        IReadOnlyList<TypeAnnotation>? substitutedTypes) =>
         RenderUnwrappedTypeAnnotations(substitutedTypes ?? shape.ConstructorArgumentTypes);
 
     private static string RenderUnwrappedTypeAnnotations(
-        IReadOnlyList<SyntaxTypes.TypeAnnotation> annotations)
+        IReadOnlyList<TypeAnnotation> annotations)
     {
         if (annotations.Count is 0)
             return "()";
@@ -220,17 +220,17 @@ public static class OptimizationOpportunityRenderer
         return rendered;
     }
 
-    private static string RenderTypeAnnotation(SyntaxTypes.TypeAnnotation annotation)
+    private static string RenderTypeAnnotation(TypeAnnotation annotation)
     {
         switch (annotation)
         {
-            case SyntaxTypes.TypeAnnotation.GenericType generic:
+            case TypeAnnotation.GenericType generic:
                 return generic.Name;
 
-            case SyntaxTypes.TypeAnnotation.Unit:
+            case TypeAnnotation.Unit:
                 return "()";
 
-            case SyntaxTypes.TypeAnnotation.Typed typed:
+            case TypeAnnotation.Typed typed:
                 {
                     var nameBuilder = new StringBuilder();
 
@@ -257,7 +257,7 @@ public static class OptimizationOpportunityRenderer
                     return builder.ToString();
                 }
 
-            case SyntaxTypes.TypeAnnotation.Tupled tupled:
+            case TypeAnnotation.Tupled tupled:
                 {
                     if (tupled.TypeAnnotations.Count is 1)
                         return RenderTypeAnnotation(tupled.TypeAnnotations[0]);
@@ -277,10 +277,10 @@ public static class OptimizationOpportunityRenderer
                     return builder.ToString();
                 }
 
-            case SyntaxTypes.TypeAnnotation.Record record:
+            case TypeAnnotation.Record record:
                 return RenderRecordDefinition(record.RecordDefinition);
 
-            case SyntaxTypes.TypeAnnotation.GenericRecord genericRecord:
+            case TypeAnnotation.GenericRecord genericRecord:
                 {
                     var builder = new StringBuilder();
                     builder.Append("{ ");
@@ -291,11 +291,11 @@ public static class OptimizationOpportunityRenderer
                     return builder.ToString();
                 }
 
-            case SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation function:
+            case TypeAnnotation.FunctionTypeAnnotation function:
                 {
                     var left = RenderTypeAnnotation(function.ArgumentType);
 
-                    if (function.ArgumentType is SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation)
+                    if (function.ArgumentType is TypeAnnotation.FunctionTypeAnnotation)
                         left = "(" + left + ")";
 
                     var right = RenderTypeAnnotation(function.ReturnType);
@@ -310,7 +310,7 @@ public static class OptimizationOpportunityRenderer
         }
     }
 
-    private static string RenderRecordDefinition(SyntaxTypes.RecordDefinition definition)
+    private static string RenderRecordDefinition(RecordDefinition definition)
     {
         if (definition.Fields.Count is 0)
             return "{}";
@@ -324,7 +324,7 @@ public static class OptimizationOpportunityRenderer
 
     private static void AppendRecordFields(
         StringBuilder builder,
-        SyntaxTypes.RecordDefinition definition)
+        RecordDefinition definition)
     {
         for (var i = 0; i < definition.Fields.Count; i++)
         {
@@ -338,24 +338,24 @@ public static class OptimizationOpportunityRenderer
     }
 
     private static string RenderTypeAnnotationParenIfComposite(
-        SyntaxTypes.TypeAnnotation annotation) =>
+        TypeAnnotation annotation) =>
         annotation switch
         {
-            SyntaxTypes.TypeAnnotation.GenericType or
-            SyntaxTypes.TypeAnnotation.Unit or
-            SyntaxTypes.TypeAnnotation.Tupled or
-            SyntaxTypes.TypeAnnotation.Record =>
+            TypeAnnotation.GenericType or
+            TypeAnnotation.Unit or
+            TypeAnnotation.Tupled or
+            TypeAnnotation.Record =>
             RenderTypeAnnotation(annotation),
 
-            SyntaxTypes.TypeAnnotation.Typed typed =>
+            TypeAnnotation.Typed typed =>
             typed.TypeArguments.Count is 0
             ?
             RenderTypeAnnotation(typed)
             :
             "(" + RenderTypeAnnotation(typed) + ")",
 
-            SyntaxTypes.TypeAnnotation.GenericRecord or
-            SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation =>
+            TypeAnnotation.GenericRecord or
+            TypeAnnotation.FunctionTypeAnnotation =>
             "(" + RenderTypeAnnotation(annotation) + ")",
 
             _ =>
@@ -369,13 +369,13 @@ public static class OptimizationOpportunityRenderer
     /// wrappers with their unwrapped types.
     /// </summary>
     public static string? TryRenderTransformedSignature(
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+        IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations,
         DeclQualifiedName functionName)
     {
         if (!declarations.TryGetValue(functionName, out var declaration))
             return null;
 
-        if (declaration is not SyntaxTypes.Declaration.FunctionDeclaration functionDeclaration)
+        if (declaration is not Declaration.FunctionDeclaration functionDeclaration)
             return null;
 
         if (functionDeclaration.Function.Signature is not { } signature)
@@ -391,7 +391,7 @@ public static class OptimizationOpportunityRenderer
         var implementation = functionDeclaration.Function.Declaration;
         var parameterCount = implementation.Arguments.Count;
 
-        var signatureParameterTypes = new List<SyntaxTypes.TypeAnnotation?>();
+        var signatureParameterTypes = new List<TypeAnnotation?>();
 
         OptimizationOpportunityFinder.DecomposeFunctionSignature(
             signature.TypeAnnotation,
@@ -444,7 +444,7 @@ public static class OptimizationOpportunityRenderer
     }
 
     private static string RenderTransformedTypeAnnotationAtRoot(
-        SyntaxTypes.TypeAnnotation annotation,
+        TypeAnnotation annotation,
         ImmutableDictionary<DeclQualifiedName, OptimizationOpportunityFinder.SingleTagShapeInfo> singleTagRegistry,
         ModuleName ownModule)
     {

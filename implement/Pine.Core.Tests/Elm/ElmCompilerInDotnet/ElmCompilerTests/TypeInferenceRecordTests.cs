@@ -1,10 +1,10 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using Pine.Core.Elm.Syntax.Concrete;
 using System.Collections.Generic;
 using Xunit;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Stil4mElmSyntax7 = Pine.Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7;
 
 using static Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests.AbstractSyntaxTestConversion;
 
@@ -35,32 +35,32 @@ public class TypeInferenceRecordTests
     private static Node<TValue> Node<TValue>(TValue value) =>
         new(s_dummyRange, value);
 
-    private static Node<(Node<string> fieldName, Node<SyntaxTypes.Expression> valueExpr)> Field(
+    private static Node<(Node<string> fieldName, Node<Stil4mElmSyntax7.Expression> valueExpr)> Field(
         string name,
-        SyntaxTypes.Expression value) =>
+        Stil4mElmSyntax7.Expression value) =>
         Node((Node(name), Node(value)));
 
-    private static SyntaxTypes.Expression Param(string name) =>
-        new SyntaxTypes.Expression.FunctionOrValue([], name);
+    private static Stil4mElmSyntax7.Expression Param(string name) =>
+        new Stil4mElmSyntax7.Expression.FunctionOrValue([], name);
 
-    private static SyntaxTypes.Expression OpApp(
+    private static Stil4mElmSyntax7.Expression OpApp(
         string op,
-        SyntaxTypes.Expression left,
-        SyntaxTypes.Expression right) =>
-        new SyntaxTypes.Expression.OperatorApplication(
+        Stil4mElmSyntax7.Expression left,
+        Stil4mElmSyntax7.Expression right) =>
+        new Stil4mElmSyntax7.Expression.OperatorApplication(
             op,
             InfixDirection.Left,
             Node(left),
             Node(right));
 
-    private static SyntaxTypes.Expression Access(SyntaxTypes.Expression record, string field) =>
-        new SyntaxTypes.Expression.RecordAccess(Node(record), Node(field));
+    private static Stil4mElmSyntax7.Expression Access(Stil4mElmSyntax7.Expression record, string field) =>
+        new Stil4mElmSyntax7.Expression.RecordAccess(Node(record), Node(field));
 
-    private static SyntaxTypes.Expression IntLit(int v) =>
-        new SyntaxTypes.Expression.Integer(v);
+    private static Stil4mElmSyntax7.Expression IntLit(int v) =>
+        new Stil4mElmSyntax7.Expression.Integer(v);
 
-    private static SyntaxTypes.Expression StrLit(string v) =>
-        new SyntaxTypes.Expression.Literal(v);
+    private static Stil4mElmSyntax7.Expression StrLit(string v) =>
+        new Stil4mElmSyntax7.Expression.Literal(v);
 
     private static IReadOnlyDictionary<string, TypeInference.InferredType> Empty =>
         new Dictionary<string, TypeInference.InferredType>();
@@ -72,7 +72,7 @@ public class TypeInferenceRecordTests
     [Fact]
     public void Empty_record_literal_infers_empty_closed_record_type()
     {
-        var expression = new SyntaxTypes.Expression.RecordExpr([]);
+        var expression = new Stil4mElmSyntax7.Expression.RecordExpr([]);
 
         var inferredType =
             TypeInference.InferExpressionType(Abs(expression), new Dictionary<string, int>(), Empty);
@@ -107,7 +107,7 @@ public class TypeInferenceRecordTests
         var stringG = OpApp("++", Param("g"), StrLit("h"));
 
         var fields =
-            new List<Node<(Node<string> fieldName, Node<SyntaxTypes.Expression> valueExpr)>>
+            new List<Node<(Node<string> fieldName, Node<Stil4mElmSyntax7.Expression> valueExpr)>>
             {
                 Field("verbatim", verbatim),
                 Field("appendableA", appendableA),
@@ -116,7 +116,7 @@ public class TypeInferenceRecordTests
                 Field("stringG", stringG),
             };
 
-        var expression = new SyntaxTypes.Expression.RecordExpr(fields);
+        var expression = new Stil4mElmSyntax7.Expression.RecordExpr(fields);
 
         var parameterNames =
             new Dictionary<string, int>
@@ -193,17 +193,17 @@ public class TypeInferenceRecordTests
     public void Nested_record_literal_infers_nested_closed_record_types()
     {
         var inner =
-            new SyntaxTypes.Expression.RecordExpr([Field("count", IntLit(1))]);
+            new Stil4mElmSyntax7.Expression.RecordExpr([Field("count", IntLit(1))]);
 
         var outer =
-            new SyntaxTypes.Expression.RecordExpr(
+            new Stil4mElmSyntax7.Expression.RecordExpr(
                 [
                 Field("greeting", OpApp("++", Param("s"), StrLit("!"))),
                 Field("inner", inner),
                 ]);
 
         var expression =
-            new SyntaxTypes.Expression.RecordExpr(
+            new Stil4mElmSyntax7.Expression.RecordExpr(
                 [
                 Field("outer", outer),
                 Field("flag", Param("b")),
@@ -259,31 +259,31 @@ public class TypeInferenceRecordTests
     public void Chain_of_record_updates_accumulates_field_constraints_on_same_parameter()
     {
         var u1 =
-            new SyntaxTypes.Expression.RecordUpdateExpression(
+            new Stil4mElmSyntax7.Expression.RecordUpdateExpression(
                 Node("r"),
                 [Field("name", StrLit("x"))]);
 
         var u2 =
-            new SyntaxTypes.Expression.RecordUpdateExpression(
+            new Stil4mElmSyntax7.Expression.RecordUpdateExpression(
                 Node("r"),
                 [Field("greeting", OpApp("++", StrLit("!"), StrLit("x")))]);
 
         var u3 =
-            new SyntaxTypes.Expression.RecordUpdateExpression(
+            new Stil4mElmSyntax7.Expression.RecordUpdateExpression(
                 Node("r"),
                 [Field("count", OpApp("+", IntLit(1), IntLit(2)))]);
 
         var listLit =
-            new SyntaxTypes.Expression.ListExpr(
+            new Stil4mElmSyntax7.Expression.ListExpr(
                 [Node(IntLit(1))]);
 
         var u4 =
-            new SyntaxTypes.Expression.RecordUpdateExpression(
+            new Stil4mElmSyntax7.Expression.RecordUpdateExpression(
                 Node("r"),
-                [Field("items", OpApp("++", new SyntaxTypes.Expression.ListExpr([]), listLit))]);
+                [Field("items", OpApp("++", new Stil4mElmSyntax7.Expression.ListExpr([]), listLit))]);
 
         var expression =
-            new SyntaxTypes.Expression.RecordExpr(
+            new Stil4mElmSyntax7.Expression.RecordExpr(
                 [
                 Field("x", u1),
                 Field("y", u2),
@@ -332,7 +332,7 @@ public class TypeInferenceRecordTests
     public void Multiple_record_accesses_on_same_parameter_accumulate_into_open_record()
     {
         var expression =
-            new SyntaxTypes.Expression.RecordExpr(
+            new Stil4mElmSyntax7.Expression.RecordExpr(
                 [
                 Field("a", Access(Param("r"), "name")),
                 Field("b", Access(Param("r"), "email")),
@@ -380,7 +380,7 @@ public class TypeInferenceRecordTests
             OpApp("+", Access(Param("deadEnd"), "col"), Access(Param("offset"), "col"));
 
         var expression =
-            new SyntaxTypes.Expression.RecordUpdateExpression(
+            new Stil4mElmSyntax7.Expression.RecordUpdateExpression(
                 Node("deadEnd"),
                 [
                 Field("row", rowValue),
@@ -430,7 +430,7 @@ public class TypeInferenceRecordTests
     public void Singleton_field_update_yields_open_record_with_one_known_field()
     {
         var expression =
-            new SyntaxTypes.Expression.RecordUpdateExpression(
+            new Stil4mElmSyntax7.Expression.RecordUpdateExpression(
                 Node("configBefore"),
                 [Field("enableDebug", Param("b"))]);
 
@@ -465,7 +465,7 @@ public class TypeInferenceRecordTests
     public void Projecting_record_literal_constrains_source_to_open_record_with_required_fields()
     {
         var expression =
-            new SyntaxTypes.Expression.RecordExpr(
+            new Stil4mElmSyntax7.Expression.RecordExpr(
                 [
                 Field("name", Access(Param("src"), "name")),
                 Field("address", Access(Param("src"), "address")),
@@ -555,14 +555,14 @@ public class TypeInferenceRecordTests
     {
         // { stack | items = stack.items ++ [newItem] }
         var newList =
-            new SyntaxTypes.Expression.ListExpr(
+            new Stil4mElmSyntax7.Expression.ListExpr(
                 [Node(Param("newItem"))]);
 
         var newItems =
             OpApp("++", Access(Param("stack"), "items"), newList);
 
         var expression =
-            new SyntaxTypes.Expression.RecordUpdateExpression(
+            new Stil4mElmSyntax7.Expression.RecordUpdateExpression(
                 Node("stack"),
                 [Field("items", newItems)]);
 

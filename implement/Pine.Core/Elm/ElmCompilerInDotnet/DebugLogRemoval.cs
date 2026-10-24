@@ -1,6 +1,5 @@
+using Pine.Core.Elm.Syntax.Abstract;
 using System.Linq;
-
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -12,7 +11,7 @@ public static class DebugLogRemoval
     /// <summary>
     /// Rewrites all function bodies in a module.
     /// </summary>
-    public static SyntaxTypes.File RewriteFile(SyntaxTypes.File file) =>
+    public static File RewriteFile(File file) =>
         file with
         {
             Declarations = [.. file.Declarations.Select(RewriteDeclaration)]
@@ -21,20 +20,20 @@ public static class DebugLogRemoval
     /// <summary>
     /// Rewrites fully applied <c>Debug.log message value</c> expressions to <c>value</c>.
     /// </summary>
-    public static SyntaxTypes.Expression RewriteExpression(SyntaxTypes.Expression expression) =>
+    public static Expression RewriteExpression(Expression expression) =>
         RewriteNormalizedExpression(
             ElmSyntaxAbstractTransformations.FlattenAllNestedApplicationHeads(expression));
 
-    private static SyntaxTypes.Expression RewriteNormalizedExpression(
-        SyntaxTypes.Expression expression)
+    private static Expression RewriteNormalizedExpression(
+        Expression expression)
     {
         var withRewrittenChildren =
             ElmSyntaxAbstractTransformations.MapChildExpressions(
                 expression,
                 RewriteNormalizedExpression);
 
-        if (withRewrittenChildren is SyntaxTypes.Expression.Application application &&
-            application.Function is SyntaxTypes.Expression.Identifier identifier &&
+        if (withRewrittenChildren is Expression.Application application &&
+            application.Function is Expression.Identifier identifier &&
             application.Arguments.Count >= 2 &&
             identifier.QualifiedName is
             {
@@ -48,7 +47,7 @@ public static class DebugLogRemoval
                 return valueArgument;
 
             return
-                new SyntaxTypes.Expression.Application(
+                new Expression.Application(
                     valueArgument,
                     [.. application.Arguments.Skip(2)]);
         }
@@ -57,14 +56,14 @@ public static class DebugLogRemoval
     }
 
     /// <summary>Rewrites one declaration without a module container.</summary>
-    public static SyntaxTypes.Declaration RewriteDeclaration(
-        SyntaxTypes.Declaration declaration)
+    public static Declaration RewriteDeclaration(
+        Declaration declaration)
     {
-        if (declaration is not SyntaxTypes.Declaration.FunctionDeclaration functionDeclaration)
+        if (declaration is not Declaration.FunctionDeclaration functionDeclaration)
             return declaration;
 
         return
-            new SyntaxTypes.Declaration.FunctionDeclaration(
+            new Declaration.FunctionDeclaration(
                 functionDeclaration.Function with
                 {
                     Declaration =

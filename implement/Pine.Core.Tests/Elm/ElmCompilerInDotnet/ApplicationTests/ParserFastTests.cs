@@ -2,9 +2,12 @@ using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmInElm;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Interpreter;
 using Pine.Core.Files;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.IntermediateVM;
+using Pine.Core.Tests.Testing;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -417,7 +420,7 @@ public class ParserFastTests
         .First(m => m.moduleName is "ParserFastTestModule")
         .moduleContent.FunctionDeclarations[name];
 
-    private readonly Core.Interpreter.IntermediateVM.PineVM _vm =
+    private readonly Core.Runtime.IntermediateVM.PineVM _vm =
         ElmCompilerTestHelper.PineVMForProfiling(_ => { });
 
     /// <summary>
@@ -426,7 +429,7 @@ public class ParserFastTests
     /// <see cref="BundledFiles.ElmKernelModulesDefault"/> + <see cref="TestModuleText"/>
     /// tree as <see cref="s_env"/>, so the lowered Elm syntax declarations the
     /// <see cref="ElmSyntaxInterpreter"/> sees match the bytecode the
-    /// <see cref="Core.Interpreter.IntermediateVM.PineVM"/> path executes.
+    /// <see cref="Core.Runtime.IntermediateVM.PineVM"/> path executes.
     /// <para>
     /// Used by <see cref="SkipWhileWithoutLinebreakHelp_alpha_longer"/> to dispatch
     /// <c>testWithoutLinebreak_alpha</c> through the syntax interpreter and capture every

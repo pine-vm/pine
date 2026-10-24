@@ -1,3 +1,4 @@
+using Pine.Core.Elm.Syntax.Abstract;
 using Pine.Core.Json;
 using System;
 using System.Collections.Generic;
@@ -14,7 +15,7 @@ public static class CompilerModelJson
     /// <summary>Builds options for immutable model values and their source-name and Pine-value leaves.</summary>
     public static JsonSerializerOptions CreateOptions()
     {
-        var options = ElmSyntax.ElmSyntaxAbstract.ElmSyntaxAbstractJson.BuildJsonSerializerOptions();
+        var options = ElmSyntaxAbstractJson.BuildJsonSerializerOptions();
         options.Converters.Add(new ClosedRecordConverter());
         options.Converters.Add(new StructuralTypeConverter());
         return options;
@@ -64,7 +65,7 @@ public sealed class ProgramJsonConverter : JsonConverter<Program>
 {
     private sealed record FunctionEntry(FunctionId Id, Function Function);
 
-    private sealed record SourceEntry(CodeAnalysis.DeclQualifiedName Name, ElmSyntax.ElmSyntaxAbstract.Declaration Declaration);
+    private sealed record SourceEntry(CodeAnalysis.DeclQualifiedName Name, Declaration Declaration);
 
     private sealed record BindingEntry(BindingId Id, string Name);
 

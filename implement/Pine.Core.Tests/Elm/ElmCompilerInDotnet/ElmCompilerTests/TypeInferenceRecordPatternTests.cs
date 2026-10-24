@@ -1,12 +1,12 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Stil4mElmSyntax7 = Pine.Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7;
 
 using static Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests.AbstractSyntaxTestConversion;
 
@@ -23,7 +23,7 @@ public class TypeInferenceRecordPatternTests
     /// <summary>
     /// Parses a single-function Elm module text and returns the parameter
     /// types inferred from how the function body uses each parameter.
-    /// Only parameters bound by a simple <see cref="SyntaxTypes.Pattern.VarPattern"/>
+    /// Only parameters bound by a simple <see cref="Pattern.VarPattern"/>
     /// are tracked, mirroring the typical usage of
     /// <see cref="TypeInference.InferParameterTypesFromUsage"/>.
     /// </summary>
@@ -34,12 +34,12 @@ public class TypeInferenceRecordPatternTests
             ElmSyntaxParser.ParseModuleText(elmModuleText)
             .Extract(err => throw new Exception("Failed to parse module: " + err));
 
-        var parsedFile = SyntaxTypes.FromFullSyntaxModel.Convert(parsedFileFull);
+        var parsedFile = Stil4mElmSyntax7.FromFullSyntaxModel.Convert(parsedFileFull);
 
         var function =
             parsedFile.Declarations
             .Select(d => d.Value)
-            .OfType<SyntaxTypes.Declaration.FunctionDeclaration>()
+            .OfType<Stil4mElmSyntax7.Declaration.FunctionDeclaration>()
             .Single(d => d.Function.Declaration.Value.Name.Value == functionName)
             .Function;
 
@@ -49,7 +49,7 @@ public class TypeInferenceRecordPatternTests
 
         for (var i = 0; i < implementation.Arguments.Count; i++)
         {
-            if (implementation.Arguments[i].Value is SyntaxTypes.Pattern.VarPattern varPattern)
+            if (implementation.Arguments[i].Value is Stil4mElmSyntax7.Pattern.VarPattern varPattern)
             {
                 parameterNames[varPattern.Name] = i;
             }

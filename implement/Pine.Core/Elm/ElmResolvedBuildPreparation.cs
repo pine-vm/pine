@@ -1,5 +1,7 @@
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Concrete;
 using Pine.Core.Files;
+using Pine.Core.Functional;
 using Pine.Core.IO;
 using System;
 using System.Collections.Generic;
@@ -12,7 +14,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
-using Syntax = Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using ConcreteSyntax = Pine.Core.Elm.Syntax.Concrete;
 
 namespace Pine.Core.Elm;
 
@@ -87,7 +89,7 @@ public static class ElmResolvedBuildPreparation
         IElmPackageProvider? provider,
         CancellationToken cancellationToken,
         string? projectDirectory,
-        IDictionary<string, Result<ElmSyntaxParseError, Syntax.File>>? sourceParseCache) =>
+        IDictionary<string, Result<ParseError, ConcreteSyntax.File>>? sourceParseCache) =>
         PrepareSourcesAsync(
             projectTree,
             manifestPath,
@@ -108,7 +110,7 @@ public static class ElmResolvedBuildPreparation
         CancellationToken cancellationToken,
         string? projectDirectory,
         bool declarationDemand,
-        IDictionary<string, Result<ElmSyntaxParseError, Syntax.File>>? sourceParseCache)
+        IDictionary<string, Result<ParseError, ConcreteSyntax.File>>? sourceParseCache)
     {
         provider ??=
             new ElmRegistryPackageProvider(configuration.Offline, compilerVersion: configuration.CompilerVersion);
@@ -446,7 +448,7 @@ public static class ElmResolvedBuildPreparation
         ElmResolvedBuild build,
         FileTree appSources,
         string projectManifestPath,
-        IDictionary<string, Result<ElmSyntaxParseError, Syntax.File>>? sourceParseCache)
+        IDictionary<string, Result<ParseError, ConcreteSyntax.File>>? sourceParseCache)
     {
         var byPath = new Dictionary<string, PreparedModule>(StringComparer.Ordinal);
 
@@ -479,7 +481,7 @@ public static class ElmResolvedBuildPreparation
 
                 sourceParseCache?[sourceText] = parsedResult;
 
-                var name = string.Join(".", Syntax.Module.GetModuleName(parsed.ModuleDefinition.Value).Value);
+                var name = string.Join(".", ConcreteSyntax.Module.GetModuleName(parsed.ModuleDefinition.Value).Value);
 
                 if (!byPath.TryAdd(path, new(name, path, owner, parsed)))
                 {
@@ -725,13 +727,13 @@ public static class ElmResolvedBuildPreparation
         }
 
         void ValidateExposing(
-            Syntax.Node<Syntax.Import> import,
+            Node<Import> import,
             PreparedModule module,
             string name,
             HashSet<(string name, bool type, bool constructors)> api,
             string targetPath)
         {
-            if (import.Value.ExposingList?.ExposingList.Value is Syntax.Exposing.Explicit exposing)
+            if (import.Value.ExposingList?.ExposingList.Value is Exposing.Explicit exposing)
             {
                 foreach (var exposed in exposing.Nodes)
                 {
@@ -799,7 +801,7 @@ public static class ElmResolvedBuildPreparation
         return api;
     }
 
-    private static HashSet<(string name, bool type, bool constructors)> GetExposedApi(Syntax.File file)
+    private static HashSet<(string name, bool type, bool constructors)> GetExposedApi(ConcreteSyntax.File file)
     {
         var declarations = new HashSet<(string name, bool type, bool constructors)>();
 
@@ -807,24 +809,24 @@ public static class ElmResolvedBuildPreparation
         {
             switch (declaration.Value)
             {
-                case Syntax.Declaration.FunctionDeclaration function:
+                case Declaration.FunctionDeclaration function:
                     declarations.Add((function.Function.Declaration.Value.Name.Value, false, false));
                     break;
 
-                case Syntax.Declaration.ChoiceTypeDeclaration choice:
+                case Declaration.ChoiceTypeDeclaration choice:
                     declarations.Add((choice.TypeDeclaration.Name.Value, true, false));
                     declarations.Add((choice.TypeDeclaration.Name.Value, true, true));
                     break;
 
-                case Syntax.Declaration.AliasDeclaration alias:
+                case Declaration.AliasDeclaration alias:
                     declarations.Add((alias.TypeAlias.Name.Value, true, false));
                     break;
 
-                case Syntax.Declaration.InfixDeclaration infix:
+                case Declaration.InfixDeclaration infix:
                     declarations.Add((infix.Infix.Operator.Value, false, false));
                     break;
 
-                case Syntax.Declaration.PortDeclaration port:
+                case Declaration.PortDeclaration port:
                     declarations.Add((port.Signature.Name.Value, false, false));
                     break;
 
@@ -837,9 +839,9 @@ public static class ElmResolvedBuildPreparation
         var exposing =
             file.ModuleDefinition.Value switch
             {
-                Syntax.Module.NormalModule normal => normal.ModuleData.ExposingList.Value,
-                Syntax.Module.PortModule port => port.ModuleData.ExposingList.Value,
-                Syntax.Module.EffectModule effect => effect.ModuleData.ExposingList.Value,
+                ConcreteSyntax.Module.NormalModule normal => normal.ModuleData.ExposingList.Value,
+                ConcreteSyntax.Module.PortModule port => port.ModuleData.ExposingList.Value,
+                ConcreteSyntax.Module.EffectModule effect => effect.ModuleData.ExposingList.Value,
 
                 _ =>
                 throw new NotImplementedException(
@@ -848,10 +850,10 @@ public static class ElmResolvedBuildPreparation
 
         switch (exposing)
         {
-            case Syntax.Exposing.All:
+            case Exposing.All:
                 return declarations;
 
-            case Syntax.Exposing.Explicit explicitExposing:
+            case Exposing.Explicit explicitExposing:
                 var api =
                     explicitExposing.Nodes
                     .Select(node => ExposedApi(node.Value)).Where(declarations.Contains).ToHashSet();
@@ -867,13 +869,13 @@ public static class ElmResolvedBuildPreparation
         }
     }
 
-    private static (string name, bool type, bool constructors) ExposedApi(Syntax.TopLevelExpose expose) =>
+    private static (string name, bool type, bool constructors) ExposedApi(TopLevelExpose expose) =>
         expose switch
         {
-            Syntax.TopLevelExpose.FunctionExpose function => (function.Name, false, false),
-            Syntax.TopLevelExpose.InfixExpose infix => (infix.Name, false, false),
-            Syntax.TopLevelExpose.TypeOrAliasExpose type => (type.Name, true, false),
-            Syntax.TopLevelExpose.TypeExpose type => (type.ExposedType.Name, true, type.ExposedType.Open is not null),
+            TopLevelExpose.FunctionExpose function => (function.Name, false, false),
+            TopLevelExpose.InfixExpose infix => (infix.Name, false, false),
+            TopLevelExpose.TypeOrAliasExpose type => (type.Name, true, false),
+            TopLevelExpose.TypeExpose type => (type.ExposedType.Name, true, type.ExposedType.Open is not null),
 
             _ =>
             throw new NotImplementedException(
@@ -881,15 +883,15 @@ public static class ElmResolvedBuildPreparation
         };
 
     private static ReadOnlyMemory<byte> RewriteModule(
-        Syntax.File parsed, string originalModuleName, string compilerModuleName, Func<string, string?> importedCompilerName) =>
+        ConcreteSyntax.File parsed, string originalModuleName, string compilerModuleName, Func<string, string?> importedCompilerName) =>
         Encoding.UTF8.GetBytes(
             Avh4Format.FormatToString(
                 RewriteModuleSyntax(parsed, originalModuleName, compilerModuleName, importedCompilerName)));
 
-    private static Syntax.File RewriteModuleSyntax(
-        Syntax.File parsed, string originalModuleName, string compilerModuleName, Func<string, string?> importedCompilerName)
+    private static ConcreteSyntax.File RewriteModuleSyntax(
+        ConcreteSyntax.File parsed, string originalModuleName, string compilerModuleName, Func<string, string?> importedCompilerName)
     {
-        var originalName = Syntax.Module.GetModuleName(parsed.ModuleDefinition.Value);
+        var originalName = ConcreteSyntax.Module.GetModuleName(parsed.ModuleDefinition.Value);
         var renamed = originalName with { Value = compilerModuleName.Split('.') };
         var qualifierAliases = new Dictionary<string, string>(StringComparer.Ordinal);
 
@@ -898,16 +900,16 @@ public static class ElmResolvedBuildPreparation
                 import => string.Join(".", import.Value.ModuleAlias?.Alias.Value ?? import.Value.ModuleName.Value))
             .Append(originalModuleName).ToHashSet(StringComparer.Ordinal);
 
-        Syntax.Module definition =
+        ConcreteSyntax.Module definition =
             parsed.ModuleDefinition.Value switch
             {
-                Syntax.Module.NormalModule normal =>
+                ConcreteSyntax.Module.NormalModule normal =>
                 normal with { ModuleData = normal.ModuleData with { ModuleName = renamed } },
 
-                Syntax.Module.PortModule port =>
+                ConcreteSyntax.Module.PortModule port =>
                 port with { ModuleData = port.ModuleData with { ModuleName = renamed } },
 
-                Syntax.Module.EffectModule effect =>
+                ConcreteSyntax.Module.EffectModule effect =>
                 effect with { ModuleData = effect.ModuleData with { ModuleName = renamed } },
 
                 _ =>
@@ -1283,5 +1285,5 @@ public static class ElmResolvedBuildPreparation
 
     private sealed record Module(string Name, string Path, string? Owner, ImmutableArray<string> Imports);
 
-    private sealed record PreparedModule(string Name, string Path, string? Owner, Syntax.File Parsed);
+    private sealed record PreparedModule(string Name, string Path, string? Owner, ConcreteSyntax.File Parsed);
 }

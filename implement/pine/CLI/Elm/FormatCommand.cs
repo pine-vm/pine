@@ -1,5 +1,6 @@
-using Pine.Core;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Concrete;
+using Pine.Core.Functional;
 using System;
 using System.CommandLine;
 using System.Linq;
@@ -111,7 +112,7 @@ public static class FormatCommand
                 formatOk.FormattedText,
                 diagnostics);
 
-        FormatFileDiagnostic ToDiagnostic(ElmSyntaxParseError error) =>
+        FormatFileDiagnostic ToDiagnostic(ParseError error) =>
             new(
                 Message: ElmSyntaxErrorRenderer.RenderPlainText(fileContent, error, includeSource: true),
                 Line: error.Region.Start.Row,

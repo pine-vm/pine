@@ -1,10 +1,10 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using Pine.Core.Elm.Syntax.Concrete;
 using System.Collections.Generic;
 using Xunit;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Stil4mElmSyntax7 = Pine.Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7;
 
 using static Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests.AbstractSyntaxTestConversion;
 
@@ -22,14 +22,14 @@ public class TypeInferenceAppendableTests
     private static Node<TValue> Node<TValue>(TValue value) =>
         new(s_dummyRange, value);
 
-    private static SyntaxTypes.Expression Param(string name) =>
-        new SyntaxTypes.Expression.FunctionOrValue([], name);
+    private static Stil4mElmSyntax7.Expression Param(string name) =>
+        new Stil4mElmSyntax7.Expression.FunctionOrValue([], name);
 
-    private static SyntaxTypes.Expression OpApp(
+    private static Stil4mElmSyntax7.Expression OpApp(
         string op,
-        SyntaxTypes.Expression left,
-        SyntaxTypes.Expression right) =>
-        new SyntaxTypes.Expression.OperatorApplication(
+        Stil4mElmSyntax7.Expression left,
+        Stil4mElmSyntax7.Expression right) =>
+        new Stil4mElmSyntax7.Expression.OperatorApplication(
             op,
             InfixDirection.Left,
             Node(left),
@@ -40,7 +40,7 @@ public class TypeInferenceAppendableTests
     {
         // alfa a = a ++ "x"
         var expression =
-            OpApp("++", Param("a"), new SyntaxTypes.Expression.Literal("x"));
+            OpApp("++", Param("a"), new Stil4mElmSyntax7.Expression.Literal("x"));
 
         var parameterTypes =
             TypeInference.InferParameterTypesFromUsage(
@@ -57,10 +57,10 @@ public class TypeInferenceAppendableTests
     {
         // alfa a = a ++ [1, 2]
         var listLiteral =
-            new SyntaxTypes.Expression.ListExpr(
+            new Stil4mElmSyntax7.Expression.ListExpr(
                 [
-                Node<SyntaxTypes.Expression>(new SyntaxTypes.Expression.Integer(1)),
-                Node<SyntaxTypes.Expression>(new SyntaxTypes.Expression.Integer(2))
+                Node<Stil4mElmSyntax7.Expression>(new Stil4mElmSyntax7.Expression.Integer(1)),
+                Node<Stil4mElmSyntax7.Expression>(new Stil4mElmSyntax7.Expression.Integer(2))
                 ]);
 
         var expression = OpApp("++", Param("a"), listLiteral);
@@ -106,15 +106,15 @@ public class TypeInferenceAppendableTests
     {
         // alfa a = { x = a ++ "x" }
         var fieldValue =
-            OpApp("++", Param("a"), new SyntaxTypes.Expression.Literal("x"));
+            OpApp("++", Param("a"), new Stil4mElmSyntax7.Expression.Literal("x"));
 
         var fields =
-            new List<Node<(Node<string> fieldName, Node<SyntaxTypes.Expression> valueExpr)>>
+            new List<Node<(Node<string> fieldName, Node<Stil4mElmSyntax7.Expression> valueExpr)>>
             {
                 Node((Node("x"), Node(fieldValue))),
             };
 
-        var expression = new SyntaxTypes.Expression.RecordExpr(fields);
+        var expression = new Stil4mElmSyntax7.Expression.RecordExpr(fields);
 
         var parameterTypes =
             TypeInference.InferParameterTypesFromUsage(
@@ -131,7 +131,7 @@ public class TypeInferenceAppendableTests
     {
         // alfa a b = a ++ (b ++ "x")
         var inner =
-            OpApp("++", Param("b"), new SyntaxTypes.Expression.Literal("x"));
+            OpApp("++", Param("b"), new Stil4mElmSyntax7.Expression.Literal("x"));
 
         var expression = OpApp("++", Param("a"), inner);
 
@@ -155,8 +155,8 @@ public class TypeInferenceAppendableTests
         var expression =
             OpApp(
                 "++",
-                new SyntaxTypes.Expression.Literal("hi"),
-                new SyntaxTypes.Expression.Literal("there"));
+                new Stil4mElmSyntax7.Expression.Literal("hi"),
+                new Stil4mElmSyntax7.Expression.Literal("there"));
 
         var inferredType =
             TypeInference.InferExpressionType(
@@ -171,12 +171,12 @@ public class TypeInferenceAppendableTests
     public void Concat_operator_on_two_lists_infers_List_result()
     {
         var leftList =
-            new SyntaxTypes.Expression.ListExpr(
-                [Node<SyntaxTypes.Expression>(new SyntaxTypes.Expression.Integer(1))]);
+            new Stil4mElmSyntax7.Expression.ListExpr(
+                [Node<Stil4mElmSyntax7.Expression>(new Stil4mElmSyntax7.Expression.Integer(1))]);
 
         var rightList =
-            new SyntaxTypes.Expression.ListExpr(
-                [Node<SyntaxTypes.Expression>(new SyntaxTypes.Expression.Integer(2))]);
+            new Stil4mElmSyntax7.Expression.ListExpr(
+                [Node<Stil4mElmSyntax7.Expression>(new Stil4mElmSyntax7.Expression.Integer(2))]);
 
         var expression = OpApp("++", leftList, rightList);
 

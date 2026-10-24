@@ -1,7 +1,7 @@
-using Pine.Core.CommonEncodings;
 using Pine.Core.DotNet.Builtins;
-using Pine.Core.Interpreter.IntermediateVM;
-using Pine.Core.PineVM;
+using Pine.Core.Encodings;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.Linq;

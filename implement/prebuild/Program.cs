@@ -1,8 +1,11 @@
 using Pine;
-using Pine.Core;
+using Pine.Core.Bundle;
 using Pine.Core.CLI;
 using Pine.Core.Elm;
 using Pine.Core.Files;
+using Pine.Core.Functional;
+using Pine.Core.Optimization;
+using Pine.Core.PineLanguage;
 using Pine.Elm;
 using Pine.IntermediateVM;
 using System;
@@ -32,13 +35,14 @@ public class Program
         Console.WriteLine(
             "Current working directory: " + Environment.CurrentDirectory);
 
+        if (false)
         {
             var clock = System.Diagnostics.Stopwatch.StartNew();
 
             Console.WriteLine("Building .NET assembly from CSharp files...");
 
             var assemblyBytes =
-                Pine.Core.Bundle.BundledPineToDotnet.LoadCSharpFilesFromFileAndBuildBundleFileAssembly(
+                BundledPineToDotnet.LoadCSharpFilesFromFileAndBuildBundleFileAssembly(
                     LastTrainedCSharpArchiveFilePath,
                     DestinationDirectory,
                     logger: Console.WriteLine);
@@ -50,7 +54,7 @@ public class Program
                 clock.Elapsed.TotalSeconds.ToString("0.00") + " seconds");
 
             SetupVM.PrecompiledLeavesDefault =
-                Pine.Core.Bundle.BundledPineToDotnet.LoadFromAssembly(assemblyBytes.ToArray())
+                BundledPineToDotnet.LoadFromAssembly(assemblyBytes.ToArray())
                 .Extract(err => throw new Exception("Failed loading from assembly: " + err))
                 .BuildDictionary();
         }
@@ -131,7 +135,7 @@ public class Program
     public static FileTree LoadLastTrainedCSharpFiles()
     {
         return
-            Pine.Core.Bundle.TarGZipArchive.ExtractArchive(
+            TarGZipArchive.ExtractArchive(
                 System.IO.File.ReadAllBytes(LastTrainedCSharpArchiveFilePath));
     }
 

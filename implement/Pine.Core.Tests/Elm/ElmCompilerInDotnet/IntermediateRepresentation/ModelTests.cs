@@ -1,7 +1,8 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Elm.Syntax.Abstract;
+using Pine.Core.Encodings;
 using Pine.Core.Tests.Elm.ElmCompilerTests;
 using System;
 using System.Collections.Generic;
@@ -14,7 +15,7 @@ using Xunit;
 using Model = Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
 using IR = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 using Shape = Pine.Core.Elm.ElmCompilerInDotnet.StructuralType;
-using InfixDirection = Pine.Core.Elm.ElmSyntax.SyntaxModel.InfixDirection;
+using InfixDirection = Pine.Core.Elm.Syntax.Concrete.InfixDirection;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 
@@ -220,13 +221,13 @@ public class ModelTests
     public void Source_metadata_cannot_provide_a_competing_function_implementation()
     {
         var declaration =
-            new Core.Elm.ElmSyntax.ElmSyntaxAbstract.Declaration.FunctionDeclaration(
-                new(null, new("root", [], Core.Elm.ElmSyntax.ElmSyntaxAbstract.Expression.UnitExpr.Instance)));
+            new Declaration.FunctionDeclaration(
+                new(null, new("root", [], Expression.UnitExpr.Instance)));
 
         var construct =
             () => new Model.Program(
                 [],
-                ImmutableDictionary<DeclQualifiedName, Core.Elm.ElmSyntax.ElmSyntaxAbstract.Declaration>.Empty
+                ImmutableDictionary<DeclQualifiedName, Declaration>.Empty
                 .Add(DeclQualifiedName.Create(["Test"], "root"), declaration));
 
         construct.Should().Throw<ArgumentException>();

@@ -1,119 +1,124 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
+using Pine.Core.Encodings;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using Xunit;
 
-using Abstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
+using AbstractSyntax = Pine.Core.Elm.Syntax.Abstract;
 using IR = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
-using InfixDirection = Pine.Core.Elm.ElmSyntax.SyntaxModel.InfixDirection;
+using InfixDirection = Pine.Core.Elm.Syntax.Concrete.InfixDirection;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 
 public class FromCanonicalSyntaxTests
 {
-    private static Abstract.Expression Integer(int value) =>
-        new Abstract.Expression.IntegerLiteral(value, IntegerEncoding.EncodeSignedInteger(value));
+    private static AbstractSyntax.Expression Integer(int value) =>
+        new AbstractSyntax.Expression.IntegerLiteral(value, IntegerEncoding.EncodeSignedInteger(value));
 
-    private static readonly Abstract.TypeAnnotation s_generic = new Abstract.TypeAnnotation.GenericType("a");
+    private static readonly AbstractSyntax.TypeAnnotation s_generic =
+        new AbstractSyntax.TypeAnnotation.GenericType("a");
 
-    private static readonly Abstract.RecordDefinition s_recordDefinition =
+    private static readonly AbstractSyntax.RecordDefinition s_recordDefinition =
         new(
             [
-            Abstract.RecordField.Create("second", new Abstract.TypeAnnotation.Typed(["Basics"], "Int", [])),
-            Abstract.RecordField.Create("first", s_generic)
+            AbstractSyntax.RecordField.Create("second", new AbstractSyntax.TypeAnnotation.Typed(["Basics"], "Int", [])),
+            AbstractSyntax.RecordField.Create("first", s_generic)
             ]);
 
-    private static readonly Abstract.FunctionStruct s_function =
+    private static readonly AbstractSyntax.FunctionStruct s_function =
         new(
-            new Abstract.Signature(
+            new AbstractSyntax.Signature(
                 "function",
-                new Abstract.TypeAnnotation.FunctionTypeAnnotation(s_generic, s_generic)),
-            new Abstract.FunctionImplementation(
+                new AbstractSyntax.TypeAnnotation.FunctionTypeAnnotation(s_generic, s_generic)),
+            new AbstractSyntax.FunctionImplementation(
                 "function",
                 [
-                new Abstract.Pattern.VarPattern("value")
+                new AbstractSyntax.Pattern.VarPattern("value")
                 ],
-                Abstract.Expression.Identifier.Create([], "value")));
+                AbstractSyntax.Expression.Identifier.Create([], "value")));
 
     public static IEnumerable<object[]> Expressions()
     {
-        Abstract.Expression[] expressions =
+        AbstractSyntax.Expression[] expressions =
             [
-            Abstract.Expression.UnitExpr.Instance,
-            Abstract.Expression.StringLiteral.Create("line\n\u03bb"),
-            Abstract.Expression.CharLiteral.Create(0x1F600),
-            new Abstract.Expression.IntegerLiteral(
+            AbstractSyntax.Expression.UnitExpr.Instance,
+            AbstractSyntax.Expression.StringLiteral.Create("line\n\u03bb"),
+            AbstractSyntax.Expression.CharLiteral.Create(0x1F600),
+            new AbstractSyntax.Expression.IntegerLiteral(
                 BigInteger.One << 100,
                 IntegerEncoding.EncodeSignedInteger(BigInteger.One << 100)),
-            new Abstract.Expression.FloatLiteral(-17, 8),
-            new Abstract.Expression.Negation(Integer(3)),
-            new Abstract.Expression.ListExpr([Integer(2), Integer(1)]),
-            Abstract.Expression.Identifier.Create(["Some", "Module"], "value"),
-            new Abstract.Expression.IfBlock(
-                Abstract.Expression.Identifier.Create(["Basics"], "True"),
+            new AbstractSyntax.Expression.FloatLiteral(-17, 8),
+            new AbstractSyntax.Expression.Negation(Integer(3)),
+            new AbstractSyntax.Expression.ListExpr([Integer(2), Integer(1)]),
+            AbstractSyntax.Expression.Identifier.Create(["Some", "Module"], "value"),
+            new AbstractSyntax.Expression.IfBlock(
+                AbstractSyntax.Expression.Identifier.Create(["Basics"], "True"),
                 Integer(1),
                 Integer(2)),
-            new Abstract.Expression.PrefixOperator("(++)"),
-            new Abstract.Expression.Application(
-                Abstract.Expression.Identifier.Create([], "f"),
+            new AbstractSyntax.Expression.PrefixOperator("(++)"),
+            new AbstractSyntax.Expression.Application(
+                AbstractSyntax.Expression.Identifier.Create([], "f"),
                 [
                 Integer(1),
                 Integer(2)
                 ]),
-            new Abstract.Expression.OperatorApplication("+", InfixDirection.Right, Integer(1), Integer(2)),
-            new Abstract.Expression.TupledExpression([Integer(2), Abstract.Expression.StringLiteral.Create("first")]),
-            new Abstract.Expression.LambdaExpression(
+            new AbstractSyntax.Expression.OperatorApplication("+", InfixDirection.Right, Integer(1), Integer(2)),
+            new AbstractSyntax.Expression.TupledExpression(
                 [
-                new Abstract.Pattern.TuplePattern(
+                Integer(2),
+                AbstractSyntax.Expression.StringLiteral.Create("first")
+                ]),
+            new AbstractSyntax.Expression.LambdaExpression(
+                [
+                new AbstractSyntax.Pattern.TuplePattern(
                     [
-                    new Abstract.Pattern.VarPattern("x"),
-                    new Abstract.Pattern.AllPattern()
+                    new AbstractSyntax.Pattern.VarPattern("x"),
+                    new AbstractSyntax.Pattern.AllPattern()
                     ])
                 ],
-                Abstract.Expression.Identifier.Create([], "x")),
-            new Abstract.Expression.CaseExpression(
-                Abstract.Expression.Identifier.Create([], "x"),
+                AbstractSyntax.Expression.Identifier.Create([], "x")),
+            new AbstractSyntax.Expression.CaseExpression(
+                AbstractSyntax.Expression.Identifier.Create([], "x"),
                 [
-                new Abstract.Case(new Abstract.Pattern.IntPattern(0), Integer(2)),
-                new Abstract.Case(new Abstract.Pattern.AllPattern(), Integer(1))
+                new AbstractSyntax.Case(new AbstractSyntax.Pattern.IntPattern(0), Integer(2)),
+                new AbstractSyntax.Case(new AbstractSyntax.Pattern.AllPattern(), Integer(1))
                 ]),
-            new Abstract.Expression.LetExpression(
+            new AbstractSyntax.Expression.LetExpression(
                 [
-                new Abstract.LetDeclaration.LetFunction(s_function with { Signature = null }),
-                new Abstract.LetDeclaration.LetDestructuring(
-                    new Abstract.Pattern.VarPattern("x"),
-                    new Abstract.Expression.Application(
-                        Abstract.Expression.Identifier.Create([], "function"),
+                new AbstractSyntax.LetDeclaration.LetFunction(s_function with { Signature = null }),
+                new AbstractSyntax.LetDeclaration.LetDestructuring(
+                    new AbstractSyntax.Pattern.VarPattern("x"),
+                    new AbstractSyntax.Expression.Application(
+                        AbstractSyntax.Expression.Identifier.Create([], "function"),
                         [
                         Integer(1)
                         ]))
                 ],
-                Abstract.Expression.Identifier.Create([], "x")),
-            new Abstract.Expression.RecordExpr(
+                AbstractSyntax.Expression.Identifier.Create([], "x")),
+            new AbstractSyntax.Expression.RecordExpr(
                 [
-                new Abstract.RecordSetter("z", StringEncoding.ValueFromString("z"), Integer(2)),
-                new Abstract.RecordSetter("a", StringEncoding.ValueFromString("a"), Integer(1))
+                new AbstractSyntax.RecordSetter("z", StringEncoding.ValueFromString("z"), Integer(2)),
+                new AbstractSyntax.RecordSetter("a", StringEncoding.ValueFromString("a"), Integer(1))
                 ]),
-            new Abstract.Expression.RecordAccess(
-                new Abstract.Expression.Application(
-                    Abstract.Expression.Identifier.Create([], "makeRecord"),
+            new AbstractSyntax.Expression.RecordAccess(
+                new AbstractSyntax.Expression.Application(
+                    AbstractSyntax.Expression.Identifier.Create([], "makeRecord"),
                     [
                     Integer(1)
                     ]),
                 "field",
                 StringEncoding.ValueFromString("field")),
-            new Abstract.Expression.RecordAccessFunction("field", StringEncoding.ValueFromString("field")),
-            new Abstract.Expression.RecordUpdateExpression(
+            new AbstractSyntax.Expression.RecordAccessFunction("field", StringEncoding.ValueFromString("field")),
+            new AbstractSyntax.Expression.RecordUpdateExpression(
                 "record",
                 [
-                new Abstract.RecordSetter("z", StringEncoding.ValueFromString("z"), Integer(2)),
-                new Abstract.RecordSetter("a", StringEncoding.ValueFromString("a"), Integer(1))
+                new AbstractSyntax.RecordSetter("z", StringEncoding.ValueFromString("z"), Integer(2)),
+                new AbstractSyntax.RecordSetter("a", StringEncoding.ValueFromString("a"), Integer(1))
                 ]),
-            new Abstract.Expression.GLSLExpression("void main() { }")
+            new AbstractSyntax.Expression.GLSLExpression("void main() { }")
             ];
 
         return expressions.Select(expression => new object[] { expression });
@@ -121,35 +126,39 @@ public class FromCanonicalSyntaxTests
 
     public static IEnumerable<object[]> Patterns()
     {
-        Abstract.Pattern[] patterns =
+        AbstractSyntax.Pattern[] patterns =
             [
-            new Abstract.Pattern.AllPattern(),
-            new Abstract.Pattern.VarPattern("value"),
-            new Abstract.Pattern.UnitPattern(),
-            new Abstract.Pattern.CharPattern(0x1F600),
-            new Abstract.Pattern.StringPattern("text\n"),
-            new Abstract.Pattern.IntPattern(BigInteger.One << 100),
-            new Abstract.Pattern.FloatPattern(1.25),
-            new Abstract.Pattern.TuplePattern([new Abstract.Pattern.VarPattern("a"), new Abstract.Pattern.AllPattern()]),
-            Abstract.Pattern.RecordPattern.Create(["z", "a"]),
-            new Abstract.Pattern.UnConsPattern(
-                new Abstract.Pattern.VarPattern("head"),
-                new Abstract.Pattern.VarPattern("tail")),
-            new Abstract.Pattern.ListPattern(
+            new AbstractSyntax.Pattern.AllPattern(),
+            new AbstractSyntax.Pattern.VarPattern("value"),
+            new AbstractSyntax.Pattern.UnitPattern(),
+            new AbstractSyntax.Pattern.CharPattern(0x1F600),
+            new AbstractSyntax.Pattern.StringPattern("text\n"),
+            new AbstractSyntax.Pattern.IntPattern(BigInteger.One << 100),
+            new AbstractSyntax.Pattern.FloatPattern(1.25),
+            new AbstractSyntax.Pattern.TuplePattern(
                 [
-                new Abstract.Pattern.IntPattern(1),
-                new Abstract.Pattern.VarPattern("second")
+                new AbstractSyntax.Pattern.VarPattern("a"),
+                new AbstractSyntax.Pattern.AllPattern()
                 ]),
-            new Abstract.Pattern.NamedPattern(
-                new Abstract.QualifiedNameRef(["Some", "Module"], "Tag"),
+            AbstractSyntax.Pattern.RecordPattern.Create(["z", "a"]),
+            new AbstractSyntax.Pattern.UnConsPattern(
+                new AbstractSyntax.Pattern.VarPattern("head"),
+                new AbstractSyntax.Pattern.VarPattern("tail")),
+            new AbstractSyntax.Pattern.ListPattern(
                 [
-                new Abstract.Pattern.TuplePattern(
+                new AbstractSyntax.Pattern.IntPattern(1),
+                new AbstractSyntax.Pattern.VarPattern("second")
+                ]),
+            new AbstractSyntax.Pattern.NamedPattern(
+                new AbstractSyntax.QualifiedNameRef(["Some", "Module"], "Tag"),
+                [
+                new AbstractSyntax.Pattern.TuplePattern(
                     [
-                    new Abstract.Pattern.VarPattern("x"),
-                    new Abstract.Pattern.AllPattern()
+                    new AbstractSyntax.Pattern.VarPattern("x"),
+                    new AbstractSyntax.Pattern.AllPattern()
                     ])
                 ]),
-            new Abstract.Pattern.AsPattern(new Abstract.Pattern.VarPattern("inner"), "outer")
+            new AbstractSyntax.Pattern.AsPattern(new AbstractSyntax.Pattern.VarPattern("inner"), "outer")
             ];
 
         return patterns.Select(pattern => new object[] { pattern });
@@ -157,10 +166,10 @@ public class FromCanonicalSyntaxTests
 
     public static IEnumerable<object[]> TypeAnnotations()
     {
-        Abstract.TypeAnnotation[] annotations =
+        AbstractSyntax.TypeAnnotation[] annotations =
             [
             s_generic,
-            new Abstract.TypeAnnotation.Typed(
+            new AbstractSyntax.TypeAnnotation.Typed(
                 [
                 "Some",
                 "Module"
@@ -168,44 +177,44 @@ public class FromCanonicalSyntaxTests
                 "Container",
                 [
                 s_generic,
-                new Abstract.TypeAnnotation.Unit()
+                new AbstractSyntax.TypeAnnotation.Unit()
                 ]),
-            new Abstract.TypeAnnotation.Unit(),
-            new Abstract.TypeAnnotation.Tupled([s_generic, new Abstract.TypeAnnotation.Unit()]),
-            new Abstract.TypeAnnotation.Record(s_recordDefinition),
-            new Abstract.TypeAnnotation.GenericRecord("row", s_recordDefinition),
-            new Abstract.TypeAnnotation.FunctionTypeAnnotation(
+            new AbstractSyntax.TypeAnnotation.Unit(),
+            new AbstractSyntax.TypeAnnotation.Tupled([s_generic, new AbstractSyntax.TypeAnnotation.Unit()]),
+            new AbstractSyntax.TypeAnnotation.Record(s_recordDefinition),
+            new AbstractSyntax.TypeAnnotation.GenericRecord("row", s_recordDefinition),
+            new AbstractSyntax.TypeAnnotation.FunctionTypeAnnotation(
                 s_generic,
-                new Abstract.TypeAnnotation.Record(s_recordDefinition))
+                new AbstractSyntax.TypeAnnotation.Record(s_recordDefinition))
             ];
 
         return annotations.Select(annotation => new object[] { annotation });
     }
 
-    private static Core.Elm.ElmCompilerInDotnet.CompilerModel.Program ConvertExpression(Abstract.Expression body)
+    private static Core.Elm.ElmCompilerInDotnet.CompilerModel.Program ConvertExpression(AbstractSyntax.Expression body)
     {
         var name = DeclQualifiedName.Create(["Test"], "root");
 
         var function =
-            new Abstract.Declaration.FunctionDeclaration(
+            new AbstractSyntax.Declaration.FunctionDeclaration(
                 new(
                     null,
-                    new Abstract.FunctionImplementation(
+                    new AbstractSyntax.FunctionImplementation(
                         "root",
                         [
-                            new Abstract.Pattern.VarPattern("f"),
-                            new Abstract.Pattern.VarPattern("x"), new Abstract.Pattern.VarPattern("record")
+                            new AbstractSyntax.Pattern.VarPattern("f"),
+                            new AbstractSyntax.Pattern.VarPattern("x"), new AbstractSyntax.Pattern.VarPattern("record")
                         ],
                         body)));
 
         return
             Core.Elm.ElmCompilerInDotnet.CompilerModel.FromCanonicalSyntax.Convert(
-                new Dictionary<DeclQualifiedName, Abstract.Declaration> { [name] = function });
+                new Dictionary<DeclQualifiedName, AbstractSyntax.Declaration> { [name] = function });
     }
 
     [Theory]
     [MemberData(nameof(Expressions))]
-    public void Source_expression_conversion_resolves_every_variant(Abstract.Expression source)
+    public void Source_expression_conversion_resolves_every_variant(AbstractSyntax.Expression source)
     {
         var model = Core.Elm.ElmCompilerInDotnet.CompilerModel.LambdaLifting.Lift(ConvertExpression(source));
         Core.Elm.ElmCompilerInDotnet.CompilerModel.ProgramValidation.Validate(model);
@@ -221,19 +230,19 @@ public class FromCanonicalSyntaxTests
 
     [Theory]
     [MemberData(nameof(Patterns))]
-    public void Source_patterns_are_resolved_or_lowered_without_name_annotations(Abstract.Pattern source)
+    public void Source_patterns_are_resolved_or_lowered_without_name_annotations(AbstractSyntax.Pattern source)
     {
         var name = DeclQualifiedName.Create(["Test"], "root");
 
         var function =
-            new Abstract.Declaration.FunctionDeclaration(
+            new AbstractSyntax.Declaration.FunctionDeclaration(
                 new(
                     null,
-                    new Abstract.FunctionImplementation("root", [source], Integer(0))));
+                    new AbstractSyntax.FunctionImplementation("root", [source], Integer(0))));
 
         var model =
             Core.Elm.ElmCompilerInDotnet.CompilerModel.FromCanonicalSyntax.Convert(
-                new Dictionary<DeclQualifiedName, Abstract.Declaration> { [name] = function });
+                new Dictionary<DeclQualifiedName, AbstractSyntax.Declaration> { [name] = function });
 
         Core.Elm.ElmCompilerInDotnet.CompilerModel.ProgramValidation.Validate(model);
         model.Functions.Should().ContainSingle();
@@ -241,19 +250,19 @@ public class FromCanonicalSyntaxTests
 
     [Theory]
     [MemberData(nameof(TypeAnnotations))]
-    public void Source_type_annotations_are_consumed_before_backend_emission(Abstract.TypeAnnotation type)
+    public void Source_type_annotations_are_consumed_before_backend_emission(AbstractSyntax.TypeAnnotation type)
     {
         var name = DeclQualifiedName.Create(["Test"], "root");
 
         var function =
-            new Abstract.Declaration.FunctionDeclaration(
+            new AbstractSyntax.Declaration.FunctionDeclaration(
                 new(
-                    new Abstract.Signature("root", type),
-                    new Abstract.FunctionImplementation("root", [], Integer(0))));
+                    new AbstractSyntax.Signature("root", type),
+                    new AbstractSyntax.FunctionImplementation("root", [], Integer(0))));
 
         var model =
             Core.Elm.ElmCompilerInDotnet.CompilerModel.FromCanonicalSyntax.Convert(
-                new Dictionary<DeclQualifiedName, Abstract.Declaration> { [name] = function });
+                new Dictionary<DeclQualifiedName, AbstractSyntax.Declaration> { [name] = function });
 
         model.Functions.Should().ContainSingle();
         typeof(IR.FunctionStruct).GetProperty("Signature").Should().BeNull();
@@ -263,9 +272,10 @@ public class FromCanonicalSyntaxTests
     public void Conversion_fixtures_cover_every_expression_and_pattern_variant()
     {
         Expressions().Select(row => row[0].GetType()).Should().BeEquivalentTo(
-            typeof(Abstract.Expression).GetNestedTypes());
+            typeof(AbstractSyntax.Expression).GetNestedTypes());
 
-        Patterns().Select(row => row[0].GetType()).Should().BeEquivalentTo(typeof(Abstract.Pattern).GetNestedTypes());
+        Patterns().Select(row => row[0].GetType()).Should().BeEquivalentTo(
+            typeof(AbstractSyntax.Pattern).GetNestedTypes());
     }
 
     [Fact]
@@ -275,5 +285,5 @@ public class FromCanonicalSyntaxTests
         convert.Should().Throw<NotImplementedException>().WithMessage("*does not handle*Unknown*");
     }
 
-    private sealed record UnknownExpression : Abstract.Expression;
+    private sealed record UnknownExpression : AbstractSyntax.Expression;
 }

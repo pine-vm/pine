@@ -1,8 +1,10 @@
 using Pine.Core;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Elm.LanguageServer;
+using Pine.Core.Encodings;
 using Pine.Core.Files;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -35,7 +37,7 @@ public class ElmCompilerInElm
             .Where(blob => blob.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
             .ToDictionary(
                 blobAtPath =>
-                Core.Elm.ElmSyntax.ElmModule.ParseModuleName(Encoding.UTF8.GetString(blobAtPath.fileContent.Span))
+                Core.Elm.Syntax.ElmModule.ParseModuleName(Encoding.UTF8.GetString(blobAtPath.fileContent.Span))
                 .Extract(err => throw new Exception(err)),
 
                 blobAtPath =>
@@ -216,7 +218,7 @@ public class ElmCompilerInElm
             .ToImmutableArray();
 
         var elmModulesTextsForElmCompiler =
-            Core.Elm.ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
+            Core.Elm.Syntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
                 rootModulesTexts: [.. rootElmFiles.Select(file => file.moduleText)],
                 availableModulesTexts: [.. allAvailableElmFiles.Select(file => file.moduleText)]);
 
@@ -525,7 +527,7 @@ public class ElmCompilerInElm
 
     public Result<string, PineValue> ParseElmModuleText(
         string elmModuleText,
-        Core.PineVM.IPineVM pineVM)
+        Core.Runtime.IPineVM pineVM)
     {
         var elmModuleTextEncoded =
             ElmValueEncoding.ElmValueAsPineValue(
@@ -562,7 +564,7 @@ public class ElmCompilerInElm
 
     public Result<string, PineValue> ParseElmInteractiveSubmissionText(
         string submissionText,
-        Core.PineVM.IPineVM pineVM)
+        Core.Runtime.IPineVM pineVM)
     {
         if (ParseInteractiveSubmission is not { } parseInteractiveSubmission)
         {
@@ -614,7 +616,7 @@ public class ElmCompilerInElm
         foreach (var file in allAvailableElmFiles)
         {
             var elmModuleName =
-                Core.Elm.ElmSyntax.ElmModule.ParseModuleName(file.moduleText)
+                Core.Elm.Syntax.ElmModule.ParseModuleName(file.moduleText)
                 .Extract(err => throw new Exception("Failed parsing module name: " + err));
 
             if (elmModuleName[0] is "CompilationInterface")

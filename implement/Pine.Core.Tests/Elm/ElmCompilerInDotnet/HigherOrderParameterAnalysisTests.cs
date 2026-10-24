@@ -1,12 +1,12 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Abstract;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Xunit;
-
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -916,14 +916,14 @@ public class HigherOrderParameterAnalysisTests
             ];
     }
 
-    private static ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>
+    private static ImmutableDictionary<DeclQualifiedName, Declaration>
         BuildDeclarationDictionary(string moduleText)
     {
         var parsed =
-            Core.Elm.ElmSyntax.ElmSyntaxParser.ParseModuleText(moduleText)
+            ElmSyntaxParser.ParseModuleText(moduleText)
             .Extract(err => throw new System.Exception("Failed parsing: " + err));
 
-        var converted = SyntaxTypes.ConvertFromConcrete.FromFile(parsed);
+        var converted = ConvertFromConcrete.FromFile(parsed);
 
         return ElmCompiler.FlattenModulesToDeclarationDictionary([converted]);
     }

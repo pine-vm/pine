@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.CLI;
 using Pine.Core.Elm.LanguageServer;
 using Pine.Core.Elm.LanguageServer.LanguageServiceInterface;
+using Pine.Core.Functional;
 using Pine.Core.LanguageServerProtocol;
 using System;
 using System.Collections.Generic;

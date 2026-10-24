@@ -1,13 +1,14 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Elm.Syntax.Concrete;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
 using Pine.Core.Tests.Elm.ElmCompilerTests;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using Xunit;
-
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 
@@ -30,7 +31,7 @@ public class CanonicalizationErrorReportingTests
                     """
                 ]);
 
-        var parsing = new Dictionary<string, Result<Core.Elm.ElmSyntax.ElmSyntaxParseError, SyntaxTypes.File>>();
+        var parsing = new Dictionary<string, Result<ParseError, File>>();
 
         var cache = new Canonicalization.DeclarationCache();
 
@@ -259,10 +260,10 @@ public class CanonicalizationErrorReportingTests
 
         var effectModuleDeclarationNames =
             compilation.pipelineStageResults.Canonicalized
-            .Single(module => module.ModuleDefinition.Value is SyntaxTypes.Module.EffectModule)
+            .Single(module => module.ModuleDefinition.Value is Module.EffectModule)
             .Declarations
             .Select(declaration => declaration.Value)
-            .OfType<SyntaxTypes.Declaration.FunctionDeclaration>()
+            .OfType<Declaration.FunctionDeclaration>()
             .Select(declaration => declaration.Function.Declaration.Value.Name.Value);
 
         effectModuleDeclarationNames.Should().Contain("command");

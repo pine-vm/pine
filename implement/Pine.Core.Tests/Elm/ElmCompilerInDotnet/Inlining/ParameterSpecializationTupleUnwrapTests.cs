@@ -6,8 +6,8 @@ using Xunit;
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
 
 using Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Elm.Syntax.Abstract;
 
-using SyntaxTypes = Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
 /// <summary>
@@ -171,11 +171,11 @@ public class ParameterSpecializationTupleUnwrapTests
                     DeclQualifiedName.Create(moduleName, "triple")),
                 ]);
 
-        SyntaxTypes.Expression argument =
-            new SyntaxTypes.Expression.TupledExpression(
+        Expression argument =
+            new Expression.TupledExpression(
                 [
-                SyntaxTypes.Expression.Identifier.Create(moduleName, "double"),
-                SyntaxTypes.Expression.Identifier.Create(moduleName, "triple"),
+                Expression.Identifier.Create(moduleName, "double"),
+                Expression.Identifier.Create(moduleName, "triple"),
                 ]);
 
         ParameterSpecialization.ArgumentMatchesSpecialization(argument, spec).Should().BeTrue();
@@ -195,10 +195,10 @@ public class ParameterSpecializationTupleUnwrapTests
                     DeclQualifiedName.Create(moduleName, "triple")),
                 ]);
 
-        SyntaxTypes.Expression argument =
-            new SyntaxTypes.Expression.TupledExpression(
+        Expression argument =
+            new Expression.TupledExpression(
                 [
-                SyntaxTypes.Expression.Identifier.Create(moduleName, "double"),
+                Expression.Identifier.Create(moduleName, "double"),
                 ]);
 
         ParameterSpecialization.ArgumentMatchesSpecialization(argument, spec).Should().BeFalse();
@@ -216,8 +216,8 @@ public class ParameterSpecializationTupleUnwrapTests
                     DeclQualifiedName.Create(moduleName, "double")),
                 ]);
 
-        SyntaxTypes.Expression argument =
-            SyntaxTypes.Expression.Identifier.Create(moduleName, "double");
+        Expression argument =
+            Expression.Identifier.Create(moduleName, "double");
 
         ParameterSpecialization.ArgumentMatchesSpecialization(argument, spec).Should().BeFalse();
     }
@@ -240,32 +240,32 @@ public class ParameterSpecializationTupleUnwrapTests
                     DeclQualifiedName.Create(moduleName, "parseTriple")),
                 ]);
 
-        SyntaxTypes.Expression BuildWrappedRef(string declName, string bindName)
+        Expression BuildWrappedRef(string declName, string bindName)
         {
             var pattern =
-                new SyntaxTypes.Pattern.NamedPattern(
-                    new SyntaxTypes.QualifiedNameRef(parserModule, "Parser"),
-                    [new SyntaxTypes.Pattern.VarPattern(bindName)]);
+                new Pattern.NamedPattern(
+                    new QualifiedNameRef(parserModule, "Parser"),
+                    [new Pattern.VarPattern(bindName)]);
 
             var rhs =
-                SyntaxTypes.Expression.Identifier.Create(moduleName, declName);
+                Expression.Identifier.Create(moduleName, declName);
 
             var letDecl =
-                new SyntaxTypes.LetDeclaration.LetDestructuring(
+                new LetDeclaration.LetDestructuring(
                     pattern,
                     rhs);
 
             var letBody =
-                SyntaxTypes.Expression.Identifier.Create([], bindName);
+                Expression.Identifier.Create([], bindName);
 
             return
-                new SyntaxTypes.Expression.LetExpression(
+                new Expression.LetExpression(
                     [letDecl],
                     letBody);
         }
 
-        SyntaxTypes.Expression argument =
-            new SyntaxTypes.Expression.TupledExpression(
+        Expression argument =
+            new Expression.TupledExpression(
                 [
                 BuildWrappedRef("parseDouble", "pA"),
                 BuildWrappedRef("parseTriple", "pB"),

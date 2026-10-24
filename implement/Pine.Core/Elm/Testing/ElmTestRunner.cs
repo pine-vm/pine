@@ -1,12 +1,15 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.Elm019;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Encodings;
 using Pine.Core.Files;
+using Pine.Core.Functional;
 using Pine.Core.IntermediateVM;
-using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.IO;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
+using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -19,9 +22,9 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 
-using IPineVM = Pine.Core.PineVM.IPineVM;
-using IntermediatePineVM = Pine.Core.Interpreter.IntermediateVM.PineVM;
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using IPineVM = Pine.Core.Runtime.IPineVM;
+using IntermediatePineVM = Pine.Core.Runtime.IntermediateVM.PineVM;
+using SyntaxTypes = Pine.Core.Elm.Syntax.Concrete;
 
 namespace Pine.Core.Elm.Testing;
 
@@ -873,7 +876,7 @@ public static class ElmTestRunner
 
         public IPineVM Wrap(IPineVM vm) => new TimedVm(vm, this);
 
-        private sealed class TimedVm(IPineVM vm, VmCallTimings timings) : PineVM.ICancellablePineVM
+        private sealed class TimedVm(IPineVM vm, VmCallTimings timings) : ICancellablePineVM
         {
             public Result<string, PineValue> EvaluateExpression(Expression expression, PineValue environment) =>
                 Measure(() => vm.EvaluateExpression(expression, environment));
@@ -885,7 +888,7 @@ public static class ElmTestRunner
                 Measure(
                     () =>
                     {
-                        if (vm is PineVM.ICancellablePineVM cancellableVm)
+                        if (vm is ICancellablePineVM cancellableVm)
                             return cancellableVm.EvaluateExpression(expression, environment, cancellationToken);
 
                         cancellationToken.ThrowIfCancellationRequested();

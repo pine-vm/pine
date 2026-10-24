@@ -1,6 +1,8 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.Testing;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Threading;
 using Xunit;

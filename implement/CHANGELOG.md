@@ -1,5 +1,18 @@
 # Pine Changelog - Implement
 
+## 2026-10-24 - Reorganization of Namespaces and API
+
+Moved implementations shipped with the public API into the following namespaces:
+
++ `Pine.Core.PineLanguage`
++ `Pine.Core.Encodings`
++ `Pine.Core.CodeGen.Pine`
++ `Pine.Core.Runtime`
++ `Pine.Core.Runtime.IntermediateVM`
++ `Pine.Core.Elm.Syntax.Concrete`
++ `Pine.Core.Elm.Syntax.Abstract`
++ `Pine.Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7`
+
 ## 2026-10-17 - CLI - Add apply command and batch mode
 
 + Added `pine  apply` for batch evaluation of Elm functions from local sources or from remote Git repository URLs.

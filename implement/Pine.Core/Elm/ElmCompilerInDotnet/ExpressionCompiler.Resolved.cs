@@ -1,16 +1,20 @@
-using Pine.Core.CodeGen;
+using Pine.Core.CodeGen.Pine;
 using Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
 using IR = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 
+using PineExpression = Pine.Core.PineLanguage.Expression;
+
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
 public partial class ExpressionCompiler
 {
-    internal static Result<CompilationError, Expression> CompileResolvedReference(
+    internal static Result<CompilationError, PineExpression> CompileResolvedReference(
         Reference reference, ExpressionCompilationContext context) =>
         reference switch
         {
@@ -34,7 +38,7 @@ public partial class ExpressionCompiler
                 $"{nameof(CompileResolvedReference)} does not handle reference variant: {reference.GetType().Name}")
         };
 
-    private static Result<CompilationError, Expression> ResolvedFunctionValue(
+    private static Result<CompilationError, PineExpression> ResolvedFunctionValue(
         FunctionId id,
         ExpressionCompilationContext context)
     {
@@ -47,13 +51,16 @@ public partial class ExpressionCompiler
             if (index < 0)
                 throw new InvalidOperationException("A same-SCC reference is absent from the recursive member layout.");
 
-            var body = ExpressionBuilder.BuildExpressionForPathInExpression([0, index], Expression.EnvironmentInstance);
-            var environment = ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance);
+            var body =
+                ExpressionBuilder.BuildExpressionForPathInExpression([0, index], PineExpression.EnvironmentInstance);
+
+            var environment =
+                ExpressionBuilder.BuildExpressionForPathInExpression([0], PineExpression.EnvironmentInstance);
 
             return
                 arity is 0
                 ?
-                new Expression.Eval(body, Expression.ListInst([environment]))
+                new PineExpression.Eval(body, PineExpression.ListInst([environment]))
                 :
                 FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgsFromEncodedBodyExpression(
                     body,
@@ -68,17 +75,17 @@ public partial class ExpressionCompiler
         return
             external.ParameterCount is 0
             ?
-            new Expression.Eval(
-                Expression.LitralInst(external.EncodedBody),
-                Expression.ListInst([Expression.LitralInst(PineValue.List([.. external.EnvFunctions]))]))
+            new PineExpression.Eval(
+                PineExpression.LitralInst(external.EncodedBody),
+                PineExpression.ListInst([PineExpression.LitralInst(PineValue.List([.. external.EnvFunctions]))]))
             :
-            Expression.LitralInst(external.CompiledValue);
+            PineExpression.LitralInst(external.CompiledValue);
     }
 
-    private static Result<CompilationError, Expression> CompileArgumentsForResolvedApplication(
-        Expression function, IReadOnlyList<IR.Expression> arguments, ExpressionCompilationContext context)
+    private static Result<CompilationError, PineExpression> CompileArgumentsForResolvedApplication(
+        PineExpression function, IReadOnlyList<IR.Expression> arguments, ExpressionCompilationContext context)
     {
-        var compiled = new List<Expression>();
+        var compiled = new List<PineExpression>();
 
         foreach (var argument in arguments)
         {
@@ -93,11 +100,11 @@ public partial class ExpressionCompiler
         return CompileGenericFunctionApplication(function, compiled);
     }
 
-    private static Result<CompilationError, Expression> CompileResolvedApplication(
+    private static Result<CompilationError, PineExpression> CompileResolvedApplication(
         FunctionId id, IReadOnlyList<IR.Expression> arguments, ExpressionCompilationContext context)
     {
         var functions = context.ResolvedFunctions;
-        var compiled = new List<Expression>();
+        var compiled = new List<PineExpression>();
 
         foreach (var argument in arguments)
         {
@@ -123,8 +130,8 @@ public partial class ExpressionCompiler
         if (arity is 0)
             return ResolvedFunctionValue(id, context).Map(value => CompileGenericFunctionApplication(value, compiled));
 
-        Expression body;
-        Expression environment;
+        PineExpression body;
+        PineExpression environment;
 
         if (sameScc)
         {
@@ -133,13 +140,13 @@ public partial class ExpressionCompiler
             if (index < 0)
                 throw new InvalidOperationException("Missing recursive member layout entry.");
 
-            body = ExpressionBuilder.BuildExpressionForPathInExpression([0, index], Expression.EnvironmentInstance);
-            environment = ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance);
+            body = ExpressionBuilder.BuildExpressionForPathInExpression([0, index], PineExpression.EnvironmentInstance);
+            environment = ExpressionBuilder.BuildExpressionForPathInExpression([0], PineExpression.EnvironmentInstance);
         }
         else
         {
-            body = Expression.LitralInst(external!.EncodedBody);
-            environment = Expression.LitralInst(PineValue.List([.. external.EnvFunctions]));
+            body = PineExpression.LitralInst(external!.EncodedBody);
+            environment = PineExpression.LitralInst(PineValue.List([.. external.EnvFunctions]));
         }
 
         if (compiled.Count < arity)
@@ -160,10 +167,11 @@ public partial class ExpressionCompiler
                     external.EnvFunctions);
         }
 
-        Expression application = new Expression.Eval(body, Expression.ListInst([environment, .. compiled.Take(arity)]));
+        PineExpression application =
+            new PineExpression.Eval(body, PineExpression.ListInst([environment, .. compiled.Take(arity)]));
 
         if (compiled.Count > arity)
-            application = CompileGenericFunctionApplication(application, compiled.Skip(arity).ToArray());
+            application = CompileGenericFunctionApplication(application, [.. compiled.Skip(arity)]);
 
         return application;
     }

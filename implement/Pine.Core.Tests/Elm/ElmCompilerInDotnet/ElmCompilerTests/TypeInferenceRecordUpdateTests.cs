@@ -1,10 +1,10 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using Pine.Core.Elm.Syntax.Concrete;
 using System.Collections.Generic;
 using Xunit;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Stil4mElmSyntax7 = Pine.Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7;
 
 using static Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests.AbstractSyntaxTestConversion;
 
@@ -24,9 +24,9 @@ public class TypeInferenceRecordUpdateTests
     private static Node<TValue> Node<TValue>(TValue value) =>
         new(s_dummyRange, value);
 
-    private static Node<(Node<string> fieldName, Node<SyntaxTypes.Expression> valueExpr)> Field(
+    private static Node<(Node<string> fieldName, Node<Stil4mElmSyntax7.Expression> valueExpr)> Field(
         string name,
-        SyntaxTypes.Expression value) =>
+        Stil4mElmSyntax7.Expression value) =>
         Node((Node(name), Node(value)));
 
     [Fact]
@@ -34,9 +34,9 @@ public class TypeInferenceRecordUpdateTests
     {
         // alfa r = { r | name = "x" }
         var expression =
-            new SyntaxTypes.Expression.RecordUpdateExpression(
+            new Stil4mElmSyntax7.Expression.RecordUpdateExpression(
                 Node("r"),
-                [Field("name", new SyntaxTypes.Expression.Literal("x"))]);
+                [Field("name", new Stil4mElmSyntax7.Expression.Literal("x"))]);
 
         var parameterTypes =
             TypeInference.InferParameterTypesFromUsage(
@@ -58,11 +58,11 @@ public class TypeInferenceRecordUpdateTests
     {
         // alfa r = { r | name = "x", age = 1 }
         var expression =
-            new SyntaxTypes.Expression.RecordUpdateExpression(
+            new Stil4mElmSyntax7.Expression.RecordUpdateExpression(
                 Node("r"),
                 [
-                Field("name", new SyntaxTypes.Expression.Literal("x")),
-                Field("age", new SyntaxTypes.Expression.Integer(1)),
+                Field("name", new Stil4mElmSyntax7.Expression.Literal("x")),
+                Field("age", new Stil4mElmSyntax7.Expression.Integer(1)),
                 ]);
 
         var parameterTypes =
@@ -96,9 +96,9 @@ public class TypeInferenceRecordUpdateTests
                 [("name", new TypeInference.InferredType.StringType())]);
 
         var expression =
-            new SyntaxTypes.Expression.RecordUpdateExpression(
+            new Stil4mElmSyntax7.Expression.RecordUpdateExpression(
                 Node("r"),
-                [Field("name", new SyntaxTypes.Expression.Literal("y"))]);
+                [Field("name", new Stil4mElmSyntax7.Expression.Literal("y"))]);
 
         var inferredType =
             TypeInference.InferExpressionType(
@@ -124,9 +124,9 @@ public class TypeInferenceRecordUpdateTests
                 ]);
 
         var update =
-            new SyntaxTypes.Expression.RecordUpdateExpression(
+            new Stil4mElmSyntax7.Expression.RecordUpdateExpression(
                 Node("state"),
-                [Field("offset", new SyntaxTypes.Expression.Integer(3))]);
+                [Field("offset", new Stil4mElmSyntax7.Expression.Integer(3))]);
 
         var inferredType =
             TypeInference.InferExpressionType(
@@ -143,23 +143,23 @@ public class TypeInferenceRecordUpdateTests
     {
         // alfa r = { a = { r | name = "x" }, b = { r | age = 1 } }
         var update1 =
-            new SyntaxTypes.Expression.RecordUpdateExpression(
+            new Stil4mElmSyntax7.Expression.RecordUpdateExpression(
                 Node("r"),
-                [Field("name", new SyntaxTypes.Expression.Literal("x"))]);
+                [Field("name", new Stil4mElmSyntax7.Expression.Literal("x"))]);
 
         var update2 =
-            new SyntaxTypes.Expression.RecordUpdateExpression(
+            new Stil4mElmSyntax7.Expression.RecordUpdateExpression(
                 Node("r"),
-                [Field("age", new SyntaxTypes.Expression.Integer(1))]);
+                [Field("age", new Stil4mElmSyntax7.Expression.Integer(1))]);
 
         var fields =
-            new List<Node<(Node<string> fieldName, Node<SyntaxTypes.Expression> valueExpr)>>
+            new List<Node<(Node<string> fieldName, Node<Stil4mElmSyntax7.Expression> valueExpr)>>
             {
                 Field("a", update1),
                 Field("b", update2),
             };
 
-        var expression = new SyntaxTypes.Expression.RecordExpr(fields);
+        var expression = new Stil4mElmSyntax7.Expression.RecordExpr(fields);
 
         var parameterTypes =
             TypeInference.InferParameterTypesFromUsage(
@@ -185,21 +185,21 @@ public class TypeInferenceRecordUpdateTests
         // alfa r = { x = r.email, y = { r | name = "x" } }
         // r should be constrained to require { email, name }.
         var fields =
-            new List<Node<(Node<string> fieldName, Node<SyntaxTypes.Expression> valueExpr)>>
+            new List<Node<(Node<string> fieldName, Node<Stil4mElmSyntax7.Expression> valueExpr)>>
             {
                 Field(
                     "x",
-                    new SyntaxTypes.Expression.RecordAccess(
-                        Node<SyntaxTypes.Expression>(new SyntaxTypes.Expression.FunctionOrValue([], "r")),
+                    new Stil4mElmSyntax7.Expression.RecordAccess(
+                        Node<Stil4mElmSyntax7.Expression>(new Stil4mElmSyntax7.Expression.FunctionOrValue([], "r")),
                         Node("email"))),
                 Field(
                     "y",
-                    new SyntaxTypes.Expression.RecordUpdateExpression(
+                    new Stil4mElmSyntax7.Expression.RecordUpdateExpression(
                         Node("r"),
-                        [Field("name", new SyntaxTypes.Expression.Literal("x"))])),
+                        [Field("name", new Stil4mElmSyntax7.Expression.Literal("x"))])),
             };
 
-        var expression = new SyntaxTypes.Expression.RecordExpr(fields);
+        var expression = new Stil4mElmSyntax7.Expression.RecordExpr(fields);
 
         var parameterTypes =
             TypeInference.InferParameterTypesFromUsage(

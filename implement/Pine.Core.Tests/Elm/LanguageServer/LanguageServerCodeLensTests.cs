@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.Elm.LanguageServer;
 using Pine.Core.Elm.LanguageServer.LanguageServiceInterface;
 using Pine.Core.Elm.LanguageServer.MonacoEditor;
+using Pine.Core.Functional;
 using Pine.Core.LanguageServerProtocol;
 using System.Collections.Generic;
 using System.Linq;

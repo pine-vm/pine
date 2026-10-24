@@ -3,7 +3,9 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine.Core.CLI;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
+using Pine.Core.Encodings;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -90,14 +92,14 @@ public static class PineCSharpSyntaxFactory
                 new ValueSyntaxKind.Other());
         }
 
-        if (pineValue == PineVM.PineKernelValues.TrueValue)
+        if (pineValue == PineKernelValues.TrueValue)
         {
             return
                 (ExpressionForPineValueBooleanLiteral(true, declarationSyntaxContext),
                 new ValueSyntaxKind.Other());
         }
 
-        if (pineValue == PineVM.PineKernelValues.FalseValue)
+        if (pineValue == PineKernelValues.FalseValue)
         {
             return
                 (ExpressionForPineValueBooleanLiteral(false, declarationSyntaxContext),
@@ -609,14 +611,14 @@ public static class PineCSharpSyntaxFactory
         SyntaxFactory.MemberAccessExpression(
             SyntaxKind.SimpleMemberAccessExpression,
             CompileTypeSyntax.TypeSyntaxFromType(
-                typeof(PineVM.PineKernelValues),
+                typeof(PineKernelValues),
                 declarationSyntaxContext),
             SyntaxFactory.IdentifierName(
                 value
                 ?
-                nameof(PineVM.PineKernelValues.TrueValue)
+                nameof(PineKernelValues.TrueValue)
                 :
-                nameof(PineVM.PineKernelValues.FalseValue)));
+                nameof(PineKernelValues.FalseValue)));
 
     /// <summary>
     /// Wraps an integer expression in IntegerEncoding.EncodeSignedInteger to produce a generic Pine value.

@@ -1,4 +1,5 @@
 using Pine.Core.Elm.Elm019;
+using Pine.Core.Elm.Syntax.Concrete;
 using Pine.Core.Files;
 using Pine.Core.Json;
 using System;
@@ -485,7 +486,7 @@ public sealed record ElmResolvedBuild(
     /// Demand-aware compilation, analysis and queries should use these nodes rather than reparse formatted Sources.
     /// Empty for legacy strict preparation.
     /// </summary>
-    public ImmutableDictionary<string, ElmSyntax.SyntaxModel.File> CompilerModuleSyntax { get; init; } =
+    public ImmutableDictionary<string, File> CompilerModuleSyntax { get; init; } =
         [];
 
     /// <summary>
@@ -500,7 +501,7 @@ public sealed record ElmResolvedBuild(
         string FilePath,
         string ModuleName,
         string ImportedModuleName,
-        ElmSyntax.SyntaxModel.Range ImportRange,
+        Syntax.Concrete.Range ImportRange,
         string Message);
 
     /// <summary>Serializes the resolution, source hashes, roots and compiler identity mapping without file-tree internals.</summary>

@@ -1,8 +1,7 @@
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Elm.Syntax.Abstract;
 using System.Collections.Immutable;
 using System.Linq;
-
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -63,7 +62,7 @@ public abstract record ParameterSpecialization
     /// </summary>
     /// <param name="Lambda">The lambda structure from the call site argument.</param>
     public sealed record ConcreteLambdaValue(
-        SyntaxTypes.Expression.LambdaExpression Lambda)
+        Expression.LambdaExpression Lambda)
         : ParameterSpecialization
     {
         /// <inheritdoc/>
@@ -149,7 +148,7 @@ public abstract record ParameterSpecialization
     /// matching element specialization.
     /// <para>
     /// Models the "tuple of knowns" shape that survives lambda-lifting when a
-    /// helper takes a <see cref="SyntaxTypes.Pattern.TuplePattern"/> parameter
+    /// helper takes a <see cref="Pattern.TuplePattern"/> parameter
     /// whose elements are themselves function-typed. See
     /// <c>explore/internal-analysis/2026-05-19-monomorphizing-expressionAfterOpeningSquareBracket-lifted-lambda3.md</c>
     /// §3 for the production scenario.
@@ -157,10 +156,10 @@ public abstract record ParameterSpecialization
     /// <para>
     /// Construction of this variant is the responsibility of the discovery
     /// walker (<c>TryBuildFunctionSpecializationForHigherOrder</c>);
-    /// <see cref="ClassifyArgument(SyntaxTypes.Expression)"/> never produces it directly because
+    /// <see cref="ClassifyArgument(Expression)"/> never produces it directly because
     /// a tuple argument may legitimately be passed to a parameter modelled
     /// as <see cref="ConcreteLambdaValue"/> when the callee's parameter
-    /// pattern is a plain <see cref="SyntaxTypes.Pattern.VarPattern"/>.
+    /// pattern is a plain <see cref="Pattern.VarPattern"/>.
     /// </para>
     /// </summary>
     /// <param name="ElementSpecializations">
@@ -214,17 +213,17 @@ public abstract record ParameterSpecialization
     /// Returns true if the argument can satisfy the specialization's requirement.
     /// </summary>
     public static bool ArgumentMatchesSpecialization(
-        SyntaxTypes.Expression argument,
+        Expression argument,
         ParameterSpecialization specialization)
     {
         return specialization switch
         {
             ConcreteFunctionValue concreteFunc =>
-            argument is SyntaxTypes.Expression.Identifier identifier &&
+            argument is Expression.Identifier identifier &&
             identifier.QualifiedName.Equals(concreteFunc.FunctionQualifiedName),
 
             ConcreteLambdaValue concreteLambda =>
-            argument is SyntaxTypes.Expression.LambdaExpression lambdaExpr
+            argument is Expression.LambdaExpression lambdaExpr
             ?
             lambdaExpr.Equals(concreteLambda.Lambda)
             :
@@ -232,7 +231,7 @@ public abstract record ParameterSpecialization
             concreteLambda.Lambda.Expression.Equals(argument),
 
             ConcreteRecordAccessFunctionValue concreteRecordAccessFunction =>
-            argument is SyntaxTypes.Expression.RecordAccessFunction recordAccessFunction &&
+            argument is Expression.RecordAccessFunction recordAccessFunction &&
             "." + recordAccessFunction.FieldName == concreteRecordAccessFunction.FunctionName,
 
             SingleChoiceTagUnwrap tagUnwrap =>
@@ -254,10 +253,10 @@ public abstract record ParameterSpecialization
     /// shape) — see <see cref="PeelOneLayerLetNewtypeWrap"/>.
     /// </summary>
     private static bool TryMatchTupleArgumentWithElementSpecializations(
-        SyntaxTypes.Expression argument,
+        Expression argument,
         TupleUnwrap tupleUnwrap)
     {
-        if (argument is not SyntaxTypes.Expression.TupledExpression tupled)
+        if (argument is not Expression.TupledExpression tupled)
             return false;
 
         if (tupled.Elements.Count != tupleUnwrap.ElementSpecializations.Length)
@@ -283,9 +282,9 @@ public abstract record ParameterSpecialization
     /// The matcher requires:
     /// <list type="bullet">
     ///   <item><description>Exactly one declaration in the let block.</description></item>
-    ///   <item><description>That declaration is a <see cref="SyntaxTypes.LetDeclaration.LetDestructuring"/>.</description></item>
-    ///   <item><description>The destructuring pattern is a <see cref="SyntaxTypes.Pattern.NamedPattern"/> with exactly one <see cref="SyntaxTypes.Pattern.VarPattern"/> argument.</description></item>
-    ///   <item><description>The let block's body is a <see cref="SyntaxTypes.Expression.Identifier"/> with empty namespaces whose declaration name matches the bound variable name.</description></item>
+    ///   <item><description>That declaration is a <see cref="LetDeclaration.LetDestructuring"/>.</description></item>
+    ///   <item><description>The destructuring pattern is a <see cref="Pattern.NamedPattern"/> with exactly one <see cref="Pattern.VarPattern"/> argument.</description></item>
+    ///   <item><description>The let block's body is a <see cref="Expression.Identifier"/> with empty namespaces whose declaration name matches the bound variable name.</description></item>
     /// </list>
     /// </para>
     /// <para>
@@ -296,21 +295,21 @@ public abstract record ParameterSpecialization
     /// observe before those passes run on a given sub-expression.
     /// </para>
     /// </summary>
-    private static SyntaxTypes.Expression PeelOneLayerLetNewtypeWrap(
-        SyntaxTypes.Expression expression)
+    private static Expression PeelOneLayerLetNewtypeWrap(
+        Expression expression)
     {
-        if (expression is not SyntaxTypes.Expression.LetExpression letExpr)
+        if (expression is not Expression.LetExpression letExpr)
             return expression;
 
         if (letExpr.Declarations.Count is not 1)
             return expression;
 
-        if (letExpr.Declarations[0] is not SyntaxTypes.LetDeclaration.LetDestructuring destructuring)
+        if (letExpr.Declarations[0] is not LetDeclaration.LetDestructuring destructuring)
             return expression;
 
         var patternInner = UnwrapAsPattern(destructuring.Pattern);
 
-        if (patternInner is not SyntaxTypes.Pattern.NamedPattern namedPattern)
+        if (patternInner is not Pattern.NamedPattern namedPattern)
             return expression;
 
         if (namedPattern.Arguments.Count is not 1)
@@ -318,10 +317,10 @@ public abstract record ParameterSpecialization
 
         var argInner = UnwrapAsPattern(namedPattern.Arguments[0]);
 
-        if (argInner is not SyntaxTypes.Pattern.VarPattern varPattern)
+        if (argInner is not Pattern.VarPattern varPattern)
             return expression;
 
-        if (letExpr.Expression is not SyntaxTypes.Expression.Identifier tailRef)
+        if (letExpr.Expression is not Expression.Identifier tailRef)
             return expression;
 
         if (tailRef.QualifiedName.Namespaces.Count is not 0 ||
@@ -333,9 +332,9 @@ public abstract record ParameterSpecialization
         return destructuring.Expression;
     }
 
-    private static SyntaxTypes.Pattern UnwrapAsPattern(SyntaxTypes.Pattern pattern)
+    private static Pattern UnwrapAsPattern(Pattern pattern)
     {
-        while (pattern is SyntaxTypes.Pattern.AsPattern asPattern)
+        while (pattern is Pattern.AsPattern asPattern)
         {
             pattern = asPattern.Pattern;
         }
@@ -348,20 +347,20 @@ public abstract record ParameterSpecialization
     /// Returns null if the argument cannot be classified into any specialization kind.
     /// </summary>
     public static ParameterSpecialization? ClassifyArgument(
-        SyntaxTypes.Expression argument)
+        Expression argument)
     {
         return argument switch
         {
-            SyntaxTypes.Expression.Identifier identifier when identifier.QualifiedName.Namespaces.Count > 0 =>
+            Expression.Identifier identifier when identifier.QualifiedName.Namespaces.Count > 0 =>
             new ConcreteFunctionValue(identifier.QualifiedName),
 
-            SyntaxTypes.Expression.Identifier identifier when IsKnownStableUnqualifiedFunctionReference(identifier.QualifiedName.DeclName) =>
+            Expression.Identifier identifier when IsKnownStableUnqualifiedFunctionReference(identifier.QualifiedName.DeclName) =>
             new ConcreteFunctionValue(identifier.QualifiedName),
 
-            SyntaxTypes.Expression.LambdaExpression lambda =>
+            Expression.LambdaExpression lambda =>
             new ConcreteLambdaValue(lambda),
 
-            SyntaxTypes.Expression.RecordAccessFunction recordAccessFunction =>
+            Expression.RecordAccessFunction recordAccessFunction =>
             new ConcreteRecordAccessFunctionValue("." + recordAccessFunction.FieldName),
 
             _ =>
@@ -370,12 +369,12 @@ public abstract record ParameterSpecialization
     }
 
     /// <summary>
-    /// Variant of <see cref="ClassifyArgument(SyntaxTypes.Expression)"/> that
+    /// Variant of <see cref="ClassifyArgument(Expression)"/> that
     /// additionally peels one let-bound hop using the supplied
     /// <paramref name="letRhsByName"/> map before attempting classification.
     /// <para>
     /// When the argument (after paren-peel) is a bare
-    /// <see cref="SyntaxTypes.Expression.Identifier"/> with empty
+    /// <see cref="Expression.Identifier"/> with empty
     /// namespaces whose declaration name is present in
     /// <paramref name="letRhsByName"/>, the resolved RHS expression is
     /// classified instead. This lets the discovery walker see through the
@@ -391,13 +390,13 @@ public abstract record ParameterSpecialization
     /// </para>
     /// </summary>
     public static ParameterSpecialization? ClassifyArgument(
-        SyntaxTypes.Expression argument,
-        ImmutableDictionary<string, SyntaxTypes.Expression> letRhsByName)
+        Expression argument,
+        ImmutableDictionary<string, Expression> letRhsByName)
     {
         if (letRhsByName is null || letRhsByName.IsEmpty)
             return ClassifyArgument(argument);
 
-        if (argument is SyntaxTypes.Expression.Identifier identifier &&
+        if (argument is Expression.Identifier identifier &&
             identifier.QualifiedName.Namespaces.Count is 0 &&
             letRhsByName.TryGetValue(identifier.QualifiedName.DeclName, out var resolvedRhs))
         {
@@ -415,7 +414,7 @@ public abstract record ParameterSpecialization
     /// that is a single-choice constructor application.
     /// </summary>
     public static ParameterSpecialization? ClassifySingleChoiceTagArgument(
-        SyntaxTypes.Expression argument,
+        Expression argument,
         DeclQualifiedName constructorName)
     {
         if (TryMatchSingleChoiceTagArgument(argument, constructorName))
@@ -433,16 +432,16 @@ public abstract record ParameterSpecialization
     /// Checks whether an expression is a constructor application matching the given constructor name.
     /// </summary>
     private static bool TryMatchSingleChoiceTagArgument(
-        SyntaxTypes.Expression argument,
+        Expression argument,
         DeclQualifiedName constructorName)
     {
-        if (argument is SyntaxTypes.Expression.Application app &&
-            app.Function is SyntaxTypes.Expression.Identifier identifier)
+        if (argument is Expression.Application app &&
+            app.Function is Expression.Identifier identifier)
         {
             return ConstructorReferenceMatches(identifier.QualifiedName, constructorName);
         }
 
-        if (argument is SyntaxTypes.Expression.Identifier bareIdentifier)
+        if (argument is Expression.Identifier bareIdentifier)
             return ConstructorReferenceMatches(bareIdentifier.QualifiedName, constructorName);
 
         return false;
@@ -460,7 +459,7 @@ public abstract record ParameterSpecialization
     /// including checking that function-typed fields match.
     /// </summary>
     private static bool TryMatchSingleChoiceTagArgumentWithSpecializedFields(
-        SyntaxTypes.Expression argument,
+        Expression argument,
         SingleChoiceTagUnwrap tagUnwrap)
     {
         if (!TryMatchSingleChoiceTagArgument(argument, tagUnwrap.ConstructorName))
@@ -469,7 +468,7 @@ public abstract record ParameterSpecialization
         if (tagUnwrap.FieldSpecializations.Count is 0)
             return true;
 
-        if (argument is SyntaxTypes.Expression.Application app)
+        if (argument is Expression.Application app)
         {
             foreach (var kvp in tagUnwrap.FieldSpecializations)
             {

@@ -1,11 +1,12 @@
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
+using Pine.Core.Encodings;
 using Pine.Core.Json;
+using Pine.Core.PineLanguage;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Serialization;
 
-using InfixDirection = Pine.Core.Elm.ElmSyntax.SyntaxModel.InfixDirection;
+using InfixDirection = Pine.Core.Elm.Syntax.Concrete.InfixDirection;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 

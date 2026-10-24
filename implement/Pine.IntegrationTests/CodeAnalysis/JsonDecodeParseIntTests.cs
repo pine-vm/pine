@@ -1,8 +1,8 @@
 using AwesomeAssertions;
-using Pine.Core;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
+using Pine.Core.Encodings;
 using Pine.Core.Internal;
+using Pine.Core.PineLanguage;
 using Xunit;
 
 namespace Pine.IntegrationTests.CodeAnalysis;
@@ -2146,10 +2146,11 @@ public class SketchContainer
             PineValue param_1_0,
             PineValue param_1_1)
         {
-            if (BuiltinFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: param_1_1, argument: param_1_0) == CommonReusedValues.Blob_37f21fcb)
+            if (BuiltinFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: param_1_1, argument: param_1_0) ==
+                CommonReusedValues.Blob_37f21fcb)
             {
                 PineValue local_000 =
-                    Test.parseUnsignedInt(
+                    parseUnsignedInt(
                         param_1_0,
                         BuiltinFunctionSpecialized.int_add(4, param_1_1));
 
@@ -2204,7 +2205,7 @@ public class SketchContainer
                 throw new ParseExpressionException("TODO: Include details from encoded and env subexpressions");
             }
 
-            return Test.parseUnsignedInt(param_1_0, param_1_1);
+            return parseUnsignedInt(param_1_0, param_1_1);
         }
 
 
@@ -2228,7 +2229,7 @@ public class SketchContainer
             if (local_000 == CommonReusedValues.Blob_Str_1)
             {
                 return
-                    Test.parseUnsignedIntRec(
+                    parseUnsignedIntRec(
                         CommonReusedValues.Blob_Int_1,
                         param_1_0,
                         BuiltinFunctionSpecialized.int_add(4, param_1_1));
@@ -2237,7 +2238,7 @@ public class SketchContainer
             if (local_000 == CommonReusedValues.Blob_Str_2)
             {
                 return
-                    Test.parseUnsignedIntRec(
+                    parseUnsignedIntRec(
                         CommonReusedValues.Blob_Int_2,
                         param_1_0,
                         BuiltinFunctionSpecialized.int_add(4, param_1_1));
@@ -2246,7 +2247,7 @@ public class SketchContainer
             if (local_000 == CommonReusedValues.Blob_Str_3)
             {
                 return
-                    Test.parseUnsignedIntRec(
+                    parseUnsignedIntRec(
                         CommonReusedValues.Blob_Int_3,
                         param_1_0,
                         BuiltinFunctionSpecialized.int_add(4, param_1_1));
@@ -2255,7 +2256,7 @@ public class SketchContainer
             if (local_000 == CommonReusedValues.Blob_Str_4)
             {
                 return
-                    Test.parseUnsignedIntRec(
+                    parseUnsignedIntRec(
                         CommonReusedValues.Blob_Int_4,
                         param_1_0,
                         BuiltinFunctionSpecialized.int_add(4, param_1_1));
@@ -2264,7 +2265,7 @@ public class SketchContainer
             if (local_000 == CommonReusedValues.Blob_Str_5)
             {
                 return
-                    Test.parseUnsignedIntRec(
+                    parseUnsignedIntRec(
                         CommonReusedValues.Blob_Int_5,
                         param_1_0,
                         BuiltinFunctionSpecialized.int_add(4, param_1_1));
@@ -2273,7 +2274,7 @@ public class SketchContainer
             if (local_000 == CommonReusedValues.Blob_Str_6)
             {
                 return
-                    Test.parseUnsignedIntRec(
+                    parseUnsignedIntRec(
                         CommonReusedValues.Blob_Int_6,
                         param_1_0,
                         BuiltinFunctionSpecialized.int_add(4, param_1_1));
@@ -2282,7 +2283,7 @@ public class SketchContainer
             if (local_000 == CommonReusedValues.Blob_Str_7)
             {
                 return
-                    Test.parseUnsignedIntRec(
+                    parseUnsignedIntRec(
                         CommonReusedValues.Blob_Int_7,
                         param_1_0,
                         BuiltinFunctionSpecialized.int_add(4, param_1_1));
@@ -2291,7 +2292,7 @@ public class SketchContainer
             if (local_000 == CommonReusedValues.Blob_Str_8)
             {
                 return
-                    Test.parseUnsignedIntRec(
+                    parseUnsignedIntRec(
                         CommonReusedValues.Blob_Int_8,
                         param_1_0,
                         BuiltinFunctionSpecialized.int_add(4, param_1_1));
@@ -2300,7 +2301,7 @@ public class SketchContainer
             if (local_000 == CommonReusedValues.Blob_Str_9)
             {
                 return
-                    Test.parseUnsignedIntRec(
+                    parseUnsignedIntRec(
                         CommonReusedValues.Blob_Int_9,
                         param_1_0,
                         BuiltinFunctionSpecialized.int_add(4, param_1_1));
@@ -2329,7 +2330,10 @@ public class SketchContainer
             while (true)
             {
                 PineValue local_000 =
-                    BuiltinFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_1_2, argument: local_param_1_1);
+                    BuiltinFunctionFused.SkipAndTake(
+                        takeCount: 4,
+                        skipCountValue: local_param_1_2,
+                        argument: local_param_1_1);
 
                 if (local_000 == CommonReusedValues.Blob_Str_0)
                 {

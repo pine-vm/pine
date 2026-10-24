@@ -1,4 +1,5 @@
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using Pine.Core.Elm.Syntax.Concrete;
+using Pine.Core.Functional;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -6,11 +7,10 @@ using System.Linq;
 
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
-using ElmSyntaxAbstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using AbstractSyntax = Pine.Core.Elm.Syntax.Abstract;
 
 // Alias to avoid ambiguity with System.Range
-using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
+using Range = Pine.Core.Elm.Syntax.Concrete.Range;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -549,22 +549,22 @@ public partial class Canonicalization
         foreach (var stubName in stubNames)
         {
             var stubDeclaration =
-                new ElmSyntaxAbstract.Declaration.FunctionDeclaration(
-                    new ElmSyntaxAbstract.FunctionStruct(
+                new AbstractSyntax.Declaration.FunctionDeclaration(
+                    new AbstractSyntax.FunctionStruct(
                         Signature: null,
-                        new ElmSyntaxAbstract.FunctionImplementation(
+                        new AbstractSyntax.FunctionImplementation(
                             stubName,
-                            [new ElmSyntaxAbstract.Pattern.VarPattern("stubArgument")],
-                            new ElmSyntaxAbstract.Expression.Application(
-                                ElmSyntaxAbstract.Expression.Identifier.Create(
+                            [new AbstractSyntax.Pattern.VarPattern("stubArgument")],
+                            new AbstractSyntax.Expression.Application(
+                                AbstractSyntax.Expression.Identifier.Create(
                                     ["Pine_kernel"],
                                     "effect_module_" + stubName + "_stub_reached"),
-                                [ElmSyntaxAbstract.Expression.Identifier.Create([], "stubArgument")]))));
+                                [AbstractSyntax.Expression.Identifier.Create([], "stubArgument")]))));
 
             declarations.Add(
                 new Node<Declaration>(
                     new Range(new Location(0, 0), new Location(0, 0)),
-                    ElmSyntaxAbstract.ConvertToConcrete.ToDeclaration(stubDeclaration)));
+                    AbstractSyntax.ConvertToConcrete.ToDeclaration(stubDeclaration)));
         }
 
         return module with { Declarations = declarations };
@@ -1896,8 +1896,8 @@ public partial class Canonicalization
     /// <param name="expr">The expression to canonicalize.</param>
     /// <param name="implicitImportConfig">The implicit imports available to the expression.</param>
     /// <returns>The canonicalized expression together with any canonicalization errors.</returns>
-    public static CanonicalizationResult<SyntaxTypes.Expression> CanonicalizeExpression(
-        SyntaxTypes.Expression expr,
+    public static CanonicalizationResult<Expression> CanonicalizeExpression(
+        Expression expr,
         ImplicitImportConfig implicitImportConfig)
     {
         var context =
@@ -1916,15 +1916,15 @@ public partial class Canonicalization
         var fakeRange = new Range(fakeLocation, fakeLocation);
 
         var exprNode =
-            new Node<SyntaxTypes.Expression>(
+            new Node<Expression>(
                 Range: fakeRange,
                 Value: expr);
 
         return CanonicalizeExpressionNode(exprNode, context).MapValue(node => node.Value);
     }
 
-    private static CanonicalizationResult<Node<SyntaxTypes.Expression>> CanonicalizeExpressionNode(
-        Node<SyntaxTypes.Expression> exprNode,
+    private static CanonicalizationResult<Node<Expression>> CanonicalizeExpressionNode(
+        Node<Expression> exprNode,
         CanonicalizationContext context)
     {
         var expr = exprNode.Value;
@@ -1932,44 +1932,44 @@ public partial class Canonicalization
         var canonicalizedExpr =
             expr switch
             {
-                SyntaxTypes.Expression.UnitExpr unitExpr =>
-                NoErrors((SyntaxTypes.Expression)unitExpr),
+                Expression.UnitExpr unitExpr =>
+                NoErrors((Expression)unitExpr),
 
-                SyntaxTypes.Expression.StringLiteral literal =>
-                NoErrors((SyntaxTypes.Expression)literal),
+                Expression.StringLiteral literal =>
+                NoErrors((Expression)literal),
 
-                SyntaxTypes.Expression.MultilineStringLiteral multilineString =>
-                NoErrors((SyntaxTypes.Expression)multilineString),
+                Expression.MultilineStringLiteral multilineString =>
+                NoErrors((Expression)multilineString),
 
-                SyntaxTypes.Expression.CharLiteral charLiteral =>
-                NoErrors((SyntaxTypes.Expression)charLiteral),
+                Expression.CharLiteral charLiteral =>
+                NoErrors((Expression)charLiteral),
 
-                SyntaxTypes.Expression.IntegerLiteral integer =>
-                NoErrors((SyntaxTypes.Expression)integer),
+                Expression.IntegerLiteral integer =>
+                NoErrors((Expression)integer),
 
-                SyntaxTypes.Expression.FloatLiteral floatable =>
-                NoErrors((SyntaxTypes.Expression)floatable),
+                Expression.FloatLiteral floatable =>
+                NoErrors((Expression)floatable),
 
-                SyntaxTypes.Expression.Negation negation =>
+                Expression.Negation negation =>
                 CanonicalizeExpressionNode(negation.Expression, context)
-                .MapValue(negExpr => (SyntaxTypes.Expression)new SyntaxTypes.Expression.Negation(negExpr)),
+                .MapValue(negExpr => (Expression)new Expression.Negation(negExpr)),
 
-                SyntaxTypes.Expression.ListExpr list =>
+                Expression.ListExpr list =>
                 CanonicalizationResultExtensions.ConcatMap(list.Elements, e => CanonicalizeExpressionNode(e, context))
                 .MapValue(
                     elements =>
-                    (SyntaxTypes.Expression)new SyntaxTypes.Expression.ListExpr(RebuildSeparated(list.Elements, [.. elements]))),
+                    (Expression)new Expression.ListExpr(RebuildSeparated(list.Elements, [.. elements]))),
 
-                SyntaxTypes.Expression.Identifier funcOrValue =>
+                Expression.Identifier funcOrValue =>
                 CanonicalizeFunctionOrValue(funcOrValue, exprNode.Range, context)
-                .MapValue(f => (SyntaxTypes.Expression)f),
+                .MapValue(f => (Expression)f),
 
-                SyntaxTypes.Expression.IfBlock ifBlock =>
+                Expression.IfBlock ifBlock =>
                 CanonicalizationResultExtensions.Map3(
                     CanonicalizeExpressionNode(ifBlock.Condition, context),
                     CanonicalizeExpressionNode(ifBlock.ThenBlock, context),
                     CanonicalizeExpressionNode(ifBlock.ElseBlock, context),
-                    (cond, thenBlock, elseBlock) => (SyntaxTypes.Expression)new SyntaxTypes.Expression.IfBlock(
+                    (cond, thenBlock, elseBlock) => (Expression)new Expression.IfBlock(
                         ifBlock.IfTokenLocation,
                         cond,
                         ifBlock.ThenTokenLocation,
@@ -1977,82 +1977,82 @@ public partial class Canonicalization
                         ifBlock.ElseTokenLocation,
                         elseBlock)),
 
-                SyntaxTypes.Expression.PrefixOperator prefixOperator =>
+                Expression.PrefixOperator prefixOperator =>
                 CanonicalizePrefixOperator(prefixOperator, exprNode.Range, context),
 
-                SyntaxTypes.Expression.Parenthesized parenExpr =>
+                Expression.Parenthesized parenExpr =>
                 CanonicalizeExpressionNode(parenExpr.Expression, context)
-                .MapValue(inner => (SyntaxTypes.Expression)new SyntaxTypes.Expression.Parenthesized(inner)),
+                .MapValue(inner => (Expression)new Expression.Parenthesized(inner)),
 
-                SyntaxTypes.Expression.Application application =>
+                Expression.Application application =>
                 CanonicalizationResultExtensions.Map2(
                     CanonicalizeExpressionNode(application.Function, context),
                     CanonicalizationResultExtensions.ConcatMap(
                         application.Arguments,
                         arg => CanonicalizeExpressionNode(arg, context)),
-                    (func, args) => (SyntaxTypes.Expression)new SyntaxTypes.Expression.Application(func, [.. args])),
+                    (func, args) => (Expression)new Expression.Application(func, [.. args])),
 
-                SyntaxTypes.Expression.OperatorApplication opApp =>
+                Expression.OperatorApplication opApp =>
                 CanonicalizeOperatorApplication(opApp, context, exprNode.Range),
 
-                SyntaxTypes.Expression.TupledExpression tupled =>
+                Expression.TupledExpression tupled =>
                 CanonicalizationResultExtensions.ConcatMap(
                     tupled.Elements,
                     e => CanonicalizeExpressionNode(e, context))
                 .MapValue(
                     elements =>
-                    (SyntaxTypes.Expression)new SyntaxTypes.Expression.TupledExpression(RebuildSeparated(tupled.Elements, [.. elements]))),
+                    (Expression)new Expression.TupledExpression(RebuildSeparated(tupled.Elements, [.. elements]))),
 
-                SyntaxTypes.Expression.LambdaExpression lambda =>
+                Expression.LambdaExpression lambda =>
                 CanonicalizeLambdaStruct(lambda.Lambda, context)
                 .MapValue(
-                    lambdaStruct => (SyntaxTypes.Expression)new SyntaxTypes.Expression.LambdaExpression(lambdaStruct)),
+                    lambdaStruct => (Expression)new Expression.LambdaExpression(lambdaStruct)),
 
-                SyntaxTypes.Expression.CaseExpression caseExpr =>
+                Expression.CaseExpression caseExpr =>
                 CanonicalizeCaseBlock(caseExpr.CaseBlock, context)
-                .MapValue(caseBlock => (SyntaxTypes.Expression)new SyntaxTypes.Expression.CaseExpression(caseBlock)),
+                .MapValue(caseBlock => (Expression)new Expression.CaseExpression(caseBlock)),
 
-                SyntaxTypes.Expression.LetExpression letExpr =>
+                Expression.LetExpression letExpr =>
                 CanonicalizeLetBlock(letExpr.Value, context)
-                .MapValue(letBlock => (SyntaxTypes.Expression)new SyntaxTypes.Expression.LetExpression(letBlock)),
+                .MapValue(letBlock => (Expression)new Expression.LetExpression(letBlock)),
 
-                SyntaxTypes.Expression.RecordExpr record =>
+                Expression.RecordExpr record =>
                 CanonicalizationResultExtensions.ConcatMap(
                     record.Fields,
                     f => CanonicalizeRecordFieldExpr(f, context))
                 .MapValue(
                     fields =>
-                    (SyntaxTypes.Expression)new SyntaxTypes.Expression.RecordExpr(RebuildSeparated(record.Fields, [.. fields]))),
+                    (Expression)new Expression.RecordExpr(RebuildSeparated(record.Fields, [.. fields]))),
 
-                SyntaxTypes.Expression.RecordAccess recordAccess =>
+                Expression.RecordAccess recordAccess =>
                 CanonicalizeExpressionNode(recordAccess.Record, context)
                 .MapValue(
                     record =>
-                    (SyntaxTypes.Expression)new SyntaxTypes.Expression.RecordAccess(record, recordAccess.FieldName)),
+                    (Expression)new Expression.RecordAccess(record, recordAccess.FieldName)),
 
-                SyntaxTypes.Expression.RecordAccessFunction recordAccessFunction =>
-                NoErrors((SyntaxTypes.Expression)recordAccessFunction),
+                Expression.RecordAccessFunction recordAccessFunction =>
+                NoErrors((Expression)recordAccessFunction),
 
-                SyntaxTypes.Expression.RecordUpdateExpression recordUpdate =>
+                Expression.RecordUpdateExpression recordUpdate =>
                 CanonicalizeRecordUpdateExpression(recordUpdate, exprNode.Range, context),
 
-                SyntaxTypes.Expression.GLSLExpression glslExpression =>
-                NoErrors((SyntaxTypes.Expression)glslExpression),
+                Expression.GLSLExpression glslExpression =>
+                NoErrors((Expression)glslExpression),
 
                 _ =>
                 throw new NotImplementedException(
                     $"Unhandled expression type in CanonicalizeExpressionNode: {expr.GetType().Name}")
             };
 
-        return canonicalizedExpr.MapValue(expr => new Node<SyntaxTypes.Expression>(exprNode.Range, expr));
+        return canonicalizedExpr.MapValue(expr => new Node<Expression>(exprNode.Range, expr));
     }
 
     /// <summary>
     /// Canonicalizes an operator application by converting it to a function application.
     /// For example, "a + b" becomes "Basics.add a b".
     /// </summary>
-    private static CanonicalizationResult<SyntaxTypes.Expression> CanonicalizeOperatorApplication(
-        SyntaxTypes.Expression.OperatorApplication opApp,
+    private static CanonicalizationResult<Expression> CanonicalizeOperatorApplication(
+        Expression.OperatorApplication opApp,
         CanonicalizationContext context,
         Range range)
     {
@@ -2083,17 +2083,17 @@ public partial class Canonicalization
 
             // Convert operator application to function application: func left right
             var funcOrValue =
-                new SyntaxTypes.Expression.Identifier(
+                new Expression.Identifier(
                     ModuleName: funcMapping.ModuleName,
                     Name: funcMapping.FunctionName);
 
-            var funcNode = new Node<SyntaxTypes.Expression>(range, funcOrValue);
+            var funcNode = new Node<Expression>(range, funcOrValue);
 
             var result =
                 CanonicalizationResultExtensions.Map2(
                     leftResult,
                     rightResult,
-                    (left, right) => (SyntaxTypes.Expression)new SyntaxTypes.Expression.Application(funcNode, [left, right]));
+                    (left, right) => (Expression)new Expression.Application(funcNode, [left, right]));
 
             return
                 result with
@@ -2116,7 +2116,7 @@ public partial class Canonicalization
                 CanonicalizationResultExtensions.Map2(
                     leftResult,
                     rightResult,
-                    (left, right) => (SyntaxTypes.Expression)new SyntaxTypes.Expression.OperatorApplication(opApp.Operator, opApp.Direction, left, right));
+                    (left, right) => (Expression)new Expression.OperatorApplication(opApp.Operator, opApp.Direction, left, right));
         }
 
         // Operator not found in mapping - preserve as OperatorApplication for built-in operator handling
@@ -2124,23 +2124,23 @@ public partial class Canonicalization
             CanonicalizationResultExtensions.Map2(
                 leftResult,
                 rightResult,
-                (left, right) => (SyntaxTypes.Expression)new SyntaxTypes.Expression.OperatorApplication(opApp.Operator, opApp.Direction, left, right));
+                (left, right) => (Expression)new Expression.OperatorApplication(opApp.Operator, opApp.Direction, left, right));
     }
 
-    private static CanonicalizationResult<SyntaxTypes.Expression> CanonicalizePrefixOperator(
-        SyntaxTypes.Expression.PrefixOperator prefix,
+    private static CanonicalizationResult<Expression> CanonicalizePrefixOperator(
+        Expression.PrefixOperator prefix,
         Range range,
         CanonicalizationContext context)
     {
         if (context.ResolveReference is null)
-            return NoErrors((SyntaxTypes.Expression)prefix);
+            return NoErrors((Expression)prefix);
 
         if (!context.TryGetOperator(prefix.Operator, out var function))
             return new(prefix, [new CanonicalizationError.UnresolvedReference(range, prefix.Operator)]);
 
         return
             new(
-                new SyntaxTypes.Expression.Identifier(function.ModuleName, function.FunctionName),
+                new Expression.Identifier(function.ModuleName, function.FunctionName),
                 context.ResolveReference(function.ModuleName, function.FunctionName, false, range));
     }
 
@@ -2157,8 +2157,8 @@ public partial class Canonicalization
     /// only ever see record updates on local names.
     /// </para>
     /// </summary>
-    private static CanonicalizationResult<SyntaxTypes.Expression> CanonicalizeRecordUpdateExpression(
-        SyntaxTypes.Expression.RecordUpdateExpression recordUpdate,
+    private static CanonicalizationResult<Expression> CanonicalizeRecordUpdateExpression(
+        Expression.RecordUpdateExpression recordUpdate,
         Range range,
         CanonicalizationContext context)
     {
@@ -2175,7 +2175,7 @@ public partial class Canonicalization
                 fieldsResult
                 .MapValue(
                     fields =>
-                    (SyntaxTypes.Expression)new SyntaxTypes.Expression.RecordUpdateExpression(
+                    (Expression)new Expression.RecordUpdateExpression(
                         recordUpdate.RecordName,
                         recordUpdate.PipeLocation,
                         RebuildSeparated(recordUpdate.Fields, [.. fields])));
@@ -2183,7 +2183,7 @@ public partial class Canonicalization
 
         var recordReferenceResult =
             CanonicalizeFunctionOrValue(
-                new SyntaxTypes.Expression.Identifier(ModuleName: [], Name: recordName),
+                new Expression.Identifier(ModuleName: [], Name: recordName),
                 recordUpdate.RecordName.Range,
                 context);
 
@@ -2201,32 +2201,32 @@ public partial class Canonicalization
                 (recordReference, fields) =>
                 {
                     var letDeclaration =
-                        new Node<SyntaxTypes.Expression.LetDeclaration>(
+                        new Node<Expression.LetDeclaration>(
                             range,
-                            new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
+                            new Expression.LetDeclaration.LetDestructuring(
                                 Pattern:
                                 new Node<Pattern>(
                                     recordUpdate.RecordName.Range,
                                     new Pattern.VarPattern(freshName)),
                                 EqualsTokenLocation: recordUpdate.RecordName.Range.End,
                                 Expression:
-                                new Node<SyntaxTypes.Expression>(
+                                new Node<Expression>(
                                     recordUpdate.RecordName.Range,
                                     recordReference)));
 
                     var rebuiltRecordUpdate =
-                        new SyntaxTypes.Expression.RecordUpdateExpression(
+                        new Expression.RecordUpdateExpression(
                             new Node<string>(recordUpdate.RecordName.Range, freshName),
                             recordUpdate.PipeLocation,
                             RebuildSeparated(recordUpdate.Fields, [.. fields]));
 
                     return
-                        (SyntaxTypes.Expression)new SyntaxTypes.Expression.LetExpression(
-                            new SyntaxTypes.Expression.LetBlock(
+                        (Expression)new Expression.LetExpression(
+                            new Expression.LetBlock(
                                 LetTokenLocation: range.Start,
                                 Declarations: [letDeclaration],
                                 InTokenLocation: range.Start,
-                                Expression: new Node<SyntaxTypes.Expression>(range, rebuiltRecordUpdate)));
+                                Expression: new Node<Expression>(range, rebuiltRecordUpdate)));
                 });
     }
 
@@ -2235,8 +2235,8 @@ public partial class Canonicalization
         context.ContainsModuleDeclaration(name) ||
         context.TryGetImport(false, name, out _);
 
-    private static CanonicalizationResult<SyntaxTypes.Expression.Identifier> CanonicalizeFunctionOrValue(
-        SyntaxTypes.Expression.Identifier funcOrValue,
+    private static CanonicalizationResult<Expression.Identifier> CanonicalizeFunctionOrValue(
+        Expression.Identifier funcOrValue,
         Range range,
         CanonicalizationContext context)
     {
@@ -2249,11 +2249,11 @@ public partial class Canonicalization
                 context);
 
         var canonicalizedFuncOrValue =
-            new SyntaxTypes.Expression.Identifier(
+            new Expression.Identifier(
                 ModuleName: resolvedModuleName,
                 Name: funcOrValue.Name);
 
-        return new CanonicalizationResult<SyntaxTypes.Expression.Identifier>(canonicalizedFuncOrValue, errors);
+        return new CanonicalizationResult<Expression.Identifier>(canonicalizedFuncOrValue, errors);
     }
 
     private static CanonicalizationResult<ModuleName> ResolveModuleName(
@@ -2527,8 +2527,8 @@ public partial class Canonicalization
         return new CanonicalizationResult<Case>(canonicalizedCase, allErrors, allShadowings);
     }
 
-    private static CanonicalizationResult<SyntaxTypes.Expression.LetBlock> CanonicalizeLetBlock(
-        SyntaxTypes.Expression.LetBlock letBlock,
+    private static CanonicalizationResult<Expression.LetBlock> CanonicalizeLetBlock(
+        Expression.LetBlock letBlock,
         CanonicalizationContext context)
     {
         // Collect let bindings while checking for shadowing against module-level and outer local declarations
@@ -2541,7 +2541,7 @@ public partial class Canonicalization
 
         foreach (var decl in letBlock.Declarations)
         {
-            if (decl.Value is SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc)
+            if (decl.Value is Expression.LetDeclaration.LetFunction letFunc)
             {
                 var funcName = letFunc.Function.Declaration.Value.Name.Value;
                 var funcNameRange = letFunc.Function.Declaration.Value.Name.Range;
@@ -2569,7 +2569,7 @@ public partial class Canonicalization
                 extendedLocalDeclarations = extendedLocalDeclarations.Add(funcName);
                 existingScope = existingScope.Add(funcName);
             }
-            else if (decl.Value is SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr)
+            else if (decl.Value is Expression.LetDeclaration.LetDestructuring letDestr)
             {
                 var (collectedVars, errors, destrShadowings) =
                     CollectPatternVariablesWithShadowCheck(
@@ -2603,7 +2603,7 @@ public partial class Canonicalization
             CanonicalizationResultExtensions.Map2(
                 declsResult,
                 exprResult,
-                (canonicalizedDecls, canonicalizedExpr) => new SyntaxTypes.Expression.LetBlock(
+                (canonicalizedDecls, canonicalizedExpr) => new Expression.LetBlock(
                     LetTokenLocation: letBlock.LetTokenLocation,
                     Declarations: [.. canonicalizedDecls],
                     InTokenLocation: letBlock.InTokenLocation,
@@ -2616,41 +2616,41 @@ public partial class Canonicalization
             CanonicalizationResult<object>.MergeShadowings(letShadowings, canonicalizedLetBlock.Shadowings);
 
         return
-            new CanonicalizationResult<SyntaxTypes.Expression.LetBlock>(
+            new CanonicalizationResult<Expression.LetBlock>(
                 canonicalizedLetBlock.Value,
                 allErrors,
                 allShadowings);
     }
 
-    private static CanonicalizationResult<Node<SyntaxTypes.Expression.LetDeclaration>> CanonicalizeLetDeclarationNode(
-        Node<SyntaxTypes.Expression.LetDeclaration> declNode,
+    private static CanonicalizationResult<Node<Expression.LetDeclaration>> CanonicalizeLetDeclarationNode(
+        Node<Expression.LetDeclaration> declNode,
         CanonicalizationContext context) =>
         MapNodeWithErrors(declNode, decl => CanonicalizeLetDeclaration(decl, context));
 
-    private static CanonicalizationResult<SyntaxTypes.Expression.LetDeclaration> CanonicalizeLetDeclaration(
-        SyntaxTypes.Expression.LetDeclaration decl,
+    private static CanonicalizationResult<Expression.LetDeclaration> CanonicalizeLetDeclaration(
+        Expression.LetDeclaration decl,
         CanonicalizationContext context)
     {
-        SyntaxTypes.Expression.LetDeclaration canonicalizedDecl;
+        Expression.LetDeclaration canonicalizedDecl;
         IReadOnlyList<CanonicalizationError> errors;
         ImmutableDictionary<string, ShadowingLocation> shadowings;
 
         switch (decl)
         {
-            case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
+            case Expression.LetDeclaration.LetFunction letFunc:
                 {
                     var funcResult =
                         CanonicalizeFunctionStruct(letFunc.Function, context);
 
                     canonicalizedDecl =
-                        new SyntaxTypes.Expression.LetDeclaration.LetFunction(funcResult.Value);
+                        new Expression.LetDeclaration.LetFunction(funcResult.Value);
 
                     errors = funcResult.Errors;
                     shadowings = funcResult.Shadowings;
                     break;
                 }
 
-            case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
+            case Expression.LetDeclaration.LetDestructuring letDestr:
                 {
                     var patternResult =
                         CanonicalizePatternNode(letDestr.Pattern, context);
@@ -2659,7 +2659,7 @@ public partial class Canonicalization
                         CanonicalizeExpressionNode(letDestr.Expression, context);
 
                     canonicalizedDecl =
-                        new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
+                        new Expression.LetDeclaration.LetDestructuring(
                             patternResult.Value,
                             letDestr.EqualsTokenLocation,
                             exprResult.Value);
@@ -2680,7 +2680,7 @@ public partial class Canonicalization
         }
 
         return
-            new CanonicalizationResult<SyntaxTypes.Expression.LetDeclaration>(
+            new CanonicalizationResult<Expression.LetDeclaration>(
                 canonicalizedDecl,
                 errors,
                 shadowings);

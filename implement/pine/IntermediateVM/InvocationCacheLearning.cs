@@ -1,5 +1,6 @@
-using Pine.Core;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
+using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -10,7 +11,7 @@ namespace Pine.IntermediateVM;
 internal static class InvocationCacheLearning
 {
     internal static ContinuousInvocationCacheLearning Create(
-        Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig? evaluationConfig = null,
+        Core.Runtime.IntermediateVM.PineVM.EvaluationConfig? evaluationConfig = null,
         IReadOnlyDictionary<PineValue, PrecompiledLeaf>? precompiledLeaves = null,
         Action<string>? logDelegate = null,
         ContinuousInvocationCacheLearningOptions? options = null,
@@ -42,7 +43,7 @@ internal static class InvocationCacheLearning
                 {
                     MaximumCandidateEvaluations = 4,
                     EvaluationConfig =
-                    evaluationConfig ?? Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig.Default
+                    evaluationConfig ?? Core.Runtime.IntermediateVM.PineVM.EvaluationConfig.Default
                 });
 
         return

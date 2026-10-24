@@ -1,6 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using Pine.Core.Elm.Syntax.Concrete;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using Xunit;

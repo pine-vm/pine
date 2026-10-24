@@ -6,9 +6,11 @@ using Pine.Core.Addressing;
 using Pine.Core.CLI;
 using Pine.Core.Elm;
 using Pine.Core.Elm.Elm019;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
 using Pine.Core.Files;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.IntermediateVM;
 using Pine.Elm;
 using Pine.IntermediateVM;
 using System;
@@ -532,7 +534,7 @@ public static class MakeCommand
             if (parseFromEnvOk.functionRecord.ParameterCount is 0)
             {
                 elmBytesValue =
-                    Core.Elm.ElmSourceCompilation.EvaluateZeroParameterRoot(elmBytesValue, pineVM, parseCache)
+                    ElmSourceCompilation.EvaluateZeroParameterRoot(elmBytesValue, pineVM, parseCache)
                     .Extract(error => throw new Exception("Failed evaluating blobMain: " + error));
             }
 

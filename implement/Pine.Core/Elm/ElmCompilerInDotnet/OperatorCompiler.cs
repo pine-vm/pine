@@ -1,4 +1,6 @@
 using Pine.Core.Elm.ElmCompilerInDotnet.CoreLibraryModule;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
 
 using SyntaxTypes = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 

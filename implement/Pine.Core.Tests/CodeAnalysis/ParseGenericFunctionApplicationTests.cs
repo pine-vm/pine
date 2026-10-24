@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Pine.Core.PineLanguage;
 using Xunit;
 
 using PineCodeAnalysis = Pine.Core.CodeAnalysis.CodeAnalysis;

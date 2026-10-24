@@ -1,4 +1,6 @@
 using Pine.Core.Elm.LanguageServer.LanguageServiceInterface;
+using Pine.Core.Functional;
+using Pine.Core.Runtime.IntermediateVM;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,13 +16,13 @@ public interface ILanguageServiceSession : System.IDisposable
     void System.IDisposable.Dispose() { }
 
     /// <summary>Returns the current policy and incremental learning evidence, when available.</summary>
-    Interpreter.IntermediateVM.InvocationCacheLearningState? GetInvocationCacheLearningState() => null;
+    InvocationCacheLearningState? GetInvocationCacheLearningState() => null;
 
     /// <summary>
     /// Returns cumulative VM-facing cache operations, or null when instrumentation is unavailable.
     /// Includes initialization and all worker attempts, including cancelled or speculative attempts.
     /// </summary>
-    Interpreter.IntermediateVM.InvocationCacheStatisticsSnapshot? GetInvocationCacheStatistics() => null;
+    InvocationCacheStatisticsSnapshot? GetInvocationCacheStatistics() => null;
 
     /// <summary>
     /// Adds or replaces the contents of a workspace file.

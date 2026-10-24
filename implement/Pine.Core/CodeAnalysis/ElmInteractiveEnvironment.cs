@@ -1,4 +1,7 @@
-using Pine.Core.CommonEncodings;
+using Pine.Core.Encodings;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -92,7 +95,7 @@ public static class ElmInteractiveEnvironment
     /// <param name="cancellationToken">Token used to cancel evaluation.</param>
     /// <returns>The result of evaluating the function application (Ok: value, Err: error message).</returns>
     public static Result<string, PineValue> ApplyFunction(
-        PineVM.IPineVM pineVM,
+        IPineVM pineVM,
         FunctionRecord functionRecord,
         IReadOnlyList<PineValue> arguments,
         System.Threading.CancellationToken cancellationToken = default)
@@ -101,7 +104,7 @@ public static class ElmInteractiveEnvironment
             ApplyFunctionArgumentsForEvalExpr(functionRecord, arguments)
             .AndThen(
                 composedArgs =>
-                pineVM is PineVM.ICancellablePineVM cancellablePineVM
+                pineVM is ICancellablePineVM cancellablePineVM
                 ?
                 cancellablePineVM.EvaluateExpression(
                     composedArgs.expression,
@@ -116,7 +119,7 @@ public static class ElmInteractiveEnvironment
     }
 
     private static Result<string, PineValue> EvaluateWithoutCancellation(
-        PineVM.IPineVM pineVM,
+        IPineVM pineVM,
         Expression expression,
         PineValue environment,
         System.Threading.CancellationToken cancellationToken)
@@ -136,7 +139,7 @@ public static class ElmInteractiveEnvironment
     /// <param name="functionRecord">The function to apply (may already have collected arguments).</param>
     /// <param name="appendArguments">Arguments to append to those already collected.</param>
     /// <returns>
-    /// On success: tuple (expression, environment) ready for <see cref="PineVM.IPineVM.EvaluateExpression"/>.
+    /// On success: tuple (expression, environment) ready for <see cref="IPineVM.EvaluateExpression"/>.
     /// On failure: error if argument count does not match (partial application not implemented yet).
     /// </returns>
     public static Result<string, (Expression expression, PineValue environment)> ApplyFunctionArgumentsForEvalExpr(

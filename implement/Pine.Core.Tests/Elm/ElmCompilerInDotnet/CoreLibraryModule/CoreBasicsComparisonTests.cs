@@ -6,7 +6,8 @@ using Pine.Core.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
 using Pine.Core.Internal;
-using Pine.Core.Interpreter;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -14,7 +15,7 @@ using System.Linq;
 using System.Text;
 using Xunit;
 
-using IntermediatePineVM = Pine.Core.Interpreter.IntermediateVM.PineVM;
+using IntermediatePineVM = Pine.Core.Runtime.IntermediateVM.PineVM;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 
@@ -185,7 +186,7 @@ public class CoreBasicsComparisonTests
             precompiledLeaves:
             withLeaves
             ?
-            Core.IntermediateVM.SetupVM.DefaultPrecompiledLeaves
+            IntermediateVM.SetupVM.DefaultPrecompiledLeaves
             :
             ImmutableDictionary<PineValue, PrecompiledLeaf>.Empty,
             reportEnterPrecompiledLeaf: null,

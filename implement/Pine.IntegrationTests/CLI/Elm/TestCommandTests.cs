@@ -1,11 +1,11 @@
 using AwesomeAssertions;
 using Pine.CLI;
 using Pine.CLI.Elm;
-using Pine.Core;
 using Pine.Core.CLI;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.Testing;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.Encodings;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.IntermediateVM;
 using Spectre.Console;
 using System;
 using System.Collections.Generic;

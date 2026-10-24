@@ -1,6 +1,7 @@
-using Pine.Core;
-using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Elm.LanguageServer;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Concrete;
+using Pine.Core.Functional;
 using Pine.Core.LanguageServerProtocol;
 using Pine.Elm.CommonBinaries;
 using System;
@@ -17,9 +18,9 @@ public delegate ValueTask<string> ElmFormatInvoker(
 /// Adapts Pine's in-process Elm formatter to the language-server formatter boundary.
 /// </summary>
 public sealed class InProcessElmDocumentFormatter(
-    Func<string, Result<ElmSyntaxParseError, string>> format) : IDocumentFormatter
+    Func<string, Result<ParseError, string>> format) : IDocumentFormatter
 {
-    private readonly Func<string, Result<ElmSyntaxParseError, string>> _format =
+    private readonly Func<string, Result<ParseError, string>> _format =
         format
         ??
         throw new ArgumentNullException(nameof(format));

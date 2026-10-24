@@ -1,6 +1,8 @@
 using AwesomeAssertions;
-using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Elm.LanguageServer;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Concrete;
+using Pine.Core.Functional;
 using Pine.Core.LanguageServerProtocol;
 using System.Linq;
 using System.Threading;
@@ -8,9 +10,9 @@ using System.Threading.Tasks;
 using Xunit;
 
 using ElmLanguageServer = Pine.Core.Elm.LanguageServer.LanguageServer;
-using Location = Pine.Core.Elm.ElmSyntax.SyntaxModel.Location;
+using Location = Pine.Core.Elm.Syntax.Concrete.Location;
 using LspRange = Pine.Core.LanguageServerProtocol.Range;
-using SyntaxRange = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
+using SyntaxRange = Pine.Core.Elm.Syntax.Concrete.Range;
 
 namespace Pine.Core.Tests.Elm.LanguageServer;
 
@@ -100,10 +102,10 @@ public class ElmSyntaxDiagnosticsProviderTests
     public void Syntax_diagnostics_compose_only_parse_errors_in_stable_source_order()
     {
         var earlier =
-            new ElmSyntaxParseError(
+            new ParseError(
                 new SyntaxRange(new Location(2, 5), new Location(2, 7)),
                 new SyntaxRange(new Location(1, 1), new Location(10, 20)),
-                new ElmSyntaxErrorKind.Parse(
+                new ErrorKind.Parse(
                     new ElmSyntaxProblem.Expected(
                         new ExpectedSyntax.Keyword("exposing"),
                         new FoundSyntax(FoundSyntaxKind.EndOfFile, ""))));
@@ -114,7 +116,7 @@ public class ElmSyntaxDiagnosticsProviderTests
             earlier with
             {
                 Kind =
-                new ElmSyntaxErrorKind.Parse(
+                new ErrorKind.Parse(
                     new ElmSyntaxProblem.Expected(
                         new ExpectedSyntax.Token(SyntaxTokenKind.CloseParen),
                         new FoundSyntax(FoundSyntaxKind.EndOfFile, "")))
@@ -123,7 +125,7 @@ public class ElmSyntaxDiagnosticsProviderTests
         var validation =
             earlier with
             {
-                Kind = new ElmSyntaxErrorKind.ModuleValidation(ModuleValidationProblem.PortInPackage)
+                Kind = new ErrorKind.ModuleValidation(ModuleValidationProblem.PortInPackage)
             };
 
         var diagnostics =
@@ -160,10 +162,10 @@ public class ElmSyntaxDiagnosticsProviderTests
         int expectedEndCharacter)
     {
         var error =
-            new ElmSyntaxParseError(
+            new ParseError(
                 new SyntaxRange(new Location(startRow, startColumn), new Location(endRow, endColumn)),
                 null,
-                new ElmSyntaxErrorKind.Parse(
+                new ErrorKind.Parse(
                     new ElmSyntaxProblem.Expected(
                         new ExpectedSyntax.Keyword("module"),
                         new FoundSyntax(FoundSyntaxKind.EndOfFile, ""))));

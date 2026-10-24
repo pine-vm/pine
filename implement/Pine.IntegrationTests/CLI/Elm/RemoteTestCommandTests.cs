@@ -406,7 +406,7 @@ public class RemoteTestCommandTests
             Encoding.UTF8.GetBytes(
                 manifest.Replace(
                     "\"src\"",
-                    System.Text.Json.JsonSerializer.Serialize(sourceDirectory),
+                    JsonSerializer.Serialize(sourceDirectory),
                     StringComparison.Ordinal));
 
         TestCommand.Execute(

@@ -1,12 +1,11 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Abstract;
 using System;
 using System.Collections.Immutable;
 using Xunit;
-
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -18,7 +17,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 /// <para>
 /// Each test parses a small Elm function body, applies
 /// <see cref="CaseBlockConsolidation.RewriteExpression"/> to
-/// the outermost <see cref="SyntaxTypes.Expression.CaseExpression"/>,
+/// the outermost <see cref="Expression.CaseExpression"/>,
 /// and asserts a structural property of the result (e.g. the outer
 /// case is gone; the if-chain has absorbed the arms).
 /// </para>
@@ -56,16 +55,16 @@ public class CaseBlockConsolidationTests
 
         // After consolidation the top-level expression should be an
         // IfBlock — the outer case is gone.
-        rewritten.Should().BeOfType<SyntaxTypes.Expression.IfBlock>();
+        rewritten.Should().BeOfType<Expression.IfBlock>();
 
-        var original = (SyntaxTypes.Expression.CaseExpression)ParseFunctionByName(ModuleText, "foo").Expression;
-        var originalIf = (SyntaxTypes.Expression.IfBlock)original.Expression;
+        var original = (Expression.CaseExpression)ParseFunctionByName(ModuleText, "foo").Expression;
+        var originalIf = (Expression.IfBlock)original.Expression;
 
         rewritten.Should().Be(
-            new SyntaxTypes.Expression.IfBlock(
+            new Expression.IfBlock(
                 originalIf.Condition,
-                new SyntaxTypes.Expression.LetExpression(
-                    [new SyntaxTypes.LetDeclaration.LetDestructuring(original.Cases[0].Pattern, originalIf.ThenBlock)],
+                new Expression.LetExpression(
+                    [new LetDeclaration.LetDestructuring(original.Cases[0].Pattern, originalIf.ThenBlock)],
                     original.Cases[0].Expression),
                 original.Cases[1].Expression));
     }
@@ -92,7 +91,7 @@ public class CaseBlockConsolidationTests
         var (rewritten, fired) = TryConsolidateBodyOf(ModuleText, "foo");
 
         fired.Should().BeTrue();
-        rewritten.Should().BeOfType<SyntaxTypes.Expression.IfBlock>();
+        rewritten.Should().BeOfType<Expression.IfBlock>();
     }
 
     [Fact]
@@ -194,16 +193,16 @@ public class CaseBlockConsolidationTests
         var (rewritten, fired) = TryConsolidateBodyOf(ModuleText, "foo");
 
         fired.Should().BeTrue();
-        rewritten.Should().BeOfType<SyntaxTypes.Expression.IfBlock>();
+        rewritten.Should().BeOfType<Expression.IfBlock>();
 
         // Walk into the else branch — should be the integer literal `0`
         // unchanged (no let-destructure wrapper, since the Nothing
         // pattern binds no variables).
-        var ifBlock = (SyntaxTypes.Expression.IfBlock)rewritten;
+        var ifBlock = (Expression.IfBlock)rewritten;
         var elseValue = ifBlock.ElseBlock;
 
         // After peeling, must be a non-let expression — no destructure was emitted.
-        elseValue.Should().NotBeOfType<SyntaxTypes.Expression.LetExpression>();
+        elseValue.Should().NotBeOfType<Expression.LetExpression>();
     }
 
     [Fact]
@@ -226,17 +225,17 @@ public class CaseBlockConsolidationTests
 
         fired.Should().BeTrue();
 
-        var ifBlock = (SyntaxTypes.Expression.IfBlock)rewritten;
-        var elseBody = (SyntaxTypes.Expression.LetExpression)ifBlock.ElseBlock;
-        var original = (SyntaxTypes.Expression.CaseExpression)ParseFunctionByName(ModuleText, "foo").Expression;
-        var originalIf = (SyntaxTypes.Expression.IfBlock)original.Expression;
+        var ifBlock = (Expression.IfBlock)rewritten;
+        var elseBody = (Expression.LetExpression)ifBlock.ElseBlock;
+        var original = (Expression.CaseExpression)ParseFunctionByName(ModuleText, "foo").Expression;
+        var originalIf = (Expression.IfBlock)original.Expression;
 
         elseBody.Should().Be(
-            new SyntaxTypes.Expression.LetExpression(
-                [new SyntaxTypes.LetDeclaration.LetDestructuring(original.Cases[1].Pattern, originalIf.ElseBlock)],
+            new Expression.LetExpression(
+                [new LetDeclaration.LetDestructuring(original.Cases[1].Pattern, originalIf.ElseBlock)],
                 original.Cases[1].Expression));
 
-        SyntaxTypes.SyntaxAnalysis.CollectRemainingFreeVariables(elseBody).Should().NotContain("alias");
+        SyntaxAnalysis.CollectRemainingFreeVariables(elseBody).Should().NotContain("alias");
     }
 
     // =========================================================================
@@ -276,13 +275,13 @@ public class CaseBlockConsolidationTests
         fired.Should().BeTrue();
 
         // After consolidation the top-level expression is a single case.
-        rewritten.Should().BeOfType<SyntaxTypes.Expression.CaseExpression>();
+        rewritten.Should().BeOfType<Expression.CaseExpression>();
 
-        var consolidated = (SyntaxTypes.Expression.CaseExpression)rewritten;
+        var consolidated = (Expression.CaseExpression)rewritten;
         consolidated.Cases.Count.Should().Be(2);
 
-        var original = (SyntaxTypes.Expression.CaseExpression)ParseFunctionByName(ModuleText, "foo").Expression;
-        var inner = (SyntaxTypes.Expression.CaseExpression)original.Expression;
+        var original = (Expression.CaseExpression)ParseFunctionByName(ModuleText, "foo").Expression;
+        var inner = (Expression.CaseExpression)original.Expression;
 
         consolidated.Expression.Should().Be(inner.Expression);
 
@@ -291,9 +290,9 @@ public class CaseBlockConsolidationTests
             consolidated.Cases[i].Pattern.Should().Be(inner.Cases[i].Pattern);
 
             consolidated.Cases[i].Expression.Should().Be(
-                new SyntaxTypes.Expression.LetExpression(
+                new Expression.LetExpression(
                     [
-                    new SyntaxTypes.LetDeclaration.LetDestructuring(
+                    new LetDeclaration.LetDestructuring(
                         original.Cases[i].Pattern,
                         inner.Cases[i].Expression)
                     ],
@@ -336,13 +335,13 @@ public class CaseBlockConsolidationTests
         fired.Should().BeTrue();
 
         // Top-level must be a LetExpression — the wrapper survived.
-        rewritten.Should().BeOfType<SyntaxTypes.Expression.LetExpression>();
+        rewritten.Should().BeOfType<Expression.LetExpression>();
 
-        var letExpr = (SyntaxTypes.Expression.LetExpression)rewritten;
+        var letExpr = (Expression.LetExpression)rewritten;
 
         // The let body should now be a single CaseExpression
         // (the consolidated case).
-        letExpr.Expression.Should().BeOfType<SyntaxTypes.Expression.CaseExpression>();
+        letExpr.Expression.Should().BeOfType<Expression.CaseExpression>();
     }
 
     [Fact]
@@ -492,15 +491,15 @@ public class CaseBlockConsolidationTests
 
         fired.Should().BeTrue();
 
-        var ifBlock = (SyntaxTypes.Expression.IfBlock)rewritten;
-        var armBody = (SyntaxTypes.Expression.LetExpression)ifBlock.ThenBlock;
-        var destructuring = (SyntaxTypes.LetDeclaration.LetDestructuring)armBody.Declarations[0];
+        var ifBlock = (Expression.IfBlock)rewritten;
+        var armBody = (Expression.LetExpression)ifBlock.ThenBlock;
+        var destructuring = (LetDeclaration.LetDestructuring)armBody.Declarations[0];
 
-        destructuring.Expression.Should().BeOfType<SyntaxTypes.Expression.LetExpression>();
+        destructuring.Expression.Should().BeOfType<Expression.LetExpression>();
 
         destructuring.Expression.Should().Be(
-            ((SyntaxTypes.Expression.IfBlock)
-            ((SyntaxTypes.Expression.CaseExpression)ParseFunctionByName(ModuleText, "foo").Expression)
+            ((Expression.IfBlock)
+            ((Expression.CaseExpression)ParseFunctionByName(ModuleText, "foo").Expression)
             .Expression).ThenBlock);
     }
 
@@ -555,9 +554,9 @@ public class CaseBlockConsolidationTests
 
         fired.Should().BeTrue();
 
-        var ifBlock = (SyntaxTypes.Expression.IfBlock)rewritten;
-        var thenBody = (SyntaxTypes.Expression.LetExpression)ifBlock.ThenBlock;
-        var original = (SyntaxTypes.Expression.CaseExpression)ParseFunctionByName(ModuleText, "foo").Expression;
+        var ifBlock = (Expression.IfBlock)rewritten;
+        var thenBody = (Expression.LetExpression)ifBlock.ThenBlock;
+        var original = (Expression.CaseExpression)ParseFunctionByName(ModuleText, "foo").Expression;
 
         thenBody.Expression.Should().Be(original.Cases[0].Expression);
     }
@@ -630,13 +629,13 @@ public class CaseBlockConsolidationTests
         var name = DeclQualifiedName.Create(["Test"], "foo");
 
         var declaration =
-            new SyntaxTypes.Declaration.FunctionDeclaration(
-                new SyntaxTypes.FunctionStruct(
+            new Declaration.FunctionDeclaration(
+                new FunctionStruct(
                     Signature: null,
                     Declaration: ParseFunctionByName(ModuleText, "foo")));
 
         var declarations =
-            ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>.Empty.Add(name, declaration);
+            ImmutableDictionary<DeclQualifiedName, Declaration>.Empty.Add(name, declaration);
 
         var rewritten =
             CaseBlockConsolidation.RewriteDeclarationDictionary(
@@ -649,12 +648,12 @@ public class CaseBlockConsolidationTests
                 CaseBlockConsolidation.CaseConsolidationConfig.Default);
 
         rewrittenOptimized.RenderAsFlatDictionary().Should().Equal(rewritten);
-        var function = (SyntaxTypes.Declaration.FunctionDeclaration)rewritten[name];
+        var function = (Declaration.FunctionDeclaration)rewritten[name];
 
-        function.Function.Declaration.Expression.Should().BeOfType<SyntaxTypes.Expression.IfBlock>();
+        function.Function.Declaration.Expression.Should().BeOfType<Expression.IfBlock>();
 
         function.Function.Declaration.GetHashCode().Should().Be(
-            new SyntaxTypes.FunctionImplementation(
+            new FunctionImplementation(
                 function.Function.Declaration.Name,
                 function.Function.Declaration.Arguments,
                 function.Function.Declaration.Expression).GetHashCode());
@@ -672,7 +671,7 @@ public class CaseBlockConsolidationTests
     /// the original, if no rewrite fired) together with a flag
     /// indicating whether a rewrite fired.
     /// </summary>
-    private static (SyntaxTypes.Expression Rewritten, bool Fired) TryConsolidateBodyOf(
+    private static (Expression Rewritten, bool Fired) TryConsolidateBodyOf(
         string moduleText, string functionName)
     {
         var func = ParseFunctionByName(moduleText, functionName);
@@ -689,7 +688,7 @@ public class CaseBlockConsolidationTests
         return (rewritten, fired);
     }
 
-    private static SyntaxTypes.FunctionImplementation ParseFunctionByName(
+    private static FunctionImplementation ParseFunctionByName(
         string moduleText, string functionName)
     {
         var parsed =
@@ -697,11 +696,11 @@ public class CaseBlockConsolidationTests
             .Extract(err => throw new Exception("Failed parsing: " + err));
 
         var converted =
-            SyntaxTypes.ConvertFromConcrete.FromFile(parsed);
+            ConvertFromConcrete.FromFile(parsed);
 
         foreach (var declaration in converted.Declarations)
         {
-            if (declaration is SyntaxTypes.Declaration.FunctionDeclaration funcDecl &&
+            if (declaration is Declaration.FunctionDeclaration funcDecl &&
                 funcDecl.Function.Declaration.Name == functionName)
             {
                 return funcDecl.Function.Declaration;

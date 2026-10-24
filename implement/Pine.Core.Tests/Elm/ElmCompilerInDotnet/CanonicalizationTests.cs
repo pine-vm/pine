@@ -1,13 +1,11 @@
 using AwesomeAssertions;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax;
-using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Pine.Core.Elm.Syntax;
 using System.Linq;
 using Xunit;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
-using ConcreteSyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using Stil4mElmSyntax7 = Pine.Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -29,7 +27,7 @@ public class CanonicalizationTests
 
         var result = Canonicalization.CanonicalizeOrThrow([baseModule, extraModule, root]);
         var module = ElmCompilerTestHelper.GetCanonicalizedModule(result, ["Main"]);
-        var rendered = Avh4Format.FormatToString(ToFullSyntaxModel.Convert(module));
+        var rendered = Avh4Format.FormatToString(Stil4mElmSyntax7.ToFullSyntaxModel.Convert(module));
         rendered.Should().Contain("Extra.extra").And.Contain("List.take");
     }
 
@@ -54,11 +52,11 @@ public class CanonicalizationTests
         var canonicalized = ElmCompilerTestHelper.GetCanonicalizedModule(result, ["Main"]);
 
         NamingErrorDetection.DetectNamingErrorsInModule(
-            [.. ToFullSyntaxModel.Convert(canonicalized).Declarations.Select(node => node.Value)],
+            [.. Stil4mElmSyntax7.ToFullSyntaxModel.Convert(canonicalized).Declarations.Select(node => node.Value)],
             ["value"]).Errors.Should().BeEmpty();
     }
 
-    private static ConcreteSyntaxTypes.File ParseModuleText(string moduleTex)
+    private static Core.Elm.Syntax.Concrete.File ParseModuleText(string moduleTex)
     {
         return
             ElmSyntaxParser.ParseModuleText(moduleTex)
@@ -91,7 +89,7 @@ public class CanonicalizationTests
         var canonicalizedModule =
             ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Test"]);
 
-        var asElmValue = EncodeAsElmValue.EncodeFile(canonicalizedModule);
+        var asElmValue = Stil4mElmSyntax7.EncodeAsElmValue.EncodeFile(canonicalizedModule);
 
         var asElmExpression =
             ElmValue.RenderAsElmExpression(asElmValue);
@@ -138,7 +136,7 @@ public class CanonicalizationTests
 
         var rendered =
             Avh4Format.FormatToString(
-                ToFullSyntaxModel.Convert(canonicalized));
+                Stil4mElmSyntax7.ToFullSyntaxModel.Convert(canonicalized));
 
         rendered.Trim().Should().Be(
             expectedModuleText.Trim());
@@ -182,7 +180,7 @@ public class CanonicalizationTests
 
         var rendered =
             Avh4Format.FormatToString(
-                ToFullSyntaxModel.Convert(canonicalized));
+                Stil4mElmSyntax7.ToFullSyntaxModel.Convert(canonicalized));
 
         rendered.Trim().Should().Be(
             expectedModuleText.Trim());
@@ -226,7 +224,7 @@ public class CanonicalizationTests
 
         var rendered =
             Avh4Format.FormatToString(
-                ToFullSyntaxModel.Convert(canonicalized));
+                Stil4mElmSyntax7.ToFullSyntaxModel.Convert(canonicalized));
 
         rendered.Trim().Should().Be(
             expectedModuleText.Trim());
@@ -269,23 +267,23 @@ public class CanonicalizationTests
         var mainFuncDecl =
             mainModule.Declarations
             .Select(d => d.Value)
-            .OfType<Declaration.FunctionDeclaration>()
+            .OfType<Stil4mElmSyntax7.Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "main");
 
         // Get the expression (otherFunc x)
         var expr = mainFuncDecl.Function.Declaration.Value.Expression.Value;
 
         // It should be an Application
-        expr.Should().BeOfType<SyntaxTypes.Expression.Application>();
-        var application = (SyntaxTypes.Expression.Application)expr;
+        expr.Should().BeOfType<Stil4mElmSyntax7.Expression.Application>();
+        var application = (Stil4mElmSyntax7.Expression.Application)expr;
 
         // First argument should be FunctionOrValue with module name "OtherModule"
         var funcOrValue = application.Arguments[0].Value;
-        funcOrValue.Should().BeOfType<SyntaxTypes.Expression.FunctionOrValue>();
-        var funcRef = (SyntaxTypes.Expression.FunctionOrValue)funcOrValue;
+        funcOrValue.Should().BeOfType<Stil4mElmSyntax7.Expression.FunctionOrValue>();
+        var funcRef = (Stil4mElmSyntax7.Expression.FunctionOrValue)funcOrValue;
 
         funcRef.Should().Be(
-            new SyntaxTypes.Expression.FunctionOrValue(
+            new Stil4mElmSyntax7.Expression.FunctionOrValue(
                 ModuleName: ["OtherModule"],
                 Name: "otherFunc"));
     }
@@ -326,24 +324,24 @@ public class CanonicalizationTests
         var useTypeFunc =
             canonicalizedModule.Declarations
             .Select(d => d.Value)
-            .OfType<Declaration.FunctionDeclaration>()
+            .OfType<Stil4mElmSyntax7.Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "useType");
 
         // Get the case expression
         var caseExpr = useTypeFunc.Function.Declaration.Value.Expression.Value;
-        caseExpr.Should().BeOfType<SyntaxTypes.Expression.CaseExpression>();
-        var caseBlock = ((SyntaxTypes.Expression.CaseExpression)caseExpr).CaseBlock;
+        caseExpr.Should().BeOfType<Stil4mElmSyntax7.Expression.CaseExpression>();
+        var caseBlock = ((Stil4mElmSyntax7.Expression.CaseExpression)caseExpr).CaseBlock;
 
         // Check the patterns - they should have module names
         var firstPattern = caseBlock.Cases[0].Pattern.Value;
-        firstPattern.Should().BeOfType<Pattern.NamedPattern>();
-        var firstNamed = (Pattern.NamedPattern)firstPattern;
-        firstNamed.Name.Should().Be(new QualifiedNameRef(["Test"], "OptionA"));
+        firstPattern.Should().BeOfType<Stil4mElmSyntax7.Pattern.NamedPattern>();
+        var firstNamed = (Stil4mElmSyntax7.Pattern.NamedPattern)firstPattern;
+        firstNamed.Name.Should().Be(new Stil4mElmSyntax7.QualifiedNameRef(["Test"], "OptionA"));
 
         var secondPattern = caseBlock.Cases[1].Pattern.Value;
-        secondPattern.Should().BeOfType<Pattern.NamedPattern>();
-        var secondNamed = (Pattern.NamedPattern)secondPattern;
-        secondNamed.Name.Should().Be(new QualifiedNameRef(["Test"], "OptionB"));
+        secondPattern.Should().BeOfType<Stil4mElmSyntax7.Pattern.NamedPattern>();
+        var secondNamed = (Stil4mElmSyntax7.Pattern.NamedPattern)secondPattern;
+        secondNamed.Name.Should().Be(new Stil4mElmSyntax7.QualifiedNameRef(["Test"], "OptionB"));
     }
 
     [Fact]
@@ -377,7 +375,7 @@ public class CanonicalizationTests
         var getNameFunc =
             canonicalizedModule.Declarations
             .Select(d => d.Value)
-            .OfType<Declaration.FunctionDeclaration>()
+            .OfType<Stil4mElmSyntax7.Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "getName");
 
         // Get the type signature
@@ -385,13 +383,13 @@ public class CanonicalizationTests
         signature.Should().NotBeNull();
 
         var typeAnnotation = signature.Value.TypeAnnotation.Value;
-        typeAnnotation.Should().BeOfType<TypeAnnotation.FunctionTypeAnnotation>();
-        var funcType = (TypeAnnotation.FunctionTypeAnnotation)typeAnnotation;
+        typeAnnotation.Should().BeOfType<Stil4mElmSyntax7.TypeAnnotation.FunctionTypeAnnotation>();
+        var funcType = (Stil4mElmSyntax7.TypeAnnotation.FunctionTypeAnnotation)typeAnnotation;
 
         // The argument type should be 'Person' which should be resolved to ["Test"]
         var argType = funcType.ArgumentType.Value;
-        argType.Should().BeOfType<TypeAnnotation.Typed>();
-        var typedArg = (TypeAnnotation.Typed)argType;
+        argType.Should().BeOfType<Stil4mElmSyntax7.TypeAnnotation.Typed>();
+        var typedArg = (Stil4mElmSyntax7.TypeAnnotation.Typed)argType;
         var (moduleName, name) = typedArg.TypeName.Value;
         moduleName.Should().Equal(["Test"]);
         name.Should().Be("Person");
@@ -441,25 +439,25 @@ public class CanonicalizationTests
         var isActiveFunc =
             mainModule.Declarations
             .Select(d => d.Value)
-            .OfType<Declaration.FunctionDeclaration>()
+            .OfType<Stil4mElmSyntax7.Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "isActive");
 
         // Get the case expression
         var caseExpr = isActiveFunc.Function.Declaration.Value.Expression.Value;
-        caseExpr.Should().BeOfType<SyntaxTypes.Expression.CaseExpression>();
-        var caseBlock = ((SyntaxTypes.Expression.CaseExpression)caseExpr).CaseBlock;
+        caseExpr.Should().BeOfType<Stil4mElmSyntax7.Expression.CaseExpression>();
+        var caseBlock = ((Stil4mElmSyntax7.Expression.CaseExpression)caseExpr).CaseBlock;
 
         // Check the patterns - they should have module names from Types module
         var firstPattern = caseBlock.Cases[0].Pattern.Value;
-        firstPattern.Should().BeOfType<Pattern.NamedPattern>();
-        var firstNamed = (Pattern.NamedPattern)firstPattern;
-        firstNamed.Name.Should().Be(new QualifiedNameRef(["Types"], "Active"));
+        firstPattern.Should().BeOfType<Stil4mElmSyntax7.Pattern.NamedPattern>();
+        var firstNamed = (Stil4mElmSyntax7.Pattern.NamedPattern)firstPattern;
+        firstNamed.Name.Should().Be(new Stil4mElmSyntax7.QualifiedNameRef(["Types"], "Active"));
 
         // Also check the type annotation
         var signature = isActiveFunc.Function.Signature;
         signature.Should().NotBeNull();
-        var funcType = (TypeAnnotation.FunctionTypeAnnotation)signature.Value.TypeAnnotation.Value;
-        var argType = (TypeAnnotation.Typed)funcType.ArgumentType.Value;
+        var funcType = (Stil4mElmSyntax7.TypeAnnotation.FunctionTypeAnnotation)signature.Value.TypeAnnotation.Value;
+        var argType = (Stil4mElmSyntax7.TypeAnnotation.Typed)funcType.ArgumentType.Value;
         var (moduleName, name) = argType.TypeName.Value;
         moduleName.Should().Equal(["Types"]);
         name.Should().Be("Status");
@@ -505,7 +503,7 @@ public class CanonicalizationTests
         var getUserNameFunc =
             mainModule.Declarations
             .Select(d => d.Value)
-            .OfType<Declaration.FunctionDeclaration>()
+            .OfType<Stil4mElmSyntax7.Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "getUserName");
 
         // Get the type signature
@@ -513,15 +511,15 @@ public class CanonicalizationTests
         signature.Should().NotBeNull();
 
         var typeAnnotation = signature.Value.TypeAnnotation.Value;
-        typeAnnotation.Should().BeOfType<TypeAnnotation.FunctionTypeAnnotation>();
-        var funcType = (TypeAnnotation.FunctionTypeAnnotation)typeAnnotation;
+        typeAnnotation.Should().BeOfType<Stil4mElmSyntax7.TypeAnnotation.FunctionTypeAnnotation>();
+        var funcType = (Stil4mElmSyntax7.TypeAnnotation.FunctionTypeAnnotation)typeAnnotation;
 
         // The argument type should be 'User' which should be resolved to ["Types"]
         var argType = funcType.ArgumentType.Value;
 
-        argType.Should().BeOfType<TypeAnnotation.Typed>();
+        argType.Should().BeOfType<Stil4mElmSyntax7.TypeAnnotation.Typed>();
 
-        var typedArg = (TypeAnnotation.Typed)argType;
+        var typedArg = (Stil4mElmSyntax7.TypeAnnotation.Typed)argType;
         var (moduleName, name) = typedArg.TypeName.Value;
 
         moduleName.Should().Equal(["Types"]);
@@ -677,17 +675,17 @@ public class CanonicalizationTests
         var valueDecl =
             mainModule.Declarations
             .Select(d => d.Value)
-            .OfType<Declaration.FunctionDeclaration>()
+            .OfType<Stil4mElmSyntax7.Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "value");
 
         // Get the expression (Decode.int)
         var expr = valueDecl.Function.Declaration.Value.Expression.Value;
-        expr.Should().BeOfType<SyntaxTypes.Expression.FunctionOrValue>();
-        var funcOrValue = (SyntaxTypes.Expression.FunctionOrValue)expr;
+        expr.Should().BeOfType<Stil4mElmSyntax7.Expression.FunctionOrValue>();
+        var funcOrValue = (Stil4mElmSyntax7.Expression.FunctionOrValue)expr;
 
         // Should be resolved from alias "Decode" to actual module "Bytes.Decode"
         funcOrValue.Should().Be(
-            new SyntaxTypes.Expression.FunctionOrValue(
+            new Stil4mElmSyntax7.Expression.FunctionOrValue(
                 ModuleName: ["Bytes", "Decode"],
                 Name: "int"));
     }
@@ -737,30 +735,30 @@ public class CanonicalizationTests
         var computeDecl =
             mainModule.Declarations
             .Select(d => d.Value)
-            .OfType<Declaration.FunctionDeclaration>()
+            .OfType<Stil4mElmSyntax7.Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "compute");
 
         // Get the expression: after canonicalization, `double x + triple x` becomes `Basics.add (double x) (triple x)`
         var expr = computeDecl.Function.Declaration.Value.Expression.Value;
-        expr.Should().BeOfType<SyntaxTypes.Expression.Application>();
-        var addApp = (SyntaxTypes.Expression.Application)expr;
+        expr.Should().BeOfType<Stil4mElmSyntax7.Expression.Application>();
+        var addApp = (Stil4mElmSyntax7.Expression.Application)expr;
 
         // First argument should be Basics.add
-        var addFunc = (SyntaxTypes.Expression.FunctionOrValue)addApp.Arguments[0].Value;
+        var addFunc = (Stil4mElmSyntax7.Expression.FunctionOrValue)addApp.Arguments[0].Value;
 
         addFunc.Should().Be(
-            new SyntaxTypes.Expression.FunctionOrValue(
+            new Stil4mElmSyntax7.Expression.FunctionOrValue(
                 ModuleName: ["Basics"],
                 Name: "add"));
 
         // Second argument should be application of double (left operand)
         var leftApp = addApp.Arguments[1].Value;
-        leftApp.Should().BeOfType<SyntaxTypes.Expression.Application>();
-        var doubleApp = (SyntaxTypes.Expression.Application)leftApp;
-        var doubleFuncOrValue = (SyntaxTypes.Expression.FunctionOrValue)doubleApp.Arguments[0].Value;
+        leftApp.Should().BeOfType<Stil4mElmSyntax7.Expression.Application>();
+        var doubleApp = (Stil4mElmSyntax7.Expression.Application)leftApp;
+        var doubleFuncOrValue = (Stil4mElmSyntax7.Expression.FunctionOrValue)doubleApp.Arguments[0].Value;
 
         doubleFuncOrValue.Should().Be(
-            new SyntaxTypes.Expression.FunctionOrValue(
+            new Stil4mElmSyntax7.Expression.FunctionOrValue(
                 ModuleName: ["Helper"],
                 Name: "double"));
     }
@@ -804,32 +802,34 @@ public class CanonicalizationTests
         var unwrapFunc =
             canonicalizedModule.Declarations
             .Select(d => d.Value)
-            .OfType<Declaration.FunctionDeclaration>()
+            .OfType<Stil4mElmSyntax7.Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "unwrap");
 
         // Get the case expression
-        var caseExpr = (SyntaxTypes.Expression.CaseExpression)unwrapFunc.Function.Declaration.Value.Expression.Value;
+        var caseExpr =
+            (Stil4mElmSyntax7.Expression.CaseExpression)unwrapFunc.Function.Declaration.Value.Expression.Value;
+
         var caseBlock = caseExpr.CaseBlock;
 
         // Check the first pattern - Just (Ok x)
         var firstPattern = caseBlock.Cases[0].Pattern.Value;
-        firstPattern.Should().BeOfType<Pattern.NamedPattern>();
-        var justPattern = (Pattern.NamedPattern)firstPattern;
-        justPattern.Name.Should().Be(new QualifiedNameRef(["Test"], "Just"));
+        firstPattern.Should().BeOfType<Stil4mElmSyntax7.Pattern.NamedPattern>();
+        var justPattern = (Stil4mElmSyntax7.Pattern.NamedPattern)firstPattern;
+        justPattern.Name.Should().Be(new Stil4mElmSyntax7.QualifiedNameRef(["Test"], "Just"));
 
         // Check the nested pattern - Ok x (may be wrapped in ParenthesizedPattern)
         var nestedPatternNode = justPattern.Arguments[0];
         var nestedPattern = nestedPatternNode.Value;
 
         // Unwrap if parenthesized
-        if (nestedPattern is Pattern.ParenthesizedPattern parenthesized)
+        if (nestedPattern is Stil4mElmSyntax7.Pattern.ParenthesizedPattern parenthesized)
         {
             nestedPattern = parenthesized.Pattern.Value;
         }
 
-        nestedPattern.Should().BeOfType<Pattern.NamedPattern>();
-        var okPattern = (Pattern.NamedPattern)nestedPattern;
-        okPattern.Name.Should().Be(new QualifiedNameRef(["Test"], "Ok"));
+        nestedPattern.Should().BeOfType<Stil4mElmSyntax7.Pattern.NamedPattern>();
+        var okPattern = (Stil4mElmSyntax7.Pattern.NamedPattern)nestedPattern;
+        okPattern.Name.Should().Be(new Stil4mElmSyntax7.QualifiedNameRef(["Test"], "Ok"));
     }
 
     [Fact]
@@ -867,18 +867,18 @@ public class CanonicalizationTests
         var processFunc =
             canonicalizedModule.Declarations
             .Select(d => d.Value)
-            .OfType<Declaration.FunctionDeclaration>()
+            .OfType<Stil4mElmSyntax7.Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "process");
 
         // Get the type signature
         var signature = processFunc.Function.Signature;
         signature.Should().NotBeNull();
 
-        var funcType = (TypeAnnotation.FunctionTypeAnnotation)signature.Value.TypeAnnotation.Value;
+        var funcType = (Stil4mElmSyntax7.TypeAnnotation.FunctionTypeAnnotation)signature.Value.TypeAnnotation.Value;
 
         // The argument type is wrapped in a single-element Tupled (parentheses)
         // containing Typed with a single-element Tupled argument
-        var argType = (TypeAnnotation.Typed)funcType.ArgumentType.Value;
+        var argType = (Stil4mElmSyntax7.TypeAnnotation.Typed)funcType.ArgumentType.Value;
 
         // Should be Optional (not Maybe)
         var (moduleName, name) = argType.TypeName.Value;
@@ -886,7 +886,7 @@ public class CanonicalizationTests
         name.Should().Be("Optional");
 
         // Check the nested type argument - Outcome Int
-        var optionalArg = (TypeAnnotation.Typed)argType.TypeArguments[0].Value;
+        var optionalArg = (Stil4mElmSyntax7.TypeAnnotation.Typed)argType.TypeArguments[0].Value;
         var (nestedModuleName, nestedName) = optionalArg.TypeName.Value;
         nestedModuleName.Should().Equal(["Test"]);
         nestedName.Should().Be("Outcome");
@@ -925,24 +925,28 @@ public class CanonicalizationTests
         var computeFunc =
             canonicalizedModule.Declarations
             .Select(d => d.Value)
-            .OfType<Declaration.FunctionDeclaration>()
+            .OfType<Stil4mElmSyntax7.Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "compute");
 
         // Get the let expression
-        var letExpr = (SyntaxTypes.Expression.LetExpression)computeFunc.Function.Declaration.Value.Expression.Value;
+        var letExpr =
+            (Stil4mElmSyntax7.Expression.LetExpression)computeFunc.Function.Declaration.Value.Expression.Value;
+
         var letBlock = letExpr.Value;
 
         // Get the helper function from let declarations
         var helperDecl = letBlock.Declarations[0].Value;
-        helperDecl.Should().BeOfType<SyntaxTypes.Expression.LetDeclaration.LetFunction>();
-        var helperFunc = ((SyntaxTypes.Expression.LetDeclaration.LetFunction)helperDecl).Function;
+        helperDecl.Should().BeOfType<Stil4mElmSyntax7.Expression.LetDeclaration.LetFunction>();
+        var helperFunc = ((Stil4mElmSyntax7.Expression.LetDeclaration.LetFunction)helperDecl).Function;
 
         // Check the type signature
         var helperSignature = helperFunc.Signature;
         helperSignature.Should().NotBeNull();
 
-        var helperFuncType = (TypeAnnotation.FunctionTypeAnnotation)helperSignature.Value.TypeAnnotation.Value;
-        var helperArgType = (TypeAnnotation.Typed)helperFuncType.ArgumentType.Value;
+        var helperFuncType =
+            (Stil4mElmSyntax7.TypeAnnotation.FunctionTypeAnnotation)helperSignature.Value.TypeAnnotation.Value;
+
+        var helperArgType = (Stil4mElmSyntax7.TypeAnnotation.Typed)helperFuncType.ArgumentType.Value;
 
         // Should be MyType resolved to Test module
         var (moduleName, name) = helperArgType.TypeName.Value;
@@ -995,10 +999,10 @@ public class CanonicalizationTests
         var intFunc =
             canonicalizedModule.Declarations
             .Select(d => d.Value)
-            .OfType<Declaration.FunctionDeclaration>()
+            .OfType<Stil4mElmSyntax7.Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "intValue");
 
-        var intType = (TypeAnnotation.Typed)intFunc.Function.Signature!.Value.TypeAnnotation.Value;
+        var intType = (Stil4mElmSyntax7.TypeAnnotation.Typed)intFunc.Function.Signature!.Value.TypeAnnotation.Value;
         var (intModuleName, intName) = intType.TypeName.Value;
         intModuleName.Should().Equal(["Basics"]);
         intName.Should().Be("Int");
@@ -1007,10 +1011,10 @@ public class CanonicalizationTests
         var floatFunc =
             canonicalizedModule.Declarations
             .Select(d => d.Value)
-            .OfType<Declaration.FunctionDeclaration>()
+            .OfType<Stil4mElmSyntax7.Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "floatValue");
 
-        var floatType = (TypeAnnotation.Typed)floatFunc.Function.Signature!.Value.TypeAnnotation.Value;
+        var floatType = (Stil4mElmSyntax7.TypeAnnotation.Typed)floatFunc.Function.Signature!.Value.TypeAnnotation.Value;
         var (floatModuleName, floatName) = floatType.TypeName.Value;
         floatModuleName.Should().Equal(["Basics"]);
         floatName.Should().Be("Float");
@@ -1019,10 +1023,10 @@ public class CanonicalizationTests
         var boolFunc =
             canonicalizedModule.Declarations
             .Select(d => d.Value)
-            .OfType<Declaration.FunctionDeclaration>()
+            .OfType<Stil4mElmSyntax7.Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "boolValue");
 
-        var boolType = (TypeAnnotation.Typed)boolFunc.Function.Signature!.Value.TypeAnnotation.Value;
+        var boolType = (Stil4mElmSyntax7.TypeAnnotation.Typed)boolFunc.Function.Signature!.Value.TypeAnnotation.Value;
         var (boolModuleName, boolName) = boolType.TypeName.Value;
         boolModuleName.Should().Equal(["Basics"]);
         boolName.Should().Be("Bool");
@@ -1031,10 +1035,10 @@ public class CanonicalizationTests
         var charFunc =
             canonicalizedModule.Declarations
             .Select(d => d.Value)
-            .OfType<Declaration.FunctionDeclaration>()
+            .OfType<Stil4mElmSyntax7.Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "charValue");
 
-        var charType = (TypeAnnotation.Typed)charFunc.Function.Signature!.Value.TypeAnnotation.Value;
+        var charType = (Stil4mElmSyntax7.TypeAnnotation.Typed)charFunc.Function.Signature!.Value.TypeAnnotation.Value;
         var (charModuleName, charName) = charType.TypeName.Value;
         charModuleName.Should().Equal(["Char"]);
         charName.Should().Be("Char");
@@ -1043,10 +1047,12 @@ public class CanonicalizationTests
         var stringFunc =
             canonicalizedModule.Declarations
             .Select(d => d.Value)
-            .OfType<Declaration.FunctionDeclaration>()
+            .OfType<Stil4mElmSyntax7.Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "stringValue");
 
-        var stringType = (TypeAnnotation.Typed)stringFunc.Function.Signature!.Value.TypeAnnotation.Value;
+        var stringType =
+            (Stil4mElmSyntax7.TypeAnnotation.Typed)stringFunc.Function.Signature!.Value.TypeAnnotation.Value;
+
         var (stringModuleName, stringName) = stringType.TypeName.Value;
         stringModuleName.Should().Equal(["String"]);
         stringName.Should().Be("String");
@@ -1190,16 +1196,16 @@ public class CanonicalizationTests
         var mainFunc =
             mainModule.Declarations
             .Select(d => d.Value)
-            .OfType<Declaration.FunctionDeclaration>()
+            .OfType<Stil4mElmSyntax7.Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "main");
 
         // Get the expression (helper 5)
-        var application = (SyntaxTypes.Expression.Application)mainFunc.Function.Declaration.Value.Expression.Value;
-        var helperRef = (SyntaxTypes.Expression.FunctionOrValue)application.Arguments[0].Value;
+        var application = (Stil4mElmSyntax7.Expression.Application)mainFunc.Function.Declaration.Value.Expression.Value;
+        var helperRef = (Stil4mElmSyntax7.Expression.FunctionOrValue)application.Arguments[0].Value;
 
         // helper should resolve to Module1, not cause a clash
         helperRef.Should().Be(
-            new SyntaxTypes.Expression.FunctionOrValue(
+            new Stil4mElmSyntax7.Expression.FunctionOrValue(
                 ModuleName: ["Module1"],
                 Name: "helper"));
     }
@@ -1252,7 +1258,7 @@ public class CanonicalizationTests
 
         var renderedAppModule =
             Avh4Format.FormatToString(
-                ToFullSyntaxModel.Convert(appModuleCanonicalized));
+                Stil4mElmSyntax7.ToFullSyntaxModel.Convert(appModuleCanonicalized));
 
         renderedAppModule.Trim().Should().Be(
             expectedAppModuleText.Trim());
@@ -1305,7 +1311,7 @@ public class CanonicalizationTests
 
         var renderedAppModule =
             Avh4Format.FormatToString(
-                ToFullSyntaxModel.Convert(appModuleCanonicalized));
+                Stil4mElmSyntax7.ToFullSyntaxModel.Convert(appModuleCanonicalized));
 
         renderedAppModule.Trim().Should().Be(
             expectedAppModuleText.Trim());
@@ -1371,7 +1377,7 @@ public class CanonicalizationTests
 
         var renderedAppModule =
             Avh4Format.FormatToString(
-                ToFullSyntaxModel.Convert(appModuleCanonicalized));
+                Stil4mElmSyntax7.ToFullSyntaxModel.Convert(appModuleCanonicalized));
 
         renderedAppModule.Trim().Should().Be(
             expectedAppModuleText.Trim());
@@ -1441,7 +1447,7 @@ public class CanonicalizationTests
 
         var renderedMainModule =
             Avh4Format.FormatToString(
-                ToFullSyntaxModel.Convert(mainModuleCanonicalized));
+                Stil4mElmSyntax7.ToFullSyntaxModel.Convert(mainModuleCanonicalized));
 
         renderedMainModule.Trim().Should().Be(
             """"
@@ -1591,7 +1597,7 @@ public class CanonicalizationTests
 
         var renderedMainModule =
             Avh4Format.FormatToString(
-                ToFullSyntaxModel.Convert(mainModuleCanonicalized));
+                Stil4mElmSyntax7.ToFullSyntaxModel.Convert(mainModuleCanonicalized));
 
         renderedMainModule.Trim().Should().Be(
             expectedMainModuleText.Trim());
@@ -1670,7 +1676,7 @@ public class CanonicalizationTests
 
         var renderedMainModule =
             Avh4Format.FormatToString(
-                ToFullSyntaxModel.Convert(mainModuleCanonicalized));
+                Stil4mElmSyntax7.ToFullSyntaxModel.Convert(mainModuleCanonicalized));
 
         renderedMainModule.Trim().Should().Be(
             expectedMainModuleText.Trim());
@@ -1870,7 +1876,7 @@ public class CanonicalizationTests
 
         var renderedMainModule =
             Avh4Format.FormatToString(
-                ToFullSyntaxModel.Convert(mainModuleCanonicalized));
+                Stil4mElmSyntax7.ToFullSyntaxModel.Convert(mainModuleCanonicalized));
 
         renderedMainModule.Trim().Should().Be(
             expectedMainModuleText.Trim());
@@ -1921,7 +1927,7 @@ public class CanonicalizationTests
 
         var renderedMainModule =
             Avh4Format.FormatToString(
-                ToFullSyntaxModel.Convert(mainModuleCanonicalized));
+                Stil4mElmSyntax7.ToFullSyntaxModel.Convert(mainModuleCanonicalized));
 
         renderedMainModule.Trim().Should().Be(
             expectedMainModuleText.Trim());
@@ -1971,7 +1977,7 @@ public class CanonicalizationTests
 
         var renderedMainModule =
             Avh4Format.FormatToString(
-                ToFullSyntaxModel.Convert(mainModuleCanonicalized));
+                Stil4mElmSyntax7.ToFullSyntaxModel.Convert(mainModuleCanonicalized));
 
         renderedMainModule.Trim().Should().Be(
             expectedMainModuleText.Trim());
@@ -2014,16 +2020,18 @@ public class CanonicalizationTests
         var originFunc =
             mainModule.Declarations
             .Select(d => d.Value)
-            .OfType<Declaration.FunctionDeclaration>()
+            .OfType<Stil4mElmSyntax7.Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "origin");
 
         // The expression should be Application [Point, 0, 0]
-        var application = (SyntaxTypes.Expression.Application)originFunc.Function.Declaration.Value.Expression.Value;
-        var pointRef = (SyntaxTypes.Expression.FunctionOrValue)application.Arguments[0].Value;
+        var application =
+            (Stil4mElmSyntax7.Expression.Application)originFunc.Function.Declaration.Value.Expression.Value;
+
+        var pointRef = (Stil4mElmSyntax7.Expression.FunctionOrValue)application.Arguments[0].Value;
 
         // Point should resolve to Types module
         pointRef.Should().Be(
-            new SyntaxTypes.Expression.FunctionOrValue(
+            new Stil4mElmSyntax7.Expression.FunctionOrValue(
                 ModuleName: ["Types"],
                 Name: "Point"));
     }

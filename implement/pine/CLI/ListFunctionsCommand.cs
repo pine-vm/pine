@@ -1,5 +1,6 @@
 using ElmTime;
 using Pine.Core;
+using Pine.Core.Functional;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.CommandLine;

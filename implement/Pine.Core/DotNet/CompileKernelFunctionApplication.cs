@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Internal;
+using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Generic;
 using System.Linq;

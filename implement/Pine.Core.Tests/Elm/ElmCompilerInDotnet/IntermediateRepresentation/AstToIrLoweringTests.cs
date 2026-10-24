@@ -1,8 +1,10 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Elm.Syntax.Abstract;
+using Pine.Core.Encodings;
+using Pine.Core.Functional;
 using Pine.Core.Tests.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 using System;
 using System.Collections.Frozen;
@@ -12,9 +14,9 @@ using System.Linq;
 using System.Numerics;
 using Xunit;
 
-using AST = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
+using AST = Pine.Core.Elm.Syntax.Abstract;
 using IR = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
-using InfixDirection = Pine.Core.Elm.ElmSyntax.SyntaxModel.InfixDirection;
+using InfixDirection = Pine.Core.Elm.Syntax.Concrete.InfixDirection;
 using FunctionId = Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel.FunctionId;
 using Model = Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
 
@@ -22,22 +24,22 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 
 public class AstToIrLoweringTests
 {
-    private static readonly FunctionId Owner = new FunctionId.Source(DeclQualifiedName.Create(["Test"], "select"));
+    private static readonly FunctionId s_owner = new FunctionId.Source(DeclQualifiedName.Create(["Test"], "select"));
 
-    private static Model.BindingId Id(int slot) => new Model.BindingId.Local(Owner, slot);
+    private static Model.BindingId Id(int slot) => new Model.BindingId.Local(s_owner, slot);
 
     [Fact]
     public void Canonical_list_annotations_do_not_lose_element_types_or_conflate_other_modules()
     {
         var canonical =
             TypeInference.TypeAnnotationToInferredType(
-                new AST.TypeAnnotation.Typed(["List"], "List", [new AST.TypeAnnotation.Unit()]));
+                new TypeAnnotation.Typed(["List"], "List", [new TypeAnnotation.Unit()]));
 
         canonical.Should().BeOfType<TypeInference.InferredType.ListType>();
 
         var unrelated =
             TypeInference.TypeAnnotationToInferredType(
-                new AST.TypeAnnotation.Typed(["Other"], "List", [new AST.TypeAnnotation.Unit()]));
+                new TypeAnnotation.Typed(["Other"], "List", [new TypeAnnotation.Unit()]));
 
         unrelated.Should().BeOfType<TypeInference.InferredType.ChoiceType>().Which.ModuleName.Should().Equal("Other");
     }
@@ -78,8 +80,8 @@ public class AstToIrLoweringTests
 
     [Theory]
     [MemberData(nameof(FromCanonicalSyntaxTests.Expressions), MemberType = typeof(FromCanonicalSyntaxTests))]
-    public void AST_to_IR_lowering_handles_every_expression_variant(AST.Expression expression) =>
-        Lower(expression, new AST.TypeAnnotation.GenericType("a")).Should().NotBeNull();
+    public void AST_to_IR_lowering_handles_every_expression_variant(Core.Elm.Syntax.Abstract.Expression expression) =>
+        Lower(expression, new TypeAnnotation.GenericType("a")).Should().NotBeNull();
 
     public static IEnumerable<object[]> ExactFloatFractions()
     {
@@ -105,8 +107,8 @@ public class AstToIrLoweringTests
     {
         var body =
             Lower(
-                new AST.Expression.FloatLiteral(numerator, denominator),
-                new AST.TypeAnnotation.Typed(["Basics"], "Float", []));
+                new Core.Elm.Syntax.Abstract.Expression.FloatLiteral(numerator, denominator),
+                new TypeAnnotation.Typed(["Basics"], "Float", []));
 
         body.Should().BeOfType<IR.Expression.LiteralValue>().Which.Value.Should().Be(
             ElmValueEncoding.TagAsPineValue(
@@ -162,17 +164,27 @@ public class AstToIrLoweringTests
     public void AST_operators_prefix_operators_and_direct_calls_select_integer_intrinsics(
         string operation, string functionName, string intrinsic)
     {
-        var left = AST.Expression.Identifier.Create([], "left");
-        var right = AST.Expression.Identifier.Create([], "right");
+        var left = Expression.Identifier.Create([], "left");
+        var right = Expression.Identifier.Create([], "right");
 
-        AST.Expression[] expressions =
+        Core.Elm.Syntax.Abstract.Expression[] expressions =
             [
-            new AST.Expression.OperatorApplication(operation, InfixDirection.Left, left, right),
-            new AST.Expression.Application(new AST.Expression.PrefixOperator(operation), [left, right]),
-            new AST.Expression.Application(AST.Expression.Identifier.Create(["Basics"], functionName), [left, right])
+            new Core.Elm.Syntax.Abstract.Expression.OperatorApplication(operation, InfixDirection.Left, left, right),
+            new Core.Elm.Syntax.Abstract.Expression.Application(
+                new Core.Elm.Syntax.Abstract.Expression.PrefixOperator(operation),
+                [
+                left,
+                right
+                ]),
+            new Core.Elm.Syntax.Abstract.Expression.Application(
+                Expression.Identifier.Create(["Basics"], functionName),
+                [
+                left,
+                right
+                ])
             ];
 
-        var integer = new AST.TypeAnnotation.Typed(["Basics"], "Int", []);
+        var integer = new TypeAnnotation.Typed(["Basics"], "Int", []);
 
         foreach (var expression in expressions)
         {
@@ -189,24 +201,34 @@ public class AstToIrLoweringTests
     [InlineData("appendable", false)]
     public void AST_append_selection_preserves_genuinely_polymorphic_operations(string typeName, bool specialized)
     {
-        AST.TypeAnnotation type =
+        TypeAnnotation type =
             typeName is "appendable"
             ?
-            new AST.TypeAnnotation.GenericType(typeName)
+            new Pine.Core.Elm.Syntax.Abstract.TypeAnnotation.GenericType(typeName)
             :
-            new AST.TypeAnnotation.Typed(
+            new Pine.Core.Elm.Syntax.Abstract.TypeAnnotation.Typed(
                 [typeName],
                 typeName,
-                typeName is "List" ? [new AST.TypeAnnotation.GenericType("a")] : []);
+                typeName is "List" ? [new Pine.Core.Elm.Syntax.Abstract.TypeAnnotation.GenericType("a")] : []);
 
-        var left = AST.Expression.Identifier.Create([], "left");
-        var right = AST.Expression.Identifier.Create([], "right");
+        var left = Expression.Identifier.Create([], "left");
+        var right = Expression.Identifier.Create([], "right");
 
-        AST.Expression[] expressions =
+        Core.Elm.Syntax.Abstract.Expression[] expressions =
             [
-            new AST.Expression.OperatorApplication("++", InfixDirection.Left, left, right),
-            new AST.Expression.Application(new AST.Expression.PrefixOperator("++"), [left, right]),
-            new AST.Expression.Application(AST.Expression.Identifier.Create(["Basics"], "append"), [left, right])
+            new Core.Elm.Syntax.Abstract.Expression.OperatorApplication("++", InfixDirection.Left, left, right),
+            new Core.Elm.Syntax.Abstract.Expression.Application(
+                new Core.Elm.Syntax.Abstract.Expression.PrefixOperator("++"),
+                [
+                left,
+                right
+                ]),
+            new Core.Elm.Syntax.Abstract.Expression.Application(
+                Expression.Identifier.Create(["Basics"], "append"),
+                [
+                left,
+                right
+                ])
             ];
 
         foreach (var expression in expressions)
@@ -224,17 +246,17 @@ public class AstToIrLoweringTests
     [InlineData("number")]
     public void Non_integer_numeric_operations_remain_generic(string typeName)
     {
-        AST.TypeAnnotation type =
+        TypeAnnotation type =
             typeName is "number"
             ?
-            new AST.TypeAnnotation.GenericType(typeName)
+            new Pine.Core.Elm.Syntax.Abstract.TypeAnnotation.GenericType(typeName)
             :
-            new AST.TypeAnnotation.Typed(["Basics"], typeName, []);
+            new Pine.Core.Elm.Syntax.Abstract.TypeAnnotation.Typed(["Basics"], typeName, []);
 
         var expression =
-            new AST.Expression.Application(
-                AST.Expression.Identifier.Create(["Basics"], "add"),
-                [AST.Expression.Identifier.Create([], "left"), AST.Expression.Identifier.Create([], "right")]);
+            new Core.Elm.Syntax.Abstract.Expression.Application(
+                Expression.Identifier.Create(["Basics"], "add"),
+                [Expression.Identifier.Create([], "left"), Expression.Identifier.Create([], "right")]);
 
         var body = Lower(expression, type);
         References(body).Should().Contain("Basics.add");
@@ -405,21 +427,21 @@ public class AstToIrLoweringTests
             .Should().Be(new ElmValue.ElmList([ElmValue.Integer(1), ElmValue.Integer(2)]));
     }
 
-    private static IR.Expression Lower(AST.Expression expression, AST.TypeAnnotation type)
+    private static IR.Expression Lower(Core.Elm.Syntax.Abstract.Expression expression, TypeAnnotation type)
     {
         var declaration =
-            new AST.Declaration.FunctionDeclaration(
+            new Declaration.FunctionDeclaration(
                 new AST.FunctionStruct(
                     new AST.Signature(
                         "select",
-                        new AST.TypeAnnotation.FunctionTypeAnnotation(
+                        new TypeAnnotation.FunctionTypeAnnotation(
                             type,
-                            new AST.TypeAnnotation.FunctionTypeAnnotation(type, type))),
+                            new TypeAnnotation.FunctionTypeAnnotation(type, type))),
                     new AST.FunctionImplementation(
                         "select",
                         [
-                        new AST.Pattern.VarPattern("left"),
-                        new AST.Pattern.VarPattern("right")
+                        new Pattern.VarPattern("left"),
+                        new Pattern.VarPattern("right")
                         ],
                         expression)));
 
@@ -427,7 +449,7 @@ public class AstToIrLoweringTests
 
         var lowered =
             LowerToIntermediateRepresentation.Lower(
-                ImmutableDictionary<DeclQualifiedName, AST.Declaration>.Empty.Add(name, declaration));
+                ImmutableDictionary<DeclQualifiedName, Declaration>.Empty.Add(name, declaration));
 
         return lowered[new FunctionId.Source(name)].Expression;
     }
@@ -439,7 +461,7 @@ public class AstToIrLoweringTests
     private static ExpressionCompilationContext Context() =>
         new(
             new Dictionary<Model.BindingId, int> { [Id(0)] = 0, [Id(1)] = 1 },
-            new Dictionary<Model.BindingId, Expression>(),
+            new Dictionary<Model.BindingId, Core.PineLanguage.Expression>(),
             new Model.SccCompilationContext(
                 [],
                 [],

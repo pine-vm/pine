@@ -1,6 +1,8 @@
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -60,7 +62,7 @@ public class CodeAnalysis
         PineValueClass environment,
         ConcurrentDictionary<Expression, ExprAnalysis> mutatedCache,
         PineVMParseCache parseCache,
-        Core.Interpreter.IntermediateVM.PineVM evalVM)
+        Core.Runtime.IntermediateVM.PineVM evalVM)
     {
         var expressionId =
             CompilePineToDotNet.CompileToCSharp.CompiledExpressionId(expression)
@@ -244,7 +246,7 @@ public class CodeAnalysis
                         parseSubExpr.ParseAndEvalExpr.Environment,
                         PineValueClassExtensions.CreateMinimalValue(environment),
                         config:
-                        new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(
+                        new Core.Runtime.IntermediateVM.PineVM.EvaluationConfig(
                             InvocationCountLimit: 100,
                             LoopIterationCountLimit: null,
                             StackDepthLimit: null))

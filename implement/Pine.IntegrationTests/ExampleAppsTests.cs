@@ -1,10 +1,10 @@
 using AwesomeAssertions;
-using Pine.Core;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
+using Pine.Core.Encodings;
 using Pine.Core.Files;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
 using Pine.Elm.Platform;
 using Pine.IntermediateVM;
 using System;
@@ -329,7 +329,7 @@ public class ExampleAppsTests
                 loweredTree,
                 ["src", "Backend", "Main.elm"]);
 
-        var pineVMCache = new InvocationCache();
+        var pineVMCache = new Core.Runtime.IntermediateVM.InvocationCache();
 
         var pineVM = SetupVM.Create(pineVMCache);
 

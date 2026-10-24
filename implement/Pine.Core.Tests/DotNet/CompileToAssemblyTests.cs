@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Pine.Core.DotNet;
 using Pine.Core.Internal;
+using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -14,9 +15,10 @@ public class CompileToAssemblyTests
     [Fact]
     public void Loads_legacy_dispatcher_dictionary()
     {
-        const string source =
+        const string Source =
             """
             using Pine.Core;
+            using Pine.Core.PineLanguage;
             using System;
             using System.Collections.Generic;
 
@@ -37,7 +39,7 @@ public class CompileToAssemblyTests
         IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> csharpFiles =
             new Dictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>
             {
-                [["HistoricalBundle", "Dispatcher.cs"]] = Encoding.UTF8.GetBytes(source),
+                [["HistoricalBundle", "Dispatcher.cs"]] = Encoding.UTF8.GetBytes(Source),
             };
 
         var compileResult =

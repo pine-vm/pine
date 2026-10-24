@@ -1,12 +1,13 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Abstract;
+using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Immutable;
 using Xunit;
 
 using Model = Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
-using Source = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -113,7 +114,7 @@ public class ProgramValidationTests
     private static void ValidateSource(string source)
     {
         var file =
-            Source.ConvertFromConcrete.FromFile(
+            ConvertFromConcrete.FromFile(
                 ElmSyntaxParser.ParseModuleText(source)
                 .Extract(error => throw new InvalidOperationException(error.ToString())));
 

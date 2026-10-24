@@ -1,8 +1,9 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
-using Pine.Core.Elm.ElmSyntax;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.Elm.Syntax.Interpreter;
+using Pine.Core.Runtime.IntermediateVM;
+using Pine.Core.Tests.Testing;
 using System;
 using System.Collections.Generic;
 using System.Linq;

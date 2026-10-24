@@ -1,11 +1,11 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
 using System.Linq;
 using Xunit;
 
-using AbstractSyntax = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
-using SyntaxModel = Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using AbstractSyntax = Pine.Core.Elm.Syntax.Abstract;
+using ConcreteSyntax = Pine.Core.Elm.Syntax.Concrete;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -48,25 +48,25 @@ public class ConcreteCanonicalizationTests
 
         var parsedList =
             parsedValue.Declaration.Value.Expression.Value
-            .Should().BeOfType<SyntaxModel.Expression.ListExpr>().Which;
+            .Should().BeOfType<ConcreteSyntax.Expression.ListExpr>().Which;
 
         var canonicalizedList =
             canonicalizedValue.Declaration.Value.Expression.Value
-            .Should().BeOfType<SyntaxModel.Expression.ListExpr>().Which;
+            .Should().BeOfType<ConcreteSyntax.Expression.ListExpr>().Which;
 
         canonicalizedList.Elements
-            .Should().BeOfType<SyntaxModel.SeparatedSyntaxList<SyntaxModel.Node<SyntaxModel.Expression>>.NonEmpty>()
+            .Should().BeOfType<ConcreteSyntax.SeparatedSyntaxList<ConcreteSyntax.Node<ConcreteSyntax.Expression>>.NonEmpty>()
             .Which.Rest.Select(item => item.SeparatorLocation)
             .Should().Equal(
             parsedList.Elements
-            .Should().BeOfType<SyntaxModel.SeparatedSyntaxList<SyntaxModel.Node<SyntaxModel.Expression>>.NonEmpty>()
+            .Should().BeOfType<ConcreteSyntax.SeparatedSyntaxList<ConcreteSyntax.Node<ConcreteSyntax.Expression>>.NonEmpty>()
             .Which.Rest.Select(item => item.SeparatorLocation));
 
         canonicalizedList.Elements.Last().Value
-            .Should().Be(new SyntaxModel.Expression.IntegerLiteral("0x2A"));
+            .Should().Be(new ConcreteSyntax.Expression.IntegerLiteral("0x2A"));
 
         canonicalizedList.Elements.ElementAt(1).Value
-            .Should().Be(new SyntaxModel.Expression.StringLiteral("line\n", """line\n"""));
+            .Should().Be(new ConcreteSyntax.Expression.StringLiteral("line\n", """line\n"""));
     }
 
     [Fact]
@@ -134,22 +134,22 @@ public class ConcreteCanonicalizationTests
             .Should().Be(AbstractSyntax.ConvertFromConcrete.FromFile(expanded));
     }
 
-    private static SyntaxModel.File Parse(string source) =>
+    private static ConcreteSyntax.File Parse(string source) =>
         ElmSyntaxParser.ParseModuleText(source)
         .Extract(error => throw new System.Exception("Failed parsing: " + error));
 
-    private static SyntaxModel.File Canonicalize(SyntaxModel.File file) =>
+    private static ConcreteSyntax.File Canonicalize(ConcreteSyntax.File file) =>
         Canonicalization.CanonicalizeOrThrow([file])
         .Extract(error => throw new System.Exception("Failed canonicalization: " + error))
         [["Test"]]
         .Extract(error => throw new System.Exception("Module canonicalization failed: " + error));
 
-    private static SyntaxModel.FunctionStruct FunctionNamed(
-        SyntaxModel.File file,
+    private static ConcreteSyntax.FunctionStruct FunctionNamed(
+        ConcreteSyntax.File file,
         string name) =>
         file.Declarations
         .Select(declaration => declaration.Value)
-        .OfType<SyntaxModel.Declaration.FunctionDeclaration>()
+        .OfType<ConcreteSyntax.Declaration.FunctionDeclaration>()
         .Single(declaration => declaration.Function.Declaration.Value.Name.Value == name)
         .Function;
 }

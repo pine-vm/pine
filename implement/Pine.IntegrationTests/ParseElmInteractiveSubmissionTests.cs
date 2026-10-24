@@ -1,8 +1,9 @@
 using AwesomeAssertions;
-using Pine.Core;
 using Pine.Core.CLI;
 using Pine.Core.Elm;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.IntermediateVM;
 using Pine.Elm;
 using Pine.IntermediateVM;
 using System;

@@ -1,7 +1,7 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
 using Pine.Core.Internal;
 using System;
 using System.Collections.Generic;
@@ -24,8 +24,8 @@ public class CompileElmAppStringExpressionTests
     private static readonly DeclQualifiedName s_functionName =
         DeclQualifiedName.Create(["CompileElmApp"], "stringExpressionFromString");
 
-    private static readonly IReadOnlyDictionary<DeclQualifiedName, Core.Elm.ElmSyntax.SyntaxModel.Declaration> s_noDeclarations =
-        new Dictionary<DeclQualifiedName, Core.Elm.ElmSyntax.SyntaxModel.Declaration>();
+    private static readonly IReadOnlyDictionary<DeclQualifiedName, Core.Elm.Syntax.Concrete.Declaration> s_noDeclarations =
+        new Dictionary<DeclQualifiedName, Core.Elm.Syntax.Concrete.Declaration>();
 
     private static string StringExpressionFromString(string input)
     {

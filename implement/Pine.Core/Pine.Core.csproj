@@ -58,4 +58,8 @@
     <PackageReference Include="SharpCompress" Version="0.50.7" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Interpreter\" />
+  </ItemGroup>
+
 </Project>

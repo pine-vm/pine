@@ -24,7 +24,7 @@ public sealed class ValueList<T> : IReadOnlyList<T>, IEquatable<ValueList<T>>
         _items = [.. items];
         var hash = new HashCode();
 
-        foreach (var item in this._items)
+        foreach (var item in _items)
         {
             if (item is null)
                 throw new ArgumentException("Compiler sequences cannot contain null elements.", nameof(items));

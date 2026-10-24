@@ -1,7 +1,6 @@
 using AwesomeAssertions;
-using Pine.Core;
 using Pine.Core.Elm;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.PineLanguage;
 using Pine.IntermediateVM;
 using Xunit;
 
@@ -87,7 +86,7 @@ public class PineExecutableBundleTests
             
             """;
 
-        var pineVMCache = new InvocationCache();
+        var pineVMCache = new Core.Runtime.IntermediateVM.InvocationCache();
 
         var pineVM =
             SetupVM.Create(evalCache: pineVMCache);

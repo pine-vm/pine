@@ -1,8 +1,7 @@
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Elm.Syntax.Abstract;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -15,7 +14,7 @@ public partial class ElmSyntaxOptimization
     /// Returns the functions that participate in a recursive call cycle.
     /// </summary>
     internal static ImmutableHashSet<DeclQualifiedName> MarkRecursiveFunctions(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.FunctionStruct> functions)
+        ImmutableDictionary<DeclQualifiedName, FunctionStruct> functions)
     {
         var directReferences =
             new Dictionary<DeclQualifiedName, HashSet<DeclQualifiedName>>(functions.Count);
@@ -40,16 +39,16 @@ public partial class ElmSyntaxOptimization
     /// Enumerates all identifier references in an expression.
     /// </summary>
     internal static IEnumerable<DeclQualifiedName> CollectFunctionReferences(
-        SyntaxTypes.Expression expression)
+        Expression expression)
     {
         var references = new List<DeclQualifiedName>();
 
-        SyntaxTypes.SyntaxAnalysis.WalkExpressionsWithScope(
+        SyntaxAnalysis.WalkExpressionsWithScope(
             expression,
             [],
             (node, _) =>
             {
-                if (node is SyntaxTypes.Expression.Identifier identifier)
+                if (node is Expression.Identifier identifier)
                     references.Add(identifier.QualifiedName);
             });
 

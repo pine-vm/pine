@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine.Core.DotNet;
+using Pine.Core.Functional;
 using System;
 using System.Collections.Generic;
 using System.IO;

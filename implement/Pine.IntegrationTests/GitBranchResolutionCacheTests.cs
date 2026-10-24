@@ -1,8 +1,8 @@
 using AwesomeAssertions;
 using Pine.CLI;
 using Pine.CLI.Elm;
-using Pine.Core;
 using Pine.Core.Files;
+using Pine.Core.Functional;
 using Spectre.Console;
 using System;
 using System.Collections.Generic;

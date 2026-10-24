@@ -1,7 +1,8 @@
 using Pine.Core.Elm.Elm019;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax.Concrete;
 using Pine.Core.Files;
+using Pine.Core.Functional;
 using Pine.Core.LanguageServerProtocol;
 using System;
 using System.Collections.Generic;
@@ -10,8 +11,6 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-
-using Syntax = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 namespace Pine.Core.Elm.LanguageServer;
 
@@ -26,7 +25,7 @@ public sealed class ElmCompilerDiagnosticsProvider(
 
     private readonly HashSet<string> _knownDocumentUris = new(StringComparer.Ordinal);
 
-    private readonly Dictionary<string, Result<ElmSyntaxParseError, Syntax.File>> _sourceParseCache = [];
+    private readonly Dictionary<string, Result<ParseError, File>> _sourceParseCache = [];
 
     private readonly Canonicalization.DeclarationCache _canonicalizationCache = new();
 
@@ -269,7 +268,7 @@ public sealed class ElmCompilerDiagnosticsProvider(
             .. diagnostic.RelatedLocations.Where(location => projectPaths.Contains(location.FilePath))
             .Select(
                 location => new DiagnosticRelatedInformation(
-                    new Location(
+                    new LanguageServerProtocol.Location(
                         new Uri(
                             treeUri,
                             string.Join("/", location.FilePath.Split('/').Select(Uri.EscapeDataString))).AbsoluteUri,

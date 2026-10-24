@@ -4,7 +4,9 @@ using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
+using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -16,7 +18,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
 
 /// <summary>
 /// Tests verifying the effectiveness of precompiled leaves on the
-/// <see cref="Core.Interpreter.IntermediateVM.PineVM"/>.
+/// <see cref="Runtime.IntermediateVM.PineVM"/>.
 /// <para>
 /// A "precompiled leaf" is a .NET delegate registered under the Pine value
 /// encoding of an inner function body. When the VM encounters a
@@ -102,9 +104,9 @@ public class PrecompiledLeavesEffectivenessTests
     /// Builds an intermediate VM with all optimizations disabled (for repeatable
     /// profiling) and the supplied precompiled-leaves dictionary.
     /// </summary>
-    private static Core.Interpreter.IntermediateVM.PineVM CreateVM(
+    private static Pine.Core.Runtime.IntermediateVM.PineVM CreateVM(
         IReadOnlyDictionary<PineValue, PrecompiledLeaf> precompiledLeaves) =>
-        Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
+        Pine.Core.Runtime.IntermediateVM.PineVM.CreateCustom(
             evalCache: null,
             evaluationConfigDefault: null,
             reportFunctionApplication: _ => { },
@@ -125,7 +127,7 @@ public class PrecompiledLeavesEffectivenessTests
     private static (ElmValue value, EvalWorkCounters counters) ApplyUnary(
         PineValue functionValue,
         ElmValue arg0,
-        Core.Interpreter.IntermediateVM.PineVM vm) =>
+        Core.Runtime.IntermediateVM.PineVM vm) =>
         CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
             functionValue,
             arg0,

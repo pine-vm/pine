@@ -1,11 +1,11 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using Pine.Core.Elm.Syntax.Concrete;
 using System.Collections.Generic;
 using Xunit;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Stil4mElmSyntax7 = Pine.Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7;
 
 using static Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests.AbstractSyntaxTestConversion;
 
@@ -24,15 +24,15 @@ public class TypeInferenceRecordAccessTests
     private static Node<TValue> Node<TValue>(TValue value) =>
         new(s_dummyRange, value);
 
-    private static SyntaxTypes.Expression Param(string name) =>
-        new SyntaxTypes.Expression.FunctionOrValue([], name);
+    private static Stil4mElmSyntax7.Expression Param(string name) =>
+        new Stil4mElmSyntax7.Expression.FunctionOrValue([], name);
 
     [Fact]
     public void Record_access_on_parameter_constrains_to_open_record_with_required_field()
     {
         // alfa r = r.name
         var expression =
-            new SyntaxTypes.Expression.RecordAccess(Node(Param("r")), Node("name"));
+            new Stil4mElmSyntax7.Expression.RecordAccess(Node(Param("r")), Node("name"));
 
         var parameterTypes =
             TypeInference.InferParameterTypesFromUsage(
@@ -55,23 +55,23 @@ public class TypeInferenceRecordAccessTests
         // Express via a record literal with three fields whose values are r.x accesses,
         // because we don't have a Tuple constructor easily available here.
         var fields =
-            new List<Node<(Node<string> fieldName, Node<SyntaxTypes.Expression> valueExpr)>>
+            new List<Node<(Node<string> fieldName, Node<Stil4mElmSyntax7.Expression> valueExpr)>>
             {
                 Node(
                     (Node("a"),
-                    Node<SyntaxTypes.Expression>(
-                        new SyntaxTypes.Expression.RecordAccess(Node(Param("r")), Node("name"))))),
+                    Node<Stil4mElmSyntax7.Expression>(
+                        new Stil4mElmSyntax7.Expression.RecordAccess(Node(Param("r")), Node("name"))))),
                 Node(
                     (Node("b"),
-                    Node<SyntaxTypes.Expression>(
-                        new SyntaxTypes.Expression.RecordAccess(Node(Param("r")), Node("age"))))),
+                    Node<Stil4mElmSyntax7.Expression>(
+                        new Stil4mElmSyntax7.Expression.RecordAccess(Node(Param("r")), Node("age"))))),
                 Node(
                     (Node("c"),
-                    Node<SyntaxTypes.Expression>(
-                        new SyntaxTypes.Expression.RecordAccess(Node(Param("r")), Node("email"))))),
+                    Node<Stil4mElmSyntax7.Expression>(
+                        new Stil4mElmSyntax7.Expression.RecordAccess(Node(Param("r")), Node("email"))))),
             };
 
-        var expression = new SyntaxTypes.Expression.RecordExpr(fields);
+        var expression = new Stil4mElmSyntax7.Expression.RecordExpr(fields);
 
         var parameterTypes =
             TypeInference.InferParameterTypesFromUsage(
@@ -95,7 +95,7 @@ public class TypeInferenceRecordAccessTests
     public void Record_access_function_is_inferred_as_function_from_open_record_to_field_type()
     {
         // .name : { r | name : a } -> a
-        var expression = new SyntaxTypes.Expression.RecordAccessFunction(".name");
+        var expression = new Stil4mElmSyntax7.Expression.RecordAccessFunction(".name");
 
         var inferredType =
             TypeInference.InferExpressionType(
@@ -129,7 +129,7 @@ public class TypeInferenceRecordAccessTests
                 ]);
 
         var expression =
-            new SyntaxTypes.Expression.RecordAccess(Node(Param("r")), Node("name"));
+            new Stil4mElmSyntax7.Expression.RecordAccess(Node(Param("r")), Node("name"));
 
         var inferredType =
             TypeInference.InferExpressionType(
@@ -145,7 +145,7 @@ public class TypeInferenceRecordAccessTests
     {
         // Without a known type for the record, we cannot determine the field's type.
         var expression =
-            new SyntaxTypes.Expression.RecordAccess(Node(Param("r")), Node("name"));
+            new Stil4mElmSyntax7.Expression.RecordAccess(Node(Param("r")), Node("name"));
 
         var inferredType =
             TypeInference.InferExpressionType(
@@ -167,10 +167,10 @@ public class TypeInferenceRecordAccessTests
                 ]);
 
         var application =
-            new SyntaxTypes.Expression.Application(
+            new Stil4mElmSyntax7.Expression.Application(
                 [
                 Node(Param("makeState")),
-                Node<SyntaxTypes.Expression>(new SyntaxTypes.Expression.Integer(2))
+                Node<Stil4mElmSyntax7.Expression>(new Stil4mElmSyntax7.Expression.Integer(2))
                 ]);
 
         var functionTypes =
@@ -214,7 +214,7 @@ public class TypeInferenceRecordAccessTests
 
         var inferredType =
             TypeInference.InferExpressionType(
-                Abs(new SyntaxTypes.Expression.FunctionOrValue(["Model"], "Absent")),
+                Abs(new Stil4mElmSyntax7.Expression.FunctionOrValue(["Model"], "Absent")),
                 parameterNames: new Dictionary<string, int>(),
                 parameterTypes: new Dictionary<string, TypeInference.InferredType>(),
                 localBindingTypes: null,

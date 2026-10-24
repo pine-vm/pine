@@ -1,9 +1,9 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
+using Pine.Core.Elm.Syntax.Abstract;
+using Pine.Core.Encodings;
+using Pine.Core.Functional;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -15,16 +15,16 @@ public static class ElmCoreBasicsLowering
     /// <summary>
     /// Applies Elm core <c>Basics</c> lowering to canonicalized declarations.
     /// </summary>
-    public static Result<string, ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>> Apply(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations) =>
+    public static Result<string, ImmutableDictionary<DeclQualifiedName, Declaration>> Apply(
+        ImmutableDictionary<DeclQualifiedName, Declaration> declarations) =>
         BuiltinOperatorLowering.ApplyElmCoreBasics(declarations);
 
-    internal static SyntaxTypes.Expression? TryLowerApplication(
-        SyntaxTypes.Expression.Application application,
+    internal static Expression? TryLowerApplication(
+        Expression.Application application,
         IReadOnlyList<TypeInference.InferredType> argumentTypes,
         TypeInference.InferredType? expectedType)
     {
-        if (application.Function is not SyntaxTypes.Expression.Identifier
+        if (application.Function is not Expression.Identifier
             {
                 QualifiedName.Namespaces: ["Basics"]
             } functionIdentifier ||
@@ -38,7 +38,7 @@ public static class ElmCoreBasicsLowering
             application.Arguments is [var minLeft, var minRight])
         {
             return
-                new SyntaxTypes.Expression.IfBlock(
+                new Expression.IfBlock(
                     BuildIntIsSortedAsc(minLeft, minRight),
                     minLeft,
                     minRight);
@@ -48,7 +48,7 @@ public static class ElmCoreBasicsLowering
             application.Arguments is [var maxLeft, var maxRight])
         {
             return
-                new SyntaxTypes.Expression.IfBlock(
+                new Expression.IfBlock(
                     BuildIntIsSortedAsc(maxLeft, maxRight),
                     maxRight,
                     maxLeft);
@@ -64,9 +64,9 @@ public static class ElmCoreBasicsLowering
             application.Arguments is [var absArgument])
         {
             return
-                new SyntaxTypes.Expression.IfBlock(
+                new Expression.IfBlock(
                     BuildIntIsSortedAsc(
-                        new SyntaxTypes.Expression.IntegerLiteral(0, IntegerEncoding.EncodeSignedInteger(0)),
+                        new Expression.IntegerLiteral(0, IntegerEncoding.EncodeSignedInteger(0)),
                         absArgument),
                     absArgument,
                     BuildIntNegation(absArgument));
@@ -76,9 +76,9 @@ public static class ElmCoreBasicsLowering
             application.Arguments is [var low, var high, var number])
         {
             return
-                new SyntaxTypes.Expression.IfBlock(
+                new Expression.IfBlock(
                     BuildIntIsSortedAsc(low, number),
-                    new SyntaxTypes.Expression.IfBlock(
+                    new Expression.IfBlock(
                         BuildIntIsSortedAsc(number, high),
                         number,
                         high),
@@ -112,9 +112,9 @@ public static class ElmCoreBasicsLowering
         return containsInt;
     }
 
-    private static SyntaxTypes.Expression BuildIntIsSortedAsc(
-        SyntaxTypes.Expression left,
-        SyntaxTypes.Expression right) =>
+    private static Expression BuildIntIsSortedAsc(
+        Expression left,
+        Expression right) =>
         BuildBuiltinApplication(
             "int_is_sorted_asc",
             [
@@ -122,18 +122,18 @@ public static class ElmCoreBasicsLowering
             right
             ]);
 
-    private static SyntaxTypes.Expression BuildIntNegation(SyntaxTypes.Expression expression) =>
+    private static Expression BuildIntNegation(Expression expression) =>
         BuildBuiltinApplication(
             "int_mul",
             [
-            new SyntaxTypes.Expression.IntegerLiteral(-1, IntegerEncoding.EncodeSignedInteger(-1)),
+            new Expression.IntegerLiteral(-1, IntegerEncoding.EncodeSignedInteger(-1)),
             expression
             ]);
 
-    private static SyntaxTypes.Expression BuildBuiltinApplication(
+    private static Expression BuildBuiltinApplication(
         string builtinName,
-        IReadOnlyList<SyntaxTypes.Expression> arguments) =>
-        new SyntaxTypes.Expression.Application(
-            SyntaxTypes.Expression.Identifier.Create(["Pine_builtin"], builtinName),
-            [new SyntaxTypes.Expression.ListExpr(arguments)]);
+        IReadOnlyList<Expression> arguments) =>
+        new Expression.Application(
+            Expression.Identifier.Create(["Pine_builtin"], builtinName),
+            [new Expression.ListExpr(arguments)]);
 }

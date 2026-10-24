@@ -1,5 +1,8 @@
-using Pine.Core.CommonEncodings;
-using Pine.Core.PineVM;
+using Pine.Core.Encodings;
+using Pine.Core.Functional;
+using Pine.Core.Optimization;
+using Pine.Core.PineLanguage;
+using Pine.Core.Text;
 using System;
 using System.Collections.Generic;
 using System.Linq;

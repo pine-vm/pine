@@ -1,10 +1,10 @@
+using Pine.Core.Elm.Syntax.Abstract;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
 
-using Abstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
@@ -28,7 +28,7 @@ public static class DeclarationDeduplication
     /// consumers use ordinal equality or ordering, not an Elm source representation.
     /// </remarks>
     public static string GetStructuralFingerprint(
-        Abstract.Declaration.FunctionDeclaration funcDecl,
+        Declaration.FunctionDeclaration funcDecl,
         ModuleName currentModuleName)
     {
         var writer = new FingerprintWriter(currentModuleName);
@@ -43,7 +43,7 @@ public static class DeclarationDeduplication
         public override string ToString() => _builder.ToString();
 
         public void WriteFunctionImplementation(
-            Abstract.FunctionImplementation implementation,
+            FunctionImplementation implementation,
             ImmutableHashSet<string> outerLocals)
         {
             _builder.Append("function(");
@@ -53,36 +53,36 @@ public static class DeclarationDeduplication
             WriteExpression(
                 implementation.Expression,
                 outerLocals.Union(
-                    Abstract.SyntaxAnalysis.CollectNamesBoundByPatterns(implementation.Arguments)));
+                    SyntaxAnalysis.CollectNamesBoundByPatterns(implementation.Arguments)));
 
             _builder.Append(')');
         }
 
         private void WriteExpression(
-            Abstract.Expression expression,
+            Expression expression,
             ImmutableHashSet<string> locals)
         {
             switch (expression)
             {
-                case Abstract.Expression.UnitExpr:
+                case Expression.UnitExpr:
                     _builder.Append("unit");
                     break;
 
-                case Abstract.Expression.StringLiteral literal:
+                case Expression.StringLiteral literal:
                     _builder.Append("string(");
                     WriteString(literal.Value);
                     _builder.Append(')');
                     break;
 
-                case Abstract.Expression.CharLiteral literal:
+                case Expression.CharLiteral literal:
                     _builder.Append("char(").Append(literal.Value.ToString(CultureInfo.InvariantCulture)).Append(')');
                     break;
 
-                case Abstract.Expression.IntegerLiteral literal:
+                case Expression.IntegerLiteral literal:
                     _builder.Append("int(").Append(literal.Value.ToString(CultureInfo.InvariantCulture)).Append(')');
                     break;
 
-                case Abstract.Expression.FloatLiteral literal:
+                case Expression.FloatLiteral literal:
                     _builder.Append("float(")
                         .Append(literal.Numerator.ToString(CultureInfo.InvariantCulture))
                         .Append(',')
@@ -91,7 +91,7 @@ public static class DeclarationDeduplication
 
                     break;
 
-                case Abstract.Expression.Identifier identifier:
+                case Expression.Identifier identifier:
                     _builder.Append("identifier(");
                     var name = identifier.QualifiedName;
 
@@ -106,25 +106,25 @@ public static class DeclarationDeduplication
                     _builder.Append(')');
                     break;
 
-                case Abstract.Expression.Negation negation:
+                case Expression.Negation negation:
                     _builder.Append("negate(");
                     WriteExpression(negation.Expression, locals);
                     _builder.Append(')');
                     break;
 
-                case Abstract.Expression.ListExpr list:
+                case Expression.ListExpr list:
                     _builder.Append("list(");
                     WriteExpressions(list.Elements, locals);
                     _builder.Append(')');
                     break;
 
-                case Abstract.Expression.TupledExpression tuple:
+                case Expression.TupledExpression tuple:
                     _builder.Append("tuple(");
                     WriteExpressions(tuple.Elements, locals);
                     _builder.Append(')');
                     break;
 
-                case Abstract.Expression.IfBlock conditional:
+                case Expression.IfBlock conditional:
                     _builder.Append("if(");
                     WriteExpression(conditional.Condition, locals);
                     _builder.Append(',');
@@ -134,13 +134,13 @@ public static class DeclarationDeduplication
                     _builder.Append(')');
                     break;
 
-                case Abstract.Expression.PrefixOperator prefix:
+                case Expression.PrefixOperator prefix:
                     _builder.Append("prefix(");
                     WriteString(prefix.Operator);
                     _builder.Append(')');
                     break;
 
-                case Abstract.Expression.Application application:
+                case Expression.Application application:
                     _builder.Append("apply(");
                     WriteExpression(application.Function, locals);
                     _builder.Append(',');
@@ -148,7 +148,7 @@ public static class DeclarationDeduplication
                     _builder.Append(')');
                     break;
 
-                case Abstract.Expression.OperatorApplication application:
+                case Expression.OperatorApplication application:
                     _builder.Append("operator(");
                     WriteString(application.Operator);
 
@@ -162,19 +162,19 @@ public static class DeclarationDeduplication
                     _builder.Append(')');
                     break;
 
-                case Abstract.Expression.LambdaExpression lambda:
+                case Expression.LambdaExpression lambda:
                     _builder.Append("lambda(");
                     WritePatterns(lambda.Arguments);
                     _builder.Append(',');
 
                     WriteExpression(
                         lambda.Expression,
-                        locals.Union(Abstract.SyntaxAnalysis.CollectNamesBoundByPatterns(lambda.Arguments)));
+                        locals.Union(SyntaxAnalysis.CollectNamesBoundByPatterns(lambda.Arguments)));
 
                     _builder.Append(')');
                     break;
 
-                case Abstract.Expression.CaseExpression caseExpression:
+                case Expression.CaseExpression caseExpression:
                     _builder.Append("case(");
                     WriteExpression(caseExpression.Expression, locals);
                     _builder.Append(",[");
@@ -186,7 +186,7 @@ public static class DeclarationDeduplication
 
                         WriteExpression(
                             branch.Expression,
-                            locals.Union(Abstract.SyntaxAnalysis.CollectNamesBoundByPattern(branch.Pattern)));
+                            locals.Union(SyntaxAnalysis.CollectNamesBoundByPattern(branch.Pattern)));
 
                         _builder.Append(';');
                     }
@@ -194,17 +194,17 @@ public static class DeclarationDeduplication
                     _builder.Append("])");
                     break;
 
-                case Abstract.Expression.LetExpression letExpression:
+                case Expression.LetExpression letExpression:
                     WriteLetExpression(letExpression, locals);
                     break;
 
-                case Abstract.Expression.RecordExpr record:
+                case Expression.RecordExpr record:
                     _builder.Append("record(");
                     WriteFields(record.Fields, locals);
                     _builder.Append(')');
                     break;
 
-                case Abstract.Expression.RecordAccess access:
+                case Expression.RecordAccess access:
                     _builder.Append("access(");
                     WriteExpression(access.Record, locals);
                     _builder.Append(',');
@@ -212,13 +212,13 @@ public static class DeclarationDeduplication
                     _builder.Append(')');
                     break;
 
-                case Abstract.Expression.RecordAccessFunction access:
+                case Expression.RecordAccessFunction access:
                     _builder.Append("getter(");
                     WriteString(access.FieldName);
                     _builder.Append(')');
                     break;
 
-                case Abstract.Expression.RecordUpdateExpression update:
+                case Expression.RecordUpdateExpression update:
                     _builder.Append("update(");
                     WriteString(update.RecordName);
                     _builder.Append(',');
@@ -226,7 +226,7 @@ public static class DeclarationDeduplication
                     _builder.Append(')');
                     break;
 
-                case Abstract.Expression.GLSLExpression shader:
+                case Expression.GLSLExpression shader:
                     _builder.Append("glsl(");
                     WriteString(shader.ShaderCode);
                     _builder.Append(')');
@@ -239,21 +239,21 @@ public static class DeclarationDeduplication
         }
 
         private void WriteLetExpression(
-            Abstract.Expression.LetExpression expression,
+            Expression.LetExpression expression,
             ImmutableHashSet<string> locals)
         {
             foreach (var declaration in expression.Declarations)
             {
                 switch (declaration)
                 {
-                    case Abstract.LetDeclaration.LetFunction function:
+                    case LetDeclaration.LetFunction function:
                         locals = locals.Add(function.Function.Declaration.Name);
                         break;
 
-                    case Abstract.LetDeclaration.LetDestructuring destructuring:
+                    case LetDeclaration.LetDestructuring destructuring:
                         locals =
                             locals.Union(
-                                Abstract.SyntaxAnalysis.CollectNamesBoundByPattern(destructuring.Pattern));
+                                SyntaxAnalysis.CollectNamesBoundByPattern(destructuring.Pattern));
 
                         break;
 
@@ -270,7 +270,7 @@ public static class DeclarationDeduplication
             {
                 switch (declaration)
                 {
-                    case Abstract.LetDeclaration.LetFunction function:
+                    case LetDeclaration.LetFunction function:
                         _builder.Append("binding(");
                         WriteString(function.Function.Declaration.Name);
                         _builder.Append(',');
@@ -293,7 +293,7 @@ public static class DeclarationDeduplication
                         _builder.Append(')');
                         break;
 
-                    case Abstract.LetDeclaration.LetDestructuring destructuring:
+                    case LetDeclaration.LetDestructuring destructuring:
                         _builder.Append("destructure(");
                         WritePattern(destructuring.Pattern);
                         _builder.Append(',');
@@ -316,7 +316,7 @@ public static class DeclarationDeduplication
         }
 
         private void WriteExpressions(
-            IReadOnlyList<Abstract.Expression> expressions,
+            IReadOnlyList<Expression> expressions,
             ImmutableHashSet<string> locals)
         {
             _builder.Append('[');
@@ -331,7 +331,7 @@ public static class DeclarationDeduplication
         }
 
         private void WriteFields(
-            IReadOnlyList<Abstract.RecordSetter> fields,
+            IReadOnlyList<RecordSetter> fields,
             ImmutableHashSet<string> locals)
         {
             _builder.Append('[');
@@ -347,7 +347,7 @@ public static class DeclarationDeduplication
             _builder.Append(']');
         }
 
-        private void WritePatterns(IReadOnlyList<Abstract.Pattern> patterns)
+        private void WritePatterns(IReadOnlyList<Pattern> patterns)
         {
             _builder.Append('[');
 
@@ -360,51 +360,51 @@ public static class DeclarationDeduplication
             _builder.Append(']');
         }
 
-        private void WritePattern(Abstract.Pattern pattern)
+        private void WritePattern(Pattern pattern)
         {
             switch (pattern)
             {
-                case Abstract.Pattern.AllPattern:
+                case Pattern.AllPattern:
                     _builder.Append("all");
                     break;
 
-                case Abstract.Pattern.VarPattern variable:
+                case Pattern.VarPattern variable:
                     _builder.Append("var(");
                     WriteString(variable.Name);
                     _builder.Append(')');
                     break;
 
-                case Abstract.Pattern.UnitPattern:
+                case Pattern.UnitPattern:
                     _builder.Append("unit");
                     break;
 
-                case Abstract.Pattern.CharPattern literal:
+                case Pattern.CharPattern literal:
                     _builder.Append("char(").Append(literal.Value.ToString(CultureInfo.InvariantCulture)).Append(')');
                     break;
 
-                case Abstract.Pattern.StringPattern literal:
+                case Pattern.StringPattern literal:
                     _builder.Append("string(");
                     WriteString(literal.Value);
                     _builder.Append(')');
                     break;
 
-                case Abstract.Pattern.IntPattern literal:
+                case Pattern.IntPattern literal:
                     _builder.Append("int(").Append(literal.Value.ToString(CultureInfo.InvariantCulture)).Append(')');
                     break;
 
-                case Abstract.Pattern.FloatPattern literal:
+                case Pattern.FloatPattern literal:
                     _builder.Append("float(").Append(literal.Value.ToString("R", CultureInfo.InvariantCulture)).Append(
                         ')');
 
                     break;
 
-                case Abstract.Pattern.TuplePattern tuple:
+                case Pattern.TuplePattern tuple:
                     _builder.Append("tuple(");
                     WritePatterns(tuple.Elements);
                     _builder.Append(')');
                     break;
 
-                case Abstract.Pattern.RecordPattern record:
+                case Pattern.RecordPattern record:
                     _builder.Append("record([");
 
                     foreach (var field in record.Fields)
@@ -416,7 +416,7 @@ public static class DeclarationDeduplication
                     _builder.Append("])");
                     break;
 
-                case Abstract.Pattern.UnConsPattern cons:
+                case Pattern.UnConsPattern cons:
                     _builder.Append("cons(");
                     WritePattern(cons.Head);
                     _builder.Append(',');
@@ -424,13 +424,13 @@ public static class DeclarationDeduplication
                     _builder.Append(')');
                     break;
 
-                case Abstract.Pattern.ListPattern list:
+                case Pattern.ListPattern list:
                     _builder.Append("list(");
                     WritePatterns(list.Elements);
                     _builder.Append(')');
                     break;
 
-                case Abstract.Pattern.NamedPattern named:
+                case Pattern.NamedPattern named:
                     _builder.Append("named(");
                     WriteQualifiedName(named.Name.ModuleName, named.Name.Name);
                     _builder.Append(',');
@@ -438,7 +438,7 @@ public static class DeclarationDeduplication
                     _builder.Append(')');
                     break;
 
-                case Abstract.Pattern.AsPattern alias:
+                case Pattern.AsPattern alias:
                     _builder.Append("as(");
                     WritePattern(alias.Pattern);
                     _builder.Append(',');
@@ -452,17 +452,17 @@ public static class DeclarationDeduplication
             }
         }
 
-        private void WriteTypeAnnotation(Abstract.TypeAnnotation annotation)
+        private void WriteTypeAnnotation(TypeAnnotation annotation)
         {
             switch (annotation)
             {
-                case Abstract.TypeAnnotation.GenericType generic:
+                case TypeAnnotation.GenericType generic:
                     _builder.Append("generic(");
                     WriteString(generic.Name);
                     _builder.Append(')');
                     break;
 
-                case Abstract.TypeAnnotation.Typed typed:
+                case TypeAnnotation.Typed typed:
                     _builder.Append("typed(");
                     WriteQualifiedName(typed.ModuleName, typed.Name);
                     _builder.Append(",[");
@@ -476,11 +476,11 @@ public static class DeclarationDeduplication
                     _builder.Append("])");
                     break;
 
-                case Abstract.TypeAnnotation.Unit:
+                case TypeAnnotation.Unit:
                     _builder.Append("unit");
                     break;
 
-                case Abstract.TypeAnnotation.Tupled tuple:
+                case TypeAnnotation.Tupled tuple:
                     _builder.Append("tuple([");
 
                     foreach (var element in tuple.TypeAnnotations)
@@ -492,13 +492,13 @@ public static class DeclarationDeduplication
                     _builder.Append("])");
                     break;
 
-                case Abstract.TypeAnnotation.Record record:
+                case TypeAnnotation.Record record:
                     _builder.Append("record(");
                     WriteRecordDefinition(record.RecordDefinition);
                     _builder.Append(')');
                     break;
 
-                case Abstract.TypeAnnotation.GenericRecord record:
+                case TypeAnnotation.GenericRecord record:
                     _builder.Append("extend(");
                     WriteString(record.GenericName);
                     _builder.Append(',');
@@ -506,7 +506,7 @@ public static class DeclarationDeduplication
                     _builder.Append(')');
                     break;
 
-                case Abstract.TypeAnnotation.FunctionTypeAnnotation function:
+                case TypeAnnotation.FunctionTypeAnnotation function:
                     _builder.Append("arrow(");
                     WriteTypeAnnotation(function.ArgumentType);
                     _builder.Append(',');
@@ -521,7 +521,7 @@ public static class DeclarationDeduplication
             }
         }
 
-        private void WriteRecordDefinition(Abstract.RecordDefinition record)
+        private void WriteRecordDefinition(RecordDefinition record)
         {
             _builder.Append('[');
 

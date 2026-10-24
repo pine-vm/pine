@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmInElm;
+using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -43,7 +44,7 @@ public class CoreListFunctionTests
         .First(m => m.moduleName is "List")
         .moduleContent.FunctionDeclarations[name];
 
-    private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
+    private static readonly Core.Runtime.IntermediateVM.PineVM s_vm =
         ElmCompilerTestHelper.PineVMForProfiling(_ => { });
 
     private static ElmValue Integer(long i) =>

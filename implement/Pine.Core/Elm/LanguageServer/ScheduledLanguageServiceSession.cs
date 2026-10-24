@@ -1,7 +1,9 @@
 using Pine.Core.Concurrent;
 using Pine.Core.Elm.LanguageServer.LanguageServiceInterface;
-using Pine.Core.Interpreter.IntermediateVM;
-using Pine.Core.PineVM;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
+using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.Linq;

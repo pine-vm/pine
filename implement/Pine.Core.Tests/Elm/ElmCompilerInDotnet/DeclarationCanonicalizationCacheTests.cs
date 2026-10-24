@@ -1,7 +1,8 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Concrete;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -9,20 +10,18 @@ using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
 
-using Syntax = Pine.Core.Elm.ElmSyntax.SyntaxModel;
-
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
 public class DeclarationCanonicalizationCacheTests
 {
     private static readonly DeclQualifiedName Root = DeclQualifiedName.Create(["Main"], "root");
 
-    private static Syntax.File Parse(string text) =>
+    private static File Parse(string text) =>
         ElmSyntaxParser.ParseModuleText(text).Extract(error => throw new InvalidOperationException(error.ToString()));
 
     private static DeclarationCanonicalizationResult Run(
         Canonicalization.DeclarationCache cache, params string[] modules) =>
-        Canonicalization.CanonicalizeDeclarations(modules.Select(Parse).ToArray(), [Root], cache: cache)
+        Canonicalization.CanonicalizeDeclarations([.. modules.Select(Parse)], [Root], cache: cache)
         .Extract(error => throw new InvalidOperationException(error));
 
     [Fact]

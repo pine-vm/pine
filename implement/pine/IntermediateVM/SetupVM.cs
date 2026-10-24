@@ -1,9 +1,10 @@
-using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Internal;
-using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.IO;
+using Pine.Core.PineLanguage;
 using Pine.Core.PineVM;
+using Pine.Core.Runtime;
+using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -82,9 +83,9 @@ public static class SetupVM
     /// Creates a VM with independently configurable caches. An omitted template-plan cache is created per VM.
     /// The template-plan cache can be shared without sharing mutable evaluation state.
     /// </summary>
-    public static Core.Interpreter.IntermediateVM.PineVM Create(
+    public static Core.Runtime.IntermediateVM.PineVM Create(
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
-        Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig? evaluationConfigDefault = null,
+        Core.Runtime.IntermediateVM.PineVM.EvaluationConfig? evaluationConfigDefault = null,
         Action<EvaluationReport>? reportFunctionApplication = null,
         IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses = null,
         bool disableReductionInCompilation = false,
@@ -123,9 +124,9 @@ public static class SetupVM
             expressionEncodingCache,
             reducedExpressionCache);
 
-    public static Core.Interpreter.IntermediateVM.PineVM CreateWithTemplatePlanCache(
+    public static Core.Runtime.IntermediateVM.PineVM CreateWithTemplatePlanCache(
         PineVMExpressionTemplatePlanCache expressionTemplatePlanCache,
-        Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig? evaluationConfigDefault,
+        Core.Runtime.IntermediateVM.PineVM.EvaluationConfig? evaluationConfigDefault,
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
         Action<EvaluationReport>? reportFunctionApplication = null,
         IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses = null,
@@ -149,7 +150,7 @@ public static class SetupVM
         cacheFileStore ??= s_cacheFileStoreDefault;
 
         return
-            Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
+            Core.Runtime.IntermediateVM.PineVM.CreateCustom(
                 expressionTemplatePlanCache: expressionTemplatePlanCache,
                 evalCache: evalCache,
                 evaluationConfigDefault: evaluationConfigDefault,

@@ -50,7 +50,7 @@ public record TestCase(
             elmModulesTexts
             .ToFrozenDictionary(
                 moduleText =>
-                Core.Elm.ElmSyntax.ElmModule.ParseModuleName(moduleText)
+                Core.Elm.Syntax.ElmModule.ParseModuleName(moduleText)
                 .Extract(err => throw new System.Exception("Failed parsing module name from module text: " + err)),
                 moduleText => moduleText,
                 comparer: EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());

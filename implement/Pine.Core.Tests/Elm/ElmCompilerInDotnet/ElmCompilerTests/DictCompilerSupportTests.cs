@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmInElm;
+using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -17,7 +18,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 /// </summary>
 public class DictCompilerSupportTests
 {
-    private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
+    private static readonly Core.Runtime.IntermediateVM.PineVM s_vm =
         ElmCompilerTestHelper.PineVMForProfiling(_ => { });
 
     #region Helpers

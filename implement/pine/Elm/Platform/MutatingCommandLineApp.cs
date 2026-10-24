@@ -1,7 +1,9 @@
 using Pine.Core;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
+using Pine.Core.Encodings;
 using Pine.Core.Files;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
 using Pine.PineVM;
 using System;
 using System.Collections.Concurrent;
@@ -27,7 +29,7 @@ public class MutatingCommandLineApp
 
     private readonly ConcurrentQueue<ReadOnlyMemory<byte>> _stdErr = new();
 
-    private readonly Core.PineVM.IPineVM _pineVM;
+    private readonly Core.Runtime.IPineVM _pineVM;
 
     private readonly CommandLineAppConfig _appConfig;
 
@@ -42,7 +44,7 @@ public class MutatingCommandLineApp
     public MutatingCommandLineApp(
         CommandLineAppConfig appConfig,
         CommandLineAppConfig.CommandLineAppInitEnvironment environment,
-        Core.PineVM.IPineVM? pineVM = null)
+        Core.Runtime.IPineVM? pineVM = null)
     {
         _appConfig = appConfig;
         _pineVM = pineVM ?? PineVMResettingCache.Create(resetCacheEntriesThresholdDefault: 10_000);
@@ -175,7 +177,7 @@ public record CommandLineAppConfig(
             rootFilePaths.Single(
                 path =>
                 sourceFiles.GetNodeAtPath(path) is FileTree.FileNode file &&
-                Core.Elm.ElmSyntax.ElmModule.ParseModuleName(System.Text.Encoding.UTF8.GetString(file.Bytes.Span))
+                Core.Elm.Syntax.ElmModule.ParseModuleName(System.Text.Encoding.UTF8.GetString(file.Bytes.Span))
                 .IsOkOrNull()?.SequenceEqual(moduleName) is true);
 
         var manifest = ElmAppDependencyResolution.FindElmJsonForEntryPoint(sourceFiles, entryPointFilePath);
@@ -215,7 +217,7 @@ public record CommandLineAppConfig(
         var runRootValue =
             ElmSourceCompilation.EvaluateZeroParameterRoot(
                 declValue,
-                Core.Interpreter.DirectInterpreter.WithLocalEvalCache(s_parseCache),
+                Core.Runtime.DirectInterpreter.WithLocalEvalCache(s_parseCache),
                 s_parseCache)
             .Extract(err => throw new Exception("Failed evaluating runRoot: " + err));
 
@@ -257,7 +259,7 @@ public record CommandLineAppConfig(
     public static (PineValue, CommandLineAppEventResponse) Init(
         CommandLineAppConfig config,
         CommandLineAppInitEnvironment environment,
-        Core.PineVM.IPineVM pineVM)
+        Core.Runtime.IPineVM pineVM)
     {
         var initRecord =
             new ElmValue.ElmRecord(
@@ -308,7 +310,7 @@ public record CommandLineAppConfig(
         CommandLineAppConfig config,
         ReadOnlyMemory<byte> input,
         PineValue stateBefore,
-        Core.PineVM.IPineVM pineVM)
+        Core.Runtime.IPineVM pineVM)
     {
         var subscriptionsValue =
             ElmInteractiveEnvironment.ApplyFunction(

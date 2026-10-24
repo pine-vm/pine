@@ -1,15 +1,16 @@
-using Pine.Core;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
-using Pine.Core.Interpreter.IntermediateVM;
-using Pine.Core.PineVM;
+using Pine.Core.Encodings;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
+using Pine.Core.Runtime.IntermediateVM;
 using Pine.IntermediateVM;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
-using ExpressionUsageRecord = System.Collections.Generic.Dictionary<Pine.Core.PineValue, Pine.PineVM.ExpressionEnvUsageRecord>;
+using ExpressionUsageRecord = System.Collections.Generic.Dictionary<Pine.Core.PineLanguage.PineValue, Pine.PineVM.ExpressionEnvUsageRecord>;
 
 namespace Pine.PineVM;
 
@@ -183,7 +184,7 @@ public class ProfilingPineVM
         PineValueClass environment,
         ConcurrentDictionary<Expression, CodeAnalysis.ExprAnalysis> exprAnalysisMutatedCache,
         PineVMParseCache parseCache,
-        Core.Interpreter.IntermediateVM.PineVM evalVM)
+        Core.Runtime.IntermediateVM.PineVM evalVM)
     {
         var analysisResult =
             CodeAnalysis.AnalyzeExpressionUsageRecursive(

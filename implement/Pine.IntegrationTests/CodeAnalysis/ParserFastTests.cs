@@ -415,7 +415,7 @@ public class ParserFastTests
             FunctionRecord.ParseFunctionRecordTagged(allPatternDecl.Value, parseCache)
             .Extract(err => throw new Exception("Failed parsing " + nameof(allPatternDecl) + ": " + err));
 
-        var invocationReports = new List<Core.Interpreter.IntermediateVM.EvaluationReport>();
+        var invocationReports = new List<Core.Runtime.IntermediateVM.EvaluationReport>();
 
         var vm =
             ElmCompilerTestHelper.PineVMForProfiling(invocationReports.Add);

@@ -1,12 +1,13 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using Pine.Core.Elm.Syntax.Concrete;
+using Pine.Core.Functional;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
-using File = Pine.Core.Elm.ElmSyntax.SyntaxModel.File;
-using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
+using File = Pine.Core.Elm.Syntax.Concrete.File;
+using Range = Pine.Core.Elm.Syntax.Concrete.Range;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -211,8 +212,8 @@ public partial class Canonicalization
                 };
 
             results[name] = CanonicalizeDeclaration(declaration, context);
-            references[name] = dependencies.Order().ToImmutableArray();
-            sourceReferences[name] = resolvedReferences.ToImmutableArray();
+            references[name] = [.. dependencies.Order()];
+            sourceReferences[name] = [.. resolvedReferences];
 
             cache?.Add(declaration, context,
                 new(results[name], references[name]) { References = sourceReferences[name] }, inputs!);

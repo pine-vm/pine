@@ -1,9 +1,11 @@
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Abstract;
+using Pine.Core.Functional;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
@@ -65,7 +67,7 @@ public enum OpportunityCategory
 
     /// <summary>
     /// A function parameter (top-level or let-bound) that is itself
-    /// applied as the head of an <see cref="SyntaxTypes.Expression.Application"/>
+    /// applied as the head of an <see cref="Expression.Application"/>
     /// inside its enclosing function body. The lowering stage is expected
     /// to specialize the function on each statically known higher-order
     /// argument so no application on a function-typed parameter remains.
@@ -251,7 +253,7 @@ public static partial class OptimizationOpportunityFinder
         ImmutableDictionary<string, int> ParameterNames,
         ImmutableDictionary<string, TypeInference.InferredType> ParameterTypes,
         ImmutableDictionary<string, TypeInference.InferredType> LocalBindingTypes,
-        ImmutableDictionary<string, SyntaxTypes.Expression> LocalBindingExpressions,
+        ImmutableDictionary<string, Expression> LocalBindingExpressions,
         IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo> FunctionTypes,
         IReadOnlyDictionary<
             DeclQualifiedName,
@@ -259,16 +261,16 @@ public static partial class OptimizationOpportunityFinder
         IReadOnlyDictionary<
             DeclQualifiedName,
             TypeInference.TypeAliasDefinition> AliasTypes,
-        ISet<SyntaxTypes.Expression.RecordAccessFunction> ClosedRecordAccessFunctions,
+        ISet<Expression.RecordAccessFunction> ClosedRecordAccessFunctions,
         ImmutableDictionary<string, RecordOperationProvenance> RecordParameterProvenance);
 
     private sealed record WholeProgramTypeInference(
         ImmutableDictionary<DeclQualifiedName, FunctionTypeInfo> FunctionTypes,
-        ISet<SyntaxTypes.Expression.RecordAccessFunction> ClosedRecordAccessFunctions);
+        ISet<Expression.RecordAccessFunction> ClosedRecordAccessFunctions);
 
     /// <summary>
     /// Mapping from <c>Basics</c> function name (as used in
-    /// <see cref="SyntaxTypes.Expression.Identifier"/>) to the
+    /// <see cref="Expression.Identifier"/>) to the
     /// optimization category it belongs to.
     /// </summary>
     private static readonly ImmutableDictionary<string, OpportunityCategory> s_basicsFunctionToCategory =
@@ -291,8 +293,8 @@ public static partial class OptimizationOpportunityFinder
 
     /// <summary>
     /// Mapping from infix operator symbol (as it appears in
-    /// <see cref="SyntaxTypes.Expression.OperatorApplication"/> or
-    /// <see cref="SyntaxTypes.Expression.PrefixOperator"/>) to its
+    /// <see cref="Expression.OperatorApplication"/> or
+    /// <see cref="Expression.PrefixOperator"/>) to its
     /// optimization category. Operators that are already monomorphic at
     /// the source level (for example <c>//</c> on <c>Int</c> or <c>/</c>
     /// on <c>Float</c>) are intentionally absent.
@@ -326,7 +328,7 @@ public static partial class OptimizationOpportunityFinder
     /// </para>
     /// </summary>
     public static ImmutableHashSet<Opportunity> FindOptimizationOpportunities(
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+        IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations,
         IReadOnlyCollection<DeclQualifiedName>? restrictToReachableFromEntryPoints = null)
     {
         var lowered =
@@ -343,7 +345,7 @@ public static partial class OptimizationOpportunityFinder
     }
 
     private static ImmutableHashSet<Opportunity> FindSourceOptimizationOpportunities(
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+        IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations,
         IReadOnlyCollection<DeclQualifiedName>? restrictToReachableFromEntryPoints)
     {
         // Build the top-level arity map once. Only function declarations
@@ -353,7 +355,7 @@ public static partial class OptimizationOpportunityFinder
 
         foreach (var (qualifiedName, declaration) in declarations)
         {
-            if (declaration is SyntaxTypes.Declaration.FunctionDeclaration fd)
+            if (declaration is Declaration.FunctionDeclaration fd)
             {
                 topLevelArity[qualifiedName] =
                     fd.Function.Declaration.Arguments.Count;
@@ -434,7 +436,7 @@ public static partial class OptimizationOpportunityFinder
 
         foreach (var (qualifiedName, declaration) in declarations)
         {
-            if (declaration is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+            if (declaration is not Declaration.FunctionDeclaration funcDecl)
                 continue;
 
             if (reachableSet is not null && !reachableSet.Contains(qualifiedName))
@@ -444,7 +446,7 @@ public static partial class OptimizationOpportunityFinder
             // may be applied as application heads inside the body. Collect
             // them up front so the body walker can flag every site.
             var topLevelParamNames =
-                SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatterns(funcDecl.Function.Declaration.Arguments);
+                SyntaxAnalysis.CollectNamesBoundByPatterns(funcDecl.Function.Declaration.Arguments);
 
             var parameterNamesBuilder = ImmutableDictionary.CreateBuilder<string, int>();
 
@@ -453,7 +455,7 @@ public static partial class OptimizationOpportunityFinder
                 argumentIndex++)
             {
                 foreach (var name in
-                    SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(
+                    SyntaxAnalysis.CollectNamesBoundByPattern(
                         funcDecl.Function.Declaration.Arguments[argumentIndex]))
                 {
                     parameterNamesBuilder[name] = argumentIndex;
@@ -601,7 +603,7 @@ public static partial class OptimizationOpportunityFinder
 
     private static ImmutableDictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition>
         BuildAliasTypes(
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
+        IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations)
     {
         var result =
             ImmutableDictionary.CreateBuilder<
@@ -610,7 +612,7 @@ public static partial class OptimizationOpportunityFinder
 
         foreach (var (qualifiedName, declaration) in declarations)
         {
-            if (declaration is SyntaxTypes.Declaration.AliasDeclaration aliasDeclaration)
+            if (declaration is Declaration.AliasDeclaration aliasDeclaration)
             {
                 result[
                     QualifiedNameHelper.ToDeclQualifiedName(
@@ -628,14 +630,14 @@ public static partial class OptimizationOpportunityFinder
 
     private static WholeProgramTypeInference
         InferFunctionTypesFromApplications(
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+        IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations,
         IReadOnlyDictionary<string, TypeInference.InferredType> functionSignatures,
         IReadOnlyDictionary<
             DeclQualifiedName,
             TypeInference.TypeAliasDefinition> aliasTypes)
     {
         var closedRecordAccessFunctions =
-            new HashSet<SyntaxTypes.Expression.RecordAccessFunction>(
+            new HashSet<Expression.RecordAccessFunction>(
                 ReferenceEqualityComparer.Instance);
 
         var functionTypes =
@@ -645,10 +647,10 @@ public static partial class OptimizationOpportunityFinder
 
         var declarationsByName =
             declarations
-            .Where(entry => entry.Value is SyntaxTypes.Declaration.FunctionDeclaration)
+            .Where(entry => entry.Value is Declaration.FunctionDeclaration)
             .ToImmutableDictionary(
                 entry => QualifiedNameHelper.FromQualifiedNameString(entry.Key.FullName),
-                entry => (SyntaxTypes.Declaration.FunctionDeclaration)entry.Value);
+                entry => (Declaration.FunctionDeclaration)entry.Value);
 
         foreach (var (qualifiedName, declaration) in declarationsByName)
         {
@@ -675,7 +677,7 @@ public static partial class OptimizationOpportunityFinder
 
             foreach (var argument in declaration.Function.Declaration.Arguments)
             {
-                if (argument is SyntaxTypes.Pattern.VarPattern varPattern &&
+                if (argument is Pattern.VarPattern varPattern &&
                     inferred.parameterTypes.TryGetValue(varPattern.Name, out var parameterType))
                 {
                     parameterTypes.Add(
@@ -741,7 +743,7 @@ public static partial class OptimizationOpportunityFinder
                     argumentIndex++)
                 {
                     foreach (var parameterName in
-                        SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(
+                        SyntaxAnalysis.CollectNamesBoundByPattern(
                             implementation.Arguments[argumentIndex]))
                     {
                         parameterNames[parameterName] = argumentIndex;
@@ -975,7 +977,7 @@ public static partial class OptimizationOpportunityFinder
     }
 
     private static void CollectFunctionTypeSuggestions(
-        SyntaxTypes.Expression expression,
+        Expression expression,
         ExpressionTypeContext context,
         IReadOnlySet<DeclQualifiedName> inferredFunctionNames,
         Dictionary<
@@ -984,13 +986,13 @@ public static partial class OptimizationOpportunityFinder
     {
         switch (expression)
         {
-            case SyntaxTypes.Expression.Application application:
+            case Expression.Application application:
                 var actualArgumentTypes =
                     application.Arguments
                     .Select(argument => InferExpressionType(argument, context))
                     .ToList();
 
-                if (application.Function is SyntaxTypes.Expression.Identifier
+                if (application.Function is Expression.Identifier
                     {
                         QualifiedName.Namespaces.Count: 0
                     } parameterIdentifier &&
@@ -1013,7 +1015,7 @@ public static partial class OptimizationOpportunityFinder
                         suggestions);
                 }
 
-                if (application.Function is SyntaxTypes.Expression.Identifier
+                if (application.Function is Expression.Identifier
                     {
                         QualifiedName.Namespaces: ["Basics"],
                         QualifiedName.DeclName: "apR" or "apL"
@@ -1035,7 +1037,7 @@ public static partial class OptimizationOpportunityFinder
                         suggestions);
                 }
 
-                if (application.Function is SyntaxTypes.Expression.Identifier appliedIdentifier &&
+                if (application.Function is Expression.Identifier appliedIdentifier &&
                     TryResolveFunction(
                         appliedIdentifier,
                         context,
@@ -1091,7 +1093,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.LetExpression letExpression:
+            case Expression.LetExpression letExpression:
                 var extendedContext =
                     context with
                     {
@@ -1109,7 +1111,7 @@ public static partial class OptimizationOpportunityFinder
                 {
                     switch (declaration)
                     {
-                        case SyntaxTypes.LetDeclaration.LetFunction letFunction:
+                        case LetDeclaration.LetFunction letFunction:
                             CollectFunctionTypeSuggestions(
                                 letFunction.Function.Declaration.Expression,
                                 extendedContext,
@@ -1118,7 +1120,7 @@ public static partial class OptimizationOpportunityFinder
 
                             break;
 
-                        case SyntaxTypes.LetDeclaration.LetDestructuring letDestructuring:
+                        case LetDeclaration.LetDestructuring letDestructuring:
                             CollectFunctionTypeSuggestions(
                                 letDestructuring.Expression,
                                 extendedContext,
@@ -1142,7 +1144,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.OperatorApplication operatorApplication:
+            case Expression.OperatorApplication operatorApplication:
                 CollectFunctionTypeSuggestions(
                     operatorApplication.Left,
                     context,
@@ -1157,7 +1159,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.IfBlock ifBlock:
+            case Expression.IfBlock ifBlock:
                 CollectFunctionTypeSuggestions(
                     ifBlock.Condition,
                     context,
@@ -1178,7 +1180,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.CaseExpression caseExpression:
+            case Expression.CaseExpression caseExpression:
                 var scrutineeType =
                     InferExpressionType(caseExpression.Expression, context);
 
@@ -1210,7 +1212,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.LambdaExpression lambdaExpression:
+            case Expression.LambdaExpression lambdaExpression:
                 CollectFunctionTypeSuggestions(
                     lambdaExpression.Expression,
                     context,
@@ -1219,7 +1221,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.ListExpr listExpression:
+            case Expression.ListExpr listExpression:
                 foreach (var element in listExpression.Elements)
                 {
                     CollectFunctionTypeSuggestions(
@@ -1231,7 +1233,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.TupledExpression tupleExpression:
+            case Expression.TupledExpression tupleExpression:
                 foreach (var element in tupleExpression.Elements)
                 {
                     CollectFunctionTypeSuggestions(
@@ -1243,7 +1245,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.RecordExpr recordExpression:
+            case Expression.RecordExpr recordExpression:
                 foreach (var field in recordExpression.Fields)
                 {
                     CollectFunctionTypeSuggestions(
@@ -1255,7 +1257,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.RecordAccess recordAccess:
+            case Expression.RecordAccess recordAccess:
                 CollectFunctionTypeSuggestions(
                     recordAccess.Record,
                     context,
@@ -1264,7 +1266,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
+            case Expression.RecordUpdateExpression recordUpdate:
                 foreach (var field in recordUpdate.Fields)
                 {
                     CollectFunctionTypeSuggestions(
@@ -1276,7 +1278,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.Negation negation:
+            case Expression.Negation negation:
                 CollectFunctionTypeSuggestions(
                     negation.Expression,
                     context,
@@ -1285,15 +1287,15 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.Identifier:
-            case SyntaxTypes.Expression.RecordAccessFunction:
-            case SyntaxTypes.Expression.PrefixOperator:
-            case SyntaxTypes.Expression.UnitExpr:
-            case SyntaxTypes.Expression.StringLiteral:
-            case SyntaxTypes.Expression.CharLiteral:
-            case SyntaxTypes.Expression.IntegerLiteral:
-            case SyntaxTypes.Expression.FloatLiteral:
-            case SyntaxTypes.Expression.GLSLExpression:
+            case Expression.Identifier:
+            case Expression.RecordAccessFunction:
+            case Expression.PrefixOperator:
+            case Expression.UnitExpr:
+            case Expression.StringLiteral:
+            case Expression.CharLiteral:
+            case Expression.IntegerLiteral:
+            case Expression.FloatLiteral:
+            case Expression.GLSLExpression:
                 break;
 
             default:
@@ -1345,7 +1347,7 @@ public static partial class OptimizationOpportunityFinder
     }
 
     private static void SuggestExpectedFunctionType(
-        SyntaxTypes.Expression expression,
+        Expression expression,
         TypeInference.InferredType expectedType,
         ExpressionTypeContext context,
         IReadOnlySet<DeclQualifiedName> inferredFunctionNames,
@@ -1353,7 +1355,7 @@ public static partial class OptimizationOpportunityFinder
             (DeclQualifiedName FunctionName, int ParameterIndex),
             TypeInference.InferredType> suggestions)
     {
-        if (expression is SyntaxTypes.Expression.Identifier
+        if (expression is Expression.Identifier
             {
                 QualifiedName.Namespaces.Count: 0
             } localIdentifier &&
@@ -1372,7 +1374,7 @@ public static partial class OptimizationOpportunityFinder
             return;
         }
 
-        if (expression is SyntaxTypes.Expression.RecordAccessFunction recordAccessFunction &&
+        if (expression is Expression.RecordAccessFunction recordAccessFunction &&
             expectedType is TypeInference.InferredType.FunctionType
             {
                 ArgumentType: TypeInference.InferredType.RecordType
@@ -1384,16 +1386,16 @@ public static partial class OptimizationOpportunityFinder
 
         var functionExpression = expression;
         var alreadyAppliedCount = 0;
-        IReadOnlyList<SyntaxTypes.Expression> alreadyAppliedArguments = [];
+        IReadOnlyList<Expression> alreadyAppliedArguments = [];
 
-        if (expression is SyntaxTypes.Expression.Application application)
+        if (expression is Expression.Application application)
         {
             functionExpression = application.Function;
             alreadyAppliedCount = application.Arguments.Count;
             alreadyAppliedArguments = application.Arguments;
         }
 
-        if (functionExpression is not SyntaxTypes.Expression.Identifier identifier ||
+        if (functionExpression is not Expression.Identifier identifier ||
             !TryResolveFunction(
                 identifier,
                 context,
@@ -1453,7 +1455,7 @@ public static partial class OptimizationOpportunityFinder
     }
 
     private static bool TryResolveFunction(
-        SyntaxTypes.Expression.Identifier identifier,
+        Expression.Identifier identifier,
         ExpressionTypeContext context,
         out DeclQualifiedName qualifiedName,
         out FunctionTypeInfo functionType)
@@ -1473,7 +1475,7 @@ public static partial class OptimizationOpportunityFinder
 
     private static ImmutableDictionary<string, TypeInference.InferredType>
         ExtractCasePatternBindingTypes(
-        SyntaxTypes.Pattern pattern,
+        Pattern pattern,
         TypeInference.InferredType scrutineeType,
         ImmutableDictionary<string, TypeInference.InferredType> existingBindings,
         ExpressionTypeContext context) =>
@@ -1485,7 +1487,7 @@ public static partial class OptimizationOpportunityFinder
 
     private static ImmutableDictionary<string, TypeInference.InferredType>
         InferLetExpressionLocalBindingTypes(
-        SyntaxTypes.Expression.LetExpression letExpression,
+        Expression.LetExpression letExpression,
         ExpressionTypeContext context)
     {
         var localBindingTypes =
@@ -1501,7 +1503,7 @@ public static partial class OptimizationOpportunityFinder
         {
             switch (declaration)
             {
-                case SyntaxTypes.LetDeclaration.LetDestructuring letDestructuring:
+                case LetDeclaration.LetDestructuring letDestructuring:
                     var expressionType =
                         InferExpressionType(
                             letDestructuring.Expression,
@@ -1519,7 +1521,7 @@ public static partial class OptimizationOpportunityFinder
 
                     break;
 
-                case SyntaxTypes.LetDeclaration.LetFunction:
+                case LetDeclaration.LetFunction:
                     break;
 
                 default:
@@ -1532,14 +1534,14 @@ public static partial class OptimizationOpportunityFinder
         return localBindingTypes;
     }
 
-    private static ImmutableDictionary<string, SyntaxTypes.Expression>
+    private static ImmutableDictionary<string, Expression>
         ExtendLocalBindingExpressions(
-        SyntaxTypes.Expression.LetExpression letExpression,
-        ImmutableDictionary<string, SyntaxTypes.Expression> localBindingExpressions)
+        Expression.LetExpression letExpression,
+        ImmutableDictionary<string, Expression> localBindingExpressions)
     {
         foreach (var declaration in letExpression.Declarations)
         {
-            if (declaration is SyntaxTypes.LetDeclaration.LetFunction letFunction &&
+            if (declaration is LetDeclaration.LetFunction letFunction &&
                 letFunction.Function.Declaration.Arguments.Count is 0)
             {
                 localBindingExpressions =
@@ -1585,11 +1587,11 @@ public static partial class OptimizationOpportunityFinder
 
     /// <summary>
     /// Computes the set of <see cref="DeclQualifiedName"/> values reachable
-    /// (by syntactic <see cref="SyntaxTypes.Expression.Identifier"/>
+    /// (by syntactic <see cref="Expression.Identifier"/>
     /// reference) from any entry point in <paramref name="entryPoints"/>.
     /// Used by the
     /// <c>restrictToReachableFromEntryPoints</c> overload of
-    /// <see cref="FindOptimizationOpportunities(IReadOnlyDictionary{DeclQualifiedName, SyntaxTypes.Declaration}, IReadOnlyCollection{DeclQualifiedName}?)"/>.
+    /// <see cref="FindOptimizationOpportunities(IReadOnlyDictionary{DeclQualifiedName, Declaration}, IReadOnlyCollection{DeclQualifiedName}?)"/>.
     /// <para>
     /// Walks bodies, types, and let-declarations. References to
     /// declarations that are not in <paramref name="declarations"/> (e.g.
@@ -1597,7 +1599,7 @@ public static partial class OptimizationOpportunityFinder
     /// </para>
     /// </summary>
     public static IReadOnlySet<DeclQualifiedName> ComputeReachableDeclarations(
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+        IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations,
         IReadOnlyCollection<DeclQualifiedName> entryPoints)
     {
         // Build forward edge map: caller → set of callees that are present
@@ -1646,18 +1648,18 @@ public static partial class OptimizationOpportunityFinder
     /// <summary>
     /// Returns the set of declarations in <paramref name="declarations"/>
     /// whose body contains at least one syntactic
-    /// <see cref="SyntaxTypes.Expression.Identifier"/> reference that
+    /// <see cref="Expression.Identifier"/> reference that
     /// resolves to <paramref name="target"/>.
     /// <para>
     /// Resolution rules match
-    /// <see cref="ComputeReachableDeclarations(IReadOnlyDictionary{DeclQualifiedName, SyntaxTypes.Declaration}, IReadOnlyCollection{DeclQualifiedName})"/>:
+    /// <see cref="ComputeReachableDeclarations(IReadOnlyDictionary{DeclQualifiedName, Declaration}, IReadOnlyCollection{DeclQualifiedName})"/>:
     /// unqualified references in a declaration body resolve against the
     /// module that declaration belongs to. The target itself is never
     /// reported as its own referrer.
     /// </para>
     /// </summary>
     public static IReadOnlySet<DeclQualifiedName> FindDirectReferrers(
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+        IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations,
         DeclQualifiedName target)
     {
         var referrers = new HashSet<DeclQualifiedName>();
@@ -1677,9 +1679,9 @@ public static partial class OptimizationOpportunityFinder
     /// <summary>
     /// Yields every syntactic <c>(caller, callee)</c> reference edge
     /// derivable from <paramref name="declarations"/>. Each
-    /// <see cref="SyntaxTypes.Expression.Identifier"/> reference in
+    /// <see cref="Expression.Identifier"/> reference in
     /// the body of a function declaration is resolved against
-    /// <see cref="SyntaxTypes.SyntaxAnalysis.BuildModuleKeyAndDeclNameIndex(IReadOnlyDictionary{DeclQualifiedName, SyntaxTypes.Declaration})"/>
+    /// <see cref="SyntaxAnalysis.BuildModuleKeyAndDeclNameIndex(IReadOnlyDictionary{DeclQualifiedName, Declaration})"/>
     /// — unqualified references resolve against the caller's enclosing
     /// module. References to declarations not present in
     /// <paramref name="declarations"/> are silently dropped.
@@ -1690,14 +1692,14 @@ public static partial class OptimizationOpportunityFinder
     /// </para>
     /// </summary>
     private static IEnumerable<(DeclQualifiedName caller, DeclQualifiedName callee)> EnumerateReferenceEdges(
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
+        IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations)
     {
         var byModuleAndName =
-            SyntaxTypes.SyntaxAnalysis.BuildModuleKeyAndDeclNameIndex(declarations);
+            SyntaxAnalysis.BuildModuleKeyAndDeclNameIndex(declarations);
 
         foreach (var (declKey, decl) in declarations)
         {
-            if (decl is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+            if (decl is not Declaration.FunctionDeclaration funcDecl)
                 continue;
 
             var ownModuleKey = string.Join(".", declKey.Namespaces);
@@ -1715,7 +1717,7 @@ public static partial class OptimizationOpportunityFinder
     }
 
     private static void CollectReferencesFromExpression(
-        SyntaxTypes.Expression expression,
+        Expression expression,
         string ownModuleKey,
         IReadOnlyDictionary<(string moduleKey, string declName), DeclQualifiedName> byModuleAndName,
         System.Action<DeclQualifiedName> emit)
@@ -1724,12 +1726,12 @@ public static partial class OptimizationOpportunityFinder
         // of lexical scope: locally-bound names cannot appear as keys in
         // byModuleAndName (which only indexes top-level declarations), so
         // the resolution will silently fail for them anyway.
-        SyntaxTypes.SyntaxAnalysis.WalkExpressionsWithScope(
+        SyntaxAnalysis.WalkExpressionsWithScope(
             expression,
             [],
             (node, _) =>
             {
-                if (node is not SyntaxTypes.Expression.Identifier identifier)
+                if (node is not Expression.Identifier identifier)
                     return;
 
                 var moduleKey =
@@ -1747,7 +1749,7 @@ public static partial class OptimizationOpportunityFinder
     /// <summary>
     /// Convenience overload that parses and canonicalizes the supplied Elm
     /// module texts, then runs
-    /// <see cref="FindOptimizationOpportunities(IReadOnlyDictionary{DeclQualifiedName, SyntaxTypes.Declaration}, IReadOnlyCollection{DeclQualifiedName}?)"/>
+    /// <see cref="FindOptimizationOpportunities(IReadOnlyDictionary{DeclQualifiedName, Declaration}, IReadOnlyCollection{DeclQualifiedName}?)"/>
     /// on the resulting flat declaration dictionary. Useful for short,
     /// inline test scenarios.
     /// </summary>
@@ -1764,7 +1766,7 @@ public static partial class OptimizationOpportunityFinder
     }
 
     private static void CollectFromExpression(
-        SyntaxTypes.Expression expression,
+        Expression expression,
         DeclQualifiedName containing,
         IReadOnlyDictionary<DeclQualifiedName, int> topLevelArity,
         ImmutableDictionary<string, int> letScope,
@@ -1780,7 +1782,7 @@ public static partial class OptimizationOpportunityFinder
         // child expressions happens at the bottom of the switch.
         switch (expression)
         {
-            case SyntaxTypes.Expression.RecordAccess recordAccess:
+            case Expression.RecordAccess recordAccess:
                 CollectFromExpression(
                     recordAccess.Record,
                     containing,
@@ -1792,12 +1794,12 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.RecordAccessFunction:
+            case Expression.RecordAccessFunction:
                 break;
 
-            case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
+            case Expression.RecordUpdateExpression recordUpdate:
                 var recordUpdateExpression =
-                    new SyntaxTypes.Expression.Identifier(
+                    new Expression.Identifier(
                         DeclQualifiedName.Create([], recordUpdate.RecordName));
 
                 var recordUpdateProvenance =
@@ -1830,7 +1832,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.Identifier identifier:
+            case Expression.Identifier identifier:
                 if (identifier.QualifiedName.Namespaces.Count is 1 &&
                     identifier.QualifiedName.Namespaces[0] is "Basics" &&
                     s_basicsFunctionToCategory.TryGetValue(identifier.QualifiedName.DeclName, out var funcCategory))
@@ -1844,7 +1846,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.OperatorApplication opApp:
+            case Expression.OperatorApplication opApp:
                 if (s_basicsOperatorToCategory.TryGetValue(opApp.Operator, out var opCategory))
                 {
                     MaybeAdd(
@@ -1880,7 +1882,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.PrefixOperator prefixOp:
+            case Expression.PrefixOperator prefixOp:
                 if (s_basicsOperatorToCategory.TryGetValue(prefixOp.Operator, out var prefixCategory))
                 {
                     MaybeAdd(
@@ -1892,8 +1894,8 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.Application app:
-                if (app.Function is SyntaxTypes.Expression.Identifier appliedIdentifier &&
+            case Expression.Application app:
+                if (app.Function is Expression.Identifier appliedIdentifier &&
                     appliedIdentifier.QualifiedName.Namespaces is ["Basics"] &&
                     s_basicsFunctionToCategory.TryGetValue(
                         appliedIdentifier.QualifiedName.DeclName,
@@ -1942,7 +1944,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.LetExpression letExpr:
+            case Expression.LetExpression letExpr:
 
                 // Let-bound function declarations introduce new arities that
                 // are visible inside the let body and inside sibling let
@@ -1964,7 +1966,7 @@ public static partial class OptimizationOpportunityFinder
 
                 foreach (var decl in letExpr.Declarations)
                 {
-                    if (decl is SyntaxTypes.LetDeclaration.LetFunction letFunc)
+                    if (decl is LetDeclaration.LetFunction letFunc)
                     {
                         var name = letFunc.Function.Declaration.Name;
                         var arity = letFunc.Function.Declaration.Arguments.Count;
@@ -1977,7 +1979,7 @@ public static partial class OptimizationOpportunityFinder
                 {
                     switch (decl)
                     {
-                        case SyntaxTypes.LetDeclaration.LetFunction letFunc:
+                        case LetDeclaration.LetFunction letFunc:
 
                             // Each let-bound function introduces its own
                             // parameter scope. Higher-order parameter
@@ -1987,7 +1989,7 @@ public static partial class OptimizationOpportunityFinder
                             // description so they do not collide with
                             // identically-named outer parameters.
                             var letParamNames =
-                                SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatterns(
+                                SyntaxAnalysis.CollectNamesBoundByPatterns(
                                     letFunc.Function.Declaration.Arguments);
 
                             var letParameterTypes =
@@ -2043,7 +2045,7 @@ public static partial class OptimizationOpportunityFinder
 
                             break;
 
-                        case SyntaxTypes.LetDeclaration.LetDestructuring letDestr:
+                        case LetDeclaration.LetDestructuring letDestr:
                             CollectFromPattern(
                                 letDestr.Pattern,
                                 InferExpressionType(letDestr.Expression, extendedTypeContext),
@@ -2080,7 +2082,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.LambdaExpression lambda:
+            case Expression.LambdaExpression lambda:
                 foreach (var argument in lambda.Arguments)
                 {
                     CollectFromPattern(
@@ -2102,7 +2104,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.IfBlock ifBlock:
+            case Expression.IfBlock ifBlock:
                 CollectFromExpression(
                     ifBlock.Condition,
                     containing,
@@ -2132,7 +2134,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.CaseExpression caseExpr:
+            case Expression.CaseExpression caseExpr:
                 var caseScrutineeType =
                     InferExpressionType(caseExpr.Expression, expressionTypeContext);
 
@@ -2177,7 +2179,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.ListExpr listExpr:
+            case Expression.ListExpr listExpr:
                 foreach (var element in listExpr.Elements)
                 {
                     CollectFromExpression(
@@ -2192,7 +2194,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.TupledExpression tupled:
+            case Expression.TupledExpression tupled:
                 foreach (var element in tupled.Elements)
                 {
                     CollectFromExpression(
@@ -2207,7 +2209,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.RecordExpr recordExpr:
+            case Expression.RecordExpr recordExpr:
                 foreach (var field in recordExpr.Fields)
                 {
                     CollectFromExpression(
@@ -2222,7 +2224,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.Negation negation:
+            case Expression.Negation negation:
                 CollectFromExpression(
                     negation.Expression,
                     containing,
@@ -2235,12 +2237,12 @@ public static partial class OptimizationOpportunityFinder
                 break;
 
             // Leaf variants with no nested Expression children.
-            case SyntaxTypes.Expression.UnitExpr:
-            case SyntaxTypes.Expression.StringLiteral:
-            case SyntaxTypes.Expression.CharLiteral:
-            case SyntaxTypes.Expression.IntegerLiteral:
-            case SyntaxTypes.Expression.FloatLiteral:
-            case SyntaxTypes.Expression.GLSLExpression:
+            case Expression.UnitExpr:
+            case Expression.StringLiteral:
+            case Expression.CharLiteral:
+            case Expression.IntegerLiteral:
+            case Expression.FloatLiteral:
+            case Expression.GLSLExpression:
                 break;
 
             default:
@@ -2251,7 +2253,7 @@ public static partial class OptimizationOpportunityFinder
     }
 
     private static void CollectFromPattern(
-        SyntaxTypes.Pattern pattern,
+        Pattern pattern,
         TypeInference.InferredType matchedType,
         DeclQualifiedName containing,
         ExpressionTypeContext expressionTypeContext,
@@ -2259,10 +2261,10 @@ public static partial class OptimizationOpportunityFinder
     {
         switch (pattern)
         {
-            case SyntaxTypes.Pattern.RecordPattern:
+            case Pattern.RecordPattern:
                 break;
 
-            case SyntaxTypes.Pattern.TuplePattern tuplePattern:
+            case Pattern.TuplePattern tuplePattern:
                 var tupleElementTypes =
                     matchedType is TypeInference.InferredType.TupleType tupleType &&
                     tupleType.ElementTypes.Count == tuplePattern.Elements.Count
@@ -2283,7 +2285,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Pattern.UnConsPattern unConsPattern:
+            case Pattern.UnConsPattern unConsPattern:
                 var listElementType =
                     matchedType is TypeInference.InferredType.ListType listType
                     ?
@@ -2307,7 +2309,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Pattern.ListPattern listPattern:
+            case Pattern.ListPattern listPattern:
                 var elementType =
                     matchedType is TypeInference.InferredType.ListType matchedListType
                     ?
@@ -2327,7 +2329,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Pattern.NamedPattern namedPattern:
+            case Pattern.NamedPattern namedPattern:
                 var constructorName =
                     QualifiedNameHelper.ToDeclQualifiedName(
                         namedPattern.Name.ModuleName,
@@ -2366,7 +2368,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Pattern.AsPattern asPattern:
+            case Pattern.AsPattern asPattern:
                 CollectFromPattern(
                     asPattern.Pattern,
                     matchedType,
@@ -2376,13 +2378,13 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Pattern.AllPattern:
-            case SyntaxTypes.Pattern.VarPattern:
-            case SyntaxTypes.Pattern.UnitPattern:
-            case SyntaxTypes.Pattern.CharPattern:
-            case SyntaxTypes.Pattern.StringPattern:
-            case SyntaxTypes.Pattern.IntPattern:
-            case SyntaxTypes.Pattern.FloatPattern:
+            case Pattern.AllPattern:
+            case Pattern.VarPattern:
+            case Pattern.UnitPattern:
+            case Pattern.CharPattern:
+            case Pattern.StringPattern:
+            case Pattern.IntPattern:
+            case Pattern.FloatPattern:
                 break;
 
             default:
@@ -2393,14 +2395,14 @@ public static partial class OptimizationOpportunityFinder
     }
 
     private static RecordOperationProvenance? GetRecordOperationProvenance(
-        SyntaxTypes.Expression expression,
+        Expression expression,
         ExpressionTypeContext context)
     {
         var semanticType = InferExpressionType(expression, context);
 
         if (semanticType is TypeInference.InferredType.RecordType)
         {
-            if (expression is SyntaxTypes.Expression.Identifier
+            if (expression is Expression.Identifier
                 {
                     QualifiedName.Namespaces.Count: 0
                 } closedRecordIdentifier)
@@ -2421,7 +2423,7 @@ public static partial class OptimizationOpportunityFinder
             return RecordOperationProvenance.OpenRecordSourceType;
         }
 
-        if (expression is not SyntaxTypes.Expression.Identifier
+        if (expression is not Expression.Identifier
             {
                 QualifiedName.Namespaces.Count: 0
             } identifier)
@@ -2451,10 +2453,10 @@ public static partial class OptimizationOpportunityFinder
         RecordOperationProvenance.UnknownRecordLayout;
 
     private static TypeInference.InferredType InferExpressionType(
-        SyntaxTypes.Expression expression,
+        Expression expression,
         ExpressionTypeContext context)
     {
-        if (expression is SyntaxTypes.Expression.RecordAccess recordAccess)
+        if (expression is Expression.RecordAccess recordAccess)
         {
             var recordType = InferExpressionType(recordAccess.Record, context);
 
@@ -2500,9 +2502,9 @@ public static partial class OptimizationOpportunityFinder
             }
         }
 
-        if (expression is SyntaxTypes.Expression.Application
+        if (expression is Expression.Application
             {
-                Function: SyntaxTypes.Expression.Identifier
+                Function: Expression.Identifier
                 {
                     QualifiedName.Namespaces: ["Basics"],
                     QualifiedName.DeclName: "apR" or "apL"
@@ -2554,18 +2556,18 @@ public static partial class OptimizationOpportunityFinder
     }
 
     /// <summary>
-    /// Inspects an <see cref="SyntaxTypes.Expression.Application"/> node
+    /// Inspects an <see cref="Expression.Application"/> node
     /// and, if its head is a statically known function whose arity exceeds
     /// the number of supplied arguments, records a
     /// <see cref="OpportunityCategory.PartialApplication"/> opportunity describing the
     /// added-argument vs parameter-count mismatch.
     /// <para>
     /// The head is "statically known" when it is an
-    /// <see cref="SyntaxTypes.Expression.Identifier"/> resolving to a
-    /// top-level <see cref="SyntaxTypes.Declaration.FunctionDeclaration"/>
+    /// <see cref="Expression.Identifier"/> resolving to a
+    /// top-level <see cref="Declaration.FunctionDeclaration"/>
     /// in <paramref name="topLevelArity"/>, an in-scope let-bound function
     /// in <paramref name="letScope"/>, or a
-    /// <see cref="SyntaxTypes.Expression.PrefixOperator"/> (binary, arity 2).
+    /// <see cref="Expression.PrefixOperator"/> (binary, arity 2).
     /// References to functions whose arity cannot be resolved (for
     /// example imports from native modules such as <c>Basics</c> /
     /// <c>Pine_kernel</c>, or unbound parameters) are skipped — the analysis
@@ -2574,7 +2576,7 @@ public static partial class OptimizationOpportunityFinder
     /// </para>
     /// </summary>
     private static void MaybeReportPartialApplication(
-        SyntaxTypes.Expression.Application app,
+        Expression.Application app,
         DeclQualifiedName containing,
         IReadOnlyDictionary<DeclQualifiedName, int> topLevelArity,
         ImmutableDictionary<string, int> letScope,
@@ -2594,7 +2596,7 @@ public static partial class OptimizationOpportunityFinder
 
         switch (head)
         {
-            case SyntaxTypes.Expression.Identifier identifier:
+            case Expression.Identifier identifier:
                 {
                     int? arity = null;
                     string? displayName = null;
@@ -2630,7 +2632,7 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.PrefixOperator prefixOp:
+            case Expression.PrefixOperator prefixOp:
                 {
                     // Source-level binary operators always have arity 2.
                     const int OperatorArity = 2;
@@ -2654,7 +2656,7 @@ public static partial class OptimizationOpportunityFinder
     /// Walks <paramref name="body"/> and records one
     /// <see cref="OpportunityCategory.HigherOrderParameter_Direct"/> finding per
     /// parameter in <paramref name="paramNames"/> that is observed as the
-    /// head of an <see cref="SyntaxTypes.Expression.Application"/>. The
+    /// head of an <see cref="Expression.Application"/>. The
     /// description is the bare parameter name when
     /// <paramref name="paramOwnerDescription"/> is <c>null</c> (top-level
     /// function) and <c>"&lt;owner&gt;.&lt;param&gt;"</c> when the
@@ -2663,7 +2665,7 @@ public static partial class OptimizationOpportunityFinder
     /// colliding.
     /// </summary>
     private static void CollectHigherOrderParameterFindings(
-        SyntaxTypes.Expression body,
+        Expression body,
         ImmutableHashSet<string> paramNames,
         DeclQualifiedName containing,
         string? paramOwnerDescription,
@@ -2715,7 +2717,7 @@ public static partial class OptimizationOpportunityFinder
     /// </para>
     /// </summary>
     private static void CollectIndirectHigherOrderParameterFindings(
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+        IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations,
         IReadOnlySet<DeclQualifiedName>? reachableSet,
         ImmutableHashSet<Opportunity>.Builder resultBuilder)
     {
@@ -2749,26 +2751,26 @@ public static partial class OptimizationOpportunityFinder
     /// <summary>
     /// Walks <paramref name="expression"/> and adds to <paramref name="found"/>
     /// every name in <paramref name="paramNames"/> that appears as the head
-    /// of an <see cref="SyntaxTypes.Expression.Application"/>.
+    /// of an <see cref="Expression.Application"/>.
     /// </summary>
     private static void FindAppliedParameterNames(
-        SyntaxTypes.Expression expression,
+        Expression expression,
         ImmutableHashSet<string> paramNames,
         HashSet<string> found)
     {
         switch (expression)
         {
-            case SyntaxTypes.Expression.Application app:
+            case Expression.Application app:
                 {
                     var head = app.Function;
 
-                    if (head is SyntaxTypes.Expression.Identifier identifier &&
+                    if (head is Expression.Identifier identifier &&
                         identifier.QualifiedName.Namespaces.Count is 0 &&
                         paramNames.Contains(identifier.QualifiedName.DeclName))
                     {
                         found.Add(identifier.QualifiedName.DeclName);
                     }
-                    else if (head is SyntaxTypes.Expression.RecordAccess recordAccessHead &&
+                    else if (head is Expression.RecordAccess recordAccessHead &&
                         TryRenderRecordAccessChainRootedAtParam(
                                  recordAccessHead, paramNames) is { } chainPath)
                     {
@@ -2783,12 +2785,12 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.OperatorApplication opApp:
+            case Expression.OperatorApplication opApp:
                 FindAppliedParameterNames(opApp.Left, paramNames, found);
                 FindAppliedParameterNames(opApp.Right, paramNames, found);
                 break;
 
-            case SyntaxTypes.Expression.LetExpression letExpr:
+            case Expression.LetExpression letExpr:
 
                 // Names bound by `let` destructuring patterns extend the
                 // visible-parameter set for the let body — when one of these
@@ -2801,13 +2803,13 @@ public static partial class OptimizationOpportunityFinder
                 {
                     switch (decl)
                     {
-                        case SyntaxTypes.LetDeclaration.LetFunction letFunc:
+                        case LetDeclaration.LetFunction letFunc:
 
                             // The let-bound function's own parameters
                             // shadow any outer parameters of the same name,
                             // so remove them from the set before descending.
                             var letParamNames =
-                                SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatterns(
+                                SyntaxAnalysis.CollectNamesBoundByPatterns(
                                     letFunc.Function.Declaration.Arguments);
 
                             var visibleHere =
@@ -2820,10 +2822,10 @@ public static partial class OptimizationOpportunityFinder
 
                             break;
 
-                        case SyntaxTypes.LetDeclaration.LetDestructuring letDestr:
+                        case LetDeclaration.LetDestructuring letDestr:
                             FindAppliedParameterNames(letDestr.Expression, paramNames, found);
 
-                            foreach (var n in SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(letDestr.Pattern))
+                            foreach (var n in SyntaxAnalysis.CollectNamesBoundByPattern(letDestr.Pattern))
                                 letDestructuredNames.Add(n);
 
                             break;
@@ -2842,9 +2844,9 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.LambdaExpression lambda:
+            case Expression.LambdaExpression lambda:
                 var lambdaParams =
-                    SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatterns(lambda.Arguments);
+                    SyntaxAnalysis.CollectNamesBoundByPatterns(lambda.Arguments);
 
                 FindAppliedParameterNames(
                     lambda.Expression,
@@ -2853,13 +2855,13 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.IfBlock ifBlock:
+            case Expression.IfBlock ifBlock:
                 FindAppliedParameterNames(ifBlock.Condition, paramNames, found);
                 FindAppliedParameterNames(ifBlock.ThenBlock, paramNames, found);
                 FindAppliedParameterNames(ifBlock.ElseBlock, paramNames, found);
                 break;
 
-            case SyntaxTypes.Expression.CaseExpression caseExpr:
+            case Expression.CaseExpression caseExpr:
                 FindAppliedParameterNames(caseExpr.Expression, paramNames, found);
 
                 foreach (var caseEntry in caseExpr.Cases)
@@ -2870,7 +2872,7 @@ public static partial class OptimizationOpportunityFinder
                     // unless the pattern shadows one (we conservatively
                     // keep both — Elm forbids shadowing in patterns).
                     var branchBound =
-                        SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(caseEntry.Pattern);
+                        SyntaxAnalysis.CollectNamesBoundByPattern(caseEntry.Pattern);
 
                     FindAppliedParameterNames(
                         caseEntry.Expression,
@@ -2880,47 +2882,47 @@ public static partial class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.ListExpr listExpr:
+            case Expression.ListExpr listExpr:
                 foreach (var element in listExpr.Elements)
                     FindAppliedParameterNames(element, paramNames, found);
 
                 break;
 
-            case SyntaxTypes.Expression.TupledExpression tupled:
+            case Expression.TupledExpression tupled:
                 foreach (var element in tupled.Elements)
                     FindAppliedParameterNames(element, paramNames, found);
 
                 break;
 
-            case SyntaxTypes.Expression.RecordExpr recordExpr:
+            case Expression.RecordExpr recordExpr:
                 foreach (var field in recordExpr.Fields)
                     FindAppliedParameterNames(field.Value, paramNames, found);
 
                 break;
 
-            case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
+            case Expression.RecordUpdateExpression recordUpdate:
                 foreach (var field in recordUpdate.Fields)
                     FindAppliedParameterNames(field.Value, paramNames, found);
 
                 break;
 
-            case SyntaxTypes.Expression.RecordAccess recordAccess:
+            case Expression.RecordAccess recordAccess:
                 FindAppliedParameterNames(recordAccess.Record, paramNames, found);
                 break;
 
-            case SyntaxTypes.Expression.Negation negation:
+            case Expression.Negation negation:
                 FindAppliedParameterNames(negation.Expression, paramNames, found);
                 break;
 
-            case SyntaxTypes.Expression.Identifier:
-            case SyntaxTypes.Expression.RecordAccessFunction:
-            case SyntaxTypes.Expression.PrefixOperator:
-            case SyntaxTypes.Expression.UnitExpr:
-            case SyntaxTypes.Expression.StringLiteral:
-            case SyntaxTypes.Expression.CharLiteral:
-            case SyntaxTypes.Expression.IntegerLiteral:
-            case SyntaxTypes.Expression.FloatLiteral:
-            case SyntaxTypes.Expression.GLSLExpression:
+            case Expression.Identifier:
+            case Expression.RecordAccessFunction:
+            case Expression.PrefixOperator:
+            case Expression.UnitExpr:
+            case Expression.StringLiteral:
+            case Expression.CharLiteral:
+            case Expression.IntegerLiteral:
+            case Expression.FloatLiteral:
+            case Expression.GLSLExpression:
                 break;
 
             default:
@@ -2933,24 +2935,24 @@ public static partial class OptimizationOpportunityFinder
     /// <summary>
     /// If <paramref name="recordAccess"/> is a chain
     /// <c>p.f1.f2.…fn</c> whose innermost record expression is a bare
-    /// <see cref="SyntaxTypes.Expression.Identifier"/> with an empty
+    /// <see cref="Expression.Identifier"/> with an empty
     /// module part and name in <paramref name="paramNames"/>, returns
     /// <c>"p.f1.f2.…fn"</c>; otherwise returns <c>null</c>.
     /// </summary>
     private static string? TryRenderRecordAccessChainRootedAtParam(
-        SyntaxTypes.Expression.RecordAccess recordAccess,
+        Expression.RecordAccess recordAccess,
         ImmutableHashSet<string> paramNames)
     {
         var fields = new List<string>();
-        SyntaxTypes.Expression current = recordAccess;
+        Expression current = recordAccess;
 
-        while (current is SyntaxTypes.Expression.RecordAccess ra)
+        while (current is Expression.RecordAccess ra)
         {
             fields.Add(ra.FieldName);
             current = ra.Record;
         }
 
-        if (current is not SyntaxTypes.Expression.Identifier rootIdentifier)
+        if (current is not Expression.Identifier rootIdentifier)
             return null;
 
         if (rootIdentifier.QualifiedName.Namespaces.Count is not 0)
@@ -2982,14 +2984,14 @@ public static partial class OptimizationOpportunityFinder
             });
     }
 
-    private static IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration>
-        ParseAndCanonicalizeToFlatDict(IReadOnlyList<string> elmModulesTexts)
+    private static IReadOnlyDictionary<DeclQualifiedName, Declaration>
+        ParseAndCanonicalizeToFlatDict(ModuleName elmModulesTexts)
     {
         var parsedModules =
             elmModulesTexts
             .Select(
                 moduleText =>
-                ElmSyntax.ElmSyntaxParser.ParseModuleText(moduleText)
+                ElmSyntaxParser.ParseModuleText(moduleText)
                 .Extract(err => throw new System.Exception("Failed parsing: " + err)))
             .ToList();
 
@@ -3002,14 +3004,14 @@ public static partial class OptimizationOpportunityFinder
             .Select(
                 parsedModule =>
                 canonicalized[
-                    ElmSyntax.SyntaxModel.Module.GetModuleName(
+                    Syntax.Concrete.Module.GetModuleName(
                         parsedModule.ModuleDefinition.Value).Value]
                 .Extract(err => throw new System.Exception("Module has errors: " + err)))
             .ToList();
 
         var orderedModulesAbstract =
             orderedModules
-            .Select(SyntaxTypes.ConvertFromConcrete.FromFile)
+            .Select(ConvertFromConcrete.FromFile)
             .ToList();
 
         return ElmCompiler.FlattenModulesToDeclarationDictionary(orderedModulesAbstract);
@@ -3027,7 +3029,7 @@ public static partial class OptimizationOpportunityFinder
         DeclQualifiedName TypeName,
         DeclQualifiedName ConstructorName,
         ModuleName TypeGenerics,
-        IReadOnlyList<SyntaxTypes.TypeAnnotation> ConstructorArgumentTypes);
+        IReadOnlyList<TypeAnnotation> ConstructorArgumentTypes);
 
     /// <summary>
     /// Builds a registry of every custom type in <paramref name="declarations"/>
@@ -3039,13 +3041,13 @@ public static partial class OptimizationOpportunityFinder
     /// </summary>
     internal static ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo>
         BuildSingleTagRegistry(
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
+        IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations)
     {
         var builder = ImmutableDictionary.CreateBuilder<DeclQualifiedName, SingleTagShapeInfo>();
 
         foreach (var (declName, decl) in declarations)
         {
-            if (decl is not SyntaxTypes.Declaration.ChoiceTypeDeclaration ctd)
+            if (decl is not Declaration.ChoiceTypeDeclaration ctd)
                 continue;
 
             if (ctd.TypeDeclaration.Constructors.Count is not 1)
@@ -3089,7 +3091,7 @@ public static partial class OptimizationOpportunityFinder
     /// <list type="bullet">
     /// <item>The function's signature names a single-tag type as the
     /// parameter's root type.</item>
-    /// <item>The parameter pattern is a <see cref="SyntaxTypes.Pattern.NamedPattern"/>
+    /// <item>The parameter pattern is a <see cref="Pattern.NamedPattern"/>
     /// (optionally wrapped in parens / as-pattern) whose constructor
     /// resolves to a single-tag constructor.</item>
     /// <item>The function body contains a top-level
@@ -3112,7 +3114,7 @@ public static partial class OptimizationOpportunityFinder
     /// </summary>
     private static void CollectRootLevelChoiceTagWrapperFindings(
         DeclQualifiedName containing,
-        SyntaxTypes.FunctionStruct function,
+        FunctionStruct function,
         ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo> singleTagRegistry,
         ImmutableHashSet<Opportunity>.Builder resultBuilder)
     {
@@ -3127,8 +3129,8 @@ public static partial class OptimizationOpportunityFinder
         // annotations + a single return type annotation. A function
         // without a signature contributes an empty list and a null
         // return type.
-        var sigParamTypes = new List<SyntaxTypes.TypeAnnotation?>();
-        SyntaxTypes.TypeAnnotation? sigReturnType = null;
+        var sigParamTypes = new List<TypeAnnotation?>();
+        TypeAnnotation? sigReturnType = null;
 
         if (function.Signature is { } signature)
         {
@@ -3143,11 +3145,11 @@ public static partial class OptimizationOpportunityFinder
         for (var i = 0; i < implementation.Arguments.Count; i++)
         {
             var paramPattern = implementation.Arguments[i];
-            var paramName = SyntaxTypes.SyntaxAnalysis.TryGetParameterDisplayName(paramPattern);
+            var paramName = SyntaxAnalysis.TryGetParameterDisplayName(paramPattern);
 
             // 1. Signature-based.
             SingleTagShapeInfo? matchedFromSig = null;
-            IReadOnlyList<SyntaxTypes.TypeAnnotation>? unwrappedFromSig = null;
+            IReadOnlyList<TypeAnnotation>? unwrappedFromSig = null;
 
             if (i < sigParamTypes.Count && sigParamTypes[i] is { } sigParamType)
             {
@@ -3198,7 +3200,7 @@ public static partial class OptimizationOpportunityFinder
 
         // Return-value detection.
         SingleTagShapeInfo? returnMatched = null;
-        IReadOnlyList<SyntaxTypes.TypeAnnotation>? returnUnwrapped = null;
+        IReadOnlyList<TypeAnnotation>? returnUnwrapped = null;
 
         if (sigReturnType is not null)
         {
@@ -3238,16 +3240,16 @@ public static partial class OptimizationOpportunityFinder
     /// <paramref name="sigParamTypes"/>.
     /// </summary>
     internal static void DecomposeFunctionSignature(
-        SyntaxTypes.TypeAnnotation annotation,
+        TypeAnnotation annotation,
         int parameterCount,
-        List<SyntaxTypes.TypeAnnotation?> sigParamTypes,
-        out SyntaxTypes.TypeAnnotation? sigReturnType)
+        List<TypeAnnotation?> sigParamTypes,
+        out TypeAnnotation? sigReturnType)
     {
         var current = annotation;
 
         for (var i = 0; i < parameterCount; i++)
         {
-            if (current is SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation fta)
+            if (current is TypeAnnotation.FunctionTypeAnnotation fta)
             {
                 sigParamTypes.Add(fta.ArgumentType);
                 current = fta.ReturnType;
@@ -3264,18 +3266,18 @@ public static partial class OptimizationOpportunityFinder
     /// <summary>
     /// Returns the <see cref="SingleTagShapeInfo"/> for the supplied
     /// type annotation when it is a
-    /// <see cref="SyntaxTypes.TypeAnnotation.Typed"/> reference to a
+    /// <see cref="TypeAnnotation.Typed"/> reference to a
     /// single-tag custom type, plus the unwrapped type annotations with
     /// generic substitution applied. Returns
     /// <c>(null, null)</c> for any other annotation shape.
     /// </summary>
-    internal static (SingleTagShapeInfo? Info, IReadOnlyList<SyntaxTypes.TypeAnnotation>? UnwrappedTypes)
+    internal static (SingleTagShapeInfo? Info, IReadOnlyList<TypeAnnotation>? UnwrappedTypes)
         TryResolveSingleTagWrap(
-        SyntaxTypes.TypeAnnotation annotation,
+        TypeAnnotation annotation,
         ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo> singleTagRegistry,
         ModuleName ownModule)
     {
-        if (annotation is not SyntaxTypes.TypeAnnotation.Typed typed)
+        if (annotation is not TypeAnnotation.Typed typed)
             return (null, null);
 
         var qualified =
@@ -3295,7 +3297,7 @@ public static partial class OptimizationOpportunityFinder
 
         // Build the generic substitution from the type's declared
         // generics to the actual type arguments at this annotation site.
-        var substitution = new Dictionary<string, SyntaxTypes.TypeAnnotation>();
+        var substitution = new Dictionary<string, TypeAnnotation>();
 
         for (var i = 0; i < info.TypeGenerics.Count; i++)
         {
@@ -3317,17 +3319,17 @@ public static partial class OptimizationOpportunityFinder
     /// Returns the <see cref="SingleTagShapeInfo"/> implied by a
     /// parameter or destructuring pattern when (after peeling
     /// as-patterns) the pattern is a
-    /// <see cref="SyntaxTypes.Pattern.NamedPattern"/> whose constructor
+    /// <see cref="Pattern.NamedPattern"/> whose constructor
     /// resolves to a single-tag constructor; otherwise <c>null</c>.
     /// </summary>
     private static SingleTagShapeInfo? TryMatchSingleTagFromPattern(
-        SyntaxTypes.Pattern pattern,
+        Pattern pattern,
         ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo> singleTagRegistry,
         ModuleName ownModule)
     {
-        var peeled = SyntaxTypes.SyntaxAnalysis.PeelPatternAsBinder(pattern);
+        var peeled = SyntaxAnalysis.PeelPatternAsBinder(pattern);
 
-        if (peeled is not SyntaxTypes.Pattern.NamedPattern named)
+        if (peeled is not Pattern.NamedPattern named)
             return null;
 
         var qualified =
@@ -3352,30 +3354,30 @@ public static partial class OptimizationOpportunityFinder
     /// Walks <paramref name="body"/>'s leading let chain (only the let
     /// blocks at the very top of the body, not nested ones) and returns
     /// the single-tag <see cref="SingleTagShapeInfo"/> implied by any
-    /// <see cref="SyntaxTypes.LetDeclaration.LetDestructuring"/>
-    /// that matches a <see cref="SyntaxTypes.Pattern.NamedPattern"/>
+    /// <see cref="LetDeclaration.LetDestructuring"/>
+    /// that matches a <see cref="Pattern.NamedPattern"/>
     /// applied to the bare parameter named
     /// <paramref name="paramName"/>; <c>null</c> when no such
     /// destructuring exists.
     /// </summary>
     private static SingleTagShapeInfo? TryMatchSingleTagFromTopLevelLetDestructuring(
-        SyntaxTypes.Expression body,
+        Expression body,
         string paramName,
         ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo> singleTagRegistry,
         ModuleName ownModule)
     {
         var current = body;
 
-        while (current is SyntaxTypes.Expression.LetExpression letExpr)
+        while (current is Expression.LetExpression letExpr)
         {
             foreach (var decl in letExpr.Declarations)
             {
-                if (decl is not SyntaxTypes.LetDeclaration.LetDestructuring letDestr)
+                if (decl is not LetDeclaration.LetDestructuring letDestr)
                     continue;
 
                 var rhs = letDestr.Expression;
 
-                if (rhs is not SyntaxTypes.Expression.Identifier rhsRef)
+                if (rhs is not Expression.Identifier rhsRef)
                     continue;
 
                 if (rhsRef.QualifiedName.Namespaces.Count is not 0 || rhsRef.QualifiedName.DeclName != paramName)
@@ -3402,12 +3404,12 @@ public static partial class OptimizationOpportunityFinder
     /// every "return leaf" of <paramref name="body"/> wraps with at
     /// the root, when this is consistent across every leaf; otherwise
     /// <c>null</c>. Return leaves are followed across
-    /// <see cref="SyntaxTypes.Expression.LetExpression"/>,
-    /// <see cref="SyntaxTypes.Expression.IfBlock"/>, and
-    /// <see cref="SyntaxTypes.Expression.CaseExpression"/>.
+    /// <see cref="Expression.LetExpression"/>,
+    /// <see cref="Expression.IfBlock"/>, and
+    /// <see cref="Expression.CaseExpression"/>.
     /// </summary>
     private static SingleTagShapeInfo? TryMatchSingleTagFromAllReturnLeaves(
-        SyntaxTypes.Expression body,
+        Expression body,
         ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo> singleTagRegistry,
         ModuleName ownModule)
     {
@@ -3424,14 +3426,14 @@ public static partial class OptimizationOpportunityFinder
     }
 
     private static bool AllReturnLeavesAgreeOnSingleTagCtor(
-        SyntaxTypes.Expression expression,
+        Expression expression,
         ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo> singleTagRegistry,
         ModuleName ownModule,
         ref SingleTagShapeInfo? agreed)
     {
-        foreach (var leaf in SyntaxTypes.SyntaxAnalysis.EnumerateReturnLeaves(expression))
+        foreach (var leaf in SyntaxAnalysis.EnumerateReturnLeaves(expression))
         {
-            if (leaf is not SyntaxTypes.Expression.Application app)
+            if (leaf is not Expression.Application app)
                 return false;
 
             if (app.Arguments.Count < 1)
@@ -3439,7 +3441,7 @@ public static partial class OptimizationOpportunityFinder
 
             var head = app.Function;
 
-            if (head is not SyntaxTypes.Expression.Identifier identifier)
+            if (head is not Expression.Identifier identifier)
                 return false;
 
             var qualified =
@@ -3477,18 +3479,18 @@ public static partial class OptimizationOpportunityFinder
     }
 
     /// <summary>
-    /// Substitutes every <see cref="SyntaxTypes.TypeAnnotation.GenericType"/>
+    /// Substitutes every <see cref="TypeAnnotation.GenericType"/>
     /// reference in <paramref name="annotation"/> with its corresponding
     /// type argument from <paramref name="substitution"/>; references
     /// not in the dictionary are left untouched.
     /// </summary>
-    private static SyntaxTypes.TypeAnnotation SubstituteGenerics(
-        SyntaxTypes.TypeAnnotation annotation,
-        IReadOnlyDictionary<string, SyntaxTypes.TypeAnnotation> substitution)
+    private static TypeAnnotation SubstituteGenerics(
+        TypeAnnotation annotation,
+        IReadOnlyDictionary<string, TypeAnnotation> substitution)
     {
         switch (annotation)
         {
-            case SyntaxTypes.TypeAnnotation.GenericType g:
+            case TypeAnnotation.GenericType g:
                 return
                     substitution.TryGetValue(g.Name, out var replacement)
                     ?
@@ -3496,65 +3498,65 @@ public static partial class OptimizationOpportunityFinder
                     :
                     g;
 
-            case SyntaxTypes.TypeAnnotation.Typed t:
+            case TypeAnnotation.Typed t:
                 {
                     var newArgs =
                         t.TypeArguments
                         .Select(arg => SubstituteGenerics(arg, substitution))
                         .ToList();
 
-                    return new SyntaxTypes.TypeAnnotation.Typed(t.ModuleName, t.Name, newArgs);
+                    return new TypeAnnotation.Typed(t.ModuleName, t.Name, newArgs);
                 }
 
-            case SyntaxTypes.TypeAnnotation.Unit:
+            case TypeAnnotation.Unit:
                 return annotation;
 
-            case SyntaxTypes.TypeAnnotation.Tupled tupled:
+            case TypeAnnotation.Tupled tupled:
                 {
                     var newAnnots =
                         tupled.TypeAnnotations
                         .Select(a => SubstituteGenerics(a, substitution))
                         .ToList();
 
-                    return new SyntaxTypes.TypeAnnotation.Tupled(newAnnots);
+                    return new TypeAnnotation.Tupled(newAnnots);
                 }
 
-            case SyntaxTypes.TypeAnnotation.Record record:
+            case TypeAnnotation.Record record:
                 {
                     var newFields =
                         record.RecordDefinition.Fields
                         .Select(
                             f =>
-                            SyntaxTypes.RecordField.Create(
+                            RecordField.Create(
                                 f.FieldName,
                                 SubstituteGenerics(f.FieldType, substitution)))
                         .ToList();
 
                     return
-                        new SyntaxTypes.TypeAnnotation.Record(
-                            new SyntaxTypes.RecordDefinition(newFields));
+                        new TypeAnnotation.Record(
+                            new RecordDefinition(newFields));
                 }
 
-            case SyntaxTypes.TypeAnnotation.GenericRecord gr:
+            case TypeAnnotation.GenericRecord gr:
                 {
                     var newFields =
                         gr.RecordDefinition.Fields
                         .Select(
                             f =>
-                            SyntaxTypes.RecordField.Create(
+                            RecordField.Create(
                                 f.FieldName,
                                 SubstituteGenerics(f.FieldType, substitution)))
                         .ToList();
 
                     return
-                        new SyntaxTypes.TypeAnnotation.GenericRecord(
+                        new TypeAnnotation.GenericRecord(
                             gr.GenericName,
-                            new SyntaxTypes.RecordDefinition(newFields));
+                            new RecordDefinition(newFields));
                 }
 
-            case SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation fta:
+            case TypeAnnotation.FunctionTypeAnnotation fta:
                 return
-                    new SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation(
+                    new TypeAnnotation.FunctionTypeAnnotation(
                         SubstituteGenerics(fta.ArgumentType, substitution),
                         SubstituteGenerics(fta.ReturnType, substitution));
 

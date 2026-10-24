@@ -1,7 +1,8 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.Functional;
 using Pine.Core.IO;
-using Pine.Core.PineVM;
+using Pine.Core.Runtime;
+using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Threading;
 using System.Threading.Tasks;

@@ -1,16 +1,18 @@
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Concrete;
+using Pine.Core.Functional;
 using Pine.Core.IntermediateVM;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
+using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
 
-using IPineVM = Pine.Core.PineVM.IPineVM;
-
-using Syntax = Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using IPineVM = Pine.Core.Runtime.IPineVM;
 
 namespace Pine.Core.Elm.Testing;
 
@@ -104,13 +106,13 @@ public sealed class ElmTestRunCacheSession(
     public ValueTask DisposeAsync() => CacheLearning?.DisposeAsync() ?? ValueTask.CompletedTask;
 
     /// <summary>Source parsing keyed by complete source text, never by path or timestamp.</summary>
-    public IDictionary<string, Result<ElmSyntaxParseError, Syntax.File>> SourceParsing { get; } =
-        new ConcurrentDictionary<string, Result<ElmSyntaxParseError, Syntax.File>>(StringComparer.Ordinal);
+    public IDictionary<string, Result<ParseError, File>> SourceParsing { get; } =
+        new ConcurrentDictionary<string, Result<ParseError, File>>(StringComparer.Ordinal);
 
     /// <summary>Declaration canonicalization memoized over structural syntax and consulted resolution inputs.</summary>
     public Canonicalization.DeclarationCache DeclarationCanonicalization { get; } = new();
 
-    internal Result<ElmSyntaxParseError, Syntax.File> ParseSource(string text)
+    internal Result<ParseError, File> ParseSource(string text)
     {
         if (SourceParsing.TryGetValue(text, out var parsed))
             return parsed;

@@ -1,0 +1,326 @@
+using AwesomeAssertions;
+using Pine.Core.CodeAnalysis;
+using Pine.Core.Encodings;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.IntermediateVM;
+using System.Collections.Generic;
+using System.Linq;
+using Xunit;
+
+namespace Pine.Core.Tests.Runtime.IntermediateVM;
+
+/// <summary>
+/// Tests for the per-iteration callback (<see cref="ReportTailLoopIteration"/>)
+/// of <see cref="IntermediateVM.PineVM"/>. The callback is
+/// distinct from <c>reportFunctionApplication</c> and fires once per tail-loop
+/// iteration, where an iteration is either a backward jump within a single
+/// stack frame, or a tail-call invocation that replaces the current stack
+/// frame.
+/// </summary>
+public class TailLoopIterationCallbackTests
+{
+    [Fact]
+    public void Callback_fires_for_each_backward_jump_in_same_frame()
+    {
+        // Arrange: a frame whose body is an infinite backward-jump loop,
+        // bounded by a small LoopIterationCountLimit so the evaluation
+        // terminates with a known number of backward jumps.
+        const int loopIterationCountLimit = 5;
+
+        var targetExpression = Expression.EnvironmentInstance;
+
+        var loopingInstructions =
+            new StackFrameInstructions(
+                Parameters: StaticFunctionInterface.FromPathsSorted([]),
+                Instructions:
+                [
+                StackInstruction.Push_Literal(PineValue.EmptyList),
+                StackInstruction.Pop,
+                StackInstruction.Jump_Unconditional(-2),
+                ],
+                TrackEnvConstraint: null);
+
+        var rootExpression =
+            new Expression.Eval(
+                encoded:
+                Expression.LitralInst(
+                    ExpressionEncoding.EncodeExpressionAsValue(targetExpression)),
+                environment: Expression.EnvironmentInstance);
+
+        var iterations = new List<TailLoopIteration>();
+
+        var vm =
+            Core.Runtime.IntermediateVM.PineVM.CreateCustom(
+                evalCache: null,
+                evaluationConfigDefault: null,
+                reportFunctionApplication: null,
+                compilationEnvClasses: null,
+                disableReductionInCompilation: true,
+                selectPrecompiled: null,
+                skipInlineForExpression: _ => false,
+                enableTailRecursionOptimization: false,
+                parseCache: null,
+                precompiledLeaves: null,
+                reportEnterPrecompiledLeaf: null,
+                reportExitPrecompiledLeaf: null,
+                optimizationParametersSerial: null,
+                cacheFileStore: null,
+                expressionCompilationOverrides:
+                new Dictionary<Expression, ExpressionCompilation>
+                {
+                    [rootExpression] =
+                    new ExpressionCompilation(
+                        Generic:
+                        new StackFrameInstructions(
+                            Parameters: StaticFunctionInterface.Generic,
+                            Instructions:
+                            [
+                            StackInstruction.Local_Get(0),
+                            StackInstruction.Eval_Const(
+                                ExpressionEncoding.EncodeExpressionAsValue(targetExpression)),
+                            StackInstruction.Return,
+                            ],
+                            TrackEnvConstraint: null),
+                        Specialized: []),
+                    [targetExpression] =
+                    new ExpressionCompilation(
+                        Generic: loopingInstructions,
+                        Specialized: []),
+                },
+                reportTailLoopIteration:
+                (in tailLoopIteration) =>
+                iterations.Add(tailLoopIteration));
+
+        // Act: evaluate. The infinite loop is terminated by the
+        // LoopIterationCountLimit, returning an error, but the callback should
+        // already have observed each backward jump.
+        var evalResult =
+            vm.EvaluateExpressionOnCustomStack(
+                rootExpression: rootExpression,
+                rootEnvironment: PineValue.EmptyList,
+                config:
+                new Core.Runtime.IntermediateVM.PineVM.EvaluationConfig(
+                    InvocationCountLimit: null,
+                    LoopIterationCountLimit: loopIterationCountLimit,
+                    StackDepthLimit: null));
+
+        evalResult.IsErrOrNull().Should().NotBeNull(
+            "the bounded infinite loop is expected to terminate with a limit error");
+
+        // Backward-jump iterations from the inner frame.
+        var backwardJumpIterations =
+            iterations
+            .Where(item => item.Kind is TailLoopIterationKind.BackwardJump)
+            .ToList();
+
+        // The callback fires once per backward jump executed.
+        // The VM reports the limit error after the (limit + 1)-th iteration.
+        backwardJumpIterations.Should().HaveCount(
+            loopIterationCountLimit + 1,
+            "the callback fires once per backward jump, including the iteration that exceeds the limit");
+
+        // All backward-jump iterations originate from the looping inner frame.
+        backwardJumpIterations.Should().AllSatisfy(
+            iteration =>
+            {
+                iteration.FrameExpression.Should().Be(targetExpression);
+                iteration.StackFrameDepth.Should().Be(1);
+            });
+
+        // IterationIndex values are a strictly increasing sequence starting at 0.
+        iterations.Select(item => item.IterationIndex)
+            .Should().Equal(Enumerable.Range(0, iterations.Count).Select(i => (long)i));
+    }
+
+    [Fact]
+    public void Callback_fires_for_tail_call_frame_replacement()
+    {
+        // The root expression is a ParseAndEval whose tail-position invocation
+        // (followed immediately by Return) triggers tail-call optimization:
+        // the new frame REPLACES the current one instead of growing the stack.
+        // This must produce exactly one TailCallReplace notification.
+        var nestedEnvironment = IntegerEncoding.EncodeSignedInteger(7);
+
+        var rootExpression =
+            new Expression.Eval(
+                encoded:
+                Expression.LitralInst(
+                    ExpressionEncoding.EncodeExpressionAsValue(Expression.EnvironmentInstance)),
+                environment:
+                Expression.LitralInst(nestedEnvironment));
+
+        var iterations = new List<TailLoopIteration>();
+
+        var vm =
+            Core.Runtime.IntermediateVM.PineVM.CreateCustom(
+                evalCache: null,
+                evaluationConfigDefault: null,
+                reportFunctionApplication: null,
+                compilationEnvClasses: null,
+                disableReductionInCompilation: true,
+                selectPrecompiled: null,
+                skipInlineForExpression: _ => false,
+                enableTailRecursionOptimization: true,
+                disableDirectEvalForSimpleTemplate: true,
+                parseCache: null,
+                precompiledLeaves: null,
+                reportEnterPrecompiledLeaf: null,
+                reportExitPrecompiledLeaf: null,
+                optimizationParametersSerial: null,
+                cacheFileStore: null,
+                reportTailLoopIteration:
+                (in tailLoopIteration) =>
+                iterations.Add(tailLoopIteration));
+
+        var result = vm.EvaluateExpression(rootExpression, PineValue.EmptyBlob);
+
+        result.IsOkOrNull().Should().Be(nestedEnvironment);
+
+        // Exactly one tail-call replacement was performed (root frame replaced
+        // by the nested ParseAndEval frame).
+        iterations.Should().HaveCount(1);
+
+        var only = iterations[0];
+
+        only.Kind.Should().Be(TailLoopIterationKind.TailCallReplace);
+        only.IterationIndex.Should().Be(0);
+
+        only.StackFrameDepth.Should().Be(
+            1,
+            "tail-call replacement must not grow the stack");
+
+        only.FrameExpression.Should().Be(
+            Expression.EnvironmentInstance,
+            "the FrameExpression of a TailCallReplace iteration is the new (replacing) frame's expression");
+
+        only.FrameInput.EvaluatedArguments.Should().Equal(
+            [nestedEnvironment],
+            "the FrameInput of a TailCallReplace iteration is the live input of the replacing frame");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Callback_fires_for_each_step_in_a_tail_call_chain(bool consolidateTemplates)
+    {
+        // Two-step tail-call chain:
+        //   root      = ParseAndEval(targetMid, env=Environment)
+        //   targetMid = ParseAndEval(targetInner, env=Environment)
+        //   targetInner = Environment
+        //
+        // Template consolidation bypasses targetMid; otherwise both replacements execute.
+        var nestedEnvironment = IntegerEncoding.EncodeSignedInteger(42);
+
+        var targetInner = Expression.EnvironmentInstance;
+
+        var targetMid =
+            new Expression.Eval(
+                encoded:
+                Expression.LitralInst(
+                    ExpressionEncoding.EncodeExpressionAsValue(targetInner)),
+                environment: Expression.EnvironmentInstance);
+
+        var rootExpression =
+            new Expression.Eval(
+                encoded:
+                Expression.LitralInst(
+                    ExpressionEncoding.EncodeExpressionAsValue(targetMid)),
+                environment:
+                Expression.LitralInst(nestedEnvironment));
+
+        var iterations = new List<TailLoopIteration>();
+
+        var vm =
+            Core.Runtime.IntermediateVM.PineVM.CreateCustom(
+                evalCache: null,
+                evaluationConfigDefault: null,
+                reportFunctionApplication: null,
+                compilationEnvClasses: null,
+                disableReductionInCompilation: true,
+                disableDirectContinueForSimpleEval: true,
+                disableDirectEvalForSimpleTemplate: true,
+                selectPrecompiled: null,
+                skipInlineForExpression: _ => false,
+                enableTailRecursionOptimization: true,
+                parseCache: null,
+                precompiledLeaves: null,
+                reportEnterPrecompiledLeaf: null,
+                reportExitPrecompiledLeaf: null,
+                optimizationParametersSerial: null,
+                cacheFileStore: null,
+                disableDirectInvocation: !consolidateTemplates,
+                reportTailLoopIteration:
+                (in tailLoopIteration) =>
+                iterations.Add(tailLoopIteration));
+
+        var result = vm.EvaluateExpression(rootExpression, PineValue.EmptyBlob);
+
+        result.IsOkOrNull().Should().Be(nestedEnvironment);
+
+        iterations.Should().HaveCount(consolidateTemplates ? 1 : 2);
+
+        iterations.Should().AllSatisfy(
+            item =>
+            {
+                item.Kind.Should().Be(TailLoopIterationKind.TailCallReplace);
+
+                item.StackFrameDepth.Should().Be(
+                    1,
+                    "tail-call replacement keeps the stack at depth 1 throughout the chain");
+            });
+
+        iterations[0].IterationIndex.Should().Be(0);
+        iterations[0].FrameExpression.Should().Be(consolidateTemplates ? targetInner : targetMid);
+
+        if (!consolidateTemplates)
+        {
+            iterations[1].IterationIndex.Should().Be(1);
+            iterations[1].FrameExpression.Should().Be(targetInner);
+        }
+    }
+
+    [Fact]
+    public void Callback_is_not_invoked_when_no_tail_loop_iterations_occur()
+    {
+        // A pure leaf computation (no backward jumps, no tail calls) must
+        // produce zero notifications.
+        var iterations = new List<TailLoopIteration>();
+
+        var vm =
+            Core.Runtime.IntermediateVM.PineVM.CreateCustom(
+                evalCache: null,
+                evaluationConfigDefault: null,
+                reportFunctionApplication: null,
+                compilationEnvClasses: null,
+                disableReductionInCompilation: true,
+                selectPrecompiled: null,
+                skipInlineForExpression: _ => false,
+                enableTailRecursionOptimization: false,
+                parseCache: null,
+                precompiledLeaves: null,
+                reportEnterPrecompiledLeaf: null,
+                reportExitPrecompiledLeaf: null,
+                optimizationParametersSerial: null,
+                cacheFileStore: null,
+                reportTailLoopIteration:
+                (in tailLoopIteration) =>
+                iterations.Add(tailLoopIteration));
+
+        var expression =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.int_add),
+                Expression.ListInst(
+                    [
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(3)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(4))
+                    ]));
+
+        var result = vm.EvaluateExpression(expression, PineValue.EmptyBlob);
+
+        result.IsOkOrNull().Should().Be(IntegerEncoding.EncodeSignedInteger(7));
+
+        iterations.Should().BeEmpty(
+            "evaluating a pure leaf expression performs no tail-loop iterations");
+    }
+}

@@ -1,4 +1,4 @@
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using Pine.Core.Elm.Syntax.Concrete;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;

@@ -3,7 +3,8 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Linq;
 using System.Text;
@@ -95,7 +96,7 @@ public class LanguageServiceCompileToPineVMRegressionTests
         """"
         ;
 
-    private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
+    private static readonly Core.Runtime.IntermediateVM.PineVM s_vm =
         ElmCompilerTestHelper.PineVMForProfiling(_ => { });
 
     /// <summary>

@@ -1,15 +1,16 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Concrete;
+using Pine.Core.Encodings;
 using Pine.Core.Files;
-using Pine.Core.PineVM;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 namespace Pine.Core.Elm;
 
@@ -23,7 +24,7 @@ public static class ElmSourceCompilation
     public static IReadOnlyList<DeclQualifiedName> EnumerateRootDeclarations(
         FileTree sourceTree,
         IReadOnlyList<IReadOnlyList<string>> filePaths,
-        IDictionary<string, Result<ElmSyntaxParseError, SyntaxTypes.File>>? sourceParseCache = null)
+        IDictionary<string, Result<ParseError, File>>? sourceParseCache = null)
     {
         var roots = new List<DeclQualifiedName>();
 
@@ -49,11 +50,11 @@ public static class ElmSourceCompilation
                 .Extract(
                     error => throw new ArgumentException("Failed parsing " + string.Join("/", path) + ": " + error));
 
-            var moduleName = SyntaxTypes.Module.GetModuleName(syntax.ModuleDefinition.Value).Value;
+            var moduleName = Module.GetModuleName(syntax.ModuleDefinition.Value).Value;
 
             roots.AddRange(
                 syntax.Declarations.Select(declaration => declaration.Value)
-                .OfType<SyntaxTypes.Declaration.FunctionDeclaration>()
+                .OfType<Declaration.FunctionDeclaration>()
                 .Select(
                     declaration =>
                     DeclQualifiedName.Create(moduleName, declaration.Function.Declaration.Value.Name.Value)));
@@ -84,7 +85,7 @@ public static class ElmSourceCompilation
 
             roots.AddRange(
                 syntax.Declarations.Select(declaration => declaration.Value)
-                .OfType<SyntaxTypes.Declaration.FunctionDeclaration>()
+                .OfType<Declaration.FunctionDeclaration>()
                 .Select(
                     declaration =>
                     DeclQualifiedName.Create(compilerName.Split('.'), declaration.Function.Declaration.Value.Name.Value)));
@@ -101,7 +102,7 @@ public static class ElmSourceCompilation
         ElmSyntaxOptimizationConfig? syntaxOptimization = null,
         bool disableGenericApplicationChainConsolidation = false,
         bool includeBundledKernelModules = true,
-        IDictionary<string, Result<ElmSyntaxParseError, SyntaxTypes.File>>? sourceParseCache = null,
+        IDictionary<string, Result<ParseError, File>>? sourceParseCache = null,
         Canonicalization.DeclarationCache? canonicalizationCache = null) =>
         ElmCompiler.CompileInteractiveEnvironment(
             appCodeTree,

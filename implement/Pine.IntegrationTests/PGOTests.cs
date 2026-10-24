@@ -1,12 +1,12 @@
 using AwesomeAssertions;
-using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Encodings;
 using Pine.Core.Files;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.IntermediateVM;
 using Pine.Elm;
 using Pine.IntermediateVM;
 using System;
@@ -263,7 +263,7 @@ public class PGOTests
         static long ReportsAverageInstructionCount(IReadOnlyList<EvaluationReport> reports) =>
             reports.Sum(report => report.InstructionCount) / reports.Count;
 
-        IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(Core.Interpreter.IntermediateVM.PineVM pineVM) =>
+        IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(Core.Runtime.IntermediateVM.PineVM pineVM) =>
             [
             .. usingRecordAccessScenarios
             .Select(
@@ -282,7 +282,7 @@ public class PGOTests
                             pineVM.EvaluateExpressionOnCustomStack(
                                 composedArgs.expression,
                                 composedArgs.environment,
-                                new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(
+                                new Core.Runtime.IntermediateVM.PineVM.EvaluationConfig(
                                     InvocationCountLimit: 1234,
                                     LoopIterationCountLimit: null,
                                     StackDepthLimit: null))
@@ -874,7 +874,7 @@ public class PGOTests
         static long ReportsAverageInstructionCount(IReadOnlyList<EvaluationReport> reports) =>
             reports.Sum(report => report.InstructionCount) / reports.Count;
 
-        IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(Core.Interpreter.IntermediateVM.PineVM pineVM) =>
+        IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(Core.Runtime.IntermediateVM.PineVM pineVM) =>
             [
             .. recordUpdateScenarios
             .Select(
@@ -894,7 +894,7 @@ public class PGOTests
                             pineVM.EvaluateExpressionOnCustomStack(
                                 composedArgs.expression,
                                 composedArgs.environment,
-                                new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(
+                                new Core.Runtime.IntermediateVM.PineVM.EvaluationConfig(
                                     InvocationCountLimit: 1234,
                                     LoopIterationCountLimit: null,
                                     StackDepthLimit: null))
@@ -1297,7 +1297,7 @@ public class PGOTests
             ElmValue.ElmList scenarioList,
             int scenarioFunctionId,
             ElmValue.ElmList scenarioExpected,
-            Core.Interpreter.IntermediateVM.PineVM pineVM)
+            Core.Runtime.IntermediateVM.PineVM pineVM)
         {
             return
                 ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(
@@ -1312,7 +1312,7 @@ public class PGOTests
                     pineVM.EvaluateExpressionOnCustomStack(
                         composedArgs.expression,
                         composedArgs.environment,
-                        new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(
+                        new Core.Runtime.IntermediateVM.PineVM.EvaluationConfig(
                             InvocationCountLimit: 12345,
                             LoopIterationCountLimit: null,
                             StackDepthLimit: null))
@@ -1333,7 +1333,7 @@ public class PGOTests
                 .Extract(fromErr: err => throw new Exception("Failed for scenario: " + err));
         }
 
-        IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(Core.Interpreter.IntermediateVM.PineVM pineVM) =>
+        IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(Core.Runtime.IntermediateVM.PineVM pineVM) =>
             [
             .. usageScenarios
             .Select(
@@ -1682,7 +1682,7 @@ public class PGOTests
             PineValue scenarioDict,
             int scenarioFunctionId,
             ElmValue.ElmList? scenarioExpected,
-            Core.Interpreter.IntermediateVM.PineVM pineVM)
+            Core.Runtime.IntermediateVM.PineVM pineVM)
         {
             return
                 ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(
@@ -1697,7 +1697,7 @@ public class PGOTests
                     pineVM.EvaluateExpressionOnCustomStack(
                         composedArgs.expression,
                         composedArgs.environment,
-                        new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(
+                        new Core.Runtime.IntermediateVM.PineVM.EvaluationConfig(
                             InvocationCountLimit: 12345,
                             LoopIterationCountLimit: null,
                             StackDepthLimit: null))
@@ -1721,7 +1721,7 @@ public class PGOTests
                 .Extract(fromErr: err => throw new Exception("Failed for scenario: " + err));
         }
 
-        IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(Core.Interpreter.IntermediateVM.PineVM pineVM) =>
+        IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(Core.Runtime.IntermediateVM.PineVM pineVM) =>
             [
             .. usageScenarios
             .Select(

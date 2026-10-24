@@ -2,9 +2,12 @@ using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmInElm;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Interpreter;
 using Pine.Core.Files;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.IntermediateVM;
+using Pine.Core.Tests.Testing;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -129,7 +132,7 @@ public class ElmParserExpressionTests
         .First(m => m.moduleName is "ElmParserExpressionTestModule")
         .moduleContent.FunctionDeclarations[name];
 
-    private readonly Core.Interpreter.IntermediateVM.PineVM _vm =
+    private readonly Core.Runtime.IntermediateVM.PineVM _vm =
         ElmCompilerTestHelper.PineVMForProfiling(_ => { });
 
     /// <summary>

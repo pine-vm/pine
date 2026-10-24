@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core.CLI;
+using Pine.Core.Functional;
 using System.Collections.Generic;
 using System.Globalization;
 using Xunit;

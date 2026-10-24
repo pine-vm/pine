@@ -1,5 +1,7 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
+using Pine.Core.Encodings;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
@@ -37,7 +39,7 @@ public partial class ElmCompiler
 
                 var located =
                     BuildSourceDependencyChain(
-                        chain.Select(item => DeclQualifiedName.FromString(item.DeclarationName)).ToArray(),
+                        [.. chain.Select(item => DeclQualifiedName.FromString(item.DeclarationName))],
                         pipeline.Canonicalized,
                         pipeline.SourceFilePaths,
                         pipeline.SourceReferences);

@@ -1,8 +1,11 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Elm.Syntax.Abstract;
+using Pine.Core.Encodings;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
@@ -10,7 +13,7 @@ using System.Linq;
 using System.Text.Json;
 using Xunit;
 
-using Abstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
+using Abstract = Pine.Core.Elm.Syntax.Abstract;
 using IR = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 using Model = Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
 
@@ -224,25 +227,25 @@ public class ProjectItemTests
             .Select(
                 name =>
                 new Abstract.File(
-                    new Abstract.Module.NormalModule(
-                        new Abstract.DefaultModuleData([name], new Abstract.Exposing.All())),
+                    new Module.NormalModule(
+                        new Abstract.DefaultModuleData([name], new Exposing.All())),
                     [new Abstract.Import(["Unused"], null, null)],
                     [
-                    new Abstract.Declaration.FunctionDeclaration(
+                    new Declaration.FunctionDeclaration(
                         new Abstract.FunctionStruct(
                             null,
                             new Abstract.FunctionImplementation("value", [], Abstract.Expression.UnitExpr.Instance)))
                     ]))
             .Append(
                 new Abstract.File(
-                    new Abstract.Module.NormalModule(
-                        new Abstract.DefaultModuleData(["Empty"], new Abstract.Exposing.All())),
+                    new Module.NormalModule(
+                        new Abstract.DefaultModuleData(["Empty"], new Exposing.All())),
                     [],
                     []))
             .ToArray();
 
         var canonical = ElmCompiler.FlattenModulesToDeclarationDictionary(modules);
-        var program = Core.Elm.ElmCompilerInDotnet.CompilerModel.FromCanonicalSyntax.Convert(canonical);
+        var program = Model.FromCanonicalSyntax.Convert(canonical);
         var pipeline = new CompilationPipelineStageResults([], canonical, program);
         var declarations = pipeline.FunctionsForEmission;
 
@@ -272,7 +275,7 @@ public class ProjectItemTests
     private static ExpressionCompilationContext CompilationContext() =>
         new(
             new Dictionary<Model.BindingId, int>(),
-            new Dictionary<Model.BindingId, Expression>(),
+            new Dictionary<Model.BindingId, Core.PineLanguage.Expression>(),
             new Model.SccCompilationContext(
                 [],
                 [],

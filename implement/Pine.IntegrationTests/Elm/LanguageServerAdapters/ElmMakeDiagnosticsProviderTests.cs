@@ -1,6 +1,6 @@
 using AwesomeAssertions;
-using Pine.Core;
 using Pine.Core.Elm.LanguageServer;
+using Pine.Core.Functional;
 using Pine.Core.LanguageServerProtocol;
 using Pine.Elm.LanguageServerAdapters;
 using System;

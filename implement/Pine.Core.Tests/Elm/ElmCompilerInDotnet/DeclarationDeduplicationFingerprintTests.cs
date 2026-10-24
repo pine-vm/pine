@@ -1,7 +1,10 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Abstract;
+using Pine.Core.Elm.Syntax.Concrete;
+using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Immutable;
 using System.Globalization;
@@ -9,7 +12,7 @@ using System.Linq;
 using System.Numerics;
 using Xunit;
 
-using Abstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
+using Abstract = Pine.Core.Elm.Syntax.Abstract;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -23,7 +26,7 @@ public class DeclarationDeduplicationFingerprintTests
 
         return
             (Abstract.Declaration.FunctionDeclaration)
-            Abstract.ConvertFromConcrete.FromDeclaration(module.Declarations.Single().Value);
+            ConvertFromConcrete.FromDeclaration(module.Declarations.Single().Value);
     }
 
     private static string Fingerprint(string declaration) =>
@@ -299,7 +302,7 @@ public class DeclarationDeduplicationFingerprintTests
     {
         var unit = Abstract.Expression.UnitExpr.Instance;
         var identifier = Abstract.Expression.Identifier.Create([], "outside");
-        var field = new Abstract.RecordSetter("field", PineValue.EmptyList, unit);
+        var field = new RecordSetter("field", PineValue.EmptyList, unit);
 
         Abstract.Expression[] expressions =
             [
@@ -316,7 +319,7 @@ public class DeclarationDeduplicationFingerprintTests
             new Abstract.Expression.Application(identifier, [unit]),
             new Abstract.Expression.OperatorApplication(
                 "+",
-                Core.Elm.ElmSyntax.SyntaxModel.InfixDirection.Left,
+                InfixDirection.Left,
                 unit,
                 unit),
             new Abstract.Expression.TupledExpression([unit, unit]),
@@ -326,9 +329,9 @@ public class DeclarationDeduplicationFingerprintTests
             new Abstract.Expression.CaseExpression(unit, [new Abstract.Case(new Abstract.Pattern.AllPattern(), unit)]),
             new Abstract.Expression.LetExpression(
                 [
-                new Abstract.LetDeclaration.LetFunction(
+                new LetDeclaration.LetFunction(
                     new Abstract.FunctionStruct(null, new Abstract.FunctionImplementation("local", [], unit))),
-                new Abstract.LetDeclaration.LetDestructuring(new Abstract.Pattern.AllPattern(), unit)
+                new LetDeclaration.LetDestructuring(new Abstract.Pattern.AllPattern(), unit)
                 ],
                 unit),
             new Abstract.Expression.RecordExpr([field]),
@@ -403,7 +406,7 @@ public class DeclarationDeduplicationFingerprintTests
                 Fingerprint(
                     new Abstract.Expression.LetExpression(
                         [
-                        new Abstract.LetDeclaration.LetFunction(
+                        new LetDeclaration.LetFunction(
                             new Abstract.FunctionStruct(
                                 new Abstract.Signature("local", annotation),
                                 new Abstract.FunctionImplementation(

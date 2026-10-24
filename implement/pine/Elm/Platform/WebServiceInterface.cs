@@ -1,11 +1,11 @@
 using ElmTime;
-using Pine.Core;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
+using Pine.Core.Encodings;
 using Pine.Core.Files;
-using Pine.Core.Interpreter;
-using Pine.Core.PineVM;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -2352,7 +2352,7 @@ type alias LoadDependencyStruct =
             new List<DeclQualifiedName>
             {
                 DeclQualifiedName.Create(
-                    Core.Elm.ElmSyntax.ElmModule.ParseModuleName(
+                    Core.Elm.Syntax.ElmModule.ParseModuleName(
                         System.Text.Encoding.UTF8.GetString(
                             ((FileTree.FileNode)loweredTreeCleaned.GetNodeAtPath(entryFileName)!).Bytes.Span))
                     .Extract(error => throw new Exception("Failed parsing web service module name: " + error)),

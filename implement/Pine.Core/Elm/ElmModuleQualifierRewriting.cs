@@ -1,13 +1,13 @@
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using Pine.Core.Elm.Syntax.Concrete;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
-using File = Pine.Core.Elm.ElmSyntax.SyntaxModel.File;
+using File = Pine.Core.Elm.Syntax.Concrete.File;
 
 namespace Pine.Core.Elm;
 
-using Expression = ElmSyntax.SyntaxModel.Expression;
+using Expression = Expression;
 
 /// <summary>Rewrites only qualified syntax references, never strings, comments or unqualified local bindings.</summary>
 internal sealed class ElmModuleQualifierRewriting(IReadOnlyDictionary<string, string> aliases)

@@ -5,7 +5,9 @@ using Pine.Core.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
 using Pine.Core.Internal;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
+using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -339,10 +341,10 @@ public class ElmSyntaxConcreteParserPrecompiledLeavesEffectivenessTests
             .moduleContent.FunctionDeclarations[declarationName];
     }
 
-    private static Core.Interpreter.IntermediateVM.PineVM CreateVM(
+    private static Core.Runtime.IntermediateVM.PineVM CreateVM(
         IReadOnlyDictionary<PineValue, PrecompiledLeaf> precompiledLeaves,
         Action<PineValue, PineValueInProcess>? reportEnterPrecompiledLeaf) =>
-        Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
+        Core.Runtime.IntermediateVM.PineVM.CreateCustom(
             evalCache: null,
             evaluationConfigDefault: null,
             reportFunctionApplication: _ => { },
@@ -359,11 +361,11 @@ public class ElmSyntaxConcreteParserPrecompiledLeavesEffectivenessTests
             cacheFileStore: null);
 
     private static (ElmValue value, EvalWorkCounters counters) Apply(
-        Core.Interpreter.IntermediateVM.PineVM vm) =>
+        Core.Runtime.IntermediateVM.PineVM vm) =>
         Apply(vm, s_exerciseFunction.Value);
 
     private static (ElmValue value, EvalWorkCounters counters) Apply(
-        Core.Interpreter.IntermediateVM.PineVM vm,
+        Core.Runtime.IntermediateVM.PineVM vm,
         PineValue function,
         ElmValue? argument = null) =>
         CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(

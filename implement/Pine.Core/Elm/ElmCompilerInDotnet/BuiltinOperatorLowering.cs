@@ -1,11 +1,14 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
+using Pine.Core.Elm.Syntax.Abstract;
+using Pine.Core.Encodings;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Numerics;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
+using AbstractSyntax = Pine.Core.Elm.Syntax.Abstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -14,7 +17,7 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// are expressed in a form that later compilation stages can map directly to Pine builtins.
 /// <para>
 /// This stage operates exclusively on the abstract Elm syntax model
-/// (<see cref="ElmSyntax.ElmSyntaxAbstract"/>): there is no source-location
+/// (<see cref="AbstractSyntax"/>): there is no source-location
 /// tracking, no concrete-syntax <c>Node&lt;T&gt;</c> wrapper, and no bridging/conversion to or
 /// from a legacy syntax model. Callers are expected to supply and receive
 /// declarations already expressed in the abstract model.
@@ -64,24 +67,24 @@ public static class BuiltinOperatorLowering
     /// </summary>
     /// <param name="declarations">The flat declaration dictionary to rewrite.</param>
     /// <returns>The rewritten declarations, or an error message.</returns>
-    public static Result<string, ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>> Apply(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations) =>
+    public static Result<string, ImmutableDictionary<DeclQualifiedName, Declaration>> Apply(
+        ImmutableDictionary<DeclQualifiedName, Declaration> declarations) =>
         Apply(
             declarations,
             new Configuration(
                 LowerBuiltinOperators: true,
                 LowerElmCoreBasics: false));
 
-    internal static Result<string, ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>> ApplyElmCoreBasics(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations) =>
+    internal static Result<string, ImmutableDictionary<DeclQualifiedName, Declaration>> ApplyElmCoreBasics(
+        ImmutableDictionary<DeclQualifiedName, Declaration> declarations) =>
         Apply(
             declarations,
             new Configuration(
                 LowerBuiltinOperators: false,
                 LowerElmCoreBasics: true));
 
-    internal static Result<string, ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>> Apply(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+    internal static Result<string, ImmutableDictionary<DeclQualifiedName, Declaration>> Apply(
+        ImmutableDictionary<DeclQualifiedName, Declaration> declarations,
         Configuration configuration)
     {
         if (!configuration.LowerBuiltinOperators &&
@@ -103,7 +106,7 @@ public static class BuiltinOperatorLowering
             BuildConstructorArgumentTypes(choiceTypeDefinitions, aliasTypes);
 
         var resultBuilder =
-            ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
+            ImmutableDictionary.CreateBuilder<DeclQualifiedName, Declaration>();
 
         foreach (var (key, decl) in declarations)
         {
@@ -126,8 +129,8 @@ public static class BuiltinOperatorLowering
         return resultBuilder.ToImmutable();
     }
 
-    private static SyntaxTypes.Declaration RewriteDeclaration(
-        SyntaxTypes.Declaration declaration,
+    private static Declaration RewriteDeclaration(
+        Declaration declaration,
         Configuration configuration,
         string moduleName,
         IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo> functionTypes,
@@ -136,7 +139,7 @@ public static class BuiltinOperatorLowering
         IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<TypeInference.InferredType>> constructorArgumentTypes,
         TypeInference.FunctionInferenceEnvironment inferenceEnvironment)
     {
-        if (declaration is not SyntaxTypes.Declaration.FunctionDeclaration functionDeclaration)
+        if (declaration is not Declaration.FunctionDeclaration functionDeclaration)
             return declaration;
 
         var implementation = functionDeclaration.Function.Declaration;
@@ -186,15 +189,15 @@ public static class BuiltinOperatorLowering
             };
 
         return
-            new SyntaxTypes.Declaration.FunctionDeclaration(
+            new Declaration.FunctionDeclaration(
                 functionDeclaration.Function with
                 {
                     Declaration = rewrittenImplementation
                 });
     }
 
-    private static SyntaxTypes.Expression RewriteExpression(
-        SyntaxTypes.Expression expression,
+    private static AbstractSyntax.Expression RewriteExpression(
+        AbstractSyntax.Expression expression,
         RewriteContext context,
         TypeInference.InferredType? expectedType = null)
     {
@@ -203,26 +206,26 @@ public static class BuiltinOperatorLowering
         return
             expression switch
             {
-                SyntaxTypes.Expression.Application application =>
+                AbstractSyntax.Expression.Application application =>
                 RewriteApplication(application, context, expandedExpectedType),
 
-                SyntaxTypes.Expression.IfBlock ifBlock =>
-                new SyntaxTypes.Expression.IfBlock(
+                AbstractSyntax.Expression.IfBlock ifBlock =>
+                new AbstractSyntax.Expression.IfBlock(
                     RewriteExpression(ifBlock.Condition, context),
                     RewriteExpression(ifBlock.ThenBlock, context, expandedExpectedType),
                     RewriteExpression(ifBlock.ElseBlock, context, expandedExpectedType)),
 
-                SyntaxTypes.Expression.CaseExpression caseExpression =>
+                AbstractSyntax.Expression.CaseExpression caseExpression =>
                 RewriteCaseExpression(caseExpression, context, expandedExpectedType),
 
-                SyntaxTypes.Expression.LetExpression letExpression =>
+                AbstractSyntax.Expression.LetExpression letExpression =>
                 RewriteLetExpression(letExpression, context, expandedExpectedType),
 
-                SyntaxTypes.Expression.LambdaExpression lambdaExpression =>
+                AbstractSyntax.Expression.LambdaExpression lambdaExpression =>
                 RewriteLambda(lambdaExpression, context, expandedExpectedType),
 
-                SyntaxTypes.Expression.ListExpr listExpression =>
-                new SyntaxTypes.Expression.ListExpr(
+                AbstractSyntax.Expression.ListExpr listExpression =>
+                new AbstractSyntax.Expression.ListExpr(
                     [
                     ..listExpression.Elements.Select(
                         element =>
@@ -236,16 +239,16 @@ public static class BuiltinOperatorLowering
                             null))
                     ]),
 
-                SyntaxTypes.Expression.TupledExpression tupleExpression =>
-                new SyntaxTypes.Expression.TupledExpression(
+                AbstractSyntax.Expression.TupledExpression tupleExpression =>
+                new AbstractSyntax.Expression.TupledExpression(
                     [.. tupleExpression.Elements.Select(element => RewriteExpression(element, context))]),
 
-                SyntaxTypes.Expression.RecordExpr recordExpression =>
-                new SyntaxTypes.Expression.RecordExpr(
+                AbstractSyntax.Expression.RecordExpr recordExpression =>
+                new AbstractSyntax.Expression.RecordExpr(
                     [
                     .. recordExpression.Fields.Select(
                         field =>
-                        new SyntaxTypes.RecordSetter(
+                        new RecordSetter(
                             field.FieldName,
                             field.FieldNameValue,
                             RewriteExpression(
@@ -260,30 +263,30 @@ public static class BuiltinOperatorLowering
                                 null)))
                     ]),
 
-                SyntaxTypes.Expression.RecordUpdateExpression recordUpdate =>
-                new SyntaxTypes.Expression.RecordUpdateExpression(
+                AbstractSyntax.Expression.RecordUpdateExpression recordUpdate =>
+                new AbstractSyntax.Expression.RecordUpdateExpression(
                     recordUpdate.RecordName,
                     [
                     .. recordUpdate.Fields.Select(
                         field =>
-                        new SyntaxTypes.RecordSetter(
+                        new RecordSetter(
                             field.FieldName,
                             field.FieldNameValue,
                             RewriteExpression(field.Value, context)))
                     ]),
 
-                SyntaxTypes.Expression.RecordAccess recordAccess =>
-                new SyntaxTypes.Expression.RecordAccess(
+                AbstractSyntax.Expression.RecordAccess recordAccess =>
+                new AbstractSyntax.Expression.RecordAccess(
                     RewriteExpression(recordAccess.Record, context),
                     recordAccess.FieldName,
                     recordAccess.FieldNameValue),
 
-                SyntaxTypes.Expression.Negation negation =>
-                new SyntaxTypes.Expression.Negation(
+                AbstractSyntax.Expression.Negation negation =>
+                new AbstractSyntax.Expression.Negation(
                     RewriteExpression(negation.Expression, context)),
 
-                SyntaxTypes.Expression.OperatorApplication operatorApplication =>
-                new SyntaxTypes.Expression.OperatorApplication(
+                AbstractSyntax.Expression.OperatorApplication operatorApplication =>
+                new AbstractSyntax.Expression.OperatorApplication(
                     operatorApplication.Operator,
                     operatorApplication.Direction,
                     RewriteExpression(operatorApplication.Left, context),
@@ -294,22 +297,22 @@ public static class BuiltinOperatorLowering
             };
     }
 
-    private static SyntaxTypes.Expression.CaseExpression RewriteCaseExpression(
-        SyntaxTypes.Expression.CaseExpression caseExpression,
+    private static AbstractSyntax.Expression.CaseExpression RewriteCaseExpression(
+        AbstractSyntax.Expression.CaseExpression caseExpression,
         RewriteContext context,
         TypeInference.InferredType? expectedType)
     {
         var scrutineeType =
             InferExpressionType(caseExpression.Expression, context);
 
-        var rewrittenCases = new List<SyntaxTypes.Case>(caseExpression.Cases.Count);
+        var rewrittenCases = new List<Case>(caseExpression.Cases.Count);
 
         foreach (var caseItem in caseExpression.Cases)
         {
             var constructorArgumentTypes = context.ConstructorArgumentTypes;
 
             if (scrutineeType is not null &&
-                caseItem.Pattern is SyntaxTypes.Pattern.NamedPattern namedPattern)
+                caseItem.Pattern is Pattern.NamedPattern namedPattern)
             {
                 var constructorName =
                     DeclQualifiedName.Create(
@@ -347,7 +350,7 @@ public static class BuiltinOperatorLowering
             }
 
             rewrittenCases.Add(
-                new SyntaxTypes.Case(
+                new Case(
                     caseItem.Pattern,
                     RewriteExpression(
                         caseItem.Expression,
@@ -356,13 +359,13 @@ public static class BuiltinOperatorLowering
         }
 
         return
-            new SyntaxTypes.Expression.CaseExpression(
+            new AbstractSyntax.Expression.CaseExpression(
                 RewriteExpression(caseExpression.Expression, context),
                 rewrittenCases);
     }
 
-    private static SyntaxTypes.Expression RewriteApplication(
-        SyntaxTypes.Expression.Application application,
+    private static AbstractSyntax.Expression RewriteApplication(
+        AbstractSyntax.Expression.Application application,
         RewriteContext context,
         TypeInference.InferredType? expectedType)
     {
@@ -382,7 +385,7 @@ public static class BuiltinOperatorLowering
 
         var expectedArgumentTypes = GetExpectedArgumentTypes(application, context, expectedType);
 
-        var rewrittenArguments = new List<SyntaxTypes.Expression>(application.Arguments.Count);
+        var rewrittenArguments = new List<AbstractSyntax.Expression>(application.Arguments.Count);
 
         for (var i = 0; i < application.Arguments.Count; i++)
         {
@@ -394,7 +397,7 @@ public static class BuiltinOperatorLowering
         }
 
         var rewrittenApplication =
-            new SyntaxTypes.Expression.Application(rewrittenFunction, rewrittenArguments);
+            new AbstractSyntax.Expression.Application(rewrittenFunction, rewrittenArguments);
 
         if (context.Configuration.LowerBuiltinOperators)
         {
@@ -406,7 +409,7 @@ public static class BuiltinOperatorLowering
         rewrittenArguments = [.. rewrittenApplication.Arguments];
 
         if (context.Configuration.LowerElmCoreBasics &&
-            rewrittenApplication.Function is SyntaxTypes.Expression.Identifier
+            rewrittenApplication.Function is AbstractSyntax.Expression.Identifier
             {
                 QualifiedName.Namespaces: ["Basics"],
                 QualifiedName.DeclName: "min" or "max" or "negate" or "abs" or "clamp"
@@ -535,23 +538,23 @@ public static class BuiltinOperatorLowering
     }
 
     /// <summary>Selects numeric and append implementations on AST before IR conversion, even when syntax optimization is disabled.</summary>
-    internal static SyntaxTypes.Expression? TryLowerNumericAndAppend(
-        SyntaxTypes.Expression expression,
-        System.Func<SyntaxTypes.Expression, TypeInference.InferredType> infer)
+    internal static AbstractSyntax.Expression? TryLowerNumericAndAppend(
+        AbstractSyntax.Expression expression,
+        System.Func<AbstractSyntax.Expression, TypeInference.InferredType> infer)
     {
-        SyntaxTypes.Expression function;
-        SyntaxTypes.Expression left;
-        SyntaxTypes.Expression right;
+        AbstractSyntax.Expression function;
+        AbstractSyntax.Expression left;
+        AbstractSyntax.Expression right;
 
-        if (expression is SyntaxTypes.Expression.Application { Arguments.Count: 2 } application)
+        if (expression is AbstractSyntax.Expression.Application { Arguments.Count: 2 } application)
         {
             function = application.Function;
             left = application.Arguments[0];
             right = application.Arguments[1];
         }
-        else if (expression is SyntaxTypes.Expression.OperatorApplication operation)
+        else if (expression is AbstractSyntax.Expression.OperatorApplication operation)
         {
-            function = new SyntaxTypes.Expression.PrefixOperator(operation.Operator);
+            function = new AbstractSyntax.Expression.PrefixOperator(operation.Operator);
             left = operation.Left;
             right = operation.Right;
         }
@@ -580,10 +583,10 @@ public static class BuiltinOperatorLowering
         return TryLowerNumericAndAppend(operationKind, left, right, leftType, rightType, resultType);
     }
 
-    private static SyntaxTypes.Expression? TryLowerNumericAndAppend(
+    private static AbstractSyntax.Expression? TryLowerNumericAndAppend(
         LoweredOperator operation,
-        SyntaxTypes.Expression left,
-        SyntaxTypes.Expression right,
+        AbstractSyntax.Expression left,
+        AbstractSyntax.Expression right,
         TypeInference.InferredType leftType,
         TypeInference.InferredType rightType,
         TypeInference.InferredType? resultType)
@@ -623,10 +626,10 @@ public static class BuiltinOperatorLowering
     /// Lowers saturated pipe operators to plain applications, appending the piped value to any
     /// arguments already applied to the function.
     /// </summary>
-    private static SyntaxTypes.Expression.Application? TryLowerPipe(
-        SyntaxTypes.Expression.Application application)
+    private static AbstractSyntax.Expression.Application? TryLowerPipe(
+        AbstractSyntax.Expression.Application application)
     {
-        if (application.Function is not SyntaxTypes.Expression.Identifier
+        if (application.Function is not AbstractSyntax.Expression.Identifier
             {
                 QualifiedName.Namespaces: ["Basics"],
                 QualifiedName.DeclName: "apR" or "apL"
@@ -650,23 +653,23 @@ public static class BuiltinOperatorLowering
                 [.. application.Arguments.Skip(1)]);
     }
 
-    private static SyntaxTypes.Expression.Application ApplyPipeArguments(
-        SyntaxTypes.Expression function,
-        IReadOnlyList<SyntaxTypes.Expression> arguments)
+    private static AbstractSyntax.Expression.Application ApplyPipeArguments(
+        AbstractSyntax.Expression function,
+        IReadOnlyList<AbstractSyntax.Expression> arguments)
     {
-        if (function is SyntaxTypes.Expression.Application existingApplication)
+        if (function is AbstractSyntax.Expression.Application existingApplication)
         {
             return
-                new SyntaxTypes.Expression.Application(
+                new AbstractSyntax.Expression.Application(
                     existingApplication.Function,
                     [.. existingApplication.Arguments, .. arguments]);
         }
 
-        return new SyntaxTypes.Expression.Application(function, arguments);
+        return new AbstractSyntax.Expression.Application(function, arguments);
     }
 
-    private static bool IsEmptyList(SyntaxTypes.Expression expression) =>
-        expression is SyntaxTypes.Expression.ListExpr { Elements.Count: 0 };
+    private static bool IsEmptyList(AbstractSyntax.Expression expression) =>
+        expression is AbstractSyntax.Expression.ListExpr { Elements.Count: 0 };
 
     private static bool ProvesIntegerBuiltin(
         TypeInference.InferredType leftType,
@@ -677,26 +680,26 @@ public static class BuiltinOperatorLowering
         (leftType is TypeInference.InferredType.IntType or TypeInference.InferredType.NumberType));
 
     private static bool ProvesPrimitiveEqualityBuiltin(
-        SyntaxTypes.Expression left,
+        AbstractSyntax.Expression left,
         TypeInference.InferredType leftType,
-        SyntaxTypes.Expression right,
+        AbstractSyntax.Expression right,
         TypeInference.InferredType rightType,
         RewriteContext context) =>
         ExpressionSupportsPrimitiveEquality(left, leftType, context) ||
         ExpressionSupportsPrimitiveEquality(right, rightType, context);
 
     private static bool ExpressionSupportsPrimitiveEquality(
-        SyntaxTypes.Expression expression,
+        AbstractSyntax.Expression expression,
         TypeInference.InferredType type,
         RewriteContext context) =>
         TypeSupportsPrimitiveEquality(type, context, []) ||
         IsPayloadFreeChoiceTag(expression, context);
 
     private static bool IsPayloadFreeChoiceTag(
-        SyntaxTypes.Expression expression,
+        AbstractSyntax.Expression expression,
         RewriteContext context)
     {
-        if (expression is not SyntaxTypes.Expression.Identifier identifier)
+        if (expression is not AbstractSyntax.Expression.Identifier identifier)
             return false;
 
         var qualifiedName =
@@ -933,8 +936,8 @@ public static class BuiltinOperatorLowering
             pair.First.FieldName == pair.Second.FieldName &&
             InferredTypesAreEquivalent(pair.First.FieldType, pair.Second.FieldType));
 
-    private static SyntaxTypes.Expression RewriteLetExpression(
-        SyntaxTypes.Expression.LetExpression letExpression,
+    private static AbstractSyntax.Expression RewriteLetExpression(
+        AbstractSyntax.Expression.LetExpression letExpression,
         RewriteContext context,
         TypeInference.InferredType? expectedType)
     {
@@ -944,7 +947,7 @@ public static class BuiltinOperatorLowering
         {
             switch (declaration)
             {
-                case SyntaxTypes.LetDeclaration.LetFunction letFunction:
+                case LetDeclaration.LetFunction letFunction:
                     {
                         var implementation = letFunction.Function.Declaration;
 
@@ -960,7 +963,7 @@ public static class BuiltinOperatorLowering
                         break;
                     }
 
-                case SyntaxTypes.LetDeclaration.LetDestructuring letDestructuring:
+                case LetDeclaration.LetDestructuring letDestructuring:
                     var bindingExpressionType =
                         InferExpressionType(
                             letDestructuring.Expression,
@@ -994,23 +997,23 @@ public static class BuiltinOperatorLowering
             .ToList();
 
         return
-            new SyntaxTypes.Expression.LetExpression(
+            new AbstractSyntax.Expression.LetExpression(
                 rewrittenDeclarations,
                 RewriteExpression(letExpression.Expression, letContext, expectedType));
     }
 
-    private static SyntaxTypes.LetDeclaration RewriteLetDeclaration(
-        SyntaxTypes.LetDeclaration declaration,
+    private static LetDeclaration RewriteLetDeclaration(
+        LetDeclaration declaration,
         RewriteContext context)
     {
         return
             declaration switch
             {
-                SyntaxTypes.LetDeclaration.LetFunction letFunction =>
+                LetDeclaration.LetFunction letFunction =>
                 RewriteLetFunctionDeclaration(letFunction, context),
 
-                SyntaxTypes.LetDeclaration.LetDestructuring letDestructuring =>
-                new SyntaxTypes.LetDeclaration.LetDestructuring(
+                LetDeclaration.LetDestructuring letDestructuring =>
+                new LetDeclaration.LetDestructuring(
                     letDestructuring.Pattern,
                     RewriteExpression(letDestructuring.Expression, context)),
 
@@ -1019,8 +1022,8 @@ public static class BuiltinOperatorLowering
             };
     }
 
-    private static SyntaxTypes.LetDeclaration RewriteLetFunctionDeclaration(
-        SyntaxTypes.LetDeclaration.LetFunction letFunction,
+    private static LetDeclaration RewriteLetFunctionDeclaration(
+        LetDeclaration.LetFunction letFunction,
         RewriteContext context)
     {
         var implementation = letFunction.Function.Declaration;
@@ -1050,7 +1053,7 @@ public static class BuiltinOperatorLowering
                 LocalBindingTypes =
                 BuildNestedLocalBindingTypes(
                     context,
-                    SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatterns(implementation.Arguments)),
+                    SyntaxAnalysis.CollectNamesBoundByPatterns(implementation.Arguments)),
             };
 
         var expectedReturnType =
@@ -1062,7 +1065,7 @@ public static class BuiltinOperatorLowering
             inferred.returnType;
 
         return
-            new SyntaxTypes.LetDeclaration.LetFunction(
+            new LetDeclaration.LetFunction(
                 letFunction.Function with
                 {
                     Declaration =
@@ -1073,8 +1076,8 @@ public static class BuiltinOperatorLowering
                 });
     }
 
-    private static SyntaxTypes.Expression.LambdaExpression RewriteLambda(
-        SyntaxTypes.Expression.LambdaExpression lambda,
+    private static AbstractSyntax.Expression.LambdaExpression RewriteLambda(
+        AbstractSyntax.Expression.LambdaExpression lambda,
         RewriteContext context,
         TypeInference.InferredType? expectedType)
     {
@@ -1098,7 +1101,7 @@ public static class BuiltinOperatorLowering
                 LocalBindingTypes =
                 BuildNestedLocalBindingTypes(
                     context,
-                    SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatterns(lambda.Arguments)),
+                    SyntaxAnalysis.CollectNamesBoundByPatterns(lambda.Arguments)),
             };
 
         return
@@ -1117,7 +1120,7 @@ public static class BuiltinOperatorLowering
     }
 
     private static ImmutableDictionary<string, TypeInference.InferredType> MergeExpectedLambdaParameterTypes(
-        IReadOnlyList<SyntaxTypes.Pattern> arguments,
+        IReadOnlyList<Pattern> arguments,
         ImmutableDictionary<string, TypeInference.InferredType> inferredParameterTypes,
         TypeInference.InferredType? expectedType,
         IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<TypeInference.InferredType>> constructorArgumentTypes)
@@ -1137,7 +1140,7 @@ public static class BuiltinOperatorLowering
                 break;
             }
 
-            if (arguments[index] is SyntaxTypes.Pattern.VarPattern varPattern)
+            if (arguments[index] is Pattern.VarPattern varPattern)
             {
                 mergedParameterTypes[varPattern.Name] =
                     ChooseLambdaParameterType(
@@ -1200,9 +1203,9 @@ public static class BuiltinOperatorLowering
     }
 
     private static LoweredOperator? TryMapBuiltinOperator(
-        SyntaxTypes.Expression functionExpression)
+        AbstractSyntax.Expression functionExpression)
     {
-        if (functionExpression is SyntaxTypes.Expression.Identifier functionOrValue &&
+        if (functionExpression is AbstractSyntax.Expression.Identifier functionOrValue &&
             functionOrValue.QualifiedName.Namespaces.Count is 1 &&
             functionOrValue.QualifiedName.Namespaces[0] is "Basics")
         {
@@ -1226,7 +1229,7 @@ public static class BuiltinOperatorLowering
             };
         }
 
-        if (functionExpression is SyntaxTypes.Expression.PrefixOperator prefixOperator)
+        if (functionExpression is AbstractSyntax.Expression.PrefixOperator prefixOperator)
         {
             return prefixOperator.Operator switch
             {
@@ -1251,19 +1254,19 @@ public static class BuiltinOperatorLowering
         return null;
     }
 
-    private static SyntaxTypes.Expression BuildBuiltinApplication(
+    private static AbstractSyntax.Expression BuildBuiltinApplication(
         string builtinName,
-        SyntaxTypes.Expression left,
-        SyntaxTypes.Expression right) =>
-        new SyntaxTypes.Expression.Application(
-            SyntaxTypes.Expression.Identifier.Create(["Pine_builtin"], builtinName),
-            [new SyntaxTypes.Expression.ListExpr([left, right])]);
+        AbstractSyntax.Expression left,
+        AbstractSyntax.Expression right) =>
+        new AbstractSyntax.Expression.Application(
+            AbstractSyntax.Expression.Identifier.Create(["Pine_builtin"], builtinName),
+            [new AbstractSyntax.Expression.ListExpr([left, right])]);
 
-    private static SyntaxTypes.Expression BuildStringAppendApplication(
-        SyntaxTypes.Expression left,
-        SyntaxTypes.Expression right) =>
-        new SyntaxTypes.Expression.Application(
-            SyntaxTypes.Expression.Identifier.Create(["String"], "String"),
+    private static AbstractSyntax.Expression BuildStringAppendApplication(
+        AbstractSyntax.Expression left,
+        AbstractSyntax.Expression right) =>
+        new AbstractSyntax.Expression.Application(
+            AbstractSyntax.Expression.Identifier.Create(["String"], "String"),
             [
             BuildBuiltinApplication(
                 "concat",
@@ -1271,8 +1274,8 @@ public static class BuiltinOperatorLowering
                 BuildStringContentAccess(right)),
             ]);
 
-    private static SyntaxTypes.Expression BuildStringContentAccess(
-        SyntaxTypes.Expression stringExpression) =>
+    private static AbstractSyntax.Expression BuildStringContentAccess(
+        AbstractSyntax.Expression stringExpression) =>
         BuildBuiltinUnaryApplication(
             "head",
             BuildBuiltinApplication(
@@ -1280,11 +1283,11 @@ public static class BuiltinOperatorLowering
                 BuildIntegerLiteral(2),
                 stringExpression));
 
-    private static SyntaxTypes.Expression BuildBuiltinUnaryApplication(
+    private static AbstractSyntax.Expression BuildBuiltinUnaryApplication(
         string builtinName,
-        SyntaxTypes.Expression argument) =>
-        new SyntaxTypes.Expression.Application(
-            SyntaxTypes.Expression.Identifier.Create(["Pine_builtin"], builtinName),
+        AbstractSyntax.Expression argument) =>
+        new AbstractSyntax.Expression.Application(
+            AbstractSyntax.Expression.Identifier.Create(["Pine_builtin"], builtinName),
             [argument]);
 
     /// <summary>
@@ -1294,22 +1297,22 @@ public static class BuiltinOperatorLowering
     /// <c>Basics.and</c> / <c>Basics.or</c> applications) into <c>if-then-else</c>
     /// expressions.
     /// </summary>
-    private static SyntaxTypes.Expression BuildBasicsBoolReference(bool value) =>
-        SyntaxTypes.Expression.Identifier.Create(["Basics"], value ? "True" : "False");
+    private static AbstractSyntax.Expression BuildBasicsBoolReference(bool value) =>
+        AbstractSyntax.Expression.Identifier.Create(["Basics"], value ? "True" : "False");
 
     /// <summary>
     /// Builds an <c>if-then-else</c> expression from the supplied condition,
     /// then-branch and else-branch expressions.
     /// </summary>
-    private static SyntaxTypes.Expression BuildIfBlock(
-        SyntaxTypes.Expression condition,
-        SyntaxTypes.Expression thenBranch,
-        SyntaxTypes.Expression elseBranch) =>
-        new SyntaxTypes.Expression.IfBlock(condition, thenBranch, elseBranch);
+    private static AbstractSyntax.Expression BuildIfBlock(
+        AbstractSyntax.Expression condition,
+        AbstractSyntax.Expression thenBranch,
+        AbstractSyntax.Expression elseBranch) =>
+        new AbstractSyntax.Expression.IfBlock(condition, thenBranch, elseBranch);
 
-    private static SyntaxTypes.Expression BuildBuiltinSubtractionApplication(
-        SyntaxTypes.Expression left,
-        SyntaxTypes.Expression right)
+    private static AbstractSyntax.Expression BuildBuiltinSubtractionApplication(
+        AbstractSyntax.Expression left,
+        AbstractSyntax.Expression right)
     {
         var negatedRight =
             BuildBuiltinApplication(
@@ -1333,10 +1336,10 @@ public static class BuiltinOperatorLowering
     /// <item><c>a &gt; b</c>  → <c>int_is_sorted_asc [ int_add [ b, 1 ], a ]</c> (with literal optimization)</item>
     /// </list>
     /// </summary>
-    private static SyntaxTypes.Expression BuildIntComparisonApplication(
+    private static AbstractSyntax.Expression BuildIntComparisonApplication(
         LoweredOperator loweredOp,
-        SyntaxTypes.Expression left,
-        SyntaxTypes.Expression right)
+        AbstractSyntax.Expression left,
+        AbstractSyntax.Expression right)
     {
         var isStrict = loweredOp is LoweredOperator.IntLt or LoweredOperator.IntGt;
         var swapOperands = loweredOp is LoweredOperator.IntGt or LoweredOperator.IntGe;
@@ -1360,9 +1363,9 @@ public static class BuiltinOperatorLowering
     /// the offset is folded into the literal to avoid emitting <c>int_add</c>.
     /// </para>
     /// </summary>
-    private static SyntaxTypes.Expression BuildStrictIntIsSortedAscApplication(
-        SyntaxTypes.Expression first,
-        SyntaxTypes.Expression second)
+    private static AbstractSyntax.Expression BuildStrictIntIsSortedAscApplication(
+        AbstractSyntax.Expression first,
+        AbstractSyntax.Expression second)
     {
         // If the first operand is a literal (or a negation of one), fold +1 into it directly.
         if (TryGetIntegerLiteralValue(first) is { } firstLiteral)
@@ -1391,12 +1394,12 @@ public static class BuiltinOperatorLowering
     /// Extracts the numeric value of an integer literal, or the negated value of a
     /// negated integer literal, otherwise <c>null</c>.
     /// </summary>
-    private static BigInteger? TryGetIntegerLiteralValue(SyntaxTypes.Expression expression) =>
+    private static BigInteger? TryGetIntegerLiteralValue(AbstractSyntax.Expression expression) =>
         expression switch
         {
-            SyntaxTypes.Expression.IntegerLiteral integer => integer.Value,
+            AbstractSyntax.Expression.IntegerLiteral integer => integer.Value,
 
-            SyntaxTypes.Expression.Negation { Expression: SyntaxTypes.Expression.IntegerLiteral negated } =>
+            AbstractSyntax.Expression.Negation { Expression: AbstractSyntax.Expression.IntegerLiteral negated } =>
             -negated.Value,
 
             _ =>
@@ -1406,17 +1409,17 @@ public static class BuiltinOperatorLowering
     /// <summary>
     /// Builds an integer literal expression, precomputing its <see cref="PineValue"/> encoding.
     /// </summary>
-    private static SyntaxTypes.Expression BuildIntegerLiteral(BigInteger value) =>
-        new SyntaxTypes.Expression.IntegerLiteral(value, IntegerEncoding.EncodeSignedInteger(value));
+    private static AbstractSyntax.Expression BuildIntegerLiteral(BigInteger value) =>
+        new AbstractSyntax.Expression.IntegerLiteral(value, IntegerEncoding.EncodeSignedInteger(value));
 
     /// <summary>
     /// Builds a <c>Pine_builtin.int_is_sorted_asc</c> application with the given operands list.
     /// </summary>
-    private static SyntaxTypes.Expression BuildIntIsSortedAscApplication(
-        IReadOnlyList<SyntaxTypes.Expression> operands) =>
-        new SyntaxTypes.Expression.Application(
-            SyntaxTypes.Expression.Identifier.Create(["Pine_builtin"], "int_is_sorted_asc"),
-            [new SyntaxTypes.Expression.ListExpr([.. operands])]);
+    private static AbstractSyntax.Expression BuildIntIsSortedAscApplication(
+        IReadOnlyList<AbstractSyntax.Expression> operands) =>
+        new AbstractSyntax.Expression.Application(
+            AbstractSyntax.Expression.Identifier.Create(["Pine_builtin"], "int_is_sorted_asc"),
+            [new AbstractSyntax.Expression.ListExpr([.. operands])]);
 
     /// <summary>
     /// Tries to merge two <c>int_is_sorted_asc</c> applications connected by <c>&amp;&amp;</c>
@@ -1434,9 +1437,9 @@ public static class BuiltinOperatorLowering
     /// → <c>int_is_sorted_asc [ a+1, b, b+1, c ]</c>.
     /// </para>
     /// </summary>
-    private static SyntaxTypes.Expression? TryMergeChainedIntIsSortedAsc(
-        SyntaxTypes.Expression leftExpr,
-        SyntaxTypes.Expression rightExpr)
+    private static AbstractSyntax.Expression? TryMergeChainedIntIsSortedAsc(
+        AbstractSyntax.Expression leftExpr,
+        AbstractSyntax.Expression rightExpr)
     {
         if (TryExtractIntIsSortedAscOperands(leftExpr) is not { } leftOperands ||
             TryExtractIntIsSortedAscOperands(rightExpr) is not { } rightOperands)
@@ -1455,7 +1458,7 @@ public static class BuiltinOperatorLowering
         // Case 1: Exact match on shared middle operand (e.g., <= chains).
         if (SyntaxExpressionsAreEqual(leftLast, rightFirst))
         {
-            var mergedOperands = new List<SyntaxTypes.Expression>(leftOperands.Count + rightOperands.Count - 1);
+            var mergedOperands = new List<AbstractSyntax.Expression>(leftOperands.Count + rightOperands.Count - 1);
             mergedOperands.AddRange(leftOperands);
 
             for (var i = 1; i < rightOperands.Count; i++)
@@ -1469,7 +1472,7 @@ public static class BuiltinOperatorLowering
         // Case 2: Strict chain where rightFirst is int_add [leftLast, 1] (e.g., < chains).
         if (IsIntAddOffsetByOne(leftLast, rightFirst))
         {
-            var mergedOperands = new List<SyntaxTypes.Expression>(leftOperands.Count + rightOperands.Count);
+            var mergedOperands = new List<AbstractSyntax.Expression>(leftOperands.Count + rightOperands.Count);
             mergedOperands.AddRange(leftOperands);
             mergedOperands.AddRange(rightOperands);
 
@@ -1484,15 +1487,15 @@ public static class BuiltinOperatorLowering
     /// indicating a +1 offset relationship used in strict comparison chains.
     /// </summary>
     private static bool IsIntAddOffsetByOne(
-        SyntaxTypes.Expression baseExpr,
-        SyntaxTypes.Expression candidate)
+        AbstractSyntax.Expression baseExpr,
+        AbstractSyntax.Expression candidate)
     {
-        if (candidate is not SyntaxTypes.Expression.Application app ||
-            app.Function is not SyntaxTypes.Expression.Identifier fv ||
+        if (candidate is not AbstractSyntax.Expression.Application app ||
+            app.Function is not AbstractSyntax.Expression.Identifier fv ||
             fv.QualifiedName.Namespaces is not ["Pine_builtin"] ||
             fv.QualifiedName.DeclName is not "int_add" ||
             app.Arguments.Count is not 1 ||
-            app.Arguments[0] is not SyntaxTypes.Expression.ListExpr listExpr ||
+            app.Arguments[0] is not AbstractSyntax.Expression.ListExpr listExpr ||
             listExpr.Elements.Count is not 2)
         {
             return false;
@@ -1505,22 +1508,22 @@ public static class BuiltinOperatorLowering
             IsIntegerLiteral(listExpr.Elements[0], 1));
     }
 
-    private static bool IsIntegerLiteral(SyntaxTypes.Expression expression, BigInteger value) =>
-        expression is SyntaxTypes.Expression.IntegerLiteral integer && integer.Value == value;
+    private static bool IsIntegerLiteral(AbstractSyntax.Expression expression, BigInteger value) =>
+        expression is AbstractSyntax.Expression.IntegerLiteral integer && integer.Value == value;
 
     /// <summary>
     /// Extracts the operand list from an <c>int_is_sorted_asc</c> application,
     /// or returns null if the expression is not such an application.
     /// </summary>
-    private static IReadOnlyList<SyntaxTypes.Expression>? TryExtractIntIsSortedAscOperands(
-        SyntaxTypes.Expression expression)
+    private static IReadOnlyList<AbstractSyntax.Expression>? TryExtractIntIsSortedAscOperands(
+        AbstractSyntax.Expression expression)
     {
-        if (expression is not SyntaxTypes.Expression.Application application ||
-            application.Function is not SyntaxTypes.Expression.Identifier functionOrValue ||
+        if (expression is not AbstractSyntax.Expression.Application application ||
+            application.Function is not AbstractSyntax.Expression.Identifier functionOrValue ||
             functionOrValue.QualifiedName.Namespaces is not ["Pine_builtin"] ||
             functionOrValue.QualifiedName.DeclName is not "int_is_sorted_asc" ||
             application.Arguments.Count is not 1 ||
-            application.Arguments[0] is not SyntaxTypes.Expression.ListExpr listExpr)
+            application.Arguments[0] is not AbstractSyntax.Expression.ListExpr listExpr)
         {
             return null;
         }
@@ -1539,29 +1542,29 @@ public static class BuiltinOperatorLowering
     /// </para>
     /// </summary>
     private static bool SyntaxExpressionsAreEqual(
-        SyntaxTypes.Expression left,
-        SyntaxTypes.Expression right)
+        AbstractSyntax.Expression left,
+        AbstractSyntax.Expression right)
     {
         return (left, right) switch
         {
-            (SyntaxTypes.Expression.Identifier leftFv, SyntaxTypes.Expression.Identifier rightFv) =>
+            (AbstractSyntax.Expression.Identifier leftFv, AbstractSyntax.Expression.Identifier rightFv) =>
             leftFv.QualifiedName.Equals(rightFv.QualifiedName),
 
-            (SyntaxTypes.Expression.IntegerLiteral leftInt, SyntaxTypes.Expression.IntegerLiteral rightInt) =>
+            (AbstractSyntax.Expression.IntegerLiteral leftInt, AbstractSyntax.Expression.IntegerLiteral rightInt) =>
             leftInt.Value == rightInt.Value,
 
-            (SyntaxTypes.Expression.Application leftApp, SyntaxTypes.Expression.Application rightApp) =>
+            (AbstractSyntax.Expression.Application leftApp, AbstractSyntax.Expression.Application rightApp) =>
             SyntaxExpressionsAreEqual(leftApp.Function, rightApp.Function) &&
             leftApp.Arguments.Count == rightApp.Arguments.Count &&
             leftApp.Arguments.Zip(rightApp.Arguments).All(
                 pair => SyntaxExpressionsAreEqual(pair.First, pair.Second)),
 
-            (SyntaxTypes.Expression.ListExpr leftList, SyntaxTypes.Expression.ListExpr rightList) =>
+            (AbstractSyntax.Expression.ListExpr leftList, AbstractSyntax.Expression.ListExpr rightList) =>
             leftList.Elements.Count == rightList.Elements.Count &&
             leftList.Elements.Zip(rightList.Elements).All(
                 pair => SyntaxExpressionsAreEqual(pair.First, pair.Second)),
 
-            (SyntaxTypes.Expression.Negation leftNeg, SyntaxTypes.Expression.Negation rightNeg) =>
+            (AbstractSyntax.Expression.Negation leftNeg, AbstractSyntax.Expression.Negation rightNeg) =>
             SyntaxExpressionsAreEqual(leftNeg.Expression, rightNeg.Expression),
 
             _ =>
@@ -1570,14 +1573,14 @@ public static class BuiltinOperatorLowering
     }
 
     private static ImmutableDictionary<DeclQualifiedName, FunctionTypeInfo> BuildFunctionTypes(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+        ImmutableDictionary<DeclQualifiedName, Declaration> declarations,
         TypeInference.FunctionInferenceEnvironment inferenceEnvironment)
     {
         var result = new Dictionary<DeclQualifiedName, FunctionTypeInfo>();
 
         foreach (var (key, decl) in declarations)
         {
-            if (decl is SyntaxTypes.Declaration.FunctionDeclaration declaration)
+            if (decl is Declaration.FunctionDeclaration declaration)
             {
                 var functionName = declaration.Function.Declaration.Name;
 
@@ -1600,13 +1603,13 @@ public static class BuiltinOperatorLowering
     }
 
     private static ImmutableDictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition> BuildAliasTypes(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
+        ImmutableDictionary<DeclQualifiedName, Declaration> declarations)
     {
         var result = new Dictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition>();
 
         foreach (var (key, decl) in declarations)
         {
-            if (decl is SyntaxTypes.Declaration.AliasDeclaration declaration)
+            if (decl is Declaration.AliasDeclaration declaration)
             {
                 result[QualifiedNameHelper.ToDeclQualifiedName(key.Namespaces, declaration.TypeAlias.Name)] =
                     new TypeInference.TypeAliasDefinition(
@@ -1645,7 +1648,7 @@ public static class BuiltinOperatorLowering
     }
 
     private static ImmutableDictionary<string, TypeInference.InferredType> BuildFunctionSignatures(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
+        ImmutableDictionary<DeclQualifiedName, Declaration> declarations)
     {
         var builder = ImmutableDictionary.CreateBuilder<string, TypeInference.InferredType>();
 
@@ -1663,13 +1666,13 @@ public static class BuiltinOperatorLowering
     }
 
     private static ImmutableDictionary<string, int> BuildParameterNames(
-        IReadOnlyList<SyntaxTypes.Pattern> arguments)
+        IReadOnlyList<Pattern> arguments)
     {
         var builder = ImmutableDictionary.CreateBuilder<string, int>();
 
         for (var index = 0; index < arguments.Count; index++)
         {
-            if (arguments[index] is SyntaxTypes.Pattern.VarPattern varPattern)
+            if (arguments[index] is Pattern.VarPattern varPattern)
             {
                 builder[varPattern.Name] = index;
             }
@@ -1679,11 +1682,11 @@ public static class BuiltinOperatorLowering
     }
 
     private static IReadOnlyList<TypeInference.InferredType?> GetExpectedArgumentTypes(
-        SyntaxTypes.Expression.Application application,
+        AbstractSyntax.Expression.Application application,
         RewriteContext context,
         TypeInference.InferredType? expectedType)
     {
-        if (application.Function is not SyntaxTypes.Expression.Identifier functionOrValue)
+        if (application.Function is not AbstractSyntax.Expression.Identifier functionOrValue)
         {
             return [];
         }
@@ -1800,10 +1803,10 @@ public static class BuiltinOperatorLowering
     }
 
     private static TypeInference.InferredType InferExpressionType(
-        SyntaxTypes.Expression expression,
+        AbstractSyntax.Expression expression,
         RewriteContext context)
     {
-        if (expression is SyntaxTypes.Expression.RecordAccess recordAccess)
+        if (expression is AbstractSyntax.Expression.RecordAccess recordAccess)
         {
             var recordType = InferExpressionType(recordAccess.Record, context);
 
@@ -1850,8 +1853,8 @@ public static class BuiltinOperatorLowering
             entry => ExpandAliasType(entry.Value, aliasTypes) ?? entry.Value);
 
     private static TypeInference.InferredType BuildInferredFunctionType(
-        SyntaxTypes.Expression expression,
-        IReadOnlyList<SyntaxTypes.Pattern> arguments,
+        AbstractSyntax.Expression expression,
+        IReadOnlyList<Pattern> arguments,
         string moduleName,
         TypeInference.FunctionInferenceEnvironment inferenceEnvironment)
     {
@@ -1870,7 +1873,7 @@ public static class BuiltinOperatorLowering
     }
 
     private static ImmutableDictionary<string, TypeInference.InferredType> BuildExplicitParameterTypes(
-        SyntaxTypes.FunctionStruct function)
+        FunctionStruct function)
     {
         var annotatedParameterTypes =
             TypeInference.GetFunctionParameterTypes(function);
@@ -1882,7 +1885,7 @@ public static class BuiltinOperatorLowering
 
         for (var index = 0; index < annotatedParameterTypes.Count && index < function.Declaration.Arguments.Count; index++)
         {
-            if (function.Declaration.Arguments[index] is SyntaxTypes.Pattern.VarPattern varPattern)
+            if (function.Declaration.Arguments[index] is Pattern.VarPattern varPattern)
             {
                 builder[varPattern.Name] = annotatedParameterTypes[index];
             }

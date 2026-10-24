@@ -1,8 +1,8 @@
 using AwesomeAssertions;
 using ElmTime;
-using Pine.Core;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
+using Pine.Core.Encodings;
+using Pine.Core.Functional;
 using Pine.Core.Json;
 using Pine.Elm.Platform;
 using Pine.IntermediateVM;

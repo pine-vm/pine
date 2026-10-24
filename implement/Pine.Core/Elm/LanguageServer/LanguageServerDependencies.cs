@@ -1,4 +1,6 @@
+using Pine.Core.Functional;
 using Pine.Core.LanguageServerProtocol;
+using Pine.Core.Runtime.IntermediateVM;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -228,7 +230,7 @@ public sealed record LanguageServerOptions
     public LanguageServerOptions(
         string serverVersion,
         int maxConcurrencyCount = 4,
-        Interpreter.IntermediateVM.InvocationCacheGenerationOptions? invocationCacheOptions = null)
+        InvocationCacheGenerationOptions? invocationCacheOptions = null)
     {
         System.ArgumentOutOfRangeException.ThrowIfLessThan(maxConcurrencyCount, 1);
 
@@ -237,7 +239,7 @@ public sealed record LanguageServerOptions
 
         InvocationCacheOptions =
             invocationCacheOptions ??
-            Interpreter.IntermediateVM.InvocationCacheGenerationOptions.Default;
+            InvocationCacheGenerationOptions.Default;
     }
 
     /// <summary>
@@ -251,5 +253,5 @@ public sealed record LanguageServerOptions
     public int MaxConcurrencyCount { get; }
 
     /// <summary>Gets the background invocation-cache maintenance policy shared by this session's workers.</summary>
-    public Interpreter.IntermediateVM.InvocationCacheGenerationOptions InvocationCacheOptions { get; }
+    public InvocationCacheGenerationOptions InvocationCacheOptions { get; }
 }

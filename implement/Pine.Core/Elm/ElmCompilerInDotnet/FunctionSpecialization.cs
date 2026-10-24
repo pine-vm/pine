@@ -1,7 +1,6 @@
+using Pine.Core.Elm.Syntax.Abstract;
 using System.Collections.Immutable;
 using System.Linq;
-
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -176,14 +175,14 @@ public sealed record FunctionSpecialization(
     /// or converting it to another syntax model.
     /// </summary>
     private static string LambdaStructuralFingerprint(
-        SyntaxTypes.Expression.LambdaExpression lambda)
+        Expression.LambdaExpression lambda)
     {
         var fn =
-            new SyntaxTypes.Declaration.FunctionDeclaration(
-                new SyntaxTypes.FunctionStruct(
+            new Declaration.FunctionDeclaration(
+                new FunctionStruct(
                     Signature: null,
                     Declaration:
-                    new SyntaxTypes.FunctionImplementation(
+                    new FunctionImplementation(
                         Name: "__lambda__",
                         Arguments: [],
                         Expression: lambda)));

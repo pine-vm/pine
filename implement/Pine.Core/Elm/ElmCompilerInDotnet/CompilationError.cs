@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
+using Range = Pine.Core.Elm.Syntax.Concrete.Range;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 

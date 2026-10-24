@@ -3,9 +3,11 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmInElm;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
 using Pine.Core.Elm.Testing;
 using Pine.Core.Files;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -19,11 +21,11 @@ using System.Text;
 using System.Text.Json;
 using Xunit;
 
-using Syntax = Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using ConcreteSyntax = Pine.Core.Elm.Syntax.Concrete;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
-[CollectionDefinition(CompilationProfilingCollection.Name, DisableParallelization = true)]
+[CollectionDefinition(Name, DisableParallelization = true)]
 public sealed class CompilationProfilingCollection
 {
     public const string Name = "Elm compilation profiling";
@@ -286,7 +288,7 @@ public sealed class IncrementalCompilationProfilingTests(ITestOutputHelper outpu
 
         var declaration =
             parsed.Declarations.Single(
-                node => node.Value is Syntax.Declaration.FunctionDeclaration function &&
+                node => node.Value is ConcreteSyntax.Declaration.FunctionDeclaration function &&
                     function.Function.Declaration.Value.Name.Value == declarationName);
 
         var text = ElmSyntaxSource.Slice(source, declaration.Range);

@@ -1,7 +1,8 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Encodings;
+using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -14,7 +15,7 @@ using Xunit;
 
 using Model = Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
 using Shape = Pine.Core.Elm.ElmCompilerInDotnet.StructuralType;
-using Direction = Pine.Core.Elm.ElmSyntax.SyntaxModel.InfixDirection;
+using Direction = Pine.Core.Elm.Syntax.Concrete.InfixDirection;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -619,7 +620,7 @@ public class CompilerModelHashTests
     {
         public int Calls { get; private set; }
 
-        public TypeProbe() : base(Shape.IntType.Instance) { }
+        public TypeProbe() : base(IntType.Instance) { }
 
         public override int GetHashCode()
         {

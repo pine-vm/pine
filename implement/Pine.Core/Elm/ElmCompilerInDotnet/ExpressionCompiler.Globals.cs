@@ -1,5 +1,7 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
+using Pine.Core.Encodings;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -157,7 +159,7 @@ public partial class ExpressionCompiler
         if (name.Namespaces is ["List"] && name.DeclName is "cons" && compiled.Count >= 2)
         {
             var cons = BuiltinHelpers.ApplyBuiltinConcat([Expression.ListInst([compiled[0]]), compiled[1]]);
-            return compiled.Count is 2 ? cons : CompileGenericFunctionApplication(cons, compiled.Skip(2).ToArray());
+            return compiled.Count is 2 ? cons : CompileGenericFunctionApplication(cons, [.. compiled.Skip(2)]);
         }
 
         return CompileGlobalReference(name, context).Map(function => CompileGenericFunctionApplication(function, compiled));

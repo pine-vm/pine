@@ -3,17 +3,20 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmInElm;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Interpreter;
 using Pine.Core.Files;
+using Pine.Core.Functional;
 using Pine.Core.Internal;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.IntermediateVM;
 using Pine.Core.Tests.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-using SyntaxModel = Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using SyntaxModel = Pine.Core.Elm.Syntax.Concrete;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -451,7 +454,7 @@ public sealed class CompareInterpreterWithIntermediateVM
             .ToDictionary(entry => entry.Name, entry => entry.Declaration);
 
         foreach (var (name, declaration) in pipelineStageResults.CanonicalDeclarations)
-            declarations[name] = Core.Elm.ElmSyntax.ElmSyntaxAbstract.ConvertToConcrete.ToDeclaration(declaration);
+            declarations[name] = Core.Elm.Syntax.Abstract.ConvertToConcrete.ToDeclaration(declaration);
 
         return declarations;
     }

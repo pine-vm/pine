@@ -1,8 +1,8 @@
 using AwesomeAssertions;
-using Pine.Core;
-using Pine.Core.CodeGen;
-using Pine.Core.CommonEncodings;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.CodeGen.Pine;
+using Pine.Core.Encodings;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.IntermediateVM;
 using Pine.Elm.LanguageServerAdapters;
 using Pine.IntermediateVM;
 using System;
@@ -117,7 +117,7 @@ public class InvocationCacheLearningTests
                 message.Split(", ").Single(field => field.StartsWith(name + "=", StringComparison.Ordinal))[(name.Length + 1)..],
                 CultureInfo.InvariantCulture);
 
-        Core.Interpreter.IntermediateVM.PineVM CreateVM(IInvocationCacheAccess cache) =>
+        Core.Runtime.IntermediateVM.PineVM CreateVM(IInvocationCacheAccess cache) =>
             SetupVM.Create(
                 invocationCache: cache,
                 parseCache: sharedCaches.ParsedExpressions,

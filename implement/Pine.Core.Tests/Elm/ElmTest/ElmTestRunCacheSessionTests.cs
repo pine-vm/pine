@@ -1,7 +1,10 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.Testing;
-using Pine.Core.Interpreter.IntermediateVM;
-using Pine.Core.Tests.Interpreter.IntermediateVM;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
+using Pine.Core.Runtime.IntermediateVM;
+using Pine.Core.Tests.Runtime.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -297,7 +300,7 @@ public class ElmTestRunCacheSessionTests(ITestOutputHelper output)
     }
 
     private sealed class CallbackVm(
-        Func<Expression, PineValue, Result<string, PineValue>> evaluate) : Core.PineVM.IPineVM
+        Func<Expression, PineValue, Result<string, PineValue>> evaluate) : IPineVM
     {
         public Result<string, PineValue> EvaluateExpression(Expression expression, PineValue environment) =>
             evaluate(expression, environment);

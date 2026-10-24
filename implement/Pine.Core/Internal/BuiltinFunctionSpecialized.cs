@@ -1,11 +1,12 @@
-using Pine.Core.CommonEncodings;
+using Pine.Core.Encodings;
+using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
 
 namespace Pine.Core.Internal;
 
-using static Core.BuiltinFunction;
+using static Pine.Core.PineLanguage.BuiltinFunction;
 
 #pragma warning disable IDE1006
 

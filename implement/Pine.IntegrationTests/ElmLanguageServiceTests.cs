@@ -1,9 +1,9 @@
 using AwesomeAssertions;
-using Pine.Core;
 using Pine.Core.Elm.LanguageServer;
 using Pine.Core.Elm.LanguageServer.MonacoEditor;
 using Pine.Core.Files;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.Functional;
+using Pine.Core.Runtime.IntermediateVM;
 using Pine.Elm;
 using Pine.Elm.LanguageServerAdapters;
 using Pine.IntermediateVM;
@@ -161,15 +161,15 @@ public class ElmLanguageServiceTests
             beforeCursor + afterCursor;
 
         var elmModuleTextLines =
-            Core.Elm.ElmSyntax.ElmModule.ModuleLines(elmModuleText)
+            Core.Elm.Syntax.ElmModule.ModuleLines(elmModuleText)
             .ToImmutableArray();
 
         var beforeCursorLines =
-            Core.Elm.ElmSyntax.ElmModule.ModuleLines(beforeCursor)
+            Core.Elm.Syntax.ElmModule.ModuleLines(beforeCursor)
             .ToImmutableArray();
 
         var afterCursorLines =
-            Core.Elm.ElmSyntax.ElmModule.ModuleLines(afterCursor)
+            Core.Elm.Syntax.ElmModule.ModuleLines(afterCursor)
             .ToImmutableArray();
 
         var lineText =
@@ -262,15 +262,15 @@ public class ElmLanguageServiceTests
             beforeCursor + afterCursor;
 
         var elmModuleTextLines =
-            Core.Elm.ElmSyntax.ElmModule.ModuleLines(elmModuleText)
+            Core.Elm.Syntax.ElmModule.ModuleLines(elmModuleText)
             .ToImmutableArray();
 
         var beforeCursorLines =
-            Core.Elm.ElmSyntax.ElmModule.ModuleLines(beforeCursor)
+            Core.Elm.Syntax.ElmModule.ModuleLines(beforeCursor)
             .ToImmutableArray();
 
         var afterCursorLines =
-            Core.Elm.ElmSyntax.ElmModule.ModuleLines(afterCursor)
+            Core.Elm.Syntax.ElmModule.ModuleLines(afterCursor)
             .ToImmutableArray();
 
         var lineText =

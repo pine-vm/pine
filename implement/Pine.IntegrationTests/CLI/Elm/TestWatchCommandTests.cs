@@ -1,9 +1,10 @@
 using AwesomeAssertions;
 using Pine.CLI.Elm;
-using Pine.Core;
 using Pine.Core.CLI;
 using Pine.Core.Elm.Testing;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
+using Pine.Core.Runtime.IntermediateVM;
 using Spectre.Console;
 using System;
 using System.Collections.Generic;
@@ -208,9 +209,9 @@ public class TestWatchCommandTests
     [Fact]
     public void Template_cache_factory_preserves_existing_explicit_null_cache_and_configuration_calls()
     {
-        global::Pine.IntermediateVM.SetupVM.Create(null).Should().NotBeNull();
-        global::Pine.IntermediateVM.SetupVM.Create(null, null).Should().NotBeNull();
-        global::Pine.IntermediateVM.SetupVM.Create(evalCache: null, evaluationConfigDefault: null).Should().NotBeNull();
+        IntermediateVM.SetupVM.Create(null).Should().NotBeNull();
+        IntermediateVM.SetupVM.Create(null, null).Should().NotBeNull();
+        IntermediateVM.SetupVM.Create(evalCache: null, evaluationConfigDefault: null).Should().NotBeNull();
     }
 
     [Fact]

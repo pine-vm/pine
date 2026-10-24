@@ -2,8 +2,9 @@ using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Abstract;
+using Pine.Core.Runtime.IntermediateVM;
 using Pine.Core.Tests.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 using System;
 using System.Collections.Generic;
@@ -11,7 +12,6 @@ using System.Collections.Immutable;
 using System.Linq;
 using Xunit;
 
-using Abstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 using IR = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 using Model = Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
 
@@ -680,7 +680,7 @@ public class RecordAccessLoweringTests
 
     private static Model.SourceLoweringResult Lower(params string[] sources)
     {
-        var declarations = ImmutableDictionary.CreateBuilder<DeclQualifiedName, Abstract.Declaration>();
+        var declarations = ImmutableDictionary.CreateBuilder<DeclQualifiedName, Declaration>();
 
         foreach (var source in sources)
         {
@@ -688,19 +688,19 @@ public class RecordAccessLoweringTests
                 ElmSyntaxParser.ParseModuleText(source).Extract(
                     error => throw new InvalidOperationException(error.ToString()));
 
-            var module = Abstract.ConvertFromConcrete.FromFile(syntax);
-            var moduleName = Abstract.Module.GetModuleName(module.ModuleDefinition);
+            var module = ConvertFromConcrete.FromFile(syntax);
+            var moduleName = Module.GetModuleName(module.ModuleDefinition);
 
             foreach (var declaration in module.Declarations)
             {
                 var name =
                     declaration switch
                     {
-                        Abstract.Declaration.FunctionDeclaration function => function.Function.Declaration.Name,
-                        Abstract.Declaration.AliasDeclaration alias => alias.TypeAlias.Name,
-                        Abstract.Declaration.ChoiceTypeDeclaration choice => choice.TypeDeclaration.Name,
-                        Abstract.Declaration.PortDeclaration port => port.Signature.Name,
-                        Abstract.Declaration.InfixDeclaration infix => infix.Infix.Operator,
+                        Declaration.FunctionDeclaration function => function.Function.Declaration.Name,
+                        Declaration.AliasDeclaration alias => alias.TypeAlias.Name,
+                        Declaration.ChoiceTypeDeclaration choice => choice.TypeDeclaration.Name,
+                        Declaration.PortDeclaration port => port.Signature.Name,
+                        Declaration.InfixDeclaration infix => infix.Infix.Operator,
 
                         _ =>
                         throw new NotImplementedException(

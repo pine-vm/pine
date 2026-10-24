@@ -1,0 +1,56 @@
+using AwesomeAssertions;
+using Pine.Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7;
+using Pine.Core.Elm.Syntax.Concrete;
+using Xunit;
+
+using FullTypes = Pine.Core.Elm.Syntax.Concrete;
+
+namespace Pine.Core.Tests.Elm.Syntax.Compatibility.Stil4mElmSyntax7;
+
+public class ToFullSyntaxModelTests
+{
+    [Fact]
+    public void Application_converts_with_function_separated_from_arguments()
+    {
+        var range = new Range(new Location(1, 1), new Location(1, 10));
+
+        var legacyApplication =
+            new Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7.Expression.Application(
+                [
+                new Node<Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7.Expression>(
+                    range,
+                    new Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7.Expression.FunctionOrValue(["Basics"], "add")),
+                new Node<Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7.Expression>(
+                    range,
+                    new Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7.Expression.Integer(1)),
+                new Node<Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7.Expression>(
+                    range,
+                    new Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7.Expression.Integer(2))
+                ]);
+
+        var result = ToFullSyntaxModel.Convert(legacyApplication);
+
+        result.Should().BeOfType<FullTypes.Expression.Application>();
+
+        var application = (FullTypes.Expression.Application)result;
+
+        application.Function.Value.Should().Be(new FullTypes.Expression.Identifier(["Basics"], "add"));
+        application.Arguments.Should().HaveCount(2);
+        application.Arguments[0].Value.Should().Be(new FullTypes.Expression.IntegerLiteral("1"));
+        application.Arguments[1].Value.Should().Be(new FullTypes.Expression.IntegerLiteral("2"));
+    }
+
+    [Fact]
+    public void Empty_legacy_application_is_rejected()
+    {
+        var legacyApplication =
+            new Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7.Expression.Application([]);
+
+        var act =
+            () => ToFullSyntaxModel.Convert(legacyApplication);
+
+        act.Should()
+            .Throw<System.InvalidOperationException>()
+            .WithMessage("*without a function expression*");
+    }
+}

@@ -1,8 +1,8 @@
 using AwesomeAssertions;
 using Nerdbank.Streams;
-using Pine.Core;
 using Pine.Core.Elm.LanguageServer;
 using Pine.Core.Elm.LanguageServer.LanguageServiceInterface;
+using Pine.Core.Functional;
 using Pine.Core.LanguageServerProtocol;
 using Pine.Core.Tests.Elm.LanguageServer;
 using Pine.Elm;

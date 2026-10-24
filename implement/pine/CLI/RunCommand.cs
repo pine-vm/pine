@@ -3,9 +3,10 @@ using Pine.Core.CLI;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.Testing;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.Functional;
 using Pine.Core.IO;
-using Pine.Core.PineVM;
+using Pine.Core.Runtime;
+using Pine.Core.Runtime.IntermediateVM;
 using Pine.Elm.Platform;
 using System;
 using System.Collections.Generic;
@@ -141,7 +142,7 @@ public static class RunCommand
                 recordDiagnostics: false);
 
         using var cancellation = cancellationToken.Register(tracker.Cancel);
-        using var consoleCancellation = CLI.Elm.TestBudgetOptions.RegisterCancellation(tracker);
+        using var consoleCancellation = Elm.TestBudgetOptions.RegisterCancellation(tracker);
         var token = tracker.CancellationToken;
         var stopwatch = Stopwatch.StartNew();
         var compilationDuration = TimeSpan.Zero;

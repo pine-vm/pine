@@ -1,12 +1,11 @@
 using AwesomeAssertions;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Elm.Syntax.Abstract;
+using Pine.Core.Encodings;
 using Pine.Core.Tests.Elm.ElmCompilerTests;
 using System;
 using System.Linq;
 using Xunit;
-
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 
@@ -15,13 +14,13 @@ public class DebugLogRemovalTests
     [Fact]
     public void Fully_applied_call_is_replaced_with_value_argument()
     {
-        var valueArgument = SyntaxTypes.Expression.StringLiteral.Create("value");
+        var valueArgument = Expression.StringLiteral.Create("value");
 
         var application =
-            new SyntaxTypes.Expression.Application(
-                SyntaxTypes.Expression.Identifier.Create(["Debug"], "log"),
+            new Expression.Application(
+                Expression.Identifier.Create(["Debug"], "log"),
                 [
-                SyntaxTypes.Expression.StringLiteral.Create("message"),
+                Expression.StringLiteral.Create("message"),
                 valueArgument
                 ]);
 
@@ -34,9 +33,9 @@ public class DebugLogRemovalTests
     public void Partial_application_is_preserved()
     {
         var application =
-            new SyntaxTypes.Expression.Application(
-                SyntaxTypes.Expression.Identifier.Create(["Debug"], "log"),
-                [SyntaxTypes.Expression.StringLiteral.Create("message")]);
+            new Expression.Application(
+                Expression.Identifier.Create(["Debug"], "log"),
+                [Expression.StringLiteral.Create("message")]);
 
         var rewritten = DebugLogRemoval.RewriteExpression(application);
 
@@ -46,13 +45,13 @@ public class DebugLogRemovalTests
     [Fact]
     public void Nested_fully_applied_call_is_replaced_with_value_argument()
     {
-        var valueArgument = SyntaxTypes.Expression.StringLiteral.Create("value");
+        var valueArgument = Expression.StringLiteral.Create("value");
 
         var application =
-            new SyntaxTypes.Expression.Application(
-                new SyntaxTypes.Expression.Application(
-                    SyntaxTypes.Expression.Identifier.Create(["Debug"], "log"),
-                    [SyntaxTypes.Expression.StringLiteral.Create("message")]),
+            new Expression.Application(
+                new Expression.Application(
+                    Expression.Identifier.Create(["Debug"], "log"),
+                    [Expression.StringLiteral.Create("message")]),
                 [valueArgument]);
 
         var rewritten = DebugLogRemoval.RewriteExpression(application);
@@ -64,22 +63,22 @@ public class DebugLogRemovalTests
     public void Application_after_logged_function_value_is_preserved()
     {
         var functionArgument =
-            SyntaxTypes.Expression.Identifier.Create(["Test"], "function");
+            Expression.Identifier.Create(["Test"], "function");
 
-        var finalArgument = SyntaxTypes.Expression.StringLiteral.Create("argument");
+        var finalArgument = Expression.StringLiteral.Create("argument");
 
         var application =
-            new SyntaxTypes.Expression.Application(
-                SyntaxTypes.Expression.Identifier.Create(["Debug"], "log"),
+            new Expression.Application(
+                Expression.Identifier.Create(["Debug"], "log"),
                 [
-                SyntaxTypes.Expression.StringLiteral.Create("message"),
+                Expression.StringLiteral.Create("message"),
                 functionArgument,
                 finalArgument
                 ]);
 
         var rewritten =
             DebugLogRemoval.RewriteExpression(application)
-            .Should().BeOfType<SyntaxTypes.Expression.Application>().Subject;
+            .Should().BeOfType<Expression.Application>().Subject;
 
         rewritten.Function.Should().BeSameAs(functionArgument);
         rewritten.Arguments.Should().ContainSingle().Which.Should().BeSameAs(finalArgument);
@@ -125,7 +124,7 @@ public class DebugLogRemovalTests
         var loweringResult =
             ElmCompiler.LowerToCompilerModel(
                 testCase.AsFileTree(),
-                rootDeclarations: [Pine.Core.CodeAnalysis.DeclQualifiedName.Create(["Test"], "logged")],
+                rootDeclarations: [Core.CodeAnalysis.DeclQualifiedName.Create(["Test"], "logged")],
                 syntaxOptimization:
                 new ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled
                 {
@@ -136,7 +135,7 @@ public class DebugLogRemovalTests
         var loggedDeclaration =
             loweringResult.CompilerProgram.Functions[
             new Core.Elm.ElmCompilerInDotnet.CompilerModel.FunctionId.Source(
-                Pine.Core.CodeAnalysis.DeclQualifiedName.Create(["Test"], "logged"))];
+                Core.CodeAnalysis.DeclQualifiedName.Create(["Test"], "logged"))];
 
         var application =
             loggedDeclaration.Body

@@ -3,7 +3,9 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
+using Pine.Core.Encodings;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -454,7 +456,7 @@ public static class PineCSharpSyntaxFactory
 
     public static ExpressionSyntax DescribeValueForErrorMessageExpression(
         ExpressionSyntax pineValueExprSyntax) =>
-        InvocationExpressionOnPineVMClass(nameof(Core.Interpreter.IntermediateVM.PineVM.DescribeValueForErrorMessage))
+        InvocationExpressionOnPineVMClass(nameof(Core.Runtime.IntermediateVM.PineVM.DescribeValueForErrorMessage))
         .WithArgumentList(
             SyntaxFactory.ArgumentList(
                 SyntaxFactory.SingletonSeparatedList(

@@ -1,10 +1,12 @@
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Elm.Syntax.Abstract;
+using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
-using AST = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
+using AST = Pine.Core.Elm.Syntax.Abstract;
 using Type = Pine.Core.Elm.ElmCompilerInDotnet.TypeInference.InferredType;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
@@ -20,19 +22,19 @@ public static class FromCanonicalSyntax
         ImmutableHashSet<string> Parameters, FunctionId Owner, ImmutableDictionary<string, BindingId> Scope);
 
     /// <summary>Converts canonical source declarations into resolved compiler expressions.</summary>
-    public static Program Convert(IReadOnlyDictionary<DeclQualifiedName, AST.Declaration> declarations) =>
+    public static Program Convert(IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations) =>
         Lower(declarations).Program;
 
     /// <summary>Converts canonical declarations and retains type evidence for analysis.</summary>
-    public static SourceLoweringResult Lower(IReadOnlyDictionary<DeclQualifiedName, AST.Declaration> declarations)
+    public static SourceLoweringResult Lower(IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations)
     {
         var aliasTypes =
-            declarations.Where(entry => entry.Value is AST.Declaration.AliasDeclaration)
+            declarations.Where(entry => entry.Value is Declaration.AliasDeclaration)
             .ToImmutableDictionary(
                 entry => entry.Key,
                 entry =>
                 {
-                    var alias = ((AST.Declaration.AliasDeclaration)entry.Value).TypeAlias;
+                    var alias = ((Declaration.AliasDeclaration)entry.Value).TypeAlias;
 
                     return
                         new TypeInference.TypeAliasDefinition(
@@ -64,10 +66,10 @@ public static class FromCanonicalSyntax
 
         foreach (var (name, declaration) in declarations)
         {
-            if (declaration is AST.Declaration.AliasDeclaration { TypeAlias.TypeAnnotation: AST.TypeAnnotation.Record })
+            if (declaration is Declaration.AliasDeclaration { TypeAlias.TypeAnnotation: TypeAnnotation.Record })
                 constructorNames.Add(name);
 
-            if (declaration is not AST.Declaration.ChoiceTypeDeclaration choice)
+            if (declaration is not Declaration.ChoiceTypeDeclaration choice)
                 continue;
 
             foreach (var constructor in choice.TypeDeclaration.Constructors)
@@ -87,11 +89,11 @@ public static class FromCanonicalSyntax
             }
         }
 
-        var sourceFunctions = declarations.Where(entry => entry.Value is AST.Declaration.FunctionDeclaration).ToArray();
+        var sourceFunctions = declarations.Where(entry => entry.Value is Declaration.FunctionDeclaration).ToArray();
 
         foreach (var (name, declaration) in sourceFunctions)
         {
-            var function = ((AST.Declaration.FunctionDeclaration)declaration).Function;
+            var function = ((Declaration.FunctionDeclaration)declaration).Function;
 
             if (function.Signature is not null)
             {
@@ -137,13 +139,13 @@ public static class FromCanonicalSyntax
             sourceFunctions.OrderBy(entry => entry.Key).ToImmutableDictionary(
                 entry => (FunctionId)new FunctionId.Source(entry.Key),
                 entry =>
-                rewriter.RewriteFunction(((AST.Declaration.FunctionDeclaration)entry.Value).Function, entry.Key));
+                rewriter.RewriteFunction(((Declaration.FunctionDeclaration)entry.Value).Function, entry.Key));
 
         return
             new(
                 new Program(
                     functions,
-                    declarations.Where(entry => entry.Value is not AST.Declaration.FunctionDeclaration)
+                    declarations.Where(entry => entry.Value is not Declaration.FunctionDeclaration)
                     .ToImmutableDictionary())
                 {
                     BindingNames = rewriter.BindingNames.ToImmutable()
@@ -213,7 +215,7 @@ public static class FromCanonicalSyntax
             return new Expression.ReferenceExpression(reference);
         }
 
-        public Function RewriteFunction(AST.FunctionStruct function, DeclQualifiedName name)
+        public Function RewriteFunction(FunctionStruct function, DeclQualifiedName name)
         {
             m_nextTemporary = 0;
 
@@ -223,7 +225,7 @@ public static class FromCanonicalSyntax
                     new Context(string.Join(".", name.Namespaces), [], [], new FunctionId.Source(name), []));
         }
 
-        private Function RewriteFunction(AST.FunctionStruct function, Context outer)
+        private Function RewriteFunction(FunctionStruct function, Context outer)
         {
             var inferred =
                 TypeInference.InferFunctionDeclarationType(
@@ -416,9 +418,9 @@ public static class FromCanonicalSyntax
 
                     var function =
                         RewriteFunction(
-                            new AST.FunctionStruct(
+                            new FunctionStruct(
                                 null,
-                                new AST.FunctionImplementation("", lambda.Arguments, lambda.Expression)),
+                                new FunctionImplementation("", lambda.Arguments, lambda.Expression)),
                             context with { Owner = lambdaId });
 
                     return
@@ -608,11 +610,11 @@ public static class FromCanonicalSyntax
 
                 switch (declaration)
                 {
-                    case AST.LetDeclaration.LetFunction function:
+                    case LetDeclaration.LetFunction function:
                         names = [function.Function.Declaration.Name];
                         break;
 
-                    case AST.LetDeclaration.LetDestructuring binding:
+                    case LetDeclaration.LetDestructuring binding:
                         names = PatternNames(binding.Pattern);
                         break;
 
@@ -641,7 +643,7 @@ public static class FromCanonicalSyntax
                 {
                     switch (declaration)
                     {
-                        case AST.LetDeclaration.LetFunction function:
+                        case LetDeclaration.LetFunction function:
                             var type =
                                 TypeInference.BuildFunctionTypeFromSignatureOrNull(function.Function)
                                 ?? (function.Function.Declaration.Arguments.Count is 0
@@ -655,7 +657,7 @@ public static class FromCanonicalSyntax
 
                             break;
 
-                        case AST.LetDeclaration.LetDestructuring binding:
+                        case LetDeclaration.LetDestructuring binding:
                             context =
                                 context with
                                 {
@@ -688,7 +690,7 @@ public static class FromCanonicalSyntax
             {
                 switch (declaration)
                 {
-                    case AST.LetDeclaration.LetFunction function:
+                    case LetDeclaration.LetFunction function:
                         Expression value;
 
                         if (function.Function.Declaration.Arguments.Count > 0)
@@ -707,7 +709,7 @@ public static class FromCanonicalSyntax
 
                         break;
 
-                    case AST.LetDeclaration.LetDestructuring binding:
+                    case LetDeclaration.LetDestructuring binding:
                         var fieldBindings = new List<Binding>();
 
                         var pattern =

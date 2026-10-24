@@ -1,0 +1,92 @@
+using AwesomeAssertions;
+using Pine.Core.CodeAnalysis;
+using Pine.Core.Elm;
+using Pine.Core.Functional;
+using Xunit;
+
+using ElmInterpreter = Pine.Core.Elm.Syntax.ElmSyntaxInterpreter;
+
+namespace Pine.Core.Tests.Elm.Syntax.Interpreter;
+
+/// <summary>
+/// Covers <see cref="ElmInterpreter.ParseAndInterpret(string, System.Collections.Generic.IReadOnlyDictionary{DeclQualifiedName, Core.Elm.Syntax.SyntaxModel.Declaration})"/>:
+/// the caller passes the root expression as a string (to be parsed and evaluated) together with
+/// a declarations dictionary resolving any referenced top-level bindings.
+/// </summary>
+public class ParseAndInterpretTests
+{
+    [Fact]
+    public void ParseAndInterpret_integer_literal_returns_integer_value()
+    {
+        var result =
+            ElmInterpreter.ParseAndInterpretAsElmValue(
+                "42",
+                System.Collections
+                .Immutable.ImmutableDictionary<DeclQualifiedName, Core.Elm.Syntax.Concrete.Declaration>.Empty);
+
+        result.Should().Be(Result<Core.Elm.Syntax.ElmInterpretationError, ElmValue>.ok(ElmValue.Integer(42)));
+    }
+
+    [Fact]
+    public void ParseAndInterpret_Pine_builtin_application()
+    {
+        var result =
+            ElmInterpreter.ParseAndInterpretAsElmValue(
+                "Pine_builtin.int_add [ 3, 4 ]",
+                System.Collections
+                .Immutable.ImmutableDictionary<DeclQualifiedName, Core.Elm.Syntax.Concrete.Declaration>.Empty);
+
+        result.Should().Be(Result<Core.Elm.Syntax.ElmInterpretationError, ElmValue>.ok(ElmValue.Integer(7)));
+    }
+
+    [Fact]
+    public void ParseAndInterpret_references_declaration_from_dictionary()
+    {
+        var declarations =
+            InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(
+                """
+                module Test exposing (..)
+
+
+                answer =
+                    Pine_builtin.int_mul [ 6, 7 ]
+                """);
+
+        var result = ElmInterpreter.ParseAndInterpretAsElmValue("answer", declarations);
+
+        result.Should().Be(Result<Core.Elm.Syntax.ElmInterpretationError, ElmValue>.ok(ElmValue.Integer(42)));
+    }
+
+    [Fact]
+    public void ParseAndInterpret_multi_line_expression_with_let()
+    {
+        var result =
+            ElmInterpreter.ParseAndInterpretAsElmValue(
+                """
+                let
+                    a =
+                        10
+
+                    b =
+                        20
+                in
+                Pine_builtin.int_add [ a, b ]
+                """,
+                System.Collections
+                .Immutable.ImmutableDictionary<DeclQualifiedName, Core.Elm.Syntax.Concrete.Declaration>.Empty);
+
+        result.Should().Be(Result<Core.Elm.Syntax.ElmInterpretationError, ElmValue>.ok(ElmValue.Integer(30)));
+    }
+
+    [Fact]
+    public void ParseAndInterpret_invalid_syntax_returns_error()
+    {
+        var result =
+            ElmInterpreter.ParseAndInterpretAsElmValue(
+                "let in",
+                System.Collections
+                .Immutable.ImmutableDictionary<DeclQualifiedName, Core.Elm.Syntax.Concrete.Declaration>.Empty);
+
+        result.IsErrOrNull().Should().NotBeNull();
+    }
+}

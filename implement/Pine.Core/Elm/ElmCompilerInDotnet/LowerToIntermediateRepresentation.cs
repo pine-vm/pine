@@ -1,10 +1,10 @@
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Elm.Syntax.Abstract;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 
 using Model = Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
 using IR = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
-using AST = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -16,7 +16,7 @@ public static class LowerToIntermediateRepresentation
 {
     /// <summary>Lowers source declarations. No unresolved or string-bound IR is ever returned.</summary>
     public static ImmutableDictionary<Model.FunctionId, IR.FunctionStruct> Lower(
-        IReadOnlyDictionary<DeclQualifiedName, AST.Declaration> declarations) =>
+        IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations) =>
         Model.ToIntermediateRepresentation.Convert(
             Model.LambdaLifting.Lift(Model.FromCanonicalSyntax.Convert(declarations)));
 }

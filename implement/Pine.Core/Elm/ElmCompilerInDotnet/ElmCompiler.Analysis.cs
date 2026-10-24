@@ -1,21 +1,23 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Concrete;
 using Pine.Core.Files;
+using Pine.Core.Functional;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 
-using Syntax = Pine.Core.Elm.ElmSyntax.SyntaxModel;
-using Abstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
+using Concrete = Pine.Core.Elm.Syntax.Concrete;
+using Abstract = Pine.Core.Elm.Syntax.Abstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
 /// <summary>A source-located frontend diagnostic, independent of rendering and executable emission.</summary>
 public sealed record ElmCompilerDiagnostic(
     string FilePath,
-    Syntax.Range Range,
+    Concrete.Range Range,
     string Message,
     string Code,
     DeclQualifiedName? Declaration = null)
@@ -25,12 +27,12 @@ public sealed record ElmCompilerDiagnostic(
 }
 
 /// <summary>A source location related to a frontend error, without coupling the compiler to an editor protocol.</summary>
-public sealed record ElmCompilerDiagnosticRelatedLocation(string FilePath, Syntax.Range Range, string Message);
+public sealed record ElmCompilerDiagnosticRelatedLocation(string FilePath, Concrete.Range Range, string Message);
 
 /// <summary>Source declaration information; unavailable type information is accompanied by diagnostics.</summary>
 public sealed record ElmDeclarationQueryResult(
     string FilePath,
-    Syntax.Node<Syntax.Declaration> Declaration,
+    Node<Declaration> Declaration,
     TypeInference.InferredType? Type,
     IReadOnlyList<ElmCompilerDiagnostic> Diagnostics);
 
@@ -40,7 +42,7 @@ public partial class ElmCompiler
     public static IReadOnlyList<ElmCompilerDiagnostic> AnalyzeApplication(
         FileTree sources,
         bool includeBundledKernelModules = true,
-        IDictionary<string, Result<ElmSyntaxParseError, Syntax.File>>? sourceParseCache = null,
+        IDictionary<string, Result<ParseError, File>>? sourceParseCache = null,
         Canonicalization.DeclarationCache? canonicalizationCache = null) =>
         AnalyzeSources(
             sources,
@@ -54,7 +56,7 @@ public partial class ElmCompiler
     /// <summary>Analyzes selected project sources while preserving resolved package visibility.</summary>
     public static IReadOnlyList<ElmCompilerDiagnostic> AnalyzeApplication(
         ElmResolvedBuild build,
-        IDictionary<string, Result<ElmSyntaxParseError, Syntax.File>>? sourceParseCache = null,
+        IDictionary<string, Result<ParseError, File>>? sourceParseCache = null,
         Canonicalization.DeclarationCache? canonicalizationCache = null)
     {
         var applicationPaths =
@@ -90,9 +92,9 @@ public partial class ElmCompiler
         FileTree sources,
         DeclQualifiedName name,
         bool includeBundledKernelModules = true,
-        IDictionary<string, Result<ElmSyntaxParseError, Syntax.File>>? sourceParseCache = null,
+        IDictionary<string, Result<ParseError, File>>? sourceParseCache = null,
         Canonicalization.DeclarationCache? canonicalizationCache = null,
-        IReadOnlyDictionary<string, Syntax.File>? parsedSources = null,
+        IReadOnlyDictionary<string, File>? parsedSources = null,
         IReadOnlySet<string>? bundledModuleNames = null)
     {
         var parseDiagnostics = new List<ElmCompilerDiagnostic>();
@@ -106,7 +108,7 @@ public partial class ElmCompiler
                 .Where(
                     node =>
                     DeclQualifiedName.Create(
-                        Syntax.Module.GetModuleName(source.File.ModuleDefinition.Value).Value,
+                        Module.GetModuleName(source.File.ModuleDefinition.Value).Value,
                         Canonicalization.GetDeclarationName(node.Value)).Equals(name))
                 .Select(node => (source.Path, Declaration: node)))
             .ToList();
@@ -149,7 +151,7 @@ public partial class ElmCompiler
         var type = InferDeclarationType(name, declarations);
 
         if (type is null && diagnostics.Count is 0 &&
-            candidates[0].Declaration.Value is Syntax.Declaration.FunctionDeclaration)
+            candidates[0].Declaration.Value is Declaration.FunctionDeclaration)
         {
             diagnostics.Add(
                 new(
@@ -172,7 +174,7 @@ public partial class ElmCompiler
     public static Result<string, ElmDeclarationQueryResult> QueryDeclaration(
         ElmResolvedBuild build,
         DeclQualifiedName name,
-        IDictionary<string, Result<ElmSyntaxParseError, Syntax.File>>? sourceParseCache = null,
+        IDictionary<string, Result<ParseError, File>>? sourceParseCache = null,
         Canonicalization.DeclarationCache? canonicalizationCache = null) =>
         QueryDeclaration(
             build.Sources,
@@ -187,9 +189,9 @@ public partial class ElmCompiler
         FileTree sources,
         IReadOnlySet<string> applicationPaths,
         bool includeBundledKernelModules,
-        IDictionary<string, Result<ElmSyntaxParseError, Syntax.File>>? sourceParseCache,
+        IDictionary<string, Result<ParseError, File>>? sourceParseCache,
         Canonicalization.DeclarationCache? canonicalizationCache,
-        IReadOnlyDictionary<string, Syntax.File>? parsedSources = null,
+        IReadOnlyDictionary<string, File>? parsedSources = null,
         bool validateSourceImports = true,
         IReadOnlySet<string>? bundledModuleNames = null)
     {
@@ -203,7 +205,7 @@ public partial class ElmCompiler
         var duplicateScopes =
             parsed.GroupBy(
                 source =>
-                string.Join(".", Syntax.Module.GetModuleName(source.File.ModuleDefinition.Value).Value))
+                string.Join(".", Module.GetModuleName(source.File.ModuleDefinition.Value).Value))
             .Where(group => group.Count() > 1).Select(group => group.Key).ToHashSet(StringComparer.Ordinal);
 
         var candidates =
@@ -213,7 +215,7 @@ public partial class ElmCompiler
                     (source.Path,
                     Node: node,
                     Name: DeclQualifiedName.Create(
-                        Syntax.Module.GetModuleName(source.File.ModuleDefinition.Value).Value,
+                        Module.GetModuleName(source.File.ModuleDefinition.Value).Value,
                         Canonicalization.GetDeclarationName(node.Value)))))
             .ToList();
 
@@ -223,7 +225,7 @@ public partial class ElmCompiler
 
         foreach (var source in parsed.Where(source => applicationPaths.Contains(source.Path)))
         {
-            var namespaceName = string.Join(".", Syntax.Module.GetModuleName(source.File.ModuleDefinition.Value).Value);
+            var namespaceName = string.Join(".", Module.GetModuleName(source.File.ModuleDefinition.Value).Value);
 
             if (duplicateScopes.Contains(namespaceName))
             {
@@ -288,7 +290,7 @@ public partial class ElmCompiler
             var causePath =
                 parsed.First(
                     source =>
-                    Syntax.Module.GetModuleName(source.File.ModuleDefinition.Value).Value.SequenceEqual(
+                    Module.GetModuleName(source.File.ModuleDefinition.Value).Value.SequenceEqual(
                         cause.Name.Namespaces)).Path;
 
             diagnostics.Add(
@@ -330,7 +332,7 @@ public partial class ElmCompiler
     }
 
     private static IReadOnlyList<ElmCompilerDiagnostic> TypeDiagnostics(
-        IReadOnlyList<(string Path, Syntax.File File)> parsed,
+        IReadOnlyList<(string Path, File File)> parsed,
         DeclarationCanonicalizationResult canonicalized,
         ImmutableDictionary<DeclQualifiedName, Abstract.Declaration> declarations,
         IReadOnlySet<string>? bundledModuleNames)
@@ -389,7 +391,7 @@ public partial class ElmCompiler
         foreach (var (name, canonical) in canonicalized.Declarations)
         {
             if (HasNamingErrors(name, canonicalized) ||
-                canonical.Value.Value is not Syntax.Declaration.FunctionDeclaration sourceFunction ||
+                canonical.Value.Value is not Declaration.FunctionDeclaration sourceFunction ||
                 declarations[name] is not Abstract.Declaration.FunctionDeclaration function ||
                 function.Function.Signature is null)
             {
@@ -426,7 +428,7 @@ public partial class ElmCompiler
                 var path =
                     parsed.First(
                         source =>
-                        Syntax.Module.GetModuleName(source.File.ModuleDefinition.Value).Value.SequenceEqual(
+                        Module.GetModuleName(source.File.ModuleDefinition.Value).Value.SequenceEqual(
                             name.Namespaces)).Path;
 
                 diagnostics.Add(
@@ -451,11 +453,11 @@ public partial class ElmCompiler
             .Where(
                 file => file is not null &&
                     file.Declarations.Any(
-                        declaration => declaration.Value is Syntax.Declaration.ChoiceTypeDeclaration
+                        declaration => declaration.Value is Declaration.ChoiceTypeDeclaration
                         {
                             TypeDeclaration.Name.Value: "String"
                         }))
-            .Select(file => string.Join(".", Syntax.Module.GetModuleName(file!.ModuleDefinition.Value).Value))
+            .Select(file => string.Join(".", Module.GetModuleName(file!.ModuleDefinition.Value).Value))
             .ToHashSet(StringComparer.Ordinal));
 
     private static HashSet<string> BundledModuleNames() =>
@@ -500,9 +502,9 @@ public partial class ElmCompiler
         return null;
     }
 
-    private static Result<ElmSyntaxParseError, Syntax.File> ParseSource(
+    private static Result<ParseError, File> ParseSource(
         string text,
-        IDictionary<string, Result<ElmSyntaxParseError, Syntax.File>>? cache)
+        IDictionary<string, Result<ParseError, File>>? cache)
     {
         if (cache is not null && cache.TryGetValue(text, out var cached))
             return cached;
@@ -514,12 +516,12 @@ public partial class ElmCompiler
         return result;
     }
 
-    private static List<(string Path, Syntax.File File)> ReadSourceFiles(
+    private static List<(string Path, File File)> ReadSourceFiles(
         FileTree sources,
         bool includeBundledKernelModules,
-        IDictionary<string, Result<ElmSyntaxParseError, Syntax.File>>? cache,
+        IDictionary<string, Result<ParseError, File>>? cache,
         List<ElmCompilerDiagnostic> diagnostics,
-        IReadOnlyDictionary<string, Syntax.File>? parsedSources = null)
+        IReadOnlyDictionary<string, File>? parsedSources = null)
     {
         var combined =
             includeBundledKernelModules
@@ -528,7 +530,7 @@ public partial class ElmCompiler
             :
             sources;
 
-        var files = new List<(string Path, Syntax.File File)>();
+        var files = new List<(string Path, File File)>();
 
         foreach (var source in combined.EnumerateFilesTransitive()
             .Where(source => source.path[^1].EndsWith(".elm", StringComparison.OrdinalIgnoreCase)))
@@ -541,7 +543,7 @@ public partial class ElmCompiler
                 parsedSources is not null && header is not null &&
                 parsedSources.TryGetValue(string.Join(".", header.ModuleName), out var supplied)
                 ?
-                Result<ElmSyntaxParseError, Syntax.File>.ok(supplied)
+                Result<ParseError, File>.ok(supplied)
                 :
                 ParseSource(text, cache);
 
@@ -571,7 +573,7 @@ public partial class ElmCompiler
     }
 
     private static List<ElmCompilerDiagnostic> DeclarationDiagnostics(
-        IReadOnlyList<(string Path, Syntax.File File)> sources,
+        IReadOnlyList<(string Path, File File)> sources,
         DeclarationCanonicalizationResult canonicalized)
     {
         var files = sources.Select(source => source.File).ToArray();
@@ -579,7 +581,7 @@ public partial class ElmCompiler
         var paths =
             sources.GroupBy(
                 source =>
-                string.Join(".", Syntax.Module.GetModuleName(source.File.ModuleDefinition.Value).Value))
+                string.Join(".", Module.GetModuleName(source.File.ModuleDefinition.Value).Value))
             .ToDictionary(group => group.Key, group => group.First().Path, StringComparer.Ordinal);
 
         var diagnostics = new List<ElmCompilerDiagnostic>();

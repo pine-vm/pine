@@ -1,8 +1,10 @@
 using AwesomeAssertions;
 using Pine.Core.Addressing;
 using Pine.Core.Elm.LanguageServer;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.Functional;
 using Pine.Core.LanguageServerProtocol;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -173,7 +175,7 @@ public class InvocationCacheStatisticsLogTests
     private static IEnumerable<string> Reports(IEnumerable<string> logs) =>
         logs.Where(message => message.StartsWith("Invocation-cache statistics (", StringComparison.Ordinal));
 
-    private static Pine.Core.Elm.LanguageServer.LanguageServer CreateServer(
+    private static Core.Elm.LanguageServer.LanguageServer CreateServer(
         ILanguageServiceSessionFactory factory, Action<string> log, TimeProvider clock) =>
         new(
             factory,
@@ -185,7 +187,7 @@ public class InvocationCacheStatisticsLogTests
             logDelegate: log,
             timeProvider: clock);
 
-    private static void Initialize(Pine.Core.Elm.LanguageServer.LanguageServer server) =>
+    private static void Initialize(Core.Elm.LanguageServer.LanguageServer server) =>
         server.Initialize(
             new InitializeParams(
                 ProcessId: null,

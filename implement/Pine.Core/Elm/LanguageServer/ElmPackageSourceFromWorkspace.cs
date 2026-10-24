@@ -1,6 +1,7 @@
 using Pine.Core.Elm.Elm019;
-using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Elm.LanguageServer.LanguageServiceInterface;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Functional;
 using System;
 using System.Collections.Generic;
 using System.Linq;

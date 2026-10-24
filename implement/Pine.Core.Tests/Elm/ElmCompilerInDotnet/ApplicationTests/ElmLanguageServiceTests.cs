@@ -4,7 +4,9 @@ using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.IntermediateVM;
+using Pine.Core.Tests.Testing;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -443,7 +445,7 @@ public class ElmLanguageServiceTests
         ElmInteractiveEnvironment.ParsedInteractiveEnvironment env,
         string name,
         ReportEnteredStackFrame? reportEnteredStackFrame = null,
-        Core.Interpreter.IntermediateVM.PineVM? vm = null)
+        Core.Runtime.IntermediateVM.PineVM? vm = null)
     {
         var declarationValue = GetTestFunction(env, name);
 
@@ -483,10 +485,10 @@ public class ElmLanguageServiceTests
     private PineValue EvaluateZeroArgTestDeclaration(
         string name,
         ReportEnteredStackFrame? reportEnteredStackFrame = null,
-        Core.Interpreter.IntermediateVM.PineVM? vm = null) =>
+        Core.Runtime.IntermediateVM.PineVM? vm = null) =>
         EvaluateZeroArgTestDeclaration(s_env.Value, name, reportEnteredStackFrame, vm);
 
-    private readonly Core.Interpreter.IntermediateVM.PineVM _vm =
+    private readonly Core.Runtime.IntermediateVM.PineVM _vm =
         ElmCompilerTestHelper.PineVMForProfiling(
             reportFunctionApplication: _ => { },
             enableTailRecursionOptimization: true);
@@ -560,7 +562,7 @@ public class ElmLanguageServiceTests
         string functionName,
         PineValue[] arguments,
         ReportEnteredStackFrame? reportGenericRecordInvocation = null,
-        Core.Interpreter.IntermediateVM.PineVM? vm = null)
+        Core.Runtime.IntermediateVM.PineVM? vm = null)
     {
         var env = s_env.Value;
 
@@ -610,7 +612,7 @@ public class ElmLanguageServiceTests
 
         public int UpdateCount { get; private set; }
 
-        public static Core.Interpreter.IntermediateVM.PineVM CreateTrackingVM() =>
+        public static Core.Runtime.IntermediateVM.PineVM CreateTrackingVM() =>
             ElmCompilerTestHelper.PineVMForProfiling(
                 _ => { },
                 enableTailRecursionOptimization: true,
@@ -1184,7 +1186,7 @@ public class ElmLanguageServiceTests
         var interpreterStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         var result =
-            Core.Elm.ElmSyntax.ElmSyntaxInterpreter.InterpretAsElmValue(
+            Core.Elm.Syntax.ElmSyntaxInterpreter.InterpretAsElmValue(
                 rootExpression,
                 preparedApp);
 
@@ -1218,7 +1220,7 @@ public class ElmLanguageServiceTests
                 includeDeclaration: true);
 
         var result =
-            Core.Elm.ElmSyntax.ElmSyntaxInterpreter.InterpretAsElmValue(
+            Core.Elm.Syntax.ElmSyntaxInterpreter.InterpretAsElmValue(
                 rootExpression,
                 s_referencesScenarioPreparedApp.Value);
 
@@ -1262,7 +1264,7 @@ public class ElmLanguageServiceTests
                     positionColumn: column);
 
             var result =
-                Core.Elm.ElmSyntax.ElmSyntaxInterpreter.InterpretAsElmValue(
+                Core.Elm.Syntax.ElmSyntaxInterpreter.InterpretAsElmValue(
                     rootExpression,
                     preparedApp);
 
@@ -1408,7 +1410,7 @@ public class ElmLanguageServiceTests
         var interpreterStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         var result =
-            Core.Elm.ElmSyntax.ElmSyntaxInterpreter.InterpretAsElmValue(
+            Core.Elm.Syntax.ElmSyntaxInterpreter.InterpretAsElmValue(
                 rootExpression,
                 preparedApp);
 
@@ -1435,7 +1437,7 @@ public class ElmLanguageServiceTests
     /// <see cref="ChallengingReferencesScenario_ModuleCText"/>, then a
     /// <c>TextDocumentReferencesRequest</c> for <c>helper</c>) but compiles the
     /// language service to Pine bytecode and runs it on the
-    /// <see cref="Core.Interpreter.IntermediateVM.PineVM"/> — like
+    /// <see cref="Runtime.IntermediateVM.PineVM"/> — like
     /// <see cref="References_request_finds_usage_across_modules"/>. It asserts the
     /// same rendered response as the interpreter analog
     /// (<see cref="ChallengingReferencesScenario_ExpectedResponse"/>) and, in
@@ -1583,7 +1585,7 @@ public class ElmLanguageServiceTests
     /// instead of a references request, issues a
     /// <c>TextDocumentRenameRequest</c> for <c>helper</c>. It compiles the
     /// language service to Pine bytecode, runs it on the
-    /// <see cref="Core.Interpreter.IntermediateVM.PineVM"/>, and asserts that the
+    /// <see cref="Runtime.IntermediateVM.PineVM"/>, and asserts that the
     /// resulting <c>WorkspaceEdit</c> covers both the declaration site and all
     /// usage sites of <c>helper</c>. It also asserts the aggregated
     /// evaluation-work-counter snapshots.
@@ -2073,7 +2075,7 @@ public class ElmLanguageServiceTests
     /// expensive <see cref="ElmSyntaxInterpreter.PrepareModules(IReadOnlyList{string})"/>
     /// step therefore runs only once and is reusable for arbitrary scenario inputs.
     /// </summary>
-    private static readonly Lazy<Core.Elm.ElmSyntax.ElmSyntaxInterpreter.Prepared> s_referencesScenarioPreparedApp =
+    private static readonly Lazy<Core.Elm.Syntax.ElmSyntaxInterpreter.Prepared> s_referencesScenarioPreparedApp =
         new(
             () =>
             {
@@ -2084,7 +2086,7 @@ public class ElmLanguageServiceTests
                     };
 
                 return
-                    Core.Elm.ElmSyntax.ElmSyntaxInterpreter.PrepareModules(modulesWithWrapper)
+                    Core.Elm.Syntax.ElmSyntaxInterpreter.PrepareModules(modulesWithWrapper)
                     .Extract(err => throw new Exception("Failed to prepare modules: " + err));
             });
 

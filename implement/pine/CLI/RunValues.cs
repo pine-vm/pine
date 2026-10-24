@@ -1,13 +1,13 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-using AST = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
+using AST = Pine.Core.Elm.Syntax.Abstract;
 using Type = Pine.Core.Elm.ElmCompilerInDotnet.TypeInference.InferredType;
 
 namespace Pine.CLI;
@@ -118,12 +118,12 @@ internal static class RunValues
                 return ElmValue.ListInstance(items);
 
             case AST.Expression.TupledExpression tuple:
-                return ElmValue.ListInstance(tuple.Elements.Select(Literal).ToArray());
+                return ElmValue.ListInstance([.. tuple.Elements.Select(Literal)]);
 
             case AST.Expression.RecordExpr record:
                 return
                     ElmValue.RecordInstance(
-                        record.Fields.Select(field => (field.FieldName, Literal(field.Value))).ToArray());
+                        [.. record.Fields.Select(field => (field.FieldName, Literal(field.Value)))]);
 
             case AST.Expression.Identifier identifier:
                 return Constructor(identifier, []);
@@ -352,11 +352,11 @@ internal static class RunValues
             case ElmValue.ElmRecord record:
                 return
                     new Type.RecordType(
-                        record.Fields.Select(field => (field.FieldName, ValueType(field.Value))).ToArray());
+                        [.. record.Fields.Select(field => (field.FieldName, ValueType(field.Value)))]);
 
             case ElmValue.ElmList list:
                 if (ElmValue.ElmListItemsLookLikeTupleItems(list.Items) is true)
-                    return new Type.TupleType(list.Items.Select(ValueType).ToArray());
+                    return new Type.TupleType([.. list.Items.Select(ValueType)]);
 
                 Type element = new Type.TypeVariable("_empty");
 

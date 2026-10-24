@@ -1,7 +1,7 @@
 using Pine.Core.CLI;
 using Pine.Core.Elm;
 using Pine.Core.Elm.Testing;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.Runtime.IntermediateVM;
 using Spectre.Console;
 using System;
 using System.Collections.Generic;
@@ -13,7 +13,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 
-using IntermediatePineVM = Pine.Core.Interpreter.IntermediateVM.PineVM;
+using IntermediatePineVM = Pine.Core.Runtime.IntermediateVM.PineVM;
 
 namespace Pine.CLI.Elm;
 

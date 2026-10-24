@@ -2,9 +2,9 @@
 
 To serve various applications working with Elm syntax, the Pine project implements the following Elm syntax models:
 
-+ Concrete syntax model, namespace current `SyntaxModel`, future `ElmSyntaxConcrete`
-+ Abstract syntax model, namespace `ElmSyntaxAbstract`
-+ stil4m/elm-syntax version 7.*, namespace `Stil4mElmSyntax7`
++ Concrete syntax model, namespace `Pine.Core.Elm.Syntax.Concrete`
++ Abstract syntax model, namespace `Pine.Core.Elm.Syntax.Abstract`
++ stil4m/elm-syntax version 7.*, namespace `Pine.Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7`
 
 
 ## Concrete Syntax Model
@@ -22,7 +22,7 @@ For example, the `elm format` subcommand is designed to be consistent with the `
 
 ## Abstract Syntax Model
 
-The abstract syntax model is optimized for use in an interpreter or as input for compilation into lower-level languages. It lives in the namespace `Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract`.
+The abstract syntax model is optimized for use in an interpreter or as input for compilation into lower-level languages.
 
 Compared to the concrete model, it deliberately drops everything that only matters for round-tripping source text:
 
@@ -54,10 +54,11 @@ The model is designed for an interpreter that operates over `PineValue`. To avoi
 
 ### Converting from the concrete model
 
-Use `ConvertFromConcrete` to obtain an abstract tree from a parsed concrete `SyntaxModel` tree. It exposes entry points for each major syntactic category (`FromFile`, `FromModule`, `FromImport`, `FromExposing`, `FromDeclaration`, `FromTypeAnnotation`, `FromPattern`, `FromExpression`). The converter performs the paren unwrapping, literal normalization, leading-dot stripping for record-access functions, and `PineValue` precomputation described above. Its behavior — including the literal normalizations — is covered by `ElmSyntaxAbstractTests.ConvertFromConcreteTests`.
+Use `ConvertFromConcrete` to convert syntax nodes from `Pine.Core.Elm.Syntax.Concrete` to `Pine.Core.Elm.Syntax.Abstract`.
+`ConvertToConcrete` converts from `Pine.Core.Elm.Syntax.Abstract` to `Pine.Core.Elm.Syntax.Concrete` while filling the locations and ranges of syntax nodes with zeroes.
 
-The Elm compiler canonicalizes concrete syntax while source ranges are still available for diagnostics, then converts directly to abstract syntax for optimization and type inference. Compiler passes must not round-trip through the legacy syntax model. Source-oriented features, such as applying inferred annotations, retain the original concrete file for output.
+The Elm compiler canonicalizes concrete syntax while keeping source ranges available for diagnostics, then converts directly to abstract syntax for optimization and type inference. Compiler passes must not round-trip through the legacy syntax model. Source-oriented features, such as applying inferred annotations, retain the original concrete file for output.
 
 ## Stil4mElmSyntax7
 
-The syntax model in the namespace `Stil4mElmSyntax7` was the first one implemented and originally used in more applications. Later, we split the syntax model into concrete and abstract forms, and since then `Stil4mElmSyntax7` has only been used for backward compatibility with certain tools.
+The syntax model in the namespace `Stil4mElmSyntax7` was the first one implemented and originally used in more applications. Later, we split the syntax model into concrete and abstract forms, and since then, `Stil4mElmSyntax7` has only been used for backward compatibility with certain tools.

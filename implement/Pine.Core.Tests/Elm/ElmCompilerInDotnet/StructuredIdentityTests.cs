@@ -1,10 +1,14 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Abstract;
+using Pine.Core.Encodings;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
 using Pine.Core.Tests.Elm.ElmCompilerTests;
 using System;
 using System.Collections.Generic;
@@ -14,7 +18,6 @@ using Xunit;
 
 using Model = Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
 using IR = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
-using Source = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 using Shape = Pine.Core.Elm.ElmCompilerInDotnet.StructuralType;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
@@ -189,9 +192,9 @@ public class StructuredIdentityTests
         foreach (var (id, function) in first.Functions)
             second.Functions[id].Should().Be(function);
 
-        Model.LambdaLifting.Lift(first).Functions.Should().BeEquivalentTo(first.Functions);
+        LambdaLifting.Lift(first).Functions.Should().BeEquivalentTo(first.Functions);
 
-        Model.LambdaLifting.Lift(first with { BindingNames = [] })
+        LambdaLifting.Lift(first with { BindingNames = [] })
             .Functions.Should().BeEquivalentTo(first.Functions);
     }
 
@@ -205,17 +208,17 @@ public class StructuredIdentityTests
                 root x = (\x -> x) x
                 """).Extract(error => throw new InvalidOperationException(error.ToString()));
 
-        var declaration = Source.ConvertFromConcrete.FromDeclaration(file.Declarations.Single().Value);
+        var declaration = ConvertFromConcrete.FromDeclaration(file.Declarations.Single().Value);
 
         var converted =
             FromCanonicalSyntax.Convert(
-                ImmutableDictionary<DeclQualifiedName, Source.Declaration>.Empty.Add(Name("Main", "root"), declaration));
+                ImmutableDictionary<DeclQualifiedName, Declaration>.Empty.Add(Name("Main", "root"), declaration));
 
         var root = converted.Functions[new FunctionId.Source(Name("Main", "root"))];
-        var outer = ((Pattern.VarPattern)root.Parameters.Single()).Binding;
+        var outer = ((Model.Pattern.VarPattern)root.Parameters.Single()).Binding;
         var application = (Model.Expression.Application)root.Body;
         var lambda = (Model.Expression.Lambda)application.Function;
-        var inner = ((Pattern.VarPattern)lambda.Parameters.Single()).Binding;
+        var inner = ((Model.Pattern.VarPattern)lambda.Parameters.Single()).Binding;
         inner.Should().NotBe(outer);
         ((Reference.Local)((Model.Expression.ReferenceExpression)lambda.Body).Reference).Binding.Should().Be(inner);
 
@@ -226,14 +229,14 @@ public class StructuredIdentityTests
     [Fact]
     public void Structured_identity_expression_values_compare_structurally_across_independent_conversion()
     {
-        const string source =
+        const string Source =
             """
             module Main exposing (root)
             root captured = \argument -> ( captured, argument, [ captured ] )
             """;
 
-        var first = Lower(source);
-        var second = Lower(source);
+        var first = Lower(Source);
+        var second = Lower(Source);
 
         foreach (var (id, function) in first.Functions)
         {
@@ -245,7 +248,7 @@ public class StructuredIdentityTests
     [Fact]
     public void Structured_identity_SCC_memoization_misses_only_changed_declaration_and_dependents()
     {
-        const string source =
+        const string Source =
             """
             module Main exposing (root, unrelated)
             shared x = x + 1
@@ -256,8 +259,8 @@ public class StructuredIdentityTests
             """;
 
         var roots = new[] { Name("Main", "root"), Name("Main", "unrelated") };
-        var first = Lower(source, roots);
-        var second = Lower(source.Replace("x + 1", "x + 2", StringComparison.Ordinal), roots);
+        var first = Lower(Source, roots);
+        var second = Lower(Source.Replace("x + 1", "x + 2", StringComparison.Ordinal), roots);
         var cache = new Dictionary<SccCompilationInput, ImmutableDictionary<FunctionId, CompiledCallable>>();
         var misses = new List<string>();
         var hits = new List<string>();
@@ -273,7 +276,7 @@ public class StructuredIdentityTests
             }
 
             misses.Add(name);
-            var result = Model.Compilation.CompileScc(input);
+            var result = Compilation.CompileScc(input);
 
             if (result.IsOkOrNull() is { } output)
                 cache.Add(input, output);
@@ -281,13 +284,13 @@ public class StructuredIdentityTests
             return result;
         }
 
-        Model.Compilation.Compile(first, compileScc: Worker)
+        Compilation.Compile(first, compileScc: Worker)
             .Extract(error => throw new InvalidOperationException(error.ToString()));
 
         misses.Should().HaveCount(5);
         misses.Clear();
 
-        Model.Compilation.Compile(second, compileScc: Worker)
+        Compilation.Compile(second, compileScc: Worker)
             .Extract(error => throw new InvalidOperationException(error.ToString()));
 
         misses.Should().BeEquivalentTo(["shared", "left", "root"]);
@@ -297,14 +300,14 @@ public class StructuredIdentityTests
     [Fact]
     public void Structured_identity_repeated_semantic_AST_reuses_every_SCC_even_when_source_locations_move()
     {
-        const string source =
+        const string Source =
             """
             module Main exposing (root)
             root captured = \argument -> captured + argument
             """;
 
-        var first = Lower(source);
-        var second = Lower(source.Replace("root captured", "\n-- moved\nroot captured", StringComparison.Ordinal));
+        var first = Lower(Source);
+        var second = Lower(Source.Replace("root captured", "\n-- moved\nroot captured", StringComparison.Ordinal));
         var requests = new HashSet<SccCompilationInput>();
         var repeated = 0;
 
@@ -313,13 +316,13 @@ public class StructuredIdentityTests
             if (!requests.Add(input))
                 repeated++;
 
-            return Model.Compilation.CompileScc(input);
+            return Compilation.CompileScc(input);
         }
 
-        Model.Compilation.Compile(first, compileScc: Worker)
+        Compilation.Compile(first, compileScc: Worker)
             .Extract(error => throw new InvalidOperationException(error.ToString()));
 
-        Model.Compilation.Compile(second, compileScc: Worker)
+        Compilation.Compile(second, compileScc: Worker)
             .Extract(error => throw new InvalidOperationException(error.ToString()));
 
         repeated.Should().Be(first.Functions.Count);
@@ -352,9 +355,9 @@ public class StructuredIdentityTests
 
         value.Should().Be(IntegerEncoding.EncodeSignedInteger(42));
         var function = pipeline.CompilerProgram.Functions[new FunctionId.Source(Name("Main", "select"))];
-        var pattern = function.Parameters[1].Should().BeOfType<Pattern.VarPattern>().Subject;
+        var pattern = function.Parameters[1].Should().BeOfType<Model.Pattern.VarPattern>().Subject;
         pattern.Binding.Should().BeOfType<BindingId.Temporary>();
-        typeof(Pattern.VarPattern).GetProperty("Name").Should().BeNull();
+        typeof(Model.Pattern.VarPattern).GetProperty("Name").Should().BeNull();
         ProgramValidation.Validate(pipeline.CompilerProgram);
     }
 
@@ -384,20 +387,20 @@ public class StructuredIdentityTests
             .OnlyContain(name => name.All(character => char.IsAsciiLetterOrDigit(character) || character == '_'));
 
         names.Functions.Values.Intersect(names.Bindings.Values, StringComparer.Ordinal).Should().BeEmpty();
-        var rendered = Model.Rendering.Render(program, names);
-        Model.Rendering.Render(program).Should().Be(rendered);
+        var rendered = Rendering.Render(program, names);
+        Rendering.Render(program).Should().Be(rendered);
         rendered.Should().Contain("function_Main_root").And.Contain("lifted").And.Contain("binding_captured");
 
         var renamed =
             program with { BindingNames = program.BindingNames.ToImmutableDictionary(entry => entry.Key, _ => "const") };
 
-        Model.Rendering.Render(renamed).Should().NotBe(rendered);
+        Rendering.Render(renamed).Should().NotBe(rendered);
 
         var first =
-            Model.Compilation.Compile(program).Extract(error => throw new InvalidOperationException(error.ToString()));
+            Compilation.Compile(program).Extract(error => throw new InvalidOperationException(error.ToString()));
 
         var second =
-            Model.Compilation.Compile(renamed).Extract(error => throw new InvalidOperationException(error.ToString()));
+            Compilation.Compile(renamed).Extract(error => throw new InvalidOperationException(error.ToString()));
 
         foreach (var (id, artifact) in first)
             second[id].Should().Be(artifact);
@@ -438,7 +441,7 @@ public class StructuredIdentityTests
         var evaluated =
             ElmSourceCompilation.EvaluateZeroParameterRoots(
                 compilation.compiledEnvValue,
-                Core.Interpreter.DirectInterpreter.WithLocalEvalCache(new PineVMParseCache()))
+                DirectInterpreter.WithLocalEvalCache(new PineVMParseCache()))
             .Extract(error => throw new InvalidOperationException(error));
 
         var environment =

@@ -1,26 +1,27 @@
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using Pine.Core.Elm.Syntax.Abstract;
+using Pine.Core.Elm.Syntax.Concrete;
 using System.Collections.Generic;
 using System.Linq;
 
-using Abstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
-using Concrete = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Abstract = Pine.Core.Elm.Syntax.Abstract;
+using Stil4mElmSyntax7 = Pine.Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 
 internal static class AbstractSyntaxTestConversion
 {
-    public static Abstract.File AbsFile(Concrete.File file) =>
-        Abstract.ConvertFromConcrete.FromFile(Concrete.ToFullSyntaxModel.Convert(file));
+    public static Abstract.File AbsFile(Stil4mElmSyntax7.File file) =>
+        ConvertFromConcrete.FromFile(Stil4mElmSyntax7.ToFullSyntaxModel.Convert(file));
 
-    public static Abstract.Expression Abs(Concrete.Expression expression) =>
-        Abstract.ConvertFromConcrete.FromExpression(Concrete.ToFullSyntaxModel.Convert(expression));
+    public static Abstract.Expression Abs(Stil4mElmSyntax7.Expression expression) =>
+        ConvertFromConcrete.FromExpression(Stil4mElmSyntax7.ToFullSyntaxModel.Convert(expression));
 
-    public static Abstract.Pattern Abs(Concrete.Pattern pattern) =>
-        Abstract.ConvertFromConcrete.FromPattern(Concrete.ToFullSyntaxModel.Convert(pattern));
+    public static Abstract.Pattern Abs(Stil4mElmSyntax7.Pattern pattern) =>
+        ConvertFromConcrete.FromPattern(Stil4mElmSyntax7.ToFullSyntaxModel.Convert(pattern));
 
-    public static Abstract.TypeAnnotation Abs(Concrete.TypeAnnotation typeAnnotation) =>
-        Abstract.ConvertFromConcrete.FromTypeAnnotation(Concrete.ToFullSyntaxModel.Convert(typeAnnotation));
+    public static Abstract.TypeAnnotation Abs(Stil4mElmSyntax7.TypeAnnotation typeAnnotation) =>
+        ConvertFromConcrete.FromTypeAnnotation(Stil4mElmSyntax7.ToFullSyntaxModel.Convert(typeAnnotation));
 
-    public static IReadOnlyList<Abstract.Pattern> AbsPatterns(IReadOnlyList<Node<Concrete.Pattern>> patterns) =>
+    public static IReadOnlyList<Abstract.Pattern> AbsPatterns(IReadOnlyList<Node<Stil4mElmSyntax7.Pattern>> patterns) =>
         [.. patterns.Select(pattern => Abs(pattern.Value))];
 }

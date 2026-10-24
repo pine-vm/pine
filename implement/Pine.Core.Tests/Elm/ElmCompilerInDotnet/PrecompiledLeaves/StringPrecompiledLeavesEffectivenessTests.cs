@@ -3,7 +3,9 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
+using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -93,9 +95,9 @@ public class StringPrecompiledLeavesEffectivenessTests
         .First(module => module.moduleName is "StringPrecompiledLeavesTestModule")
         .moduleContent.FunctionDeclarations[name];
 
-    private static Core.Interpreter.IntermediateVM.PineVM CreateVM(
+    private static Core.Runtime.IntermediateVM.PineVM CreateVM(
         IReadOnlyDictionary<PineValue, PrecompiledLeaf> precompiledLeaves) =>
-        Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
+        Core.Runtime.IntermediateVM.PineVM.CreateCustom(
             evalCache: null,
             evaluationConfigDefault: null,
             reportFunctionApplication: _ => { },
@@ -259,7 +261,7 @@ public class StringPrecompiledLeavesEffectivenessTests
     private static (ElmValue value, EvalWorkCounters counters) ApplyUnary(
         PineValue function,
         ElmValue argument,
-        Core.Interpreter.IntermediateVM.PineVM vm) =>
+        Core.Runtime.IntermediateVM.PineVM vm) =>
         CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
             function,
             argument,

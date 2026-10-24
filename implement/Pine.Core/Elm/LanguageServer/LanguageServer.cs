@@ -1,10 +1,12 @@
 using Pine.Core.CLI;
 using Pine.Core.Elm.Elm019;
-using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Elm.LanguageServer.LanguageServiceInterface;
 using Pine.Core.Elm.LanguageServer.MonacoEditor;
+using Pine.Core.Elm.Syntax;
 using Pine.Core.Files;
+using Pine.Core.Functional;
 using Pine.Core.LanguageServerProtocol;
+using Pine.Core.Runtime.IntermediateVM;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -273,7 +275,7 @@ public class LanguageServer(
     /// Returns cache statistics after workspace initialization, or null if not available.
     /// Does not wait for initialization or schedule a language-service request.
     /// </summary>
-    public Interpreter.IntermediateVM.InvocationCacheStatisticsSnapshot? GetInvocationCacheStatistics() =>
+    public InvocationCacheStatisticsSnapshot? GetInvocationCacheStatistics() =>
         _languageServiceStateTask is { IsCompletedSuccessfully: true } task
         ?
         task.Result.IsOkOrNull()?.GetInvocationCacheStatistics()
@@ -281,7 +283,7 @@ public class LanguageServer(
         null;
 
     /// <summary>Returns the current learned policy and latest-run evidence after initialization, when available.</summary>
-    public Interpreter.IntermediateVM.InvocationCacheLearningState? GetInvocationCacheLearningState() =>
+    public InvocationCacheLearningState? GetInvocationCacheLearningState() =>
         _languageServiceStateTask is { IsCompletedSuccessfully: true } task
         ?
         task.Result.IsOkOrNull()?.GetInvocationCacheLearningState()
@@ -347,7 +349,7 @@ public class LanguageServer(
     public (InitializeResult, IReadOnlyList<KeyValuePair<string, object>>) Initialize(
         InitializeParams initializeParams)
     {
-        Log("Initialize: " + System.Text.Json.JsonSerializer.Serialize(initializeParams));
+        Log("Initialize: " + JsonSerializer.Serialize(initializeParams));
 
         Log(
             "LSP request cancellation is enabled through $/cancelRequest; " +
@@ -1576,7 +1578,7 @@ public class LanguageServer(
         try
         {
             var elmJsonFileParsed =
-                System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJson);
+                JsonSerializer.Deserialize<ElmJsonStructure>(elmJson);
 
             if (elmJsonFileParsed?.Dependencies.Direct is { } directDependencies)
             {
@@ -3142,12 +3144,12 @@ public class LanguageServer(
     /// </summary>
     internal static IReadOnlyList<Diagnostic> ComputeSyntaxErrorDiagnostics(
         string moduleText,
-        IEnumerable<ElmSyntaxParseError> errors)
+        IEnumerable<Syntax.Concrete.ParseError> errors)
     {
         return
             [
             ..errors
-            .Where(error => error.Kind is ElmSyntaxErrorKind.Parse)
+            .Where(error => error.Kind is Syntax.Concrete.ErrorKind.Parse)
             .OrderBy(error => error.Region.Start.Row)
             .ThenBy(error => error.Region.Start.Column)
             .Select(

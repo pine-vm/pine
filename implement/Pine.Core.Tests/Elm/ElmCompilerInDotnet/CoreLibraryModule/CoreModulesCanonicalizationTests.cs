@@ -1,6 +1,6 @@
 using AwesomeAssertions;
-using Pine.Core.Elm.ElmSyntax;
-using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7;
 using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.CoreLibraryModule;

@@ -1,5 +1,8 @@
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Elm.Syntax;
 using Pine.Core.Files;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
@@ -7,8 +10,8 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 
-using SyntaxModelTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
-using ElmSyntaxAbstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
+using ConcreteSyntax = Pine.Core.Elm.Syntax.Concrete;
+using AbstractSyntax = Pine.Core.Elm.Syntax.Abstract;
 using IrTypes = Pine.Core.Elm.ElmCompilerInDotnet.IntermediateRepresentation;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
@@ -17,8 +20,8 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// Canonical source syntax for diagnostics and the actual compiler-owned result consumed by emission.
 /// </summary>
 public record CompilationPipelineStageResults(
-    IReadOnlyList<SyntaxModelTypes.File> Canonicalized,
-    ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> CanonicalDeclarations,
+    IReadOnlyList<ConcreteSyntax.File> Canonicalized,
+    ImmutableDictionary<DeclQualifiedName, AbstractSyntax.Declaration> CanonicalDeclarations,
     CompilerModel.Program CompilerProgram)
 {
     /// <summary>
@@ -55,10 +58,10 @@ public record CompilationPipelineStageResults(
 public partial class ElmCompiler
 {
     private sealed record CanonicalizationBoundaryResult(
-        IReadOnlyList<SyntaxModelTypes.File> ConcreteModules,
+        IReadOnlyList<ConcreteSyntax.File> ConcreteModules,
         IReadOnlySet<DeclQualifiedName> RootDeclarations)
     {
-        public ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> CanonicalDeclarations { get; init; } =
+        public ImmutableDictionary<DeclQualifiedName, AbstractSyntax.Declaration> CanonicalDeclarations { get; init; } =
             [];
 
         public IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<DeclarationReference>> References { get; init; } =
@@ -94,9 +97,9 @@ public partial class ElmCompiler
         IReadOnlyList<DeclQualifiedName> rootDeclarations,
         ElmSyntaxOptimizationConfig? syntaxOptimization = null,
         bool includeBundledKernelModules = true,
-        IDictionary<string, Result<ElmSyntax.ElmSyntaxParseError, SyntaxModelTypes.File>>? sourceParseCache = null,
+        IDictionary<string, Result<ConcreteSyntax.ParseError, ConcreteSyntax.File>>? sourceParseCache = null,
         Canonicalization.DeclarationCache? canonicalizationCache = null,
-        IReadOnlyDictionary<string, SyntaxModelTypes.File>? parsedSources = null)
+        IReadOnlyDictionary<string, ConcreteSyntax.File>? parsedSources = null)
     {
         syntaxOptimization ??= new ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled();
 
@@ -156,9 +159,9 @@ public partial class ElmCompiler
         FileTree appCodeTree,
         IReadOnlyList<DeclQualifiedName> rootDeclarations,
         bool includeBundledKernelModules,
-        IDictionary<string, Result<ElmSyntax.ElmSyntaxParseError, SyntaxModelTypes.File>>? sourceParseCache,
+        IDictionary<string, Result<ConcreteSyntax.ParseError, ConcreteSyntax.File>>? sourceParseCache,
         Canonicalization.DeclarationCache? canonicalizationCache,
-        IReadOnlyDictionary<string, SyntaxModelTypes.File>? parsedSources)
+        IReadOnlyDictionary<string, ConcreteSyntax.File>? parsedSources)
     {
         if (rootDeclarations.Count is 0)
             return new CanonicalizationBoundaryResult([], ImmutableHashSet<DeclQualifiedName>.Empty);
@@ -180,7 +183,7 @@ public partial class ElmCompiler
             .ToImmutableArray();
 
         // Step 1: Parse all modules, building a map from file path to module name.
-        var successfullyParsedModules = new List<SyntaxModelTypes.File>();
+        var successfullyParsedModules = new List<ConcreteSyntax.File>();
 
         var parseFailures = new Dictionary<string, string>();
 
@@ -193,7 +196,7 @@ public partial class ElmCompiler
 
             // First try to get the module name from the header
             var headerResult =
-                ElmSyntax.ElmSyntaxParser.ParseModuleHeader(moduleText);
+                ElmSyntaxParser.ParseModuleHeader(moduleText);
 
             if (headerResult.IsErrOrNull() is not null)
             {
@@ -216,13 +219,13 @@ public partial class ElmCompiler
             var parseResult =
                 parsedSources is not null && parsedSources.TryGetValue(moduleNameFlattened, out var supplied)
                 ?
-                Result<ElmSyntax.ElmSyntaxParseError, SyntaxModelTypes.File>.ok(supplied)
+                Result<ConcreteSyntax.ParseError, ConcreteSyntax.File>.ok(supplied)
                 :
                 ParseSource(moduleText, sourceParseCache);
 
             if (parseResult.IsErrOrNullable() is { } parseErr)
             {
-                parseFailures.Add(moduleNameFlattened, ElmSyntax.ElmSyntaxParseError.RenderDisplayString(parseErr));
+                parseFailures.Add(moduleNameFlattened, ConcreteSyntax.ParseError.RenderDisplayString(parseErr));
                 continue;
             }
 
@@ -238,7 +241,7 @@ public partial class ElmCompiler
 
                 parseFailures.Add(
                     moduleNameFlattened,
-                    ElmSyntax.ElmSyntaxParseError.RenderDisplayString(firstIncompleteDeclaration.Value.ParseError));
+                    ConcreteSyntax.ParseError.RenderDisplayString(firstIncompleteDeclaration.Value.ParseError));
 
                 continue;
             }
@@ -277,7 +280,7 @@ public partial class ElmCompiler
 
         foreach (var root in rootDeclarations)
         {
-            if (canonicalizedDeclarations.Declarations[root].Value.Value is not SyntaxModelTypes.Declaration.FunctionDeclaration)
+            if (canonicalizedDeclarations.Declarations[root].Value.Value is not ConcreteSyntax.Declaration.FunctionDeclaration)
             {
                 return
                     new CompilationError.Message(
@@ -340,7 +343,7 @@ public partial class ElmCompiler
                     .. canonicalizedDeclarations.Declarations
                     .Where(
                         entry => entry.Key.Namespaces.SequenceEqual(
-                            SyntaxModelTypes.Module.GetModuleName(source.ModuleDefinition.Value).Value))
+                            ConcreteSyntax.Module.GetModuleName(source.ModuleDefinition.Value).Value))
                     .OrderBy(entry => entry.Value.Value.Range.Start.Row)
                     .Select(entry => entry.Value.Value)
                     .Distinct()
@@ -357,7 +360,7 @@ public partial class ElmCompiler
                 CanonicalDeclarations =
                 canonicalizedDeclarations.Declarations.ToImmutableDictionary(
                     entry => entry.Key,
-                    entry => ElmSyntaxAbstract.ConvertFromConcrete.FromDeclaration(entry.Value.Value.Value)),
+                    entry => AbstractSyntax.ConvertFromConcrete.FromDeclaration(entry.Value.Value.Value)),
                 References = canonicalizedDeclarations.References,
                 FilePaths = moduleNameToFilePath
             };
@@ -365,7 +368,7 @@ public partial class ElmCompiler
 
     private static IReadOnlyList<CompilationError.DeclarationDependencyChainItem> BuildSourceDependencyChain(
         IReadOnlyList<DeclQualifiedName> declarations,
-        IReadOnlyList<SyntaxModelTypes.File> sources,
+        IReadOnlyList<ConcreteSyntax.File> sources,
         IReadOnlyDictionary<string, string> paths,
         IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<DeclarationReference>> references)
     {
@@ -379,7 +382,7 @@ public partial class ElmCompiler
             var source =
                 sources.FirstOrDefault(
                     file =>
-                    SyntaxModelTypes.Module.GetModuleName(file.ModuleDefinition.Value).Value.SequenceEqual(
+                    ConcreteSyntax.Module.GetModuleName(file.ModuleDefinition.Value).Value.SequenceEqual(
                         declaration.Namespaces));
 
             var definition =
@@ -404,7 +407,7 @@ public partial class ElmCompiler
                     var previousSource =
                         sources.FirstOrDefault(
                             file =>
-                            SyntaxModelTypes.Module.GetModuleName(file.ModuleDefinition.Value).Value.SequenceEqual(
+                            ConcreteSyntax.Module.GetModuleName(file.ModuleDefinition.Value).Value.SequenceEqual(
                                 previous.Namespaces));
 
                     var import =
@@ -448,7 +451,7 @@ public partial class ElmCompiler
 
     private static CompilationError.CanonicalizationDiagnostic CompleteCanonicalizationDiagnostic(
         CompilationError.CanonicalizationDiagnostic diagnostic,
-        IReadOnlyList<SyntaxModelTypes.File> sources,
+        IReadOnlyList<ConcreteSyntax.File> sources,
         IReadOnlyDictionary<string, string> paths)
     {
         if (diagnostic.Error is not CanonicalizationError.UnresolvedReference { Target: { } target } unresolved)
@@ -457,7 +460,7 @@ public partial class ElmCompiler
         var targetSource =
             sources.FirstOrDefault(
                 source =>
-                SyntaxModelTypes.Module.GetModuleName(source.ModuleDefinition.Value).Value.SequenceEqual(
+                ConcreteSyntax.Module.GetModuleName(source.ModuleDefinition.Value).Value.SequenceEqual(
                     target.Namespaces));
 
         var owningName = QualifiedNameHelper.FromQualifiedNameString(diagnostic.DeclarationName);
@@ -465,7 +468,7 @@ public partial class ElmCompiler
         var declaringSource =
             sources.FirstOrDefault(
                 source =>
-                SyntaxModelTypes.Module.GetModuleName(source.ModuleDefinition.Value).Value.SequenceEqual(
+                ConcreteSyntax.Module.GetModuleName(source.ModuleDefinition.Value).Value.SequenceEqual(
                     owningName.Namespaces));
 
         var import =
@@ -474,16 +477,16 @@ public partial class ElmCompiler
         var targetDefinition =
             targetSource?.Declarations.FirstOrDefault(node =>
             unresolved.IsTypeReference
-            ? node.Value is SyntaxModelTypes.Declaration.ChoiceTypeDeclaration or SyntaxModelTypes.Declaration.AliasDeclaration &&
+            ? node.Value is ConcreteSyntax.Declaration.ChoiceTypeDeclaration or ConcreteSyntax.Declaration.AliasDeclaration &&
                 Canonicalization.GetDeclarationName(node.Value) == target.DeclName
             : node.Value switch
             {
-                SyntaxModelTypes.Declaration.FunctionDeclaration function => function.Function.Declaration.Value.Name.Value == target.DeclName,
-                SyntaxModelTypes.Declaration.PortDeclaration port => port.Signature.Name.Value == target.DeclName,
-                SyntaxModelTypes.Declaration.InfixDeclaration infix => infix.Infix.Operator.Value == target.DeclName,
-                SyntaxModelTypes.Declaration.AliasDeclaration alias => alias.TypeAlias.Name.Value == target.DeclName &&
-                    alias.TypeAlias.TypeAnnotation.Value is SyntaxModelTypes.TypeAnnotation.Record,
-                SyntaxModelTypes.Declaration.ChoiceTypeDeclaration choice => choice.TypeDeclaration.Constructors.Any(constructor =>
+                ConcreteSyntax.Declaration.FunctionDeclaration function => function.Function.Declaration.Value.Name.Value == target.DeclName,
+                ConcreteSyntax.Declaration.PortDeclaration port => port.Signature.Name.Value == target.DeclName,
+                ConcreteSyntax.Declaration.InfixDeclaration infix => infix.Infix.Operator.Value == target.DeclName,
+                ConcreteSyntax.Declaration.AliasDeclaration alias => alias.TypeAlias.Name.Value == target.DeclName &&
+                    alias.TypeAlias.TypeAnnotation.Value is ConcreteSyntax.TypeAnnotation.Record,
+                ConcreteSyntax.Declaration.ChoiceTypeDeclaration choice => choice.TypeDeclaration.Constructors.Any(constructor =>
                     constructor.Value.Name.Value == target.DeclName),
                 _ => throw new NotImplementedException(
                     $"{nameof(CompleteCanonicalizationDiagnostic)} does not handle declaration variant: {node.Value.GetType().Name}")
@@ -522,9 +525,9 @@ public partial class ElmCompiler
         ElmSyntaxOptimizationConfig? syntaxOptimization = null,
         bool disableGenericApplicationChainConsolidation = false,
         bool includeBundledKernelModules = true,
-        IDictionary<string, Result<ElmSyntax.ElmSyntaxParseError, SyntaxModelTypes.File>>? sourceParseCache = null,
+        IDictionary<string, Result<ConcreteSyntax.ParseError, ConcreteSyntax.File>>? sourceParseCache = null,
         Canonicalization.DeclarationCache? canonicalizationCache = null,
-        IReadOnlyDictionary<string, SyntaxModelTypes.File>? parsedSources = null)
+        IReadOnlyDictionary<string, ConcreteSyntax.File>? parsedSources = null)
     {
         syntaxOptimization ??= SyntaxOptimizationConfigDefault;
 
@@ -556,7 +559,7 @@ public partial class ElmCompiler
     public static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults pipelineStageResults)> CompileResolvedEnvironment(
         ElmResolvedBuild build,
         IReadOnlyList<DeclQualifiedName> rootDeclarations,
-        IDictionary<string, Result<ElmSyntax.ElmSyntaxParseError, SyntaxModelTypes.File>>? sourceParseCache = null,
+        IDictionary<string, Result<ConcreteSyntax.ParseError, ConcreteSyntax.File>>? sourceParseCache = null,
         Canonicalization.DeclarationCache? canonicalizationCache = null)
     {
         var result =
@@ -645,7 +648,7 @@ public partial class ElmCompiler
     }
 
     internal static ImmutableDictionary<string, TypeInference.InferredType> ExtractParameterTypes(
-        ElmSyntaxAbstract.FunctionStruct function,
+        AbstractSyntax.FunctionStruct function,
         IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? choiceTagTypes,
         IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? functionTypes,
         string currentModuleName)
@@ -668,7 +671,7 @@ public partial class ElmCompiler
 
             var paramIndex = 0;
 
-            while (currentType is ElmSyntaxAbstract.TypeAnnotation.FunctionTypeAnnotation funcType &&
+            while (currentType is AbstractSyntax.TypeAnnotation.FunctionTypeAnnotation funcType &&
                 paramIndex < parameters.Count)
             {
                 var paramPattern = parameters[paramIndex];
@@ -752,17 +755,17 @@ public partial class ElmCompiler
         };
 
     private static string? RenderExposing(
-        (SyntaxModelTypes.Location ExposingTokenLocation,
-        SyntaxModelTypes.Node<SyntaxModelTypes.Exposing> ExposingList)? exposing) =>
+        (ConcreteSyntax.Location ExposingTokenLocation,
+        ConcreteSyntax.Node<ConcreteSyntax.Exposing> ExposingList)? exposing) =>
         exposing?.ExposingList.Value switch
         {
             null =>
             null,
 
-            SyntaxModelTypes.Exposing.All =>
+            ConcreteSyntax.Exposing.All =>
             "(..)",
 
-            SyntaxModelTypes.Exposing.Explicit explicitExposing =>
+            ConcreteSyntax.Exposing.Explicit explicitExposing =>
             "(" +
             string.Join(
                 ", ",
@@ -770,16 +773,16 @@ public partial class ElmCompiler
                     node =>
                     node.Value switch
                     {
-                        SyntaxModelTypes.TopLevelExpose.InfixExpose infix =>
+                        ConcreteSyntax.TopLevelExpose.InfixExpose infix =>
                         "(" + infix.Name + ")",
 
-                        SyntaxModelTypes.TopLevelExpose.FunctionExpose function =>
+                        ConcreteSyntax.TopLevelExpose.FunctionExpose function =>
                         function.Name,
 
-                        SyntaxModelTypes.TopLevelExpose.TypeOrAliasExpose typeOrAlias =>
+                        ConcreteSyntax.TopLevelExpose.TypeOrAliasExpose typeOrAlias =>
                         typeOrAlias.Name,
 
-                        SyntaxModelTypes.TopLevelExpose.TypeExpose type =>
+                        ConcreteSyntax.TopLevelExpose.TypeExpose type =>
                         type.ExposedType.Name + (type.ExposedType.Open is null ? string.Empty : "(..)"),
 
                         _ =>
@@ -795,15 +798,15 @@ public partial class ElmCompiler
     /// Flattens a list of modules into an immutable dictionary of declarations keyed by
     /// their fully qualified name.
     /// </summary>
-    public static ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>
+    public static ImmutableDictionary<DeclQualifiedName, AbstractSyntax.Declaration>
         FlattenModulesToDeclarationDictionary(
-        IReadOnlyList<ElmSyntaxAbstract.File> modules)
+        IReadOnlyList<AbstractSyntax.File> modules)
     {
-        var builder = ImmutableDictionary.CreateBuilder<DeclQualifiedName, ElmSyntaxAbstract.Declaration>();
+        var builder = ImmutableDictionary.CreateBuilder<DeclQualifiedName, AbstractSyntax.Declaration>();
 
         foreach (var module in modules)
         {
-            var moduleName = ElmSyntaxAbstract.Module.GetModuleName(module.ModuleDefinition);
+            var moduleName = AbstractSyntax.Module.GetModuleName(module.ModuleDefinition);
 
             foreach (var decl in module.Declarations)
             {
@@ -824,9 +827,9 @@ public partial class ElmCompiler
         return builder.ToImmutable();
     }
 
-    internal static ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>
+    internal static ImmutableDictionary<DeclQualifiedName, AbstractSyntax.Declaration>
         FilterFunctionDeclarationsToRootDependencies(
-        ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> declarations,
+        ImmutableDictionary<DeclQualifiedName, AbstractSyntax.Declaration> declarations,
         IReadOnlySet<DeclQualifiedName> roots)
     {
         var includedFunctions = new HashSet<DeclQualifiedName>();
@@ -837,7 +840,7 @@ public partial class ElmCompiler
                 .Where(
                     name =>
                     declarations.TryGetValue(name, out var declaration) &&
-                    declaration is ElmSyntaxAbstract.Declaration.FunctionDeclaration));
+                    declaration is AbstractSyntax.Declaration.FunctionDeclaration));
 
         while (pendingFunctions.TryPop(out var functionName))
         {
@@ -845,14 +848,14 @@ public partial class ElmCompiler
                 continue;
 
             var functionDeclaration =
-                (ElmSyntaxAbstract.Declaration.FunctionDeclaration)declarations[functionName];
+                (AbstractSyntax.Declaration.FunctionDeclaration)declarations[functionName];
 
             foreach (var referencedName in
                 ElmSyntaxOptimization.CollectFunctionReferences(
                     functionDeclaration.Function.Declaration.Expression))
             {
                 if (declarations.TryGetValue(referencedName, out var referencedDeclaration) &&
-                    referencedDeclaration is ElmSyntaxAbstract.Declaration.FunctionDeclaration)
+                    referencedDeclaration is AbstractSyntax.Declaration.FunctionDeclaration)
                 {
                     pendingFunctions.Push(referencedName);
                 }
@@ -863,7 +866,7 @@ public partial class ElmCompiler
             declarations
             .Where(
                 declaration =>
-                declaration.Value is not ElmSyntaxAbstract.Declaration.FunctionDeclaration ||
+                declaration.Value is not AbstractSyntax.Declaration.FunctionDeclaration ||
                 includedFunctions.Contains(declaration.Key))
             .ToImmutableDictionary();
     }
@@ -871,22 +874,22 @@ public partial class ElmCompiler
     /// <summary>
     /// Extracts the declaration name from a syntax declaration.
     /// </summary>
-    internal static string? GetDeclarationName(ElmSyntaxAbstract.Declaration decl) =>
+    internal static string? GetDeclarationName(AbstractSyntax.Declaration decl) =>
         decl switch
         {
-            ElmSyntaxAbstract.Declaration.FunctionDeclaration funcDecl =>
+            AbstractSyntax.Declaration.FunctionDeclaration funcDecl =>
             funcDecl.Function.Declaration.Name,
 
-            ElmSyntaxAbstract.Declaration.ChoiceTypeDeclaration typeDecl =>
+            AbstractSyntax.Declaration.ChoiceTypeDeclaration typeDecl =>
             typeDecl.TypeDeclaration.Name,
 
-            ElmSyntaxAbstract.Declaration.AliasDeclaration aliasDecl =>
+            AbstractSyntax.Declaration.AliasDeclaration aliasDecl =>
             aliasDecl.TypeAlias.Name,
 
-            ElmSyntaxAbstract.Declaration.PortDeclaration portDecl =>
+            AbstractSyntax.Declaration.PortDeclaration portDecl =>
             portDecl.Signature.Name,
 
-            ElmSyntaxAbstract.Declaration.InfixDeclaration infixDecl =>
+            AbstractSyntax.Declaration.InfixDeclaration infixDecl =>
             infixDecl.Infix.Operator,
 
             _ =>

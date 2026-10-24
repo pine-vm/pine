@@ -1,5 +1,6 @@
 using Pine.Core;
 using Pine.Core.Elm.Elm019;
+using Pine.Core.Functional;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -52,7 +53,7 @@ public class ElmPackage
             {
                 var moduleText = Encoding.UTF8.GetString(fileContent.Span);
 
-                if (Core.Elm.ElmSyntax.ElmModule.ParseModuleName(moduleText).IsOkOrNull() is not { } moduleName)
+                if (Core.Elm.Syntax.ElmModule.ParseModuleName(moduleText).IsOkOrNull() is not { } moduleName)
                 {
                     continue;
                 }
@@ -65,7 +66,7 @@ public class ElmPackage
                         ModuleName: moduleName,
                         ImportedModulesNames:
                         [
-                        .. Core.Elm.ElmSyntax.ElmModule.ParseModuleImportedModulesNames(moduleText)
+                        .. Core.Elm.Syntax.ElmModule.ParseModuleImportedModulesNames(moduleText)
                         ]));
             }
             catch (Exception)

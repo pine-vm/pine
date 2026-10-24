@@ -1,12 +1,13 @@
 using AwesomeAssertions;
-using Pine.Core;
 using Pine.Core.CLI;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
+using Pine.Core.Encodings;
 using Pine.Core.Files;
-using Pine.Core.Interpreter.IntermediateVM;
-using Pine.Core.PineVM;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
+using Pine.Core.Runtime.IntermediateVM;
 using Pine.Elm;
 using Pine.IntermediateVM;
 using Pine.PineVM;
@@ -384,7 +385,7 @@ public class CompileElmCompilerTests
             .First(c => c.blobAtPath.path.SequenceEqual(["src", "ElmCompiler.elm"]));
 
         var elmModulesTextsForElmCompiler =
-            Core.Elm.ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
+            Core.Elm.Syntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
                 rootModulesTexts: [rootElmFile.moduleText],
                 availableModulesTexts: [.. allAvailableElmFiles.Select(f => f.moduleText)]);
 
@@ -476,7 +477,7 @@ public class CompileElmCompilerTests
             string moduleText)
         {
             return
-                Core.Elm.ElmSyntax.ElmModule.ParseModuleName(moduleText)
+                Core.Elm.Syntax.ElmModule.ParseModuleName(moduleText)
                 .MapError(err => "Failed parsing name for module " + moduleText.Split('\n', '\r').FirstOrDefault())
                 .AndThen(
                     moduleName =>

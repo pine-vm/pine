@@ -1,8 +1,9 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
+using Pine.Core.Encodings;
 using Pine.Core.Internal;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -10,7 +11,7 @@ using System.Linq;
 using System.Numerics;
 using Xunit;
 
-using ElmInterpreter = Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter;
+using ElmInterpreter = Pine.Core.Elm.Syntax.ElmSyntaxInterpreter;
 
 namespace Pine.Core.Tests.Internal;
 
@@ -32,8 +33,10 @@ public class PineValueInProcessTests
 
         var recipe =
             new TemplateValueRecipe.List(
-                expected.Items
-                .ToArray().Select(item => (TemplateValueRecipe)new TemplateValueRecipe.Constant(item)).ToArray());
+                [
+                    .. expected.Items
+                    .ToArray().Select(item => (TemplateValueRecipe)new TemplateValueRecipe.Constant(item))
+                ]);
 
         var plan =
             new ExpressionTemplatePlan(
@@ -41,7 +44,7 @@ public class PineValueInProcessTests
                 PineValue.EmptyList,
                 Expression.EnvironmentInstance,
                 collected.Count + 1,
-                Enumerable.Repeat<TemplateValueRecipe>(recipe, collected.Count).ToArray(),
+                [.. Enumerable.Repeat<TemplateValueRecipe>(recipe, collected.Count)],
                 TemplateValueRecipe.EmptyList);
 
         return PineValueInProcess.CreateDeferredTemplateValue(plan, collected, materialize, reportMaterialization);

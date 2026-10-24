@@ -1,7 +1,7 @@
 using AwesomeAssertions;
-using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
+using Pine.Core.PineLanguage;
 using Pine.Elm;
 using Pine.IntermediateVM;
 using System;
@@ -198,15 +198,15 @@ public class ElmAppCompilationComponentsTests
 
     private static readonly ElmCompilerInElm s_elmCompilerInElm = LoadBundledElmCompilerInElm();
 
-    private static readonly Dictionary<Core.Interpreter.IntermediateVM.EvalCacheEntryKey, PineValue> s_vmEvalCache = [];
+    private static readonly Dictionary<Core.Runtime.IntermediateVM.EvalCacheEntryKey, PineValue> s_vmEvalCache = [];
 
     private static readonly PineVMParseCache s_parseCache = new();
 
-    private static readonly Core.Interpreter.IntermediateVM.PineVM s_pineVM = InitVM();
+    private static readonly Core.Runtime.IntermediateVM.PineVM s_pineVM = InitVM();
 
     private static readonly ElmCompilerCache s_elmCompilerCache = new();
 
-    private static Core.Interpreter.IntermediateVM.PineVM InitVM()
+    private static Core.Runtime.IntermediateVM.PineVM InitVM()
     {
         return SetupVM.Create(s_vmEvalCache, parseCache: s_parseCache);
     }

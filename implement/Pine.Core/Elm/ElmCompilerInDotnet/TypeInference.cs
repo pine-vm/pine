@@ -1,10 +1,10 @@
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Elm.Syntax.Abstract;
+using Pine.Core.Functional;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -114,7 +114,7 @@ public static partial class TypeInference
         return Render(type);
     }
 
-    private static DeclQualifiedName DeclQualifiedNameFromSyntax(SyntaxTypes.QualifiedNameRef qualifiedNameRef) =>
+    private static DeclQualifiedName DeclQualifiedNameFromSyntax(QualifiedNameRef qualifiedNameRef) =>
         DeclQualifiedName.Create(qualifiedNameRef.ModuleName, qualifiedNameRef.Name);
 
     private static DeclQualifiedName ResolveDeclQualifiedName(
@@ -1184,7 +1184,7 @@ public static partial class TypeInference
     /// Returns <c>List a</c> with a free element type variable so that unification will succeed
     /// against any concrete list type carried by the other operand.
     /// </summary>
-    private static InferredType BuildListTypeConstraintFromListExpr(SyntaxTypes.Expression.ListExpr listExpr)
+    private static InferredType BuildListTypeConstraintFromListExpr(Expression.ListExpr listExpr)
     {
         // We don't reach into the elements here; the goal is only to record the
         // "operand must be a list" constraint. Unifying ListType(unknown) with a more
@@ -1235,9 +1235,9 @@ public static partial class TypeInference
     /// <summary>
     /// Converts an Elm type annotation to an inferred type.
     /// </summary>
-    public static InferredType TypeAnnotationToInferredType(SyntaxTypes.TypeAnnotation typeAnnotation)
+    public static InferredType TypeAnnotationToInferredType(TypeAnnotation typeAnnotation)
     {
-        if (typeAnnotation is SyntaxTypes.TypeAnnotation.Typed typed)
+        if (typeAnnotation is TypeAnnotation.Typed typed)
         {
             var moduleName = typed.ModuleName;
             var name = typed.Name;
@@ -1311,7 +1311,7 @@ public static partial class TypeInference
         }
 
         // Handle tuple type annotations
-        if (typeAnnotation is SyntaxTypes.TypeAnnotation.Tupled tupled)
+        if (typeAnnotation is TypeAnnotation.Tupled tupled)
         {
             // A single-element "tuple" represents a parenthesized type annotation
             // (e.g. `(Int -> Int)`), not an actual tuple. Unwrap it to the inner type.
@@ -1331,7 +1331,7 @@ public static partial class TypeInference
         }
 
         // Handle record type annotations
-        if (typeAnnotation is SyntaxTypes.TypeAnnotation.Record recordType)
+        if (typeAnnotation is TypeAnnotation.Record recordType)
         {
             // Extract field names and types, sorted alphabetically (as Elm records are stored)
             var fields =
@@ -1343,7 +1343,7 @@ public static partial class TypeInference
             return new InferredType.RecordType(fields);
         }
 
-        if (typeAnnotation is SyntaxTypes.TypeAnnotation.GenericRecord genericRecordType)
+        if (typeAnnotation is TypeAnnotation.GenericRecord genericRecordType)
         {
             var fields =
                 genericRecordType.RecordDefinition.Fields
@@ -1355,7 +1355,7 @@ public static partial class TypeInference
         }
 
         // Handle function type annotations
-        if (typeAnnotation is SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation funcType)
+        if (typeAnnotation is TypeAnnotation.FunctionTypeAnnotation funcType)
         {
             var argType =
                 TypeAnnotationToInferredType(funcType.ArgumentType);
@@ -1367,7 +1367,7 @@ public static partial class TypeInference
         }
 
         // Handle generic type (type variable like 'a', 'b', etc.)
-        if (typeAnnotation is SyntaxTypes.TypeAnnotation.GenericType genericType)
+        if (typeAnnotation is TypeAnnotation.GenericType genericType)
         {
             return new InferredType.TypeVariable(genericType.Name);
         }
@@ -1381,7 +1381,7 @@ public static partial class TypeInference
     /// </summary>
     /// <param name="function">The function structure containing the signature.</param>
     /// <returns>The inferred return type, or UnknownType if not determinable.</returns>
-    public static InferredType GetFunctionReturnType(SyntaxTypes.FunctionStruct function)
+    public static InferredType GetFunctionReturnType(FunctionStruct function)
     {
         if (function.Signature is not { } signature)
         {
@@ -1396,7 +1396,7 @@ public static partial class TypeInference
 
         for (var i = 0; i < paramCount; i++)
         {
-            if (currentType is SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation funcType)
+            if (currentType is TypeAnnotation.FunctionTypeAnnotation funcType)
             {
                 currentType = funcType.ReturnType;
             }
@@ -1416,7 +1416,7 @@ public static partial class TypeInference
     /// </summary>
     /// <param name="declaration">The function declaration.</param>
     /// <returns>The inferred return type, or UnknownType if not determinable.</returns>
-    public static InferredType GetFunctionReturnType(SyntaxTypes.Declaration.FunctionDeclaration declaration)
+    public static InferredType GetFunctionReturnType(Declaration.FunctionDeclaration declaration)
     {
         return GetFunctionReturnType(declaration.Function);
     }
@@ -1427,7 +1427,7 @@ public static partial class TypeInference
     /// </summary>
     /// <param name="function">The function structure containing the signature.</param>
     /// <returns>List of parameter types, or empty list if not determinable.</returns>
-    public static IReadOnlyList<InferredType> GetFunctionParameterTypes(SyntaxTypes.FunctionStruct function)
+    public static IReadOnlyList<InferredType> GetFunctionParameterTypes(FunctionStruct function)
     {
         if (function.Signature is not { } signature)
         {
@@ -1444,7 +1444,7 @@ public static partial class TypeInference
 
         for (var i = 0; i < paramCount; i++)
         {
-            if (currentType is SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation funcType)
+            if (currentType is TypeAnnotation.FunctionTypeAnnotation funcType)
             {
                 parameterTypes.Add(TypeAnnotationToInferredType(funcType.ArgumentType));
                 currentType = funcType.ReturnType;
@@ -1465,7 +1465,7 @@ public static partial class TypeInference
     /// <param name="declaration">The function declaration.</param>
     /// <returns>List of parameter types, or empty list if not determinable.</returns>
     public static IReadOnlyList<InferredType> GetFunctionParameterTypes(
-        SyntaxTypes.Declaration.FunctionDeclaration declaration)
+        Declaration.FunctionDeclaration declaration)
     {
         return GetFunctionParameterTypes(declaration.Function);
     }
@@ -1474,7 +1474,7 @@ public static partial class TypeInference
     /// Builds an inferred function type from a function's explicit signature when the annotated parameter and return types can be recovered.
     /// </summary>
     public static InferredType? BuildFunctionTypeFromSignatureOrNull(
-        SyntaxTypes.FunctionStruct function)
+        FunctionStruct function)
     {
         if (function.Signature is null)
         {
@@ -1494,7 +1494,7 @@ public static partial class TypeInference
 
         for (var i = 0; i < annotatedParameterTypes.Count && i < function.Declaration.Arguments.Count; i++)
         {
-            if (function.Declaration.Arguments[i] is SyntaxTypes.Pattern.VarPattern varPattern)
+            if (function.Declaration.Arguments[i] is Pattern.VarPattern varPattern)
             {
                 parameterTypesByName[varPattern.Name] = annotatedParameterTypes[i];
             }
@@ -1516,7 +1516,7 @@ public static partial class TypeInference
     /// <param name="localBindingTypes">Map of local binding names to their types.</param>
     /// <returns>The inferred type of the expression.</returns>
     public static InferredType InferExpressionType(
-        SyntaxTypes.Expression expression,
+        Expression expression,
         IReadOnlyDictionary<string, int> parameterNames,
         IReadOnlyDictionary<string, InferredType> parameterTypes,
         IReadOnlyDictionary<string, InferredType>? localBindingTypes = null) =>
@@ -1533,7 +1533,7 @@ public static partial class TypeInference
     /// <param name="functionTypes">Map of qualified function names to their return and parameter types.</param>
     /// <returns>The inferred type of the expression.</returns>
     public static InferredType InferExpressionType(
-        SyntaxTypes.Expression expression,
+        Expression expression,
         IReadOnlyDictionary<string, int> parameterNames,
         IReadOnlyDictionary<string, InferredType> parameterTypes,
         IReadOnlyDictionary<string, InferredType>? localBindingTypes,
@@ -1541,19 +1541,19 @@ public static partial class TypeInference
         IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? functionTypes)
     {
         // Integer literal - in Elm, this has type "number" (polymorphic), not forced to Int
-        if (expression is SyntaxTypes.Expression.IntegerLiteral)
+        if (expression is Expression.IntegerLiteral)
         {
             return s_numberType;
         }
 
         // Float literal
-        if (expression is SyntaxTypes.Expression.FloatLiteral)
+        if (expression is Expression.FloatLiteral)
         {
             return s_floatType;
         }
 
         // Negation preserves numeric type
-        if (expression is SyntaxTypes.Expression.Negation negation)
+        if (expression is Expression.Negation negation)
         {
             var innerType =
                 InferExpressionType(
@@ -1579,19 +1579,19 @@ public static partial class TypeInference
         }
 
         // String literal
-        if (expression is SyntaxTypes.Expression.StringLiteral)
+        if (expression is Expression.StringLiteral)
         {
             return s_stringType;
         }
 
         // Char literal
-        if (expression is SyntaxTypes.Expression.CharLiteral)
+        if (expression is Expression.CharLiteral)
         {
             return s_charType;
         }
 
         // Boolean values
-        if (expression is SyntaxTypes.Expression.Identifier funcOrValue &&
+        if (expression is Expression.Identifier funcOrValue &&
             funcOrValue.QualifiedName.Namespaces.Count is 0 &&
             (funcOrValue.QualifiedName.DeclName is "True" || funcOrValue.QualifiedName.DeclName is "False"))
         {
@@ -1600,7 +1600,7 @@ public static partial class TypeInference
 
         // Local binding reference - look up the type from local binding types
         // Check local bindings FIRST because they may shadow parameters or have more precise types
-        if (expression is SyntaxTypes.Expression.Identifier localRef &&
+        if (expression is Expression.Identifier localRef &&
             localRef.QualifiedName.Namespaces.Count is 0 &&
             localBindingTypes is not null &&
             localBindingTypes.TryGetValue(localRef.QualifiedName.DeclName, out var localType))
@@ -1609,7 +1609,7 @@ public static partial class TypeInference
         }
 
         // Parameter reference - look up the type from annotations
-        if (expression is SyntaxTypes.Expression.Identifier paramRef &&
+        if (expression is Expression.Identifier paramRef &&
             paramRef.QualifiedName.Namespaces.Count is 0 &&
             parameterTypes.TryGetValue(paramRef.QualifiedName.DeclName, out var paramType))
         {
@@ -1618,7 +1618,7 @@ public static partial class TypeInference
 
         // Function or constructor reference - look up type from function signatures
         // This handles cases like `ChoiceD` which should return `Bool -> Beta`
-        if (expression is SyntaxTypes.Expression.Identifier funcOrValueRef &&
+        if (expression is Expression.Identifier funcOrValueRef &&
             functionTypes is not null)
         {
             var qualifiedFuncName =
@@ -1636,7 +1636,7 @@ public static partial class TypeInference
         }
 
         // Operator application - infer from operands
-        if (expression is SyntaxTypes.Expression.OperatorApplication operatorApp)
+        if (expression is Expression.OperatorApplication operatorApp)
         {
             return
                 InferOperatorApplicationType(
@@ -1649,7 +1649,7 @@ public static partial class TypeInference
         }
 
         // Tuple expression - infer type from element types
-        if (expression is SyntaxTypes.Expression.TupledExpression tupledExpr)
+        if (expression is Expression.TupledExpression tupledExpr)
         {
             var elementTypes = new List<InferredType>();
 
@@ -1669,11 +1669,11 @@ public static partial class TypeInference
         }
 
         // Function application - infer from the function's return type
-        if (expression is SyntaxTypes.Expression.Application application &&
+        if (expression is Expression.Application application &&
             application.Arguments.Count >= 1)
         {
             // Check if the first argument is a FunctionOrValue
-            if (application.Function is SyntaxTypes.Expression.Identifier funcRef)
+            if (application.Function is Expression.Identifier funcRef)
             {
                 if (funcRef.QualifiedName.Namespaces.Count is 0 &&
                     (parameterNames.ContainsKey(funcRef.QualifiedName.DeclName) ||
@@ -1791,7 +1791,7 @@ public static partial class TypeInference
                 }
             }
             // Check if the first argument is a PrefixOperator (e.g., (+), (-), (*), (//))
-            else if (application.Function is SyntaxTypes.Expression.PrefixOperator prefixOp)
+            else if (application.Function is Expression.PrefixOperator prefixOp)
             {
                 // Map the operator to a function name and get its type info
                 if (CoreLibraryModule.CoreBasics.OperatorToFunctionName(prefixOp.Operator) is { } funcName)
@@ -1834,7 +1834,7 @@ public static partial class TypeInference
         }
 
         // Record expression - infer type from field names and values
-        if (expression is SyntaxTypes.Expression.RecordExpr recordExpr)
+        if (expression is Expression.RecordExpr recordExpr)
         {
             var fields = new List<(string FieldName, InferredType FieldType)>();
 
@@ -1860,7 +1860,7 @@ public static partial class TypeInference
         }
 
         // Let expression - infer types for local bindings and then the body
-        if (expression is SyntaxTypes.Expression.LetExpression letExpr)
+        if (expression is Expression.LetExpression letExpr)
         {
             var extendedLocalBindings =
                 InferLetExpressionLocalBindingTypes(
@@ -1883,7 +1883,7 @@ public static partial class TypeInference
         }
 
         // List expression - infer type from element types
-        if (expression is SyntaxTypes.Expression.ListExpr listExpr)
+        if (expression is Expression.ListExpr listExpr)
         {
             if (listExpr.Elements.Count is 0)
             {
@@ -1905,7 +1905,7 @@ public static partial class TypeInference
         }
 
         // If-block expression - unify types from all branches
-        if (expression is SyntaxTypes.Expression.IfBlock ifBlock)
+        if (expression is Expression.IfBlock ifBlock)
         {
             var thenType =
                 InferExpressionType(
@@ -1930,7 +1930,7 @@ public static partial class TypeInference
         }
 
         // Case expression - unify types from all case arm expressions
-        if (expression is SyntaxTypes.Expression.CaseExpression caseExpr)
+        if (expression is Expression.CaseExpression caseExpr)
         {
             if (caseExpr.Cases.Count is 0)
             {
@@ -1968,7 +1968,7 @@ public static partial class TypeInference
         // Prefix operator used as a standalone expression (e.g., (::), (+), (//)).
         // These are function values: (::) : a -> List a -> List a,
         // (+) : number -> number -> number, etc.
-        if (expression is SyntaxTypes.Expression.PrefixOperator prefixOperator)
+        if (expression is Expression.PrefixOperator prefixOperator)
         {
             return InferPrefixOperatorType(prefixOperator.Operator);
         }
@@ -1977,7 +1977,7 @@ public static partial class TypeInference
         // If we know the record type, look up the field; otherwise return unknown.
         // (Constraint propagation back to the record's parameter is done in
         // ScanExpressionForParameterTypes via an OpenRecordType.)
-        if (expression is SyntaxTypes.Expression.RecordAccess recordAccess)
+        if (expression is Expression.RecordAccess recordAccess)
         {
             var recordType =
                 InferExpressionType(
@@ -1996,7 +1996,7 @@ public static partial class TypeInference
         // Record-access function: .field
         // Has type: { r | field : a } -> a, modeled here as a function from an open
         // record (with a fresh free element type) to that element type.
-        if (expression is SyntaxTypes.Expression.RecordAccessFunction recordAccessFunction)
+        if (expression is Expression.RecordAccessFunction recordAccessFunction)
         {
             var fieldName = recordAccessFunction.FieldName;
             var fieldType = new InferredType.TypeVariable("a");
@@ -2014,7 +2014,7 @@ public static partial class TypeInference
         // (from parameterTypes / localBindingTypes), return that. Otherwise build
         // an OpenRecordType from the listed fields, inferring each field's type
         // from the corresponding value expression.
-        if (expression is SyntaxTypes.Expression.RecordUpdateExpression recordUpdate)
+        if (expression is Expression.RecordUpdateExpression recordUpdate)
         {
             var recordName = recordUpdate.RecordName;
 
@@ -2094,7 +2094,7 @@ public static partial class TypeInference
     /// Infers the bindings introduced by an Elm <c>let</c> expression.
     /// </summary>
     public static ImmutableDictionary<string, InferredType> InferLetExpressionLocalBindingTypes(
-        SyntaxTypes.Expression.LetExpression letExpression,
+        Expression.LetExpression letExpression,
         IReadOnlyDictionary<string, int> parameterNames,
         IReadOnlyDictionary<string, InferredType> parameterTypes,
         IReadOnlyDictionary<string, InferredType>? localBindingTypes,
@@ -2106,7 +2106,7 @@ public static partial class TypeInference
 
         foreach (var declaration in letExpression.Declarations)
         {
-            if (declaration is SyntaxTypes.LetDeclaration.LetFunction letFunction)
+            if (declaration is LetDeclaration.LetFunction letFunction)
             {
                 var functionType =
                     BuildFunctionTypeFromSignatureOrNull(letFunction.Function)
@@ -2124,7 +2124,7 @@ public static partial class TypeInference
                         letFunction.Function.Declaration.Name,
                         functionType);
             }
-            else if (declaration is SyntaxTypes.LetDeclaration.LetDestructuring letDestructuring)
+            else if (declaration is LetDeclaration.LetDestructuring letDestructuring)
             {
                 var expressionType =
                     InferExpressionType(
@@ -2149,15 +2149,15 @@ public static partial class TypeInference
     /// <summary>
     /// Extracts binding names from a pattern.
     /// </summary>
-    private static IEnumerable<string> ExtractBindingsFromPattern(SyntaxTypes.Pattern pattern)
+    private static IEnumerable<string> ExtractBindingsFromPattern(Pattern pattern)
     {
         switch (pattern)
         {
-            case SyntaxTypes.Pattern.VarPattern var:
+            case Pattern.VarPattern var:
                 yield return var.Name;
                 break;
 
-            case SyntaxTypes.Pattern.TuplePattern tuple:
+            case Pattern.TuplePattern tuple:
                 foreach (var elem in tuple.Elements)
                 {
                     foreach (var binding in ExtractBindingsFromPattern(elem))
@@ -2168,7 +2168,7 @@ public static partial class TypeInference
 
                 break;
 
-            case SyntaxTypes.Pattern.RecordPattern record:
+            case Pattern.RecordPattern record:
                 foreach (var field in record.Fields)
                 {
                     yield return field.FieldName;
@@ -2176,7 +2176,7 @@ public static partial class TypeInference
 
                 break;
 
-            case SyntaxTypes.Pattern.AsPattern asPattern:
+            case Pattern.AsPattern asPattern:
                 yield return asPattern.Name;
 
                 foreach (var binding in ExtractBindingsFromPattern(asPattern.Pattern))
@@ -2186,15 +2186,15 @@ public static partial class TypeInference
 
                 break;
 
-            case SyntaxTypes.Pattern.AllPattern:
-            case SyntaxTypes.Pattern.UnitPattern:
-            case SyntaxTypes.Pattern.CharPattern:
-            case SyntaxTypes.Pattern.StringPattern:
-            case SyntaxTypes.Pattern.IntPattern:
-            case SyntaxTypes.Pattern.FloatPattern:
-            case SyntaxTypes.Pattern.UnConsPattern:
-            case SyntaxTypes.Pattern.ListPattern:
-            case SyntaxTypes.Pattern.NamedPattern:
+            case Pattern.AllPattern:
+            case Pattern.UnitPattern:
+            case Pattern.CharPattern:
+            case Pattern.StringPattern:
+            case Pattern.IntPattern:
+            case Pattern.FloatPattern:
+            case Pattern.UnConsPattern:
+            case Pattern.ListPattern:
+            case Pattern.NamedPattern:
                 break;
 
             default:
@@ -2208,7 +2208,7 @@ public static partial class TypeInference
     /// Uses the organized operator constraints to determine forced types.
     /// </summary>
     private static InferredType InferOperatorApplicationType(
-        SyntaxTypes.Expression.OperatorApplication operatorApp,
+        Expression.OperatorApplication operatorApp,
         IReadOnlyDictionary<string, int> parameterNames,
         IReadOnlyDictionary<string, InferredType> parameterTypes,
         IReadOnlyDictionary<string, InferredType>? localBindingTypes,
@@ -2338,7 +2338,7 @@ public static partial class TypeInference
     /// <param name="existingConstraints">Existing type constraints to merge with.</param>
     /// <returns>A new dictionary containing all constraints (existing plus newly discovered).</returns>
     public static ImmutableDictionary<string, InferredType> ExtractTypeConstraintsFromTagApplications(
-        SyntaxTypes.Expression expression,
+        Expression expression,
         IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<InferredType>>? constructorArgumentTypes,
         ImmutableDictionary<string, InferredType> existingConstraints)
     {
@@ -2353,19 +2353,19 @@ public static partial class TypeInference
     }
 
     private static ImmutableDictionary<string, InferredType> ExtractTypeConstraintsFromTagApplicationsInternal(
-        SyntaxTypes.Expression expression,
+        Expression expression,
         IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<InferredType>> constructorArgumentTypes,
         ImmutableDictionary<string, InferredType> constraints)
     {
         switch (expression)
         {
-            case SyntaxTypes.Expression.Application application:
+            case Expression.Application application:
 
                 // Check if this is a tag constructor application.
                 // In the abstract model the function head is separate from Arguments,
                 // so a single-argument constructor application has Arguments.Count == 1.
                 if (application.Arguments.Count >= 1 &&
-                    application.Function is SyntaxTypes.Expression.Identifier tagFuncRef &&
+                    application.Function is Expression.Identifier tagFuncRef &&
                     ElmValueEncoding.StringIsValidTagName(tagFuncRef.QualifiedName.DeclName))
                 {
                     // This is a tag constructor application
@@ -2384,7 +2384,7 @@ public static partial class TypeInference
 
                             // If the argument is a simple variable reference, constrain its type
                             // (only if not already constrained, to avoid overwriting existing constraints)
-                            if (argExpr is SyntaxTypes.Expression.Identifier tagVarRef &&
+                            if (argExpr is Expression.Identifier tagVarRef &&
                                 tagVarRef.QualifiedName.Namespaces.Count is 0 &&
                                 !ElmValueEncoding.StringIsValidTagName(tagVarRef.QualifiedName.DeclName) &&
                                 !constraints.ContainsKey(tagVarRef.QualifiedName.DeclName))
@@ -2408,7 +2408,7 @@ public static partial class TypeInference
 
                 return constraints;
 
-            case SyntaxTypes.Expression.OperatorApplication opApp:
+            case Expression.OperatorApplication opApp:
                 constraints =
                     ExtractTypeConstraintsFromTagApplicationsInternal(opApp.Left, constructorArgumentTypes, constraints);
 
@@ -2417,7 +2417,7 @@ public static partial class TypeInference
 
                 return constraints;
 
-            case SyntaxTypes.Expression.IfBlock ifBlock:
+            case Expression.IfBlock ifBlock:
                 constraints =
                     ExtractTypeConstraintsFromTagApplicationsInternal(ifBlock.Condition, constructorArgumentTypes, constraints);
 
@@ -2429,12 +2429,12 @@ public static partial class TypeInference
 
                 return constraints;
 
-            case SyntaxTypes.Expression.LetExpression letExpr:
+            case Expression.LetExpression letExpr:
                 foreach (var decl in letExpr.Declarations)
                 {
                     switch (decl)
                     {
-                        case SyntaxTypes.LetDeclaration.LetFunction letFunc:
+                        case LetDeclaration.LetFunction letFunc:
                             constraints =
                                 ExtractTypeConstraintsFromTagApplicationsInternal(
                                     letFunc.Function.Declaration.Expression,
@@ -2443,7 +2443,7 @@ public static partial class TypeInference
 
                             break;
 
-                        case SyntaxTypes.LetDeclaration.LetDestructuring letDestr:
+                        case LetDeclaration.LetDestructuring letDestr:
                             constraints =
                                 ExtractTypeConstraintsFromTagApplicationsInternal(letDestr.Expression, constructorArgumentTypes, constraints);
 
@@ -2460,7 +2460,7 @@ public static partial class TypeInference
 
                 return constraints;
 
-            case SyntaxTypes.Expression.CaseExpression caseExpr:
+            case Expression.CaseExpression caseExpr:
                 constraints =
                     ExtractTypeConstraintsFromTagApplicationsInternal(caseExpr.Expression, constructorArgumentTypes, constraints);
 
@@ -2472,7 +2472,7 @@ public static partial class TypeInference
 
                 return constraints;
 
-            case SyntaxTypes.Expression.ListExpr listExpr:
+            case Expression.ListExpr listExpr:
                 foreach (var elem in listExpr.Elements)
                 {
                     constraints =
@@ -2481,7 +2481,7 @@ public static partial class TypeInference
 
                 return constraints;
 
-            case SyntaxTypes.Expression.TupledExpression tupleExpr:
+            case Expression.TupledExpression tupleExpr:
                 foreach (var elem in tupleExpr.Elements)
                 {
                     constraints =
@@ -2490,22 +2490,22 @@ public static partial class TypeInference
 
                 return constraints;
 
-            case SyntaxTypes.Expression.Negation negation:
+            case Expression.Negation negation:
                 return ExtractTypeConstraintsFromTagApplicationsInternal(negation.Expression, constructorArgumentTypes, constraints);
 
-            case SyntaxTypes.Expression.UnitExpr:
-            case SyntaxTypes.Expression.StringLiteral:
-            case SyntaxTypes.Expression.CharLiteral:
-            case SyntaxTypes.Expression.IntegerLiteral:
-            case SyntaxTypes.Expression.FloatLiteral:
-            case SyntaxTypes.Expression.Identifier:
-            case SyntaxTypes.Expression.PrefixOperator:
-            case SyntaxTypes.Expression.LambdaExpression:
-            case SyntaxTypes.Expression.RecordExpr:
-            case SyntaxTypes.Expression.RecordAccess:
-            case SyntaxTypes.Expression.RecordAccessFunction:
-            case SyntaxTypes.Expression.RecordUpdateExpression:
-            case SyntaxTypes.Expression.GLSLExpression:
+            case Expression.UnitExpr:
+            case Expression.StringLiteral:
+            case Expression.CharLiteral:
+            case Expression.IntegerLiteral:
+            case Expression.FloatLiteral:
+            case Expression.Identifier:
+            case Expression.PrefixOperator:
+            case Expression.LambdaExpression:
+            case Expression.RecordExpr:
+            case Expression.RecordAccess:
+            case Expression.RecordAccessFunction:
+            case Expression.RecordUpdateExpression:
+            case Expression.GLSLExpression:
                 return constraints;
 
             default:
@@ -2526,7 +2526,7 @@ public static partial class TypeInference
     /// <param name="existingConstraints">Existing type constraints to merge with.</param>
     /// <returns>A new dictionary containing all constraints (existing plus newly discovered).</returns>
     public static ImmutableDictionary<string, InferredType> ExtractTypeConstraintsFromFunctionApplications(
-        SyntaxTypes.Expression expression,
+        Expression expression,
         IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? functionTypes,
         string currentModuleName,
         ImmutableDictionary<string, InferredType> existingConstraints)
@@ -2543,18 +2543,18 @@ public static partial class TypeInference
     }
 
     private static ImmutableDictionary<string, InferredType> ExtractTypeConstraintsFromFunctionApplicationsInternal(
-        SyntaxTypes.Expression expression,
+        Expression expression,
         IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo> functionTypes,
         string currentModuleName,
         ImmutableDictionary<string, InferredType> constraints)
     {
         switch (expression)
         {
-            case SyntaxTypes.Expression.Application application:
+            case Expression.Application application:
 
                 // Check if this is a function application (not a tag constructor)
                 if (application.Arguments.Count >= 1 &&
-                    application.Function is SyntaxTypes.Expression.Identifier funcRef &&
+                    application.Function is Expression.Identifier funcRef &&
                     !ElmValueEncoding.StringIsValidTagName(funcRef.QualifiedName.DeclName))
                 {
                     var qualifiedFuncName =
@@ -2607,7 +2607,7 @@ public static partial class TypeInference
                 }
                 // Also handle PrefixOperator applications (e.g., (//) a b)
                 else if (application.Arguments.Count >= 1 &&
-                    application.Function is SyntaxTypes.Expression.PrefixOperator prefixOp)
+                    application.Function is Expression.PrefixOperator prefixOp)
                 {
                     // Map the operator to a function name and get its type info
                     if (CoreLibraryModule.CoreBasics.OperatorToFunctionName(prefixOp.Operator) is { } funcName)
@@ -2647,7 +2647,7 @@ public static partial class TypeInference
 
                 return constraints;
 
-            case SyntaxTypes.Expression.OperatorApplication opApp:
+            case Expression.OperatorApplication opApp:
                 constraints =
                     ExtractTypeConstraintsFromFunctionApplicationsInternal(opApp.Left, functionTypes, currentModuleName, constraints);
 
@@ -2656,7 +2656,7 @@ public static partial class TypeInference
 
                 return constraints;
 
-            case SyntaxTypes.Expression.IfBlock ifBlock:
+            case Expression.IfBlock ifBlock:
                 constraints =
                     ExtractTypeConstraintsFromFunctionApplicationsInternal(
                         ifBlock.Condition,
@@ -2680,12 +2680,12 @@ public static partial class TypeInference
 
                 return constraints;
 
-            case SyntaxTypes.Expression.LetExpression letExpr:
+            case Expression.LetExpression letExpr:
                 foreach (var decl in letExpr.Declarations)
                 {
                     switch (decl)
                     {
-                        case SyntaxTypes.LetDeclaration.LetFunction letFunc:
+                        case LetDeclaration.LetFunction letFunc:
                             constraints =
                                 ExtractTypeConstraintsFromFunctionApplicationsInternal(
                                     letFunc.Function.Declaration.Expression,
@@ -2695,7 +2695,7 @@ public static partial class TypeInference
 
                             break;
 
-                        case SyntaxTypes.LetDeclaration.LetDestructuring letDestr:
+                        case LetDeclaration.LetDestructuring letDestr:
                             constraints =
                                 ExtractTypeConstraintsFromFunctionApplicationsInternal(
                                     letDestr.Expression,
@@ -2720,7 +2720,7 @@ public static partial class TypeInference
 
                 return constraints;
 
-            case SyntaxTypes.Expression.CaseExpression caseExpr:
+            case Expression.CaseExpression caseExpr:
                 constraints =
                     ExtractTypeConstraintsFromFunctionApplicationsInternal(
                         caseExpr.Expression,
@@ -2740,7 +2740,7 @@ public static partial class TypeInference
 
                 return constraints;
 
-            case SyntaxTypes.Expression.ListExpr listExpr:
+            case Expression.ListExpr listExpr:
                 foreach (var elem in listExpr.Elements)
                 {
                     constraints =
@@ -2749,7 +2749,7 @@ public static partial class TypeInference
 
                 return constraints;
 
-            case SyntaxTypes.Expression.TupledExpression tupleExpr:
+            case Expression.TupledExpression tupleExpr:
                 foreach (var elem in tupleExpr.Elements)
                 {
                     constraints =
@@ -2758,7 +2758,7 @@ public static partial class TypeInference
 
                 return constraints;
 
-            case SyntaxTypes.Expression.Negation negation:
+            case Expression.Negation negation:
                 return
                     ExtractTypeConstraintsFromFunctionApplicationsInternal(
                         negation.Expression,
@@ -2766,19 +2766,19 @@ public static partial class TypeInference
                         currentModuleName,
                         constraints);
 
-            case SyntaxTypes.Expression.UnitExpr:
-            case SyntaxTypes.Expression.StringLiteral:
-            case SyntaxTypes.Expression.CharLiteral:
-            case SyntaxTypes.Expression.IntegerLiteral:
-            case SyntaxTypes.Expression.FloatLiteral:
-            case SyntaxTypes.Expression.Identifier:
-            case SyntaxTypes.Expression.PrefixOperator:
-            case SyntaxTypes.Expression.LambdaExpression:
-            case SyntaxTypes.Expression.RecordExpr:
-            case SyntaxTypes.Expression.RecordAccess:
-            case SyntaxTypes.Expression.RecordAccessFunction:
-            case SyntaxTypes.Expression.RecordUpdateExpression:
-            case SyntaxTypes.Expression.GLSLExpression:
+            case Expression.UnitExpr:
+            case Expression.StringLiteral:
+            case Expression.CharLiteral:
+            case Expression.IntegerLiteral:
+            case Expression.FloatLiteral:
+            case Expression.Identifier:
+            case Expression.PrefixOperator:
+            case Expression.LambdaExpression:
+            case Expression.RecordExpr:
+            case Expression.RecordAccess:
+            case Expression.RecordAccessFunction:
+            case Expression.RecordUpdateExpression:
+            case Expression.GLSLExpression:
                 return constraints;
 
             default:
@@ -2794,13 +2794,13 @@ public static partial class TypeInference
     /// This recursively processes operator expressions, parenthesized expressions, etc.
     /// </summary>
     private static ImmutableDictionary<string, InferredType> ExtractTypeConstraintsFromExpression(
-        SyntaxTypes.Expression expression,
+        Expression expression,
         InferredType targetType,
         ImmutableDictionary<string, InferredType> constraints)
     {
         switch (expression)
         {
-            case SyntaxTypes.Expression.Identifier varRef:
+            case Expression.Identifier varRef:
 
                 // Simple variable reference - constrain its type if not already constrained
                 if (varRef.QualifiedName.Namespaces.Count is 0 &&
@@ -2812,7 +2812,7 @@ public static partial class TypeInference
 
                 return constraints;
 
-            case SyntaxTypes.Expression.OperatorApplication opApp:
+            case Expression.OperatorApplication opApp:
 
                 // For arithmetic operators where result type is known, propagate to operands
                 if (targetType is InferredType.IntType)
@@ -2837,12 +2837,12 @@ public static partial class TypeInference
 
                 return constraints;
 
-            case SyntaxTypes.Expression.Application application:
+            case Expression.Application application:
 
                 // Handle canonicalized operators (Basics.add, Basics.sub, Basics.mul)
                 // After canonicalization, `x + 7` becomes `Basics.add x 7`
                 if (application.Arguments.Count >= 2 &&
-                    application.Function is SyntaxTypes.Expression.Identifier funcRef &&
+                    application.Function is Expression.Identifier funcRef &&
                     funcRef.QualifiedName.Namespaces.Count is 1 && funcRef.QualifiedName.Namespaces[0] is "Basics" &&
                     targetType is InferredType.IntType or InferredType.FloatType)
                 {
@@ -2859,28 +2859,28 @@ public static partial class TypeInference
 
                 return constraints;
 
-            case SyntaxTypes.Expression.Negation negation:
+            case Expression.Negation negation:
 
                 // Negation preserves numeric type
                 return ExtractTypeConstraintsFromExpression(negation.Expression, targetType, constraints);
 
-            case SyntaxTypes.Expression.UnitExpr:
-            case SyntaxTypes.Expression.StringLiteral:
-            case SyntaxTypes.Expression.CharLiteral:
-            case SyntaxTypes.Expression.IntegerLiteral:
-            case SyntaxTypes.Expression.FloatLiteral:
-            case SyntaxTypes.Expression.ListExpr:
-            case SyntaxTypes.Expression.IfBlock:
-            case SyntaxTypes.Expression.PrefixOperator:
-            case SyntaxTypes.Expression.TupledExpression:
-            case SyntaxTypes.Expression.LambdaExpression:
-            case SyntaxTypes.Expression.CaseExpression:
-            case SyntaxTypes.Expression.LetExpression:
-            case SyntaxTypes.Expression.RecordExpr:
-            case SyntaxTypes.Expression.RecordAccess:
-            case SyntaxTypes.Expression.RecordAccessFunction:
-            case SyntaxTypes.Expression.RecordUpdateExpression:
-            case SyntaxTypes.Expression.GLSLExpression:
+            case Expression.UnitExpr:
+            case Expression.StringLiteral:
+            case Expression.CharLiteral:
+            case Expression.IntegerLiteral:
+            case Expression.FloatLiteral:
+            case Expression.ListExpr:
+            case Expression.IfBlock:
+            case Expression.PrefixOperator:
+            case Expression.TupledExpression:
+            case Expression.LambdaExpression:
+            case Expression.CaseExpression:
+            case Expression.LetExpression:
+            case Expression.RecordExpr:
+            case Expression.RecordAccess:
+            case Expression.RecordAccessFunction:
+            case Expression.RecordUpdateExpression:
+            case Expression.GLSLExpression:
                 return constraints;
 
             default:
@@ -2893,7 +2893,7 @@ public static partial class TypeInference
     /// Determines if an expression is known to be of integer type.
     /// </summary>
     public static bool IsIntegerType(
-        SyntaxTypes.Expression expression,
+        Expression expression,
         IReadOnlyDictionary<string, int> parameterNames,
         IReadOnlyDictionary<string, InferredType> parameterTypes,
         IReadOnlyDictionary<string, InferredType>? localBindingTypes = null)
@@ -2912,29 +2912,29 @@ public static partial class TypeInference
     /// <param name="existingBindings">Existing binding types to merge with.</param>
     /// <returns>A new dictionary containing all bindings (existing plus newly discovered).</returns>
     public static ImmutableDictionary<string, InferredType> ExtractPatternBindingTypes(
-        SyntaxTypes.Pattern pattern,
-        SyntaxTypes.TypeAnnotation typeAnnotation,
+        Pattern pattern,
+        TypeAnnotation typeAnnotation,
         ImmutableDictionary<string, InferredType> existingBindings)
     {
         return ExtractPatternBindingTypesInternal(pattern, typeAnnotation, existingBindings);
     }
 
     private static ImmutableDictionary<string, InferredType> ExtractPatternBindingTypesInternal(
-        SyntaxTypes.Pattern pattern,
-        SyntaxTypes.TypeAnnotation typeAnnotation,
+        Pattern pattern,
+        TypeAnnotation typeAnnotation,
         ImmutableDictionary<string, InferredType> bindings)
     {
         switch (pattern)
         {
-            case SyntaxTypes.Pattern.VarPattern varPattern:
+            case Pattern.VarPattern varPattern:
 
                 // Simple variable binding - convert the type annotation to inferred type
                 return bindings.SetItem(varPattern.Name, TypeAnnotationToInferredType(typeAnnotation));
 
-            case SyntaxTypes.Pattern.TuplePattern tuplePattern:
+            case Pattern.TuplePattern tuplePattern:
 
                 // Tuple pattern - match against Tupled type annotation
-                if (typeAnnotation is SyntaxTypes.TypeAnnotation.Tupled tupledType &&
+                if (typeAnnotation is TypeAnnotation.Tupled tupledType &&
                     tupledType.TypeAnnotations.Count == tuplePattern.Elements.Count)
                 {
                     for (var i = 0; i < tuplePattern.Elements.Count; i++)
@@ -2949,17 +2949,17 @@ public static partial class TypeInference
 
                 return bindings;
 
-            case SyntaxTypes.Pattern.AllPattern:
-            case SyntaxTypes.Pattern.UnitPattern:
-            case SyntaxTypes.Pattern.CharPattern:
-            case SyntaxTypes.Pattern.StringPattern:
-            case SyntaxTypes.Pattern.IntPattern:
-            case SyntaxTypes.Pattern.FloatPattern:
-            case SyntaxTypes.Pattern.RecordPattern:
-            case SyntaxTypes.Pattern.UnConsPattern:
-            case SyntaxTypes.Pattern.ListPattern:
-            case SyntaxTypes.Pattern.NamedPattern:
-            case SyntaxTypes.Pattern.AsPattern:
+            case Pattern.AllPattern:
+            case Pattern.UnitPattern:
+            case Pattern.CharPattern:
+            case Pattern.StringPattern:
+            case Pattern.IntPattern:
+            case Pattern.FloatPattern:
+            case Pattern.RecordPattern:
+            case Pattern.UnConsPattern:
+            case Pattern.ListPattern:
+            case Pattern.NamedPattern:
+            case Pattern.AsPattern:
                 return bindings;
 
             default:
@@ -2977,7 +2977,7 @@ public static partial class TypeInference
     /// <param name="existingBindings">Existing binding types to merge with.</param>
     /// <returns>A new dictionary containing all bindings (existing plus newly discovered).</returns>
     public static ImmutableDictionary<string, InferredType> ExtractPatternBindingTypesWithConstructors(
-        SyntaxTypes.Pattern pattern,
+        Pattern pattern,
         IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<InferredType>>? constructorArgumentTypes,
         ImmutableDictionary<string, InferredType> existingBindings)
     {
@@ -2988,13 +2988,13 @@ public static partial class TypeInference
     }
 
     private static ImmutableDictionary<string, InferredType> ExtractPatternBindingTypesWithConstructorsInternal(
-        SyntaxTypes.Pattern pattern,
+        Pattern pattern,
         IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<InferredType>> constructorArgumentTypes,
         ImmutableDictionary<string, InferredType> bindings)
     {
         switch (pattern)
         {
-            case SyntaxTypes.Pattern.NamedPattern namedPattern:
+            case Pattern.NamedPattern namedPattern:
 
                 // NamedPattern - look up constructor argument types
                 if (constructorArgumentTypes.TryGetValue(DeclQualifiedNameFromSyntax(namedPattern.Name), out var argTypes) &&
@@ -3013,7 +3013,7 @@ public static partial class TypeInference
 
                 return bindings;
 
-            case SyntaxTypes.Pattern.TuplePattern tuplePattern:
+            case Pattern.TuplePattern tuplePattern:
 
                 // Recurse into tuple elements (they might contain NamedPatterns)
                 foreach (var elem in tuplePattern.Elements)
@@ -3024,7 +3024,7 @@ public static partial class TypeInference
 
                 return bindings;
 
-            case SyntaxTypes.Pattern.UnConsPattern unConsPattern:
+            case Pattern.UnConsPattern unConsPattern:
                 bindings =
                     ExtractPatternBindingTypesWithConstructorsInternal(
                         unConsPattern.Head,
@@ -3037,7 +3037,7 @@ public static partial class TypeInference
                         constructorArgumentTypes,
                         bindings);
 
-            case SyntaxTypes.Pattern.ListPattern listPattern:
+            case Pattern.ListPattern listPattern:
                 foreach (var element in listPattern.Elements)
                 {
                     bindings =
@@ -3049,21 +3049,21 @@ public static partial class TypeInference
 
                 return bindings;
 
-            case SyntaxTypes.Pattern.AsPattern asPattern:
+            case Pattern.AsPattern asPattern:
                 return
                     ExtractPatternBindingTypesWithConstructorsInternal(
                         asPattern.Pattern,
                         constructorArgumentTypes,
                         bindings);
 
-            case SyntaxTypes.Pattern.AllPattern:
-            case SyntaxTypes.Pattern.VarPattern:
-            case SyntaxTypes.Pattern.UnitPattern:
-            case SyntaxTypes.Pattern.CharPattern:
-            case SyntaxTypes.Pattern.StringPattern:
-            case SyntaxTypes.Pattern.IntPattern:
-            case SyntaxTypes.Pattern.FloatPattern:
-            case SyntaxTypes.Pattern.RecordPattern:
+            case Pattern.AllPattern:
+            case Pattern.VarPattern:
+            case Pattern.UnitPattern:
+            case Pattern.CharPattern:
+            case Pattern.StringPattern:
+            case Pattern.IntPattern:
+            case Pattern.FloatPattern:
+            case Pattern.RecordPattern:
                 return bindings;
 
             default:
@@ -3081,7 +3081,7 @@ public static partial class TypeInference
     /// <param name="existingBindings">Existing binding types to merge with.</param>
     /// <returns>A new dictionary containing all bindings (existing plus newly discovered).</returns>
     public static ImmutableDictionary<string, InferredType> ExtractPatternBindingTypesFromInferred(
-        SyntaxTypes.Pattern pattern,
+        Pattern pattern,
         InferredType inferredType,
         ImmutableDictionary<string, InferredType> existingBindings)
     {
@@ -3099,7 +3099,7 @@ public static partial class TypeInference
     /// <param name="constructorArgumentTypes">Optional map of constructor names to their argument types.</param>
     /// <returns>A new dictionary containing all bindings (existing plus newly discovered).</returns>
     public static ImmutableDictionary<string, InferredType> ExtractPatternBindingTypesFromInferred(
-        SyntaxTypes.Pattern pattern,
+        Pattern pattern,
         InferredType inferredType,
         ImmutableDictionary<string, InferredType> existingBindings,
         IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<InferredType>>? constructorArgumentTypes)
@@ -3126,7 +3126,7 @@ public static partial class TypeInference
     /// Constructor arguments are specialized recursively from the type matched at each named pattern.
     /// </summary>
     public static ImmutableDictionary<string, InferredType> ExtractPatternBindingTypesFromInferredWithChoiceTagTypes(
-        SyntaxTypes.Pattern pattern,
+        Pattern pattern,
         InferredType inferredType,
         ImmutableDictionary<string, InferredType> existingBindings,
         IReadOnlyDictionary<DeclQualifiedName, FunctionTypeInfo>? choiceTagTypes)
@@ -3152,19 +3152,19 @@ public static partial class TypeInference
     }
 
     private static ImmutableDictionary<string, InferredType> ExtractPatternBindingTypesFromInferredInternal(
-        SyntaxTypes.Pattern pattern,
+        Pattern pattern,
         InferredType inferredType,
         ImmutableDictionary<string, InferredType> bindings,
         Func<DeclQualifiedName, InferredType, IReadOnlyList<InferredType>?>? resolveConstructorArgumentTypes)
     {
         switch (pattern)
         {
-            case SyntaxTypes.Pattern.VarPattern varPattern:
+            case Pattern.VarPattern varPattern:
 
                 // Simple variable binding
                 return bindings.SetItem(varPattern.Name, inferredType);
 
-            case SyntaxTypes.Pattern.TuplePattern tuplePattern:
+            case Pattern.TuplePattern tuplePattern:
 
                 // Tuple pattern - match against TupleType
                 if (inferredType is InferredType.TupleType tupleType &&
@@ -3183,7 +3183,7 @@ public static partial class TypeInference
 
                 return bindings;
 
-            case SyntaxTypes.Pattern.RecordPattern recordPattern:
+            case Pattern.RecordPattern recordPattern:
                 IReadOnlyList<(string FieldName, InferredType FieldType)>? recordFields = null;
 
                 if (inferredType is InferredType.RecordType recordType)
@@ -3207,7 +3207,7 @@ public static partial class TypeInference
 
                 return bindings;
 
-            case SyntaxTypes.Pattern.NamedPattern namedPattern:
+            case Pattern.NamedPattern namedPattern:
 
                 // NamedPattern - look up constructor argument types
                 if (resolveConstructorArgumentTypes?.Invoke(
@@ -3228,7 +3228,7 @@ public static partial class TypeInference
 
                 return bindings;
 
-            case SyntaxTypes.Pattern.UnConsPattern unConsPattern:
+            case Pattern.UnConsPattern unConsPattern:
                 var elementType =
                     inferredType switch
                     {
@@ -3264,7 +3264,7 @@ public static partial class TypeInference
                         bindings,
                         resolveConstructorArgumentTypes);
 
-            case SyntaxTypes.Pattern.ListPattern listPattern:
+            case Pattern.ListPattern listPattern:
                 var listElementType =
                     inferredType switch
                     {
@@ -3298,7 +3298,7 @@ public static partial class TypeInference
 
                 return bindings;
 
-            case SyntaxTypes.Pattern.AsPattern asPattern:
+            case Pattern.AsPattern asPattern:
                 bindings = bindings.SetItem(asPattern.Name, inferredType);
 
                 return
@@ -3308,12 +3308,12 @@ public static partial class TypeInference
                         bindings,
                         resolveConstructorArgumentTypes);
 
-            case SyntaxTypes.Pattern.AllPattern:
-            case SyntaxTypes.Pattern.UnitPattern:
-            case SyntaxTypes.Pattern.CharPattern:
-            case SyntaxTypes.Pattern.StringPattern:
-            case SyntaxTypes.Pattern.IntPattern:
-            case SyntaxTypes.Pattern.FloatPattern:
+            case Pattern.AllPattern:
+            case Pattern.UnitPattern:
+            case Pattern.CharPattern:
+            case Pattern.StringPattern:
+            case Pattern.IntPattern:
+            case Pattern.FloatPattern:
                 return bindings;
 
             default:
@@ -3331,14 +3331,14 @@ public static partial class TypeInference
     /// <param name="aliasDefinitions">Optional precomputed type alias definitions.</param>
     /// <returns>A dictionary mapping qualified function names to their inferred types.</returns>
     public static ImmutableDictionary<string, InferredType> BuildFunctionSignaturesMap(
-        SyntaxTypes.File file,
+        File file,
         string moduleName,
         IReadOnlyDictionary<DeclQualifiedName, TypeAliasDefinition>? aliasDefinitions = null) =>
         BuildFunctionSignaturesMap(file.Declarations, moduleName, aliasDefinitions);
 
     /// <summary>Builds signatures from AST declarations in a module.</summary>
     public static ImmutableDictionary<string, InferredType> BuildFunctionSignaturesMap(
-        IReadOnlyList<SyntaxTypes.Declaration> declarations,
+        IReadOnlyList<Declaration> declarations,
         string moduleName,
         IReadOnlyDictionary<DeclQualifiedName, TypeAliasDefinition>? aliasDefinitions = null)
     {
@@ -3363,11 +3363,11 @@ public static partial class TypeInference
     /// and record type alias constructors.
     /// </summary>
     public static void CollectFunctionSignaturesFromDeclaration(
-        SyntaxTypes.Declaration declaration,
+        Declaration declaration,
         string moduleName,
         ImmutableDictionary<string, InferredType>.Builder builder)
     {
-        if (declaration is SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+        if (declaration is Declaration.FunctionDeclaration funcDecl)
         {
             var funcName = funcDecl.Function.Declaration.Name;
             var qualifiedName = moduleName + "." + funcName;
@@ -3378,7 +3378,7 @@ public static partial class TypeInference
                 builder[qualifiedName] = inferredType;
             }
         }
-        else if (declaration is SyntaxTypes.Declaration.ChoiceTypeDeclaration choiceTypeDecl)
+        else if (declaration is Declaration.ChoiceTypeDeclaration choiceTypeDecl)
         {
             var typeName = choiceTypeDecl.TypeDeclaration.Name;
 
@@ -3424,7 +3424,7 @@ public static partial class TypeInference
                 builder[qualifiedConstructorName] = constructorType;
             }
         }
-        else if (declaration is SyntaxTypes.Declaration.AliasDeclaration aliasDecl)
+        else if (declaration is Declaration.AliasDeclaration aliasDecl)
         {
             // Type alias record constructors - if the type alias is for a record type,
             // it creates an implicit constructor: FieldType1 -> FieldType2 -> ... -> { field1: T1, field2: T2, ... }
@@ -3433,7 +3433,7 @@ public static partial class TypeInference
             var qualifiedAliasName = moduleName + "." + aliasName;
 
             // Check if the type annotation is a record type
-            if (aliasDecl.TypeAlias.TypeAnnotation is SyntaxTypes.TypeAnnotation.Record recordType &&
+            if (aliasDecl.TypeAlias.TypeAnnotation is TypeAnnotation.Record recordType &&
                 recordType.RecordDefinition.Fields.Count > 0)
             {
                 // Convert the full record type annotation to InferredType for the result type
@@ -3469,8 +3469,8 @@ public static partial class TypeInference
     /// <param name="functionSignatures">Map of known function signatures.</param>
     /// <returns>A tuple containing the return type and inferred parameter types.</returns>
     public static (InferredType returnType, ImmutableDictionary<string, InferredType> parameterTypes) InferFunctionDeclarationType(
-        SyntaxTypes.Expression expression,
-        IReadOnlyList<SyntaxTypes.Pattern> arguments,
+        Expression expression,
+        IReadOnlyList<Pattern> arguments,
         string moduleName,
         IReadOnlyDictionary<string, InferredType> functionSignatures) =>
         InferFunctionDeclarationType(
@@ -3523,8 +3523,8 @@ public static partial class TypeInference
     /// Infers a function using a previously prepared immutable signature environment.
     /// </summary>
     public static (InferredType returnType, ImmutableDictionary<string, InferredType> parameterTypes) InferFunctionDeclarationType(
-        SyntaxTypes.Expression expression,
-        IReadOnlyList<SyntaxTypes.Pattern> arguments,
+        Expression expression,
+        IReadOnlyList<Pattern> arguments,
         string moduleName,
         FunctionInferenceEnvironment environment)
     {
@@ -3533,7 +3533,7 @@ public static partial class TypeInference
 
         for (var i = 0; i < arguments.Count; i++)
         {
-            if (arguments[i] is SyntaxTypes.Pattern.VarPattern varPattern)
+            if (arguments[i] is Pattern.VarPattern varPattern)
             {
                 parameterNames[varPattern.Name] = i;
             }
@@ -3569,7 +3569,7 @@ public static partial class TypeInference
     /// <param name="returnType">The return type of the function.</param>
     /// <returns>The complete function type.</returns>
     public static InferredType BuildFunctionType(
-        IReadOnlyList<SyntaxTypes.Pattern> arguments,
+        IReadOnlyList<Pattern> arguments,
         ImmutableDictionary<string, InferredType> parameterTypes,
         InferredType returnType)
     {
@@ -3585,7 +3585,7 @@ public static partial class TypeInference
         {
             InferredType paramType;
 
-            if (arguments[i] is SyntaxTypes.Pattern.VarPattern varPattern &&
+            if (arguments[i] is Pattern.VarPattern varPattern &&
                 parameterTypes.TryGetValue(varPattern.Name, out var inferredParamType))
             {
                 paramType = inferredParamType;
@@ -3642,18 +3642,18 @@ public static partial class TypeInference
     /// Builds the type alias definitions declared in a module.
     /// </summary>
     public static ImmutableDictionary<DeclQualifiedName, TypeAliasDefinition> BuildTypeAliasDefinitions(
-        SyntaxTypes.File file,
+        File file,
         string moduleName) =>
         BuildTypeAliasDefinitions(file.Declarations, moduleName);
 
     /// <summary>Builds type alias definitions from AST declarations in a module.</summary>
     public static ImmutableDictionary<DeclQualifiedName, TypeAliasDefinition> BuildTypeAliasDefinitions(
-        IEnumerable<SyntaxTypes.Declaration> declarations,
+        IEnumerable<Declaration> declarations,
         string moduleName)
     {
         var definitions = ImmutableDictionary.CreateBuilder<DeclQualifiedName, TypeAliasDefinition>();
 
-        foreach (var aliasDeclaration in declarations.OfType<SyntaxTypes.Declaration.AliasDeclaration>())
+        foreach (var aliasDeclaration in declarations.OfType<Declaration.AliasDeclaration>())
         {
             definitions[QualifiedNameHelper.FromQualifiedNameString(moduleName + "." + aliasDeclaration.TypeAlias.Name)] =
                 new TypeAliasDefinition(
@@ -3907,7 +3907,7 @@ public static partial class TypeInference
     /// <param name="functionSignatures">Map of known function signatures.</param>
     /// <returns>A dictionary mapping parameter names to their inferred types.</returns>
     public static ImmutableDictionary<string, InferredType> InferParameterTypesFromUsage(
-        SyntaxTypes.Expression expression,
+        Expression expression,
         IReadOnlyDictionary<string, int> parameterNames,
         IReadOnlyDictionary<string, InferredType> functionSignatures)
     {
@@ -3924,7 +3924,7 @@ public static partial class TypeInference
     /// Scans an expression recursively to infer parameter types from function applications.
     /// </summary>
     private static ImmutableDictionary<string, InferredType> ScanExpressionForParameterTypes(
-        SyntaxTypes.Expression expression,
+        Expression expression,
         IReadOnlyDictionary<string, int> parameterNames,
         IReadOnlyDictionary<string, InferredType> functionSignatures,
         ImmutableDictionary<string, InferredType> parameterTypes) =>
@@ -3940,21 +3940,21 @@ public static partial class TypeInference
     /// with support for tracking local binding definitions for constraint propagation.
     /// </summary>
     private static ImmutableDictionary<string, InferredType> ScanExpressionForParameterTypes(
-        SyntaxTypes.Expression expression,
+        Expression expression,
         IReadOnlyDictionary<string, int> parameterNames,
         IReadOnlyDictionary<string, InferredType> functionSignatures,
         ImmutableDictionary<string, InferredType> parameterTypes,
-        ImmutableDictionary<string, SyntaxTypes.Expression> localBindingDefinitions)
+        ImmutableDictionary<string, Expression> localBindingDefinitions)
     {
         switch (expression)
         {
-            case SyntaxTypes.Expression.Application app:
+            case Expression.Application app:
 
                 if (app.Arguments.Count is 0)
                     break;
 
                 // Check if first argument is a function reference with known signature
-                if (app.Function is SyntaxTypes.Expression.Identifier funcRef)
+                if (app.Function is Expression.Identifier funcRef)
                 {
                     // Try both qualified and unqualified names
                     InferredType? funcType = null;
@@ -3984,7 +3984,7 @@ public static partial class TypeInference
                         // Match application arguments with function parameter types
                         for (var i = 1; i < app.Arguments.Count + 1 && i - 1 < argTypes.Count; i++)
                         {
-                            if (app.Arguments[i - 1] is SyntaxTypes.Expression.Identifier argRef &&
+                            if (app.Arguments[i - 1] is Expression.Identifier argRef &&
                                 argRef.QualifiedName.Namespaces.Count is 0 &&
                                 parameterNames.ContainsKey(argRef.QualifiedName.DeclName) &&
                                 !parameterTypes.ContainsKey(argRef.QualifiedName.DeclName))
@@ -4009,14 +4009,14 @@ public static partial class TypeInference
 
                 break;
 
-            case SyntaxTypes.Expression.LetExpression letExpr:
+            case Expression.LetExpression letExpr:
 
                 // Build a map of local binding definitions for constraint propagation
                 var extendedLocalBindings = localBindingDefinitions;
 
                 foreach (var decl in letExpr.Declarations)
                 {
-                    if (decl is SyntaxTypes.LetDeclaration.LetFunction letFunc)
+                    if (decl is LetDeclaration.LetFunction letFunc)
                     {
                         var bindingName = letFunc.Function.Declaration.Name;
                         var bindingExpr = letFunc.Function.Declaration.Expression;
@@ -4030,7 +4030,7 @@ public static partial class TypeInference
                                 parameterTypes,
                                 extendedLocalBindings);
                     }
-                    else if (decl is SyntaxTypes.LetDeclaration.LetDestructuring letDestr)
+                    else if (decl is LetDeclaration.LetDestructuring letDestr)
                     {
                         // `let { f1, f2, ... } = r in ...`: when `r` is a parameter
                         // and the LHS pattern is a record pattern, constrain `r` to
@@ -4038,8 +4038,8 @@ public static partial class TypeInference
                         // Multiple destructurings of the same parameter accumulate
                         // their fields via unification, mirroring the behaviour of
                         // multiple `r.field` accesses on the same parameter.
-                        if (letDestr.Pattern is SyntaxTypes.Pattern.RecordPattern recordPattern &&
-                            letDestr.Expression is SyntaxTypes.Expression.Identifier scrutineeRef &&
+                        if (letDestr.Pattern is Pattern.RecordPattern recordPattern &&
+                            letDestr.Expression is Expression.Identifier scrutineeRef &&
                             scrutineeRef.QualifiedName.Namespaces.Count is 0 &&
                             parameterNames.ContainsKey(scrutineeRef.QualifiedName.DeclName))
                         {
@@ -4077,7 +4077,7 @@ public static partial class TypeInference
                             foreach (var fieldNameNode in recordPattern.Fields)
                             {
                                 var syntheticRecordAccess =
-                                    new SyntaxTypes.Expression.RecordAccess(
+                                    new Expression.RecordAccess(
                                         letDestr.Expression,
                                         fieldNameNode.FieldName,
                                         fieldNameNode.FieldNameValue);
@@ -4107,7 +4107,7 @@ public static partial class TypeInference
 
                 break;
 
-            case SyntaxTypes.Expression.IfBlock ifBlock:
+            case Expression.IfBlock ifBlock:
                 parameterTypes =
                     ScanExpressionForParameterTypes(
                         ifBlock.Condition,
@@ -4134,7 +4134,7 @@ public static partial class TypeInference
 
                 break;
 
-            case SyntaxTypes.Expression.CaseExpression caseExpr:
+            case Expression.CaseExpression caseExpr:
                 parameterTypes =
                     ScanExpressionForParameterTypes(
                         caseExpr.Expression,
@@ -4156,7 +4156,7 @@ public static partial class TypeInference
 
                 break;
 
-            case SyntaxTypes.Expression.OperatorApplication opApp:
+            case Expression.OperatorApplication opApp:
 
                 // Check if the operator forces specific operand types
                 if (s_operatorConstraints.TryGetValue(opApp.Operator, out var constraints))
@@ -4191,7 +4191,7 @@ public static partial class TypeInference
                 if (opApp.Operator is "+" or "-" or "*" or "^" or "%")
                 {
                     // Check if left operand is a Float literal
-                    if (opApp.Left is SyntaxTypes.Expression.FloatLiteral)
+                    if (opApp.Left is Expression.FloatLiteral)
                     {
                         parameterTypes =
                             ExtractTypeConstraintFromExpression(
@@ -4203,7 +4203,7 @@ public static partial class TypeInference
                     }
 
                     // Check if right operand is a Float literal
-                    if (opApp.Right is SyntaxTypes.Expression.FloatLiteral)
+                    if (opApp.Right is Expression.FloatLiteral)
                     {
                         parameterTypes =
                             ExtractTypeConstraintFromExpression(
@@ -4220,7 +4220,7 @@ public static partial class TypeInference
                 // parameters to String / List a once enough information is available.
                 if (opApp.Operator is "++")
                 {
-                    if (opApp.Left is SyntaxTypes.Expression.StringLiteral)
+                    if (opApp.Left is Expression.StringLiteral)
                     {
                         parameterTypes =
                             ExtractTypeConstraintFromExpression(
@@ -4231,7 +4231,7 @@ public static partial class TypeInference
                                 localBindingDefinitions);
                     }
 
-                    if (opApp.Right is SyntaxTypes.Expression.StringLiteral)
+                    if (opApp.Right is Expression.StringLiteral)
                     {
                         parameterTypes =
                             ExtractTypeConstraintFromExpression(
@@ -4242,7 +4242,7 @@ public static partial class TypeInference
                                 localBindingDefinitions);
                     }
 
-                    if (opApp.Left is SyntaxTypes.Expression.ListExpr leftList)
+                    if (opApp.Left is Expression.ListExpr leftList)
                     {
                         parameterTypes =
                             ExtractTypeConstraintFromExpression(
@@ -4253,7 +4253,7 @@ public static partial class TypeInference
                                 localBindingDefinitions);
                     }
 
-                    if (opApp.Right is SyntaxTypes.Expression.ListExpr rightList)
+                    if (opApp.Right is Expression.ListExpr rightList)
                     {
                         parameterTypes =
                             ExtractTypeConstraintFromExpression(
@@ -4320,7 +4320,7 @@ public static partial class TypeInference
 
                 break;
 
-            case SyntaxTypes.Expression.LambdaExpression lambda:
+            case Expression.LambdaExpression lambda:
                 parameterTypes =
                     ScanExpressionForParameterTypes(
                         lambda.Expression,
@@ -4331,7 +4331,7 @@ public static partial class TypeInference
 
                 break;
 
-            case SyntaxTypes.Expression.TupledExpression tuple:
+            case Expression.TupledExpression tuple:
                 foreach (var elem in tuple.Elements)
                 {
                     parameterTypes =
@@ -4345,7 +4345,7 @@ public static partial class TypeInference
 
                 break;
 
-            case SyntaxTypes.Expression.ListExpr list:
+            case Expression.ListExpr list:
                 foreach (var elem in list.Elements)
                 {
                     parameterTypes =
@@ -4359,7 +4359,7 @@ public static partial class TypeInference
 
                 break;
 
-            case SyntaxTypes.Expression.RecordExpr record:
+            case Expression.RecordExpr record:
                 foreach (var field in record.Fields)
                 {
                     parameterTypes =
@@ -4373,12 +4373,12 @@ public static partial class TypeInference
 
                 break;
 
-            case SyntaxTypes.Expression.RecordAccess recordAccess:
+            case Expression.RecordAccess recordAccess:
 
                 // r.fieldName: if r is a parameter, constrain it to an open record
                 // requiring at least 'fieldName'. Multiple accesses on the same parameter
                 // accumulate fields via unification.
-                if (recordAccess.Record is SyntaxTypes.Expression.Identifier accessedVar &&
+                if (recordAccess.Record is Expression.Identifier accessedVar &&
                     accessedVar.QualifiedName.Namespaces.Count is 0 &&
                     parameterNames.ContainsKey(accessedVar.QualifiedName.DeclName))
                 {
@@ -4414,7 +4414,7 @@ public static partial class TypeInference
 
                 break;
 
-            case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
+            case Expression.RecordUpdateExpression recordUpdate:
 
                 // { r | f1 = e1, f2 = e2, ... }: if r is a parameter, constrain it
                 // to an open record requiring at least each updated field, with the
@@ -4465,16 +4465,16 @@ public static partial class TypeInference
 
                 break;
 
-            case SyntaxTypes.Expression.UnitExpr:
-            case SyntaxTypes.Expression.StringLiteral:
-            case SyntaxTypes.Expression.CharLiteral:
-            case SyntaxTypes.Expression.IntegerLiteral:
-            case SyntaxTypes.Expression.FloatLiteral:
-            case SyntaxTypes.Expression.Negation:
-            case SyntaxTypes.Expression.Identifier:
-            case SyntaxTypes.Expression.PrefixOperator:
-            case SyntaxTypes.Expression.RecordAccessFunction:
-            case SyntaxTypes.Expression.GLSLExpression:
+            case Expression.UnitExpr:
+            case Expression.StringLiteral:
+            case Expression.CharLiteral:
+            case Expression.IntegerLiteral:
+            case Expression.FloatLiteral:
+            case Expression.Negation:
+            case Expression.Identifier:
+            case Expression.PrefixOperator:
+            case Expression.RecordAccessFunction:
+            case Expression.GLSLExpression:
                 break;
 
             default:
@@ -4491,7 +4491,7 @@ public static partial class TypeInference
     /// this method extracts constraints for parameter variables like 'a' and 'b'.
     /// </summary>
     private static ImmutableDictionary<string, InferredType> ExtractTypeConstraintFromExpression(
-        SyntaxTypes.Expression expression,
+        Expression expression,
         InferredType targetType,
         IReadOnlyDictionary<string, int> parameterNames,
         ImmutableDictionary<string, InferredType> parameterTypes) =>
@@ -4509,15 +4509,15 @@ public static partial class TypeInference
     /// this method extracts constraints for parameter variables like 'a' and 'b'.
     /// </summary>
     private static ImmutableDictionary<string, InferredType> ExtractTypeConstraintFromExpression(
-        SyntaxTypes.Expression expression,
+        Expression expression,
         InferredType targetType,
         IReadOnlyDictionary<string, int> parameterNames,
         ImmutableDictionary<string, InferredType> parameterTypes,
-        ImmutableDictionary<string, SyntaxTypes.Expression> localBindingDefinitions)
+        ImmutableDictionary<string, Expression> localBindingDefinitions)
     {
         switch (expression)
         {
-            case SyntaxTypes.Expression.Identifier varRef:
+            case Expression.Identifier varRef:
 
                 // If this is a parameter variable, constrain its type
                 if (varRef.QualifiedName.Namespaces.Count is 0 &&
@@ -4550,13 +4550,13 @@ public static partial class TypeInference
 
                 return parameterTypes;
 
-            case SyntaxTypes.Expression.RecordAccess recordAccess:
+            case Expression.RecordAccess recordAccess:
 
                 // r.fieldName known to have type targetType: if r is a parameter,
                 // constrain it to an open record where the accessed field has
                 // exactly that type. Multiple constraints accumulate via unification
                 // of the open-record types.
-                if (recordAccess.Record is SyntaxTypes.Expression.Identifier accessedRef &&
+                if (recordAccess.Record is Expression.Identifier accessedRef &&
                     accessedRef.QualifiedName.Namespaces.Count is 0 &&
                     parameterNames.ContainsKey(accessedRef.QualifiedName.DeclName))
                 {
@@ -4580,7 +4580,7 @@ public static partial class TypeInference
 
                 return parameterTypes;
 
-            case SyntaxTypes.Expression.OperatorApplication nestedOpApp:
+            case Expression.OperatorApplication nestedOpApp:
 
                 // For arithmetic operators that preserve numeric type, propagate constraints to operands
                 if (nestedOpApp.Operator is "+" or "-" or "*" or "/" or "//" or "%" or "^")
@@ -4626,24 +4626,24 @@ public static partial class TypeInference
 
                 return parameterTypes;
 
-            case SyntaxTypes.Expression.UnitExpr:
-            case SyntaxTypes.Expression.StringLiteral:
-            case SyntaxTypes.Expression.CharLiteral:
-            case SyntaxTypes.Expression.IntegerLiteral:
-            case SyntaxTypes.Expression.FloatLiteral:
-            case SyntaxTypes.Expression.Negation:
-            case SyntaxTypes.Expression.ListExpr:
-            case SyntaxTypes.Expression.IfBlock:
-            case SyntaxTypes.Expression.PrefixOperator:
-            case SyntaxTypes.Expression.Application:
-            case SyntaxTypes.Expression.TupledExpression:
-            case SyntaxTypes.Expression.LambdaExpression:
-            case SyntaxTypes.Expression.CaseExpression:
-            case SyntaxTypes.Expression.LetExpression:
-            case SyntaxTypes.Expression.RecordExpr:
-            case SyntaxTypes.Expression.RecordAccessFunction:
-            case SyntaxTypes.Expression.RecordUpdateExpression:
-            case SyntaxTypes.Expression.GLSLExpression:
+            case Expression.UnitExpr:
+            case Expression.StringLiteral:
+            case Expression.CharLiteral:
+            case Expression.IntegerLiteral:
+            case Expression.FloatLiteral:
+            case Expression.Negation:
+            case Expression.ListExpr:
+            case Expression.IfBlock:
+            case Expression.PrefixOperator:
+            case Expression.Application:
+            case Expression.TupledExpression:
+            case Expression.LambdaExpression:
+            case Expression.CaseExpression:
+            case Expression.LetExpression:
+            case Expression.RecordExpr:
+            case Expression.RecordAccessFunction:
+            case Expression.RecordUpdateExpression:
+            case Expression.GLSLExpression:
                 return parameterTypes;
 
             default:
@@ -4692,13 +4692,13 @@ public static partial class TypeInference
     /// inferred types of its arguments.
     /// </summary>
     public static ImmutableDictionary<DeclQualifiedName, ChoiceTypeDefinition> BuildChoiceTypeDefinitions(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
+        ImmutableDictionary<DeclQualifiedName, Declaration> declarations)
     {
         var result = new Dictionary<DeclQualifiedName, ChoiceTypeDefinition>();
 
         foreach (var (key, decl) in declarations)
         {
-            if (decl is not SyntaxTypes.Declaration.ChoiceTypeDeclaration declaration)
+            if (decl is not Declaration.ChoiceTypeDeclaration declaration)
                 continue;
 
             var typeStruct = declaration.TypeDeclaration;

@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.LanguageServer;
+using Pine.Core.Functional;
 using Pine.Core.IO;
 using System;
 using System.Collections.Generic;

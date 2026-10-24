@@ -1,12 +1,12 @@
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Elm.Syntax.Concrete;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 
 // Alias to avoid ambiguity with System.Range
-using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
+using Range = Pine.Core.Elm.Syntax.Concrete.Range;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
@@ -68,7 +68,7 @@ public abstract record CanonicalizationError(
     public record AmbiguousImport(
         Range Range,
         string Name,
-        IReadOnlyList<string> ImportingModules)
+        ModuleName ImportingModules)
         : CanonicalizationError(Range);
 }
 
@@ -130,7 +130,7 @@ public record ShadowingLocation(
 /// Each value describes the location of the shadowing declaration.
 /// </param>
 public record ModuleCanonicalizationResult(
-    SyntaxTypes.File File,
+    File File,
     IReadOnlyList<CanonicalizationError> Errors,
     ImmutableDictionary<string, ShadowingLocation> Shadowings);
 

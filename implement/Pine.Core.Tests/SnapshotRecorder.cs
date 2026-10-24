@@ -23,7 +23,7 @@ public static class SnapshotRecorder
             s_memberCounters.TryGetValue(memberName, out var index);
             s_memberCounters[memberName] = index + 1;
 
-            System.IO.File.AppendAllText(
+            File.AppendAllText(
                 "snapshots.txt",
                 "### " + memberName + " #" + index + "\n" + snapshot + "\n\n");
         }

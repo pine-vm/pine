@@ -1,7 +1,10 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
+using Pine.Core.Runtime.IntermediateVM;
+using Pine.Core.Tests.Testing;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -284,8 +287,8 @@ public class FunctionApplicationOverheadTests
     /// elm-syntax parser. Disabling reduction here reveals the per-call
     /// cost structure that optimization should target.
     /// </summary>
-    private readonly Core.Interpreter.IntermediateVM.PineVM _vm =
-        Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
+    private readonly Core.Runtime.IntermediateVM.PineVM _vm =
+        Core.Runtime.IntermediateVM.PineVM.CreateCustom(
             evalCache: null,
             evaluationConfigDefault: null,
             reportFunctionApplication: _ => { },
@@ -496,7 +499,7 @@ public class FunctionApplicationOverheadTests
         var enteredFrames = new List<EnteredStackFrame>();
 
         var vm =
-            Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
+            Core.Runtime.IntermediateVM.PineVM.CreateCustom(
                 evalCache: null,
                 evaluationConfigDefault: null,
                 reportFunctionApplication: _ => { },

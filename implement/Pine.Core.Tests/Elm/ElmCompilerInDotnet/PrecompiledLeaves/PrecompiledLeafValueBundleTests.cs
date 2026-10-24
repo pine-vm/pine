@@ -1,4 +1,6 @@
 using AwesomeAssertions;
+using Pine.Core.Optimization;
+using Pine.Core.PineLanguage;
 using System.Linq;
 using Xunit;
 

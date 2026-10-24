@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
-using Pine.Core;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.IntermediateVM;
 using System.Collections.Generic;
 using System.Linq;
 

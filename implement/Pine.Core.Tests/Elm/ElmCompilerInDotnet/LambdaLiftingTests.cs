@@ -1,11 +1,11 @@
 using AwesomeAssertions;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Abstract;
 using System;
 using System.Linq;
 using Xunit;
 
 using Model = Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
-using Source = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -15,7 +15,7 @@ public class LambdaLiftingTests
     private static void AssertLifted(string source, int expectedHelpers)
     {
         var file =
-            Source.ConvertFromConcrete.FromFile(
+            ConvertFromConcrete.FromFile(
                 ElmSyntaxParser.ParseModuleText(source)
                 .Extract(error => throw new InvalidOperationException(error.ToString())));
 

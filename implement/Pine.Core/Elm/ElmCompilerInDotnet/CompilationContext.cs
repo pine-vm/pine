@@ -4,6 +4,8 @@ using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 
+using PineExpression = Pine.Core.PineLanguage.Expression;
+
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
 internal static class QualifiedNameHelper
@@ -40,20 +42,20 @@ public sealed record ModuleCompilationContext(
 /// <summary>Resolved expression compilation. Every lexical lookup uses BindingId and every function lookup uses FunctionId.</summary>
 public sealed record ExpressionCompilationContext(
     IReadOnlyDictionary<BindingId, int> ParameterNames,
-    IReadOnlyDictionary<BindingId, Expression> LocalBindings,
+    IReadOnlyDictionary<BindingId, PineExpression> LocalBindings,
     SccCompilationContext ResolvedFunctions,
     ModuleCompilationContext ModuleCompilationContext,
     string CurrentModuleName,
     PineVMParseCache ParseCache,
-    IDictionary<(Expression, ReductionConfig), Expression>? ReducedExpressionCache)
+    IDictionary<(PineExpression, ReductionConfig), PineExpression>? ReducedExpressionCache)
 {
     /// <summary>Adds lexical bindings without changing their identities.</summary>
-    public ExpressionCompilationContext WithLocalBindings(IReadOnlyDictionary<BindingId, Expression> bindings)
+    public ExpressionCompilationContext WithLocalBindings(IReadOnlyDictionary<BindingId, PineExpression> bindings)
     {
         if (bindings.Count is 0)
             return this;
 
-        var combined = new Dictionary<BindingId, Expression>(LocalBindings);
+        var combined = new Dictionary<BindingId, PineExpression>(LocalBindings);
 
         foreach (var (id, value) in bindings)
             combined[id] = value;
@@ -62,11 +64,12 @@ public sealed record ExpressionCompilationContext(
     }
 
     /// <summary>Replaces the lexical environment.</summary>
-    public ExpressionCompilationContext WithReplacedLocalBindings(IReadOnlyDictionary<BindingId, Expression> bindings) =>
+    public ExpressionCompilationContext WithReplacedLocalBindings(
+        IReadOnlyDictionary<BindingId, PineExpression> bindings) =>
         this with { LocalBindings = bindings };
 
     /// <summary>Looks up one lexical identity.</summary>
-    public Expression? TryGetLocalBinding(BindingId binding) => LocalBindings.GetValueOrDefault(binding);
+    public PineExpression? TryGetLocalBinding(BindingId binding) => LocalBindings.GetValueOrDefault(binding);
 
     /// <summary>Looks up a parameter identity.</summary>
     public int? TryGetParameterIndex(BindingId binding) =>

@@ -1,5 +1,6 @@
-using Pine.Core.CodeGen;
-using Pine.Core.CommonEncodings;
+using Pine.Core.CodeGen.Pine;
+using Pine.Core.Encodings;
+using Pine.Core.PineLanguage;
 using System.Collections.Generic;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet.CoreLibraryModule;
@@ -3349,10 +3350,10 @@ public partial class CoreBasics
 
     // Pine kernel true/false values (for comparing with kernel function results)
     private static readonly Expression s_pineKernelTrue =
-        Expression.LitralInst(PineVM.PineKernelValues.TrueValue);
+        Expression.LitralInst(PineKernelValues.TrueValue);
 
     private static readonly Expression s_pineKernelFalse =
-        Expression.LitralInst(PineVM.PineKernelValues.FalseValue);
+        Expression.LitralInst(PineKernelValues.FalseValue);
 
     private static readonly Expression s_orderLT =
         Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("LT", [])));

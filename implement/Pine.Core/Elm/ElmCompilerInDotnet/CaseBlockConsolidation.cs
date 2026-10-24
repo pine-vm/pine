@@ -1,9 +1,8 @@
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Elm.Syntax.Abstract;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -18,8 +17,8 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// <item>
 /// <b>Conditional duplication of case arm by leaf shape</b>
 /// (<see cref="TryConsolidateBranchedCase"/>): when the scrutinee of a
-/// <see cref="SyntaxTypes.Expression.CaseExpression"/> is an
-/// <see cref="SyntaxTypes.Expression.IfBlock"/> whose every leaf produces
+/// <see cref="Expression.CaseExpression"/> is an
+/// <see cref="Expression.IfBlock"/> whose every leaf produces
 /// an expression with a statically-known outermost constructor tag, and
 /// each tag maps uniquely to one arm of the case, the case is folded
 /// down into the if-chain: each leaf is replaced by the matching arm's
@@ -30,9 +29,9 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// <b>Deduct tag constraint via alias pattern</b>
 /// (<see cref="TryConsolidateNestedCaseOfCase"/>): when an outer case's
 /// scrutinee is itself a case expression (possibly wrapped in a
-/// <see cref="SyntaxTypes.Expression.LetExpression"/>), and every inner-arm
+/// <see cref="Expression.LetExpression"/>), and every inner-arm
 /// body has a statically-inferable tag (either directly or via an
-/// <see cref="SyntaxTypes.Pattern.AsPattern"/> on the inner arm pattern),
+/// <see cref="Pattern.AsPattern"/> on the inner arm pattern),
 /// and the inner-tag→outer-arm mapping is one-to-one (no duplication
 /// required), the two cases are collapsed into the inner case with each
 /// arm's body rewritten to its matching outer arm's body.
@@ -72,7 +71,7 @@ internal static class CaseBlockConsolidation
 
     /// <summary>
     /// <see cref="OptimizedElmSyntaxDeclarations"/>-flavoured overload of
-    /// <see cref="RewriteDeclarationDictionary(ImmutableDictionary{DeclQualifiedName, SyntaxTypes.Declaration}, CaseConsolidationConfig)"/>.
+    /// <see cref="RewriteDeclarationDictionary(ImmutableDictionary{DeclQualifiedName, Declaration}, CaseConsolidationConfig)"/>.
     /// </summary>
     public static OptimizedElmSyntaxDeclarations RewriteDeclarationDictionary(
         OptimizedElmSyntaxDeclarations declarations,
@@ -92,11 +91,11 @@ internal static class CaseBlockConsolidation
     /// expression so cascading rewrites (e.g. one consolidation that
     /// exposes a second) are handled in a single pass.
     /// </summary>
-    public static ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> RewriteDeclarationDictionary(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+    public static ImmutableDictionary<DeclQualifiedName, Declaration> RewriteDeclarationDictionary(
+        ImmutableDictionary<DeclQualifiedName, Declaration> declarations,
         CaseConsolidationConfig config)
     {
-        var builder = ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
+        var builder = ImmutableDictionary.CreateBuilder<DeclQualifiedName, Declaration>();
 
         foreach (var (declName, decl) in declarations)
         {
@@ -106,13 +105,13 @@ internal static class CaseBlockConsolidation
         return builder.ToImmutable();
     }
 
-    private static SyntaxTypes.Declaration RewriteDeclaration(
-        SyntaxTypes.Declaration decl,
+    private static Declaration RewriteDeclaration(
+        Declaration decl,
         CaseConsolidationConfig config)
     {
         switch (decl)
         {
-            case SyntaxTypes.Declaration.FunctionDeclaration funcDecl:
+            case Declaration.FunctionDeclaration funcDecl:
                 {
                     var impl = funcDecl.Function.Declaration;
 
@@ -122,7 +121,7 @@ internal static class CaseBlockConsolidation
                         return decl;
 
                     var newImpl =
-                        new SyntaxTypes.FunctionImplementation(
+                        new FunctionImplementation(
                             impl.Name,
                             impl.Arguments,
                             newBody);
@@ -133,13 +132,13 @@ internal static class CaseBlockConsolidation
                             Declaration = newImpl,
                         };
 
-                    return new SyntaxTypes.Declaration.FunctionDeclaration(newFunc);
+                    return new Declaration.FunctionDeclaration(newFunc);
                 }
 
-            case SyntaxTypes.Declaration.ChoiceTypeDeclaration:
-            case SyntaxTypes.Declaration.AliasDeclaration:
-            case SyntaxTypes.Declaration.PortDeclaration:
-            case SyntaxTypes.Declaration.InfixDeclaration:
+            case Declaration.ChoiceTypeDeclaration:
+            case Declaration.AliasDeclaration:
+            case Declaration.PortDeclaration:
+            case Declaration.InfixDeclaration:
                 return decl;
 
             default:
@@ -157,13 +156,13 @@ internal static class CaseBlockConsolidation
     /// fires, the result is re-rewritten to allow cascading
     /// consolidations.
     /// </summary>
-    public static SyntaxTypes.Expression RewriteExpression(
-        SyntaxTypes.Expression expr,
+    public static Expression RewriteExpression(
+        Expression expr,
         CaseConsolidationConfig config)
     {
         var anyChildChanged = false;
 
-        SyntaxTypes.Expression Recurse(SyntaxTypes.Expression child)
+        Expression Recurse(Expression child)
         {
             var rewrittenChild = RewriteExpression(child, config);
 
@@ -195,11 +194,11 @@ internal static class CaseBlockConsolidation
     /// Does NOT recurse into children — call
     /// <see cref="RewriteExpression"/> for the full bottom-up walk.
     /// </summary>
-    public static SyntaxTypes.Expression? TryConsolidateLocal(
-        SyntaxTypes.Expression expr,
+    public static Expression? TryConsolidateLocal(
+        Expression expr,
         CaseConsolidationConfig config)
     {
-        if (expr is not SyntaxTypes.Expression.CaseExpression caseExpr)
+        if (expr is not Expression.CaseExpression caseExpr)
             return null;
 
         // The two rewrites are mutually exclusive based on the scrutinee
@@ -220,13 +219,13 @@ internal static class CaseBlockConsolidation
 
     /// <summary>
     /// If <paramref name="caseExpr"/>'s scrutinee is, after peeling
-    /// <see cref="SyntaxTypes.Expression.LetExpression"/>, an
-    /// <see cref="SyntaxTypes.Expression.IfBlock"/> whose every leaf is
+    /// <see cref="Expression.LetExpression"/>, an
+    /// <see cref="Expression.IfBlock"/> whose every leaf is
     /// tagged by a statically-known constructor, AND each predicted
     /// leaf tag maps uniquely to exactly one arm of the case (with no
     /// pre-empting wildcard / variable arm), AND the duplication cost
     /// budget in <paramref name="config"/> is respected, returns the
-    /// consolidated expression (an <see cref="SyntaxTypes.Expression.IfBlock"/>
+    /// consolidated expression (an <see cref="Expression.IfBlock"/>
     /// rooted at the same root with each leaf substituted by the
     /// matching arm body — possibly wrapped in a <c>let</c>
     /// destructure binding the arm pattern's variables against the
@@ -236,8 +235,8 @@ internal static class CaseBlockConsolidation
     /// Returns <see langword="null"/> if any precondition fails.
     /// </para>
     /// </summary>
-    public static SyntaxTypes.Expression? TryConsolidateBranchedCase(
-        SyntaxTypes.Expression.CaseExpression caseExpr,
+    public static Expression? TryConsolidateBranchedCase(
+        Expression.CaseExpression caseExpr,
         CaseConsolidationConfig config)
     {
         var scrutinee = caseExpr.Expression;
@@ -247,7 +246,7 @@ internal static class CaseBlockConsolidation
         // the consolidated expression.
         var (peeledScrutinee, rewrap) = PeelLetWrappers(scrutinee);
 
-        if (peeledScrutinee is not SyntaxTypes.Expression.IfBlock)
+        if (peeledScrutinee is not Expression.IfBlock)
             return null;
 
         var leaves =
@@ -259,7 +258,7 @@ internal static class CaseBlockConsolidation
         // For each leaf, find the unique arm of the outer case that
         // selects its predicted tag. Reject the rewrite if any leaf has
         // a preceding wildcard / variable arm, or if no arm matches.
-        var armForLeaf = new SyntaxTypes.Case[leaves.Count];
+        var armForLeaf = new Case[leaves.Count];
 
         for (var i = 0; i < leaves.Count; i++)
         {
@@ -303,13 +302,13 @@ internal static class CaseBlockConsolidation
         for (var i = 0; i < leaves.Count; i++)
         {
             var armPatternBindings =
-                SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(armForLeaf[i].Pattern);
+                SyntaxAnalysis.CollectNamesBoundByPattern(armForLeaf[i].Pattern);
 
             if (armPatternBindings.Count is 0)
                 continue;
 
             var leafFreeVars =
-                SyntaxTypes.SyntaxAnalysis.CollectRemainingFreeVariables(leaves[i].LeafExpression);
+                SyntaxAnalysis.CollectRemainingFreeVariables(leaves[i].LeafExpression);
 
             if (armPatternBindings.Overlaps(leafFreeVars))
                 return null;
@@ -342,15 +341,15 @@ internal static class CaseBlockConsolidation
         return rewrap(replacement);
     }
 
-    private static SyntaxTypes.Expression RebuildIfChainWithSubstitutedLeaves(
-        SyntaxTypes.Expression expression,
-        IReadOnlyList<(SyntaxTypes.Expression LeafExpression, SyntaxTypes.QualifiedNameRef PredictedTag)> leaves,
-        SyntaxTypes.Case[] armForLeaf,
+    private static Expression RebuildIfChainWithSubstitutedLeaves(
+        Expression expression,
+        IReadOnlyList<(Expression LeafExpression, QualifiedNameRef PredictedTag)> leaves,
+        Case[] armForLeaf,
         ref int leafIndex)
     {
         var current = expression;
 
-        if (current is SyntaxTypes.Expression.IfBlock ifBlock)
+        if (current is Expression.IfBlock ifBlock)
         {
             var newThen =
                 RebuildIfChainWithSubstitutedLeaves(ifBlock.ThenBlock, leaves, armForLeaf, ref leafIndex);
@@ -359,7 +358,7 @@ internal static class CaseBlockConsolidation
                 RebuildIfChainWithSubstitutedLeaves(ifBlock.ElseBlock, leaves, armForLeaf, ref leafIndex);
 
             return
-                new SyntaxTypes.Expression.IfBlock(
+                new Expression.IfBlock(
                     Condition: ifBlock.Condition,
                     ThenBlock: newThen,
                     ElseBlock: newElse);
@@ -391,22 +390,22 @@ internal static class CaseBlockConsolidation
     /// the leaf's constructor application arguments, then evaluate the
     /// arm body in that scope.
     /// </summary>
-    private static SyntaxTypes.Expression SubstituteLeafIntoArmBody(
-        SyntaxTypes.Expression leafExpression,
-        SyntaxTypes.Case arm)
+    private static Expression SubstituteLeafIntoArmBody(
+        Expression leafExpression,
+        Case arm)
     {
         // Named constructor (possibly aliased): emit a let-destructure
         // binding the arm pattern against the constructor argument
         // expression(s) from the leaf.
         var namedArmPattern =
-            SyntaxTypes.SyntaxAnalysis.PeelPatternAsBinder(arm.Pattern) as SyntaxTypes.Pattern.NamedPattern;
+            SyntaxAnalysis.PeelPatternAsBinder(arm.Pattern) as Pattern.NamedPattern;
 
         // Even with an alias, we need the alias name visible inside the
         // arm body — re-emit the original arm pattern as the
         // let-destructure pattern so all bound names (alias + nested
         // var patterns) are introduced together.
         if (namedArmPattern is { Arguments.Count: 0 } &&
-            SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(arm.Pattern).Count is 0)
+            SyntaxAnalysis.CollectNamesBoundByPattern(arm.Pattern).Count is 0)
         {
             // Zero-arity constructor arm (e.g. `Maybe.Nothing -> body`).
             // Elide the destructure only when it introduces no names;
@@ -415,12 +414,12 @@ internal static class CaseBlockConsolidation
         }
 
         var letDestr =
-            new SyntaxTypes.LetDeclaration.LetDestructuring(
+            new LetDeclaration.LetDestructuring(
                 Pattern: arm.Pattern,
                 Expression: leafExpression);
 
         return
-            new SyntaxTypes.Expression.LetExpression(
+            new Expression.LetExpression(
                 Declarations: [letDestr],
                 Expression: arm.Expression);
     }
@@ -432,22 +431,22 @@ internal static class CaseBlockConsolidation
     /// arm matches, or a preceding wildcard / variable arm would
     /// short-circuit the match.
     /// </summary>
-    private static SyntaxTypes.Case? TryFindUniqueArmForTag(
-        IReadOnlyList<SyntaxTypes.Case> arms,
-        SyntaxTypes.QualifiedNameRef tag)
+    private static Case? TryFindUniqueArmForTag(
+        IReadOnlyList<Case> arms,
+        QualifiedNameRef tag)
     {
-        SyntaxTypes.Case? match = null;
+        Case? match = null;
 
         for (var i = 0; i < arms.Count; i++)
         {
             var arm = arms[i];
-            var peeled = SyntaxTypes.SyntaxAnalysis.PeelPatternAsBinder(arm.Pattern);
+            var peeled = SyntaxAnalysis.PeelPatternAsBinder(arm.Pattern);
 
             // Look through AsPattern: the alias-bound name does not
             // change the matched tag.
             // A wildcard or var arm preceding our predicted-tag arm
             // would short-circuit the match — abort the rewrite.
-            if (peeled is SyntaxTypes.Pattern.AllPattern || peeled is SyntaxTypes.Pattern.VarPattern)
+            if (peeled is Pattern.AllPattern || peeled is Pattern.VarPattern)
             {
                 if (match is not null)
                 {
@@ -465,7 +464,7 @@ internal static class CaseBlockConsolidation
                 continue;
             }
 
-            if (peeled is SyntaxTypes.Pattern.NamedPattern named && named.Name.Equals(tag))
+            if (peeled is Pattern.NamedPattern named && named.Name.Equals(tag))
             {
                 if (match is not null)
                 {
@@ -488,8 +487,8 @@ internal static class CaseBlockConsolidation
 
     /// <summary>
     /// If <paramref name="outerCase"/>'s scrutinee is, after peeling
-    /// <see cref="SyntaxTypes.Expression.LetExpression"/>, another
-    /// <see cref="SyntaxTypes.Expression.CaseExpression"/>, AND every
+    /// <see cref="Expression.LetExpression"/>, another
+    /// <see cref="Expression.CaseExpression"/>, AND every
     /// inner-arm body has a statically-inferable outermost tag (either
     /// directly or via an alias pattern on the inner arm pattern), AND
     /// every inner-arm tag maps uniquely to one outer-arm with no
@@ -502,13 +501,13 @@ internal static class CaseBlockConsolidation
     /// Returns <see langword="null"/> if any precondition fails.
     /// </para>
     /// </summary>
-    public static SyntaxTypes.Expression? TryConsolidateNestedCaseOfCase(
-        SyntaxTypes.Expression.CaseExpression outerCase)
+    public static Expression? TryConsolidateNestedCaseOfCase(
+        Expression.CaseExpression outerCase)
     {
         var outerScrutinee = outerCase.Expression;
         var (peeledScrutinee, rewrap) = PeelLetWrappers(outerScrutinee);
 
-        if (peeledScrutinee is not SyntaxTypes.Expression.CaseExpression innerCase)
+        if (peeledScrutinee is not Expression.CaseExpression innerCase)
             return null;
 
         // For every inner arm, compute the predicted outermost tag.
@@ -517,7 +516,7 @@ internal static class CaseBlockConsolidation
         if (innerArms.Count is 0)
             return null;
 
-        var tagPerInnerArm = new SyntaxTypes.QualifiedNameRef[innerArms.Count];
+        var tagPerInnerArm = new QualifiedNameRef[innerArms.Count];
 
         for (var i = 0; i < innerArms.Count; i++)
         {
@@ -535,7 +534,7 @@ internal static class CaseBlockConsolidation
         // Map each inner-arm tag to a unique outer arm. No outer arm
         // may be selected by two distinct inner tags (this rewrite
         // does not duplicate arm bodies).
-        var outerArmForInnerArm = new SyntaxTypes.Case[innerArms.Count];
+        var outerArmForInnerArm = new Case[innerArms.Count];
         var outerArmIndexUsed = new HashSet<int>();
 
         for (var i = 0; i < innerArms.Count; i++)
@@ -557,10 +556,10 @@ internal static class CaseBlockConsolidation
             // post-stage <c>CheckForNamingErrors</c> validation. Abort
             // the rewrite rather than emit shadow-prone code.
             var innerBindings =
-                SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(innerArms[i].Pattern);
+                SyntaxAnalysis.CollectNamesBoundByPattern(innerArms[i].Pattern);
 
             var outerBindings =
-                SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(outerArm.Pattern);
+                SyntaxAnalysis.CollectNamesBoundByPattern(outerArm.Pattern);
 
             if (innerBindings.Overlaps(outerBindings))
                 return null;
@@ -581,7 +580,7 @@ internal static class CaseBlockConsolidation
         // Build the consolidated case: each inner arm keeps its pattern
         // but its body becomes the outer-arm body, with the outer-arm
         // pattern matched against the inner-arm body expression.
-        var newCases = new SyntaxTypes.Case[innerArms.Count];
+        var newCases = new Case[innerArms.Count];
 
         for (var i = 0; i < innerArms.Count; i++)
         {
@@ -595,38 +594,38 @@ internal static class CaseBlockConsolidation
                     outerArmBody: outerArm.Expression);
 
             newCases[i] =
-                new SyntaxTypes.Case(
+                new Case(
                     Pattern: innerArm.Pattern,
                     Expression: rewrittenBody);
         }
 
         var consolidatedCase =
-            new SyntaxTypes.Expression.CaseExpression(
+            new Expression.CaseExpression(
                 Expression: innerCase.Expression,
                 Cases: newCases);
 
         return rewrap(consolidatedCase);
     }
 
-    private static (SyntaxTypes.Case? Arm, int Index) TryFindUniqueArmForTagWithIndex(
-        IReadOnlyList<SyntaxTypes.Case> arms,
-        SyntaxTypes.QualifiedNameRef tag)
+    private static (Case? Arm, int Index) TryFindUniqueArmForTagWithIndex(
+        IReadOnlyList<Case> arms,
+        QualifiedNameRef tag)
     {
-        SyntaxTypes.Case? match = null;
+        Case? match = null;
         var matchIndex = -1;
 
         for (var i = 0; i < arms.Count; i++)
         {
             var arm = arms[i];
-            var peeled = SyntaxTypes.SyntaxAnalysis.PeelPatternAsBinder(arm.Pattern);
+            var peeled = SyntaxAnalysis.PeelPatternAsBinder(arm.Pattern);
 
-            if ((peeled is SyntaxTypes.Pattern.AllPattern || peeled is SyntaxTypes.Pattern.VarPattern)
+            if ((peeled is Pattern.AllPattern || peeled is Pattern.VarPattern)
                 && match is null)
             {
                 return (null, -1);
             }
 
-            if (peeled is SyntaxTypes.Pattern.NamedPattern named && named.Name.Equals(tag))
+            if (peeled is Pattern.NamedPattern named && named.Name.Equals(tag))
             {
                 if (match is not null)
                     continue;
@@ -639,22 +638,22 @@ internal static class CaseBlockConsolidation
         return (match, matchIndex);
     }
 
-    private static SyntaxTypes.Expression BuildConsolidatedArmBody(
-        SyntaxTypes.Expression innerArmBody,
-        SyntaxTypes.Pattern outerArmPattern,
-        SyntaxTypes.Expression outerArmBody)
+    private static Expression BuildConsolidatedArmBody(
+        Expression innerArmBody,
+        Pattern outerArmPattern,
+        Expression outerArmBody)
     {
         // The selected outer arm always has a named constructor pattern.
         // Emit a let-destructure binding the outer arm
         // pattern against the inner arm body, and evaluate the outer
         // arm body in that scope.
         var letDestr =
-            new SyntaxTypes.LetDeclaration.LetDestructuring(
+            new LetDeclaration.LetDestructuring(
                 Pattern: outerArmPattern,
                 Expression: innerArmBody);
 
         return
-            new SyntaxTypes.Expression.LetExpression(
+            new Expression.LetExpression(
                 Declarations: [letDestr],
                 Expression: outerArmBody);
     }
@@ -663,12 +662,12 @@ internal static class CaseBlockConsolidation
     // Shared helpers.
     // ------------------------------------------------------------------
 
-    private static int CountExpressionNodes(SyntaxTypes.Expression expression, int max)
+    private static int CountExpressionNodes(Expression expression, int max)
     {
         if (max <= 0)
             return 0;
 
-        var pending = new Stack<SyntaxTypes.Expression>();
+        var pending = new Stack<Expression>();
         pending.Push(expression);
 
         // Preserve the existing budget convention: count descendants, not the root.
@@ -692,22 +691,22 @@ internal static class CaseBlockConsolidation
         return count;
     }
 
-    private static ImmutableHashSet<string> CollectTopLevelLetBoundNames(SyntaxTypes.Expression expression)
+    private static ImmutableHashSet<string> CollectTopLevelLetBoundNames(Expression expression)
     {
         var names = ImmutableHashSet.CreateBuilder<string>();
 
-        while (expression is SyntaxTypes.Expression.LetExpression letExpr)
+        while (expression is Expression.LetExpression letExpr)
         {
             foreach (var declaration in letExpr.Declarations)
             {
                 switch (declaration)
                 {
-                    case SyntaxTypes.LetDeclaration.LetFunction function:
+                    case LetDeclaration.LetFunction function:
                         names.Add(function.Function.Declaration.Name);
                         break;
 
-                    case SyntaxTypes.LetDeclaration.LetDestructuring destructuring:
-                        names.UnionWith(SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(destructuring.Pattern));
+                    case LetDeclaration.LetDestructuring destructuring:
+                        names.UnionWith(SyntaxAnalysis.CollectNamesBoundByPattern(destructuring.Pattern));
                         break;
 
                     default:
@@ -723,30 +722,30 @@ internal static class CaseBlockConsolidation
         return names.ToImmutable();
     }
 
-    private static SyntaxTypes.QualifiedNameRef? TryPredictOutermostConstructorTag(
-        SyntaxTypes.Expression expression)
+    private static QualifiedNameRef? TryPredictOutermostConstructorTag(
+        Expression expression)
     {
-        while (expression is SyntaxTypes.Expression.LetExpression letExpr)
+        while (expression is Expression.LetExpression letExpr)
             expression = letExpr.Expression;
 
         var identifier =
-            expression is SyntaxTypes.Expression.Application application
+            expression is Pine.Core.Elm.Syntax.Abstract.Expression.Application application
             ?
-            application.Function as SyntaxTypes.Expression.Identifier
+            application.Function as Pine.Core.Elm.Syntax.Abstract.Expression.Identifier
             :
-            expression as SyntaxTypes.Expression.Identifier;
+            expression as Pine.Core.Elm.Syntax.Abstract.Expression.Identifier;
 
         if (identifier is not null &&
             identifier.QualifiedName.DeclName.Length > 0 &&
             char.IsUpper(identifier.QualifiedName.DeclName[0]))
         {
             return
-                new SyntaxTypes.QualifiedNameRef(
+                new QualifiedNameRef(
                     identifier.QualifiedName.Namespaces,
                     identifier.QualifiedName.DeclName);
         }
 
-        if (expression is SyntaxTypes.Expression.IfBlock ifBlock)
+        if (expression is Expression.IfBlock ifBlock)
         {
             var thenTag = TryPredictOutermostConstructorTag(ifBlock.ThenBlock);
             var elseTag = TryPredictOutermostConstructorTag(ifBlock.ElseBlock);
@@ -757,14 +756,14 @@ internal static class CaseBlockConsolidation
         return null;
     }
 
-    private static IReadOnlyList<(SyntaxTypes.Expression LeafExpression, SyntaxTypes.QualifiedNameRef PredictedTag)>?
-        EnumerateConstructorTaggedLeavesOfIfChain(SyntaxTypes.Expression expression)
+    private static IReadOnlyList<(Expression LeafExpression, QualifiedNameRef PredictedTag)>?
+        EnumerateConstructorTaggedLeavesOfIfChain(Expression expression)
     {
-        var leaves = new List<(SyntaxTypes.Expression, SyntaxTypes.QualifiedNameRef)>();
+        var leaves = new List<(Expression, QualifiedNameRef)>();
 
-        bool Collect(SyntaxTypes.Expression current)
+        bool Collect(Expression current)
         {
-            if (current is SyntaxTypes.Expression.IfBlock ifBlock)
+            if (current is Expression.IfBlock ifBlock)
                 return Collect(ifBlock.ThenBlock) && Collect(ifBlock.ElseBlock);
 
             var tag = TryPredictOutermostConstructorTag(current);
@@ -779,18 +778,18 @@ internal static class CaseBlockConsolidation
         return Collect(expression) ? leaves : null;
     }
 
-    private static SyntaxTypes.QualifiedNameRef? TryPredictOutermostConstructorTagInArmBody(
-        SyntaxTypes.Pattern armPattern,
-        SyntaxTypes.Expression armBody)
+    private static QualifiedNameRef? TryPredictOutermostConstructorTagInArmBody(
+        Pattern armPattern,
+        Expression armBody)
     {
         if (TryPredictOutermostConstructorTag(armBody) is { } directTag)
             return directTag;
 
-        if (armBody is SyntaxTypes.Expression.Identifier identifier &&
+        if (armBody is Expression.Identifier identifier &&
             identifier.QualifiedName.Namespaces.Count is 0 &&
-            armPattern is SyntaxTypes.Pattern.AsPattern alias &&
+            armPattern is Pattern.AsPattern alias &&
             string.Equals(alias.Name, identifier.QualifiedName.DeclName, StringComparison.Ordinal) &&
-            SyntaxTypes.SyntaxAnalysis.PeelPatternAsBinder(alias.Pattern) is SyntaxTypes.Pattern.NamedPattern named)
+            SyntaxAnalysis.PeelPatternAsBinder(alias.Pattern) is Pattern.NamedPattern named)
         {
             return named.Name;
         }
@@ -799,31 +798,31 @@ internal static class CaseBlockConsolidation
     }
 
     /// <summary>
-    /// Peels <see cref="SyntaxTypes.Expression.LetExpression"/> wrappers
+    /// Peels <see cref="Expression.LetExpression"/> wrappers
     /// off the given expression, returning the peeled inner expression
     /// together with a function that re-wraps a replacement inner
     /// expression in the same enclosing wrappers. The re-wrap function
     /// preserves the let-bindings so any names they introduce remain in
     /// scope around the new inner expression.
     /// </summary>
-    private static (SyntaxTypes.Expression Peeled, Func<SyntaxTypes.Expression, SyntaxTypes.Expression> Rewrap)
-        PeelLetWrappers(SyntaxTypes.Expression expression)
+    private static (Expression Peeled, Func<Expression, Expression> Rewrap)
+        PeelLetWrappers(Expression expression)
     {
-        var stack = new List<Func<SyntaxTypes.Expression, SyntaxTypes.Expression>>();
+        var stack = new List<Func<Expression, Expression>>();
         var current = expression;
 
-        while (current is SyntaxTypes.Expression.LetExpression letExpr)
+        while (current is Expression.LetExpression letExpr)
         {
             stack.Add(
                 inner =>
-                new SyntaxTypes.Expression.LetExpression(
+                new Expression.LetExpression(
                     Declarations: letExpr.Declarations,
                     Expression: inner));
 
             current = letExpr.Expression;
         }
 
-        SyntaxTypes.Expression Rewrap(SyntaxTypes.Expression inner)
+        Expression Rewrap(Expression inner)
         {
             var result = inner;
 

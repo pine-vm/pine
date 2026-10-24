@@ -1,10 +1,9 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Elm.Syntax.Abstract;
 using System.Collections.Immutable;
 using Xunit;
-
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -27,39 +26,39 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 ///     empty, only-other, only-functions-without-specializations,
 ///     functions-with-specializations (verifying the module qualifier is taken from
 ///     the original declaration and the simple name from the specialization's own
-///     <see cref="SyntaxTypes.FunctionImplementation.Name"/>), and a mixed case.
+///     <see cref="FunctionImplementation.Name"/>), and a mixed case.
 ///     Also verifies the duplicate-key contract.
 ///   </description></item>
 /// </list>
 /// </summary>
 public class OptimizedElmSyntaxDeclarationsTests
 {
-    private static SyntaxTypes.Declaration.FunctionDeclaration MakeFunctionDeclaration(
+    private static Declaration.FunctionDeclaration MakeFunctionDeclaration(
         string declName,
-        SyntaxTypes.Expression? body = null)
+        Expression? body = null)
     {
         var implementation =
-            new SyntaxTypes.FunctionImplementation(
+            new FunctionImplementation(
                 Name: declName,
                 Arguments: [],
-                Expression: body ?? SyntaxTypes.Expression.UnitExpr.Instance);
+                Expression: body ?? Expression.UnitExpr.Instance);
 
         var functionStruct =
-            new SyntaxTypes.FunctionStruct(
+            new FunctionStruct(
                 Signature: null,
                 Declaration: implementation);
 
-        return new SyntaxTypes.Declaration.FunctionDeclaration(functionStruct);
+        return new Declaration.FunctionDeclaration(functionStruct);
     }
 
-    private static SyntaxTypes.Declaration.PortDeclaration MakePortDeclaration(string portName)
+    private static Declaration.PortDeclaration MakePortDeclaration(string portName)
     {
         var signature =
-            new SyntaxTypes.Signature(
+            new Signature(
                 Name: portName,
-                TypeAnnotation: new SyntaxTypes.TypeAnnotation.Unit());
+                TypeAnnotation: new TypeAnnotation.Unit());
 
-        return new SyntaxTypes.Declaration.PortDeclaration(signature);
+        return new Declaration.PortDeclaration(signature);
     }
 
     // ----------------------------------------------------------------------
@@ -79,13 +78,13 @@ public class OptimizedElmSyntaxDeclarationsTests
         var declA =
             new OptimizedElmSyntaxFunctionDeclaration(
                 original,
-                ImmutableDictionary<FunctionSpecialization, SyntaxTypes.Declaration.FunctionDeclaration>
+                ImmutableDictionary<FunctionSpecialization, Declaration.FunctionDeclaration>
                 .Empty.Add(specKey, specA));
 
         var declB =
             new OptimizedElmSyntaxFunctionDeclaration(
                 original,
-                ImmutableDictionary<FunctionSpecialization, SyntaxTypes.Declaration.FunctionDeclaration>
+                ImmutableDictionary<FunctionSpecialization, Declaration.FunctionDeclaration>
                 .Empty.Add(specKey, specB));
 
         declA.Should().Be(declB);
@@ -96,7 +95,7 @@ public class OptimizedElmSyntaxDeclarationsTests
     public void OptimizedElmSyntaxFunctionDeclaration_not_equal_when_originals_differ()
     {
         var emptySpecializations =
-            ImmutableDictionary<FunctionSpecialization, SyntaxTypes.Declaration.FunctionDeclaration>.Empty;
+            ImmutableDictionary<FunctionSpecialization, Declaration.FunctionDeclaration>.Empty;
 
         var declA =
             new OptimizedElmSyntaxFunctionDeclaration(
@@ -126,7 +125,7 @@ public class OptimizedElmSyntaxDeclarationsTests
         var declWith =
             new OptimizedElmSyntaxFunctionDeclaration(
                 original,
-                ImmutableDictionary<FunctionSpecialization, SyntaxTypes.Declaration.FunctionDeclaration>
+                ImmutableDictionary<FunctionSpecialization, Declaration.FunctionDeclaration>
                 .Empty.Add(specKey, MakeFunctionDeclaration("f__specialized__1")));
 
         declWithout.Should().NotBe(declWith);
@@ -147,13 +146,13 @@ public class OptimizedElmSyntaxDeclarationsTests
         var declA =
             new OptimizedElmSyntaxFunctionDeclaration(
                 original,
-                ImmutableDictionary<FunctionSpecialization, SyntaxTypes.Declaration.FunctionDeclaration>
+                ImmutableDictionary<FunctionSpecialization, Declaration.FunctionDeclaration>
                 .Empty.Add(keyA, specBody));
 
         var declB =
             new OptimizedElmSyntaxFunctionDeclaration(
                 original,
-                ImmutableDictionary<FunctionSpecialization, SyntaxTypes.Declaration.FunctionDeclaration>
+                ImmutableDictionary<FunctionSpecialization, Declaration.FunctionDeclaration>
                 .Empty.Add(keyB, specBody));
 
         declA.Should().NotBe(declB);
@@ -169,13 +168,13 @@ public class OptimizedElmSyntaxDeclarationsTests
         var declA =
             new OptimizedElmSyntaxFunctionDeclaration(
                 original,
-                ImmutableDictionary<FunctionSpecialization, SyntaxTypes.Declaration.FunctionDeclaration>
+                ImmutableDictionary<FunctionSpecialization, Declaration.FunctionDeclaration>
                 .Empty.Add(specKey, MakeFunctionDeclaration("f__specialized__1")));
 
         var declB =
             new OptimizedElmSyntaxFunctionDeclaration(
                 original,
-                ImmutableDictionary<FunctionSpecialization, SyntaxTypes.Declaration.FunctionDeclaration>
+                ImmutableDictionary<FunctionSpecialization, Declaration.FunctionDeclaration>
                 .Empty.Add(specKey, MakeFunctionDeclaration("f__different__name")));
 
         declA.Should().NotBe(declB);
@@ -198,13 +197,13 @@ public class OptimizedElmSyntaxDeclarationsTests
         var declInOrderA =
             new OptimizedElmSyntaxFunctionDeclaration(
                 original,
-                ImmutableDictionary<FunctionSpecialization, SyntaxTypes.Declaration.FunctionDeclaration>
+                ImmutableDictionary<FunctionSpecialization, Declaration.FunctionDeclaration>
                 .Empty.Add(key1, spec1).Add(key2, spec2));
 
         var declInOrderB =
             new OptimizedElmSyntaxFunctionDeclaration(
                 original,
-                ImmutableDictionary<FunctionSpecialization, SyntaxTypes.Declaration.FunctionDeclaration>
+                ImmutableDictionary<FunctionSpecialization, Declaration.FunctionDeclaration>
                 .Empty.Add(key2, spec2).Add(key1, spec1));
 
         declInOrderA.Should().Be(declInOrderB);
@@ -242,20 +241,20 @@ public class OptimizedElmSyntaxDeclarationsTests
                 []);
 
         var portQualifiedName = DeclQualifiedName.FromString("Mod.p");
-        SyntaxTypes.Declaration portDecl = MakePortDeclaration("p");
+        Declaration portDecl = MakePortDeclaration("p");
 
         var a =
             new OptimizedElmSyntaxDeclarations(
                 ImmutableDictionary<DeclQualifiedName, OptimizedElmSyntaxFunctionDeclaration>
                 .Empty.Add(qualifiedName, optimizedFn),
-                ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>
+                ImmutableDictionary<DeclQualifiedName, Declaration>
                 .Empty.Add(portQualifiedName, portDecl));
 
         var b =
             new OptimizedElmSyntaxDeclarations(
                 ImmutableDictionary<DeclQualifiedName, OptimizedElmSyntaxFunctionDeclaration>
                 .Empty.Add(qualifiedName, optimizedFn),
-                ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>
+                ImmutableDictionary<DeclQualifiedName, Declaration>
                 .Empty.Add(portQualifiedName, portDecl));
 
         a.Should().Be(b);
@@ -275,7 +274,7 @@ public class OptimizedElmSyntaxDeclarationsTests
                 MakeFunctionDeclaration("g"),
                 []);
 
-        var emptyOther = ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>.Empty;
+        var emptyOther = ImmutableDictionary<DeclQualifiedName, Declaration>.Empty;
 
         var a =
             new OptimizedElmSyntaxDeclarations(
@@ -301,13 +300,13 @@ public class OptimizedElmSyntaxDeclarationsTests
         var a =
             new OptimizedElmSyntaxDeclarations(
                 emptyFunctions,
-                ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>
+                ImmutableDictionary<DeclQualifiedName, Declaration>
                 .Empty.Add(DeclQualifiedName.FromString("Mod.p"), MakePortDeclaration("p")));
 
         var b =
             new OptimizedElmSyntaxDeclarations(
                 emptyFunctions,
-                ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>
+                ImmutableDictionary<DeclQualifiedName, Declaration>
                 .Empty.Add(DeclQualifiedName.FromString("Mod.q"), MakePortDeclaration("q")));
 
         a.Should().NotBe(b);
@@ -376,12 +375,12 @@ public class OptimizedElmSyntaxDeclarationsTests
     public void RenderAsFlatDictionary_passes_through_OtherDeclarations()
     {
         var portName = DeclQualifiedName.FromString("Mod.p");
-        SyntaxTypes.Declaration portDecl = MakePortDeclaration("p");
+        Declaration portDecl = MakePortDeclaration("p");
 
         var model =
             new OptimizedElmSyntaxDeclarations(
                 [],
-                ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>.Empty.Add(portName, portDecl));
+                ImmutableDictionary<DeclQualifiedName, Declaration>.Empty.Add(portName, portDecl));
 
         var flat = model.RenderAsFlatDictionary();
 
@@ -426,7 +425,7 @@ public class OptimizedElmSyntaxDeclarationsTests
         var optimized =
             new OptimizedElmSyntaxFunctionDeclaration(
                 original,
-                ImmutableDictionary<FunctionSpecialization, SyntaxTypes.Declaration.FunctionDeclaration>
+                ImmutableDictionary<FunctionSpecialization, Declaration.FunctionDeclaration>
                 .Empty.Add(specKey, specialization));
 
         var model =
@@ -470,7 +469,7 @@ public class OptimizedElmSyntaxDeclarationsTests
         var optimized =
             new OptimizedElmSyntaxFunctionDeclaration(
                 original,
-                ImmutableDictionary<FunctionSpecialization, SyntaxTypes.Declaration.FunctionDeclaration>
+                ImmutableDictionary<FunctionSpecialization, Declaration.FunctionDeclaration>
                 .Empty.Add(key1, spec1).Add(key2, spec2));
 
         var model =
@@ -504,7 +503,7 @@ public class OptimizedElmSyntaxDeclarationsTests
         var optimized =
             new OptimizedElmSyntaxFunctionDeclaration(
                 original,
-                ImmutableDictionary<FunctionSpecialization, SyntaxTypes.Declaration.FunctionDeclaration>
+                ImmutableDictionary<FunctionSpecialization, Declaration.FunctionDeclaration>
                 .Empty.Add(specKey, specialization));
 
         var model =
@@ -538,7 +537,7 @@ public class OptimizedElmSyntaxDeclarationsTests
         var optimized =
             new OptimizedElmSyntaxFunctionDeclaration(
                 original,
-                ImmutableDictionary<FunctionSpecialization, SyntaxTypes.Declaration.FunctionDeclaration>
+                ImmutableDictionary<FunctionSpecialization, Declaration.FunctionDeclaration>
                 .Empty.Add(specKey, specialization));
 
         var model =
@@ -573,16 +572,16 @@ public class OptimizedElmSyntaxDeclarationsTests
         var optimized =
             new OptimizedElmSyntaxFunctionDeclaration(
                 original,
-                ImmutableDictionary<FunctionSpecialization, SyntaxTypes.Declaration.FunctionDeclaration>
+                ImmutableDictionary<FunctionSpecialization, Declaration.FunctionDeclaration>
                 .Empty.Add(specKey, specialization));
 
-        SyntaxTypes.Declaration portDecl = MakePortDeclaration("p");
+        Declaration portDecl = MakePortDeclaration("p");
 
         var model =
             new OptimizedElmSyntaxDeclarations(
                 ImmutableDictionary<DeclQualifiedName, OptimizedElmSyntaxFunctionDeclaration>
                 .Empty.Add(fnName, optimized),
-                ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>
+                ImmutableDictionary<DeclQualifiedName, Declaration>
                 .Empty.Add(portName, portDecl));
 
         var flat = model.RenderAsFlatDictionary();
@@ -607,7 +606,7 @@ public class OptimizedElmSyntaxDeclarationsTests
         var optimized =
             new OptimizedElmSyntaxFunctionDeclaration(
                 original,
-                ImmutableDictionary<FunctionSpecialization, SyntaxTypes.Declaration.FunctionDeclaration>
+                ImmutableDictionary<FunctionSpecialization, Declaration.FunctionDeclaration>
                 .Empty.Add(specKey, specialization));
 
         var collidingOther = DeclQualifiedName.Create(fnName.Namespaces, "collide");
@@ -616,7 +615,7 @@ public class OptimizedElmSyntaxDeclarationsTests
             new OptimizedElmSyntaxDeclarations(
                 ImmutableDictionary<DeclQualifiedName, OptimizedElmSyntaxFunctionDeclaration>
                 .Empty.Add(fnName, optimized),
-                ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>
+                ImmutableDictionary<DeclQualifiedName, Declaration>
                 .Empty.Add(collidingOther, MakePortDeclaration("collide")));
 
         var act = () => model.RenderAsFlatDictionary();
@@ -646,7 +645,7 @@ public class OptimizedElmSyntaxDeclarationsTests
         var fnDecl = MakeFunctionDeclaration("f");
 
         var flat =
-            ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>
+            ImmutableDictionary<DeclQualifiedName, Declaration>
             .Empty.Add(fnName, fnDecl);
 
         var model = OptimizedElmSyntaxDeclarations.FromFlatDictionary(flat);
@@ -661,10 +660,10 @@ public class OptimizedElmSyntaxDeclarationsTests
     public void FromFlatDictionary_buckets_non_function_declarations_into_OtherDeclarations()
     {
         var portName = DeclQualifiedName.FromString("Mod.p");
-        SyntaxTypes.Declaration portDecl = MakePortDeclaration("p");
+        Declaration portDecl = MakePortDeclaration("p");
 
         var flat =
-            ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>
+            ImmutableDictionary<DeclQualifiedName, Declaration>
             .Empty.Add(portName, portDecl);
 
         var model = OptimizedElmSyntaxDeclarations.FromFlatDictionary(flat);
@@ -681,10 +680,10 @@ public class OptimizedElmSyntaxDeclarationsTests
         var portName = DeclQualifiedName.FromString("Mod.p");
 
         var fnDecl = MakeFunctionDeclaration("f");
-        SyntaxTypes.Declaration portDecl = MakePortDeclaration("p");
+        Declaration portDecl = MakePortDeclaration("p");
 
         var flat =
-            ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>
+            ImmutableDictionary<DeclQualifiedName, Declaration>
             .Empty
             .Add(fnName, fnDecl)
             .Add(portName, portDecl);
@@ -707,7 +706,7 @@ public class OptimizedElmSyntaxDeclarationsTests
         var portName = DeclQualifiedName.FromString("Mod.p");
 
         var flat =
-            ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>
+            ImmutableDictionary<DeclQualifiedName, Declaration>
             .Empty
             .Add(fnName, MakeFunctionDeclaration("f"))
             .Add(globalFnName, MakeFunctionDeclaration("topLevel"))

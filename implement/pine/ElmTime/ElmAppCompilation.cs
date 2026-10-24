@@ -4,8 +4,10 @@ using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Files;
+using Pine.Core.Functional;
 using Pine.Core.Internal;
 using Pine.Core.Json;
+using Pine.Core.PineLanguage;
 using Pine.Elm;
 using System;
 using System.Collections.Concurrent;
@@ -15,12 +17,12 @@ using System.Linq;
 using System.Text;
 
 using CompilationIterationResult =
-    Pine.Core.Result<
+    Pine.Core.Functional.Result<
         System.Collections.Generic.IReadOnlyList<ElmTime.CompilerSerialInterface.LocatedCompilationError>,
         ElmTime.ElmAppCompilation.CompilationIterationSuccess>;
 
 using CompilationResult =
-    Pine.Core.Result<
+    Pine.Core.Functional.Result<
         System.Collections.Generic.IReadOnlyList<ElmTime.ElmAppCompilation.LocatedCompilationError>,
         ElmTime.ElmAppCompilation.CompilationSuccess>;
 
@@ -542,7 +544,7 @@ namespace ElmTime
                 arguments.Select(PineValueInProcess.Create).ToList();
 
             var interpretResult =
-                Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter.Interpret(
+                Pine.Core.Elm.Syntax.ElmSyntaxInterpreter.Interpret(
                     DeclQualifiedName.Create(
                         ["CompileElmAppMain"],
                         "asCompletelyLoweredElmApp"),
@@ -1267,14 +1269,14 @@ namespace ElmTime
         /// <summary>
         /// The Elm compiler modules (the <c>CompileElmAppMain</c> program and its transitive
         /// dependencies) parsed and canonicalized for evaluation with
-        /// <see cref="Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter"/>. This replaces the previous
+        /// <see cref="Pine.Core.Elm.Syntax.ElmSyntaxInterpreter"/>. This replaces the previous
         /// approach of applying the compiled compiler environment from
         /// <see cref="BundledElmEnvironments"/> via <see cref="ElmCompilerInElm"/>.
         /// </summary>
-        public static readonly Lazy<Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter.Prepared> CompilerModulesPreparedForInterpreter =
+        public static readonly Lazy<Pine.Core.Elm.Syntax.ElmSyntaxInterpreter.Prepared> CompilerModulesPreparedForInterpreter =
             new(PrepareCompilerModulesForInterpreter);
 
-        private static Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter.Prepared PrepareCompilerModulesForInterpreter()
+        private static Pine.Core.Elm.Syntax.ElmSyntaxInterpreter.Prepared PrepareCompilerModulesForInterpreter()
         {
             var containerTree =
                 Pine.Core.Elm.ElmInElm.BundledFiles.CompilerSourceContainerFilesDefault.Value;
@@ -1312,12 +1314,12 @@ namespace ElmTime
                 .ToImmutableArray();
 
             var orderedModulesTexts =
-                Pine.Core.Elm.ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
+                Pine.Core.Elm.Syntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
                     rootModulesTexts: [rootModuleText],
                     availableModulesTexts: availableModulesTexts);
 
             return
-                Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter.PrepareModules(orderedModulesTexts)
+                Pine.Core.Elm.Syntax.ElmSyntaxInterpreter.PrepareModules(orderedModulesTexts)
                 .Extract(err => throw new Exception("Failed preparing compiler modules for interpreter: " + err));
         }
 

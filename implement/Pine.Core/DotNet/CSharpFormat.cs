@@ -1,5 +1,6 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Pine.Core.Functional;
 
 namespace Pine.Core.DotNet;
 

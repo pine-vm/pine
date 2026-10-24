@@ -1,11 +1,12 @@
 using AwesomeAssertions;
 using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CodeGen;
-using Pine.Core.CommonEncodings;
+using Pine.Core.CodeGen.Pine;
 using Pine.Core.Elm.Testing;
-using Pine.Core.Interpreter.IntermediateVM;
-using Pine.Core.PineVM;
+using Pine.Core.Encodings;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.Linq;

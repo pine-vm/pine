@@ -3,12 +3,14 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine.CompilePineToDotNet;
-using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
 using Pine.Core.DotNet;
+using Pine.Core.Encodings;
 using Pine.Core.Files;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
 using Pine.Elm;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -66,7 +68,7 @@ public class CompilePineToDotNetTests
                 typeof(EvalExprDelegate),
                 usings: []);
 
-        syntax.ToFullString().Should().Be("Pine.Core.EvalExprDelegate");
+        syntax.ToFullString().Should().Be("Pine.Core.Runtime.EvalExprDelegate");
     }
 
     [Fact]
@@ -77,7 +79,7 @@ public class CompilePineToDotNetTests
                 typeof(Result<string, int>),
                 usings: []);
 
-        syntax.ToFullString().Should().Be("Pine.Core.Result<System.String,System.Int32>");
+        syntax.ToFullString().Should().Be("Pine.Core.Functional.Result<System.String,System.Int32>");
     }
 
     [Fact]
@@ -89,7 +91,7 @@ public class CompilePineToDotNetTests
                 usings: []);
 
         syntax.ToFullString().Should().Be(
-            "System.Collections.Generic.IReadOnlyDictionary<Pine.Core.PineValue,System.String>");
+            "System.Collections.Generic.IReadOnlyDictionary<Pine.Core.PineLanguage.PineValue,System.String>");
     }
 
     [Fact]
@@ -136,7 +138,7 @@ public class CompilePineToDotNetTests
         var context =
             new DeclarationSyntaxContext(
                 UsingDirectives: [],
-                CurrentNamespace: "Pine.Core");
+                CurrentNamespace: "Pine.Core.PineLanguage");
 
         var syntax =
             CompileTypeSyntax.TypeSyntaxFromType(
@@ -159,7 +161,7 @@ public class CompilePineToDotNetTests
                 typeof(PineValue),
                 context);
 
-        syntax.ToFullString().Should().Be("Core.PineValue");
+        syntax.ToFullString().Should().Be("Core.PineLanguage.PineValue");
     }
 
     [Fact]
@@ -175,7 +177,7 @@ public class CompilePineToDotNetTests
                 typeof(PineValue),
                 context);
 
-        syntax.ToFullString().Should().Be("Pine.Core.PineValue");
+        syntax.ToFullString().Should().Be("Pine.Core.PineLanguage.PineValue");
     }
 
     [Fact]
@@ -183,7 +185,7 @@ public class CompilePineToDotNetTests
     {
         var usingDirective =
             SyntaxFactory.UsingDirective(
-                SyntaxFactory.ParseName("Pine.Core"));
+                SyntaxFactory.ParseName("Pine.Core.PineLanguage"));
 
         var context =
             new DeclarationSyntaxContext(
@@ -211,7 +213,7 @@ public class CompilePineToDotNetTests
                 typeof(Result<string, PineValue>),
                 context);
 
-        syntax.ToFullString().Should().Be("Result<System.String,PineValue>");
+        syntax.ToFullString().Should().Be("Functional.Result<System.String,PineLanguage.PineValue>");
     }
 
     [Fact]
@@ -223,7 +225,7 @@ public class CompilePineToDotNetTests
                 typeof(PineValue),
                 usings: []);
 
-        syntax.ToFullString().Should().Be("Pine.Core.PineValue");
+        syntax.ToFullString().Should().Be("Pine.Core.PineLanguage.PineValue");
     }
 
     [Fact]

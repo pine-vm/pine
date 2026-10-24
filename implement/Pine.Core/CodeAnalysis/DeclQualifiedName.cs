@@ -9,7 +9,7 @@ namespace Pine.Core.CodeAnalysis;
 public record DeclQualifiedName
     : System.IComparable<DeclQualifiedName>, System.IEquatable<DeclQualifiedName>
 {
-    private long cachedHashCode;
+    private long _cachedHashCode;
 
     /// <summary>Copies a name without carrying over a memoized hash.</summary>
     protected DeclQualifiedName(DeclQualifiedName original)
@@ -39,7 +39,7 @@ public record DeclQualifiedName
         string declName,
         string fullName)
     {
-        Namespaces = System.Collections.Immutable.ImmutableArray.CreateRange(namespaces);
+        Namespaces = [.. namespaces];
         DeclName = declName;
         FullName = fullName;
     }
@@ -82,7 +82,7 @@ public record DeclQualifiedName
     /// <inheritdoc/>
     public override int GetHashCode()
     {
-        var encoded = System.Threading.Volatile.Read(ref cachedHashCode);
+        var encoded = System.Threading.Volatile.Read(ref _cachedHashCode);
 
         if (encoded != 0)
             return unchecked((int)(encoded - 1));
@@ -94,7 +94,7 @@ public record DeclQualifiedName
             hash.Add(part);
 
         var value = hash.ToHashCode();
-        System.Threading.Volatile.Write(ref cachedHashCode, (long)unchecked((uint)value) + 1);
+        System.Threading.Volatile.Write(ref _cachedHashCode, (long)unchecked((uint)value) + 1);
         return value;
     }
 

@@ -1,13 +1,16 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.Elm.ElmSyntax;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Abstract;
+using Pine.Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7;
+using Pine.Core.Elm.Syntax.Concrete;
 using System.Collections.Immutable;
 using System.Linq;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
 
-using Stil4mElmSyntax7 = Core.Elm.ElmSyntax.Stil4mElmSyntax7;
-using AbstractSyntax = Core.Elm.ElmSyntax.ElmSyntaxAbstract;
+using ConcreteSyntax = Core.Elm.Syntax.Concrete;
+using AbstractSyntax = Core.Elm.Syntax.Abstract;
+using Stil4mElmSyntax7 = Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7;
 
 public class InliningTestHelper
 {
@@ -16,23 +19,31 @@ public class InliningTestHelper
         declarations.ToImmutableDictionary(
             item => item.Key,
             item =>
-            AbstractSyntax.ConvertFromConcrete.FromDeclaration(
-                Stil4mElmSyntax7.ToFullSyntaxModel.Convert(item.Value)));
+            ConvertFromConcrete.FromDeclaration(
+                ToFullSyntaxModel.Convert(item.Value)));
 
     internal static ImmutableDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration> ToStil4m(
         ImmutableDictionary<DeclQualifiedName, AbstractSyntax.Declaration> declarations) =>
         declarations.ToImmutableDictionary(
             item => item.Key,
             item =>
-            Stil4mElmSyntax7.FromFullSyntaxModel.Convert(
-                AbstractSyntax.ConvertToConcrete.ToDeclaration(item.Value)));
+            FromFullSyntaxModel.Convert(
+                ConvertToConcrete.ToDeclaration(item.Value)));
 
-    private static readonly ImmutableDictionary<QualifiedNameRef, QualifiedNameRef> s_renderingNameMap =
-        ImmutableDictionary<QualifiedNameRef, QualifiedNameRef>.Empty
-        .SetItem(QualifiedNameRef.FromFullName("Basics.Int"), QualifiedNameRef.FromFullName("Int"))
-        .SetItem(QualifiedNameRef.FromFullName("Basics.Bool"), QualifiedNameRef.FromFullName("Bool"))
-        .SetItem(QualifiedNameRef.FromFullName("String.String"), QualifiedNameRef.FromFullName("String"))
-        .SetItem(QualifiedNameRef.FromFullName("Char.Char"), QualifiedNameRef.FromFullName("Char"));
+    private static readonly ImmutableDictionary<ConcreteSyntax.QualifiedNameRef, ConcreteSyntax.QualifiedNameRef> s_renderingNameMap =
+        ImmutableDictionary<ConcreteSyntax.QualifiedNameRef, ConcreteSyntax.QualifiedNameRef>.Empty
+        .SetItem(
+            ConcreteSyntax.QualifiedNameRef.FromFullName("Basics.Int"),
+            ConcreteSyntax.QualifiedNameRef.FromFullName("Int"))
+        .SetItem(
+            ConcreteSyntax.QualifiedNameRef.FromFullName("Basics.Bool"),
+            ConcreteSyntax.QualifiedNameRef.FromFullName("Bool"))
+        .SetItem(
+            ConcreteSyntax.QualifiedNameRef.FromFullName("String.String"),
+            ConcreteSyntax.QualifiedNameRef.FromFullName("String"))
+        .SetItem(
+            ConcreteSyntax.QualifiedNameRef.FromFullName("Char.Char"),
+            ConcreteSyntax.QualifiedNameRef.FromFullName("Char"));
 
     public static string RenderModuleForSnapshotTests(Stil4mElmSyntax7.File module)
     {
@@ -56,7 +67,7 @@ public class InliningTestHelper
 
         var normalized =
             NormalizeForRoundTripComparison(
-                Stil4mElmSyntax7.FromFullSyntaxModel.Convert(parsedFile));
+                FromFullSyntaxModel.Convert(parsedFile));
 
         return RenderNormalizedForRoundTripComparison(normalized);
     }
@@ -76,8 +87,8 @@ public class InliningTestHelper
                     "Round-trip verification failed: rendered Elm text could not be parsed: " + err));
 
         // Convert to Stil4m model (which normalizes locations) and back for comparison
-        var normalizedVia7 = Stil4mElmSyntax7.FromFullSyntaxModel.Convert(parsedFile);
-        var backToFull = Stil4mElmSyntax7.ToFullSyntaxModel.Convert(normalizedVia7);
+        var normalizedVia7 = FromFullSyntaxModel.Convert(parsedFile);
+        var backToFull = ToFullSyntaxModel.Convert(normalizedVia7);
         var reformatted = SnapshotTestFormat.Format(backToFull);
         var rerendered = Rendering.ToString(reformatted);
 
@@ -90,11 +101,11 @@ public class InliningTestHelper
         // Normalize both ASTs by converting through Stil4m model (which drops locations)
         var normalizedFirst =
             NormalizeForRoundTripComparison(
-                Stil4mElmSyntax7.FromFullSyntaxModel.Convert(parsedFile));
+                FromFullSyntaxModel.Convert(parsedFile));
 
         var normalizedSecond =
             NormalizeForRoundTripComparison(
-                Stil4mElmSyntax7.FromFullSyntaxModel.Convert(reparsedFile));
+                FromFullSyntaxModel.Convert(reparsedFile));
 
         var canonicalFirst = RenderNormalizedForRoundTripComparison(normalizedFirst);
         var canonicalSecond = RenderNormalizedForRoundTripComparison(normalizedSecond);
@@ -112,7 +123,7 @@ public class InliningTestHelper
     private static string RenderNormalizedForRoundTripComparison(Stil4mElmSyntax7.File file) =>
         Rendering.ToString(
             SnapshotTestFormat.Format(
-                Stil4mElmSyntax7.ToFullSyntaxModel.Convert(file)));
+                ToFullSyntaxModel.Convert(file)));
 
     private static Stil4mElmSyntax7.File NormalizeForRoundTripComparison(Stil4mElmSyntax7.File file) =>
         file with

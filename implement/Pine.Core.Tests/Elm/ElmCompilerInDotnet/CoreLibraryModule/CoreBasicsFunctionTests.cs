@@ -2,7 +2,8 @@ using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet.CoreLibraryModule;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.IntermediateVM;
 using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.CoreLibraryModule;
@@ -2577,7 +2578,7 @@ public class CoreBasicsFunctionTests
 
     #endregion
 
-    private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
+    private static readonly Core.Runtime.IntermediateVM.PineVM s_vm =
         ElmCompilerTestHelper.PineVMForProfiling(_ => { });
 
     private static (ElmValue value, EvaluationReport profile) ApplyDirectBinary(

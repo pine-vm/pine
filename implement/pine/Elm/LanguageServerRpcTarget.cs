@@ -1,4 +1,4 @@
-using Pine.Core;
+using Pine.Core.Functional;
 using Pine.Core.LanguageServerProtocol;
 using Pine.LanguageServer;
 using StreamJsonRpc;

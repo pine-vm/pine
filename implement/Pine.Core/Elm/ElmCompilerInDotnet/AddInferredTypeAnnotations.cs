@@ -1,17 +1,18 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.Elm.ElmSyntax;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Concrete;
 using Pine.Core.Files;
+using Pine.Core.Functional;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 
-using AbstractSyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
+using AbstractSyntax = Pine.Core.Elm.Syntax.Abstract;
 
 // Alias to avoid ambiguity with System.Range
-using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
+using Range = Pine.Core.Elm.Syntax.Concrete.Range;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -146,7 +147,7 @@ public class AddInferredTypeAnnotations
         // Build combined function signatures from ALL canonicalized modules
         var allSignatures = ImmutableDictionary<string, TypeInference.InferredType>.Empty;
 
-        var canonicalizedFilesByModuleName = new Dictionary<string, AbstractSyntaxTypes.File>(StringComparer.Ordinal);
+        var canonicalizedFilesByModuleName = new Dictionary<string, AbstractSyntax.File>(StringComparer.Ordinal);
 
         var allAliasDefinitions =
             ImmutableDictionary<DeclQualifiedName, TypeInference.TypeAliasDefinition>.Empty;
@@ -157,7 +158,7 @@ public class AddInferredTypeAnnotations
             // don't prevent us from inferring types for cross-module references
             var moduleNameStr = string.Join(".", moduleName);
 
-            var abstractFile = AbstractSyntaxTypes.ConvertFromConcrete.FromFile(canonicalizedFile);
+            var abstractFile = AbstractSyntax.ConvertFromConcrete.FromFile(canonicalizedFile);
 
             canonicalizedFilesByModuleName[moduleNameStr] = abstractFile;
 
@@ -223,7 +224,7 @@ public class AddInferredTypeAnnotations
     /// Infers type annotations for all declarations in a file, including local declarations in let-blocks.
     /// </summary>
     private static ImmutableDictionary<IReadOnlyList<string>, TypeAnnotation> InferTypeAnnotationsForFile(
-        AbstractSyntaxTypes.File file,
+        AbstractSyntax.File file,
         string moduleName,
         Func<IReadOnlyList<string>, bool> includeDeclaration,
         ImmutableDictionary<string, TypeInference.InferredType> allModuleSignatures)
@@ -242,7 +243,7 @@ public class AddInferredTypeAnnotations
 
         foreach (var declaration in file.Declarations)
         {
-            if (declaration is AbstractSyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+            if (declaration is AbstractSyntax.Declaration.FunctionDeclaration funcDecl)
             {
                 var funcName = funcDecl.Function.Declaration.Name;
                 var declarationPath = new[] { funcName };
@@ -317,12 +318,12 @@ public class AddInferredTypeAnnotations
     }
 
     private static IReadOnlyList<string> SourceModuleNameForType(
-        AbstractSyntaxTypes.File file,
+        AbstractSyntax.File file,
         IReadOnlyList<string> typeModuleName,
         string typeName)
     {
         var currentModuleName =
-            AbstractSyntaxTypes.Module.GetModuleName(file.ModuleDefinition);
+            AbstractSyntax.Module.GetModuleName(file.ModuleDefinition);
 
         if (currentModuleName.SequenceEqual(typeModuleName))
         {
@@ -351,15 +352,15 @@ public class AddInferredTypeAnnotations
     }
 
     private static bool ExposingIncludesType(
-        AbstractSyntaxTypes.Exposing exposing,
+        AbstractSyntax.Exposing exposing,
         string typeName)
     {
         switch (exposing)
         {
-            case AbstractSyntaxTypes.Exposing.All:
+            case AbstractSyntax.Exposing.All:
                 return true;
 
-            case AbstractSyntaxTypes.Exposing.Explicit explicitExposing:
+            case AbstractSyntax.Exposing.Explicit explicitExposing:
                 return
                     explicitExposing.Exposes.Any(
                         expose => TopLevelExposeIncludesType(expose, typeName));
@@ -371,19 +372,19 @@ public class AddInferredTypeAnnotations
     }
 
     private static bool TopLevelExposeIncludesType(
-        AbstractSyntaxTypes.TopLevelExpose expose,
+        AbstractSyntax.TopLevelExpose expose,
         string typeName)
     {
         switch (expose)
         {
-            case AbstractSyntaxTypes.TopLevelExpose.TypeOrAliasExpose typeOrAliasExpose:
+            case AbstractSyntax.TopLevelExpose.TypeOrAliasExpose typeOrAliasExpose:
                 return typeOrAliasExpose.Name == typeName;
 
-            case AbstractSyntaxTypes.TopLevelExpose.TypeExpose typeExpose:
+            case AbstractSyntax.TopLevelExpose.TypeExpose typeExpose:
                 return typeExpose.ExposedType.Name == typeName;
 
-            case AbstractSyntaxTypes.TopLevelExpose.InfixExpose:
-            case AbstractSyntaxTypes.TopLevelExpose.FunctionExpose:
+            case AbstractSyntax.TopLevelExpose.InfixExpose:
+            case AbstractSyntax.TopLevelExpose.FunctionExpose:
                 return false;
 
             default:
@@ -397,7 +398,7 @@ public class AddInferredTypeAnnotations
     /// Uses TypeInference for actual type inference and only converts InferredType to TypeAnnotation.
     /// </summary>
     private static ImmutableDictionary<IReadOnlyList<string>, TypeAnnotation> CollectTypeAnnotationsInExpression(
-        AbstractSyntaxTypes.Expression expression,
+        AbstractSyntax.Expression expression,
         IReadOnlyList<string> currentPath,
         string moduleName,
         IReadOnlyDictionary<string, TypeInference.InferredType> functionSignatures,
@@ -407,12 +408,12 @@ public class AddInferredTypeAnnotations
     {
         switch (expression)
         {
-            case AbstractSyntaxTypes.Expression.LetExpression letExpr:
+            case AbstractSyntax.Expression.LetExpression letExpr:
 
                 // Process each declaration in the let-block
                 foreach (var letDecl in letExpr.Declarations)
                 {
-                    if (letDecl is AbstractSyntaxTypes.LetDeclaration.LetFunction letFunc)
+                    if (letDecl is AbstractSyntax.LetDeclaration.LetFunction letFunc)
                     {
                         var localFuncName = letFunc.Function.Declaration.Name;
                         var localPath = currentPath.Append(localFuncName).ToArray();
@@ -491,7 +492,7 @@ public class AddInferredTypeAnnotations
 
                 break;
 
-            case AbstractSyntaxTypes.Expression.IfBlock ifBlock:
+            case AbstractSyntax.Expression.IfBlock ifBlock:
                 annotations =
                     CollectTypeAnnotationsInExpression(
                         ifBlock.Condition,
@@ -524,7 +525,7 @@ public class AddInferredTypeAnnotations
 
                 break;
 
-            case AbstractSyntaxTypes.Expression.CaseExpression caseExpr:
+            case AbstractSyntax.Expression.CaseExpression caseExpr:
                 annotations =
                     CollectTypeAnnotationsInExpression(
                         caseExpr.Expression,
@@ -550,7 +551,7 @@ public class AddInferredTypeAnnotations
 
                 break;
 
-            case AbstractSyntaxTypes.Expression.LambdaExpression lambda:
+            case AbstractSyntax.Expression.LambdaExpression lambda:
                 annotations =
                     CollectTypeAnnotationsInExpression(
                         lambda.Expression,
@@ -563,7 +564,7 @@ public class AddInferredTypeAnnotations
 
                 break;
 
-            case AbstractSyntaxTypes.Expression.Application app:
+            case AbstractSyntax.Expression.Application app:
                 annotations =
                     CollectTypeAnnotationsInExpression(
                         app.Function,
@@ -589,7 +590,7 @@ public class AddInferredTypeAnnotations
 
                 break;
 
-            case AbstractSyntaxTypes.Expression.OperatorApplication opApp:
+            case AbstractSyntax.Expression.OperatorApplication opApp:
                 annotations =
                     CollectTypeAnnotationsInExpression(
                         opApp.Left,
@@ -612,7 +613,7 @@ public class AddInferredTypeAnnotations
 
                 break;
 
-            case AbstractSyntaxTypes.Expression.TupledExpression tuple:
+            case AbstractSyntax.Expression.TupledExpression tuple:
                 foreach (var elem in tuple.Elements)
                 {
                     annotations =
@@ -628,7 +629,7 @@ public class AddInferredTypeAnnotations
 
                 break;
 
-            case AbstractSyntaxTypes.Expression.ListExpr list:
+            case AbstractSyntax.Expression.ListExpr list:
                 foreach (var elem in list.Elements)
                 {
                     annotations =
@@ -644,7 +645,7 @@ public class AddInferredTypeAnnotations
 
                 break;
 
-            case AbstractSyntaxTypes.Expression.RecordExpr record:
+            case AbstractSyntax.Expression.RecordExpr record:
                 foreach (var field in record.Fields)
                 {
                     annotations =
@@ -660,18 +661,18 @@ public class AddInferredTypeAnnotations
 
                 break;
 
-            case AbstractSyntaxTypes.Expression.UnitExpr:
-            case AbstractSyntaxTypes.Expression.StringLiteral:
-            case AbstractSyntaxTypes.Expression.CharLiteral:
-            case AbstractSyntaxTypes.Expression.IntegerLiteral:
-            case AbstractSyntaxTypes.Expression.FloatLiteral:
-            case AbstractSyntaxTypes.Expression.Negation:
-            case AbstractSyntaxTypes.Expression.Identifier:
-            case AbstractSyntaxTypes.Expression.PrefixOperator:
-            case AbstractSyntaxTypes.Expression.RecordAccess:
-            case AbstractSyntaxTypes.Expression.RecordAccessFunction:
-            case AbstractSyntaxTypes.Expression.RecordUpdateExpression:
-            case AbstractSyntaxTypes.Expression.GLSLExpression:
+            case AbstractSyntax.Expression.UnitExpr:
+            case AbstractSyntax.Expression.StringLiteral:
+            case AbstractSyntax.Expression.CharLiteral:
+            case AbstractSyntax.Expression.IntegerLiteral:
+            case AbstractSyntax.Expression.FloatLiteral:
+            case AbstractSyntax.Expression.Negation:
+            case AbstractSyntax.Expression.Identifier:
+            case AbstractSyntax.Expression.PrefixOperator:
+            case AbstractSyntax.Expression.RecordAccess:
+            case AbstractSyntax.Expression.RecordAccessFunction:
+            case AbstractSyntax.Expression.RecordUpdateExpression:
+            case AbstractSyntax.Expression.GLSLExpression:
                 break;
 
             default:

@@ -1,4 +1,4 @@
-using Pine.Core.PineVM;
+using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Generic;
 
@@ -6,7 +6,7 @@ namespace Pine.Core.CodeAnalysis;
 
 /// <summary>
 /// A minimal interpreter for <see cref="StaticExpression{StaticFunctionIdentifier}"/> expressions.
-/// Analog to <see cref="Interpreter.DirectInterpreter"/>, but operating on the static
+/// Analog to <see cref="Runtime.DirectInterpreter"/>, but operating on the static
 /// expression model rather than the general Pine <see cref="Expression"/> model.
 /// </summary>
 /// <remarks>

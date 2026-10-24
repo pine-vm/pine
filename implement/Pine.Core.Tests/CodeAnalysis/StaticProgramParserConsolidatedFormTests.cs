@@ -1,7 +1,8 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CodeGen;
-using Pine.Core.CommonEncodings;
+using Pine.Core.CodeGen.Pine;
+using Pine.Core.Encodings;
+using Pine.Core.PineLanguage;
 using Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 using System.Collections.Immutable;
 using System.Linq;

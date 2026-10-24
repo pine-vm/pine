@@ -1,5 +1,6 @@
-using Pine.Core.CodeGen;
-using Pine.Core.CommonEncodings;
+using Pine.Core.CodeGen.Pine;
+using Pine.Core.Encodings;
+using Pine.Core.PineLanguage;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 
@@ -369,7 +370,7 @@ public static class CoreDebug
         var tagArgumentNeedsParens =
             Expression.ConditionalInst(
                 condition: IsChoiceTypeTag(tagArgument),
-                falseBranch: Expression.LitralInst(PineVM.PineKernelValues.FalseValue),
+                falseBranch: Expression.LitralInst(PineKernelValues.FalseValue),
                 trueBranch:
                 Expression.BuiltinInst(
                     nameof(BuiltinFunction.int_is_sorted_asc),
@@ -569,7 +570,7 @@ public static class CoreDebug
         var isString =
             Expression.ConditionalInst(
                 condition: hasListItems,
-                falseBranch: Expression.LitralInst(PineVM.PineKernelValues.FalseValue),
+                falseBranch: Expression.LitralInst(PineKernelValues.FalseValue),
                 trueBranch:
                 BuiltinHelpers.ApplyBuiltinEqualBinary(
                     BuiltinHelpers.ApplyBuiltinHead(
@@ -579,7 +580,7 @@ public static class CoreDebug
         var isFloat =
             Expression.ConditionalInst(
                 condition: hasListItems,
-                falseBranch: Expression.LitralInst(PineVM.PineKernelValues.FalseValue),
+                falseBranch: Expression.LitralInst(PineKernelValues.FalseValue),
                 trueBranch:
                 BuiltinHelpers.ApplyBuiltinEqualBinary(
                     BuiltinHelpers.ApplyBuiltinHead(
@@ -589,7 +590,7 @@ public static class CoreDebug
         var isRecord =
             Expression.ConditionalInst(
                 condition: hasListItems,
-                falseBranch: Expression.LitralInst(PineVM.PineKernelValues.FalseValue),
+                falseBranch: Expression.LitralInst(PineKernelValues.FalseValue),
                 trueBranch:
                 BuiltinHelpers.ApplyBuiltinEqualBinary(
                     BuiltinHelpers.ApplyBuiltinHead(rendererValue),
@@ -639,12 +640,12 @@ public static class CoreDebug
             Expression.ConditionalInst(
                 condition: BuiltinHelpers.ApplyBuiltinEqualBinary(blobSign, LiteralByte(2)),
                 falseBranch: BuiltinHelpers.ApplyBuiltinEqualBinary(blobSign, LiteralByte(4)),
-                trueBranch: Expression.LitralInst(PineVM.PineKernelValues.TrueValue));
+                trueBranch: Expression.LitralInst(PineKernelValues.TrueValue));
 
         var blobDecodesAsInteger =
             Expression.ConditionalInst(
                 condition: blobHasIntegerLength,
-                falseBranch: Expression.LitralInst(PineVM.PineKernelValues.FalseValue),
+                falseBranch: Expression.LitralInst(PineKernelValues.FalseValue),
                 trueBranch: blobHasIntegerSign);
 
         var blobResult =
@@ -677,7 +678,7 @@ public static class CoreDebug
     private static Expression IsChoiceTypeTag(Expression value)
     {
         var falseValue =
-            Expression.LitralInst(PineVM.PineKernelValues.FalseValue);
+            Expression.LitralInst(PineKernelValues.FalseValue);
 
         var valueLength =
             BuiltinHelpers.ApplyBuiltinLength(value);

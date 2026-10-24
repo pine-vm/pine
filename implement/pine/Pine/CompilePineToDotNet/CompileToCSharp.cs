@@ -3,8 +3,11 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
 using Pine.Core.DotNet;
+using Pine.Core.Encodings;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
 using Pine.PineVM;
 using System;
 using System.Collections.Generic;
@@ -1212,7 +1215,7 @@ public partial class CompileToCSharp
                             innerExprValueId.ExpressionHashBase16[..8] +
                             ": " + err +
                             " - expressionValue is " +
-                            Core.Interpreter.IntermediateVM.PineVM.DescribeValueForErrorMessage(innerExpressionValue);
+                            Core.Runtime.IntermediateVM.PineVM.DescribeValueForErrorMessage(innerExpressionValue);
 
                         var throwSyntax =
                             CoreSyntaxFactory.ThrowParseExpressionException(

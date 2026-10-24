@@ -3,9 +3,12 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmInElm;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Concrete;
 using Pine.Core.Files;
-using Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
+using Pine.Core.Tests.Elm.Syntax.Interpreter;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -301,8 +304,8 @@ public class CoreRegexFunctionTests
                     ModuleSource,
                 ]));
 
-    private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
-        Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
+    private static readonly Core.Runtime.IntermediateVM.PineVM s_vm =
+        Core.Runtime.IntermediateVM.PineVM.CreateCustom(
             evalCache: null,
             evaluationConfigDefault: null,
             reportFunctionApplication: null,

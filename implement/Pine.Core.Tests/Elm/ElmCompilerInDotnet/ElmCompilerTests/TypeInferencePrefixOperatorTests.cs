@@ -1,9 +1,8 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7;
 using System.Collections.Generic;
 using Xunit;
-
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 using static Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests.AbstractSyntaxTestConversion;
 
@@ -24,7 +23,7 @@ public class TypeInferencePrefixOperatorTests
         // InferExpressionType should return a FunctionType for this expression.
 
         var expression =
-            new SyntaxTypes.Expression.PrefixOperator("::");
+            new Expression.PrefixOperator("::");
 
         var inferredType =
             TypeInference.InferExpressionType(
@@ -41,7 +40,7 @@ public class TypeInferencePrefixOperatorTests
         // (+) has type `number -> number -> number` in Elm.
 
         var expression =
-            new SyntaxTypes.Expression.PrefixOperator("+");
+            new Expression.PrefixOperator("+");
 
         var inferredType =
             TypeInference.InferExpressionType(
@@ -58,7 +57,7 @@ public class TypeInferencePrefixOperatorTests
         // (//) has type `Int -> Int -> Int` in Elm.
 
         var expression =
-            new SyntaxTypes.Expression.PrefixOperator("//");
+            new Expression.PrefixOperator("//");
 
         var inferredType =
             TypeInference.InferExpressionType(
@@ -75,7 +74,7 @@ public class TypeInferencePrefixOperatorTests
         // (==) has type `a -> a -> Bool` in Elm.
 
         var expression =
-            new SyntaxTypes.Expression.PrefixOperator("==");
+            new Expression.PrefixOperator("==");
 
         var inferredType =
             TypeInference.InferExpressionType(

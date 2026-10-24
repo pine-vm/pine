@@ -3,7 +3,9 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
+using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -98,9 +100,9 @@ public class DictPrecompiledLeavesEffectivenessTests
         .First(module => module.moduleName is "Dict")
         .moduleContent.FunctionDeclarations[name];
 
-    private static Core.Interpreter.IntermediateVM.PineVM CreateVM(
+    private static Core.Runtime.IntermediateVM.PineVM CreateVM(
         IReadOnlyDictionary<PineValue, PrecompiledLeaf> precompiledLeaves) =>
-        Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
+        Core.Runtime.IntermediateVM.PineVM.CreateCustom(
             evalCache: null,
             evaluationConfigDefault: null,
             reportFunctionApplication: _ => { },
@@ -118,7 +120,7 @@ public class DictPrecompiledLeavesEffectivenessTests
 
     private static ElmValue BuildIntIntDict(
         IEnumerable<(long key, long value)> pairs,
-        Core.Interpreter.IntermediateVM.PineVM vm)
+        Core.Runtime.IntermediateVM.PineVM vm)
     {
         var tupleList =
             ElmValue.ListInstance(
@@ -139,7 +141,7 @@ public class DictPrecompiledLeavesEffectivenessTests
     private static (ElmValue value, EvalWorkCounters counters) ApplyUnary(
         string functionName,
         ElmValue argument,
-        Core.Interpreter.IntermediateVM.PineVM vm) =>
+        Core.Runtime.IntermediateVM.PineVM vm) =>
         CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
             GetTestFunction(functionName),
             argument,

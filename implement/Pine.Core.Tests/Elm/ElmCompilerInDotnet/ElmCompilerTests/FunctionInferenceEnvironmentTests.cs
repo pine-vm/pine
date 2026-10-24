@@ -1,11 +1,10 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Elm.Syntax.Abstract;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using Xunit;
-
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 
@@ -22,11 +21,11 @@ public class FunctionInferenceEnvironmentTests
                     new TypeInference.InferredType.StringType()));
 
         var expression =
-            new SyntaxTypes.Expression.Application(
-                SyntaxTypes.Expression.Identifier.Create(["Library"], "consume"),
-                [SyntaxTypes.Expression.Identifier.Create([], "value")]);
+            new Expression.Application(
+                Expression.Identifier.Create(["Library"], "consume"),
+                [Expression.Identifier.Create([], "value")]);
 
-        SyntaxTypes.Pattern[] arguments = [new SyntaxTypes.Pattern.VarPattern("value")];
+        Pattern[] arguments = [new Pattern.VarPattern("value")];
 
         var environment = new TypeInference.FunctionInferenceEnvironment(signatures);
 
@@ -46,11 +45,11 @@ public class FunctionInferenceEnvironmentTests
     public void Changed_arguments_or_signature_environment_do_not_reuse_body_only_results()
     {
         var expression =
-            new SyntaxTypes.Expression.Application(
-                SyntaxTypes.Expression.Identifier.Create(["Library"], "consume"),
-                [SyntaxTypes.Expression.Identifier.Create([], "value")]);
+            new Expression.Application(
+                Expression.Identifier.Create(["Library"], "consume"),
+                [Expression.Identifier.Create([], "value")]);
 
-        SyntaxTypes.Pattern[] arguments = [new SyntaxTypes.Pattern.VarPattern("value")];
+        Pattern[] arguments = [new Pattern.VarPattern("value")];
 
         var signatures =
             ImmutableDictionary<string, TypeInference.InferredType>.Empty.Add(
@@ -67,7 +66,7 @@ public class FunctionInferenceEnvironmentTests
         var differentArguments =
             TypeInference.InferFunctionDeclarationType(
                 expression,
-                [new SyntaxTypes.Pattern.VarPattern("other")],
+                [new Pattern.VarPattern("other")],
                 "Test",
                 environment);
 
@@ -91,7 +90,7 @@ public class FunctionInferenceEnvironmentTests
     [Fact]
     public void Current_module_is_part_of_inference_context()
     {
-        var expression = SyntaxTypes.Expression.Identifier.Create([], "value");
+        var expression = Expression.Identifier.Create([], "value");
 
         var signatures =
             ImmutableDictionary<string, TypeInference.InferredType>.Empty
@@ -111,9 +110,9 @@ public class FunctionInferenceEnvironmentTests
     public void Legacy_overload_preserves_signature_lookup_comparer()
     {
         var expression =
-            new SyntaxTypes.Expression.Application(
-                SyntaxTypes.Expression.Identifier.Create(["Library"], "CONSUME"),
-                [SyntaxTypes.Expression.Identifier.Create([], "value")]);
+            new Expression.Application(
+                Expression.Identifier.Create(["Library"], "CONSUME"),
+                [Expression.Identifier.Create([], "value")]);
 
         var signatures =
             new Dictionary<string, TypeInference.InferredType>(StringComparer.OrdinalIgnoreCase)
@@ -125,7 +124,7 @@ public class FunctionInferenceEnvironmentTests
             };
 
         TypeInference.InferFunctionDeclarationType(
-            expression, [new SyntaxTypes.Pattern.VarPattern("value")], "Test", signatures)
+            expression, [new Pattern.VarPattern("value")], "Test", signatures)
             .parameterTypes["value"].Should().BeOfType<TypeInference.InferredType.IntType>();
     }
 }

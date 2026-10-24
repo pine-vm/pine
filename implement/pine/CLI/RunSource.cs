@@ -1,7 +1,7 @@
-using Pine.Core;
 using Pine.Core.Elm;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
 using Pine.Core.Files;
+using Pine.Core.Functional;
 using System;
 using System.Collections.Generic;
 using System.Globalization;

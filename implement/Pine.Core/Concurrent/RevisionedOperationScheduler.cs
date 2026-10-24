@@ -203,7 +203,8 @@ public sealed class RevisionedOperationScheduler<TState, TOperation, TResult, TW
                         previousOperation,
                         orderedCompletion,
                         resultCompletion,
-                        cancellationToken));
+                        cancellationToken),
+                    CancellationToken.None);
 
             return resultCompletion.Task;
         }

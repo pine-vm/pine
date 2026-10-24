@@ -1,9 +1,10 @@
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Elm.Syntax.Concrete;
+using Pine.Core.Encodings;
 using Pine.Core.Json;
+using Pine.Core.PineLanguage;
 using System.Collections.Immutable;
 using System.Text.Json.Serialization;
-
-using Source = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
 
@@ -14,20 +15,20 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
 [JsonConverter(typeof(ProgramJsonConverter))]
 public sealed record Program(
     ImmutableDictionary<FunctionId, Function> Functions,
-    ImmutableDictionary<DeclQualifiedName, Source.Declaration> SourceDeclarations)
+    ImmutableDictionary<DeclQualifiedName, Syntax.Abstract.Declaration> SourceDeclarations)
 {
     /// <summary>Source metadata cannot contain a second implementation of a compiled function.</summary>
-    public ImmutableDictionary<DeclQualifiedName, Source.Declaration> SourceDeclarations { get; } =
+    public ImmutableDictionary<DeclQualifiedName, Syntax.Abstract.Declaration> SourceDeclarations { get; } =
         ValidateMetadata(SourceDeclarations);
 
-    private static ImmutableDictionary<DeclQualifiedName, Source.Declaration> ValidateMetadata(
-        ImmutableDictionary<DeclQualifiedName, Source.Declaration> declarations)
+    private static ImmutableDictionary<DeclQualifiedName, Syntax.Abstract.Declaration> ValidateMetadata(
+        ImmutableDictionary<DeclQualifiedName, Syntax.Abstract.Declaration> declarations)
     {
         System.ArgumentNullException.ThrowIfNull(declarations);
 
         foreach (var (name, declaration) in declarations)
         {
-            if (declaration is null || declaration is Source.Declaration.FunctionDeclaration ||
+            if (declaration is null || declaration is Syntax.Abstract.Declaration.FunctionDeclaration ||
                 ElmCompiler.GetDeclarationName(declaration) != name.DeclName)
             {
                 throw new System.ArgumentException(
@@ -162,7 +163,7 @@ public abstract record Expression
     {
         /// <summary>Derived runtime label encoding.</summary>
         [JsonIgnore]
-        public PineValue FieldNameValue => Pine.Core.CommonEncodings.StringEncoding.ValueFromString(FieldName);
+        public PineValue FieldNameValue => StringEncoding.ValueFromString(FieldName);
 
         /// <inheritdoc/>
         public override int GetHashCode() =>
@@ -174,7 +175,7 @@ public abstract record Expression
     {
         /// <summary>Derived runtime label encoding.</summary>
         [JsonIgnore]
-        public PineValue FieldNameValue => Pine.Core.CommonEncodings.StringEncoding.ValueFromString(FieldName);
+        public PineValue FieldNameValue => StringEncoding.ValueFromString(FieldName);
 
         /// <inheritdoc/>
         public override int GetHashCode() =>
@@ -216,7 +217,7 @@ public abstract record Expression
     }
 
     /// <summary>An operator that retains the existing backend's implementation choice.</summary>
-    public sealed record Operator(string Name, ElmSyntax.SyntaxModel.InfixDirection Direction, Expression Left, Expression Right) : Expression
+    public sealed record Operator(string Name, InfixDirection Direction, Expression Left, Expression Right) : Expression
     {
         /// <inheritdoc/>
         public override int GetHashCode() =>
@@ -307,5 +308,5 @@ public sealed record Field(string Name, Expression Value)
 
     /// <summary>Derived runtime label encoding.</summary>
     [JsonIgnore]
-    public PineValue NameValue => Pine.Core.CommonEncodings.StringEncoding.ValueFromString(Name);
+    public PineValue NameValue => StringEncoding.ValueFromString(Name);
 }

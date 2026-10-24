@@ -1,4 +1,8 @@
+using Pine.Core.Bundle;
 using Pine.Core.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
+using Pine.Core.Optimization;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
 using System;
 using System.Collections.Generic;
 using System.IO;

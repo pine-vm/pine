@@ -1,6 +1,8 @@
-using Pine.Core.CodeGen;
-using Pine.Core.CommonEncodings;
-using Pine.Core.Interpreter;
+using Pine.Core.CodeGen.Pine;
+using Pine.Core.Encodings;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
 using System;
 using System.Collections.Generic;
 

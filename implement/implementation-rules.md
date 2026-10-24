@@ -30,7 +30,7 @@ Before submitting a pull request, format any added or changed C# code using the 
 
 ## Exhaustive `switch` over Variant Hierarchies
 
-The C# compiler does **not** statically check exhaustiveness of `switch` statements or `switch` expressions over an open record / class hierarchy (for example over `Pine.Core.Expression` and its variants, over `Pine.Core.Elm.ElmSyntax.SyntaxModel.Pattern` variants, etc.). Adding a new variant, therefore, silently slips through every existing `switch` that does not list it.
+The C# compiler does **not** statically check exhaustiveness of `switch` statements or `switch` expressions over an open record / class hierarchy (for example over `Pine.Core.PineLanguage.Expression` and its variants). Adding a new variant, therefore, silently slips through every existing `switch` that does not list it.
 
 To compensate for this missing language feature, **every `switch` statement and `switch` expression that switches over the variants of such a hierarchy must satisfy both of the following requirements**:
 

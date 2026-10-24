@@ -1,9 +1,12 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Encodings;
 using Pine.Core.Files;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
 using Pine.Core.Tests.Elm.ElmCompilerTests;
 using System;
 using System.Collections.Generic;
@@ -122,9 +125,9 @@ public class DeclarationDemandTests
             .Extract(error => throw new Exception(error));
 
         var value =
-            Core.Interpreter.DirectInterpreter.WithSharedEvalCache(
+            DirectInterpreter.WithSharedEvalCache(
                 parseCache,
-                new Dictionary<Core.Interpreter.DirectInterpreter.EvalCacheEntryKey, PineValue>())
+                new Dictionary<DirectInterpreter.EvalCacheEntryKey, PineValue>())
             .EvaluateExpression(executable, PineValue.EmptyList)
             .Extract(error => throw new Exception(error));
 

@@ -1,14 +1,15 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CodeGen;
-using Pine.Core.CommonEncodings;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using Pine.Core.CodeGen.Pine;
+
+using Pine.Core.Elm.Syntax.Concrete;
+using Pine.Core.Encodings;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-
-using Source = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet.CompilerModel;
 
@@ -160,13 +161,13 @@ public static class Compilation
         {
             switch (declaration)
             {
-                case Source.Declaration.AliasDeclaration alias:
-                    if (alias.TypeAlias.TypeAnnotation is Source.TypeAnnotation.Record record)
+                case Syntax.Abstract.Declaration.AliasDeclaration alias:
+                    if (alias.TypeAlias.TypeAnnotation is Syntax.Abstract.TypeAnnotation.Record record)
                         allRecords.Add(name, new(record.RecordDefinition.Fields.Select(field => field.FieldName)));
 
                     break;
 
-                case Source.Declaration.ChoiceTypeDeclaration choice:
+                case Syntax.Abstract.Declaration.ChoiceTypeDeclaration choice:
                     foreach (var constructor in choice.TypeDeclaration.Constructors)
                     {
                         allChoices.Add(
@@ -176,11 +177,11 @@ public static class Compilation
 
                     break;
 
-                case Source.Declaration.FunctionDeclaration:
+                case Syntax.Abstract.Declaration.FunctionDeclaration:
                     throw new InvalidOperationException("Compiler metadata must not contain source function bodies.");
 
-                case Source.Declaration.PortDeclaration:
-                case Source.Declaration.InfixDeclaration:
+                case Syntax.Abstract.Declaration.PortDeclaration:
+                case Syntax.Abstract.Declaration.InfixDeclaration:
                     break;
 
                 default:
@@ -261,14 +262,14 @@ public static class Compilation
                 ChoiceConstructorArities: input.ChoiceConstructors);
 
         var parseCache = new PineVMParseCache();
-        var reductions = new Dictionary<(Core.Expression, ReductionConfig), Core.Expression>();
-        var encodings = new PineExpressionEncodingCache();
-        var bodies = new Dictionary<FunctionId, Core.Expression>();
+        var reductions = new Dictionary<(PineLanguage.Expression, ReductionConfig), PineLanguage.Expression>();
+        var encodings = new ExpressionEncodingCache();
+        var bodies = new Dictionary<FunctionId, PineLanguage.Expression>();
 
         foreach (var (id, function) in members)
         {
             var parameters = new Dictionary<BindingId, int>();
-            var bindings = new Dictionary<BindingId, Core.Expression>();
+            var bindings = new Dictionary<BindingId, PineLanguage.Expression>();
 
             for (var index = 0; index < function.Parameters.Count; index++)
             {

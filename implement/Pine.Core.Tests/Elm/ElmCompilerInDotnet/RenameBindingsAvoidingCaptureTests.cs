@@ -1,14 +1,12 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax;
-using Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Abstract;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Xunit;
-
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -579,20 +577,20 @@ public class RenameBindingsAvoidingCaptureTests
     [Fact]
     public void MapChildExpressions_recomputes_let_function_hash_codes()
     {
-        var originalBody = SyntaxTypes.Expression.Identifier.Create([], "original");
-        var rewrittenBody = SyntaxTypes.Expression.Identifier.Create([], "rewritten");
+        var originalBody = Expression.Identifier.Create([], "original");
+        var rewrittenBody = Expression.Identifier.Create([], "rewritten");
         var implementation = new FunctionImplementation("value", [], originalBody);
 
         var expression =
-            new SyntaxTypes.Expression.LetExpression(
+            new Expression.LetExpression(
                 [
                 new LetDeclaration.LetFunction(
                     new FunctionStruct(null, implementation))
                 ],
-                SyntaxTypes.Expression.Identifier.Create([], "value"));
+                Expression.Identifier.Create([], "value"));
 
         var rewritten =
-            (SyntaxTypes.Expression.LetExpression)ElmSyntaxAbstractTransformations.MapChildExpressions(
+            (Expression.LetExpression)ElmSyntaxAbstractTransformations.MapChildExpressions(
                 expression,
                 child => ReferenceEquals(child, originalBody) ? rewrittenBody : child);
 

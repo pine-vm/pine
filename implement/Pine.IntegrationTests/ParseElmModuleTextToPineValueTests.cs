@@ -1,9 +1,10 @@
 using AwesomeAssertions;
 using AwesomeAssertions.Execution;
-using Pine.Core;
 using Pine.Core.CLI;
 using Pine.Core.Elm;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.IntermediateVM;
 using Pine.Core.Testing;
 using Pine.Elm;
 using Pine.IntermediateVM;
@@ -28,7 +29,7 @@ public class ParseElmModuleTextToPineValueTests
 
     private static readonly Core.CodeAnalysis.PineVMParseCache s_pineVMParseCache = new();
 
-    private static Core.Interpreter.IntermediateVM.PineVM CreateVMWithCache()
+    private static Core.Runtime.IntermediateVM.PineVM CreateVMWithCache()
     {
         var pineVMCache = new InvocationCache();
 
@@ -2034,7 +2035,7 @@ public class ParseElmModuleTextToPineValueTests
 
     public static void Dotnet_parser_results_in_same_expression_as_Elm_parser(
         string testCase,
-        Core.PineVM.IPineVM pineVM)
+        Core.Runtime.IPineVM pineVM)
     {
         var parsedModulePineValue =
             ParseElmModuleTextToPineValue(testCase, pineVM)
@@ -2048,7 +2049,7 @@ public class ParseElmModuleTextToPineValueTests
             ElmValue.RenderAsElmExpression(responseAsElmValue).expressionString;
 
         var fromDotnetResult =
-            Core.Elm.ElmSyntax.ElmSyntaxParser.ParseModuleTextAsElmSyntaxElmValue(testCase);
+            Core.Elm.Syntax.ElmSyntaxParser.ParseModuleTextAsElmSyntaxElmValue(testCase);
 
         if (fromDotnetResult.IsErrOrNullable() is { } err)
         {
@@ -2094,7 +2095,7 @@ public class ParseElmModuleTextToPineValueTests
         string elmModuleText,
         IReadOnlyList<string> expectedExpressionStringChunks,
         bool alsoTestDotnetParser,
-        Core.PineVM.IPineVM pineVM)
+        Core.Runtime.IPineVM pineVM)
     {
         var expectedExpressionString =
             string.Concat(expectedExpressionStringChunks);
@@ -2139,7 +2140,7 @@ public class ParseElmModuleTextToPineValueTests
         if (alsoTestDotnetParser)
         {
             var fromDotnetResult =
-                Core.Elm.ElmSyntax.ElmSyntaxParser.ParseModuleTextAsElmSyntaxElmValue(elmModuleText);
+                Core.Elm.Syntax.ElmSyntaxParser.ParseModuleTextAsElmSyntaxElmValue(elmModuleText);
 
             if (fromDotnetResult.IsErrOrNullable() is { } err)
             {
@@ -2172,7 +2173,7 @@ public class ParseElmModuleTextToPineValueTests
 
     public static Result<string, PineValue> ParseElmModuleTextToPineValue(
         string elmModuleText,
-        Core.PineVM.IPineVM pineVM)
+        Core.Runtime.IPineVM pineVM)
     {
         return s_bundledElmCompiler.Value.ParseElmModuleText(elmModuleText, pineVM);
     }

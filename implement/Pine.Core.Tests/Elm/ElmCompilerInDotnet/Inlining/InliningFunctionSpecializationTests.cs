@@ -6,8 +6,8 @@ using Xunit;
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
 
 using Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Elm.Syntax.Abstract;
 
-using SyntaxTypes = Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
 public class InliningFunctionSpecializationTests
@@ -35,19 +35,19 @@ public class InliningFunctionSpecializationTests
     {
         ParameterSpecialization left =
             new ParameterSpecialization.ConcreteLambdaValue(
-                new SyntaxTypes.Expression.LambdaExpression(
+                new Expression.LambdaExpression(
                     [
-                    new SyntaxTypes.Pattern.VarPattern("x")
+                    new Pattern.VarPattern("x")
                     ],
-                    SyntaxTypes.Expression.Identifier.Create([], "x")));
+                    Expression.Identifier.Create([], "x")));
 
         ParameterSpecialization right =
             new ParameterSpecialization.ConcreteLambdaValue(
-                new SyntaxTypes.Expression.LambdaExpression(
+                new Expression.LambdaExpression(
                     [
-                    new SyntaxTypes.Pattern.VarPattern("x")
+                    new Pattern.VarPattern("x")
                     ],
-                    SyntaxTypes.Expression.Identifier.Create([], "x")));
+                    Expression.Identifier.Create([], "x")));
 
         left.Equals(right).Should().BeTrue();
         left.GetHashCode().Should().Be(right.GetHashCode());

@@ -6,7 +6,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using Xunit;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
+using AbstractSyntax = Pine.Core.Elm.Syntax.Abstract;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -17,20 +17,20 @@ public class MarkRecursiveFunctionsTests
 {
     private static readonly IReadOnlyList<string> s_module = ["M"];
 
-    private static SyntaxTypes.Expression Identifier(
+    private static AbstractSyntax.Expression Identifier(
         IReadOnlyList<string> moduleName,
         string name) =>
-        SyntaxTypes.Expression.Identifier.Create(moduleName, name);
+        AbstractSyntax.Expression.Identifier.Create(moduleName, name);
 
-    private static SyntaxTypes.Expression.Application App(
-        SyntaxTypes.Expression function,
-        params SyntaxTypes.Expression[] arguments) =>
+    private static AbstractSyntax.Expression.Application App(
+        AbstractSyntax.Expression function,
+        params AbstractSyntax.Expression[] arguments) =>
         new(function, arguments);
 
-    private static SyntaxTypes.FunctionStruct Func(
+    private static AbstractSyntax.FunctionStruct Func(
         string name,
         IReadOnlyList<string> argumentNames,
-        SyntaxTypes.Expression body) =>
+        AbstractSyntax.Expression body) =>
         new(
             Signature: null,
             Declaration:
@@ -40,15 +40,15 @@ public class MarkRecursiveFunctionsTests
                 [
                 ..argumentNames.Select(
                     argumentName =>
-                    new SyntaxTypes.Pattern.VarPattern(argumentName))
+                    new AbstractSyntax.Pattern.VarPattern(argumentName))
                 ],
                 Expression: body));
 
-    private static ImmutableDictionary<DeclQualifiedName, SyntaxTypes.FunctionStruct> Functions(
-        params (string Name, SyntaxTypes.FunctionStruct Function)[] items)
+    private static ImmutableDictionary<DeclQualifiedName, AbstractSyntax.FunctionStruct> Functions(
+        params (string Name, AbstractSyntax.FunctionStruct Function)[] items)
     {
         var builder =
-            ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.FunctionStruct>();
+            ImmutableDictionary.CreateBuilder<DeclQualifiedName, AbstractSyntax.FunctionStruct>();
 
         foreach (var (name, function) in items)
             builder[DeclQualifiedName.Create(s_module, name)] = function;
@@ -57,7 +57,7 @@ public class MarkRecursiveFunctionsTests
     }
 
     private static bool IsMarkedRecursive(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.FunctionStruct> functions,
+        ImmutableDictionary<DeclQualifiedName, AbstractSyntax.FunctionStruct> functions,
         string name)
     {
         var marked = ElmSyntaxOptimization.MarkRecursiveFunctions(functions);

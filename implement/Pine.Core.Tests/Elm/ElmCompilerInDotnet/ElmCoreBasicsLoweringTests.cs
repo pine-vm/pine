@@ -1,12 +1,13 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Abstract;
 using Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
 using System;
 using System.Linq;
 using Xunit;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Stil4mElmSyntax7 = Pine.Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -361,7 +362,7 @@ public class ElmCoreBasicsLoweringTests
             """.Trim());
     }
 
-    private static SyntaxTypes.File LowerElmCoreBasics(
+    private static Stil4mElmSyntax7.File LowerElmCoreBasics(
         string moduleText,
         BuiltinOperatorLowering.Configuration? configuration = null)
     {
@@ -370,7 +371,7 @@ public class ElmCoreBasicsLoweringTests
             .Extract(err => throw new Exception("Failed parsing: " + err));
 
         var parsedModules =
-            new[] { SyntaxTypes.FromFullSyntaxModel.Convert(parsedModule) };
+            new[] { Stil4mElmSyntax7.FromFullSyntaxModel.Convert(parsedModule) };
 
         var canonicalizedModules =
             Canonicalization.CanonicalizeOrThrow([parsedModule])
@@ -380,13 +381,13 @@ public class ElmCoreBasicsLoweringTests
             parsedModules
             .Select(
                 module =>
-                canonicalizedModules[SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value]
+                canonicalizedModules[Stil4mElmSyntax7.Module.GetModuleName(module.ModuleDefinition.Value).Value]
                 .Extract(err => throw new Exception("Module has errors: " + err)))
             .ToList();
 
         var orderedCanonicalizedModulesAbstract =
             orderedCanonicalizedModules
-            .Select(Core.Elm.ElmSyntax.ElmSyntaxAbstract.ConvertFromConcrete.FromFile)
+            .Select(ConvertFromConcrete.FromFile)
             .ToList();
 
         var flatDecls = ElmCompiler.FlattenModulesToDeclarationDictionary(orderedCanonicalizedModulesAbstract);
@@ -403,20 +404,22 @@ public class ElmCoreBasicsLoweringTests
             orderedCanonicalizedModulesAbstract
             .Single(
                 module =>
-                Core.Elm.ElmSyntax.ElmSyntaxAbstract.Module.GetModuleName(module.ModuleDefinition)
+                Module.GetModuleName(module.ModuleDefinition)
                 .SequenceEqual(["Test"]))
             with
             {
                 Declarations =
-                loweredDecls.Where(entry => entry.Key.Namespaces.SequenceEqual(["Test"]))
-                .OrderBy(entry => entry.Key).Select(entry => entry.Value).ToArray()
+                [
+                .. loweredDecls.Where(entry => entry.Key.Namespaces.SequenceEqual(["Test"]))
+                .OrderBy(entry => entry.Key).Select(entry => entry.Value)
+                ]
             };
 
         return
-            SyntaxTypes.FromFullSyntaxModel.Convert(
-                Core.Elm.ElmSyntax.ElmSyntaxAbstract.ConvertToConcrete.FromFile(moduleAbstract));
+            Stil4mElmSyntax7.FromFullSyntaxModel.Convert(
+                ConvertToConcrete.FromFile(moduleAbstract));
     }
 
-    private static string RenderCanonicalized(SyntaxTypes.File module) =>
+    private static string RenderCanonicalized(Stil4mElmSyntax7.File module) =>
         InliningTestHelper.RenderModuleForSnapshotTests(module).Trim();
 }

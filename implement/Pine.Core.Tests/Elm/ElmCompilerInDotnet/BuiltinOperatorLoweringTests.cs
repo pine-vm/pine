@@ -1,12 +1,13 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Abstract;
 using Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
 using System;
 using System.Linq;
 using Xunit;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Stil4mElmSyntax = Pine.Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -1597,7 +1598,7 @@ public class BuiltinOperatorLoweringTests
             """.Trim());
     }
 
-    private static SyntaxTypes.File LowerOperators(params string[] moduleTexts)
+    private static Stil4mElmSyntax.File LowerOperators(params string[] moduleTexts)
     {
         var parsedModules =
             moduleTexts
@@ -1609,7 +1610,7 @@ public class BuiltinOperatorLoweringTests
 
         var parsedModulesAbstract =
             parsedModules
-            .Select(SyntaxTypes.FromFullSyntaxModel.Convert)
+            .Select(Stil4mElmSyntax.FromFullSyntaxModel.Convert)
             .ToList();
 
         var canonicalizedModules =
@@ -1620,13 +1621,13 @@ public class BuiltinOperatorLoweringTests
             parsedModulesAbstract
             .Select(
                 module =>
-                canonicalizedModules[SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value]
+                canonicalizedModules[Stil4mElmSyntax.Module.GetModuleName(module.ModuleDefinition.Value).Value]
                 .Extract(err => throw new Exception("Module has errors: " + err)))
             .ToList();
 
         var orderedCanonicalizedModulesAbstract =
             orderedCanonicalizedModules
-            .Select(Core.Elm.ElmSyntax.ElmSyntaxAbstract.ConvertFromConcrete.FromFile)
+            .Select(ConvertFromConcrete.FromFile)
             .ToList();
 
         var flatDecls = ElmCompiler.FlattenModulesToDeclarationDictionary(orderedCanonicalizedModulesAbstract);
@@ -1639,19 +1640,22 @@ public class BuiltinOperatorLoweringTests
             orderedCanonicalizedModulesAbstract
             .Single(
                 m =>
-                Core.Elm.ElmSyntax.ElmSyntaxAbstract.Module.GetModuleName(m.ModuleDefinition).SequenceEqual(["Test"]))
+                Module.GetModuleName(m.ModuleDefinition).SequenceEqual(["Test"]))
             with
             {
                 Declarations =
-                loweredDecls.Where(entry => entry.Key.Namespaces.SequenceEqual(["Test"]))
-                .OrderBy(entry => entry.Key).Select(entry => entry.Value).ToArray()
+                [
+                .. loweredDecls
+                .Where(entry => entry.Key.Namespaces.SequenceEqual(["Test"]))
+                .OrderBy(entry => entry.Key).Select(entry => entry.Value)
+                ]
             };
 
         return
-            SyntaxTypes.FromFullSyntaxModel.Convert(
-                Core.Elm.ElmSyntax.ElmSyntaxAbstract.ConvertToConcrete.FromFile(moduleAbstract));
+            Stil4mElmSyntax.FromFullSyntaxModel.Convert(
+                ConvertToConcrete.FromFile(moduleAbstract));
     }
 
-    private static string RenderCanonicalized(SyntaxTypes.File module) =>
+    private static string RenderCanonicalized(Stil4mElmSyntax.File module) =>
         InliningTestHelper.RenderModuleForSnapshotTests(module).Trim();
 }

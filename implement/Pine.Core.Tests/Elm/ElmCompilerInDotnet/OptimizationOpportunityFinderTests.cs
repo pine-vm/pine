@@ -2,12 +2,13 @@ using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmInElm;
+using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Abstract;
 using Pine.Core.Files;
+using Pine.Core.Tests.Testing;
 using System.Collections.Immutable;
 using System.Linq;
 using Xunit;
-
-using Syntax = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -644,17 +645,17 @@ public class OptimizationOpportunityFinderTests
         // prefix-matching behaviour without depending on the inliner.
         var hotKey = DeclQualifiedName.FromString("Test.hot");
         var specializedKey = DeclQualifiedName.FromString("Test.hot_specialized_1");
-        var hot = ((Syntax.Declaration.FunctionDeclaration)declarations[hotKey]).Function;
+        var hot = ((Declaration.FunctionDeclaration)declarations[hotKey]).Function;
 
         var specialized =
-            new Syntax.Declaration.FunctionDeclaration(
-                new Syntax.FunctionStruct(
+            new Declaration.FunctionDeclaration(
+                new FunctionStruct(
                     hot.Signature is null
                     ?
                     null
                     :
-                    new Syntax.Signature(specializedKey.DeclName, hot.Signature.TypeAnnotation),
-                    new Syntax.FunctionImplementation(
+                    new Signature(specializedKey.DeclName, hot.Signature.TypeAnnotation),
+                    new FunctionImplementation(
                         specializedKey.DeclName,
                         hot.Declaration.Arguments,
                         hot.Declaration.Expression)));
@@ -2199,7 +2200,7 @@ public class OptimizationOpportunityFinderTests
         var pipelineResults =
             ElmCompiler.LowerToCompilerModel(
                 sourceTree,
-                Pine.Core.Elm.ElmSourceCompilation.EnumerateRootDeclarations(sourceTree, rootFilePaths))
+                Core.Elm.ElmSourceCompilation.EnumerateRootDeclarations(sourceTree, rootFilePaths))
             .Extract(error => throw new System.Exception("Failed lowering: " + error));
 
         var opportunities =
@@ -2341,11 +2342,11 @@ public class OptimizationOpportunityFinderTests
         return false;
     }
 
-    private static System.Collections.Generic.IReadOnlyDictionary<DeclQualifiedName, Syntax.Declaration>
+    private static System.Collections.Generic.IReadOnlyDictionary<DeclQualifiedName, Declaration>
         ParseAndCanonicalize(string elmModuleText)
     {
         var parsed =
-            Core.Elm.ElmSyntax.ElmSyntaxParser.ParseModuleText(elmModuleText)
+            ElmSyntaxParser.ParseModuleText(elmModuleText)
             .Extract(err => throw new System.Exception("Failed parsing: " + err));
 
         var canonicalized =
@@ -2354,13 +2355,13 @@ public class OptimizationOpportunityFinderTests
 
         var orderedModules =
             canonicalized[
-                Core.Elm.ElmSyntax.SyntaxModel.Module.GetModuleName(
+                Core.Elm.Syntax.Concrete.Module.GetModuleName(
                     parsed.ModuleDefinition.Value).Value]
             .Extract(err => throw new System.Exception("Module has errors: " + err));
 
         var orderedModulesAbstract =
             new[] { orderedModules }
-            .Select(Core.Elm.ElmSyntax.ElmSyntaxAbstract.ConvertFromConcrete.FromFile)
+            .Select(ConvertFromConcrete.FromFile)
             .ToList();
 
         return ElmCompiler.FlattenModulesToDeclarationDictionary(orderedModulesAbstract);

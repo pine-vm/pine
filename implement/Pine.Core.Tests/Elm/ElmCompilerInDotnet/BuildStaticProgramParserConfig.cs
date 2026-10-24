@@ -1,4 +1,6 @@
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Functional;
+using Pine.Core.PineLanguage;
 using Pine.Core.Tests.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 using System.Collections.Generic;
 using System.Collections.Immutable;

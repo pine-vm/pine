@@ -3,6 +3,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
+using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -71,7 +72,7 @@ public class TokensFromStringConcreteTests
         .First(module => module.moduleName == moduleName)
         .moduleContent.FunctionDeclarations[functionName];
 
-    private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
+    private static readonly Core.Runtime.IntermediateVM.PineVM s_vm =
         ElmCompilerTestHelper.PineVMForProfiling(
             reportFunctionApplication: _ => { },
             enableTailRecursionOptimization: true);

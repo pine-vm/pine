@@ -1,7 +1,6 @@
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Elm.Syntax.Abstract;
 using System.Collections.Immutable;
-
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -12,14 +11,14 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// </summary>
 public record OptimizedElmSyntaxDeclarations(
     ImmutableDictionary<DeclQualifiedName, OptimizedElmSyntaxFunctionDeclaration> FunctionDeclarations,
-    ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> OtherDeclarations)
+    ImmutableDictionary<DeclQualifiedName, Declaration> OtherDeclarations)
 {
     /// <summary>
     /// Lifts a flat declaration dictionary into the structured
     /// <see cref="OptimizedElmSyntaxDeclarations"/> form by bucketing each entry:
     /// <list type="bullet">
     ///   <item><description>
-    ///     Every <see cref="SyntaxTypes.Declaration.FunctionDeclaration"/> becomes an
+    ///     Every <see cref="Declaration.FunctionDeclaration"/> becomes an
     ///     <see cref="OptimizedElmSyntaxFunctionDeclaration"/> with the declaration itself
     ///     as <see cref="OptimizedElmSyntaxFunctionDeclaration.Original"/> and an empty
     ///     <see cref="OptimizedElmSyntaxFunctionDeclaration.Specializations"/> map. The
@@ -38,17 +37,17 @@ public record OptimizedElmSyntaxDeclarations(
     /// </para>
     /// </summary>
     public static OptimizedElmSyntaxDeclarations FromFlatDictionary(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> flat)
+        ImmutableDictionary<DeclQualifiedName, Declaration> flat)
     {
         var functions =
             ImmutableDictionary.CreateBuilder<DeclQualifiedName, OptimizedElmSyntaxFunctionDeclaration>();
 
         var others =
-            ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
+            ImmutableDictionary.CreateBuilder<DeclQualifiedName, Declaration>();
 
         foreach (var (name, declaration) in flat)
         {
-            if (declaration is SyntaxTypes.Declaration.FunctionDeclaration functionDeclaration)
+            if (declaration is Declaration.FunctionDeclaration functionDeclaration)
             {
                 functions.Add(
                     name,
@@ -82,7 +81,7 @@ public record OptimizedElmSyntaxDeclarations(
     ///     One entry per specialization, keyed by a <see cref="DeclQualifiedName"/> whose
     ///     <see cref="DeclQualifiedName.Namespaces"/> are inherited from the original declaration
     ///     and whose <see cref="DeclQualifiedName.DeclName"/> is taken from the specialization's
-    ///     own <see cref="SyntaxTypes.FunctionImplementation.Name"/>. This derives the module
+    ///     own <see cref="FunctionImplementation.Name"/>. This derives the module
     ///     qualifier for each specialization from the original declaration it specializes.
     ///   </description></item>
     /// </list>
@@ -95,10 +94,10 @@ public record OptimizedElmSyntaxDeclarations(
     /// (for example, two specializations of different originals resolving to the same qualified name,
     /// or a specialization colliding with an entry in <see cref="OtherDeclarations"/>).
     /// </exception>
-    public ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> RenderAsFlatDictionary()
+    public ImmutableDictionary<DeclQualifiedName, Declaration> RenderAsFlatDictionary()
     {
         var builder =
-            ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
+            ImmutableDictionary.CreateBuilder<DeclQualifiedName, Declaration>();
 
         foreach (var (originalName, optimized) in FunctionDeclarations)
         {
@@ -180,8 +179,8 @@ public record OptimizedElmSyntaxDeclarations(
 /// differs from <see cref="Original"/>.
 /// </summary>
 public record OptimizedElmSyntaxFunctionDeclaration(
-    SyntaxTypes.Declaration.FunctionDeclaration Original,
-    ImmutableDictionary<FunctionSpecialization, SyntaxTypes.Declaration.FunctionDeclaration> Specializations)
+    Declaration.FunctionDeclaration Original,
+    ImmutableDictionary<FunctionSpecialization, Declaration.FunctionDeclaration> Specializations)
 {
     /// <inheritdoc/>
     public virtual bool Equals(OptimizedElmSyntaxFunctionDeclaration? other)

@@ -1,8 +1,10 @@
 using Pine.Core.Addressing;
-using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.ElmInElm;
+using Pine.Core.Encodings;
 using Pine.Core.Files;
+using Pine.Core.Functional;
 using Pine.Core.IO;
+using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Immutable;
 using System.IO;
@@ -88,7 +90,7 @@ internal static class LanguageServiceCompilation
         var encoded =
             PineValue.List(
                 [
-                    CommonEncodings.StringEncoding.ValueFromString("language-service-explicit-roots-v1"),
+                    StringEncoding.ValueFromString("language-service-explicit-roots-v1"),
                     FileTreeEncoding.Encode(sourceTree)
                 ]);
 

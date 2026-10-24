@@ -1,5 +1,5 @@
 using Pine.Core.Addressing;
-using Pine.Core.CommonEncodings;
+using Pine.Core.Encodings;
 using Pine.Core.Files;
 using System;
 using System.CommandLine;

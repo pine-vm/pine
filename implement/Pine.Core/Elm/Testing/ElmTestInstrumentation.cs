@@ -1,10 +1,12 @@
 using Pine.Core.Addressing;
 using Pine.Core.CLI;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.CommonEncodings;
+using Pine.Core.Encodings;
+using Pine.Core.Functional;
 using Pine.Core.Internal;
-using Pine.Core.Interpreter.IntermediateVM;
-using Pine.Core.PineVM;
+using Pine.Core.PineLanguage;
+using Pine.Core.Runtime;
+using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -14,7 +16,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 
-using InstrumentedVM = Pine.Core.Interpreter.IntermediateVM.PineVM;
+using InstrumentedVM = Pine.Core.Runtime.IntermediateVM.PineVM;
 
 namespace Pine.Core.Elm.Testing;
 
@@ -378,7 +380,7 @@ public sealed class ElmTestInstrumentation : IDisposable
     /// <summary>Records the selected runnable tests' full paths for the aggregate report.</summary>
     public void SelectTests(IReadOnlyList<string> paths)
     {
-        SelectedTests = paths.ToArray();
+        SelectedTests = [.. paths];
         SelectedTest = paths.Count is 1 ? paths[0] : null;
     }
 

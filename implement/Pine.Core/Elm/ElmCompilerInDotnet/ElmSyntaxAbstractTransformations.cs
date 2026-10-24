@@ -1,13 +1,12 @@
+using Pine.Core.Elm.Syntax.Abstract;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
-
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
 /// <summary>
-/// Syntax transformations that operate on the <see cref="ElmSyntax.ElmSyntaxAbstract"/> model.
+/// Syntax transformations that operate on the <see cref="Syntax.Abstract"/> model.
 /// </summary>
 internal static class ElmSyntaxAbstractTransformations
 {
@@ -15,57 +14,57 @@ internal static class ElmSyntaxAbstractTransformations
     /// Rebuilds an expression by applying <paramref name="mapChild"/> to all immediate child
     /// expression nodes. This centralizes the expression-variant reconstruction pattern for
     /// tree-mapping operations (substitution, rewriting, flattening). Leaf expressions
-    /// (<see cref="SyntaxTypes.Expression.Identifier"/>, literals, etc.) are returned
+    /// (<see cref="Expression.Identifier"/>, literals, etc.) are returned
     /// unchanged.
     /// </summary>
-    public static SyntaxTypes.Expression MapChildExpressions(
-        SyntaxTypes.Expression expr,
-        Func<SyntaxTypes.Expression, SyntaxTypes.Expression> mapChild)
+    public static Expression MapChildExpressions(
+        Expression expr,
+        Func<Expression, Expression> mapChild)
     {
         switch (expr)
         {
-            case SyntaxTypes.Expression.Application app:
+            case Expression.Application app:
                 return
-                    new SyntaxTypes.Expression.Application(
+                    new Expression.Application(
                         mapChild(app.Function),
                         [.. app.Arguments.Select(mapChild)]);
 
-            case SyntaxTypes.Expression.IfBlock ifBlock:
+            case Expression.IfBlock ifBlock:
                 return
-                    new SyntaxTypes.Expression.IfBlock(
+                    new Expression.IfBlock(
                         mapChild(ifBlock.Condition),
                         mapChild(ifBlock.ThenBlock),
                         mapChild(ifBlock.ElseBlock));
 
-            case SyntaxTypes.Expression.CaseExpression caseExpr:
+            case Expression.CaseExpression caseExpr:
                 return
-                    new SyntaxTypes.Expression.CaseExpression(
+                    new Expression.CaseExpression(
                         mapChild(caseExpr.Expression),
                         [
                         .. caseExpr.Cases.Select(
-                            c => new SyntaxTypes.Case(c.Pattern, mapChild(c.Expression)))
+                            c => new Case(c.Pattern, mapChild(c.Expression)))
                         ]);
 
-            case SyntaxTypes.Expression.LetExpression letExpr:
+            case Expression.LetExpression letExpr:
                 return
-                    new SyntaxTypes.Expression.LetExpression(
+                    new Expression.LetExpression(
                         [
                         .. letExpr.Declarations.Select(
                             d => d switch
                             {
-                                SyntaxTypes.LetDeclaration.LetFunction letFunc =>
-                                (SyntaxTypes.LetDeclaration)new SyntaxTypes.LetDeclaration.LetFunction(
+                                LetDeclaration.LetFunction letFunc =>
+                                (LetDeclaration)new LetDeclaration.LetFunction(
                                     letFunc.Function with
                                     {
                                         Declaration =
-                                        new SyntaxTypes.FunctionImplementation(
+                                        new FunctionImplementation(
                                             letFunc.Function.Declaration.Name,
                                             letFunc.Function.Declaration.Arguments,
                                             mapChild(letFunc.Function.Declaration.Expression))
                                     }),
 
-                                SyntaxTypes.LetDeclaration.LetDestructuring letDestr =>
-                                new SyntaxTypes.LetDeclaration.LetDestructuring(
+                                LetDeclaration.LetDestructuring letDestr =>
+                                new LetDeclaration.LetDestructuring(
                                     letDestr.Pattern,
                                     mapChild(letDestr.Expression)),
 
@@ -76,48 +75,48 @@ internal static class ElmSyntaxAbstractTransformations
                         ],
                         mapChild(letExpr.Expression));
 
-            case SyntaxTypes.Expression.LambdaExpression lambda:
+            case Expression.LambdaExpression lambda:
                 return
-                    new SyntaxTypes.Expression.LambdaExpression(
+                    new Expression.LambdaExpression(
                         lambda.Arguments,
                         mapChild(lambda.Expression));
 
-            case SyntaxTypes.Expression.ListExpr listExpr:
+            case Expression.ListExpr listExpr:
                 return
-                    new SyntaxTypes.Expression.ListExpr(
+                    new Expression.ListExpr(
                         [.. listExpr.Elements.Select(mapChild)]);
 
-            case SyntaxTypes.Expression.TupledExpression tupled:
+            case Expression.TupledExpression tupled:
                 return
-                    new SyntaxTypes.Expression.TupledExpression(
+                    new Expression.TupledExpression(
                         [.. tupled.Elements.Select(mapChild)]);
 
-            case SyntaxTypes.Expression.RecordExpr recordExpr:
+            case Expression.RecordExpr recordExpr:
                 return
-                    new SyntaxTypes.Expression.RecordExpr(
+                    new Expression.RecordExpr(
                         [
                         .. recordExpr.Fields.Select(
                             f => f with { Value = mapChild(f.Value) })
                         ]);
 
-            case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
+            case Expression.RecordUpdateExpression recordUpdate:
                 return
-                    new SyntaxTypes.Expression.RecordUpdateExpression(
+                    new Expression.RecordUpdateExpression(
                         recordUpdate.RecordName,
                         [
                         .. recordUpdate.Fields.Select(
                             f => f with { Value = mapChild(f.Value) })
                         ]);
 
-            case SyntaxTypes.Expression.RecordAccess recordAccess:
+            case Expression.RecordAccess recordAccess:
                 return recordAccess with { Record = mapChild(recordAccess.Record) };
 
-            case SyntaxTypes.Expression.Negation negation:
-                return new SyntaxTypes.Expression.Negation(mapChild(negation.Expression));
+            case Expression.Negation negation:
+                return new Expression.Negation(mapChild(negation.Expression));
 
-            case SyntaxTypes.Expression.OperatorApplication opApp:
+            case Expression.OperatorApplication opApp:
                 return
-                    new SyntaxTypes.Expression.OperatorApplication(
+                    new Expression.OperatorApplication(
                         opApp.Operator,
                         opApp.Direction,
                         mapChild(opApp.Left),
@@ -126,15 +125,15 @@ internal static class ElmSyntaxAbstractTransformations
             // Leaf expression variants have no child expressions to map; return them
             // unchanged. They are listed explicitly so that the throwing default below never
             // fires for a valid expression value.
-            case SyntaxTypes.Expression.UnitExpr:
-            case SyntaxTypes.Expression.StringLiteral:
-            case SyntaxTypes.Expression.CharLiteral:
-            case SyntaxTypes.Expression.IntegerLiteral:
-            case SyntaxTypes.Expression.FloatLiteral:
-            case SyntaxTypes.Expression.Identifier:
-            case SyntaxTypes.Expression.PrefixOperator:
-            case SyntaxTypes.Expression.RecordAccessFunction:
-            case SyntaxTypes.Expression.GLSLExpression:
+            case Expression.UnitExpr:
+            case Expression.StringLiteral:
+            case Expression.CharLiteral:
+            case Expression.IntegerLiteral:
+            case Expression.FloatLiteral:
+            case Expression.Identifier:
+            case Expression.PrefixOperator:
+            case Expression.RecordAccessFunction:
+            case Expression.GLSLExpression:
                 return expr;
 
             default:
@@ -145,32 +144,32 @@ internal static class ElmSyntaxAbstractTransformations
 
     /// <summary>
     /// Recursively walks the expression tree and replaces every
-    /// <see cref="SyntaxTypes.Expression.Application"/> whose head
-    /// (<see cref="SyntaxTypes.Expression.Application.Function"/>) is itself an
-    /// <see cref="SyntaxTypes.Expression.Application"/> with the equivalent flat form.
+    /// <see cref="Expression.Application"/> whose head
+    /// (<see cref="Expression.Application.Function"/>) is itself an
+    /// <see cref="Expression.Application"/> with the equivalent flat form.
     /// <para>
     /// Flattening lets
     /// <see cref="ExpressionCompiler.CompileApplication"/> take the direct-call fast path
     /// instead of allocating a closure for a partial application.
     /// </para>
     /// </summary>
-    public static SyntaxTypes.Expression FlattenAllNestedApplicationHeads(
-        SyntaxTypes.Expression expr)
+    public static Expression FlattenAllNestedApplicationHeads(
+        Expression expr)
     {
         var withChildrenFlattened = MapChildExpressions(expr, FlattenAllNestedApplicationHeads);
 
-        if (withChildrenFlattened is SyntaxTypes.Expression.Application app &&
-            app.Function is SyntaxTypes.Expression.Application innerApp)
+        if (withChildrenFlattened is Expression.Application app &&
+            app.Function is Expression.Application innerApp)
         {
             // The child pass already flattened innerApp, so innerApp.Function is guaranteed
             // not to be an Application. A single splice therefore yields the flat form.
             var combinedArguments =
-                new List<SyntaxTypes.Expression>(innerApp.Arguments.Count + app.Arguments.Count);
+                new List<Expression>(innerApp.Arguments.Count + app.Arguments.Count);
 
             combinedArguments.AddRange(innerApp.Arguments);
             combinedArguments.AddRange(app.Arguments);
 
-            return new SyntaxTypes.Expression.Application(innerApp.Function, combinedArguments);
+            return new Expression.Application(innerApp.Function, combinedArguments);
         }
 
         return withChildrenFlattened;
@@ -194,22 +193,22 @@ internal static class ElmSyntaxAbstractTransformations
     /// Renames local bindings and their references to avoid names already visible to the caller.
     /// Qualified references and record field labels are not variable references.
     /// </summary>
-    internal static SyntaxTypes.FunctionImplementation RenameBindingsAvoidingCapture(
-        SyntaxTypes.FunctionImplementation implementation,
+    internal static FunctionImplementation RenameBindingsAvoidingCapture(
+        FunctionImplementation implementation,
         IReadOnlySet<string> namesAlreadyInScope)
     {
         var scope = new HashSet<string>(namesAlreadyInScope, StringComparer.Ordinal);
         var reserved = CollectReservedNames(implementation.Expression, namesAlreadyInScope);
-        reserved.UnionWith(SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatterns(implementation.Arguments));
+        reserved.UnionWith(SyntaxAnalysis.CollectNamesBoundByPatterns(implementation.Arguments));
         var renames = new Dictionary<string, string>(StringComparer.Ordinal);
-        var extractedBindings = new List<SyntaxTypes.LetDeclaration>();
+        var extractedBindings = new List<LetDeclaration>();
 
         var arguments =
             implementation.Arguments.Select(
                 argument => RenamePatternBindings(argument, scope, reserved, renames, extractedBindings)).ToArray();
 
         return
-            new SyntaxTypes.FunctionImplementation(
+            new FunctionImplementation(
                 implementation.Name,
                 arguments,
                 WrapExtractedBindings(
@@ -220,8 +219,8 @@ internal static class ElmSyntaxAbstractTransformations
     /// <summary>
     /// Renames bindings within an expression without changing its free variable references.
     /// </summary>
-    internal static SyntaxTypes.Expression RenameBindingsAvoidingCapture(
-        SyntaxTypes.Expression expression,
+    internal static Expression RenameBindingsAvoidingCapture(
+        Expression expression,
         IReadOnlySet<string> namesAlreadyInScope) =>
         RenameExpressionBindings(
             expression,
@@ -230,49 +229,49 @@ internal static class ElmSyntaxAbstractTransformations
             CollectReservedNames(expression, namesAlreadyInScope));
 
     private static HashSet<string> CollectReservedNames(
-        SyntaxTypes.Expression expression,
+        Expression expression,
         IReadOnlySet<string> namesAlreadyInScope)
     {
         var names = new HashSet<string>(namesAlreadyInScope, StringComparer.Ordinal);
 
-        SyntaxTypes.Expression Collect(SyntaxTypes.Expression current)
+        Expression Collect(Expression current)
         {
-            if (current is SyntaxTypes.Expression.Identifier identifier &&
+            if (current is Expression.Identifier identifier &&
                 identifier.QualifiedName.Namespaces.Count is 0)
             {
                 names.Add(identifier.QualifiedName.DeclName);
             }
 
-            if (current is SyntaxTypes.Expression.RecordUpdateExpression recordUpdate)
+            if (current is Expression.RecordUpdateExpression recordUpdate)
                 names.Add(recordUpdate.RecordName);
 
-            if (current is SyntaxTypes.Expression.LambdaExpression lambda)
-                names.UnionWith(SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatterns(lambda.Arguments));
+            if (current is Expression.LambdaExpression lambda)
+                names.UnionWith(SyntaxAnalysis.CollectNamesBoundByPatterns(lambda.Arguments));
 
-            if (current is SyntaxTypes.Expression.CaseExpression caseExpression)
+            if (current is Expression.CaseExpression caseExpression)
             {
                 foreach (var branch in caseExpression.Cases)
-                    names.UnionWith(SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(branch.Pattern));
+                    names.UnionWith(SyntaxAnalysis.CollectNamesBoundByPattern(branch.Pattern));
             }
 
-            if (current is SyntaxTypes.Expression.LetExpression letExpression)
+            if (current is Expression.LetExpression letExpression)
             {
                 foreach (var declaration in letExpression.Declarations)
                 {
                     switch (declaration)
                     {
-                        case SyntaxTypes.LetDeclaration.LetFunction function:
+                        case LetDeclaration.LetFunction function:
                             names.Add(function.Function.Declaration.Name);
 
                             names.UnionWith(
-                                SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatterns(
+                                SyntaxAnalysis.CollectNamesBoundByPatterns(
                                     function.Function.Declaration.Arguments));
 
                             break;
 
-                        case SyntaxTypes.LetDeclaration.LetDestructuring destructuring:
+                        case LetDeclaration.LetDestructuring destructuring:
                             names.UnionWith(
-                                SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(destructuring.Pattern));
+                                SyntaxAnalysis.CollectNamesBoundByPattern(destructuring.Pattern));
 
                             break;
 
@@ -304,27 +303,27 @@ internal static class ElmSyntaxAbstractTransformations
         return chosenName;
     }
 
-    private static SyntaxTypes.Pattern RenamePatternBindings(
-        SyntaxTypes.Pattern pattern,
+    private static Pattern RenamePatternBindings(
+        Pattern pattern,
         HashSet<string> scope,
         HashSet<string> reserved,
         Dictionary<string, string> renames,
-        List<SyntaxTypes.LetDeclaration> extractedBindings)
+        List<LetDeclaration> extractedBindings)
     {
-        SyntaxTypes.Pattern Recurse(SyntaxTypes.Pattern child) =>
+        Pattern Recurse(Pattern child) =>
             RenamePatternBindings(child, scope, reserved, renames, extractedBindings);
 
         switch (pattern)
         {
-            case SyntaxTypes.Pattern.VarPattern variable:
+            case Pattern.VarPattern variable:
                 return
-                    new SyntaxTypes.Pattern.VarPattern(
+                    new Pattern.VarPattern(
                         RenameBinding(variable.Name, scope, reserved, renames));
 
-            case SyntaxTypes.Pattern.TuplePattern tuple:
-                return new SyntaxTypes.Pattern.TuplePattern([.. tuple.Elements.Select(Recurse)]);
+            case Pattern.TuplePattern tuple:
+                return new Pattern.TuplePattern([.. tuple.Elements.Select(Recurse)]);
 
-            case SyntaxTypes.Pattern.RecordPattern record:
+            case Pattern.RecordPattern record:
                 {
                     if (!record.Fields.Any(field => scope.Contains(field.FieldName)))
                     {
@@ -345,42 +344,42 @@ internal static class ElmSyntaxAbstractTransformations
                         var fieldName = RenameBinding(field.FieldName, scope, reserved, renames);
 
                         extractedBindings.Add(
-                            new SyntaxTypes.LetDeclaration.LetFunction(
-                                new SyntaxTypes.FunctionStruct(
+                            new LetDeclaration.LetFunction(
+                                new FunctionStruct(
                                     null,
-                                    new SyntaxTypes.FunctionImplementation(
+                                    new FunctionImplementation(
                                         fieldName,
                                         [],
-                                        new SyntaxTypes.Expression.RecordAccess(
-                                            SyntaxTypes.Expression.Identifier.Create([], recordName),
+                                        new Expression.RecordAccess(
+                                            Expression.Identifier.Create([], recordName),
                                             field.FieldName,
                                             field.FieldNameValue)))));
                     }
 
-                    return new SyntaxTypes.Pattern.VarPattern(recordName);
+                    return new Pattern.VarPattern(recordName);
                 }
 
-            case SyntaxTypes.Pattern.UnConsPattern uncons:
-                return new SyntaxTypes.Pattern.UnConsPattern(Recurse(uncons.Head), Recurse(uncons.Tail));
+            case Pattern.UnConsPattern uncons:
+                return new Pattern.UnConsPattern(Recurse(uncons.Head), Recurse(uncons.Tail));
 
-            case SyntaxTypes.Pattern.ListPattern list:
-                return new SyntaxTypes.Pattern.ListPattern([.. list.Elements.Select(Recurse)]);
+            case Pattern.ListPattern list:
+                return new Pattern.ListPattern([.. list.Elements.Select(Recurse)]);
 
-            case SyntaxTypes.Pattern.NamedPattern named:
-                return new SyntaxTypes.Pattern.NamedPattern(named.Name, [.. named.Arguments.Select(Recurse)]);
+            case Pattern.NamedPattern named:
+                return new Pattern.NamedPattern(named.Name, [.. named.Arguments.Select(Recurse)]);
 
-            case SyntaxTypes.Pattern.AsPattern alias:
+            case Pattern.AsPattern alias:
                 return
-                    new SyntaxTypes.Pattern.AsPattern(
+                    new Pattern.AsPattern(
                         Recurse(alias.Pattern),
                         RenameBinding(alias.Name, scope, reserved, renames));
 
-            case SyntaxTypes.Pattern.AllPattern:
-            case SyntaxTypes.Pattern.UnitPattern:
-            case SyntaxTypes.Pattern.CharPattern:
-            case SyntaxTypes.Pattern.StringPattern:
-            case SyntaxTypes.Pattern.IntPattern:
-            case SyntaxTypes.Pattern.FloatPattern:
+            case Pattern.AllPattern:
+            case Pattern.UnitPattern:
+            case Pattern.CharPattern:
+            case Pattern.StringPattern:
+            case Pattern.IntPattern:
+            case Pattern.FloatPattern:
                 return pattern;
 
             default:
@@ -389,40 +388,40 @@ internal static class ElmSyntaxAbstractTransformations
         }
     }
 
-    private static SyntaxTypes.Expression WrapExtractedBindings(
-        SyntaxTypes.Expression expression,
-        IReadOnlyList<SyntaxTypes.LetDeclaration> extractedBindings) =>
+    private static Expression WrapExtractedBindings(
+        Expression expression,
+        IReadOnlyList<LetDeclaration> extractedBindings) =>
         extractedBindings.Count is 0
         ?
         expression
         :
-        new SyntaxTypes.Expression.LetExpression(extractedBindings, expression);
+        new Expression.LetExpression(extractedBindings, expression);
 
-    private static SyntaxTypes.Expression RenameExpressionBindings(
-        SyntaxTypes.Expression expression,
+    private static Expression RenameExpressionBindings(
+        Expression expression,
         IReadOnlyDictionary<string, string> renames,
         IReadOnlySet<string> scope,
         HashSet<string> reserved)
     {
-        SyntaxTypes.Expression Recurse(SyntaxTypes.Expression child) =>
+        Expression Recurse(Expression child) =>
             RenameExpressionBindings(child, renames, scope, reserved);
 
         switch (expression)
         {
-            case SyntaxTypes.Expression.Identifier identifier:
+            case Expression.Identifier identifier:
                 return
                     identifier.QualifiedName.Namespaces.Count is 0 &&
                     renames.TryGetValue(identifier.QualifiedName.DeclName, out var renamed)
                     ?
-                    SyntaxTypes.Expression.Identifier.Create([], renamed)
+                    Expression.Identifier.Create([], renamed)
                     :
                     expression;
 
-            case SyntaxTypes.Expression.LambdaExpression lambda:
+            case Expression.LambdaExpression lambda:
                 {
                     var innerScope = new HashSet<string>(scope, StringComparer.Ordinal);
                     var innerRenames = new Dictionary<string, string>(renames, StringComparer.Ordinal);
-                    var extractedBindings = new List<SyntaxTypes.LetDeclaration>();
+                    var extractedBindings = new List<LetDeclaration>();
 
                     var arguments =
                         lambda.Arguments.Select(
@@ -434,16 +433,16 @@ internal static class ElmSyntaxAbstractTransformations
                                 extractedBindings)).ToArray();
 
                     return
-                        new SyntaxTypes.Expression.LambdaExpression(
+                        new Expression.LambdaExpression(
                             arguments,
                             WrapExtractedBindings(
                                 RenameExpressionBindings(lambda.Expression, innerRenames, innerScope, reserved),
                                 extractedBindings));
                 }
 
-            case SyntaxTypes.Expression.CaseExpression caseExpression:
+            case Expression.CaseExpression caseExpression:
                 return
-                    new SyntaxTypes.Expression.CaseExpression(
+                    new Expression.CaseExpression(
                         Recurse(caseExpression.Expression),
                         [
                         .. caseExpression.Cases.Select(
@@ -451,7 +450,7 @@ internal static class ElmSyntaxAbstractTransformations
                             {
                                 var innerScope = new HashSet<string>(scope, StringComparer.Ordinal);
                                 var innerRenames = new Dictionary<string, string>(renames, StringComparer.Ordinal);
-                                var extractedBindings = new List<SyntaxTypes.LetDeclaration>();
+                                var extractedBindings = new List<LetDeclaration>();
 
                                 var pattern =
                                     RenamePatternBindings(
@@ -462,7 +461,7 @@ internal static class ElmSyntaxAbstractTransformations
                                         extractedBindings);
 
                                 return
-                                    new SyntaxTypes.Case(
+                                    new Case(
                                         pattern,
                                         WrapExtractedBindings(
                                             RenameExpressionBindings(branch.Expression, innerRenames, innerScope, reserved),
@@ -470,12 +469,12 @@ internal static class ElmSyntaxAbstractTransformations
                             })
                         ]);
 
-            case SyntaxTypes.Expression.LetExpression letExpression:
+            case Expression.LetExpression letExpression:
                 {
                     var innerScope = new HashSet<string>(scope, StringComparer.Ordinal);
                     var innerRenames = new Dictionary<string, string>(renames, StringComparer.Ordinal);
-                    var declarations = new List<SyntaxTypes.LetDeclaration>();
-                    var extractedBindings = new List<SyntaxTypes.LetDeclaration>();
+                    var declarations = new List<LetDeclaration>();
+                    var extractedBindings = new List<LetDeclaration>();
 
                     // All let names are visible in every declaration, including mutual recursion.
                     foreach (var declaration in letExpression.Declarations)
@@ -483,11 +482,11 @@ internal static class ElmSyntaxAbstractTransformations
                         declarations.Add(
                             declaration switch
                             {
-                                SyntaxTypes.LetDeclaration.LetFunction function =>
-                                new SyntaxTypes.LetDeclaration.LetFunction(
-                                    new SyntaxTypes.FunctionStruct(
+                                LetDeclaration.LetFunction function =>
+                                new LetDeclaration.LetFunction(
+                                    new FunctionStruct(
                                         function.Function.Signature,
-                                        new SyntaxTypes.FunctionImplementation(
+                                        new FunctionImplementation(
                                             RenameBinding(
                                                 function.Function.Declaration.Name,
                                                 innerScope,
@@ -496,8 +495,8 @@ internal static class ElmSyntaxAbstractTransformations
                                             function.Function.Declaration.Arguments,
                                             function.Function.Declaration.Expression))),
 
-                                SyntaxTypes.LetDeclaration.LetDestructuring destructuring =>
-                                new SyntaxTypes.LetDeclaration.LetDestructuring(
+                                LetDeclaration.LetDestructuring destructuring =>
+                                new LetDeclaration.LetDestructuring(
                                     RenamePatternBindings(
                                         destructuring.Pattern,
                                         innerScope,
@@ -521,14 +520,14 @@ internal static class ElmSyntaxAbstractTransformations
                             {
                                 switch (declaration)
                                 {
-                                    case SyntaxTypes.LetDeclaration.LetFunction function:
+                                    case LetDeclaration.LetFunction function:
                                         var implementation = function.Function.Declaration;
                                         var functionScope = new HashSet<string>(innerScope, StringComparer.Ordinal);
 
                                         var functionRenames =
                                             new Dictionary<string, string>(innerRenames, StringComparer.Ordinal);
 
-                                        var functionExtractedBindings = new List<SyntaxTypes.LetDeclaration>();
+                                        var functionExtractedBindings = new List<LetDeclaration>();
 
                                         var arguments =
                                             implementation.Arguments.Select(
@@ -540,14 +539,14 @@ internal static class ElmSyntaxAbstractTransformations
                                                     functionExtractedBindings)).ToArray();
 
                                         return
-                                            (SyntaxTypes.LetDeclaration)new SyntaxTypes.LetDeclaration.LetFunction(
-                                                new SyntaxTypes.FunctionStruct(
+                                            (LetDeclaration)new LetDeclaration.LetFunction(
+                                                new FunctionStruct(
                                                     function.Function.Signature is { } signature
                                                     ?
                                                     signature with { Name = implementation.Name }
                                                     :
                                                     null,
-                                                    new SyntaxTypes.FunctionImplementation(
+                                                    new FunctionImplementation(
                                                         implementation.Name,
                                                         arguments,
                                                         WrapExtractedBindings(
@@ -558,9 +557,9 @@ internal static class ElmSyntaxAbstractTransformations
                                                                 reserved),
                                                             functionExtractedBindings))));
 
-                                    case SyntaxTypes.LetDeclaration.LetDestructuring destructuring:
+                                    case LetDeclaration.LetDestructuring destructuring:
                                         return
-                                            new SyntaxTypes.LetDeclaration.LetDestructuring(
+                                            new LetDeclaration.LetDestructuring(
                                                 destructuring.Pattern,
                                                 RenameExpressionBindings(
                                                     destructuring.Expression,
@@ -576,14 +575,14 @@ internal static class ElmSyntaxAbstractTransformations
                             }).ToArray();
 
                     return
-                        new SyntaxTypes.Expression.LetExpression(
+                        new Expression.LetExpression(
                             freshDeclarations,
                             RenameExpressionBindings(letExpression.Expression, innerRenames, innerScope, reserved));
                 }
 
-            case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
+            case Expression.RecordUpdateExpression recordUpdate:
                 return
-                    new SyntaxTypes.Expression.RecordUpdateExpression(
+                    new Expression.RecordUpdateExpression(
                         renames.TryGetValue(recordUpdate.RecordName, out var recordName)
                         ?
                         recordName
@@ -591,22 +590,22 @@ internal static class ElmSyntaxAbstractTransformations
                         recordUpdate.RecordName,
                         [.. recordUpdate.Fields.Select(field => field with { Value = Recurse(field.Value) })]);
 
-            case SyntaxTypes.Expression.UnitExpr:
-            case SyntaxTypes.Expression.StringLiteral:
-            case SyntaxTypes.Expression.CharLiteral:
-            case SyntaxTypes.Expression.IntegerLiteral:
-            case SyntaxTypes.Expression.FloatLiteral:
-            case SyntaxTypes.Expression.Application:
-            case SyntaxTypes.Expression.IfBlock:
-            case SyntaxTypes.Expression.ListExpr:
-            case SyntaxTypes.Expression.TupledExpression:
-            case SyntaxTypes.Expression.RecordExpr:
-            case SyntaxTypes.Expression.RecordAccess:
-            case SyntaxTypes.Expression.Negation:
-            case SyntaxTypes.Expression.OperatorApplication:
-            case SyntaxTypes.Expression.PrefixOperator:
-            case SyntaxTypes.Expression.RecordAccessFunction:
-            case SyntaxTypes.Expression.GLSLExpression:
+            case Expression.UnitExpr:
+            case Expression.StringLiteral:
+            case Expression.CharLiteral:
+            case Expression.IntegerLiteral:
+            case Expression.FloatLiteral:
+            case Expression.Application:
+            case Expression.IfBlock:
+            case Expression.ListExpr:
+            case Expression.TupledExpression:
+            case Expression.RecordExpr:
+            case Expression.RecordAccess:
+            case Expression.Negation:
+            case Expression.OperatorApplication:
+            case Expression.PrefixOperator:
+            case Expression.RecordAccessFunction:
+            case Expression.GLSLExpression:
                 return MapChildExpressions(expression, Recurse);
 
             default:
