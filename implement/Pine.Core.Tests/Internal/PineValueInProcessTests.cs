@@ -70,6 +70,92 @@ public class PineValueInProcessTests
     }
 
     [Fact]
+    public void Create_reuses_interned_integers()
+    {
+        for (var integer = -5_000; integer < 10_000; ++integer)
+        {
+            var value = IntegerEncoding.EncodeSignedInteger(integer);
+            var result = PineValueInProcess.Create(value);
+
+            result.Should().BeSameAs(PineValueInProcess.CreateInteger(integer));
+            result.Evaluate().Should().Be(value);
+        }
+    }
+
+    [Fact]
+    public void Create_reuses_all_interned_blobs()
+    {
+        foreach (var blob in PineValue.ReusedBlobInstances)
+        {
+            var result = PineValueInProcess.Create(blob);
+            var equalBlob = new PineValue.BlobValue(blob.Bytes.ToArray());
+
+            PineValueInProcess.Create(blob).Should().BeSameAs(result);
+            PineValueInProcess.Create(equalBlob).Should().BeSameAs(result);
+            result.Evaluate().Should().Be(blob);
+        }
+    }
+
+    [Fact]
+    public void Create_reuses_single_byte_instances_used_by_slicing()
+    {
+        for (var i = 0; i < 256; ++i)
+        {
+            var source = PineValueInProcess.Create(PineValue.Blob([(byte)i, 17]));
+            var sliced = PineValueInProcess.Take(1, source);
+
+            PineValueInProcess.Create(PineValue.BlobSingleByte((byte)i))
+                .Should().BeSameAs(sliced);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Create_reuses_kernel_booleans(bool boolean)
+    {
+        var expected = PineValueInProcess.CreateBool(boolean);
+
+        PineValueInProcess.Create(expected.Evaluate()).Should().BeSameAs(expected);
+    }
+
+    [Theory]
+    [InlineData(new byte[] { 2, 0 })]
+    [InlineData(new byte[] { 4, 0, 0 })]
+    [InlineData(new byte[] { 4, 0, 42 })]
+    [InlineData(new byte[] { 2, 0, 42 })]
+    public void Create_preserves_noncanonical_integer_blobs(byte[] bytes)
+    {
+        var value = PineValue.Blob(bytes);
+        var result = PineValueInProcess.Create(value);
+        var integer = BuiltinFunction.SignedIntegerFromValueRelaxed(value)!.Value;
+
+        result.Should().NotBeSameAs(PineValueInProcess.CreateInteger(integer));
+        result.Evaluate().Should().Be(value);
+        result.GetLength().Should().Be(bytes.Length);
+    }
+
+    [Fact]
+    public void Create_preserves_uninterned_values()
+    {
+        PineValue[] values =
+            [
+            PineValue.Blob([17, 31, 47, 63, 79]),
+            IntegerEncoding.EncodeSignedInteger(BigInteger.One << 100),
+            IntegerEncoding.EncodeSignedInteger(-(BigInteger.One << 100)),
+            PineValue.List([PineValue.Blob([1, 2, 3])]),
+            ];
+
+        foreach (var value in values)
+        {
+            var result = PineValueInProcess.Create(value);
+
+            result.EvaluatedOrNull.Should().BeSameAs(value);
+            result.Should().NotBeSameAs(PineValueInProcess.Create(value));
+        }
+    }
+
+    [Fact]
     public void CreateFullyRepresented_retains_only_top_level_list_representation()
     {
         var integer = IntegerEncoding.EncodeSignedInteger(42);

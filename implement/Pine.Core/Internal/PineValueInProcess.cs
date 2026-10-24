@@ -1,8 +1,10 @@
 using Pine.Core.DotNet.Builtins;
 using Pine.Core.Encodings;
+using Pine.Core.Functional;
 using Pine.Core.PineLanguage;
 using Pine.Core.Runtime.IntermediateVM;
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -329,12 +331,17 @@ public class PineValueInProcess
     /// </summary>
     public static readonly PineValueInProcess KernelFalseValue = Create(PineKernelValues.FalseValue);
 
+    private static readonly FrozenDictionary<PineValue.BlobValue, PineValueInProcess> s_reusedBlobs =
+        PineValue.ReusedBlobInstances.ToFrozenDictionary(
+            blob => blob,
+            blob => Create(blob),
+            PineValue.BlobValue.BlobValueEqualityComparer.Instance);
 
     /// <summary>
     /// Create an in-process representation from an already evaluated <see cref="PineValue"/>.
     /// </summary>
     /// <param name="evaluated">The concrete value that should back this instance.</param>
-    /// <returns>A new <see cref="PineValueInProcess"/> wrapping <paramref name="evaluated"/>.</returns>
+    /// <returns>An in-process representation, reusing an interned instance when available.</returns>
     public static PineValueInProcess Create(PineValue evaluated)
     {
         var profile = PineVMWorkProfile.Current;
@@ -369,6 +376,30 @@ public class PineValueInProcess
             {
                 profile?.Count(PineVMWorkProfile.Metric.CreateReuses);
                 return reusedInst;
+            }
+        }
+
+        if (evaluated is PineValue.BlobValue blob)
+        {
+            if (blob.Bytes.Length is 1 && s_blobSingle is { } blobSingle)
+            {
+                profile?.Count(PineVMWorkProfile.Metric.CreateReuses);
+                return blobSingle[blob.Bytes.Span[0]];
+            }
+
+            if (blob.Bytes.Length >= 2 &&
+                blob.Bytes.Span[0] is 2 or 4 &&
+                IntegerEncoding.ParseSignedIntegerStrict(blob) is Result<string, BigInteger>.Ok integer &&
+                ReusedInstanceForInteger(integer.Value) is { } reusedInteger)
+            {
+                profile?.Count(PineVMWorkProfile.Metric.CreateReuses);
+                return reusedInteger;
+            }
+
+            if (s_reusedBlobs is { } reusedBlobs && reusedBlobs.TryGetValue(blob, out var reusedBlob))
+            {
+                profile?.Count(PineVMWorkProfile.Metric.CreateReuses);
+                return reusedBlob;
             }
         }
 
@@ -524,7 +555,15 @@ public class PineValueInProcess
     /// </summary>
     /// <param name="integer">The integer payload to encode lazily.</param>
     /// <returns>A new <see cref="PineValueInProcess"/> representing the integer.</returns>
-    public static PineValueInProcess CreateInteger(BigInteger integer)
+    public static PineValueInProcess CreateInteger(BigInteger integer) =>
+        ReusedInstanceForInteger(integer) ??
+        new PineValueInProcess
+        {
+            _integer = integer,
+            _integerIsStrict = true
+        };
+
+    private static PineValueInProcess? ReusedInstanceForInteger(BigInteger integer)
     {
         if (0 <= integer)
         {
@@ -543,12 +582,7 @@ public class PineValueInProcess
             }
         }
 
-        return
-            new PineValueInProcess
-            {
-                _integer = integer,
-                _integerIsStrict = true
-            };
+        return null;
     }
 
     private static PineValueInProcess CreateFromBlob(
@@ -613,30 +647,6 @@ public class PineValueInProcess
             }
 
             var blobValue = PineValue.Blob(source.Bytes.Slice(startIndex, resultLength));
-
-            if (BuiltinFunction.SignedIntegerFromValueRelaxed(blobValue) is { } integer)
-            {
-                if (0 <= integer && integer < s_integersPositive.Count)
-                {
-                    var reused = s_integersPositive[(int)integer];
-
-                    if (reused.Evaluate() == blobValue)
-                        return reused;
-                }
-
-                if (integer < 0)
-                {
-                    var index = -integer - 1;
-
-                    if (index < s_integersNegative.Count)
-                    {
-                        var reused = s_integersNegative[(int)index];
-
-                        if (reused.Evaluate() == blobValue)
-                            return reused;
-                    }
-                }
-            }
 
             return Create(blobValue);
         }

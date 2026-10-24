@@ -22,6 +22,8 @@ namespace Pine.Core.Tests.Runtime.IntermediateVM;
 
 public class PineVMWorkProfileTests
 {
+    private static readonly PineValue s_uninternedLiteral = PineValue.Blob([40, 41, 42, 43, 44]);
+
     // These tests measure the unoptimized observer and its counterfactual sharing estimates.
     private static (PineValueInProcess value, EvalWorkCounters evalWorkCounters)? BaselineDirect(
         Expression expression, PineValueInProcess environment) =>
@@ -30,7 +32,7 @@ public class PineVMWorkProfileTests
     private static (Expression Expression, PineValueInProcess Environment) SharedConstructor()
     {
         var environment = PineValueInProcess.Create(PineValue.EmptyBlob);
-        var literal = Expression.LitralInst(PineValue.Blob([40, 41]));
+        var literal = Expression.LitralInst(s_uninternedLiteral);
         var shared = Expression.ListInst([literal, Expression.EnvironmentInstance]);
         return (Expression.ListInst([shared, shared]), environment);
     }
@@ -326,7 +328,7 @@ public class PineVMWorkProfileTests
     public void Work_profile_frontier_estimate_prunes_overlapping_descendant_repeats()
     {
         var environment = PineValueInProcess.EmptyBlob;
-        var literal = Expression.LitralInst(PineValue.Blob([40, 41]));
+        var literal = Expression.LitralInst(s_uninternedLiteral);
         var inner = Expression.ListInst([literal]);
         var outer = Expression.ListInst([inner, inner]);
         var expression = Expression.ListInst([outer, outer]);
@@ -509,22 +511,46 @@ public class PineVMWorkProfileTests
         profile.KnownAllocationObjects.Should().Be(4);
     }
 
-    [Fact]
-    public void Work_profile_counterfactual_does_not_count_reused_literal_wrappers_as_allocations()
+    [Theory]
+    [InlineData(new byte[] { })]
+    [InlineData(new byte[] { 42 })]
+    [InlineData(new byte[] { 40, 41 })]
+    [InlineData(new byte[] { 4, 0 })]
+    [InlineData(new byte[] { 4, 42 })]
+    [InlineData(new byte[] { 2, 42 })]
+    [InlineData(new byte[] { 4, 39, 15 })]
+    [InlineData(new byte[] { 2, 19, 136 })]
+    [InlineData(new byte[] { 4, 255, 255 })]
+    [InlineData(new byte[] { 2, 255, 255 })]
+    [InlineData(new byte[] { 4, 0, 42 })]
+    [InlineData(new byte[] { 2, 0 })]
+    [InlineData(new byte[] { 0, 0, 0, 65 })]
+    public void Work_profile_counterfactual_does_not_count_reused_literal_wrappers_as_allocations(byte[] bytes)
     {
         var environment = PineValueInProcess.EmptyBlob;
-        var literal = Expression.LitralInst(PineValue.EmptyBlob);
+        var literal = Expression.LitralInst(PineValue.Blob(bytes));
+        var reusedLiteral = PineValueInProcess.Create(literal.Value);
         var expression = Expression.ListInst([literal, literal]);
         using var profile = new PineVMWorkProfile();
+        PineValueInProcess result;
 
         using (profile.Enter())
-            BaselineDirect(expression, environment).Should().NotBeNull();
+            result = BaselineDirect(expression, environment)!.Value.value;
 
+        result.ListItemsOrNull()![0].Should().BeSameAs(reusedLiteral);
+        result.ListItemsOrNull()![1].Should().BeSameAs(reusedLiteral);
         profile[PineVMWorkProfile.Metric.ConstructorRepeatFrontiers].Should().Be(1);
+        profile[PineVMWorkProfile.Metric.CreateCalls].Should().Be(2);
         profile[PineVMWorkProfile.Metric.CreateReuses].Should().Be(2);
         profile[PineVMWorkProfile.Metric.WrapperAllocations].Should().Be(1);
         profile[PineVMWorkProfile.Metric.ConstructorFrontierAvoidableWrappers].Should().Be(0);
         profile[PineVMWorkProfile.Metric.ConstructorFrontierAvoidableLiteralWrappers].Should().Be(0);
+
+        var boundary = profile.LastConstructorInvocation!.Value;
+        boundary.AllocationConservationVerified.Should().BeTrue();
+        boundary.FreshLiteralWrappers.Should().Be(0);
+        boundary.RootRetainedFreshObjects.Should().Be(FreshOutputObjects(result, reusedLiteral)).And.Be(2);
+        boundary.RootRetainedAvoidableObjects.Should().Be(0);
     }
 
     [Fact]
@@ -995,7 +1021,7 @@ public class PineVMWorkProfileTests
     [Fact]
     public void Work_profile_conditional_and_label_boundaries_do_not_claim_pure_grammar_retention()
     {
-        var literal = Expression.LitralInst(PineValue.Blob([40, 41]));
+        var literal = Expression.LitralInst(s_uninternedLiteral);
         var list = Expression.ListInst([literal]);
         var conditional = new Expression.Conditional(list, list, list);
         using var profile = new PineVMWorkProfile();
@@ -1079,7 +1105,7 @@ public class PineVMWorkProfileTests
     [Fact]
     public void Work_profile_large_completed_boundaries_emit_bounded_numeric_record_maxima()
     {
-        Expression expression = Expression.LitralInst(PineValue.Blob([40, 41]));
+        Expression expression = Expression.LitralInst(s_uninternedLiteral);
 
         for (var depth = 0; depth < 12; ++depth)
             expression = Expression.ListInst([expression, expression]);

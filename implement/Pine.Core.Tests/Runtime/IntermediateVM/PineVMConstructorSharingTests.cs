@@ -16,9 +16,11 @@ namespace Pine.Core.Tests.Runtime.IntermediateVM;
 
 public class PineVMConstructorSharingTests
 {
+    private static readonly PineValue s_uninternedLiteral = PineValue.Blob([40, 41, 42, 43, 44]);
+
     private static Expression SharedConstructor()
     {
-        var literal = new Expression.Litral(PineValue.Blob([40, 41]));
+        var literal = new Expression.Litral(s_uninternedLiteral);
         var shared = new Expression.List([literal, Expression.EnvironmentInstance]);
         return new Expression.List([shared, shared]);
     }
@@ -84,8 +86,8 @@ public class PineVMConstructorSharingTests
     [Fact]
     public void Direct_constructor_sharing_uses_identity_not_structural_equality()
     {
-        var left = new Expression.List([new Expression.Litral(PineValue.Blob([40, 41]))]);
-        var right = new Expression.List([new Expression.Litral(PineValue.Blob([40, 41]))]);
+        var left = new Expression.List([new Expression.Litral(s_uninternedLiteral)]);
+        var right = new Expression.List([new Expression.Litral(s_uninternedLiteral)]);
         left.Should().Be(right).And.NotBeSameAs(right);
         var expression = new Expression.List([left, right, left]);
         var actual = DirectVM.EvalDirect(expression, PineValueInProcess.EmptyBlob)!.Value;
@@ -106,7 +108,7 @@ public class PineVMConstructorSharingTests
         var tree =
             new Expression.List(
                 [
-                new Expression.List([new Expression.Litral(PineValue.Blob([40, 41]))]),
+                new Expression.List([new Expression.Litral(s_uninternedLiteral)]),
                 new Expression.List([new Expression.Litral(PineValue.Blob([42, 43]))])
                 ]);
 
@@ -125,7 +127,7 @@ public class PineVMConstructorSharingTests
         var small =
             new Expression.List(
                 [
-                new Expression.Litral(PineValue.Blob([40, 41])),
+                new Expression.Litral(s_uninternedLiteral),
                 Expression.EnvironmentInstance
                 ]);
 
@@ -148,7 +150,7 @@ public class PineVMConstructorSharingTests
     [Fact]
     public void Direct_constructor_sharing_handles_empty_lists_and_repeated_literals()
     {
-        var literal = new Expression.Litral(PineValue.Blob([40, 41]));
+        var literal = new Expression.Litral(s_uninternedLiteral);
         var empty = new Expression.List([]);
         var expression = new Expression.List([literal, literal, empty, empty]);
         var actual = DirectVM.EvalDirect(expression, PineValueInProcess.EmptyBlob)!.Value;
@@ -162,6 +164,47 @@ public class PineVMConstructorSharingTests
         items[3].Should().BeSameAs(PineValueInProcess.EmptyList);
         actual.evalWorkCounters.Should().Be(baseline.evalWorkCounters);
         actual.value.Evaluate().Should().Be(baseline.value.Evaluate());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Direct_constructor_sharing_preserves_interned_literals_without_fresh_wrapper_counts(bool sharing)
+    {
+        var literal = new Expression.Litral(PineValue.Blob([40, 41]));
+        var reusedLiteral = PineValueInProcess.Create(literal.Value);
+        var inner = new Expression.List([literal]);
+        var expression = new Expression.List([inner, inner]);
+        using var profile = new PineVMWorkProfile();
+        (PineValueInProcess value, EvalWorkCounters evalWorkCounters) actual;
+
+        using (profile.Enter())
+            actual = DirectVM.EvalDirect(expression, PineValueInProcess.EmptyBlob, sharing)!.Value;
+
+        var items = actual.value.ListItemsOrNull()!;
+        items[0].ListItemsOrNull()![0].Should().BeSameAs(reusedLiteral);
+        items[1].ListItemsOrNull()![0].Should().BeSameAs(reusedLiteral);
+
+        if (sharing)
+            items[0].Should().BeSameAs(items[1]);
+
+        else
+            items[0].Should().NotBeSameAs(items[1]);
+
+        actual.evalWorkCounters.InstructionCount.Should().Be(5);
+        actual.evalWorkCounters.BuildListCount.Should().Be(3);
+        actual.evalWorkCounters.BuildListItemCount.Should().Be(4);
+        profile[PineVMWorkProfile.Metric.CreateReuses].Should().Be(sharing ? 1 : 2);
+        profile[PineVMWorkProfile.Metric.WrapperAllocations].Should().Be(sharing ? 2 : 3);
+
+        var boundary = profile.LastConstructorInvocation!.Value;
+        boundary.AllocationConservationVerified.Should().BeTrue();
+        boundary.FreshLiteralWrappers.Should().Be(0);
+
+        boundary.RootRetainedFreshObjects.Should().Be(FreshObjects(actual.value, reusedLiteral))
+            .And.Be(sharing ? 4 : 6);
+
+        boundary.RootRetainedAvoidableObjects.Should().Be(sharing ? 0 : 2);
     }
 
     [Fact]
@@ -304,7 +347,7 @@ public class PineVMConstructorSharingTests
     [Fact]
     public void Direct_constructor_sharing_reports_completed_logical_boundary_for_matched_work_profiles()
     {
-        Expression expression = new Expression.Litral(PineValue.Blob([40, 41]));
+        Expression expression = new Expression.Litral(s_uninternedLiteral);
 
         for (var depth = 0; depth < 12; ++depth)
             expression = new Expression.List([expression, expression]);
@@ -353,7 +396,7 @@ public class PineVMConstructorSharingTests
     [InlineData(64)]
     public void Direct_constructor_sharing_retention_proof_matches_object_census_for_all_memo_kinds(int capacity)
     {
-        var literal = new Expression.Litral(PineValue.Blob([40, 41]));
+        var literal = new Expression.Litral(s_uninternedLiteral);
         var inner = new Expression.List([literal, Expression.EnvironmentInstance]);
         var expression = new Expression.List([inner, inner, literal, Expression.EnvironmentInstance]);
         using var profile = new PineVMWorkProfile(referenceCapacity: capacity);
@@ -467,7 +510,7 @@ public class PineVMConstructorSharingTests
     public void Direct_constructor_sharing_keeps_deep_exponential_DAG_work_and_output_linear()
     {
         const int depth = 45;
-        Expression expression = new Expression.Litral(PineValue.Blob([40, 41]));
+        Expression expression = new Expression.Litral(s_uninternedLiteral);
 
         for (var level = 0; level < depth; ++level)
             expression = new Expression.List([expression, expression]);
@@ -498,7 +541,7 @@ public class PineVMConstructorSharingTests
             current = items[0];
         }
 
-        current.Evaluate().Should().Be(PineValue.Blob([40, 41]));
+        current.Evaluate().Should().Be(s_uninternedLiteral);
         actual.value.Evaluate().Should().BeOfType<PineValue.ListValue>();
     }
 
