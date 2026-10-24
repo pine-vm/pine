@@ -48,7 +48,7 @@
     <PackageReference Include="ReadLine" Version="2.0.1" />
     <PackageReference Include="SharpCompress" Version="0.50.7" />
     <PackageReference Include="Spectre.Console" Version="0.57.2" />
-    <PackageReference Include="StreamJsonRpc" Version="2.25.29" />
+    <PackageReference Include="StreamJsonRpc" Version="2.26.150" />
     <PackageReference Include="System.CommandLine" Version="2.0.13" />
     <PackageReference Include="TupleAsJsonArray" Version="1.0.2" />
   </ItemGroup>

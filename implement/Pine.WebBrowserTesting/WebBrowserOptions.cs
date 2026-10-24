@@ -17,7 +17,7 @@ public enum WebBrowserExecutionMode
 /// </summary>
 public sealed record WebBrowserProcessOptions
 {
-    public const string DefaultContainerImage = "mcr.microsoft.com/playwright:v1.63.0-noble";
+    public const string DefaultContainerImage = "mcr.microsoft.com/playwright:v1.64.1-noble";
 
     public string ContainerImage { get; init; } = DefaultContainerImage;
 
