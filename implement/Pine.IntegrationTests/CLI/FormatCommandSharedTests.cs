@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
 using Xunit;
 
@@ -34,6 +35,9 @@ public class FormatCommandSharedTests
         rendered.Should().Contain("Already formatted:");
         rendered.Should().Contain("Need formatting:");
         rendered.Should().Contain("Syntax errors:");
+        rendered.Should().Contain("✓");
+        rendered.Should().Contain("○");
+        rendered.Should().Contain("✗");
         rendered.Should().Contain("10");
         rendered.Should().Contain("7");
         rendered.Should().Contain("2");
@@ -59,6 +63,139 @@ public class FormatCommandSharedTests
         rendered.Should().Contain("\u001b[32mAlready formatted:");
         rendered.Should().Contain("\u001b[93mNeed formatting:");
         rendered.Should().Contain("\u001b[91mSyntax errors:");
+    }
+
+
+    [Theory]
+    [InlineData(437, 0)]
+    [InlineData(437, 2)]
+    [InlineData(850, 0)]
+    [InlineData(850, 2)]
+    public void WriteOverview_legacy_encoding_keeps_table_borders_aligned(
+        int codePage,
+        int needsFormattingCount)
+    {
+        var rendered =
+            RenderLegacyOutput(
+                codePage,
+                console =>
+                FormatCommandShared.WriteOverview(
+                    console,
+                    commandLabel: "dotnet-format",
+                    totalFiles: 932,
+                    alreadyFormattedCount: 931 - needsFormattingCount,
+                    needsFormattingCount: needsFormattingCount,
+                    errorCount: 1));
+
+        rendered.Should().NotContain("\t");
+        rendered.Should().NotContain("?");
+        rendered.Should().Contain("+");
+        rendered.Should().Contain("x");
+
+        if (needsFormattingCount is not 0)
+        {
+            rendered.Should().Contain("*");
+        }
+
+        var tableLines =
+            rendered
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+            .Skip(1)
+            .ToArray();
+
+        tableLines.Should().HaveCount(6);
+        tableLines.Select(line => line.Length).Distinct().Should().ContainSingle();
+    }
+
+
+    [Theory]
+    [InlineData(437, false, false)]
+    [InlineData(437, false, true)]
+    [InlineData(437, true, false)]
+    [InlineData(437, true, true)]
+    [InlineData(850, false, false)]
+    [InlineData(850, false, true)]
+    [InlineData(850, true, false)]
+    [InlineData(850, true, true)]
+    public void WriteFilesNeedingFormatting_legacy_encoding_preserves_status_prefix(
+        int codePage,
+        bool showGrouped,
+        bool isTerminal)
+    {
+        var rendered =
+            RenderLegacyOutput(
+                codePage,
+                console =>
+                FormatCommandShared.WriteFilesNeedingFormatting(
+                    console,
+                    [
+                        "/project/src/Module1.cs",
+                        "/project/src/Module2.cs",
+                        "/project/src/Module3.cs",
+                        "/project/src/Module4.cs",
+                        "/project/src/Module5.cs",
+                    ],
+                    showGrouped),
+                isTerminal);
+
+        rendered.Should().NotContain("\t");
+        rendered.Should().NotContain("?");
+
+        foreach (var index in Enumerable.Range(1, 5))
+        {
+            rendered.Should().Contain(
+                showGrouped
+                ?
+                $"* Module{index}.cs"
+                :
+                $"* /project/src/Module{index}.cs");
+        }
+    }
+
+
+    [Theory]
+    [InlineData(437, false)]
+    [InlineData(437, true)]
+    [InlineData(850, false)]
+    [InlineData(850, true)]
+    public void Status_messages_legacy_encoding_preserves_error_and_success_markers(
+        int codePage,
+        bool isTerminal)
+    {
+        var rendered =
+            RenderLegacyOutput(
+                codePage,
+                console =>
+                {
+                    (string path, string error)[] errors =
+                        [
+                            ("/project/Module1.cs", "First error"),
+                            ("/project/Module2.cs", "Second error"),
+                            ("/project/Module3.cs", "Third error"),
+                            ("/project/Module4.cs", "Fourth error"),
+                            ("/project/Module5.cs", "Fifth error"),
+                        ];
+
+                    FormatCommandShared.WriteFilesWithErrors(console, errors, showGrouped: false);
+                    FormatCommandShared.WriteFilesWithErrors(console, errors, showGrouped: true);
+
+                    FormatCommandShared.WriteFileDiagnostics(
+                        console,
+                        [
+                            ("/project/Module.cs",
+                            (IReadOnlyList<FormatFileDiagnostic>)[new("Diagnostic")]),
+                        ]);
+
+                    FormatCommandShared.WriteSuccessMessage(console, fileCount: 1, verifyMode: false);
+                },
+                isTerminal);
+
+        rendered.Should().NotContain("\t");
+        rendered.Should().NotContain("?");
+        rendered.Should().Contain("x /project/Module1.cs");
+        rendered.Should().Contain("x Module1.cs");
+        rendered.Should().Contain("x /project/Module.cs");
+        rendered.Should().Contain("+ File is already properly formatted.");
     }
 
 
@@ -669,7 +806,43 @@ public class FormatCommandSharedTests
     }
 
 
-    private sealed class TestConsoleOutput(StringWriter writer) : IAnsiConsoleOutput
+    private static string RenderLegacyOutput(
+        int codePage,
+        Action<IAnsiConsole> render,
+        bool isTerminal = true)
+    {
+        var encoding =
+            CodePagesEncodingProvider.Instance.GetEncoding(codePage)
+            ?? throw new InvalidOperationException($"Encoding {codePage} is unavailable");
+
+        using var bytes = new MemoryStream();
+        using var writer = new StreamWriter(bytes, encoding, leaveOpen: true);
+
+        var console =
+            AnsiConsole.Create(
+                new AnsiConsoleSettings
+                {
+                    Ansi = AnsiSupport.No,
+                    Interactive = InteractionSupport.No,
+                    Enrichment = new ProfileEnrichment { UseDefaultEnrichers = false },
+                    Out =
+                    isTerminal
+                    ?
+                    new TestConsoleOutput(writer)
+                    :
+                    new AnsiConsoleOutput(writer),
+                });
+
+        console.Profile.Capabilities.Unicode.Should().BeFalse();
+
+        render(console);
+        writer.Flush();
+
+        return encoding.GetString(bytes.ToArray());
+    }
+
+
+    private sealed class TestConsoleOutput(TextWriter writer) : IAnsiConsoleOutput
     {
         public TextWriter Writer { get; } = writer;
 

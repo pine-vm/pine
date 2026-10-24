@@ -44,3 +44,10 @@ Controls whether or not colored output is used in the terminal. Possible values:
 
 Can be overridden with the `--color` command-line option.
 
+### Formatter status markers
+
+The `dotnet format` and `elm format` subcommands use Unicode status markers
+when the output supports Unicode. With legacy output encodings, they use
+ASCII alternatives: `+` for success, `*` for files needing formatting, and
+`x` for errors. This keeps summary borders and file lists aligned without
+changing the terminal's encoding. The markers remain visible with `--color never`.

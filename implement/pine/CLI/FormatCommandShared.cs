@@ -479,7 +479,7 @@ public static class FormatCommandShared
         table.AddRow(
             new Text("Already formatted:", FormatCommandTheme.Success),
             CountText(alreadyFormattedCount, FormatCommandTheme.Success),
-            new Text("✓", FormatCommandTheme.Success));
+            new Text(StatusSymbol(console, "✓"), FormatCommandTheme.Success));
 
         var needsFormattingStyle =
             needsFormattingCount is 0
@@ -492,7 +492,7 @@ public static class FormatCommandShared
             new Text("Need formatting:", needsFormattingStyle),
             CountText(needsFormattingCount, needsFormattingStyle),
             new Text(
-                needsFormattingCount is 0 ? "✓" : "○",
+                StatusSymbol(console, needsFormattingCount is 0 ? "✓" : "○"),
                 needsFormattingStyle));
 
         if (errorCount is not 0)
@@ -500,7 +500,7 @@ public static class FormatCommandShared
             table.AddRow(
                 new Text("Syntax errors:", FormatCommandTheme.Error),
                 CountText(errorCount, FormatCommandTheme.Error),
-                new Text("✗", FormatCommandTheme.Error));
+                new Text(StatusSymbol(console, "✗"), FormatCommandTheme.Error));
         }
 
         console.Write(table);
@@ -545,6 +545,7 @@ public static class FormatCommandShared
                     var fileNode =
                         tree.AddNode(
                             StatusText(
+                                console,
                                 "✗",
                                 FormatCommandTheme.Error,
                                 Path.GetFileName(filePath)));
@@ -645,6 +646,7 @@ public static class FormatCommandShared
             var tree =
                 new Tree(
                     StatusText(
+                        console,
                         "✗",
                         FormatCommandTheme.Error,
                         filePath))
@@ -708,6 +710,7 @@ public static class FormatCommandShared
                 {
                     tree.AddNode(
                         StatusText(
+                            console,
                             "○",
                             FormatCommandTheme.Warning,
                             Path.GetFileName(filePath)));
@@ -814,11 +817,28 @@ public static class FormatCommandShared
 
 
     private static IRenderable StatusText(
+        IAnsiConsole console,
         string symbol,
         Style symbolStyle,
         string message) =>
         new Markup(
-            $"[{symbolStyle.ToMarkup()}]{Markup.Escape(symbol + " " + message)}[/]");
+            $"[{symbolStyle.ToMarkup()}]{Markup.Escape(StatusSymbol(console, symbol) + " " + message)}[/]");
+
+
+    private static string StatusSymbol(IAnsiConsole console, string symbol) =>
+        console.Profile.Capabilities.Unicode
+        ?
+        symbol
+        :
+        symbol switch
+        {
+            "✓" => "+",
+            "○" => "*",
+            "✗" => "x",
+
+            _ =>
+            throw new ArgumentOutOfRangeException(nameof(symbol)),
+        };
 
 
     private static void WriteStatusLine(
@@ -827,6 +847,8 @@ public static class FormatCommandShared
         Style symbolStyle,
         string message)
     {
+        symbol = StatusSymbol(console, symbol);
+
         if (console.Profile.Out.IsTerminal)
         {
             console.Write(new Text(symbol + " " + message, symbolStyle));
