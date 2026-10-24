@@ -319,6 +319,55 @@ public class PineCliOptionsTests
     }
 
     [Theory]
+    [InlineData("elm", "format")]
+    [InlineData("elm-format")]
+    public void Elm_format_commands_preserve_carriage_return_escapes(params string[] command)
+    {
+        var directory = CreateFormatTestDirectory();
+        var sourcePath = Path.Combine(directory, "Main.elm");
+
+        const string Source =
+            "module Main exposing (..)\n\n" +
+            "value text =\n" +
+            "    case text of\n" +
+            "        \"\\r\\n\" -> \"\\r\"\n\n" +
+            "        \"\\u{000D}\" -> \"\\u{000d}\"\n\n" +
+            "        _ -> \"\"\"\\r\\n\"\"\"\n";
+
+        const string Expected =
+            "module Main exposing (..)\n\n\n" +
+            "value text =\n" +
+            "    case text of\n" +
+            "        \"\\r\\n\" ->\n" +
+            "            \"\\r\"\n\n" +
+            "        \"\\u{000D}\" ->\n" +
+            "            \"\\u{000d}\"\n\n" +
+            "        _ ->\n" +
+            "            \"\"\"\\r\\n\"\"\"\n";
+
+        try
+        {
+            File.WriteAllText(sourcePath, Source);
+
+            var result = RunPine([.. command, sourcePath, "--yes", "--color", "never"]);
+
+            result.ExitCode.Should().Be(0);
+            result.StandardError.Should().BeEmpty();
+            File.ReadAllText(sourcePath).Should().Be(Expected);
+
+            var verification = RunPine([.. command, sourcePath, "--verify-no-changes", "--color", "never"]);
+
+            verification.ExitCode.Should().Be(0);
+            verification.StandardError.Should().BeEmpty();
+            File.ReadAllText(sourcePath).Should().Be(Expected);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Theory]
     [InlineData("dotnet", ".cs", "class Source{ }\n")]
     [InlineData("elm", ".elm", "module Source exposing (value)\n\nvalue=1\n")]
     public void Format_commands_ignore_generated_workspace_files(

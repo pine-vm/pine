@@ -1440,7 +1440,7 @@ public class Rendering
                 break;
 
             case Pattern.StringPattern stringPattern:
-                context.Append($"{RenderStringLiteral(stringPattern.Value)}");
+                context.AppendMultilineStringContent(RenderStringPattern(stringPattern).Split('\n'));
                 break;
 
             case Pattern.IntPattern intPattern:
@@ -1539,6 +1539,9 @@ public class Rendering
 
     private static string RenderModuleName(IReadOnlyList<string> moduleName) =>
         string.Join(".", moduleName);
+
+    internal static string RenderStringPattern(Pattern.StringPattern pattern) =>
+        pattern.LiteralText ?? RenderStringLiteral(pattern.Value);
 
     /// <summary>
     /// Converts the specified string to a simple source code string literal.

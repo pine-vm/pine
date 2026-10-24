@@ -43,6 +43,12 @@ public class ElmFormatPreservesLiteralsTests
 
     [Theory]
     [InlineData("\"line1\\nline2\"")]
+    [InlineData("\"\\r\"")]
+    [InlineData("\"\\r\\n\"")]
+    [InlineData("\"before\\rbetween\\r\\nafter\"")]
+    [InlineData("\"\\u{0000D}\"")]
+    [InlineData("\"\\u{000D}\"")]
+    [InlineData("\"\\u{000d}\"")]
     [InlineData("\"tab\\tend\"")]
     [InlineData("\"unicode \\u{0041}\\u{1F332}\"")]
     [InlineData("\"backslash \\\\ done\"")]
@@ -51,6 +57,56 @@ public class ElmFormatPreservesLiteralsTests
     {
         var moduleText =
             "module Test exposing (..)\n\n\ntest =\n    " + literal + "\n";
+
+        var formatted = Format(moduleText);
+
+        formatted.Should().Be(moduleText);
+    }
+
+    [Theory]
+    [InlineData("\"\\r\"")]
+    [InlineData("\"\\r\\n\"")]
+    [InlineData("\"before\\rbetween\\r\\nafter\"")]
+    [InlineData("\"\\\\r\"")]
+    [InlineData("\"\\u{0000D}\"")]
+    [InlineData("\"\\u{000D}\"")]
+    [InlineData("\"\\u{000d}\"")]
+    [InlineData("\"\\r\\u{000D}\\n\"")]
+    [InlineData("\"\\\\u{00D}\"")]
+    [InlineData("\"\\u{000A}\\u{0009}\\u{0041}\"")]
+    [InlineData("\"\"\"\\r\\u{000D}\"\"\"")]
+    [InlineData("\"\"\"first\\r\nsecond\\u{000D}\"\"\"")]
+    public void Preserves_original_representation_of_string_patterns(string literal)
+    {
+        foreach (var newline in new[] { "\n", "\r\n" })
+        {
+            var moduleText =
+                ("module Test exposing (..)\n\n\n" +
+                "test text =\n" +
+                "    case text of\n" +
+                "        " + literal + " ->\n" +
+                "            1\n\n" +
+                "        _ ->\n" +
+                "            0\n").Replace("\n", newline);
+
+            var result =
+                ElmFormat.FormatModuleTextReportingSyntaxErrors(moduleText)
+                .Extract(err => throw new Exception("Formatting failed: " + err));
+
+            result.SyntaxErrors.Should().BeEmpty();
+            var formatted = result.FormattedText;
+
+            formatted.Should().Be(moduleText);
+            Format(formatted).Should().Be(formatted);
+        }
+    }
+
+    [Fact]
+    public void Preserves_carriage_return_escapes_in_triple_quoted_string_literal()
+    {
+        var moduleText =
+            "module Test exposing (..)\n\n\ntest =\n" +
+            "    \"\"\"before\\r\nbetween\\r\\nafter\\u{000D}\"\"\"\n";
 
         var formatted = Format(moduleText);
 

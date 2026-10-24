@@ -4904,8 +4904,14 @@ public class ElmSyntaxParser
                 if (!TryUnwrap(Consume(start.Type), out var literalToken, out var literalTokenErr))
                     return literalTokenErr;
 
+                var delimiter =
+                    start.Type is TokenType.TripleQuotedStringLiteral ? "\"\"\"" : "\"";
+
                 var stringPattern =
-                    new SyntaxTypes.Pattern.StringPattern(literalToken.Lexeme);
+                    new SyntaxTypes.Pattern.StringPattern(
+                        literalToken.Lexeme,
+                        LiteralText:
+                        literalToken.RawText is { } rawText ? delimiter + rawText + delimiter : null);
 
                 return
                     new Node<SyntaxTypes.Pattern>(

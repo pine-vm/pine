@@ -1245,8 +1245,15 @@ public abstract record Pattern
         : Pattern;
 
     /// <summary>Pattern matching a specific string literal.</summary>
+    /// <param name="Value">The decoded string value.</param>
+    /// <param name="LiteralText">
+    /// The original source representation, including its single or triple quote delimiters.
+    /// Escape sequences are preserved verbatim and physical line endings are normalized to LF.
+    /// Null for synthesized patterns, which are rendered from <paramref name="Value"/>.
+    /// </param>
     public sealed record StringPattern(
-        string Value)
+        string Value,
+        string? LiteralText = null)
         : Pattern;
 
     /// <summary>Pattern matching a decimal integer literal.</summary>

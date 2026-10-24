@@ -8,6 +8,8 @@ namespace Pine.Core.Elm.Syntax;
 /// <summary>
 /// High-level API for formatting Elm module source code.
 /// This provides the shared formatting logic used by both the elm-format CLI command and the language server.
+/// Formatting preserves the original spelling of escapes in string literals and string patterns,
+/// including both <c>\r</c> and <c>\u{000D}</c>.
 /// </summary>
 public static class ElmFormat
 {

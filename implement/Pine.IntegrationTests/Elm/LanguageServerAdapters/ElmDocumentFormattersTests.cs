@@ -12,6 +12,43 @@ namespace Pine.IntegrationTests.Elm.LanguageServerAdapters;
 
 public class ElmDocumentFormattersTests
 {
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    public async Task In_process_formatter_preserves_carriage_return_escapes(string newline)
+    {
+        var formatter = new InProcessElmDocumentFormatter();
+
+        var source =
+            ("module Main exposing (..)\n\n" +
+            "value text =\n" +
+            "    case text of\n" +
+            "        \"\\r\\n\" -> \"\\r\"\n\n" +
+            "        \"\\u{000D}\" -> \"\\u{000d}\"\n\n" +
+            "        _ -> \"\"\"\\r\\n\"\"\"\n").Replace("\n", newline);
+
+        var expected =
+            ("module Main exposing (..)\n\n\n" +
+            "value text =\n" +
+            "    case text of\n" +
+            "        \"\\r\\n\" ->\n" +
+            "            \"\\r\"\n\n" +
+            "        \"\\u{000D}\" ->\n" +
+            "            \"\\u{000d}\"\n\n" +
+            "        _ ->\n" +
+            "            \"\"\"\\r\\n\"\"\"\n").Replace("\n", newline);
+
+        var result =
+            await formatter.FormatAsync(
+                "file:///workspace/Main.elm",
+                source,
+                new FormattingOptions(),
+                CancellationToken.None);
+
+        result.Should().BeOfType<Result<DocumentFormattingError, string>.Ok>()
+            .Which.Value.Should().Be(expected);
+    }
+
     [Fact]
     public async Task In_process_formatter_formats_Elm_and_reports_syntax_errors()
     {

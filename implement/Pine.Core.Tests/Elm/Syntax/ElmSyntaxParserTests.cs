@@ -305,6 +305,30 @@ public class ElmSyntaxParserTests
     }
 
     [Theory]
+    [InlineData("\"\\r\"", "\r")]
+    [InlineData("\"\\u{000D}\"", "\r")]
+    [InlineData("\"\\u{000d}\"", "\r")]
+    [InlineData("\"\\r\\u{000D}\\n\"", "\r\r\n")]
+    [InlineData("\"\\\\r\"", "\\r")]
+    [InlineData("\"\"\"first\\r\r\nsecond\\u{000D}\"\"\"", "first\r\nsecond\r")]
+    public void String_patterns_preserve_decoded_values_and_original_literal_text(
+        string source, string expectedValue)
+    {
+        var expression =
+            ElmSyntaxParser.ParseExpression("case text of\n    " + source + " ->\n        1")
+            .Extract(error => throw new System.Exception(error));
+
+        var caseExpression = expression.Should().BeOfType<ExpressionSyntax.CaseExpression>().Subject;
+
+        var pattern =
+            caseExpression.CaseBlock.Cases[0].Pattern.Value
+            .Should().BeOfType<Pattern.StringPattern>().Subject;
+
+        pattern.Value.Should().Be(expectedValue);
+        pattern.LiteralText.Should().Be(source.Replace("\r\n", "\n"));
+    }
+
+    [Theory]
     [InlineData("'🐟'", 0x1F41F)]
     [InlineData("'\\u{1F41F}'", 0x1F41F)]
     [InlineData("'\\n'", 10)]

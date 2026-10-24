@@ -335,6 +335,24 @@ public class ConvertFromConcreteTests
         stringPattern.ValueAsPineValue.Should().Be(ElmValueEncoding.StringAsPineValue("hello"));
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("\"\\r\"")]
+    [InlineData("\"\\u{000D}\"")]
+    [InlineData("\"\"\"\\u{000d}\"\"\"")]
+    public void String_pattern_source_representation_does_not_change_abstract_value(string? literalText)
+    {
+        var converted =
+            ConvertFromConcrete.FromPattern(
+                new ConcreteSyntax.Pattern.StringPattern("\r", LiteralText: literalText));
+
+        var stringPattern = converted.Should().BeOfType<Pattern.StringPattern>().Subject;
+
+        stringPattern.Value.Should().Be("\r");
+        stringPattern.ValueAsPineValue.Should().Be(ElmValueEncoding.StringAsPineValue("\r"));
+        stringPattern.Should().Be(new Pattern.StringPattern("\r"));
+    }
+
     [Fact]
     public void Named_pattern_holds_precomputed_tag_name_pine_value()
     {

@@ -7307,12 +7307,21 @@ public class Avh4Format
                             context);
 
                 case Pattern.StringPattern stringPattern:
-                    return
-                        FormatSimplePattern(
-                            pattern,
-                            Rendering.RenderStringLiteral(stringPattern.Value).Length,
-                            startLoc,
-                            context);
+                    {
+                        var lines = Rendering.RenderStringPattern(stringPattern).Split('\n');
+                        var patternContext = context.Advance(lines[0].Length);
+
+                        for (var lineIndex = 1; lineIndex < lines.Length; lineIndex++)
+                        {
+                            patternContext =
+                                patternContext.ResetIndent().NextRowToIndent().Advance(lines[lineIndex].Length);
+                        }
+
+                        return
+                            FormattingResult<Node<Pattern>>.Create(
+                                MakeNode(startLoc, patternContext.CurrentLocation(), pattern),
+                                patternContext);
+                    }
 
                 case Pattern.IntPattern intPattern:
                     return FormatSimplePattern(pattern, intPattern.Value.ToString().Length, startLoc, context);
@@ -7656,7 +7665,7 @@ public class Avh4Format
 
         /// <summary>
         /// Helper for formatting simple patterns (literals and names) that have a fixed length.
-        /// Reduces repetition across AllPattern, VarPattern, UnitPattern, CharPattern, StringPattern,
+        /// Reduces repetition across AllPattern, VarPattern, UnitPattern, CharPattern,
         /// IntPattern, HexPattern, and FloatPattern cases.
         /// </summary>
         private static FormattingResult<Node<Pattern>> FormatSimplePattern(
