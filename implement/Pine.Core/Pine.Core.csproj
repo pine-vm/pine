@@ -47,7 +47,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Elm\elm-in-elm\**\*.elm;Elm\elm-in-elm\**\*.json;" />
+    <EmbeddedResource Include="..\elm-in-elm\**\*.elm;..\elm-in-elm\**\*.json" Link="Elm\elm-in-elm\%(RecursiveDir)%(Filename)%(Extension)" />
     <EmbeddedResource Include="Elm\Testing\elm-test\**;Elm\Testing\elm-random\**" />
   </ItemGroup>
 
@@ -56,10 +56,6 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.9.0" />
     <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.13" />
     <PackageReference Include="SharpCompress" Version="0.50.7" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Interpreter\" />
   </ItemGroup>
 
 </Project>

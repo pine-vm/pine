@@ -43,7 +43,8 @@ public class BundledFiles
     /// <summary>
     /// Loads all Elm compiler source code files from the manifest embedded file provider
     /// of the Pine.Core assembly, returning them as a dictionary from path to file content.
-    /// The files reside under the <c>Elm/elm-in-elm</c> directory of the assembly.
+    /// Sources from <c>implement/elm-in-elm</c> are embedded under the virtual
+    /// <c>Elm/elm-in-elm</c> directory of the assembly.
     /// </summary>
     public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadElmCompilerSourceCodeFiles() =>
         DotNetAssembly.LoadDirectoryFilesFromManifestEmbeddedFileProviderAsDictionary(

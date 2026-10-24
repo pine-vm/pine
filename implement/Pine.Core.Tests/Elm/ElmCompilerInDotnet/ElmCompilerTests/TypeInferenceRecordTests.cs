@@ -21,7 +21,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 ///         on a different field.</item>
 ///   <item>Multiple record-access usages on the same value, accumulating into one
 ///         open record.</item>
-///   <item>Record-update idioms taken from <c>implement/Pine.Core/Elm/elm-in-elm</c>:
+///   <item>Record-update idioms taken from <c>implement/elm-in-elm</c>:
 ///         singleton-field update on a parameter, multi-field update where the value
 ///         expressions use record-access on the same parameter, and record literals
 ///         whose values come from passed-in field values.</item>

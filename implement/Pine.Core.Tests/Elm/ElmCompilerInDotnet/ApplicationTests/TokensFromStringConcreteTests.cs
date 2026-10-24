@@ -14,7 +14,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ApplicationTests;
 /// <summary>
 /// Executes the actual <c>ElmSyntax.Concrete.Parser.TokensFromString</c> and
 /// <c>ElmSyntax.Concrete.Parser.FromString</c> modules from
-/// <c>implement/Pine.Core/Elm/elm-in-elm/pine-elm-syntax/src</c> (bundled with the assembly)
+/// <c>implement/elm-in-elm/pine-elm-syntax/src</c> (bundled with the assembly)
 /// through the from-scratch, offline Elm-in-.NET compiler and virtual machine.
 /// <para>
 /// These tests exist to verify, by actually running the tokenizer, the behavior of the

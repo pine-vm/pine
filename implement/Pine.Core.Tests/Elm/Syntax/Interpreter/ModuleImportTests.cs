@@ -31,7 +31,7 @@ namespace Pine.Core.Tests.Elm.Syntax.Interpreter;
 /// </para>
 ///
 /// Each test exercises one form of <c>import</c> statement found in
-/// <c>implement/Pine.Core/Elm/elm-in-elm</c> (qualified-only, alias, exposing names,
+/// <c>implement/elm-in-elm</c> (qualified-only, alias, exposing names,
 /// exposing types with and without constructors, exposing operators, open exposing,
 /// dotted module names, and combinations of alias + exposing). To exercise the
 /// alias / exposing forms (which only affect a module's <em>own</em> body, never
