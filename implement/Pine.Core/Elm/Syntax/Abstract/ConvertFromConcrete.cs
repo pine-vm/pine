@@ -1,6 +1,5 @@
 using Pine.Core.Encodings;
 using Pine.Core.PineLanguage;
-using System.Linq;
 using System.Numerics;
 
 namespace Pine.Core.Elm.Syntax.Abstract;
@@ -23,8 +22,8 @@ public static class ConvertFromConcrete
     public static File FromFile(Concrete.File file) =>
         new(
             FromModule(file.ModuleDefinition.Value),
-            [.. file.Imports.Select(import => FromImport(import.Value))],
-            [.. file.Declarations.Select(declaration => FromDeclaration(declaration.Value))]);
+            SyntaxList.Map(file.Imports, import => FromImport(import.Value)),
+            SyntaxList.Map(file.Declarations, declaration => FromDeclaration(declaration.Value)));
 
     /// <summary>
     /// Converts a concrete <see cref="Concrete.Import"/> into an abstract <see cref="Import"/>.
@@ -82,7 +81,7 @@ public static class ConvertFromConcrete
 
             Concrete.Exposing.Explicit explicitExposing =>
             new Exposing.Explicit(
-                [.. explicitExposing.Nodes.Nodes.Select(node => FromTopLevelExpose(node.Value))]),
+                SyntaxList.Map(explicitExposing.Nodes, node => FromTopLevelExpose(node.Value))),
 
             _ =>
             throw new System.NotImplementedException(
@@ -148,19 +147,19 @@ public static class ConvertFromConcrete
     private static TypeAlias FromTypeAlias(Concrete.TypeAlias typeAlias) =>
         new(
             typeAlias.Name.Value,
-            [.. typeAlias.Generics.Select(generic => generic.Value)],
+            SyntaxList.Map(typeAlias.Generics, generic => generic.Value),
             FromTypeAnnotation(typeAlias.TypeAnnotation.Value));
 
     private static ChoiceTypeStruct FromTypeStruct(Concrete.ChoiceTypeStruct typeStruct) =>
         new(
             typeStruct.Name.Value,
-            [.. typeStruct.Generics.Select(generic => generic.Value)],
-            [.. typeStruct.Constructors.Select(constructor => FromValueConstructor(constructor.Value))]);
+            SyntaxList.Map(typeStruct.Generics, generic => generic.Value),
+            SyntaxList.Map(typeStruct.Constructors, constructor => FromValueConstructor(constructor.Value)));
 
     private static ValueConstructor FromValueConstructor(Concrete.ValueConstructor valueConstructor) =>
         ValueConstructor.Create(
             valueConstructor.Name.Value,
-            [.. valueConstructor.Arguments.Select(argument => FromTypeAnnotation(argument.Value))]);
+            SyntaxList.Map(valueConstructor.Arguments, argument => FromTypeAnnotation(argument.Value)));
 
     /// <summary>
     /// Converts a concrete <see cref="Concrete.TypeAnnotation"/> into an abstract <see cref="TypeAnnotation"/>.
@@ -175,14 +174,14 @@ public static class ConvertFromConcrete
             new TypeAnnotation.Typed(
                 typed.TypeName.Value.ModuleName,
                 typed.TypeName.Value.Name,
-                [.. typed.TypeArguments.Select(argument => FromTypeAnnotation(argument.Value))]),
+                SyntaxList.Map(typed.TypeArguments, argument => FromTypeAnnotation(argument.Value))),
 
             Concrete.TypeAnnotation.Unit =>
             new TypeAnnotation.Unit(),
 
             Concrete.TypeAnnotation.Tupled tupled =>
             new TypeAnnotation.Tupled(
-                [.. tupled.TypeAnnotations.Nodes.Select(node => FromTypeAnnotation(node.Value))]),
+                SyntaxList.Map(tupled.TypeAnnotations, node => FromTypeAnnotation(node.Value))),
 
             Concrete.TypeAnnotation.Record record =>
             new TypeAnnotation.Record(FromRecordDefinition(record.RecordDefinition)),
@@ -204,7 +203,7 @@ public static class ConvertFromConcrete
 
     private static RecordDefinition FromRecordDefinition(Concrete.RecordDefinition recordDefinition) =>
         new(
-            [.. recordDefinition.Fields.Nodes.Select(node => FromRecordField(node.Value))]);
+            SyntaxList.Map(recordDefinition.Fields, node => FromRecordField(node.Value)));
 
     private static RecordField FromRecordField(Concrete.RecordField recordField) =>
         RecordField.Create(
@@ -227,7 +226,7 @@ public static class ConvertFromConcrete
         Concrete.FunctionImplementation functionImplementation) =>
         new(
             functionImplementation.Name.Value,
-            [.. functionImplementation.Arguments.Select(argument => FromPattern(argument.Value))],
+            SyntaxList.Map(functionImplementation.Arguments, argument => FromPattern(argument.Value)),
             FromExpression(functionImplementation.Expression.Value));
 
     private static Signature FromSignature(Concrete.Signature signature) =>
@@ -268,11 +267,11 @@ public static class ConvertFromConcrete
 
             Concrete.Pattern.TuplePattern tuplePattern =>
             new Pattern.TuplePattern(
-                [.. tuplePattern.Elements.Nodes.Select(node => FromPattern(node.Value))]),
+                SyntaxList.Map(tuplePattern.Elements, node => FromPattern(node.Value))),
 
             Concrete.Pattern.RecordPattern recordPattern =>
             Pattern.RecordPattern.Create(
-                [.. recordPattern.Fields.Nodes.Select(node => node.Value)]),
+                SyntaxList.Map(recordPattern.Fields, node => node.Value)),
 
             Concrete.Pattern.UnConsPattern unConsPattern =>
             new Pattern.UnConsPattern(
@@ -281,12 +280,12 @@ public static class ConvertFromConcrete
 
             Concrete.Pattern.ListPattern listPattern =>
             new Pattern.ListPattern(
-                [.. listPattern.Elements.Nodes.Select(node => FromPattern(node.Value))]),
+                SyntaxList.Map(listPattern.Elements, node => FromPattern(node.Value))),
 
             Concrete.Pattern.NamedPattern namedPattern =>
             new Pattern.NamedPattern(
                 FromQualifiedNameRef(namedPattern.Name),
-                [.. namedPattern.Arguments.Select(argument => FromPattern(argument.Value))]),
+                SyntaxList.Map(namedPattern.Arguments, argument => FromPattern(argument.Value))),
 
             Concrete.Pattern.AsPattern asPattern =>
             new Pattern.AsPattern(
@@ -337,7 +336,7 @@ public static class ConvertFromConcrete
 
             Concrete.Expression.ListExpr listExpr =>
             new Expression.ListExpr(
-                [.. listExpr.Elements.Nodes.Select(node => FromExpression(node.Value))]),
+                SyntaxList.Map(listExpr.Elements, node => FromExpression(node.Value))),
 
             Concrete.Expression.Identifier functionOrValue =>
             Expression.Identifier.Create(functionOrValue.ModuleName, functionOrValue.Name),
@@ -357,7 +356,7 @@ public static class ConvertFromConcrete
             Concrete.Expression.Application application =>
             new Expression.Application(
                 FromExpression(application.Function.Value),
-                [.. application.Arguments.Select(argument => FromExpression(argument.Value))]),
+                SyntaxList.Map(application.Arguments, argument => FromExpression(argument.Value))),
 
             Concrete.Expression.OperatorApplication operatorApplication =>
             new Expression.OperatorApplication(
@@ -368,28 +367,28 @@ public static class ConvertFromConcrete
 
             Concrete.Expression.TupledExpression tupledExpression =>
             new Expression.TupledExpression(
-                [.. tupledExpression.Elements.Nodes.Select(node => FromExpression(node.Value))]),
+                SyntaxList.Map(tupledExpression.Elements, node => FromExpression(node.Value))),
 
             Concrete.Expression.LambdaExpression lambdaExpression =>
             new Expression.LambdaExpression(
-                [.. lambdaExpression.Lambda.Arguments.Select(argument => FromPattern(argument.Value))],
+                SyntaxList.Map(lambdaExpression.Lambda.Arguments, argument => FromPattern(argument.Value)),
                 FromExpression(lambdaExpression.Lambda.Expression.Value)),
 
             Concrete.Expression.CaseExpression caseExpression =>
             new Expression.CaseExpression(
                 FromExpression(caseExpression.CaseBlock.Expression.Value),
-                [.. caseExpression.CaseBlock.Cases.Select(FromCase)]),
+                SyntaxList.Map(caseExpression.CaseBlock.Cases, FromCase)),
 
             Concrete.Expression.LetExpression letExpression =>
             new Expression.LetExpression(
-                [.. letExpression.Value.Declarations.Select(declaration => FromLetDeclaration(declaration.Value))],
+                SyntaxList.Map(letExpression.Value.Declarations, declaration => FromLetDeclaration(declaration.Value)),
                 FromExpression(letExpression.Value.Expression.Value)),
 
             Concrete.Expression.RecordExpr recordExpr =>
             Expression.RecordExpr.CreateSorted(
-                [
-                .. recordExpr.Fields.Nodes.Select(field => (field.FieldName.Value, FromExpression(field.ValueExpr.Value)))
-                ]),
+                SyntaxList.Map(
+                    recordExpr.Fields,
+                    field => (field.FieldName.Value, FromExpression(field.ValueExpr.Value)))),
 
             Concrete.Expression.RecordAccess recordAccess =>
             new Expression.RecordAccess(
@@ -403,10 +402,9 @@ public static class ConvertFromConcrete
             Concrete.Expression.RecordUpdateExpression recordUpdateExpression =>
             Expression.RecordUpdateExpression.CreateSorted(
                 recordUpdateExpression.RecordName.Value,
-                [
-                .. recordUpdateExpression.Fields.Nodes.Select(
-                    field => (field.FieldName.Value, FromExpression(field.ValueExpr.Value)))
-                ]),
+                SyntaxList.Map(
+                    recordUpdateExpression.Fields,
+                    field => (field.FieldName.Value, FromExpression(field.ValueExpr.Value)))),
 
             Concrete.Expression.GLSLExpression glslExpression =>
             new Expression.GLSLExpression(glslExpression.ShaderCode),

@@ -1,6 +1,5 @@
 using Pine.Core.Elm.Syntax.Concrete;
 using System.Collections.Generic;
-using System.Linq;
 
 using FullTypes = Pine.Core.Elm.Syntax.Concrete;
 
@@ -21,8 +20,9 @@ public static class FromFullSyntaxModel
     public static File Convert(
         FullTypes.File file)
     {
-        if (file.IncompleteDeclarations.FirstOrDefault() is { } incompleteDeclarationNode)
+        if (file.IncompleteDeclarations.Count > 0)
         {
+            var incompleteDeclarationNode = file.IncompleteDeclarations[0];
             /*
              * If the file should be converted despite syntax errors,
              * set the 'IncompleteDeclarations' to empty before invoking this conversion.
@@ -216,7 +216,7 @@ public static class FromFullSyntaxModel
             Documentation: typeStruct.Documentation,
             Name: typeStruct.Name,
             Generics: typeStruct.Generics,
-            Constructors: [.. typeStruct.Constructors.Select(c => ConvertNode(c, Convert))]);
+            Constructors: ConvertSeparatedNodes(typeStruct.Constructors, Convert));
 
     /// <summary>
     /// Converts a <see cref="ValueConstructor"/>
@@ -304,7 +304,7 @@ public static class FromFullSyntaxModel
     /// </summary>
     private static IReadOnlyList<Node<TypeAnnotation>> ConvertTypeAnnotationNodes(
         IReadOnlyList<Node<FullTypes.TypeAnnotation>> nodes) =>
-        [.. nodes.Select(ConvertTypeAnnotationNode)];
+        SyntaxList.Map(nodes, ConvertTypeAnnotationNode);
 
     /// <summary>
     /// Converts a RecordDefinition
@@ -393,7 +393,7 @@ public static class FromFullSyntaxModel
                 ConvertSeparatedNodes(tuplePattern.Elements, Convert)),
 
             FullTypes.Pattern.RecordPattern recordPattern =>
-            new Pattern.RecordPattern(ToList(recordPattern.Fields)),
+            new Pattern.RecordPattern(recordPattern.Fields.WithoutSeparatorTokens()),
 
             FullTypes.Pattern.UnConsPattern unConsPattern =>
             new Pattern.UnConsPattern(
@@ -487,7 +487,7 @@ public static class FromFullSyntaxModel
 
             FullTypes.Expression.Application application =>
             new Expression.Application(
-                [ConvertExpressionNode(application.Function), .. ConvertExpressionNodes(application.Arguments)]),
+                ConvertApplicationNodes(application)),
 
             FullTypes.Expression.OperatorApplication operatorApplication =>
             new Expression.OperatorApplication(
@@ -572,19 +572,24 @@ public static class FromFullSyntaxModel
         return new Node<Expression>(node.Range, convertedValue);
     }
 
-    /// <summary>
-    /// Converts a list of expression nodes.
-    /// </summary>
-    private static IReadOnlyList<Node<Expression>> ConvertExpressionNodes(
-        IReadOnlyList<Node<FullTypes.Expression>> nodes) =>
-        [.. nodes.Select(ConvertExpressionNode)];
+    private static IReadOnlyList<Node<Expression>> ConvertApplicationNodes(
+        FullTypes.Expression.Application application)
+    {
+        var result = new Node<Expression>[application.Arguments.Count + 1];
+        result[0] = ConvertExpressionNode(application.Function);
+
+        for (var i = 0; i < application.Arguments.Count; i++)
+            result[i + 1] = ConvertExpressionNode(application.Arguments[i]);
+
+        return result;
+    }
 
     /// <summary>
     /// Converts a SeparatedSyntaxList of expression nodes to an IReadOnlyList.
     /// </summary>
     private static IReadOnlyList<Node<Expression>> ConvertExpressionNodes(
         SeparatedSyntaxList<Node<FullTypes.Expression>> separatedList) =>
-        [.. ToList(separatedList).Select(ConvertExpressionNode)];
+        SyntaxList.Map(separatedList, ConvertExpressionNode);
 
     /// <summary>
     /// Converts a <see cref="LambdaStruct"/>
@@ -602,7 +607,7 @@ public static class FromFullSyntaxModel
         FullTypes.CaseBlock caseBlock) =>
         new(
             Expression: ConvertExpressionNode(caseBlock.Expression),
-            Cases: [.. caseBlock.Cases.Select(Convert)]);
+            Cases: SyntaxList.Map(caseBlock.Cases, Convert));
 
     /// <summary>
     /// Converts a <see cref="Case"/>
@@ -653,24 +658,7 @@ public static class FromFullSyntaxModel
     private static IReadOnlyList<Node<TResult>> ConvertNodes<TSource, TResult>(
         IReadOnlyList<Node<TSource>> nodes,
         System.Func<TSource, TResult> converter) =>
-        [.. nodes.Select(node => ConvertNode(node, converter))];
-
-    /// <summary>
-    /// Converts a SeparatedSyntaxList to an IReadOnlyList, discarding separator locations.
-    /// </summary>
-    public static IReadOnlyList<TNode> ToList<TNode>(
-        SeparatedSyntaxList<TNode> separatedList) =>
-        separatedList switch
-        {
-            SeparatedSyntaxList<TNode>.Empty => [],
-
-            SeparatedSyntaxList<TNode>.NonEmpty nonEmpty =>
-            [nonEmpty.First, .. nonEmpty.Rest.Select(r => r.Node)],
-
-            _ =>
-            throw new System.NotImplementedException(
-                "Unexpected SeparatedSyntaxList type: " + separatedList.GetType().Name),
-        };
+        SyntaxList.Map(nodes, node => ConvertNode(node, converter));
 
     /// <summary>
     /// Converts a SeparatedSyntaxList of nodes to an IReadOnlyList, applying a converter to each node's value.
@@ -678,7 +666,7 @@ public static class FromFullSyntaxModel
     public static IReadOnlyList<Node<TResult>> ConvertSeparatedNodes<TSource, TResult>(
         SeparatedSyntaxList<Node<TSource>> separatedList,
         System.Func<TSource, TResult> converter) =>
-        [.. ToList(separatedList).Select(node => ConvertNode(node, converter))];
+        SyntaxList.Map(separatedList, node => ConvertNode(node, converter));
 
     /// <summary>
     /// Converts a full syntax model integer expression (which holds the original literal text)

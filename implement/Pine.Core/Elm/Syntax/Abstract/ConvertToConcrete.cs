@@ -1,7 +1,6 @@
 using Pine.Core.Elm.Syntax.Concrete;
 using Pine.Core.PineLanguage;
 using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
 
 namespace Pine.Core.Elm.Syntax.Abstract;
@@ -37,18 +36,24 @@ public static class ConvertToConcrete
         new(s_zeroRange, value);
 
     /// <summary>
-    /// Builds a concrete <see cref="SeparatedSyntaxList{TNode}"/> from a flat list, using the
+    /// Builds a concrete <see cref="SeparatedSyntaxList{TResult}"/> from a flat list, using the
     /// placeholder zero location for every separator.
     /// </summary>
-    private static SeparatedSyntaxList<TNode> ToSeparatedList<TNode>(IReadOnlyList<TNode> items)
+    private static SeparatedSyntaxList<TResult> ToSeparatedList<TSource, TResult>(
+        IReadOnlyList<TSource> items,
+        System.Func<TSource, TResult> convert)
     {
         if (items.Count is 0)
-            return new SeparatedSyntaxList<TNode>.Empty();
+            return new SeparatedSyntaxList<TResult>.Empty();
+
+        var first = convert(items[0]);
+        var rest = new (Location SeparatorLocation, TResult Node)[items.Count - 1];
+
+        for (var i = 0; i < rest.Length; i++)
+            rest[i] = (s_zeroLocation, convert(items[i + 1]));
 
         return
-            new SeparatedSyntaxList<TNode>.NonEmpty(
-                items[0],
-                [.. items.Skip(1).Select(item => (s_zeroLocation, item))]);
+            new SeparatedSyntaxList<TResult>.NonEmpty(first, rest);
     }
 
     /// <summary>
@@ -57,8 +62,8 @@ public static class ConvertToConcrete
     public static Concrete.File FromFile(File file) =>
         new(
             Node(ToModule(file.ModuleDefinition)),
-            [.. file.Imports.Select(import => Node(ToImport(import)))],
-            [.. file.Declarations.Select(declaration => Node(ToDeclaration(declaration)))],
+            SyntaxList.Map(file.Imports, import => Node(ToImport(import))),
+            SyntaxList.Map(file.Declarations, declaration => Node(ToDeclaration(declaration))),
             Comments: [],
             IncompleteDeclarations: []);
 
@@ -135,7 +140,8 @@ public static class ConvertToConcrete
             new Concrete.Exposing.Explicit(
                 s_zeroLocation,
                 ToSeparatedList(
-                    [.. explicitExposing.Exposes.Select(expose => Node(ToTopLevelExpose(expose)))]),
+                    explicitExposing.Exposes,
+                    expose => Node(ToTopLevelExpose(expose))),
                 s_zeroLocation),
 
             _ =>
@@ -207,7 +213,7 @@ public static class ConvertToConcrete
             s_zeroLocation,
             s_zeroLocation,
             Node(typeAlias.Name),
-            [.. typeAlias.Generics.Select(Node)],
+            SyntaxList.Map(typeAlias.Generics, Node),
             s_zeroLocation,
             Node(ToTypeAnnotation(typeAlias.TypeAnnotation)));
 
@@ -216,24 +222,14 @@ public static class ConvertToConcrete
             Documentation: null,
             s_zeroLocation,
             Node(typeStruct.Name),
-            [.. typeStruct.Generics.Select(Node)],
+            SyntaxList.Map(typeStruct.Generics, Node),
             s_zeroLocation,
-            typeStruct.Constructors.Count is 0
-            ?
-            new Syntax.Concrete.SeparatedSyntaxList<Pine.Core.Elm.Syntax.Concrete.Node<Syntax.Concrete.ValueConstructor>>.Empty()
-            :
-            new Syntax.Concrete.SeparatedSyntaxList<Pine.Core.Elm.Syntax.Concrete.Node<Syntax.Concrete.ValueConstructor>>.NonEmpty(
-                Node(ToValueConstructor(typeStruct.Constructors[0])),
-                [
-                .. typeStruct.Constructors
-                .Skip(1)
-                .Select(constructor => (s_zeroLocation, Node(ToValueConstructor(constructor))))
-                ]));
+            ToSeparatedList(typeStruct.Constructors, constructor => Node(ToValueConstructor(constructor))));
 
     private static Concrete.ValueConstructor ToValueConstructor(ValueConstructor valueConstructor) =>
         new(
             Node(valueConstructor.Name),
-            [.. valueConstructor.Arguments.Select(argument => Node(ToTypeAnnotation(argument)))]);
+            SyntaxList.Map(valueConstructor.Arguments, argument => Node(ToTypeAnnotation(argument))));
 
     /// <summary>
     /// Converts an abstract <see cref="TypeAnnotation"/> into a concrete <see cref="Concrete.TypeAnnotation"/>.
@@ -247,7 +243,7 @@ public static class ConvertToConcrete
             TypeAnnotation.Typed typed =>
             new Concrete.TypeAnnotation.Typed(
                 Node((typed.ModuleName, typed.Name)),
-                [.. typed.TypeArguments.Select(argument => Node(ToTypeAnnotation(argument)))]),
+                SyntaxList.Map(typed.TypeArguments, argument => Node(ToTypeAnnotation(argument)))),
 
             TypeAnnotation.Unit =>
             new Concrete.TypeAnnotation.Unit(),
@@ -255,7 +251,8 @@ public static class ConvertToConcrete
             TypeAnnotation.Tupled tupled =>
             new Concrete.TypeAnnotation.Tupled(
                 ToSeparatedList(
-                    [.. tupled.TypeAnnotations.Select(annotation => Node(ToTypeAnnotation(annotation)))])),
+                    tupled.TypeAnnotations,
+                    annotation => Node(ToTypeAnnotation(annotation)))),
 
             TypeAnnotation.Record record =>
             new Concrete.TypeAnnotation.Record(ToRecordDefinition(record.RecordDefinition)),
@@ -280,7 +277,8 @@ public static class ConvertToConcrete
     private static Concrete.RecordDefinition ToRecordDefinition(RecordDefinition recordDefinition) =>
         new(
             ToSeparatedList(
-                [.. recordDefinition.Fields.Select(field => Node(ToRecordField(field)))]));
+                recordDefinition.Fields,
+                field => Node(ToRecordField(field))));
 
     private static Concrete.RecordField ToRecordField(RecordField recordField) =>
         new(
@@ -302,7 +300,7 @@ public static class ConvertToConcrete
         FunctionImplementation functionImplementation) =>
         new(
             Node(functionImplementation.Name),
-            [.. functionImplementation.Arguments.Select(argument => Node(ToPatternInArgumentPosition(argument)))],
+            SyntaxList.Map(functionImplementation.Arguments, argument => Node(ToPatternInArgumentPosition(argument))),
             s_zeroLocation,
             Node(ToExpression(functionImplementation.Expression)));
 
@@ -344,12 +342,14 @@ public static class ConvertToConcrete
             Pattern.TuplePattern tuplePattern =>
             new Concrete.Pattern.TuplePattern(
                 ToSeparatedList(
-                    [.. tuplePattern.Elements.Select(element => Node(ToPattern(element)))])),
+                    tuplePattern.Elements,
+                    element => Node(ToPattern(element)))),
 
             Pattern.RecordPattern recordPattern =>
             new Concrete.Pattern.RecordPattern(
                 ToSeparatedList(
-                    [.. recordPattern.Fields.Select(field => Node(field.FieldName))])),
+                    recordPattern.Fields,
+                    field => Node(field.FieldName))),
 
             Pattern.UnConsPattern unConsPattern =>
             new Concrete.Pattern.UnConsPattern(
@@ -360,12 +360,13 @@ public static class ConvertToConcrete
             Pattern.ListPattern listPattern =>
             new Concrete.Pattern.ListPattern(
                 ToSeparatedList(
-                    [.. listPattern.Elements.Select(element => Node(ToPattern(element)))])),
+                    listPattern.Elements,
+                    element => Node(ToPattern(element)))),
 
             Pattern.NamedPattern namedPattern =>
             new Concrete.Pattern.NamedPattern(
                 ToQualifiedNameRef(namedPattern.Name),
-                [.. namedPattern.Arguments.Select(argument => Node(ToPatternInArgumentPosition(argument)))]),
+                SyntaxList.Map(namedPattern.Arguments, argument => Node(ToPatternInArgumentPosition(argument)))),
 
             Pattern.AsPattern asPattern =>
             new Concrete.Pattern.AsPattern(
@@ -450,7 +451,8 @@ public static class ConvertToConcrete
             Expression.ListExpr listExpr =>
             new Concrete.Expression.ListExpr(
                 ToSeparatedList(
-                    [.. listExpr.Elements.Select(element => Node(ToExpression(element)))])),
+                    listExpr.Elements,
+                    element => Node(ToExpression(element)))),
 
             Expression.Identifier functionOrValue =>
             new Concrete.Expression.Identifier(
@@ -472,7 +474,7 @@ public static class ConvertToConcrete
             Expression.Application application =>
             new Concrete.Expression.Application(
                 Node(ToExpressionInApplicationPosition(application.Function)),
-                [.. application.Arguments.Select(argument => Node(ToExpressionInApplicationPosition(argument)))]),
+                SyntaxList.Map(application.Arguments, argument => Node(ToExpressionInApplicationPosition(argument)))),
 
             Expression.OperatorApplication operatorApplication =>
             new Concrete.Expression.OperatorApplication(
@@ -484,13 +486,14 @@ public static class ConvertToConcrete
             Expression.TupledExpression tupledExpression =>
             new Concrete.Expression.TupledExpression(
                 ToSeparatedList(
-                    [.. tupledExpression.Elements.Select(element => Node(ToExpression(element)))])),
+                    tupledExpression.Elements,
+                    element => Node(ToExpression(element)))),
 
             Expression.LambdaExpression lambdaExpression =>
             new Concrete.Expression.LambdaExpression(
                 new LambdaStruct(
                     s_zeroLocation,
-                    [.. lambdaExpression.Arguments.Select(argument => Node(ToPatternInArgumentPosition(argument)))],
+                    SyntaxList.Map(lambdaExpression.Arguments, argument => Node(ToPatternInArgumentPosition(argument))),
                     s_zeroLocation,
                     Node(ToExpression(lambdaExpression.Expression)))),
 
@@ -500,20 +503,21 @@ public static class ConvertToConcrete
                     s_zeroLocation,
                     Node(ToExpression(caseExpression.Expression)),
                     s_zeroLocation,
-                    [.. caseExpression.Cases.Select(ToCase)])),
+                    SyntaxList.Map(caseExpression.Cases, ToCase))),
 
             Expression.LetExpression letExpression =>
             new Concrete.Expression.LetExpression(
                 new Concrete.Expression.LetBlock(
                     s_zeroLocation,
-                    [.. letExpression.Declarations.Select(declaration => Node(ToLetDeclaration(declaration)))],
+                    SyntaxList.Map(letExpression.Declarations, declaration => Node(ToLetDeclaration(declaration))),
                     s_zeroLocation,
                     Node(ToExpression(letExpression.Expression)))),
 
             Expression.RecordExpr recordExpr =>
             new Concrete.Expression.RecordExpr(
                 ToSeparatedList(
-                    [.. recordExpr.Fields.Select(ToRecordExprField)])),
+                    recordExpr.Fields,
+                    ToRecordExprField)),
 
             Expression.RecordAccess recordAccess =>
             new Concrete.Expression.RecordAccess(
@@ -528,7 +532,8 @@ public static class ConvertToConcrete
                 Node(recordUpdateExpression.RecordName),
                 s_zeroLocation,
                 ToSeparatedList(
-                    [.. recordUpdateExpression.Fields.Select(ToRecordExprField)])),
+                    recordUpdateExpression.Fields,
+                    ToRecordExprField)),
 
             Expression.GLSLExpression glslExpression =>
             new Concrete.Expression.GLSLExpression(glslExpression.ShaderCode),

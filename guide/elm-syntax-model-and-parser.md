@@ -67,6 +67,17 @@ represented separately by `ElmSyntaxErrorKind.ModuleValidation`. Pine's existing
 record-expression colon-to-equals canonicalization remains supported; missing
 separators are still syntax errors.
 
+## Indexed syntax conversion
+
+The formatter and the abstract/concrete and compatibility model conversions traverse
+syntax collections by index rather than using LINQ or enumerators. Conversion keeps
+node order, and formatter sorting preserves the input order of equal keys.
+
+Use `Concrete.SeparatedSyntaxList<TNode>.WithoutSeparatorTokens()` to copy a
+separated list into an `IReadOnlyList<TNode>` without delimiter locations. This
+operation belongs to the concrete model; it does not require the
+`Compatibility.Stil4mElmSyntax7` converters.
+
 
 ## Origin and Evolution
 

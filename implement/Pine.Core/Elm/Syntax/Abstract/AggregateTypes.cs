@@ -5,7 +5,6 @@ using Pine.Core.Json;
 using Pine.Core.PineLanguage;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Linq;
 using System.Numerics;
 using System.Text.Json.Serialization;
 
@@ -79,8 +78,8 @@ internal static class AbstractModelEquality
         if (items is null)
             return;
 
-        foreach (var item in items)
-            hashCode.Add(item);
+        for (var i = 0; i < items.Count; i++)
+            hashCode.Add(items[i]);
     }
 }
 
@@ -1437,15 +1436,13 @@ public abstract record Expression
                 return Empty;
 
             var sortedFields =
-                fields
-                .OrderBy(f => f.FieldName, System.StringComparer.Ordinal)
-                .Select(
+                SyntaxList.Map(
+                    SyntaxList.OrderByOrdinal(fields, f => f.FieldName),
                     f =>
                     new RecordSetter(
                         f.FieldName,
                         FieldNameValue: StringEncoding.ValueFromString(f.FieldName),
-                        f.FieldExpr))
-                .ToList();
+                        f.FieldExpr));
 
             return new RecordExpr(sortedFields);
         }
@@ -1522,15 +1519,13 @@ public abstract record Expression
             IReadOnlyList<(string FieldName, Expression FieldExpr)> fields)
         {
             var sortedFields =
-                fields
-                .OrderBy(f => f.FieldName, System.StringComparer.Ordinal)
-                .Select(
+                SyntaxList.Map(
+                    SyntaxList.OrderByOrdinal(fields, f => f.FieldName),
                     f =>
                     new RecordSetter(
                         f.FieldName,
                         FieldNameValue: StringEncoding.ValueFromString(f.FieldName),
-                        f.FieldExpr))
-                .ToList();
+                        f.FieldExpr));
 
             return new RecordUpdateExpression(recordName, sortedFields);
         }

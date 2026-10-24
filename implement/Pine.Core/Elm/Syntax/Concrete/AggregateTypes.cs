@@ -92,6 +92,22 @@ public abstract record SeparatedSyntaxList<TNode>
         };
 
     /// <summary>
+    /// Copies the nodes to an indexed list, discarding separator locations without enumeration.
+    /// </summary>
+    public IReadOnlyList<TNode> WithoutSeparatorTokens()
+    {
+        if (Count is 0)
+            return [];
+
+        var result = new TNode[Count];
+
+        for (var i = 0; i < result.Length; i++)
+            result[i] = this[i];
+
+        return result;
+    }
+
+    /// <summary>
     /// Gets all nodes in the list as an enumerable.
     /// </summary>
     public IEnumerable<TNode> Nodes =>

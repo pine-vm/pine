@@ -1,6 +1,5 @@
 using Pine.Core.Elm.Syntax.Concrete;
 using System.Collections.Generic;
-using System.Linq;
 
 using FullTypes = Pine.Core.Elm.Syntax.Concrete;
 
@@ -243,17 +242,7 @@ public static class ToFullSyntaxModel
             Generics: ConvertNodesPreserveValue(typeStruct.Generics),
             EqualsTokenLocation: s_defaultLocation,
             Constructors:
-            typeStruct.Constructors.Count is 0
-            ?
-            new SeparatedSyntaxList<Node<FullTypes.ValueConstructor>>.Empty()
-            :
-            new SeparatedSyntaxList<Node<FullTypes.ValueConstructor>>.NonEmpty(
-                ConvertNode(typeStruct.Constructors[0], Convert),
-                [
-                .. typeStruct.Constructors
-                .Skip(1)
-                .Select(c => (s_defaultLocation, ConvertNode(c, Convert)))
-                ]));
+            ToSeparatedList(typeStruct.Constructors, Convert));
 
     /// <summary>
     /// Converts a ValueConstructor.
@@ -262,7 +251,7 @@ public static class ToFullSyntaxModel
         ValueConstructor constructor) =>
         new(
             Name: ConvertNodePreserveValue(constructor.Name),
-            Arguments: [.. constructor.Arguments.Select(ConvertConstructorArgument)]);
+            Arguments: SyntaxList.Map(constructor.Arguments, ConvertConstructorArgument));
 
     /// <summary>
     /// Converts a TypeAnnotation.
@@ -277,7 +266,7 @@ public static class ToFullSyntaxModel
             TypeAnnotation.Typed typed =>
             new FullTypes.TypeAnnotation.Typed(
                 ConvertNodePreserveValue(typed.TypeName),
-                [.. typed.TypeArguments.Select(ConvertTypedTypeArgument)]),
+                SyntaxList.Map(typed.TypeArguments, ConvertTypedTypeArgument)),
 
             TypeAnnotation.Unit =>
             new FullTypes.TypeAnnotation.Unit(),
@@ -507,7 +496,7 @@ public static class ToFullSyntaxModel
                 _ =>
                 new FullTypes.Expression.Application(
                     ConvertNode(application.Arguments[0], Convert),
-                    ConvertNodes(application.Arguments.Skip(1).ToList(), Convert))
+                    ConvertNodes(application.Arguments, Convert, startIndex: 1))
             },
 
             Expression.OperatorApplication operatorApplication =>
@@ -579,7 +568,7 @@ public static class ToFullSyntaxModel
             CaseTokenLocation: s_defaultLocation,
             Expression: ConvertNode(caseBlock.Expression, Convert),
             OfTokenLocation: s_defaultLocation,
-            Cases: [.. caseBlock.Cases.Select(Convert)]);
+            Cases: SyntaxList.Map(caseBlock.Cases, Convert));
 
     /// <summary>
     /// Converts a Case.
@@ -744,8 +733,16 @@ public static class ToFullSyntaxModel
 
     private static IReadOnlyList<Node<TResult>> ConvertNodes<TSource, TResult>(
         IReadOnlyList<Node<TSource>> nodes,
-        System.Func<TSource, TResult> converter) =>
-        [.. nodes.Select(node => ConvertNode(node, converter))];
+        System.Func<TSource, TResult> converter,
+        int startIndex = 0)
+    {
+        var result = new Node<TResult>[nodes.Count - startIndex];
+
+        for (var i = 0; i < result.Length; i++)
+            result[i] = ConvertNode(nodes[i + startIndex], converter);
+
+        return result;
+    }
 
     /// <summary>
     /// Converts a node preserving its value type (identity conversion for the value).
@@ -759,14 +756,14 @@ public static class ToFullSyntaxModel
     /// </summary>
     private static IReadOnlyList<Node<T>> ConvertNodesPreserveValue<T>(
         IReadOnlyList<Node<T>> nodes) =>
-        [.. nodes.Select(ConvertNodePreserveValue)];
+        SyntaxList.Map(nodes, ConvertNodePreserveValue);
 
     /// <summary>
     /// Converts comments to use the default range.
     /// </summary>
     private static IReadOnlyList<Node<string>> ConvertComments(
         IReadOnlyList<Node<string>> comments) =>
-        [.. comments.Select(c => new Node<string>(s_defaultRange, c.Value))];
+        ConvertNodesPreserveValue(comments);
 
     /// <summary>
     /// Converts an IReadOnlyList to a SeparatedSyntaxList, using DefaultLocation for separator locations.
@@ -780,12 +777,10 @@ public static class ToFullSyntaxModel
 
         var first = ConvertNode(nodes[0], converter);
 
-        var rest =
-            nodes.Skip(1)
-            .Select(
-                node => (SeparatorLocation: s_defaultLocation,
-                Node: ConvertNode(node, converter)))
-            .ToList();
+        var rest = new (Location SeparatorLocation, Node<TResult> Node)[nodes.Count - 1];
+
+        for (var i = 0; i < rest.Length; i++)
+            rest[i] = (s_defaultLocation, ConvertNode(nodes[i + 1], converter));
 
         return new SeparatedSyntaxList<Node<TResult>>.NonEmpty(first, rest);
     }
@@ -801,12 +796,10 @@ public static class ToFullSyntaxModel
 
         var first = ConvertNodePreserveValue(nodes[0]);
 
-        var rest =
-            nodes.Skip(1)
-            .Select(
-                node => (SeparatorLocation: s_defaultLocation,
-                Node: ConvertNodePreserveValue(node)))
-            .ToList();
+        var rest = new (Location SeparatorLocation, Node<T> Node)[nodes.Count - 1];
+
+        for (var i = 0; i < rest.Length; i++)
+            rest[i] = (s_defaultLocation, ConvertNodePreserveValue(nodes[i + 1]));
 
         return new SeparatedSyntaxList<Node<T>>.NonEmpty(first, rest);
     }
@@ -821,23 +814,17 @@ public static class ToFullSyntaxModel
         if (fields.Count == 0)
             return new SeparatedSyntaxList<RecordExprField>.Empty();
 
-        var convertedFields =
-            fields.Select(
-                field =>
-                new RecordExprField(
-                    ConvertNodePreserveValue(field.Value.fieldName),
-                    s_defaultLocation, // EqualsLocation
-                    ConvertNode(field.Value.valueExpr, Convert)))
-            .ToList();
+        RecordExprField ConvertField(Node<(Node<string> fieldName, Node<Expression> valueExpr)> field) =>
+            new(
+                ConvertNodePreserveValue(field.Value.fieldName),
+                s_defaultLocation,
+                ConvertNode(field.Value.valueExpr, Convert));
 
-        var first = convertedFields[0];
+        var first = ConvertField(fields[0]);
+        var rest = new (Location SeparatorLocation, RecordExprField Node)[fields.Count - 1];
 
-        var rest =
-            convertedFields.Skip(1)
-            .Select(
-                recordField => (SeparatorLocation: s_defaultLocation,
-                Node: recordField))
-            .ToList();
+        for (var i = 0; i < rest.Length; i++)
+            rest[i] = (s_defaultLocation, ConvertField(fields[i + 1]));
 
         return new SeparatedSyntaxList<RecordExprField>.NonEmpty(first, rest);
     }

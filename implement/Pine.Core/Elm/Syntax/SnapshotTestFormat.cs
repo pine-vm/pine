@@ -364,7 +364,7 @@ public class SnapshotTestFormat
         // so this only affects the detection of whether the RECORD itself is multiline.
         if (formattedValue is ExpressionSyntax.RecordExpr recordExpr && recordExpr.Fields.Count > 0)
         {
-            var fields = Stil4mElmSyntax7.FromFullSyntaxModel.ToList(recordExpr.Fields);
+            var fields = recordExpr.Fields.WithoutSeparatorTokens();
             var lastField = fields[^1];
             // Use the last field's row + 1 for closing brace on next line
             var lastFieldRow = lastField.FieldName.Range.Start.Row;
