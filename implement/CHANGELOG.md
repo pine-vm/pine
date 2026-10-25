@@ -1,5 +1,9 @@
 # Pine Changelog - Implement
 
+## 2026-10-25 - expand CLI `apply` command - Watch batch inputs
+
++ Added `--watch` to `pine  apply` and batch-mode `pine  run`: rerun after local input file changes, including editor-style file replacement, with debouncing, cancellation, and recovery after failed evaluations.
+
 ## 2026-10-24 - Reorganization of Namespaces and API
 
 Moved implementations shipped with the public API into the following namespaces:

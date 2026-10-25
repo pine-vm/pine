@@ -554,7 +554,7 @@ public static class TestCommand
         CancellationToken cancellationToken = default,
         ElmTestRunCacheSession? cacheSession = null,
         Action<ElmTestRunCacheSession>? onCacheSession = null,
-        Func<string, ITestWatcher>? createWatcher = null,
+        Func<string, IFileWatcher>? createWatcher = null,
         Func<ElmTestRunCacheSession>? createWatchCacheSession = null)
     {
         CommandLineColorMode resolvedColorMode;
@@ -664,7 +664,7 @@ public static class TestCommand
             try
             {
                 return
-                    TestWatchRunner.RunAsync(
+                    FileWatchRunner.RunAsync(
                         source,
                         run:
                         token =>

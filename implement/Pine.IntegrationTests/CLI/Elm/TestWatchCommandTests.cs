@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Pine.CLI;
 using Pine.CLI.Elm;
 using Pine.Core.CLI;
 using Pine.Core.Elm.Testing;
@@ -388,7 +389,7 @@ public class TestWatchCommandTests
 
         var watching =
             Task.Run(
-                () => TestWatchRunner.RunAsync(
+                () => FileWatchRunner.RunAsync(
                     directory.Path,
                     token =>
                     {
@@ -418,7 +419,7 @@ public class TestWatchCommandTests
         Exception? reported = null;
         var count = 0;
 
-        (await TestWatchRunner.RunAsync(
+        (await FileWatchRunner.RunAsync(
             directory.Path,
             _ =>
             {
@@ -448,7 +449,7 @@ public class TestWatchCommandTests
         var ready = false;
         var count = 0;
 
-        (await TestWatchRunner.RunAsync(
+        (await FileWatchRunner.RunAsync(
             directory.Path,
             _ =>
             {
@@ -494,7 +495,7 @@ public class TestWatchCommandTests
         var watcher = new FakeTestWatcher(onStart: () => throw failure);
         Exception? reported = null;
 
-        (await TestWatchRunner.RunAsync(
+        (await FileWatchRunner.RunAsync(
             directory.Path,
             _ => throw new InvalidOperationException("Must not run"),
             () => throw new InvalidOperationException("Must not announce readiness"),
@@ -1249,9 +1250,9 @@ public class TestWatchCommandTests
             learningTimeout: TimeSpan.FromSeconds(5));
 
     private static Task<int> Start(
-        string directory, CancellationToken token, Func<CancellationToken, int> run, ITestWatcher? watcher = null) =>
+        string directory, CancellationToken token, Func<CancellationToken, int> run, IFileWatcher? watcher = null) =>
         Task.Run(
-            () => TestWatchRunner.RunAsync(
+            () => FileWatchRunner.RunAsync(
                 directory,
                 run,
                 () => { },
@@ -1282,7 +1283,7 @@ public class TestWatchCommandTests
         public void Dispose() => Directory.Delete(Path, recursive: true);
     }
 
-    private sealed class FakeTestWatcher(Action? onStart = null) : ITestWatcher
+    private sealed class FakeTestWatcher(Action? onStart = null) : IFileWatcher
     {
         public event Action? Changed;
 

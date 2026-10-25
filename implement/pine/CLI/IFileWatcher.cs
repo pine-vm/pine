@@ -1,9 +1,9 @@
 using System;
 using System.IO;
 
-namespace Pine.CLI.Elm;
+namespace Pine.CLI;
 
-internal interface ITestWatcher : IDisposable
+internal interface IFileWatcher : IDisposable
 {
     event Action? Changed;
 
@@ -14,7 +14,7 @@ internal interface ITestWatcher : IDisposable
     void Stop();
 }
 
-internal sealed class FileSystemTestWatcher : ITestWatcher
+internal sealed class DirectoryFileWatcher : IFileWatcher
 {
     private readonly FileSystemWatcher _watcher;
 
@@ -22,7 +22,7 @@ internal sealed class FileSystemTestWatcher : ITestWatcher
 
     public event Action<Exception>? Error;
 
-    internal FileSystemTestWatcher(string directory)
+    internal DirectoryFileWatcher(string directory)
     {
         _watcher =
             new FileSystemWatcher(directory)

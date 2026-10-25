@@ -76,6 +76,13 @@ public static class RunCommand
         var transformFileOption =
             new Option<string?>("--transform-file") { Description = "Read and replace the same local file." };
 
+        var watchOption =
+            new Option<bool>("--watch")
+            {
+                Description =
+                "Reapply a batch function when local input files change. Requires all arguments explicitly and a distinct --output-file. Stop with Ctrl+C."
+            };
+
         var colorOption = FormatCommandShared.CreateColorOption();
 
         var durationsOption =
@@ -96,7 +103,7 @@ public static class RunCommand
 
         command.Add(entryPointArgument);
 
-        foreach (var option in new Option[] { inputDirectoryOption, inputOption, inputFileOption, outputFileOption, transformFileOption, colorOption, durationsOption, timeoutOption })
+        foreach (var option in new Option[] { inputDirectoryOption, inputOption, inputFileOption, outputFileOption, transformFileOption, watchOption, colorOption, durationsOption, timeoutOption })
         {
             command.Add(option);
 
@@ -133,7 +140,8 @@ public static class RunCommand
                 result.GetValue(timeoutOption) is { } seconds ? TimeSpan.FromSeconds(seconds) : null,
                 result.InvocationConfiguration.Output,
                 result.InvocationConfiguration.Error,
-                batchOnly: batchOnly));
+                batchOnly: batchOnly,
+                watch: result.GetValue(watchOption)));
 
         return command;
     }
@@ -154,7 +162,9 @@ public static class RunCommand
         CancellationToken cancellationToken = default,
         TextReader? inputReader = null,
         bool batchOnly = false,
-        Func<IReadOnlyList<RunDeclarationSelection.Candidate>, string>? selectDeclaration = null)
+        Func<IReadOnlyList<RunDeclarationSelection.Candidate>, string>? selectDeclaration = null,
+        bool watch = false,
+        Func<IReadOnlyList<string>, IFileWatcher>? createWatcher = null)
     {
         output ??= Console.Out;
         error ??= Console.Error;
@@ -185,6 +195,12 @@ public static class RunCommand
                     Environment.GetEnvironmentVariable(FormatCommandShared.ColorEnvironmentVariable));
 
             var console = FormatCommandShared.CreateSystemConsole(error, color.Value);
+
+            if (watch && transformFile is not null)
+            {
+                throw new ArgumentException(
+                    "--watch cannot be combined with --transform-file; use distinct input and output files.");
+            }
 
             if (transformFile is not null)
             {
@@ -228,9 +244,6 @@ public static class RunCommand
             compilationDuration = stopwatch.Elapsed;
             executionStarted = true;
             using var execution = tracker.EnterScope("execution", entryPoint);
-            var caches = new PineVMSharedCaches();
-            var invocations = new InvocationCache();
-            var vm = tracker.CreateVm(new InvocationCacheAccessFromDictionary(invocations), caches);
 
             var environment =
                 ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiled.Environment)
@@ -244,6 +257,13 @@ public static class RunCommand
                 record.Fields.Any(field => field is { FieldName: "init", FieldType: Type.FunctionType }) &&
                 record.Fields.Any(field => field is { FieldName: "subscriptions", FieldType: Type.FunctionType }))
             {
+                if (watch)
+                {
+                    throw DeclarationError(
+                        compiled,
+                        "--watch supports batch functions only, not interactive applications.");
+                }
+
                 if (batchOnly)
                 {
                     throw DeclarationError(
@@ -259,6 +279,10 @@ public static class RunCommand
 
                 if (batchInputs.Count is not 0 || outputFile is not null)
                     throw new ArgumentException("Batch input/output options cannot be used with an application.");
+
+                var caches = new PineVMSharedCaches();
+                var invocations = new InvocationCache();
+                var vm = tracker.CreateVm(new InvocationCacheAccessFromDictionary(invocations), caches);
 
                 var selectedValue =
                     ElmSourceCompilation.EvaluateZeroParameterRoot(wrapper, vm, caches.ParsedExpressions)
@@ -298,145 +322,210 @@ public static class RunCommand
                     "Supply one --input or --input-file option per parameter, in parameter order.");
             }
 
-            if (batchInputs.Count < parameterTypes.Count)
+            if (watch)
             {
-                error.WriteLine(
-                    "Supply batch input using --input, --input-file, or --transform-file, or enter it below.");
+                if (batchInputs.Count != parameterTypes.Count)
+                {
+                    throw new ArgumentException(
+                        "--watch requires every argument explicitly; input prompts are not supported.");
+                }
+
+                if (outputFile is null)
+                    throw new ArgumentException("--watch requires --output-file.");
+
+                var inputFiles = batchInputs.Where(input => input.IsFile).Select(input => input.Value).ToArray();
+
+                if (inputFiles.Length is 0 || inputFiles.Any(RunSource.IsRemote))
+                {
+                    throw new ArgumentException(
+                        "--watch requires at least one local --input-file and does not support remote input files.");
+                }
+
+                var paths =
+                    inputFiles.Select(BatchInputWatcher.ResolveDirectoryLinks)
+                    .Distinct(BatchInputWatcher.PathComparer).ToArray();
+
+                if (paths.Contains(BatchInputWatcher.ResolveDirectoryLinks(outputFile), BatchInputWatcher.PathComparer))
+                    throw new ArgumentException("--watch requires an output file distinct from every input file.");
+
+                var exit =
+                    FileWatchRunner.RunAsync(
+                        Path.GetDirectoryName(paths[0])!,
+                        _ =>
+                        {
+                            var result = 0;
+
+                            try
+                            {
+                                ApplyBatch();
+                            }
+                            catch (Exception exception) when (!token.IsCancellationRequested)
+                            {
+                                WriteFailure(error, color.Value, exception);
+                                result = 1;
+                            }
+
+                            error.WriteLine("Waiting for input changes...");
+                            return result;
+                        },
+                        () => error.WriteLine("Watching input files: " + string.Join(", ", paths) + ". Stop with Ctrl+C."),
+                        exception => error.WriteLine("File watcher failed: " + exception.Message),
+                        token,
+                        _ => createWatcher?.Invoke(paths) ?? new BatchInputWatcher(paths))
+                    .GetAwaiter().GetResult();
+
+                token.ThrowIfCancellationRequested();
+                return exit;
             }
 
-            using var standardInput =
-                batchInputs.Count < parameterTypes.Count && inputReader is null
-                ?
-                new StreamReader(Console.OpenStandardInput(), Console.InputEncoding)
-                :
-                null;
+            return ApplyBatch();
 
-            var arguments = new ElmValue[parameterTypes.Count];
-            var argumentTypeVariables = new Dictionary<string, Type>();
-            RunValues.TextEncoding? encoding = null;
-            error.WriteLine("Arguments (in parameter order):");
-
-            for (var index = 0; index < arguments.Length; ++index)
+            int ApplyBatch()
             {
-                console.MarkupLine(
-                    $"  Argument {index + 1}/{arguments.Length}: " +
-                    RunDeclarationSelection.SignatureMarkup(compiled.ParameterSignatures[index]));
+                var caches = new PineVMSharedCaches();
+                var invocations = new InvocationCache();
+                var vm = tracker.CreateVm(new InvocationCacheAccessFromDictionary(invocations), caches);
 
-                BatchInput input;
-                string inputSource;
-
-                if (index < batchInputs.Count)
-                {
-                    input = batchInputs[index];
-                    inputSource = input.IsFile ? "--input-file" : "--input";
-
-                    if (transformFile is not null)
-                        inputSource = "--transform-file";
-                }
-                else
+                if (batchInputs.Count < parameterTypes.Count)
                 {
                     error.WriteLine(
-                        parameterTypes[index] is Type.StringType
-                        ?
-                        "    Enter text, or an Elm string literal with quotes and escapes."
-                        :
-                        "    Enter an Elm value matching this parameter's type.");
+                        "Supply batch input using --input, --input-file, or --transform-file, or enter it below.");
+                }
 
-                    error.Write(
-                        parameterTypes.Count is 1 ? "Input> " : $"Input {index + 1} of {parameterTypes.Count}> ");
+                using var standardInput =
+                    batchInputs.Count < parameterTypes.Count && inputReader is null
+                    ?
+                    new StreamReader(Console.OpenStandardInput(), Console.InputEncoding)
+                    :
+                    null;
 
-                    error.Flush();
+                var arguments = new ElmValue[parameterTypes.Count];
+                var argumentTypeVariables = new Dictionary<string, Type>();
+                RunValues.TextEncoding? encoding = null;
+                error.WriteLine("Arguments (in parameter order):");
 
-                    // Console streams may not interrupt an in-flight read when its token is cancelled.
-                    var line =
-                        (inputReader ?? standardInput!).ReadLineAsync(token).AsTask()
-                        .WaitAsync(token).GetAwaiter().GetResult();
+                for (var index = 0; index < arguments.Length; ++index)
+                {
+                    console.MarkupLine(
+                        $"  Argument {index + 1}/{arguments.Length}: " +
+                        RunDeclarationSelection.SignatureMarkup(compiled.ParameterSignatures[index]));
 
-                    error.WriteLine();
-                    token.ThrowIfCancellationRequested();
+                    BatchInput input;
+                    string inputSource;
 
-                    if (line is null)
+                    if (index < batchInputs.Count)
                     {
-                        throw new ArgumentException(
-                            "No batch input was received (end of input). Supply --input, --input-file, or --transform-file.");
+                        input = batchInputs[index];
+                        inputSource = input.IsFile ? "--input-file" : "--input";
+
+                        if (transformFile is not null)
+                            inputSource = "--transform-file";
+                    }
+                    else
+                    {
+                        error.WriteLine(
+                            parameterTypes[index] is Type.StringType
+                            ?
+                            "    Enter text, or an Elm string literal with quotes and escapes."
+                            :
+                            "    Enter an Elm value matching this parameter's type.");
+
+                        error.Write(
+                            parameterTypes.Count is 1 ? "Input> " : $"Input {index + 1} of {parameterTypes.Count}> ");
+
+                        error.Flush();
+
+                        // Console streams may not interrupt an in-flight read when its token is cancelled.
+                        var line =
+                            (inputReader ?? standardInput!).ReadLineAsync(token).AsTask()
+                            .WaitAsync(token).GetAwaiter().GetResult();
+
+                        error.WriteLine();
+                        token.ThrowIfCancellationRequested();
+
+                        if (line is null)
+                        {
+                            throw new ArgumentException(
+                                "No batch input was received (end of input). Supply --input, --input-file, or --transform-file.");
+                        }
+
+                        input = new(line);
+                        inputSource = "stdin";
                     }
 
-                    input = new(line);
-                    inputSource = "stdin";
+                    if (input.IsFile)
+                    {
+                        var bytes = sourceLoader.ReadInput(input.Value, token);
+
+                        var (argument, inputEncoding) =
+                            RunValues.FromFile(bytes, parameterTypes[index]);
+
+                        arguments[index] = argument;
+                        encoding ??= inputEncoding;
+
+                        inputSource +=
+                            " " + RunValues.Render(ElmValue.StringInstance(input.Value)) + $" ({bytes.Length} bytes)";
+                    }
+                    else
+                        arguments[index] = RunValues.ParseInput(input.Value, parameterTypes[index]);
+
+                    RunValues.Validate(arguments[index], parameterTypes[index], compiled.Types, argumentTypeVariables);
+                    error.WriteLine("    Source: " + inputSource);
+                    error.WriteLine("    Value: " + RunValues.RenderInputPreview(arguments[index]));
                 }
 
-                if (input.IsFile)
+                token.ThrowIfCancellationRequested();
+                error.WriteLine("Applying " + compiled.Declaration + "...");
+
+                var encodedArguments = arguments.Select(ElmValueEncoding.ElmValueAsPineValue).ToArray();
+                var result = wrapper;
+                var appliedArguments = 0;
+
+                while (appliedArguments < encodedArguments.Length)
                 {
-                    var bytes = sourceLoader.ReadInput(input.Value, token);
+                    var callable =
+                        FunctionRecord.ParseFunctionRecordTagged(result, caches.ParsedExpressions)
+                        .Extract(message => throw new InvalidOperationException(message));
 
-                    var (argument, inputEncoding) =
-                        RunValues.FromFile(bytes, parameterTypes[index]);
+                    var count = callable.ParameterCount - callable.ArgumentsAlreadyCollected.Length;
 
-                    arguments[index] = argument;
-                    encoding ??= inputEncoding;
+                    result =
+                        ElmInteractiveEnvironment.ApplyFunction(
+                            vm,
+                            callable,
+                            encodedArguments.Skip(appliedArguments).Take(count).ToArray(),
+                            token)
+                        .Extract(message => throw new InvalidOperationException(message));
 
-                    inputSource +=
-                        " " + RunValues.Render(ElmValue.StringInstance(input.Value)) + $" ({bytes.Length} bytes)";
+                    appliedArguments += count;
+                }
+
+                token.ThrowIfCancellationRequested();
+
+                if (FunctionRecord.ParseFunctionRecordTagged(result, caches.ParsedExpressions).IsOkOrNull() is { ParameterCount: > 0 })
+                {
+                    throw new ArgumentException(
+                        "The selected function returned another function after all inputs were applied.");
+                }
+
+                var value =
+                    ElmValueEncoding.PineValueAsElmValue(result, null, null)
+                    .Extract(message => throw new InvalidOperationException(message));
+
+                if (outputFile is not null)
+                {
+                    AtomicFile.WriteAllBytes(outputFile, RunValues.ToFile(value, encoding), token);
+                    error.WriteLine("Result written to " + RunValues.Render(ElmValue.StringInstance(outputFile)) + ".");
                 }
                 else
-                    arguments[index] = RunValues.ParseInput(input.Value, parameterTypes[index]);
+                {
+                    var text = RunValues.Render(value);
+                    token.ThrowIfCancellationRequested();
+                    output.WriteLine(text);
+                }
 
-                RunValues.Validate(arguments[index], parameterTypes[index], compiled.Types, argumentTypeVariables);
-                error.WriteLine("    Source: " + inputSource);
-                error.WriteLine("    Value: " + RunValues.RenderInputPreview(arguments[index]));
+                return 0;
             }
-
-            token.ThrowIfCancellationRequested();
-            error.WriteLine("Applying " + compiled.Declaration + "...");
-
-            var encodedArguments = arguments.Select(ElmValueEncoding.ElmValueAsPineValue).ToArray();
-            var result = wrapper;
-            var appliedArguments = 0;
-
-            while (appliedArguments < encodedArguments.Length)
-            {
-                var callable =
-                    FunctionRecord.ParseFunctionRecordTagged(result, caches.ParsedExpressions)
-                    .Extract(message => throw new InvalidOperationException(message));
-
-                var count = callable.ParameterCount - callable.ArgumentsAlreadyCollected.Length;
-
-                result =
-                    ElmInteractiveEnvironment.ApplyFunction(
-                        vm,
-                        callable,
-                        encodedArguments.Skip(appliedArguments).Take(count).ToArray(),
-                        token)
-                    .Extract(message => throw new InvalidOperationException(message));
-
-                appliedArguments += count;
-            }
-
-            token.ThrowIfCancellationRequested();
-
-            if (FunctionRecord.ParseFunctionRecordTagged(result, caches.ParsedExpressions).IsOkOrNull() is { ParameterCount: > 0 })
-            {
-                throw new ArgumentException(
-                    "The selected function returned another function after all inputs were applied.");
-            }
-
-            var value =
-                ElmValueEncoding.PineValueAsElmValue(result, null, null)
-                .Extract(message => throw new InvalidOperationException(message));
-
-            if (outputFile is not null)
-            {
-                AtomicFile.WriteAllBytes(outputFile, RunValues.ToFile(value, encoding), token);
-                error.WriteLine("Result written to " + RunValues.Render(ElmValue.StringInstance(outputFile)) + ".");
-            }
-            else
-            {
-                var text = RunValues.Render(value);
-                token.ThrowIfCancellationRequested();
-                output.WriteLine(text);
-            }
-
-            return 0;
         }
         catch (Exception) when (token.IsCancellationRequested)
         {
@@ -449,20 +538,9 @@ public static class RunCommand
 
             return tracker.CancelledByUser ? 130 : 124;
         }
-        catch (Exception exception) when (exception is ArgumentException or IOException or InvalidDataException or UnauthorizedAccessException or
-            ElmDependencyResolutionException or Core.Elm.ElmCompilerInDotnet.ElmCompilationException or InvalidOperationException)
-        {
-            var console = FormatCommandShared.CreateSystemConsole(error, color ?? CommandLineColorMode.Auto);
-            FormatCommandShared.WriteLabelledLine(console, "Error:", FormatCommandTheme.Error, exception.Message);
-
-            if (exception is DeclarationException declaration)
-                RunDeclarationSelection.WriteInferredSignature(console, declaration.Signature);
-
-            return 1;
-        }
         catch (Exception exception)
         {
-            error.WriteLine("Failed to run with runtime exception: " + exception);
+            WriteFailure(error, color ?? CommandLineColorMode.Auto, exception);
             return 1;
         }
         finally
@@ -487,6 +565,21 @@ public static class RunCommand
                 }
             }
         }
+    }
+
+    private static void WriteFailure(TextWriter error, CommandLineColorMode color, Exception exception)
+    {
+        if (exception is ArgumentException or IOException or InvalidDataException or UnauthorizedAccessException or
+            ElmDependencyResolutionException or ElmCompilationException or InvalidOperationException)
+        {
+            var console = FormatCommandShared.CreateSystemConsole(error, color);
+            FormatCommandShared.WriteLabelledLine(console, "Error:", FormatCommandTheme.Error, exception.Message);
+
+            if (exception is DeclarationException declaration)
+                RunDeclarationSelection.WriteInferredSignature(console, declaration.Signature);
+        }
+        else
+            error.WriteLine("Failed to run with runtime exception: " + exception);
     }
 
     private static DeclarationException DeclarationError(RunCompilation compiled, string message) =>

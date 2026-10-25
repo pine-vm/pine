@@ -4,9 +4,9 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 
-namespace Pine.CLI.Elm;
+namespace Pine.CLI;
 
-internal static class TestWatchRunner
+internal static class FileWatchRunner
 {
     internal static async Task<int> RunAsync(
         string directory,
@@ -14,7 +14,7 @@ internal static class TestWatchRunner
         Action onReady,
         Action<Exception> onError,
         CancellationToken cancellationToken,
-        Func<string, ITestWatcher>? createWatcher = null)
+        Func<string, IFileWatcher>? createWatcher = null)
     {
         var changes =
             Channel.CreateBounded<bool>(
@@ -39,7 +39,7 @@ internal static class TestWatchRunner
         {
             using var watcher =
                 createWatcher?.Invoke(Path.GetFullPath(directory))
-                ?? new FileSystemTestWatcher(Path.GetFullPath(directory));
+                ?? new DirectoryFileWatcher(Path.GetFullPath(directory));
 
             watcher.Changed += Changed;
             watcher.Error += Failed;
@@ -59,7 +59,7 @@ internal static class TestWatchRunner
                         return 1;
                     }
 
-                    // Leave events queued during the run so edits made while compiling or testing are not lost.
+                    // Leave events queued during the run so edits made while processing are not lost.
                     run(cancellationToken);
                     await changes.Reader.ReadAsync(cancellationToken);
 
