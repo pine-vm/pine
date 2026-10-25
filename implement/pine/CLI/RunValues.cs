@@ -160,8 +160,30 @@ internal static class RunValues
         return ElmValue.TagInstance(identifier.QualifiedName.DeclName, arguments);
     }
 
-    public static void Validate(ElmValue value, Type type, RunCompilation.TypeInformation information) =>
-        Validate(value, type, information.Choices, []);
+    public static string RenderInputPreview(ElmValue value)
+    {
+        const int maxLength = 160;
+
+        if (value is ElmValue.ElmString text && text.Value.Length > maxLength)
+        {
+            var length = char.IsHighSurrogate(text.Value[maxLength - 1]) ? maxLength - 1 : maxLength;
+            return Render(ElmValue.StringInstance(text.Value[..length])) + $" ... ({text.Value.Length} characters)";
+        }
+
+        if (value is ElmValue.ElmBytes bytes)
+        {
+            return
+                $"Bytes {bytes.Value.Length} 0x{Convert.ToHexStringLower(bytes.Value.Span[..Math.Min(32, bytes.Value.Length)])}" +
+                (bytes.Value.Length > 32 ? "..." : "");
+        }
+
+        var rendered = Render(value);
+        return rendered.Length > maxLength ? rendered[..maxLength] + " ... (preview)" : rendered;
+    }
+
+    public static void Validate(
+        ElmValue value, Type type, RunCompilation.TypeInformation information, Dictionary<string, Type> variables) =>
+        Validate(value, type, information.Choices, variables);
 
     private static void Validate(
         ElmValue value, Type type, Dictionary<string, TypeInference.ChoiceTypeDefinition> choices, Dictionary<string, Type> variables)

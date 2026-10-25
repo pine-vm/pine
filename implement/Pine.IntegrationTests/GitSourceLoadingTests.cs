@@ -198,7 +198,7 @@ public sealed class GitSourceLoadingTests : IDisposable
 
         RunCommand.Execute(
             Url(fixture, "project/src/Main.elm/main"),
-            input: "hello",
+            inputs: [new("hello")],
             color: CommandLineColorMode.Never,
             output: output,
             error: errors,

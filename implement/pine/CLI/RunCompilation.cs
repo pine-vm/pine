@@ -19,6 +19,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 
+using ExpressionSyntax = Pine.Core.Elm.Syntax.Concrete.Expression;
 using Type = Pine.Core.Elm.ElmCompilerInDotnet.TypeInference.InferredType;
 
 namespace Pine.CLI;
@@ -28,7 +29,8 @@ internal sealed record RunCompilation(
     string ModuleName,
     string Declaration,
     RunCompilation.TypeInformation Types,
-    string DeclarationSignature)
+    string DeclarationSignature,
+    IReadOnlyList<string> ParameterSignatures)
 {
     internal sealed record TypeInformation(Type Type, Dictionary<string, TypeInference.ChoiceTypeDefinition> Choices);
 
@@ -177,13 +179,61 @@ internal sealed record RunCompilation(
                 "." + choice.TypeName;
         }
 
-        RunCompilation Compilation(PineValue environment, TypeInformation types) =>
-            new(
-                environment,
-                moduleName,
-                declaration,
-                types,
-                declaration + " : " + TypeInference.RenderInferredType(types.Type, ChoiceTypeName));
+        RunCompilation Compilation(PineValue environment, TypeInformation types)
+        {
+            var function = functions.Single(item => item.Function.Declaration.Value.Name.Value == declaration).Function;
+            var patterns = function.Declaration.Value.Arguments.ToList();
+            var body = function.Declaration.Value.Expression.Value;
+
+            while (true)
+            {
+                if (body is ExpressionSyntax.Parenthesized parenthesized)
+                    body = parenthesized.Expression.Value;
+
+                else if (body is ExpressionSyntax.LambdaExpression lambda)
+                {
+                    patterns.AddRange(lambda.Lambda.Arguments);
+                    body = lambda.Lambda.Expression.Value;
+                }
+                else
+                    break;
+            }
+
+            var annotations = new List<string>();
+            var annotation = function.Signature?.Value.TypeAnnotation.Value;
+
+            while (annotation is TypeAnnotation.FunctionTypeAnnotation arrow)
+            {
+                annotations.Add(Regex.Replace(Rendering.RenderTypeAnnotation(arrow.ArgumentType), @"\s+", " "));
+                annotation = arrow.ReturnType.Value;
+            }
+
+            var parameterSignatures =
+                TypeInference.ExtractArgumentTypesFromFunctionType(types.Type)
+                .Select(
+                    (type, index) =>
+                    (index < patterns.Count
+                    ?
+                    Rendering.RenderPattern(patterns[index])
+                    :
+                    "argument " + (index + 1)) +
+                    " : " +
+                    (index < annotations.Count
+                    ?
+                    annotations[index]
+                    :
+                    TypeInference.RenderInferredType(type, ChoiceTypeName)))
+                .ToArray();
+
+            return
+                new(
+                    environment,
+                    moduleName,
+                    declaration,
+                    types,
+                    declaration + " : " + TypeInference.RenderInferredType(types.Type, ChoiceTypeName),
+                    parameterSignatures);
+        }
 
         var root = DeclQualifiedName.Create(moduleName.Split('.'), declaration);
         var treeHash = Convert.ToHexStringLower(PineValueHashTree.ComputeHashSorted(tree).Span);

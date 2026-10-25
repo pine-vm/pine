@@ -66,6 +66,20 @@ public class Rendering
         return context.Output.ToString();
     }
 
+    /// <summary>Renders a pattern using its source token locations.</summary>
+    public static string RenderPattern(Node<Pattern> pattern)
+    {
+        var context =
+            new RenderContext(LinebreakStyle.LF)
+            {
+                CurrentRow = pattern.Range.Start.Row,
+                CurrentColumn = pattern.Range.Start.Column
+            };
+
+        RenderPattern(pattern, context);
+        return context.Output.ToString();
+    }
+
     /// <summary>
     /// Represents an item that can be inserted during rendering (comment or incomplete declaration).
     /// </summary>

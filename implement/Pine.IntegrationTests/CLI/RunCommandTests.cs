@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.CommandLine;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -52,6 +53,14 @@ public sealed class RunCommandTests : IDisposable
             record : { name : String, count : Int } -> String
             record input = String.repeat input.count input.name
 
+            type alias Options = { name : String, count : Int }
+
+            recordPattern : Options -> String
+            recordPattern { name, count } = String.repeat count name
+
+            wildcard : String -> String
+            wildcard _ = "ignored"
+
             tuple : ( String, Int ) -> String
             tuple ( text, count ) = String.repeat count text
 
@@ -66,6 +75,33 @@ public sealed class RunCommandTests : IDisposable
 
             multiple : String -> String -> String
             multiple a b = a ++ b
+
+            fileTuple : String -> ( String, Int ) -> String
+            fileTuple text ( suffix, count ) = String.repeat count text ++ suffix
+
+            tupleFile : ( String, Int ) -> String -> String
+            tupleFile ( prefix, count ) text = prefix ++ String.repeat count text
+
+            fileChoice : String -> Box ( String, Int ) -> String
+            fileChoice text box =
+                case box of
+                    Box ( suffix, count ) -> String.repeat count text ++ suffix
+                    Empty -> text
+
+            three : String -> String -> String -> String
+            three first second third = first ++ second ++ third
+
+            curried : String -> String -> String
+            curried first = \second -> first ++ second
+
+            partial : String -> String -> String
+            partial = three "prefix:"
+
+            multipleAlias : String -> String -> String
+            multipleAlias = multiple
+
+            same : a -> a -> a
+            same first second = first
 
             inferred text = String.length text
 
@@ -113,7 +149,8 @@ public sealed class RunCommandTests : IDisposable
         TextReader? inputReader = null,
         bool batchOnly = false,
         Func<IReadOnlyList<RunDeclarationSelection.Candidate>, string>? selectDeclaration = null,
-        CommandLineColorMode color = CommandLineColorMode.Never)
+        CommandLineColorMode color = CommandLineColorMode.Never,
+        IReadOnlyList<RunCommand.BatchInput>? inputs = null)
     {
         using var output = new StringWriter();
         using var error = new StringWriter();
@@ -121,8 +158,12 @@ public sealed class RunCommandTests : IDisposable
         var exit =
             RunCommand.Execute(
                 source ?? Module + (declaration is null ? "" : "/" + declaration),
-                input: input,
-                inputFile: inputFile,
+                inputs:
+                inputs ??
+                [
+                    .. input is null ? Array.Empty<RunCommand.BatchInput>() : [new(input)],
+                    .. inputFile is null ? Array.Empty<RunCommand.BatchInput>() : [new(inputFile, IsFile: true)]
+                ],
                 outputFile: outputFile,
                 transformFile: transformFile,
                 color: color,
@@ -430,7 +471,7 @@ public sealed class RunCommandTests : IDisposable
             eof.Exit.Should().Be(1);
             eof.Output.Should().BeEmpty();
             eof.Error.Should().Contain("Input> ").And.Contain("No batch input was received (end of input).");
-            Run(input: "x", inputFile: "input", batchOnly: batchOnly).Error.Should().Contain("mutually exclusive");
+            Run(input: "x", inputFile: "input", batchOnly: batchOnly).Error.Should().Contain("expected 1, received 2");
             Run(input: "x", transformFile: "input", batchOnly: batchOnly).Error.Should().Contain("cannot be combined");
 
             Run(transformFile: "https://github.com/a/b/blob/main/input", batchOnly: batchOnly).Error.Should().Contain(
@@ -575,7 +616,6 @@ public sealed class RunCommandTests : IDisposable
     }
 
     [Theory]
-    [InlineData("multiple", "multiple : String -> String -> String")]
     [InlineData("constant", "constant : Int")]
     public void Run_unsupported_declaration_reports_the_selected_Elm_signature(string declaration, string signature)
     {
@@ -585,7 +625,7 @@ public sealed class RunCommandTests : IDisposable
             result.Exit.Should().Be(1);
             result.Output.Should().BeEmpty();
 
-            result.Error.Should().Contain("Select a function taking one input")
+            result.Error.Should().Contain("Select a function taking one or more inputs")
                 .And.Contain(Environment.NewLine + "    " + signature + Environment.NewLine);
 
             if (batchOnly)
@@ -638,12 +678,14 @@ public sealed class RunCommandTests : IDisposable
         result.Exit.Should().Be(1, result.Error);
         result.Output.Should().BeEmpty();
         result.Error.Should().Contain("runRoot : " + inputType + " -> Maybe (List Int)");
+        result.Error.Should().Contain("input : " + inputType);
 
         var cached = Run(source: main + "/runRoot", timeout: TimeSpan.FromSeconds(45));
         cached.Exit.Should().Be(1, cached.Error);
 
         cached.Error.Should().Contain("Using cached run compilation.")
-            .And.Contain("runRoot : " + inputType + " -> Maybe (List Int)");
+            .And.Contain("runRoot : " + inputType + " -> Maybe (List Int)")
+            .And.Contain("input : " + inputType);
     }
 
     [Theory]
@@ -976,7 +1018,16 @@ public sealed class RunCommandTests : IDisposable
         foreach (var invalid in new[] { "0", "-1", "NaN", "Infinity" })
             command.Parse([Module, "--timeout", invalid]).Errors.Should().NotBeEmpty();
 
-        command.Parse([Module, "--input", "one", "--input", "two"]).Errors.Should().NotBeEmpty();
+        command.Parse([Module, "--input", "one", "--input", "two"]).Errors.Should().BeEmpty();
+        command.Parse([Module, "--input-file", "one", "--input-file", "two"]).Errors.Should().BeEmpty();
+        command.Parse([Module, "--input", "one", "--input-file", "two"]).Errors.Should().BeEmpty();
+        command.Parse([Module, "--input"]).Errors.Should().NotBeEmpty();
+        command.Parse([Module, "--input-file"]).Errors.Should().NotBeEmpty();
+        command.Parse([Module, "--input", "one", "--input"]).Errors.Should().NotBeEmpty();
+        command.Parse([Module, "--input-file", "one", "--input-file"]).Errors.Should().NotBeEmpty();
+        command.Parse([Module, "--input", "--input", "two"]).Errors.Should().NotBeEmpty();
+        command.Parse([Module, "--input", "one", "two"]).Errors.Should().NotBeEmpty();
+        command.Parse([Module, "--output-file", "one", "--output-file", "two"]).Errors.Should().NotBeEmpty();
     }
 
     [Theory]
@@ -1002,6 +1053,361 @@ public sealed class RunCommandTests : IDisposable
             .And.NotContain("Input> ");
     }
 
+    [Theory]
+    [InlineData("multiple", "\"firstsecond\"", "--input", "first", "--input", "second")]
+    [InlineData("multiple", "\"samesame\"", "--input", "same", "--input", "same")]
+    [InlineData("multiple", "\"second\"", "--input", "", "--input", "second")]
+    [InlineData("multiple", "\"--input-filex\"", "--input=--input-file", "--input=x")]
+    [InlineData("multipleAlias", "\"firstsecond\"", "--input", "first", "--input=second")]
+    [InlineData("curried", "\"firstsecond\"", "--input", "first", "--input", "second")]
+    [InlineData("partial", "\"prefix:firstsecond\"", "--input", "first", "--input", "second")]
+    [InlineData("three", "\"firstsecondthird\"", "--input", "first", "--input", "second", "--input", "third")]
+    [InlineData("fileTuple", "\"ababab!\"", "--input-file", "<file>", "--input", "( \"!\", 3 )")]
+    [InlineData("tupleFile", "\"!ababab\"", "--input", "( \"!\", 3 )", "--input-file", "<file>")]
+    [InlineData("fileChoice", "\"ababab!\"", "--input-file=<file>", "--input:Box ( \"!\", 3 )")]
+    [InlineData("fileChoice", "\"ab\"", "--input-file", "<file>", "--input", "Empty")]
+    [InlineData("three", "\"ab|ab\"", "--input-file", "<file>", "--input", "|", "--input-file=<file>")]
+    [InlineData("same", "\"first\"", "--input", "\"first\"", "--input", "\"second\"")]
+    public void Run_cli_multi_parameter_inputs_preserve_order(
+        string declaration,
+        string expected,
+        params string[] options)
+    {
+        var path = Path.Combine(_directory, "input");
+        File.WriteAllText(path, "ab");
+
+        foreach (var batchOnly in new[] { false, true })
+        {
+            using var output = new StringWriter();
+            using var error = new StringWriter();
+
+            var exit =
+                RunCommand.Create(batchOnly).Parse(
+                    [
+                        Module + "/" + declaration,
+                        .. options.Select(option => option.Replace("<file>", path, StringComparison.Ordinal)),
+                        "--color", "Never", "--timeout", "45"
+                    ])
+                .Invoke(new InvocationConfiguration { Output = output, Error = error });
+
+            exit.Should().Be(0, error.ToString());
+            output.ToString().Should().Be(expected + Environment.NewLine);
+            error.ToString().Should().Contain("Batch mode was selected because").And.NotContain("Input> ");
+        }
+    }
+
+    [Theory]
+    [InlineData("multiple", 3, 2)]
+    [InlineData("runRoot", 2, 1)]
+    public void Run_batch_rejects_excess_inputs_before_reading_files(
+        string declaration, int supplied, int required)
+    {
+        var path = Path.Combine(_directory, "output");
+        File.WriteAllText(path, "unchanged");
+
+        foreach (var batchOnly in new[] { false, true })
+        {
+            using var reader = new StringReader("unused input\n");
+
+            var result =
+                Run(
+                    declaration,
+                    inputs: [.. Enumerable.Repeat(new RunCommand.BatchInput("missing-file", IsFile: true), supplied)],
+                    outputFile: path,
+                    inputReader: reader,
+                    batchOnly: batchOnly);
+
+            result.Exit.Should().Be(1);
+            result.Output.Should().BeEmpty();
+
+            result.Error.Should().Contain($"expected {required}, received {supplied}")
+                .And.Contain(declaration + " : ")
+                .And.NotContain("Input> ");
+
+            reader.ReadLine().Should().Be("unused input");
+            File.ReadAllText(path).Should().Be("unchanged");
+        }
+    }
+
+    [Theory]
+    [InlineData("fileTuple", "( \"!\", \"not an Int\" )", "does not match")]
+    [InlineData("fileChoice", "Box ( 42, 3 )", "does not match")]
+    [InlineData("multiple", "\"unterminated", "Invalid --input expression")]
+    public void Run_batch_validates_each_parameter_before_writing_output(
+        string declaration, string expression, string message)
+    {
+        var inputPath = Path.Combine(_directory, "input");
+        var outputPath = Path.Combine(_directory, "output");
+        File.WriteAllText(inputPath, "ab");
+        File.WriteAllText(outputPath, "unchanged");
+
+        foreach (var batchOnly in new[] { false, true })
+        {
+            var result =
+                Run(
+                    declaration,
+                    inputs: [new(inputPath, IsFile: true), new(expression)],
+                    outputFile: outputPath,
+                    batchOnly: batchOnly);
+
+            result.Exit.Should().Be(1);
+            result.Output.Should().BeEmpty();
+            result.Error.Should().Contain(message);
+            File.ReadAllText(outputPath).Should().Be("unchanged");
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Run_batch_validates_shared_type_variables_across_parameters(bool batchOnly)
+    {
+        var result = Run("same", inputs: [new("\"text\""), new("42")], batchOnly: batchOnly);
+        result.Exit.Should().Be(1);
+        result.Output.Should().BeEmpty();
+        result.Error.Should().Contain("does not match");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Run_prompts_once_per_parameter_when_no_inputs_are_supplied(bool batchOnly)
+    {
+        using var reader = new StringReader("ab\n( \"!\", 3 )\nunused input\n");
+        var result = Run("fileTuple", inputReader: reader, batchOnly: batchOnly);
+        result.Exit.Should().Be(0, result.Error);
+        result.Output.Should().Be("\"ababab!\"" + Environment.NewLine);
+        result.Error.Should().Contain("Input 1 of 2> ").And.Contain("Input 2 of 2> ");
+
+        result.Error.Should().Contain("Argument 1/2: text : String")
+            .And.Contain("Argument 2/2: ( suffix, count ) : ( String, Int )")
+            .And.Contain("Source: stdin")
+            .And.Contain("Value: \"ab\"")
+            .And.Contain("Value: (\"!\", 3)");
+
+        reader.ReadLine().Should().Be("unused input");
+
+        using var incomplete = new StringReader("ab\n");
+        var eof = Run("fileTuple", inputReader: incomplete, batchOnly: batchOnly);
+        eof.Exit.Should().Be(1);
+        eof.Output.Should().BeEmpty();
+        eof.Error.Should().Contain("No batch input was received (end of input).");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Run_partial_inputs_prompt_for_each_remaining_parameter_and_log_used_inputs(bool batchOnly)
+    {
+        for (var attempt = 0; attempt < 2; ++attempt)
+        {
+            using var reader = new StringReader("second\nthird\nunused input\n");
+            var result = Run("three", inputs: [new("first")], inputReader: reader, batchOnly: batchOnly);
+            result.Exit.Should().Be(0, result.Error);
+            result.Output.Should().Be("\"firstsecondthird\"" + Environment.NewLine);
+
+            result.Error.Should().Contain("Argument 1/3: first : String")
+                .And.Contain("Source: --input")
+                .And.Contain("Value: \"first\"")
+                .And.Contain("Argument 2/3: second : String")
+                .And.Contain("Input 2 of 3> ")
+                .And.Contain("Value: \"second\"")
+                .And.Contain("Argument 3/3: third : String")
+                .And.Contain("Input 3 of 3> ")
+                .And.Contain("Value: \"third\"")
+                .And.Contain("Applying three...")
+                .And.NotContain("Input 1 of 3> ");
+
+            result.Error.IndexOf("Argument 2/3:", StringComparison.Ordinal).Should().BeLessThan(
+                result.Error.IndexOf("Input 2 of 3> ", StringComparison.Ordinal));
+
+            result.Error.IndexOf("Argument 3/3:", StringComparison.Ordinal).Should().BeLessThan(
+                result.Error.IndexOf("Input 3 of 3> ", StringComparison.Ordinal));
+
+            reader.ReadLine().Should().Be("unused input");
+
+            if (attempt is 1)
+                result.Error.Should().Contain("Using cached run compilation.");
+        }
+    }
+
+    [Theory]
+    [InlineData("inferred", "hello\n", "text : String", "5")]
+    [InlineData("recordPattern", "{ name = \"x\", count = 2 }\n", "{ name, count } : Options", "\"xx\"")]
+    [InlineData("wildcard", "hello\n", "_ : String", "\"ignored\"")]
+    [InlineData("curried", "first\nsecond\n", "second : String", "\"firstsecond\"")]
+    [InlineData("multipleAlias", "first\nsecond\n", "argument 2 : String", "\"firstsecond\"")]
+    public void Run_parameter_guides_show_source_patterns_and_annotations_or_inferred_types(
+        string declaration, string input, string guide, string expected)
+    {
+        foreach (var batchOnly in new[] { false, true })
+        {
+            using var reader = new StringReader(input);
+            var result = Run(declaration, inputReader: reader, batchOnly: batchOnly);
+            result.Exit.Should().Be(0, result.Error);
+            result.Output.Should().Be(expected + Environment.NewLine);
+            result.Error.Should().Contain(guide).And.Contain("Source: stdin").And.Contain("Value:");
+
+            result.Error.IndexOf(guide, StringComparison.Ordinal).Should().BeLessThan(
+                result.Error.LastIndexOf("Input", StringComparison.Ordinal));
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Run_cli_prompts_for_a_missing_tuple_after_file_input_with_parameter_guides(bool batchOnly)
+    {
+        var path = Path.Combine(_directory, "input");
+        File.WriteAllText(path, "ab");
+
+        var start =
+            new ProcessStartInfo("dotnet")
+            {
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            };
+
+        foreach (var argument in new[]
+        {
+            typeof(RunCommand).Assembly.Location, batchOnly ? "apply" : "run",
+            Module + "/fileTuple", "--input-file", path, "--color", "Never", "--timeout", "45"
+        })
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        using var process = Process.Start(start)!;
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEndAsync();
+
+        try
+        {
+            await process.StandardInput.WriteAsync("( \"!\", 3 )\n");
+            process.StandardInput.Close();
+            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(60));
+            var diagnostics = await error;
+            process.ExitCode.Should().Be(0, diagnostics);
+            (await output).Should().Be("\"ababab!\"" + Environment.NewLine);
+
+            diagnostics.Should().Contain("fileTuple : String -> (String, Int) -> String")
+                .And.Contain("Argument 1/2: text : String")
+                .And.Contain("Source: --input-file")
+                .And.Contain(path)
+                .And.Contain("(2 bytes)")
+                .And.Contain("Value: \"ab\"")
+                .And.Contain("Argument 2/2: ( suffix, count ) : ( String, Int )")
+                .And.Contain("Input 2 of 2> ")
+                .And.Contain("Source: stdin")
+                .And.Contain("Value: (\"!\", 3)")
+                .And.NotContain("Input 1 of 2> ")
+                .And.NotContain("\u001b[");
+        }
+        finally
+        {
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Run_cancellation_at_a_remaining_parameter_prompt_preserves_output(bool batchOnly)
+    {
+        var path = Path.Combine(_directory, "output");
+        File.WriteAllText(path, "unchanged");
+        using var cancellation = new CancellationTokenSource();
+        using var reader = new CancellingInputReader(cancellation);
+
+        var result =
+            Run(
+                "multiple",
+                inputs: [new("first")],
+                outputFile: path,
+                inputReader: reader,
+                cancellationToken: cancellation.Token,
+                batchOnly: batchOnly);
+
+        result.Exit.Should().Be(130, result.Error);
+        result.Output.Should().BeEmpty();
+        result.Error.Should().Contain("Argument 2/2: b : String").And.Contain("Run cancelled.");
+        File.ReadAllText(path).Should().Be("unchanged");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Run_transform_prompts_for_remaining_arguments_and_logs_the_destination(bool batchOnly)
+    {
+        var path = Path.Combine(_directory, "transform");
+        File.WriteAllText(path, "ab", new UTF8Encoding(false, true));
+        using var reader = new StringReader("( \"!\", 3 )\n");
+        var result = Run("fileTuple", transformFile: path, inputReader: reader, batchOnly: batchOnly);
+        result.Exit.Should().Be(0, result.Error);
+        result.Output.Should().BeEmpty();
+
+        result.Error.Should().Contain("Source: --transform-file")
+            .And.Contain("Argument 2/2: ( suffix, count ) : ( String, Int )")
+            .And.Contain("Input 2 of 2> ")
+            .And.Contain("Result written to")
+            .And.Contain(path);
+
+        File.ReadAllText(path).Should().Be("ababab!");
+    }
+
+    [Fact]
+    public void Run_used_input_log_bounds_previews_without_changing_values()
+    {
+        var input = "[red]\n" + new string('x', 500);
+        var result = Run(input: input, batchOnly: true);
+        result.Exit.Should().Be(0, result.Error);
+
+        result.Output.Should().Be(
+            RunValues.Render(ElmValue.StringInstance(input.ToUpperInvariant())) + Environment.NewLine);
+
+        result.Error.Should().Contain("Argument 1/1: text : String")
+            .And.Contain("Value: \"[red]\\n")
+            .And.Contain("(506 characters)")
+            .And.NotContain(new string('x', 161));
+
+        RunValues.RenderInputPreview(new ElmValue.ElmBytes(new byte[1000]))
+            .Should().Be("Bytes 1000 0x" + new string('0', 64) + "...");
+
+        var prefix = new string('x', 159);
+
+        RunValues.RenderInputPreview(ElmValue.StringInstance(prefix + "\ud83d\ude42tail"))
+            .Should().Be("\"" + prefix + "\" ... (165 characters)");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Run_multiple_file_inputs_preserve_the_first_text_files_encoding(bool batchOnly)
+    {
+        var first = Path.Combine(_directory, "first");
+        var second = Path.Combine(_directory, "second");
+        var destination = Path.Combine(_directory, "output");
+        var encoding = new UnicodeEncoding(bigEndian: true, byteOrderMark: true, throwOnInvalidBytes: true);
+        File.WriteAllText(first, "first", encoding);
+        File.WriteAllText(second, "second", new UTF8Encoding(false, true));
+
+        var result =
+            Run(
+                "multiple",
+                inputs: [new(first, IsFile: true), new(second, IsFile: true)],
+                outputFile: destination,
+                batchOnly: batchOnly);
+
+        result.Exit.Should().Be(0, result.Error);
+        result.Output.Should().BeEmpty();
+
+        File.ReadAllBytes(destination).Should().Equal(
+            [.. encoding.GetPreamble(), .. encoding.GetBytes("firstsecond")]);
+    }
+
     [Fact]
     public async Task Apply_is_listed_in_top_level_help()
     {
@@ -1023,7 +1429,7 @@ public sealed class RunCommandTests : IDisposable
         {
             await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
             process.ExitCode.Should().Be(0, await error);
-            (await output).Should().Contain("Apply an Elm function to one input; reject interactive applications.");
+            (await output).Should().Contain("Apply an Elm function to batch inputs; reject interactive applications.");
         }
         finally
         {

@@ -1,9 +1,9 @@
 # Run and Apply Command Line Interface
 
 `pine run` selects an execution mode from the selected Elm declaration's type:
-run a command-line application, or apply a function to one batch input.
+run a command-line application, or apply a function to batch inputs.
 `pine apply` provides the same batch functionality but rejects interactive
-application declarations. Use `apply` when you intend to process one input and
+application declarations. Use `apply` when you intend to process batch inputs and
 want to ensure that selecting a different declaration cannot start an application.
 
 ```console
@@ -18,8 +18,8 @@ Source selection (both commands):
   --input-directory <directory>  Source directory for a relative local entry point.
 
 Batch input/output options:
-  --input <expression>           Elm literal, list, tuple, record, or choice constructor.
-  --input-file <file>            Local input file or GitHub/GitLab file URL.
+  --input <expression>           Elm literal, list, tuple, record, or choice constructor; repeat per parameter.
+  --input-file <file>            Local input file or GitHub/GitLab file URL; repeat or mix with --input.
   --output-file <file>           Write only to this local file; overwrite without prompting.
   --transform-file <file>        Read and replace the same local file.
 
@@ -35,7 +35,7 @@ Options for both commands:
 | Mode | Selected declaration's type | Input and output |
 | --- | --- | --- |
 | Application | A record with `init` and `subscriptions` functions, implementing Pine's command-line application interface. | The application receives stdin, emits stdout/stderr, and chooses its exit status. |
-| Batch | A function taking one input and returning a non-function value. | Pine obtains one input from an option or a prompt, applies the function once, and writes the result to stdout or a file. |
+| Batch | A function taking one or more inputs and returning a non-function value. | Pine obtains one input per parameter from options or prompts, applies the function once, and writes the result to stdout or a file. |
 
 | Command | Supported modes |
 | --- | --- |
@@ -102,8 +102,8 @@ When stdin is redirected, a missing selection is an error listing the available
 declarations; neither command reads the redirected input to make a choice. An
 invalid explicit name or line is also an error, not a request to choose again.
 This keeps declaration selection separate from batch data or an application's
-stdin. After an interactive declaration choice, a batch input prompt may follow
-if no batch input option was supplied.
+stdin. After an interactive declaration choice, batch input prompts follow
+for any parameters not supplied by input options.
 
 ### Sources and project discovery
 
@@ -148,7 +148,7 @@ Web-service hosting is a separate command: use `pine run-server`, not `pine run`
 ## Batch mode (`run` and `apply`)
 
 Both commands share the batch behavior described below. The selected function
-must take one input and return a non-function value:
+must take one or more inputs and return a non-function value:
 
 ```elm
 characterCount : String -> Int
@@ -168,22 +168,77 @@ Either command produces the same batch result on stdout:
 ```
 
 A list, tuple, or record counts as one input. Curried functions such as
-`String -> String -> String` are not supported.
+`String -> String -> String` take two inputs.
 
 ### Supplying input
 
-Supply one input using one of these methods:
+Supply one input per parameter using these methods:
 
 | Method | Behavior |
 | --- | --- |
-| `--input <expression>` | Parse the option's value as an Elm input, with the string handling described below. |
-| `--input-file <file>` | Read a local file or a GitHub/GitLab file URL; the parameter must accept `String` or `Bytes`. |
-| `--transform-file <file>` | Read a local file and replace it with the function's result. |
-| No input option | Show the options hint and prompt for one line on stdin. Parse and validate it exactly like `--input`. |
+| `--input <expression>` | Parse the option's value as an Elm input, with the string handling described below. Repeat for additional parameters. |
+| `--input-file <file>` | Read a local file or a GitHub/GitLab file URL; the corresponding parameter must accept `String` or `Bytes`. Repeat for additional parameters. |
+| `--transform-file <file>` | Read the first parameter from a local file and replace it with the function's result. Prompt for any remaining parameters. |
+| Missing input options | Show the options hint and prompt for one line per remaining parameter on stdin. Parse and validate each line exactly like `--input`. |
 
-The three input options are mutually exclusive.
+`--input` and `--input-file` may be repeated and mixed. Inputs map to parameters
+in command-line order, regardless of which option supplies them. Each occurrence
+takes exactly one value. Explicit inputs fill parameters from left to right;
+Pine prompts for any remaining parameters. Too many explicit inputs are an error.
+The total number of explicit and prompted inputs must match the function's arity.
 `--transform-file` cannot be combined with any other batch input/output option.
-Explicit input options skip the prompt and do not read stdin.
+Supplying every input explicitly skips the prompts and does not read stdin.
+
+For example, given a function with a file-content parameter and a tuple parameter:
+
+```elm
+decorate : String -> ( String, Int ) -> String
+decorate text ( suffix, count ) =
+    String.repeat count text ++ suffix
+```
+
+```console
+pine apply src/Tools.elm/decorate --input-file input.txt --input '("!", 3)'
+pine apply src/Tools.elm/append --input "hello " --input "world"
+```
+
+The first command reads the first argument from `input.txt` and parses the second
+as an Elm tuple. The second supplies two string arguments to a function of type
+`String -> String -> String`.
+
+Omit the second option to be guided through the remaining argument:
+
+```console
+pine apply src/Tools.elm/decorate --input-file input.txt
+```
+
+For a file containing `ab`, the argument log and prompt look like this:
+
+```console
+Arguments (in parameter order):
+  Argument 1/2: text : String
+    Source: --input-file "input.txt" (2 bytes)
+    Value: "ab"
+  Argument 2/2: ( suffix, count ) : ( String, Int )
+    Enter an Elm value matching this parameter's type.
+Input 2 of 2> ("!", 3)
+    Source: stdin
+    Value: ("!", 3)
+Applying decorate...
+"ababab!"
+```
+
+Each argument's guide shows its source name or destructuring pattern and source
+type annotation. Without an annotation, Pine shows the inferred type (`?` if
+undetermined). Parameters without a source pattern, such as a function alias's
+implicit parameters, use numbered labels. These guides are reconstructed on
+cached runs too.
+
+The log identifies each input's source and previews the actual parsed value,
+whether supplied by an option or a prompt. Long strings and byte inputs have
+bounded previews with an explicit truncation indicator; file inputs also show
+their path and byte count. Guides, prompts, input logs, and execution messages go
+to stderr. Only the function's result goes to stdout, so pipelines stay usable.
 
 Without an input option, run the same function interactively:
 
@@ -202,7 +257,9 @@ Input> hello world
 
 The prompt and hint go to stderr; only the result goes to stdout. A blank line is
 a valid empty `String`, not end-of-input. Redirected stdin also supplies one line
-when no input option is given. End-of-input without a line is an error, as is an
+per remaining parameter. Multi-parameter prompts are numbered
+(`Input 1 of 2> `, `Input 2 of 2> `) and preceded by that parameter's guide.
+End-of-input before all parameters have a line is an error, as is an
 invalid input expression or a value that does not match the parameter type.
 
 Both `--input` and prompted input accept literals, lists, tuples, records, and choice constructors,
@@ -242,6 +299,7 @@ input is strict UTF-8. Invalid byte sequences are errors.
 File output writes `Bytes` verbatim and `String` as encoded text without Elm quotes.
 Other Elm values are rendered as Elm expressions before encoding. If file input was
 decoded to a string, text output preserves its encoding, byte order, and BOM presence.
+With multiple file inputs, the first file decoded to a string determines the output encoding.
 Otherwise, text output uses UTF-8 without a BOM. No newline is appended to file output.
 
 Destinations must be local files with an existing parent directory. Reading,
