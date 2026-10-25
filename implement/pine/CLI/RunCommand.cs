@@ -6,6 +6,7 @@ using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.Testing;
 using Pine.Core.Functional;
 using Pine.Core.IO;
+using Pine.Core.PineLanguage;
 using Pine.Core.Runtime;
 using Pine.Core.Runtime.IntermediateVM;
 using Pine.Elm.Platform;
@@ -80,7 +81,7 @@ public static class RunCommand
             new Option<bool>("--watch")
             {
                 Description =
-                "Reapply a batch function when local input files change. Requires all arguments explicitly and a distinct --output-file. Stop with Ctrl+C."
+                "Reapply a batch function when local program sources or input files change. Requires all arguments explicitly and a distinct --output-file. Stop with Ctrl+C."
             };
 
         var colorOption = FormatCommandShared.CreateColorOption();
@@ -186,6 +187,7 @@ public static class RunCommand
         var stopwatch = Stopwatch.StartNew();
         var compilationDuration = TimeSpan.Zero;
         var executionStarted = false;
+        var watchStarted = false;
 
         try
         {
@@ -221,13 +223,20 @@ public static class RunCommand
                 throw new ArgumentException("--output-file requires a local path.");
 
             sourceLoader ??= new RunSource.Loader(cacheDirectory, error);
-            RunCompilation compiled;
+            RunSource? programSource = null;
+            string? selectedDeclaration = null;
 
-            using (tracker.EnterScope("compilation", entryPoint))
+            RunCompilation Compile()
             {
-                compiled =
+                using var scope = tracker.EnterScope("compilation", entryPoint);
+                programSource = sourceLoader.Read(entryPoint, inputDirectory, token);
+
+                if (selectedDeclaration is not null)
+                    programSource = programSource with { Declaration = selectedDeclaration, Line = null };
+
+                var result =
                     RunCompilation.Compile(
-                        sourceLoader.Read(entryPoint, inputDirectory, token),
+                        programSource,
                         cacheDirectory,
                         error,
                         token,
@@ -239,18 +248,19 @@ public static class RunCommand
                             Console.IsInputRedirected,
                             batchOnly,
                             token)));
+
+                compilationDuration = stopwatch.Elapsed;
+                executionStarted = true;
+                return result;
             }
 
-            compilationDuration = stopwatch.Elapsed;
-            executionStarted = true;
-            using var execution = tracker.EnterScope("execution", entryPoint);
+            var compiled = Compile();
+            selectedDeclaration = compiled.Declaration;
 
-            var environment =
+            PineValue Wrapper() =>
                 ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiled.Environment)
-                .Extract(message => throw new InvalidDataException(message));
-
-            var wrapper =
-                environment.Modules.Single(module => module.moduleName == compiled.ModuleName)
+                .Extract(message => throw new InvalidDataException(message))
+                .Modules.Single(module => module.moduleName == compiled.ModuleName)
                 .moduleContent.FunctionDeclarations[compiled.Declaration];
 
             if (compiled.Types.Type is Type.RecordType record &&
@@ -283,9 +293,10 @@ public static class RunCommand
                 var caches = new PineVMSharedCaches();
                 var invocations = new InvocationCache();
                 var vm = tracker.CreateVm(new InvocationCacheAccessFromDictionary(invocations), caches);
+                using var execution = tracker.EnterScope("execution", entryPoint);
 
                 var selectedValue =
-                    ElmSourceCompilation.EvaluateZeroParameterRoot(wrapper, vm, caches.ParsedExpressions)
+                    ElmSourceCompilation.EvaluateZeroParameterRoot(Wrapper(), vm, caches.ParsedExpressions)
                     .Extract(message => throw new InvalidOperationException(message));
 
                 return
@@ -297,48 +308,64 @@ public static class RunCommand
                         error);
             }
 
-            if (compiled.Types.Type is not Type.FunctionType)
+            IReadOnlyList<Type> ValidateBatch()
             {
-                throw DeclarationError(
-                    compiled,
-                    "Select a function taking one or more inputs and returning a non-function value" +
-                    (batchOnly ? ". " : ", or a command-line application. ") +
-                    "Add an explicit type annotation if inference is insufficient. Web services use 'pine run-server'.");
-            }
+                if (compiled.Types.Type is not Type.FunctionType)
+                {
+                    throw DeclarationError(
+                        compiled,
+                        "Select a function taking one or more inputs and returning a non-function value" +
+                        (batchOnly ? ". " : ", or a command-line application. ") +
+                        "Add an explicit type annotation if inference is insufficient. Web services use 'pine run-server'.");
+                }
 
-            var parameterTypes = TypeInference.ExtractArgumentTypesFromFunctionType(compiled.Types.Type);
+                var types = TypeInference.ExtractArgumentTypesFromFunctionType(compiled.Types.Type);
 
-            error.WriteLine(
-                "Batch mode was selected because the declaration takes " +
-                (parameterTypes.Count is 1 ? "one input" : parameterTypes.Count + " inputs") +
-                " and returns a non-function value.");
+                error.WriteLine(
+                    "Batch mode was selected because the declaration takes " +
+                    (types.Count is 1 ? "one input" : types.Count + " inputs") +
+                    " and returns a non-function value.");
 
-            RunDeclarationSelection.WriteInferredSignature(console, compiled.DeclarationSignature);
+                RunDeclarationSelection.WriteInferredSignature(console, compiled.DeclarationSignature);
 
-            if (batchInputs.Count > parameterTypes.Count)
-            {
-                throw new ArgumentException(
-                    $"Too many inputs for the selected function: expected {parameterTypes.Count}, received {batchInputs.Count}. " +
-                    "Supply one --input or --input-file option per parameter, in parameter order.");
-            }
+                if (batchInputs.Count > types.Count)
+                {
+                    throw new ArgumentException(
+                        $"Too many inputs for the selected function: expected {types.Count}, received {batchInputs.Count}. " +
+                        "Supply one --input or --input-file option per parameter, in parameter order.");
+                }
 
-            if (watch)
-            {
-                if (batchInputs.Count != parameterTypes.Count)
+                if (watch && batchInputs.Count != types.Count)
                 {
                     throw new ArgumentException(
                         "--watch requires every argument explicitly; input prompts are not supported.");
                 }
 
+                return types;
+            }
+
+            var parameterTypes = ValidateBatch();
+
+            if (watch)
+            {
                 if (outputFile is null)
                     throw new ArgumentException("--watch requires --output-file.");
 
-                var inputFiles = batchInputs.Where(input => input.IsFile).Select(input => input.Value).ToArray();
+                var inputFiles =
+                    batchInputs.Where(input => input.IsFile && !RunSource.IsRemote(input.Value))
+                    .Select(input => input.Value).ToArray();
 
-                if (inputFiles.Length is 0 || inputFiles.Any(RunSource.IsRemote))
+                var sourceDirectory =
+                    programSource!.DirectoryPath is { } directory
+                    ?
+                    BatchInputWatcher.ResolveDirectoryLinks(directory)
+                    :
+                    null;
+
+                if (inputFiles.Length is 0 && sourceDirectory is null)
                 {
                     throw new ArgumentException(
-                        "--watch requires at least one local --input-file and does not support remote input files.");
+                        "--watch requires local program sources or at least one local --input-file.");
                 }
 
                 var paths =
@@ -348,15 +375,47 @@ public static class RunCommand
                 if (paths.Contains(BatchInputWatcher.ResolveDirectoryLinks(outputFile), BatchInputWatcher.PathComparer))
                     throw new ArgumentException("--watch requires an output file distinct from every input file.");
 
+                var changedPaths = new HashSet<string>(BatchInputWatcher.PathComparer);
+                var firstRun = true;
+                watchStarted = true;
+
                 var exit =
                     FileWatchRunner.RunAsync(
-                        Path.GetDirectoryName(paths[0])!,
+                        sourceDirectory ?? Path.GetDirectoryName(paths[0])!,
                         _ =>
                         {
                             var result = 0;
 
+                            if (!firstRun)
+                            {
+                                lock (changedPaths)
+                                {
+                                    foreach (var path in changedPaths.Order(BatchInputWatcher.PathComparer))
+                                    {
+                                        error.WriteLine(
+                                            (paths.Contains(path, BatchInputWatcher.PathComparer)
+                                            ?
+                                            "Input file changed: "
+                                            :
+                                            "Program source changed: ") + path);
+                                    }
+
+                                    changedPaths.Clear();
+                                }
+
+                                stopwatch.Restart();
+                                compilationDuration = TimeSpan.Zero;
+                                executionStarted = false;
+                            }
+
                             try
                             {
+                                if (!firstRun)
+                                {
+                                    compiled = Compile();
+                                    parameterTypes = ValidateBatch();
+                                }
+
                                 ApplyBatch();
                             }
                             catch (Exception exception) when (!token.IsCancellationRequested)
@@ -364,14 +423,39 @@ public static class RunCommand
                                 WriteFailure(error, color.Value, exception);
                                 result = 1;
                             }
+                            finally
+                            {
+                                WriteDurations();
+                                firstRun = false;
+                            }
 
                             error.WriteLine("Waiting for input changes...");
                             return result;
                         },
-                        () => error.WriteLine("Watching input files: " + string.Join(", ", paths) + ". Stop with Ctrl+C."),
+                        () =>
+                        {
+                            if (sourceDirectory is not null)
+                                error.WriteLine("Watching program sources in " + sourceDirectory + " recursively.");
+
+                            if (paths.Length > 0)
+                                error.WriteLine("Watching input files: " + string.Join(", ", paths) + ".");
+
+                            error.WriteLine("Stop with Ctrl+C.");
+                        },
                         exception => error.WriteLine("File watcher failed: " + exception.Message),
                         token,
-                        _ => createWatcher?.Invoke(paths) ?? new BatchInputWatcher(paths))
+                        _ => createWatcher?.Invoke(paths) ??
+                            new BatchInputWatcher(
+                                paths,
+                                sourceDirectory,
+                                outputFile,
+                                path =>
+                                {
+                                    lock (changedPaths)
+                                    {
+                                        changedPaths.Add(path);
+                                    }
+                                }))
                     .GetAwaiter().GetResult();
 
                 token.ThrowIfCancellationRequested();
@@ -382,6 +466,8 @@ public static class RunCommand
 
             int ApplyBatch()
             {
+                using var execution = tracker.EnterScope("execution", entryPoint);
+                var wrapper = Wrapper();
                 var caches = new PineVMSharedCaches();
                 var invocations = new InvocationCache();
                 var vm = tracker.CreateVm(new InvocationCacheAccessFromDictionary(invocations), caches);
@@ -531,11 +617,6 @@ public static class RunCommand
         {
             tracker.NotifyCancellation();
             error.WriteLine(tracker.CancelledByUser ? "Run cancelled." : "Run timed out (cooperative timeout).");
-            var counters = tracker.GetSummary().Counters;
-
-            if (counters != default)
-                error.WriteLine(EvalWorkCountersFormatting.FormatCounts(counters));
-
             return tracker.CancelledByUser ? 130 : 124;
         }
         catch (Exception exception)
@@ -544,6 +625,12 @@ public static class RunCommand
             return 1;
         }
         finally
+        {
+            if (!watchStarted)
+                WriteDurations();
+        }
+
+        void WriteDurations()
         {
             if (reportDurations)
             {

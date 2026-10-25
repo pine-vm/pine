@@ -22,7 +22,7 @@ Batch input/output options:
   --input-file <file>            Local input file or GitHub/GitLab file URL; repeat or mix with --input.
   --output-file <file>           Write only to this local file; overwrite without prompting.
   --transform-file <file>        Read and replace the same local file.
-  --watch                        Reapply a batch function when local input files change.
+  --watch                        Reapply when local program sources or input files change.
 
 Options for both commands:
   --color <Always|Auto|Never>     Diagnostic color; overrides PINE_TERM_COLOR.
@@ -317,43 +317,50 @@ With `--output-file` or `--transform-file`, the result is written only to the fi
 Successful batch execution exits with status `0`. Elm values such as `Err "message"`
 are ordinary successful results, not command failures.
 
-### Watching batch input files
+### Watching program sources and batch input files
 
 Add `--watch` to run immediately and reapply the selected function after saving
-an input file. This works with both `apply` and `run` when the selected declaration
+an input file, Elm source, or project manifest. This works with both `apply` and `run` when the selected declaration
 is a batch function:
 
 ```console
-pine apply src/Demos.elm/wallpaperFromFile --input-file inputs/wallpaper.json --output-file output/wallpaper.svg --watch
-pine run src/Demos.elm/chartFromFiles --input-file inputs/sales.csv --input-file inputs/chart.json --output-file output/chart.svg --watch
+pine  apply  src/Demos.elm/wallpaperFromFile  --input-file inputs/wallpaper.json  --output-file output/wallpaper.svg  --watch
+pine  run  src/Demos.elm/chartFromFiles  --input-file inputs/sales.csv  --input-file inputs/chart.json  --output-file output/chart.svg  --watch
+pine  apply  src/Tools.elm/normalize  --input "hello world"  --output-file output.txt  --watch
 ```
 
-Watch mode requires every function argument explicitly, at least one local
-`--input-file`, and a local `--output-file` distinct from every input file.
-Multiple local input files and fixed `--input` literals can be mixed in parameter
-order. Missing-argument prompts, remote input files, interactive applications,
-and `--transform-file` are rejected before evaluation.
+Watch mode requires every function argument explicitly and a local `--output-file`
+distinct from every local input file. There must be something local to watch:
+local program sources or at least one local `--input-file`. Local programs can use
+only `--input` literals or remote input files; local and remote input files can
+also be mixed in parameter order. Missing-argument prompts, interactive
+applications, and `--transform-file` are rejected before evaluation.
 
-Only the selected input paths are monitored, not their neighboring files, output
-files, Elm sources, or project manifests. The declaration is compiled once;
-restart after changing source code. Saves that replace an input through a rename
-are supported. Bursts of events are debounced, runs never overlap, and changes
+For local programs, the discovered source directory (or `--input-directory`) is
+monitored recursively for Elm source and `elm.json` changes, excluding `.git`,
+`elm-stuff`, `bin`, `obj`, and `node_modules`. Each rerun reloads and recompiles
+the program, keeping the selected declaration without reopening the picker.
+Local argument files are watched individually, not their neighboring files.
+Output files do not trigger reruns, even inside the source directory. Remote
+programs and inputs remain pinned to their resolved commits and are not watched.
+Saves that replace a watched file through a rename are supported.
+Bursts of events are debounced, runs never overlap, and changes
 received during evaluation are queued for another run.
 
-Each run rereads all input files and uses fresh evaluation state. Reading,
-evaluation, conversion, or output-write failures are reported on stderr without
+The changed paths are identified on stderr as program-source or input-file changes.
+Each run rereads all input files and uses fresh evaluation state. Loading,
+compilation, evaluation, conversion, or output-write failures are reported on stderr without
 replacing the previous output, and watching continues for the next edit. An Elm
 `Err` remains an ordinary successful result and can replace the output, exactly
 as in one-shot mode. A file-watcher failure terminates the command with status
-`1`. Ctrl+C stops the watcher and exits with `130`; `--timeout` still covers the
-whole command, including time waiting for edits, and exits with `124`.
+`1`.
+
+Ctrl+C stops the watcher and exits with `130`; `--timeout` still covers the whole command, including time waiting for edits, and exits with `124`.
 
 ## Shared diagnostics and limits
 
-Pine's mode explanation, selected declaration signature, source-loading and cache
-messages, timings, errors, and work counters go to stderr with both commands. Batch
-input hints and prompts also go to stderr. Application output still follows the
-application's own stdout/stderr commands.
+Pine's mode explanation, selected declaration signature, source-loading and cache messages, timings, and errors go to stderr with both commands.
+Batch input hints and prompts also go to stderr. Application output still follows the application's own stdout/stderr commands.
 
 `--color` affects Pine's diagnostics and type signatures, not batch result data or
 application output. Cursor-control capability is detected independently of color.

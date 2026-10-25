@@ -977,9 +977,10 @@ public sealed class RunCommandTests : IDisposable
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Run_timeout_and_cancellation_preserve_files_and_print_counters(bool batchOnly)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Run_timeout_and_cancellation_preserve_files_without_work_counters(bool batchOnly, bool durations)
     {
         // Warm VM setup and compilation so the deadline interrupts actual work.
         var warmup = Run(input: "warmup", batchOnly: batchOnly);
@@ -990,10 +991,16 @@ public sealed class RunCommandTests : IDisposable
         File.WriteAllText(path, "unchanged");
 
         var result =
-            Run("loop", input: "0", outputFile: path, timeout: TimeSpan.FromSeconds(5), batchOnly: batchOnly);
+            Run(
+                "loop",
+                input: "0",
+                outputFile: path,
+                timeout: TimeSpan.FromSeconds(5),
+                batchOnly: batchOnly,
+                durations: durations);
 
         result.Exit.Should().Be(124, result.Error);
-        result.Error.Should().Contain("timed out").And.MatchRegex(@"(?m)^InstructionCount: [1-9]");
+        result.Error.Should().Contain("timed out").And.NotContain("Count:");
         result.Output.Should().BeEmpty();
         File.ReadAllText(path).Should().Be("unchanged");
         using var cancelled = new CancellationTokenSource();
@@ -1294,9 +1301,7 @@ public sealed class RunCommandTests : IDisposable
 
             diagnostics.Should().Contain("fileTuple : String -> (String, Int) -> String")
                 .And.Contain("Argument 1/2: text : String")
-                .And.Contain("Source: --input-file")
-                .And.Contain(path)
-                .And.Contain("(2 bytes)")
+                .And.Contain("Source: --input-file " + RunValues.Render(ElmValue.StringInstance(path)) + " (2 bytes)")
                 .And.Contain("Value: \"ab\"")
                 .And.Contain("Argument 2/2: ( suffix, count ) : ( String, Int )")
                 .And.Contain("Input 2 of 2> ")
@@ -1349,11 +1354,12 @@ public sealed class RunCommandTests : IDisposable
         result.Exit.Should().Be(0, result.Error);
         result.Output.Should().BeEmpty();
 
-        result.Error.Should().Contain("Source: --transform-file")
+        var renderedPath = RunValues.Render(ElmValue.StringInstance(path));
+
+        result.Error.Should().Contain("Source: --transform-file " + renderedPath + " (2 bytes)")
             .And.Contain("Argument 2/2: ( suffix, count ) : ( String, Int )")
             .And.Contain("Input 2 of 2> ")
-            .And.Contain("Result written to")
-            .And.Contain(path);
+            .And.Contain("Result written to " + renderedPath + ".");
 
         File.ReadAllText(path).Should().Be("ababab!");
     }
