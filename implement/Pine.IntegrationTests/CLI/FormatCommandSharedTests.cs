@@ -76,7 +76,7 @@ public class FormatCommandSharedTests
         int needsFormattingCount)
     {
         var rendered =
-            RenderLegacyOutput(
+            RenderEncodedOutput(
                 codePage,
                 console =>
                 FormatCommandShared.WriteOverview(
@@ -123,7 +123,7 @@ public class FormatCommandSharedTests
         bool isTerminal)
     {
         var rendered =
-            RenderLegacyOutput(
+            RenderEncodedOutput(
                 codePage,
                 console =>
                 FormatCommandShared.WriteFilesNeedingFormatting(
@@ -163,7 +163,7 @@ public class FormatCommandSharedTests
         bool isTerminal)
     {
         var rendered =
-            RenderLegacyOutput(
+            RenderEncodedOutput(
                 codePage,
                 console =>
                 {
@@ -196,6 +196,113 @@ public class FormatCommandSharedTests
         rendered.Should().Contain("x Module1.cs");
         rendered.Should().Contain("x /project/Module.cs");
         rendered.Should().Contain("+ File is already properly formatted.");
+    }
+
+
+    [Theory]
+    [InlineData(437, false, false, false)]
+    [InlineData(437, false, false, true)]
+    [InlineData(437, false, true, false)]
+    [InlineData(437, false, true, true)]
+    [InlineData(437, true, false, false)]
+    [InlineData(437, true, false, true)]
+    [InlineData(437, true, true, false)]
+    [InlineData(437, true, true, true)]
+    [InlineData(850, false, false, false)]
+    [InlineData(850, false, false, true)]
+    [InlineData(850, false, true, false)]
+    [InlineData(850, false, true, true)]
+    [InlineData(850, true, false, false)]
+    [InlineData(850, true, false, true)]
+    [InlineData(850, true, true, false)]
+    [InlineData(850, true, true, true)]
+    [InlineData(65001, false, false, false)]
+    [InlineData(65001, false, false, true)]
+    [InlineData(65001, false, true, false)]
+    [InlineData(65001, false, true, true)]
+    [InlineData(65001, true, false, false)]
+    [InlineData(65001, true, false, true)]
+    [InlineData(65001, true, true, false)]
+    [InlineData(65001, true, true, true)]
+    public void Execute_reports_recovered_errors_with_encoded_output(
+        int codePage,
+        bool isTerminal,
+        bool needsFormatting,
+        bool verifyNoChanges)
+    {
+        var directory = CreateTempDirectory();
+        var filePath = Path.Combine(directory, "Module.elm");
+
+        try
+        {
+            File.WriteAllText(filePath, "before");
+
+            var (errorConsole, errorOutput) = CreateConsole();
+
+            var rendered =
+                RenderEncodedOutput(
+                    codePage,
+                    console =>
+                    {
+                        var exitCode =
+                            FormatCommandShared.Execute(
+                                paths: [filePath],
+                                fileExtension: ".elm",
+                                formatFile:
+                                _ =>
+                                needsFormatting
+                                ?
+                                new FormatFileResult.Changed("after", [new("Recovered error")])
+                                :
+                                new FormatFileResult.Stable([new("Recovered error")]),
+                                skipPrompt: true,
+                                verifyNoChanges: verifyNoChanges,
+                                commandLabel: "elm-format",
+                                colorMode: CommandLineColorMode.Never,
+                                console: console,
+                                errorConsole: errorConsole);
+
+                        exitCode.Should().Be(verifyNoChanges || !needsFormatting ? 200 : 0);
+                    },
+                    isTerminal);
+
+            errorOutput.ToString().Should().BeEmpty();
+
+            File.ReadAllText(filePath)
+                .Should().Be(needsFormatting && !verifyNoChanges ? "after" : "before");
+
+            rendered.Should().Contain("SYNTAX ERRORS (1)");
+            rendered.Should().Contain("Recovered error");
+            rendered.Should().NotContain("\t");
+            rendered.Should().NotContain("?");
+            rendered.Should().NotContain("already properly formatted");
+            rendered.Should().NotContain("Verification passed.");
+
+            if (verifyNoChanges)
+            {
+                rendered.Should().NotContain("Formatted 1 file.");
+                rendered.Should().NotContain("contain syntax errors (see above).");
+            }
+            else
+            {
+                var warningSymbol = codePage is 65001 ? "⚠" : "!";
+
+                rendered.Should().Contain(
+                    warningSymbol + " 1 file(s) " +
+                    (needsFormatting ? "still contain" : "contain") +
+                    " syntax errors (see above).");
+
+                if (needsFormatting)
+                {
+                    rendered.Should().Contain(
+                        (codePage is 65001 ? "✓" : "+") + " Formatted 1 file.");
+                }
+            }
+        }
+        finally
+        {
+            Filesystem.DeleteLocalDirectoryRecursive(directory);
+        }
     }
 
 
@@ -806,12 +913,16 @@ public class FormatCommandSharedTests
     }
 
 
-    private static string RenderLegacyOutput(
+    private static string RenderEncodedOutput(
         int codePage,
         Action<IAnsiConsole> render,
         bool isTerminal = true)
     {
         var encoding =
+            codePage is 65001
+            ?
+            Encoding.UTF8
+            :
             CodePagesEncodingProvider.Instance.GetEncoding(codePage)
             ?? throw new InvalidOperationException($"Encoding {codePage} is unavailable");
 
@@ -833,7 +944,7 @@ public class FormatCommandSharedTests
                     new AnsiConsoleOutput(writer),
                 });
 
-        console.Profile.Capabilities.Unicode.Should().BeFalse();
+        console.Profile.Capabilities.Unicode.Should().Be(codePage is 65001);
 
         render(console);
         writer.Flush();

@@ -835,6 +835,7 @@ public static class FormatCommandShared
             "✓" => "+",
             "○" => "*",
             "✗" => "x",
+            "⚠" => "!",
 
             _ =>
             throw new ArgumentOutOfRangeException(nameof(symbol)),
