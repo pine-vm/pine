@@ -1,12 +1,13 @@
 using Pine.Core.Elm.Syntax.Abstract;
 using Pine.Core.Elm.Syntax.Concrete;
+using Pine.Core.Elm.Syntax.Interpreter;
 using Pine.Core.Internal;
 using System;
 using System.Linq;
 
-using PreparedExpr = Pine.Core.Elm.Syntax.ElmSyntaxInterpreter.PreparedExpression;
-using LetDeclaration = Pine.Core.Elm.Syntax.ElmSyntaxInterpreter.PreparedLetDeclaration;
-using CaseDispatchSegment = Pine.Core.Elm.Syntax.ElmSyntaxInterpreter.PreparedCaseDispatchSegment;
+using PreparedExpr = Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter.PreparedExpression;
+using LetDeclaration = Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter.PreparedLetDeclaration;
+using CaseDispatchSegment = Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter.PreparedCaseDispatchSegment;
 using Pattern = Pine.Core.Elm.Syntax.Abstract.Pattern;
 
 namespace Pine.Core.Elm.Syntax;

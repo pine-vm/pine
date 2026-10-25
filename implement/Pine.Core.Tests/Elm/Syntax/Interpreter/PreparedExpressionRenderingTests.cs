@@ -10,9 +10,9 @@ using System.Numerics;
 using Xunit;
 
 using AbstractExpr = Pine.Core.Elm.Syntax.Abstract.Expression;
-using ElmInterpreter = Pine.Core.Elm.Syntax.ElmSyntaxInterpreter;
+using ElmInterpreter = Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter;
 using InfixDirection = Pine.Core.Elm.Syntax.Concrete.InfixDirection;
-using PreparedExpr = Pine.Core.Elm.Syntax.ElmSyntaxInterpreter.PreparedExpression;
+using PreparedExpr = Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter.PreparedExpression;
 
 namespace Pine.Core.Tests.Elm.Syntax.Interpreter;
 

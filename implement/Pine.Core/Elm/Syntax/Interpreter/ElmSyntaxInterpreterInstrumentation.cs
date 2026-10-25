@@ -1,12 +1,11 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.Elm.Syntax.Interpreter;
 using Pine.Core.Internal;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 
-namespace Pine.Core.Elm.Syntax;
+namespace Pine.Core.Elm.Syntax.Interpreter;
 
 public partial class ElmSyntaxInterpreter
 {

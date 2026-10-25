@@ -2,6 +2,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Interpreter;
 using Pine.Core.Functional;
 using Pine.Core.PineLanguage;
 using System;
@@ -10,7 +11,7 @@ using System.Collections.Immutable;
 using System.Text;
 
 using SyntaxTypes = Pine.Core.Elm.Syntax.Concrete;
-using ElmInterpreter = Pine.Core.Elm.Syntax.ElmSyntaxInterpreter;
+using ElmInterpreter = Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter;
 using PineValueInProcess = Pine.Core.Internal.PineValueInProcess;
 
 namespace Pine.Core.Tests.Elm.Syntax.Interpreter;

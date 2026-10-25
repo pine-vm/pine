@@ -4,7 +4,7 @@ using Pine.Core.Elm;
 using Pine.Core.Functional;
 using Xunit;
 
-using ElmInterpreter = Pine.Core.Elm.Syntax.ElmSyntaxInterpreter;
+using ElmInterpreter = Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter;
 
 namespace Pine.Core.Tests.Elm.Syntax.Interpreter;
 
@@ -24,7 +24,8 @@ public class ParseAndInterpretTests
                 System.Collections
                 .Immutable.ImmutableDictionary<DeclQualifiedName, Core.Elm.Syntax.Concrete.Declaration>.Empty);
 
-        result.Should().Be(Result<Core.Elm.Syntax.ElmInterpretationError, ElmValue>.ok(ElmValue.Integer(42)));
+        result.Should().Be(
+            Result<Core.Elm.Syntax.Interpreter.ElmInterpretationError, ElmValue>.ok(ElmValue.Integer(42)));
     }
 
     [Fact]
@@ -36,7 +37,8 @@ public class ParseAndInterpretTests
                 System.Collections
                 .Immutable.ImmutableDictionary<DeclQualifiedName, Core.Elm.Syntax.Concrete.Declaration>.Empty);
 
-        result.Should().Be(Result<Core.Elm.Syntax.ElmInterpretationError, ElmValue>.ok(ElmValue.Integer(7)));
+        result.Should().Be(
+            Result<Core.Elm.Syntax.Interpreter.ElmInterpretationError, ElmValue>.ok(ElmValue.Integer(7)));
     }
 
     [Fact]
@@ -54,7 +56,8 @@ public class ParseAndInterpretTests
 
         var result = ElmInterpreter.ParseAndInterpretAsElmValue("answer", declarations);
 
-        result.Should().Be(Result<Core.Elm.Syntax.ElmInterpretationError, ElmValue>.ok(ElmValue.Integer(42)));
+        result.Should().Be(
+            Result<Core.Elm.Syntax.Interpreter.ElmInterpretationError, ElmValue>.ok(ElmValue.Integer(42)));
     }
 
     [Fact]
@@ -75,7 +78,8 @@ public class ParseAndInterpretTests
                 System.Collections
                 .Immutable.ImmutableDictionary<DeclQualifiedName, Core.Elm.Syntax.Concrete.Declaration>.Empty);
 
-        result.Should().Be(Result<Core.Elm.Syntax.ElmInterpretationError, ElmValue>.ok(ElmValue.Integer(30)));
+        result.Should().Be(
+            Result<Core.Elm.Syntax.Interpreter.ElmInterpretationError, ElmValue>.ok(ElmValue.Integer(30)));
     }
 
     [Fact]

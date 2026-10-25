@@ -1,12 +1,12 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
-using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Interpreter;
 using Pine.Core.Functional;
 using System.Collections.Generic;
 using Xunit;
 
-using ElmInterpreter = Pine.Core.Elm.Syntax.ElmSyntaxInterpreter;
+using ElmInterpreter = Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter;
 
 namespace Pine.Core.Tests.Elm.Syntax.Interpreter;
 

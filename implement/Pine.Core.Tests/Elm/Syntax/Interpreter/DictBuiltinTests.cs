@@ -9,7 +9,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using Xunit;
 
-using ElmInterpreter = Pine.Core.Elm.Syntax.ElmSyntaxInterpreter;
+using ElmInterpreter = Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter;
 using ElmValue = Pine.Core.Elm.ElmValue;
 
 namespace Pine.Core.Tests.Elm.Syntax.Interpreter;

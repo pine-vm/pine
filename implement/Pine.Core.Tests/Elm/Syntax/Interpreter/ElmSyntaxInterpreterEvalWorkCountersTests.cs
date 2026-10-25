@@ -8,7 +8,7 @@ using System.Collections.Generic;
 using System.Text;
 using Xunit;
 
-using ElmInterpreter = Pine.Core.Elm.Syntax.ElmSyntaxInterpreter;
+using ElmInterpreter = Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter;
 using SyntaxTypes = Pine.Core.Elm.Syntax.Concrete;
 
 namespace Pine.Core.Tests.Elm.Syntax.Interpreter;

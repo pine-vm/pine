@@ -8,7 +8,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Numerics;
 
-namespace Pine.Core.Elm.Syntax;
+namespace Pine.Core.Elm.Syntax.Interpreter;
 
 public partial class ElmSyntaxInterpreter
 {

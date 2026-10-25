@@ -544,7 +544,7 @@ namespace ElmTime
                 arguments.Select(PineValueInProcess.Create).ToList();
 
             var interpretResult =
-                Pine.Core.Elm.Syntax.ElmSyntaxInterpreter.Interpret(
+                Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter.Interpret(
                     DeclQualifiedName.Create(
                         ["CompileElmAppMain"],
                         "asCompletelyLoweredElmApp"),
@@ -1269,14 +1269,14 @@ namespace ElmTime
         /// <summary>
         /// The Elm compiler modules (the <c>CompileElmAppMain</c> program and its transitive
         /// dependencies) parsed and canonicalized for evaluation with
-        /// <see cref="Pine.Core.Elm.Syntax.ElmSyntaxInterpreter"/>. This replaces the previous
+        /// <see cref="Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter"/>. This replaces the previous
         /// approach of applying the compiled compiler environment from
         /// <see cref="BundledElmEnvironments"/> via <see cref="ElmCompilerInElm"/>.
         /// </summary>
-        public static readonly Lazy<Pine.Core.Elm.Syntax.ElmSyntaxInterpreter.Prepared> CompilerModulesPreparedForInterpreter =
+        public static readonly Lazy<Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter.Prepared> CompilerModulesPreparedForInterpreter =
             new(PrepareCompilerModulesForInterpreter);
 
-        private static Pine.Core.Elm.Syntax.ElmSyntaxInterpreter.Prepared PrepareCompilerModulesForInterpreter()
+        private static Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter.Prepared PrepareCompilerModulesForInterpreter()
         {
             var containerTree =
                 Pine.Core.Elm.ElmInElm.BundledFiles.CompilerSourceContainerFilesDefault.Value;
@@ -1319,7 +1319,7 @@ namespace ElmTime
                     availableModulesTexts: availableModulesTexts);
 
             return
-                Pine.Core.Elm.Syntax.ElmSyntaxInterpreter.PrepareModules(orderedModulesTexts)
+                Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter.PrepareModules(orderedModulesTexts)
                 .Extract(err => throw new Exception("Failed preparing compiler modules for interpreter: " + err));
         }
 

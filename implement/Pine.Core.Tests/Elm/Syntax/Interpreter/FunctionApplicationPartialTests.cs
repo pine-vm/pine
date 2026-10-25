@@ -35,7 +35,7 @@ public class FunctionApplicationPartialTests
     /// and renders the resulting value back to its Elm-expression form.
     /// </summary>
     private static string Evaluate(string elmModuleText, string expression) =>
-        Core.Elm.Syntax.ElmSyntaxInterpreter.RenderAsElmExpression(
+        Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter.RenderAsElmExpression(
             InterpreterTestHelper.EvaluateInModuleOrCrash(expression, elmModuleText))
         .expressionString;
 

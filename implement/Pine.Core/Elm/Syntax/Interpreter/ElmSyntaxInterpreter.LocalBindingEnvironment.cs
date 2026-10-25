@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
-namespace Pine.Core.Elm.Syntax;
+namespace Pine.Core.Elm.Syntax.Interpreter;
 
 public partial class ElmSyntaxInterpreter
 {

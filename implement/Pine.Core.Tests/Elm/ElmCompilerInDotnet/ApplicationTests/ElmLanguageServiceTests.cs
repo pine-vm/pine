@@ -1186,7 +1186,7 @@ public class ElmLanguageServiceTests
         var interpreterStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         var result =
-            Core.Elm.Syntax.ElmSyntaxInterpreter.InterpretAsElmValue(
+            Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter.InterpretAsElmValue(
                 rootExpression,
                 preparedApp);
 
@@ -1220,7 +1220,7 @@ public class ElmLanguageServiceTests
                 includeDeclaration: true);
 
         var result =
-            Core.Elm.Syntax.ElmSyntaxInterpreter.InterpretAsElmValue(
+            Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter.InterpretAsElmValue(
                 rootExpression,
                 s_referencesScenarioPreparedApp.Value);
 
@@ -1264,7 +1264,7 @@ public class ElmLanguageServiceTests
                     positionColumn: column);
 
             var result =
-                Core.Elm.Syntax.ElmSyntaxInterpreter.InterpretAsElmValue(
+                Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter.InterpretAsElmValue(
                     rootExpression,
                     preparedApp);
 
@@ -1410,7 +1410,7 @@ public class ElmLanguageServiceTests
         var interpreterStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         var result =
-            Core.Elm.Syntax.ElmSyntaxInterpreter.InterpretAsElmValue(
+            Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter.InterpretAsElmValue(
                 rootExpression,
                 preparedApp);
 
@@ -2075,7 +2075,7 @@ public class ElmLanguageServiceTests
     /// expensive <see cref="ElmSyntaxInterpreter.PrepareModules(IReadOnlyList{string})"/>
     /// step therefore runs only once and is reusable for arbitrary scenario inputs.
     /// </summary>
-    private static readonly Lazy<Core.Elm.Syntax.ElmSyntaxInterpreter.Prepared> s_referencesScenarioPreparedApp =
+    private static readonly Lazy<Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter.Prepared> s_referencesScenarioPreparedApp =
         new(
             () =>
             {
@@ -2086,7 +2086,7 @@ public class ElmLanguageServiceTests
                     };
 
                 return
-                    Core.Elm.Syntax.ElmSyntaxInterpreter.PrepareModules(modulesWithWrapper)
+                    Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter.PrepareModules(modulesWithWrapper)
                     .Extract(err => throw new Exception("Failed to prepare modules: " + err));
             });
 

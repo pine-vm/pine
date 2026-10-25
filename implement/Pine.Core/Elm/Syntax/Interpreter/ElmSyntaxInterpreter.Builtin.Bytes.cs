@@ -4,7 +4,7 @@ using Pine.Core.PineLanguage;
 using System.Collections.Generic;
 using System.Numerics;
 
-namespace Pine.Core.Elm.Syntax;
+namespace Pine.Core.Elm.Syntax.Interpreter;
 
 /// <summary>
 /// Builtins for the <c>Bytes.Encode</c>, <c>Bytes.Decode</c>, and base64

@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Numerics;
 
-namespace Pine.Core.Elm.Syntax;
+namespace Pine.Core.Elm.Syntax.Interpreter;
 
 /// <summary>
 /// Builtin implementation of <c>Json.Decode.parseValue</c> from

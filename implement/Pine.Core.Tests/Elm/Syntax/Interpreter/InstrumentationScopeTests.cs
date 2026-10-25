@@ -7,8 +7,8 @@ using System;
 using System.Linq;
 using Xunit;
 
-using ElmInterpreter = Pine.Core.Elm.Syntax.ElmSyntaxInterpreter;
-using FunctionStepCountingInvocationLogger = Pine.Core.Elm.Syntax.FunctionStepCountingInvocationLogger;
+using ElmInterpreter = Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter;
+using FunctionStepCountingInvocationLogger = Pine.Core.Elm.Syntax.Interpreter.FunctionStepCountingInvocationLogger;
 using PineValueInProcess = Pine.Core.Internal.PineValueInProcess;
 
 namespace Pine.Core.Tests.Elm.Syntax.Interpreter;

@@ -6,7 +6,7 @@ using Pine.Core.PineLanguage;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 
-namespace Pine.Core.Elm.Syntax;
+namespace Pine.Core.Elm.Syntax.Interpreter;
 
 /// <summary>
 /// Builtins for some Elm kernel and core functions.

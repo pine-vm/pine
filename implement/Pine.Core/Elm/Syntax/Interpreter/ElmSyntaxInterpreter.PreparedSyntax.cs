@@ -17,7 +17,7 @@ using AbstractLetDeclaration = Pine.Core.Elm.Syntax.Abstract.LetDeclaration;
 using AbstractPattern = Pine.Core.Elm.Syntax.Abstract.Pattern;
 using AbstractRecordSetter = Pine.Core.Elm.Syntax.Abstract.RecordSetter;
 
-namespace Pine.Core.Elm.Syntax;
+namespace Pine.Core.Elm.Syntax.Interpreter;
 
 #pragma warning disable CS1591
 

@@ -1,7 +1,7 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
-using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Interpreter;
 using Pine.Core.Functional;
 using Pine.Core.Internal;
 using System.Text;

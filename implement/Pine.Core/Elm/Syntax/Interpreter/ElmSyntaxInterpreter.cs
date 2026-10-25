@@ -2,7 +2,6 @@ using Microsoft.CodeAnalysis;
 using Pine.Core.CLI;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.Syntax.Abstract;
-using Pine.Core.Elm.Syntax.Interpreter;
 using Pine.Core.Encodings;
 using Pine.Core.Functional;
 using Pine.Core.Internal;
@@ -12,7 +11,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
-namespace Pine.Core.Elm.Syntax;
+namespace Pine.Core.Elm.Syntax.Interpreter;
 
 /// <summary>
 /// One frame of an Elm call stack: the function declaration that was active and the values

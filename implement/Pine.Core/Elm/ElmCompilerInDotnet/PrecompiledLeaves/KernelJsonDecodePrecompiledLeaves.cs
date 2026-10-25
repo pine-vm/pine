@@ -1,6 +1,6 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmInElm;
-using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Interpreter;
 using Pine.Core.Encodings;
 using Pine.Core.Internal;
 using Pine.Core.PineLanguage;

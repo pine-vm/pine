@@ -17,7 +17,7 @@ using AbstractDeclaration = Pine.Core.Elm.Syntax.Abstract.Declaration;
 using AbstractJson = Pine.Core.Elm.Syntax.Abstract.ElmSyntaxAbstractJson;
 using AbstractModule = Pine.Core.Elm.Syntax.Abstract.Module;
 using ConvertFromAbstractConcrete = Pine.Core.Elm.Syntax.Abstract.ConvertFromConcrete;
-using ElmInterpreter = Pine.Core.Elm.Syntax.ElmSyntaxInterpreter;
+using ElmInterpreter = Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter;
 
 namespace Pine.Core.Tests.Elm.Syntax.Interpreter;
 

@@ -7,7 +7,7 @@ using System.Collections.Generic;
 
 using AbstractExpression = Pine.Core.Elm.Syntax.Abstract.Expression;
 
-namespace Pine.Core.Elm.Syntax;
+namespace Pine.Core.Elm.Syntax.Interpreter;
 
 public partial class ElmSyntaxInterpreter
 {

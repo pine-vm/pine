@@ -2,7 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.Elm;
 using Xunit;
 
-using ElmInterpreter = Pine.Core.Elm.Syntax.ElmSyntaxInterpreter;
+using ElmInterpreter = Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter;
 
 namespace Pine.Core.Tests.Elm.Syntax.Interpreter;
 

@@ -1,7 +1,6 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.Syntax.Abstract;
-using Pine.Core.Elm.Syntax.Interpreter;
 using Pine.Core.Functional;
 using Pine.Core.Internal;
 using System.Collections.Generic;
@@ -10,7 +9,7 @@ using System.Text.Json.Serialization;
 
 using AbstractDeclaration = Pine.Core.Elm.Syntax.Abstract.Declaration;
 
-namespace Pine.Core.Elm.Syntax;
+namespace Pine.Core.Elm.Syntax.Interpreter;
 
 /// <summary>
 /// Multi-module evaluation overloads. These accept a collection of Elm module source
