@@ -23,6 +23,9 @@ public sealed record DeclarationCanonicalizationResult(
     /// <summary>Resolved source references, including constructors whose owning declaration has another name.</summary>
     public IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<DeclarationReference>> References { get; init; } =
         ImmutableDictionary<DeclQualifiedName, IReadOnlyList<DeclarationReference>>.Empty;
+
+    /// <summary>Signatures without executable bodies, including annotated effect and unavailable-kernel APIs.</summary>
+    public ImmutableDictionary<string, TypeInference.InferredType> TypeOnlyFunctionSignatures { get; init; } = [];
 }
 
 /// <summary>A source reference to a demanded declaration, retaining the referenced symbol and exact location.</summary>
@@ -30,7 +33,11 @@ public sealed record DeclarationReference(
     DeclQualifiedName Declaration,
     DeclQualifiedName ReferencedName,
     Range Range,
-    bool IsTypeReference);
+    bool IsTypeReference)
+{
+    /// <summary>The reference resolves to type information, not an executable declaration.</summary>
+    public bool IsTypeOnly { get; init; }
+}
 
 /// <summary>A reused declaration result includes the dependencies to demand without recanonicalizing its body.</summary>
 public sealed record DeclarationCanonicalizationCacheEntry(
@@ -50,7 +57,9 @@ public partial class Canonicalization
         IReadOnlyList<File> sources,
         IReadOnlyCollection<DeclQualifiedName> roots,
         ImplicitImportConfig? implicitImports = null,
-        DeclarationCache? cache = null)
+        DeclarationCache? cache = null,
+        IReadOnlyDictionary<string, ElmModuleTypeInterface>? moduleTypeInterfaces = null,
+        bool useSourceModuleTypeInterfaces = true)
     {
         if (roots.Count is 0)
         {
@@ -61,8 +70,10 @@ public partial class Canonicalization
         }
 
         implicitImports ??= ImplicitImportConfig.Default;
-        var files = sources.Select(AddEffectModuleStubs).ToList();
-        var exports = BuildModuleExportsMap(files);
+        moduleTypeInterfaces ??= ElmModuleTypeInterface.Standard;
+        var files = sources.ToList();
+        var sourceExports = BuildModuleExportsMap(files);
+        var exports = AddTypeInterfaceExports(sourceExports, moduleTypeInterfaces);
         var infixes = BuildModuleInfixMap(files);
 
         var duplicateScopes =
@@ -134,6 +145,7 @@ public partial class Canonicalization
         }
 
         var native = new SymbolResolution.Native();
+        var typeOnly = new SymbolResolution.TypeOnly(new([]));
         var ambiguous = new SymbolResolution.Ambiguous();
 
         var missing =
@@ -156,10 +168,114 @@ public partial class Canonicalization
 
         var moduleNames = files.Select(file => Module.GetModuleName(file.ModuleDefinition.Value).Value).ToArray();
 
+        var sourceSignatures = new Dictionary<DeclQualifiedName, TypeOnlySignature>();
+        var effectOperations = new Dictionary<DeclQualifiedName, TypeOnlySignature>();
+
+        foreach (var file in files)
+        {
+            if (file.ModuleDefinition.Value is not Module.EffectModule effect)
+                continue;
+
+            var moduleName = Module.GetModuleName(file.ModuleDefinition.Value).Value;
+
+            if (duplicateScopes.Contains(string.Join(".", moduleName)))
+                continue;
+
+            AddOperation("command", effect.ModuleData.Command, ["Platform", "Cmd"], "Cmd");
+            AddOperation("subscription", effect.ModuleData.Subscription, ["Platform", "Sub"], "Sub");
+
+            void AddOperation(string name, Node<string>? payloadType, string[] resultModule, string resultType)
+            {
+                if (payloadType is null)
+                    return;
+
+                var message = new TypeInference.InferredType.TypeVariable("msg");
+                var payload = DeclQualifiedName.Create(moduleName, payloadType.Value);
+
+                effectOperations.Add(
+                    DeclQualifiedName.Create(moduleName, name),
+                    new(
+                        new TypeInference.InferredType.FunctionType(
+                            new TypeInference.InferredType.ChoiceType(moduleName, payloadType.Value, [message]),
+                            new TypeInference.InferredType.ChoiceType(resultModule, resultType, [message])),
+                        declarations.ContainsKey(payload) ? [payload] : []));
+            }
+        }
+
         foreach (var file in files)
         {
             contexts[file] =
                 contexts[file] with { LookupSymbol = LookupSymbol, LookupAvailability = LookupAvailability };
+        }
+
+        foreach (var file in files.Where(
+            file =>
+            useSourceModuleTypeInterfaces &&
+            (file.ModuleDefinition.Value is Module.EffectModule ||
+            file.Imports.Any(
+                import =>
+                import.Value.ModuleName.Value is ["Elm", "Kernel", ..] or ["PineUnavailable", _, "Elm", "Kernel", ..] &&
+                !moduleNames.Any(module => ModuleNameComparer.Equal(module, import.Value.ModuleName.Value))))))
+        {
+            var moduleName = Module.GetModuleName(file.ModuleDefinition.Value).Value;
+
+            if (duplicateScopes.Contains(string.Join(".", moduleName)))
+                continue;
+
+            var publicValues = sourceExports[string.Join(".", moduleName)].ValueExports;
+
+            foreach (var declaration in file.Declarations)
+            {
+                if (declaration.Value is not Declaration.FunctionDeclaration
+                    { Function.Signature: { } signature } function ||
+                    !publicValues.Contains(function.Function.Declaration.Value.Name.Value))
+                {
+                    continue;
+                }
+
+                var dependencies = new HashSet<DeclQualifiedName>();
+                var context = contexts[file] with { ResolveReference = ResolveSignatureReference };
+                var annotation = CanonicalizeTypeAnnotationNode(signature.Value.TypeAnnotation, context);
+
+                if (annotation.Errors.Count is 0)
+                {
+                    sourceSignatures.Add(
+                        DeclQualifiedName.Create(moduleName, function.Function.Declaration.Value.Name.Value),
+                        new(
+                            TypeInference.TypeAnnotationToInferredType(
+                                Syntax.Abstract.ConvertFromConcrete.FromTypeAnnotation(annotation.Value.Value)),
+                            [.. dependencies.Order()]));
+                }
+
+                IReadOnlyList<CanonicalizationError> ResolveSignatureReference(
+                    IReadOnlyList<string> module, string symbol, bool typeReference, Range range)
+                {
+                    var reference = DeclQualifiedName.Create(module, symbol);
+
+                    var resolution = LookupSymbol(reference, typeReference);
+
+                    switch (resolution)
+                    {
+                        case SymbolResolution.Native:
+                        case SymbolResolution.TypeOnly:
+                            return [];
+
+                        case SymbolResolution.Declaration resolved:
+                            dependencies.Add(resolved.Owner);
+                            return [];
+
+                        case SymbolResolution.Ambiguous:
+                            return [new CanonicalizationError.NamingClash(range, reference.FullName)];
+
+                        case SymbolResolution.Missing:
+                            return [new CanonicalizationError.UnresolvedReference(range, reference.FullName)];
+
+                        default:
+                            throw new NotImplementedException(
+                                $"{nameof(ResolveSignatureReference)} does not handle symbol resolution: {resolution.GetType().Name}");
+                    }
+                }
+            }
         }
 
         var pending = new Queue<DeclQualifiedName>();
@@ -233,6 +349,17 @@ public partial class Canonicalization
                     case SymbolResolution.Native:
                         return [];
 
+                    case SymbolResolution.TypeOnly typeSignature:
+                        resolvedReferences.Add(new(reference, reference, range, typeReference) { IsTypeOnly = true });
+
+                        foreach (var dependency in typeSignature.Dependencies)
+                        {
+                            dependencies.Add(dependency);
+                            Demand(dependency, [.. chains[name], dependency]);
+                        }
+
+                        return [];
+
                     case SymbolResolution.Missing:
                         return [MissingReference(reference, typeReference, range)];
 
@@ -290,7 +417,11 @@ public partial class Canonicalization
             new DeclarationCanonicalizationResult(results, chains)
             {
                 Dependencies = references,
-                References = sourceReferences
+                References = sourceReferences,
+                TypeOnlyFunctionSignatures =
+                ElmModuleTypeInterface.FunctionSignatures(moduleTypeInterfaces).SetItems(
+                    sourceSignatures.Concat(effectOperations).Select(
+                        entry => KeyValuePair.Create(entry.Key.FullName, entry.Value.Type)))
             };
 
         void Demand(DeclQualifiedName name, IReadOnlyList<DeclQualifiedName> chain)
@@ -306,6 +437,20 @@ public partial class Canonicalization
 
             if (symbols.ContainsKey((reference, !typeReference)))
                 return SymbolAvailability.OtherNamespace;
+
+            if (moduleTypeInterfaces.TryGetValue(string.Join(".", reference.Namespaces), out var moduleInterface))
+            {
+                if (typeReference
+                ?
+                moduleInterface.Values.ContainsKey(reference.DeclName)
+                :
+                moduleInterface.Types.ContainsKey(reference.DeclName))
+                {
+                    return SymbolAvailability.OtherNamespace;
+                }
+
+                return SymbolAvailability.MissingName;
+            }
 
             if (reference.Namespaces.Count is 1 &&
                 reference.Namespaces[0] is "Basics" or "Debug" or "Pine_kernel" or "Pine_builtin")
@@ -326,6 +471,29 @@ public partial class Canonicalization
         {
             if (!IsNativeReference(reference))
             {
+                var moduleName = string.Join(".", reference.Namespaces);
+
+                if (!typeReference && !duplicateScopes.Contains(moduleName) &&
+                    (sourceSignatures.TryGetValue(reference, out var signature) ||
+                    effectOperations.TryGetValue(reference, out signature)))
+                {
+                    return new SymbolResolution.TypeOnly(new(signature.Dependencies));
+                }
+
+                if (!duplicateScopes.Contains(moduleName) &&
+                    moduleTypeInterfaces.TryGetValue(moduleName, out var moduleInterface) &&
+                    (typeReference
+                    ?
+                    moduleInterface.Types.ContainsKey(reference.DeclName)
+                    :
+                    moduleInterface.Values.ContainsKey(reference.DeclName)) &&
+                    (!resolvedSymbols.ContainsKey((reference, typeReference)) ||
+                    !sourceExports.TryGetValue(moduleName, out var implementedExports) ||
+                    !(typeReference ? implementedExports.TypeExports : implementedExports.ValueExports).Contains(reference.DeclName)))
+                {
+                    return typeOnly;
+                }
+
                 return
                     resolvedSymbols.TryGetValue((reference, typeReference), out var resolved)
                     ?
@@ -371,6 +539,10 @@ public partial class Canonicalization
         }
     }
 
+    private sealed record TypeOnlySignature(
+        TypeInference.InferredType Type,
+        IReadOnlyList<DeclQualifiedName> Dependencies);
+
     internal static string GetDeclarationName(Declaration declaration) =>
         declaration switch
         {
@@ -386,9 +558,16 @@ public partial class Canonicalization
         };
 
     /// <summary>Checks source imports and exposing clauses without demanding declaration bodies.</summary>
-    internal static IReadOnlyList<CanonicalizationError> ValidateImports(File file, IReadOnlyList<File> sources)
+    internal static IReadOnlyList<CanonicalizationError> ValidateImports(
+        File file,
+        IReadOnlyList<File> sources,
+        IReadOnlyDictionary<string, ElmModuleTypeInterface>? moduleTypeInterfaces = null)
     {
-        var exports = BuildModuleExportsMap(sources);
+        var exports =
+            AddTypeInterfaceExports(
+                BuildModuleExportsMap(sources),
+                moduleTypeInterfaces ?? ElmModuleTypeInterface.Standard);
+
         var errors = new List<CanonicalizationError>();
 
         foreach (var import in file.Imports)
@@ -520,6 +699,30 @@ public partial class Canonicalization
                 }
             }
         }
+    }
+
+    private static ImmutableDictionary<string, ModuleExports> AddTypeInterfaceExports(
+        ImmutableDictionary<string, ModuleExports> exports,
+        IReadOnlyDictionary<string, ElmModuleTypeInterface> interfaces)
+    {
+        foreach (var (name, moduleInterface) in interfaces)
+        {
+            var existing =
+                exports.GetValueOrDefault(name) ??
+                new ModuleExports([], [], ImmutableDictionary<string, ImmutableList<string>>.Empty);
+
+            exports =
+                exports.SetItem(
+                    name,
+                    existing with
+                    {
+                        TypeExports = existing.TypeExports.Union(moduleInterface.Types.Keys),
+                        ValueExports = existing.ValueExports.Union(moduleInterface.Values.Keys),
+                        TypeConstructors = moduleInterface.TypeConstructors.SetItems(existing.TypeConstructors)
+                    });
+        }
+
+        return exports;
     }
 
     private static bool IsNativeReference(DeclQualifiedName name) =>

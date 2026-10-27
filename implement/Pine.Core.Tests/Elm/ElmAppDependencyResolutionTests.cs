@@ -373,7 +373,7 @@ public class ElmAppDependencyResolutionTests
     }
 
     [Fact]
-    public async Task Declaration_demand_preparation_retains_sources_with_unused_missing_Platform_import()
+    public async Task Declaration_demand_preparation_retains_sources_with_type_only_Platform_import()
     {
         var tree =
             FileTree.MergeFiles(
@@ -400,12 +400,9 @@ public class ElmAppDependencyResolutionTests
         build.CompilerModuleNames.Should().ContainKey("elm-packages/elm/core/src/List.elm");
         build.ImportDiagnostics.Should().Contain(diagnostic => diagnostic.ImportedModuleName == "Missing");
 
-        var platform = build.ImportDiagnostics.Single(diagnostic => diagnostic.ImportedModuleName == "Platform");
-        platform.FilePath.Should().Be("src/Main.elm");
-        platform.ModuleName.Should().Be("Main");
-        platform.ImportRange.Start.Row.Should().Be(2);
-        platform.ImportRange.Start.Column.Should().Be(1);
-        platform.Message.Should().Contain("has no implementation").And.Contain("not searched upstream");
+        build.ImportDiagnostics.Should().NotContain(diagnostic => diagnostic.ImportedModuleName == "Platform");
+        build.CompilerModuleTypeInterfaces.Should().ContainKey("Platform");
+        build.CompilerModuleSyntax.Should().NotContainKey("Platform");
         provider.SourceQueries.Should().BeEmpty();
 
         Func<Task> strict =
@@ -417,6 +414,51 @@ public class ElmAppDependencyResolutionTests
                 provider);
 
         await strict.Should().ThrowAsync<ElmDependencyResolutionException>().WithMessage("*Import 'Platform'*");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Declaration_demand_type_only_modules_preserve_package_ambiguity_and_private_names(
+        bool exposesTask)
+    {
+        var shadow =
+            ElmPackageSubstitution.Create(
+                "author/shadow",
+                "task-module",
+                ["1.0.0"],
+                FileTree.MergeFiles(Source("Task", "succeed value = value"), Source("Entry", "value = 1")),
+                exposesTask ? ["Task", "Entry"] : ["Entry"]) with
+            {
+                ImplementationDependencies = Deps(("elm/core", "1.0.0 <= v < 2.0.0"))
+            };
+
+        var defaults = ElmPackageSubstitutions.DefaultBuild.Value;
+
+        var sources =
+            FileTree.MergeFiles(
+                Tree(Application(Deps(("elm/core", "1.0.5"), ("author/shadow", "1.0.0")))),
+                Source("Main", "import Task\nvalue = Task.succeed 42"));
+
+        var build =
+            await ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(
+                sources,
+                ["elm.json"],
+                [],
+                defaults with { Substitutions = [.. defaults.Substitutions, shadow] },
+                new Provider { RejectRequests = true });
+
+        if (exposesTask)
+        {
+            build.ImportDiagnostics.Should().Contain(
+                diagnostic => diagnostic.ImportedModuleName == "Task" &&
+                    diagnostic.Message.Contains("ambiguous", StringComparison.Ordinal));
+        }
+        else
+        {
+            build.ImportDiagnostics.Should().BeEmpty();
+            ElmCompiler.AnalyzeApplication(build).Should().BeEmpty();
+        }
     }
 
     [Theory]

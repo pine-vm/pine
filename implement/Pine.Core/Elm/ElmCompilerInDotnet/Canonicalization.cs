@@ -7,8 +7,6 @@ using System.Linq;
 
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
-using AbstractSyntax = Pine.Core.Elm.Syntax.Abstract;
-
 // Alias to avoid ambiguity with System.Range
 using Range = Pine.Core.Elm.Syntax.Concrete.Range;
 
@@ -367,8 +365,6 @@ public partial class Canonicalization
         IReadOnlyList<File> modules,
         ImplicitImportConfig implicitImportConfig)
     {
-        modules = [.. modules.Select(AddEffectModuleStubs)];
-
         // Check for duplicate module names
         var moduleNameGroups =
             modules
@@ -393,7 +389,7 @@ public partial class Canonicalization
         }
 
         // Build module exports map for resolving exposing (..)
-        var moduleExportsMap = BuildModuleExportsMap(modules);
+        var moduleExportsMap = AddTypeInterfaceExports(BuildModuleExportsMap(modules), ElmModuleTypeInterface.Standard);
 
         // Build a map of module names to their infix declarations
         var moduleInfixMap = BuildModuleInfixMap(modules);
@@ -513,61 +509,28 @@ public partial class Canonicalization
             }
         }
 
+        if (module.ModuleDefinition.Value is Module.EffectModule effect)
+        {
+            if (effect.ModuleData.Command is not null)
+                valueNames.Add("command");
+
+            if (effect.ModuleData.Subscription is not null)
+                valueNames.Add("subscription");
+        }
+
         return
             new CanonicalizationContext(
                 new(moduleName),
                 types,
                 values,
                 aliases,
-                BuildLocalDeclarations(module),
+                BuildLocalDeclarations(module).Union(valueNames),
                 [],
                 operators,
                 [],
                 ModuleLevelTypes: typeNames.ToImmutable(),
                 ModuleLevelValues: valueNames.ToImmutable())
             .WithDefaults(implicitImports, exports);
-    }
-
-    private static File AddEffectModuleStubs(File module)
-    {
-        if (module.ModuleDefinition.Value is not Module.EffectModule effectModule)
-            return module;
-
-        var stubNames = new List<string>();
-
-        if (effectModule.ModuleData.Command is not null)
-            stubNames.Add("command");
-
-        if (effectModule.ModuleData.Subscription is not null)
-            stubNames.Add("subscription");
-
-        if (stubNames.Count is 0)
-            return module;
-
-        var declarations = module.Declarations.ToList();
-
-        foreach (var stubName in stubNames)
-        {
-            var stubDeclaration =
-                new AbstractSyntax.Declaration.FunctionDeclaration(
-                    new AbstractSyntax.FunctionStruct(
-                        Signature: null,
-                        new AbstractSyntax.FunctionImplementation(
-                            stubName,
-                            [new AbstractSyntax.Pattern.VarPattern("stubArgument")],
-                            new AbstractSyntax.Expression.Application(
-                                AbstractSyntax.Expression.Identifier.Create(
-                                    ["Pine_kernel"],
-                                    "effect_module_" + stubName + "_stub_reached"),
-                                [AbstractSyntax.Expression.Identifier.Create([], "stubArgument")]))));
-
-            declarations.Add(
-                new Node<Declaration>(
-                    new Range(new Location(0, 0), new Location(0, 0)),
-                    AbstractSyntax.ConvertToConcrete.ToDeclaration(stubDeclaration)));
-        }
-
-        return module with { Declarations = declarations };
     }
 
     private static ImmutableHashSet<string> BuildLocalDeclarations(File module)

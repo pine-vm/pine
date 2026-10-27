@@ -72,7 +72,8 @@ public partial class ElmCompiler
                 canonicalizationCache,
                 build.CompilerModuleSyntax,
                 validateSourceImports: false,
-                bundledModuleNames: BundledModuleNames(build));
+                bundledModuleNames: BundledModuleNames(build),
+                moduleTypeInterfaces: build.CompilerModuleTypeInterfaces);
 
         return
             [
@@ -95,8 +96,16 @@ public partial class ElmCompiler
         IDictionary<string, Result<ParseError, File>>? sourceParseCache = null,
         Canonicalization.DeclarationCache? canonicalizationCache = null,
         IReadOnlyDictionary<string, File>? parsedSources = null,
-        IReadOnlySet<string>? bundledModuleNames = null)
+        IReadOnlySet<string>? bundledModuleNames = null,
+        IReadOnlyDictionary<string, ElmModuleTypeInterface>? moduleTypeInterfaces = null)
     {
+        moduleTypeInterfaces ??=
+            includeBundledKernelModules
+            ?
+            ElmModuleTypeInterface.Standard
+            :
+            ImmutableDictionary<string, ElmModuleTypeInterface>.Empty;
+
         var parseDiagnostics = new List<ElmCompilerDiagnostic>();
 
         var parsed =
@@ -132,7 +141,8 @@ public partial class ElmCompiler
             Canonicalization.CanonicalizeDeclarations(
                 [.. parsed.Select(source => source.File)],
                 [name],
-                cache: canonicalizationCache);
+                cache: canonicalizationCache,
+                moduleTypeInterfaces: moduleTypeInterfaces);
 
         if (result.IsErrOrNull() is { } error)
             return error;
@@ -148,7 +158,7 @@ public partial class ElmCompiler
                 declarations,
                 bundledModuleNames ?? (includeBundledKernelModules ? BundledModuleNames() : null)));
 
-        var type = InferDeclarationType(name, declarations);
+        var type = InferDeclarationType(name, declarations, canonicalized.TypeOnlyFunctionSignatures);
 
         if (type is null && diagnostics.Count is 0 &&
             candidates[0].Declaration.Value is Declaration.FunctionDeclaration)
@@ -183,7 +193,8 @@ public partial class ElmCompiler
             sourceParseCache,
             canonicalizationCache,
             build.CompilerModuleSyntax,
-            BundledModuleNames(build));
+            BundledModuleNames(build),
+            build.CompilerModuleTypeInterfaces);
 
     private static IReadOnlyList<ElmCompilerDiagnostic> AnalyzeSources(
         FileTree sources,
@@ -193,8 +204,16 @@ public partial class ElmCompiler
         Canonicalization.DeclarationCache? canonicalizationCache,
         IReadOnlyDictionary<string, File>? parsedSources = null,
         bool validateSourceImports = true,
-        IReadOnlySet<string>? bundledModuleNames = null)
+        IReadOnlySet<string>? bundledModuleNames = null,
+        IReadOnlyDictionary<string, ElmModuleTypeInterface>? moduleTypeInterfaces = null)
     {
+        moduleTypeInterfaces ??=
+            includeBundledKernelModules
+            ?
+            ElmModuleTypeInterface.Standard
+            :
+            ImmutableDictionary<string, ElmModuleTypeInterface>.Empty;
+
         var diagnostics = new List<ElmCompilerDiagnostic>();
 
         var parsed =
@@ -239,7 +258,8 @@ public partial class ElmCompiler
 
             foreach (var error in Canonicalization.ValidateImports(
                 validateSourceImports ? source.File : source.File with { Imports = [] },
-                files))
+                files,
+                moduleTypeInterfaces))
             {
                 diagnostics.Add(new(source.Path, error.Range, RenderCanonicalizationError(error), "elm-name"));
             }
@@ -266,7 +286,12 @@ public partial class ElmCompiler
                 !duplicateScopes.Contains(string.Join(".", candidate.Name.Namespaces)))
             .Select(candidate => candidate.Name).Distinct().ToArray();
 
-        var result = Canonicalization.CanonicalizeDeclarations(files, roots, cache: canonicalizationCache);
+        var result =
+            Canonicalization.CanonicalizeDeclarations(
+                files,
+                roots,
+                cache: canonicalizationCache,
+                moduleTypeInterfaces: moduleTypeInterfaces);
 
         if (result.IsErrOrNull() is { } failure)
         {
@@ -379,7 +404,7 @@ public partial class ElmCompiler
         }
 
         var functionTypes =
-            BuildFunctionTypes(declarations).ToDictionary(
+            BuildFunctionTypes(declarations, canonicalized.TypeOnlyFunctionSignatures).ToDictionary(
                 entry => entry.Key,
                 entry => new FunctionTypeInfo(
                     TypeInference.ExpandTypeAliases(entry.Value.ReturnType, aliases, entry.Key.Namespaces),
@@ -670,17 +695,32 @@ public partial class ElmCompiler
             entry => Abstract.ConvertFromConcrete.FromDeclaration(entry.Value.Value.Value));
 
     private static Dictionary<DeclQualifiedName, FunctionTypeInfo> BuildFunctionTypes(
-        IReadOnlyDictionary<DeclQualifiedName, Abstract.Declaration> declarations) =>
-        declarations.Where(entry => entry.Value is Abstract.Declaration.FunctionDeclaration)
-        .ToDictionary(
-            entry => entry.Key,
-            entry => new FunctionTypeInfo(
-                TypeInference.GetFunctionReturnType((Abstract.Declaration.FunctionDeclaration)entry.Value),
-                TypeInference.GetFunctionParameterTypes((Abstract.Declaration.FunctionDeclaration)entry.Value)));
+        IReadOnlyDictionary<DeclQualifiedName, Abstract.Declaration> declarations,
+        ImmutableDictionary<string, TypeInference.InferredType> typeOnlySignatures)
+    {
+        var types =
+            new TypeInference.FunctionInferenceEnvironment(
+                typeOnlySignatures,
+                ImmutableDictionary<string, ElmModuleTypeInterface>.Empty).FunctionTypes.ToDictionary();
+
+        foreach (var (name, declaration) in declarations)
+        {
+            if (declaration is Abstract.Declaration.FunctionDeclaration function)
+            {
+                types[name] =
+                    new(
+                        TypeInference.GetFunctionReturnType(function),
+                        TypeInference.GetFunctionParameterTypes(function));
+            }
+        }
+
+        return types;
+    }
 
     private static TypeInference.InferredType? InferDeclarationType(
         DeclQualifiedName name,
-        IReadOnlyDictionary<DeclQualifiedName, Abstract.Declaration> declarations)
+        IReadOnlyDictionary<DeclQualifiedName, Abstract.Declaration> declarations,
+        ImmutableDictionary<string, TypeInference.InferredType> typeOnlySignatures)
     {
         if (declarations[name] is not Abstract.Declaration.FunctionDeclaration function)
             return null;
@@ -688,7 +728,7 @@ public partial class ElmCompiler
         if (function.Function.Signature is { } signature)
             return TypeInference.TypeAnnotationToInferredType(signature.TypeAnnotation);
 
-        var knownTypes = BuildFunctionTypes(declarations);
+        var knownTypes = BuildFunctionTypes(declarations, typeOnlySignatures);
 
         var parameterNames =
             function.Function.Declaration.Arguments

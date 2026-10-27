@@ -99,9 +99,17 @@ public partial class ElmCompiler
         bool includeBundledKernelModules = true,
         IDictionary<string, Result<ConcreteSyntax.ParseError, ConcreteSyntax.File>>? sourceParseCache = null,
         Canonicalization.DeclarationCache? canonicalizationCache = null,
-        IReadOnlyDictionary<string, ConcreteSyntax.File>? parsedSources = null)
+        IReadOnlyDictionary<string, ConcreteSyntax.File>? parsedSources = null,
+        IReadOnlyDictionary<string, ElmModuleTypeInterface>? moduleTypeInterfaces = null)
     {
         syntaxOptimization ??= new ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled();
+
+        moduleTypeInterfaces ??=
+            includeBundledKernelModules
+            ?
+            ElmModuleTypeInterface.Standard
+            :
+            ImmutableDictionary<string, ElmModuleTypeInterface>.Empty;
 
         var canonicalizationResult =
             ParseAndCanonicalizeForLowering(
@@ -110,7 +118,8 @@ public partial class ElmCompiler
                 includeBundledKernelModules,
                 sourceParseCache,
                 canonicalizationCache,
-                parsedSources);
+                parsedSources,
+                moduleTypeInterfaces);
 
         if (canonicalizationResult.IsErrOrNull() is { } error)
             return error.ToString();
@@ -161,7 +170,8 @@ public partial class ElmCompiler
         bool includeBundledKernelModules,
         IDictionary<string, Result<ConcreteSyntax.ParseError, ConcreteSyntax.File>>? sourceParseCache,
         Canonicalization.DeclarationCache? canonicalizationCache,
-        IReadOnlyDictionary<string, ConcreteSyntax.File>? parsedSources)
+        IReadOnlyDictionary<string, ConcreteSyntax.File>? parsedSources,
+        IReadOnlyDictionary<string, ElmModuleTypeInterface> moduleTypeInterfaces)
     {
         if (rootDeclarations.Count is 0)
             return new CanonicalizationBoundaryResult([], ImmutableHashSet<DeclQualifiedName>.Empty);
@@ -265,7 +275,9 @@ public partial class ElmCompiler
             Canonicalization.CanonicalizeDeclarations(
                 successfullyParsedModules,
                 rootDeclarations,
-                cache: canonicalizationCache);
+                cache: canonicalizationCache,
+                moduleTypeInterfaces: moduleTypeInterfaces,
+                useSourceModuleTypeInterfaces: false);
 
         if (canonicalizationResult.IsErrOrNull() is { } canonErr)
         {
@@ -331,6 +343,19 @@ public partial class ElmCompiler
         if (moduleErrors.Count > 0)
         {
             return new CompilationError.CanonicalizationErrors(moduleErrors);
+        }
+
+        foreach (var (owner, references) in canonicalizedDeclarations.References.OrderBy(entry => entry.Key))
+        {
+            if (references.FirstOrDefault(reference => reference.IsTypeOnly && !reference.IsTypeReference) is { } reference)
+            {
+                return
+                    new CompilationError.Message(
+                        $"Cannot compile '{owner.FullName}': '{reference.ReferencedName.FullName}' at " +
+                        $"{moduleNameToFilePath[string.Join(".", owner.Namespaces)]}:" +
+                        $"{reference.Range.Start.Row}:{reference.Range.Start.Column} " +
+                        "is available only as a type-only interface; no executable implementation is supplied.");
+            }
         }
 
         var canonicalizedModules =
@@ -527,7 +552,8 @@ public partial class ElmCompiler
         bool includeBundledKernelModules = true,
         IDictionary<string, Result<ConcreteSyntax.ParseError, ConcreteSyntax.File>>? sourceParseCache = null,
         Canonicalization.DeclarationCache? canonicalizationCache = null,
-        IReadOnlyDictionary<string, ConcreteSyntax.File>? parsedSources = null)
+        IReadOnlyDictionary<string, ConcreteSyntax.File>? parsedSources = null,
+        IReadOnlyDictionary<string, ElmModuleTypeInterface>? moduleTypeInterfaces = null)
     {
         syntaxOptimization ??= SyntaxOptimizationConfigDefault;
 
@@ -539,7 +565,8 @@ public partial class ElmCompiler
                 includeBundledKernelModules,
                 sourceParseCache,
                 canonicalizationCache,
-                parsedSources);
+                parsedSources,
+                moduleTypeInterfaces);
 
         if (loweringResult.IsErrOrNull() is { } loweringErr)
             return loweringErr;
@@ -569,7 +596,8 @@ public partial class ElmCompiler
                 includeBundledKernelModules: false,
                 sourceParseCache: sourceParseCache,
                 canonicalizationCache: canonicalizationCache,
-                parsedSources: build.CompilerModuleSyntax);
+                parsedSources: build.CompilerModuleSyntax,
+                moduleTypeInterfaces: build.CompilerModuleTypeInterfaces);
 
         if (result.IsErrOrNull() is not { } error)
             return result;

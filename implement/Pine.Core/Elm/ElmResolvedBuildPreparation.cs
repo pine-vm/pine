@@ -293,12 +293,41 @@ public static class ElmResolvedBuildPreparation
                 ProjectSourceFingerprint = ElmDependencyResolver.SourceFingerprint(appSources),
             };
 
-        return
+        var prepared =
             declarationDemand
             ?
             PrepareDeclarationSources(build, appSources, string.Join("/", manifestPath), sourceParseCache)
             :
             ValidateImports(build, appSources, string.Join("/", manifestPath));
+
+        var interfaces =
+            ElmCompilerInDotnet.ElmModuleTypeInterface.Standard
+            .Where(
+                item =>
+                prepared.Resolution.Packages.TryGetValue(item.Value.PackageName, out var package) &&
+                package.SubstitutionImplementationId == "pine-bundled:" + item.Value.PackageName)
+            .ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal);
+
+        var names =
+            interfaces.ToDictionary(
+                item => item.Key,
+                item => prepared.CompilerModuleOrigins.Where(
+                    origin =>
+                    origin.Value.ModuleName == item.Key &&
+                    origin.Value is ElmModuleOrigin.Substitution substitution &&
+                    substitution.ReplacedPackage.Name == item.Value.PackageName)
+                .Select(origin => origin.Key).SingleOrDefault() ?? item.Key,
+                StringComparer.Ordinal);
+
+        return
+            prepared with
+            {
+                CompilerModuleTypeInterfaces =
+                interfaces.ToImmutableDictionary(
+                    item => names[item.Key],
+                    item => item.Value.RenameModules(name => names.GetValueOrDefault(name) ?? name),
+                    StringComparer.Ordinal)
+            };
     }
 
     /// <summary>Adds package-relative Elm sources under an owner-specific elm-packages directory.</summary>
@@ -569,6 +598,28 @@ public static class ElmResolvedBuildPreparation
                 item.Scope is ElmDependencyScope.Direct or ElmDependencyScope.TestDirect)
             .Select(item => item.PackageName).ToHashSet(StringComparer.Ordinal);
 
+        var typeInterfaces =
+            ElmCompilerInDotnet.ElmModuleTypeInterface.Standard
+            .Where(
+                item =>
+                build.Resolution.Packages.TryGetValue(item.Value.PackageName, out var package) &&
+                package.SubstitutionImplementationId == "pine-bundled:" + item.Value.PackageName)
+            .ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal);
+
+        var interfaceNames =
+            typeInterfaces.ToDictionary(
+                item => item.Key,
+                item =>
+                {
+                    var source =
+                        byPath.Values.SingleOrDefault(
+                            module =>
+                            module.Name == item.Key && module.Owner == item.Value.PackageName);
+
+                    return source is not null ? compilerNames[source.Path] : item.Key;
+                },
+                StringComparer.Ordinal);
+
         var importNames = new Dictionary<(string path, string name), string>();
         var diagnostics = ImmutableArray.CreateBuilder<ElmResolvedBuild.ImportDiagnostic>();
 
@@ -604,6 +655,28 @@ public static class ElmResolvedBuildPreparation
                         candidate.Owner is not null && visiblePackages.Contains(candidate.Owner) &&
                         build.Resolution.Packages[candidate.Owner].ExposedModules.Contains(name)).ToArray();
 
+                var visibleInterface =
+                    typeInterfaces.TryGetValue(name, out var moduleInterface) &&
+                    (module.Owner == moduleInterface.PackageName ||
+                    visiblePackages.Contains(moduleInterface.PackageName));
+
+                var interfaceOnlyCandidate =
+                    visibleInterface && !visible.Any(target => target.Owner == moduleInterface!.PackageName);
+
+                if (visible.Length is 0 && interfaceOnlyCandidate)
+                {
+                    importNames[(module.Path, name)] = interfaceNames[name];
+
+                    ValidateExposing(
+                        import,
+                        module,
+                        name,
+                        InterfaceExposedApi(moduleInterface!),
+                        "the type-only module interface");
+
+                    continue;
+                }
+
                 if (name is "Basics" or "Debug" && visible.Length is 0 &&
                     (visiblePackages.Contains("elm/core") || module.Owner is "elm/core"))
                 {
@@ -617,12 +690,22 @@ public static class ElmResolvedBuildPreparation
                     continue;
                 }
 
-                if (visible.Length is not 1)
+                if (visible.Length is not 1 || interfaceOnlyCandidate)
                 {
                     var reason =
-                        visible.Length > 1
+                        visible.Length > 1 || interfaceOnlyCandidate
                         ?
-                        "is ambiguous between " + string.Join(", ", visible.Select(candidate => candidate.Path))
+                        "is ambiguous between " +
+                        string.Join(
+                            ", ",
+                            visible.Select(candidate => candidate.Path).Concat(
+                                interfaceOnlyCandidate
+                                ?
+                                [
+                                "the type-only interface from " + moduleInterface!.PackageName
+                                ]
+                                :
+                                []))
                         :
                         candidates.Length > 0
                         ?
@@ -662,7 +745,12 @@ public static class ElmResolvedBuildPreparation
                 var target = visible[0];
                 importNames[(module.Path, name)] = compilerNames[target.Path];
 
-                ValidateExposing(import, module, name, exportedApi[target.Path], target.Path);
+                var api = exportedApi[target.Path];
+
+                if (visibleInterface && target.Owner == moduleInterface!.PackageName)
+                    api = [.. api.Union(InterfaceExposedApi(moduleInterface))];
+
+                ValidateExposing(import, module, name, api, target.Path);
             }
         }
 
@@ -774,6 +862,14 @@ public static class ElmResolvedBuildPreparation
                     Fingerprint = null,
                 });
     }
+
+    private static HashSet<(string name, bool type, bool constructors)> InterfaceExposedApi(
+        ElmCompilerInDotnet.ElmModuleTypeInterface moduleInterface) =>
+        [
+        .. moduleInterface.Types.Keys.Select(name => (name, true, false)),
+        .. moduleInterface.TypeConstructors.Keys.Select(name => (name, true, true)),
+        .. moduleInterface.Values.Keys.Select(name => (name, false, false))
+        ];
 
     private static HashSet<(string name, bool type, bool constructors)> NativeExposedApi(string moduleName)
     {

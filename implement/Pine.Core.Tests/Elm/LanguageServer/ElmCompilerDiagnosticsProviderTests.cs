@@ -3,7 +3,13 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.LanguageServer;
+using Pine.Core.Files;
+using Pine.Core.Functional;
+using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -71,11 +77,286 @@ public class ElmCompilerDiagnosticsProviderTests
         }
         """;
 
+    [Fact]
+    public async Task Declaration_demand_compiler_diagnostics_accept_effect_types_without_executable_stubs()
+    {
+        var (workspace, _) =
+            VirtualWorkspace.Create(
+                [
+                    (["elm.json"],
+                    Manifest.Replace(
+                        "\"elm/core\": \"1.0.5\"",
+                        "\"elm/core\": \"1.0.5\", \"elm/time\": \"1.0.0\"")),
+                    (["src", "Main.elm"],
+                    """
+                    module Main exposing (..)
+                    import Task
+                    import Time
+
+                    type Event = TimeArrived Time.Posix
+
+                    subscriptions : model -> Sub Event
+                    subscriptions _ = Sub.batch [ Time.every 200 TimeArrived, Sub.none ]
+
+                    update : Event -> model -> (model, Cmd Event)
+                    update _ state = (state, Cmd.none)
+
+                    now : Cmd Event
+                    now = Task.perform TimeArrived Time.now
+                    """)
+                ]);
+
+        var provider =
+            new ElmCompilerDiagnosticsProvider(
+                workspace,
+                new DocumentTexts(),
+                (sources, manifestPath, token) => ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(
+                    sources,
+                    manifestPath,
+                    [],
+                    ElmPackageSubstitutions.DefaultBuild.Value,
+                    cancellationToken: token));
+
+        var result =
+            (await provider.GetDiagnosticsAsync(
+                VirtualWorkspace.DocumentUri("src", "Main.elm"),
+                CancellationToken.None))
+            .Extract(error => throw new System.Exception(error.Message));
+
+        result.Should().ContainSingle().Which.Diagnostics.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Declaration_demand_compiler_diagnostics_resolve_encoder_source_directories()
+    {
+        var (workspace, _) =
+            VirtualWorkspace.Create(
+                [
+                    (["elm.json"],
+                    Manifest.Replace("[\"src\"]", "[\"src\", \"encoders/src\"]").Replace(
+                        "\"elm/core\": \"1.0.5\"",
+                        "\"elm/core\": \"1.0.5\", \"elm/json\": \"1.1.3\"")),
+                    (["src", "CompileElmApp.elm"],
+                    """
+                    module CompileElmApp exposing (..)
+                    import Elm.Syntax.Encode.TypeAnnotation
+                    import Json.Encode
+
+                    parseJsonConverterDeclarationType annotation =
+                        Json.Encode.encode 0 (Elm.Syntax.Encode.TypeAnnotation.encode annotation)
+
+                    asCompletelyLoweredElmApp annotation = parseJsonConverterDeclarationType annotation
+                    mapJsonConvertersModuleText annotation = parseJsonConverterDeclarationType annotation
+                    """),
+                    (["encoders", "src", "Elm", "Syntax", "Encode", "TypeAnnotation.elm"],
+                    """
+                    module Elm.Syntax.Encode.TypeAnnotation exposing (encode)
+                    import Json.Encode
+
+                    encode : String -> Json.Encode.Value
+                    encode = Json.Encode.string
+                    """)
+                ]);
+
+        var provider =
+            new ElmCompilerDiagnosticsProvider(
+                workspace,
+                new DocumentTexts(),
+                (sources, manifestPath, token) => ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(
+                    sources,
+                    manifestPath,
+                    [],
+                    ElmPackageSubstitutions.DefaultBuild.Value,
+                    cancellationToken: token));
+
+        var result =
+            (await provider.GetDiagnosticsAsync(
+                VirtualWorkspace.DocumentUri("src", "CompileElmApp.elm"),
+                CancellationToken.None))
+            .Extract(error => throw new System.Exception(error.Message));
+
+        result.Should().HaveCount(2);
+        result.Should().OnlyContain(document => document.Diagnostics.Count == 0);
+    }
+
     private sealed class DocumentTexts : IDocumentTextSource
     {
         public Dictionary<string, string> Texts { get; } = [];
 
         public string? TryGetDocumentText(string documentUri) => Texts.GetValueOrDefault(documentUri);
+    }
+
+    [Theory]
+    [InlineData("Decode.Value", "Encode.string \"hello\"", false)]
+    [InlineData("Decode.Decoder Decode.Value", "Decode.value", false)]
+    [InlineData("Decode.Value -> Encode.Value", "identity", false)]
+    [InlineData("Encode.Value -> Decode.Value", "identity", false)]
+    [InlineData("Value -> Encode.Value", "identity", false)]
+    [InlineData("Encode.Value -> Value", "identity", false)]
+    [InlineData("Encode.Value", "Decode.decodeString Decode.value \"null\" |> Result.withDefault Encode.null", false)]
+    [InlineData("Value", "42", true)]
+    [InlineData("Decode.Value", "\"hello\"", true)]
+    [InlineData("Decode.Decoder Value", "42", true)]
+    public async Task Declaration_demand_compiler_diagnostics_share_json_decode_and_encode_values(
+        string type,
+        string expression,
+        bool expectTypeError)
+    {
+        var (workspace, _) =
+            VirtualWorkspace.Create(
+                [
+                    (["elm.json"],
+                    Manifest.Replace(
+                        "\"elm/core\": \"1.0.5\"",
+                        "\"elm/core\": \"1.0.5\", \"elm/json\": \"1.1.3\"")),
+                    (["src", "Main.elm"],
+                    $$"""
+                    module Main exposing (..)
+                    import Json.Decode as Decode exposing (Value)
+                    import Json.Encode as Encode
+
+                    value : {{type}}
+                    value = {{expression}}
+                    """)
+                ]);
+
+        ElmResolvedBuild? build = null;
+
+        var provider =
+            new ElmCompilerDiagnosticsProvider(
+                workspace,
+                new DocumentTexts(),
+                async (sources, manifestPath, token) => build =
+                    await ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(
+                        sources,
+                        manifestPath,
+                        [],
+                        ElmPackageSubstitutions.DefaultBuild.Value,
+                        cancellationToken: token));
+
+        var result =
+            (await provider.GetDiagnosticsAsync(
+                VirtualWorkspace.DocumentUri("src", "Main.elm"),
+                CancellationToken.None))
+            .Extract(error => throw new Exception(error.Message));
+
+        string[] expectedCodes = expectTypeError ? ["elm-type"] : [];
+
+        result.Should().ContainSingle().Which.Diagnostics.Select(diagnostic => diagnostic.Code)
+            .Should().Equal(expectedCodes);
+
+        var name = DeclQualifiedName.Create(["Main"], "value");
+
+        ElmCompiler.QueryDeclaration(build!, name).Extract(error => throw new Exception(error))
+            .Diagnostics.Select(diagnostic => diagnostic.Code).Should().Equal(expectedCodes);
+
+        if (!expectTypeError)
+        {
+            ElmCompiler.CompileResolvedEnvironment(build!, [name]).IsErrOrNull().Should().BeNull();
+        }
+    }
+
+    [Fact]
+    public async Task Declaration_demand_compiler_diagnostics_accept_virtual_dom_json_properties()
+    {
+        var virtualDom =
+            ElmPackageSubstitution.Create(
+                "elm/virtual-dom",
+                "virtual-dom-type-interface-fixture",
+                ["1.0.3"],
+                FileTree.FromSetOfFilesWithStringPath(
+                    [
+                        (new[] { "src", "VirtualDom.elm" },
+                        (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(
+                            """
+                            module VirtualDom exposing (Attribute, Node, node, property)
+                            import Elm.Kernel.VirtualDom
+                            import Json.Decode as Json
+
+                            type Attribute msg = Attribute
+                            type Node msg = Node
+
+                            property : String -> Json.Value -> Attribute msg
+                            property = Elm.Kernel.VirtualDom.property
+
+                            node : String -> List (Attribute msg) -> List (Node msg) -> Node msg
+                            node = Elm.Kernel.VirtualDom.node
+                            """))
+                    ]),
+                ["VirtualDom"]) with
+            {
+                ImplementationDependencies =
+                ImmutableDictionary<string, string>.Empty
+                .Add("elm/core", "1.0.0 <= v < 2.0.0")
+                .Add("elm/json", "1.0.0 <= v < 2.0.0")
+            };
+
+        var defaults = ElmPackageSubstitutions.DefaultBuild.Value;
+        var configuration = defaults with { Substitutions = [.. defaults.Substitutions, virtualDom] };
+
+        var (workspace, _) =
+            VirtualWorkspace.Create(
+                [
+                    (["elm.json"],
+                    Manifest.Replace(
+                        "\"elm/core\": \"1.0.5\"",
+                        "\"elm/core\": \"1.0.5\", \"elm/json\": \"1.1.3\", \"elm/virtual-dom\": \"1.0.3\"")),
+                    (["src", "Main.elm"],
+                    """
+                    module Main exposing (..)
+                    import Json.Encode as Encode
+                    import Platform
+                    import VirtualDom
+
+                    type Event = Tick
+
+                    main : Program () () Event
+                    main = Platform.worker
+                        { init = \_ -> ( (), Cmd.none )
+                        , update = \_ state -> ( state, Cmd.none )
+                        , subscriptions = subscriptions
+                        }
+
+                    subscriptions : () -> Sub Event
+                    subscriptions state =
+                        case view state of
+                            _ -> Sub.none
+
+                    view : () -> VirtualDom.Node Event
+                    view _ = VirtualDom.node "input" [ VirtualDom.property "value" (Encode.string "hello") ] []
+                    """)
+                ]);
+
+        ElmResolvedBuild? build = null;
+
+        var provider =
+            new ElmCompilerDiagnosticsProvider(
+                workspace,
+                new DocumentTexts(),
+                async (sources, manifestPath, token) => build =
+                    await ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(
+                        sources,
+                        manifestPath,
+                        [],
+                        configuration,
+                        cancellationToken: token));
+
+        var result =
+            (await provider.GetDiagnosticsAsync(
+                VirtualWorkspace.DocumentUri("src", "Main.elm"),
+                CancellationToken.None))
+            .Extract(error => throw new Exception(error.Message));
+
+        result.Should().ContainSingle().Which.Diagnostics.Should().BeEmpty();
+
+        foreach (var name in new[] { "main", "subscriptions", "view" })
+        {
+            ElmCompiler.QueryDeclaration(build!, DeclQualifiedName.Create(["Main"], name))
+                .Extract(error => throw new Exception(error)).Diagnostics.Should().BeEmpty();
+        }
+
+        ElmCompiler.CompileResolvedEnvironment(build!, [DeclQualifiedName.Create(["Main"], "view")])
+            .IsErrOrNull().Should().Contain("Elm.Kernel.VirtualDom");
     }
 
     [Theory]

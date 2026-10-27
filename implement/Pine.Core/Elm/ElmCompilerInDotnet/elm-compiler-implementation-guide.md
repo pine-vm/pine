@@ -38,6 +38,40 @@ the literal prefix of a `Build_List_With_Prefix` instruction.
 
 When looking at the compilation of Elm programs to Pine, a platform is just a constraint on the type of the entry point. Since the platform is the system that translates between values and effects, it is outside the scope of the Elm app and this specification.
 
+### Type-only module interfaces
+
+`ElmModuleTypeInterface` describes types, public constructor signatures, and value
+signatures without supplying any executable bodies or assuming a runtime
+representation for opaque types. The shared inference environment uses these
+signatures in both compilation and compiler-derived language-server diagnostics.
+The standard catalog covers `Platform`, `Platform.Cmd`, `Platform.Sub`, `Task`,
+`Process`, and the public `Time` API. Implemented source exports take precedence.
+
+Resolved builds select these interfaces only for the corresponding bundled
+package substitutions, preserve direct-dependency visibility, and rewrite nominal
+type identities alongside package module identities. Interfaces do not satisfy
+strict implementation-closure checks or permit upstream fallback for a replacement.
+They do allow pure functions to mention otherwise unimplemented opaque types.
+
+For diagnostics, annotated public functions in effect modules and modules importing
+an unavailable `Elm.Kernel` module also provide type-only signatures (for example
+`Browser.Events.onAnimationFrame` and `Browser.element`). Their type
+dependencies are still resolved and demanded, but their backend-specific bodies
+are not needed to analyze callers. Executable compilation instead demands the
+actual bodies, so pure helpers in effect modules remain compilable.
+
+These signatures still require their referenced types to resolve. Substituted
+modules must preserve public type aliases, not replace them with distinct opaque
+types. For example, bundled `Json.Decode.Value` aliases `Json.Encode.Value`, so
+`VirtualDom.property` accepts encoded JSON values without demanding its kernel
+implementation.
+
+Effect-manager `command` and `subscription` operations are type-only symbols,
+not generated Elm declarations or crash-on-invocation stubs. If a demanded value
+requires one of these operations or another interface-only value, compilation
+fails before emission with an explicit "no executable implementation" error.
+Canonicalization caches retain this distinction and the interface's type dependencies.
+
 ### Simplified Internal Function Interfaces
 
 For functions not called directly from outside, the compiler may emit a simplified interface to optimize for smaller program size or runtime efficiency.

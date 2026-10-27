@@ -40,7 +40,13 @@ module Json.Decode exposing
 
 import Array
 import Dict
-import Json.Encode exposing (Value(..))
+import Json.Encode
+
+
+{-| The same JSON value type used by `Json.Encode`.
+-}
+type alias Value =
+    Json.Encode.Value
 
 
 {-| A structured error describing exactly how the decoder failed. You can use
@@ -97,7 +103,7 @@ So if you ever see a `null`, this will return whatever value you specified.
 -}
 null : a -> Decoder a
 null ok jsonValue =
-    if jsonValue == NullValue then
+    if jsonValue == Json.Encode.NullValue then
         Ok ok
 
     else
@@ -107,7 +113,7 @@ null ok jsonValue =
 bool : Decoder Bool
 bool jsonValue =
     case jsonValue of
-        BoolValue boolVal ->
+        Json.Encode.BoolValue boolVal ->
             Ok boolVal
 
         _ ->
@@ -117,7 +123,7 @@ bool jsonValue =
 int : Decoder Int
 int jsonValue =
     case jsonValue of
-        IntValue intVal ->
+        Json.Encode.IntValue intVal ->
             Ok intVal
 
         _ ->
@@ -127,7 +133,7 @@ int jsonValue =
 string : Decoder String
 string jsonValue =
     case jsonValue of
-        StringValue stringVal ->
+        Json.Encode.StringValue stringVal ->
             Ok stringVal
 
         _ ->
@@ -137,7 +143,7 @@ string jsonValue =
 list : Decoder a -> Decoder (List a)
 list decoder jsonValue =
     case jsonValue of
-        ArrayValue values ->
+        Json.Encode.ArrayValue values ->
             decodeListRecursively [] decoder values
 
         _ ->
@@ -147,7 +153,7 @@ list decoder jsonValue =
 array : Decoder a -> Decoder (Array.Array a)
 array decoder jsonValue =
     case jsonValue of
-        ArrayValue values ->
+        Json.Encode.ArrayValue values ->
             case decodeListRecursively [] decoder values of
                 Ok decodedList ->
                     Ok (Array.fromList decodedList)
@@ -177,7 +183,7 @@ decodeListRecursively result decoder values =
 field : String -> Decoder a -> Decoder a
 field key decoder jsonValue =
     case jsonValue of
-        ObjectValue fields ->
+        Json.Encode.ObjectValue fields ->
             case List.filter (\( k, _ ) -> k == key) fields of
                 [ ( _, fieldValue ) ] ->
                     decoder fieldValue
@@ -192,7 +198,7 @@ field key decoder jsonValue =
 float : Decoder Float
 float jsonValue =
     case jsonValue of
-        FloatValue floatAsString ->
+        Json.Encode.FloatValue floatAsString ->
             case String.toFloat floatAsString of
                 Just floatVal ->
                     Ok floatVal
@@ -200,7 +206,7 @@ float jsonValue =
                 Nothing ->
                     Err (Failure ("Expecting a float, but got: " ++ floatAsString) jsonValue)
 
-        IntValue intVal ->
+        Json.Encode.IntValue intVal ->
             Ok (toFloat intVal)
 
         _ ->
@@ -210,7 +216,7 @@ float jsonValue =
 index : Int -> Decoder a -> Decoder a
 index targetIndex decoder jsonValue =
     case jsonValue of
-        ArrayValue values ->
+        Json.Encode.ArrayValue values ->
             case List.drop targetIndex values of
                 indexedValue :: _ ->
                     decoder indexedValue
@@ -524,7 +530,7 @@ oneOfRecursively errors decoders jsonValue =
 nullable : Decoder a -> Decoder (Maybe a)
 nullable decoder jsonValue =
     case jsonValue of
-        NullValue ->
+        Json.Encode.NullValue ->
             Ok Nothing
 
         _ ->
@@ -579,7 +585,7 @@ decodeString : Decoder a -> String -> Result Error a
 decodeString decoder jsonString =
     case parseJsonStringToValue jsonString of
         Err parseErr ->
-            Err (Failure ("Bad JSON: " ++ parseErr) NullValue)
+            Err (Failure ("Bad JSON: " ++ parseErr) Json.Encode.NullValue)
 
         Ok jsonValue ->
             decodeValue decoder jsonValue
@@ -673,7 +679,7 @@ parseValue srcBytes offset0 =
                 -- Parse a JSON string (the leading quote is consumed here)
                 case parseJsonStringLiteral srcBytes (Pine_builtin.int_add [ offset1, 4 ]) of
                     ( Ok str, offset2 ) ->
-                        ( Ok (StringValue str), offset2 )
+                        ( Ok (Json.Encode.StringValue str), offset2 )
 
                     ( Err err, offset2 ) ->
                         ( Err err, offset2 )
@@ -682,7 +688,7 @@ parseValue srcBytes offset0 =
                 -- Parse an array (leading '[' is already consumed).
                 case parseArray srcBytes (Pine_builtin.int_add [ offset1, 4 ]) of
                     ( Ok values, offset2 ) ->
-                        ( Ok (ArrayValue values), offset2 )
+                        ( Ok (Json.Encode.ArrayValue values), offset2 )
 
                     ( Err err, offset2 ) ->
                         ( Err err, offset2 )
@@ -691,7 +697,7 @@ parseValue srcBytes offset0 =
                 -- Parse an object (leading '{' is already consumed).
                 case parseObjectRec [] srcBytes (Pine_builtin.int_add [ offset1, 4 ]) of
                     ( Ok fields, offset2 ) ->
-                        ( Ok (ObjectValue fields), offset2 )
+                        ( Ok (Json.Encode.ObjectValue fields), offset2 )
 
                     ( Err err, offset2 ) ->
                         ( Err err, offset2 )
@@ -719,7 +725,7 @@ parseNull srcBytes offset0 =
             Pine_builtin.take [ 16, Pine_builtin.skip [ offset0, srcBytes ] ]
     in
     if Pine_builtin.equal [ nextChars, Pine_builtin.concat [ 'n', 'u', 'l', 'l' ] ] then
-        ( Ok NullValue, Pine_builtin.int_add [ offset0, 16 ] )
+        ( Ok Json.Encode.NullValue, Pine_builtin.int_add [ offset0, 16 ] )
 
     else
         ( Err "Expecting 'null'", offset0 )
@@ -733,7 +739,7 @@ parseTrue srcBytes offset0 =
             Pine_builtin.take [ 16, Pine_builtin.skip [ offset0, srcBytes ] ]
     in
     if Pine_builtin.equal [ nextChars, Pine_builtin.concat [ 't', 'r', 'u', 'e' ] ] then
-        ( Ok (BoolValue True), Pine_builtin.int_add [ offset0, 16 ] )
+        ( Ok (Json.Encode.BoolValue True), Pine_builtin.int_add [ offset0, 16 ] )
 
     else
         ( Err "Expecting 'true'", offset0 )
@@ -747,7 +753,7 @@ parseFalse srcBytes offset0 =
             Pine_builtin.take [ 20, Pine_builtin.skip [ offset0, srcBytes ] ]
     in
     if Pine_builtin.equal [ nextChars, Pine_builtin.concat [ 'f', 'a', 'l', 's', 'e' ] ] then
-        ( Ok (BoolValue False), Pine_builtin.int_add [ offset0, 20 ] )
+        ( Ok (Json.Encode.BoolValue False), Pine_builtin.int_add [ offset0, 20 ] )
 
     else
         ( Err "Expecting 'false'", offset0 )
@@ -792,7 +798,7 @@ parseNumber srcBytes offset0 =
                                     , Pine_builtin.skip [ offset0, srcBytes ]
                                     ]
                         in
-                        ( Ok (FloatValue (String sliceBytes))
+                        ( Ok (Json.Encode.FloatValue (String sliceBytes))
                         , offset2
                         )
 
@@ -801,7 +807,7 @@ parseNumber srcBytes offset0 =
 
             else
                 -- If no decimal point, we're done: it's an integer
-                ( Ok (IntValue intVal), offset1 )
+                ( Ok (Json.Encode.IntValue intVal), offset1 )
 
         ( Err err, offset1 ) ->
             ( Err err, offset1 )
@@ -815,7 +821,7 @@ parseNumber srcBytes offset0 =
 
         src = String.toList "[true, false, null]"
         parseArray src 0
-        --> ( Ok [ BoolValue True, BoolValue False, NullValue ], finalOffset )
+        --> ( Ok [ Json.Encode.BoolValue True, Json.Encode.BoolValue False, Json.Encode.NullValue ], finalOffset )
 
 -}
 parseArray : Int -> Int -> ( Result String (List Value), Int )
@@ -1644,7 +1650,7 @@ skipWhitespace strBytes offset =
 keyValuePairs : Decoder a -> Decoder (List ( String, a ))
 keyValuePairs decoder jsonValue =
     case jsonValue of
-        ObjectValue fields ->
+        Json.Encode.ObjectValue fields ->
             decodeKeyValuePairsRecursively [] decoder fields
 
         _ ->

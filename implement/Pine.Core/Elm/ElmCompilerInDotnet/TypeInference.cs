@@ -3492,17 +3492,28 @@ public static partial class TypeInference
         /// <summary>
         /// Prepares the qualified function-type lookup for the supplied immutable signature map.
         /// </summary>
-        public FunctionInferenceEnvironment(ImmutableDictionary<string, InferredType> functionSignatures)
-            : this((IReadOnlyDictionary<string, InferredType>)functionSignatures)
+        public FunctionInferenceEnvironment(
+            ImmutableDictionary<string, InferredType> functionSignatures,
+            IReadOnlyDictionary<string, ElmModuleTypeInterface>? moduleTypeInterfaces = null)
+            : this((IReadOnlyDictionary<string, InferredType>)functionSignatures, moduleTypeInterfaces)
         {
         }
 
-        internal FunctionInferenceEnvironment(IReadOnlyDictionary<string, InferredType> functionSignatures)
+        internal FunctionInferenceEnvironment(
+            IReadOnlyDictionary<string, InferredType> functionSignatures,
+            IReadOnlyDictionary<string, ElmModuleTypeInterface>? moduleTypeInterfaces = null)
         {
-            FunctionSignatures = functionSignatures;
+            FunctionSignatures =
+                new FunctionSignatureLookup(
+                    functionSignatures,
+                    moduleTypeInterfaces is null
+                    ?
+                    ElmModuleTypeInterface.StandardFunctionSignatures
+                    :
+                    ElmModuleTypeInterface.FunctionSignatures(moduleTypeInterfaces));
 
             FunctionTypes =
-                functionSignatures.ToImmutableDictionary(
+                FunctionSignatures.ToImmutableDictionary(
                     kvp => QualifiedNameHelper.FromQualifiedNameString(kvp.Key),
                     kvp =>
                     {
@@ -3517,6 +3528,31 @@ public static partial class TypeInference
                                 ExtractArgumentTypesFromFunctionType(kvp.Value));
                     });
         }
+    }
+
+    private sealed class FunctionSignatureLookup(
+        IReadOnlyDictionary<string, InferredType> source,
+        IReadOnlyDictionary<string, InferredType> typeOnly) : IReadOnlyDictionary<string, InferredType>
+    {
+        private IEnumerable<KeyValuePair<string, InferredType>> Entries =>
+            source.Concat(typeOnly.Where(entry => !source.ContainsKey(entry.Key)));
+
+        public IEnumerable<string> Keys => Entries.Select(entry => entry.Key);
+
+        public IEnumerable<InferredType> Values => Entries.Select(entry => entry.Value);
+
+        public int Count => source.Count + typeOnly.Keys.Count(key => !source.ContainsKey(key));
+
+        public InferredType this[string key] => source.TryGetValue(key, out var type) ? type : typeOnly[key];
+
+        public bool ContainsKey(string key) => source.ContainsKey(key) || typeOnly.ContainsKey(key);
+
+        public bool TryGetValue(string key, out InferredType value) =>
+            source.TryGetValue(key, out value!) || typeOnly.TryGetValue(key, out value!);
+
+        public IEnumerator<KeyValuePair<string, InferredType>> GetEnumerator() => Entries.GetEnumerator();
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     /// <summary>

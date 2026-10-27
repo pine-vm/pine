@@ -25,6 +25,32 @@ public class DeclarationCanonicalizationCacheTests
         .Extract(error => throw new InvalidOperationException(error));
 
     [Fact]
+    public void Effect_interface_dependency_changes_invalidate_cached_consumers()
+    {
+        const string main = "module Main exposing (..)\nimport Effects\nroot = Effects.value";
+
+        const string effect =
+            """
+            effect module Effects where { subscription = MySub } exposing (value)
+            type MySub msg = MySub msg
+            type alias One = Int
+            type alias Two = String
+            value : One
+            value = missingKernelImplementation
+            """;
+
+        var cache = new Canonicalization.DeclarationCache();
+        var first = Run(cache, main, effect);
+        var same = Run(cache, main, effect);
+        same.Declarations[Root].Should().BeSameAs(first.Declarations[Root]);
+
+        var changed = Run(cache, main, effect.Replace("value : One", "value : Two", StringComparison.Ordinal));
+        changed.Declarations[Root].Should().NotBeSameAs(first.Declarations[Root]);
+        changed.Declarations.Should().ContainKey(DeclQualifiedName.Create(["Effects"], "Two"));
+        changed.Declarations.Should().NotContainKey(DeclQualifiedName.Create(["Effects"], "One"));
+    }
+
+    [Fact]
     public void Semantic_inputs_reuse_independent_equal_syntax_and_ignore_unconsulted_scope_changes()
     {
         const string main = "module Main exposing (..)\nimport A exposing (..)\nimport B exposing (..)\nroot = value";

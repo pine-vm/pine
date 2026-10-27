@@ -62,7 +62,20 @@ public static class ElmPackageSubstitutions
 
         return
             [
-                Package("elm/core", ["1.0.5"], [.. coreModules, "Debug"]),
+                Package(
+                    "elm/core",
+                    [
+                    "1.0.5"
+                    ],
+                    [
+                    .. coreModules,
+                    "Debug",
+                    "Platform",
+                    "Platform.Cmd",
+                    "Platform.Sub",
+                    "Task",
+                    "Process"
+                    ]),
                 Package("elm/bytes", ["1.0.8"], ["Bytes", "Bytes.Encode", "Bytes.Decode"]),
                 Package("elm/json", ["1.1.3", "1.1.4"], ["Json.Encode", "Json.Decode"]),
                 Package("elm/parser", ["1.1.0"], ["Parser", "Parser.Advanced"], "Elm.Kernel.Parser"),

@@ -489,6 +489,10 @@ public sealed record ElmResolvedBuild(
     public ImmutableDictionary<string, File> CompilerModuleSyntax { get; init; } =
         [];
 
+    /// <summary>Package-scoped type-only APIs. These supply no source bodies or executable implementations.</summary>
+    public ImmutableDictionary<string, ElmCompilerInDotnet.ElmModuleTypeInterface> CompilerModuleTypeInterfaces { get; init; } =
+        [];
+
     /// <summary>
     /// Import errors from all available sources, including disconnected project sources.
     /// These do not invalidate dependency resolution or an unrelated declaration compilation.
@@ -516,6 +520,7 @@ public sealed record ElmResolvedBuild(
                 CompilerModuleNames,
                 CompilerModuleSourcePaths,
                 CompilerModuleOrigins,
+                CompilerModuleTypeInterfaces = CompilerModuleTypeInterfaces.Keys,
                 ImportDiagnostics,
             },
             new JsonSerializerOptions { WriteIndented = true });

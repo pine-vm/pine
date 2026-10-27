@@ -3,11 +3,8 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.Syntax.Concrete;
 using Pine.Core.Functional;
-using Pine.Core.PineLanguage;
 using Pine.Core.Tests.Elm.ElmCompilerTests;
-using System;
 using System.Collections.Generic;
-using System.Linq;
 using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
@@ -218,7 +215,7 @@ public class CanonicalizationErrorReportingTests
     }
 
     [Fact]
-    public void Effect_module_command_stub_compiles_and_crashes_if_invoked()
+    public void Effect_module_command_is_type_only_and_rejected_before_execution()
     {
         var rootModule =
             """
@@ -256,42 +253,10 @@ public class CanonicalizationErrorReportingTests
                 appCodeTree,
                 rootFilePaths);
 
-        var compilation = result.Extract(error => throw new Exception(error));
-
-        var effectModuleDeclarationNames =
-            compilation.pipelineStageResults.Canonicalized
-            .Single(module => module.ModuleDefinition.Value is Module.EffectModule)
-            .Declarations
-            .Select(declaration => declaration.Value)
-            .OfType<Declaration.FunctionDeclaration>()
-            .Select(declaration => declaration.Function.Declaration.Value.Name.Value);
-
-        effectModuleDeclarationNames.Should().Contain("command");
-        // The unused effect operation is not demanded merely by importing Task.
-        effectModuleDeclarationNames.Should().NotContain("subscription");
-
-        var parsedEnvironment =
-            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compilation.compiledEnvValue)
-            .Extract(error => throw new Exception(error));
-
-        var rootValue =
-            parsedEnvironment.Modules
-            .Single(module => module.moduleName is "Root")
-            .moduleContent.FunctionDeclarations["main"];
-
-        var rootFunction =
-            FunctionRecord.ParseFunctionRecordTagged(rootValue, new PineVMParseCache())
-            .Extract(error => throw new Exception(error));
-
-        var invokeCommand =
-            ElmCompilerTestHelper.CreateFunctionInvocationDelegate(rootFunction);
-
-        Action invokeStub =
-            () => invokeCommand([PineValue.EmptyList]).evalReport.ReturnValue.Evaluate();
-
-        invokeStub.Should()
-            .Throw<NotImplementedException>()
-            .WithMessage("*effect_module_command_stub_reached*");
+        result.IsErrOrNull().Should().Contain("Task.command")
+            .And.Contain("type-only interface")
+            .And.Contain("no executable implementation")
+            .And.NotContain("stub_reached");
     }
 
     [Fact]

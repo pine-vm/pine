@@ -288,6 +288,8 @@ public partial class Canonicalization
     {
         public sealed record Native : SymbolResolution;
 
+        public sealed record TypeOnly(CompilerModel.ValueList<DeclQualifiedName> Dependencies) : SymbolResolution;
+
         public sealed record Declaration(DeclQualifiedName Owner) : SymbolResolution;
 
         public sealed record Ambiguous : SymbolResolution;

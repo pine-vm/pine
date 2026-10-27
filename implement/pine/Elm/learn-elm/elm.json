@@ -2,7 +2,9 @@
     "type": "application",
     "source-directories": [
         "src",
-        "./../../../elm-in-elm/src"
+        "./../../../elm-in-elm/src",
+        "./../../../elm-in-elm/elm-syntax-encode-json/src",
+        "./../../../elm-in-elm/pine-elm-syntax/src"
     ],
     "elm-version": "0.19.1",
     "dependencies": {
