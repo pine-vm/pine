@@ -86,7 +86,12 @@ toListRecursive offset list blob =
 
 fromList : List Char -> String
 fromList chars =
-    String (Pine_builtin.concat chars)
+    case chars of
+        [] ->
+            String (Pine_builtin.take [ 0, 0 ])
+
+        _ ->
+            String (Pine_builtin.concat chars)
 
 
 fromChar : Char -> String

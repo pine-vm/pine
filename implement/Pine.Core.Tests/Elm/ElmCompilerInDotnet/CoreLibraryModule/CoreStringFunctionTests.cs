@@ -684,6 +684,18 @@ public class CoreStringFunctionTests
     // fromList ['a','b','c'] == "abc"
 
     [Fact]
+    public void FromList_empty_list_has_canonical_encoding()
+    {
+        var result =
+            CoreLibraryTestHelper.ApplyGenericPine(
+                GetStringFunction("fromList"),
+                [PineValue.EmptyList],
+                s_vm);
+
+        result.Should().Be(ToPine(String("")));
+    }
+
+    [Fact]
     public void FromList_abc()
     {
         var result =
