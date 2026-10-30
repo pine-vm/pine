@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Pine.Core.Elm;
 using Pine.Core.Encodings;
+using Pine.Core.Functional;
 using Pine.Core.PineLanguage;
 using Pine.Elm.Platform;
 using System;
@@ -15,6 +16,17 @@ public class ElmWebServiceUsingVolatileProcessNativeTest
 {
     public static PineValue ElmWebServiceVolatileProcessNative =>
         TestSetup.AppConfigComponentFromFiles(TestSetup.VolatileProcessNativeWebApp);
+
+    [Fact]
+    public void Volatile_process_native_stdin_success_encodes_unit()
+    {
+        var encoded =
+            WebServiceInterface.EncodeWriteToVolatileProcessNativeStdInResult(
+                Result<WebServiceInterface.RequestToVolatileProcessError, object>.ok(new object()));
+
+        encoded.Should().Be(
+            ElmValueEncoding.TagAsPineValue("Ok", [PineValue.EmptyList]));
+    }
 
     [Fact]
     public async Task Volatile_process_native_echo_json()

@@ -61,7 +61,7 @@ public static class CoreRecordPrecompiledLeaves
         var record = environment.GetElementAt(0);
         var fieldName = environment.GetElementAt(1);
 
-        if (!record.IsList())
+        if (!IsRecord(record))
         {
             return null;
         }
@@ -101,7 +101,7 @@ public static class CoreRecordPrecompiledLeaves
         var record = environment.GetElementAt(0);
         var updates = environment.GetElementAt(1);
 
-        if (!record.IsList())
+        if (!IsRecord(record))
         {
             return null;
         }
@@ -148,8 +148,13 @@ public static class CoreRecordPrecompiledLeaves
             }
         }
 
-        return PineValueInProcess.CreateList(resultItems);
+        return updatesIndex == updates.GetLength() ? PineValueInProcess.CreateList(resultItems) : null;
     }
+
+    private static bool IsRecord(PineValueInProcess record) =>
+        record.IsList() && (record.GetLength() & 1) is 1 &&
+        (PineValueInProcess.AreEqual(record.GetElementAt(0), ElmValue.ElmRecordTypeTagNameAsValue) ||
+        PineValueInProcess.AreEqual(record.GetElementAt(0), ElmValue.ElmRecordTypeTagNameAsValue_2026));
 
     /// <summary>
     /// Default precompiled-leaves dictionary contributed by the runtime record functions.

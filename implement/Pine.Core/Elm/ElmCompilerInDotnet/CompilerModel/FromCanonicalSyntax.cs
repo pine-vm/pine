@@ -523,7 +523,7 @@ public static class FromCanonicalSyntax
             foreach (var name in updates.Keys)
             {
                 if (!fields.Any(field => field.FieldName == name))
-                    throw new InvalidOperationException($"Closed record type does not contain field '{name}'.");
+                    throw new InvalidOperationException(ElmRuntimeErrorMessages.RecordUpdateFieldNotFound(name));
             }
 
             var items = new List<Expression> { new Expression.Project(receiver, 0) };
@@ -564,7 +564,7 @@ public static class FromCanonicalSyntax
                         return new Expression.Project(receiver, checked(2 * index + 2));
                 }
 
-                throw new InvalidOperationException($"Closed record type does not contain field '{field}'.");
+                throw new InvalidOperationException(ElmRuntimeErrorMessages.RecordFieldNotFound(field));
             }
 
             var access = new Expression.RecordAccess(receiver, field);

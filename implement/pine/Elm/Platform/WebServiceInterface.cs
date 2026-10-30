@@ -799,7 +799,7 @@ type alias LoadDependencyStruct =
             EncodeResult(
                 result,
                 encodeErr: EncodeRequestToVolatileProcessError,
-                encodeOk: _ => ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("Ok", [])));
+                encodeOk: _ => PineValue.EmptyList);
     }
 
     public static PineValue EncodeRequestToVolatileProcessError(

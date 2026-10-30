@@ -620,7 +620,25 @@ public class SimpleNamedPatternTests
         wholeProgramText.Trim().Should().Be(
             """
             Test.decl param_1_0 =
-                param_1_2[2][3][4]
+                if
+                    Pine_builtin.equal
+                        [ param_1_1
+                        , FunctionNode
+                        ]
+                then
+                    if
+                        Pine_builtin.equal
+                            [ param_1_2[2][1]
+                            , Node
+                            ]
+                    then
+                        param_1_2[2][3][4]
+
+                    else
+                        <always_crash>
+
+                else
+                    <always_crash>
 
             """.Trim());
     }
@@ -670,7 +688,25 @@ public class SimpleNamedPatternTests
         wholeProgramText.Trim().Should().Be(
             """
             Test.decl param_1_0 =
-                param_1_2[3][4]
+                if
+                    if
+                        Pine_builtin.equal
+                            [ param_1_2[1]
+                            , Node
+                            ]
+                    then
+                        Pine_builtin.equal
+                            [ param_1_1
+                            , ImportNode
+                            ]
+
+                    else
+                        False
+                then
+                    param_1_2[3][4]
+
+                else
+                    <always_crash>
 
             """.Trim());
     }

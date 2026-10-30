@@ -226,7 +226,7 @@ public class PatternCompiler
                     Expression.ConditionalInst(
                         condition: conditionExpr,
                         trueBranch: caseBody,
-                        falseBranch: result ?? caseBody);
+                        falseBranch: result ?? ElmRuntimeFailure.Emit(ElmRuntimeErrorMessages.CaseNoMatch));
             }
         }
 
@@ -373,7 +373,7 @@ public class PatternCompiler
                     Expression.ConditionalInst(
                         condition: conditionExpr,
                         trueBranch: caseBody,
-                        falseBranch: invokedBodyExpr ?? caseBody);
+                        falseBranch: invokedBodyExpr ?? ElmRuntimeFailure.Emit(ElmRuntimeErrorMessages.CaseNoMatch));
             }
         }
 

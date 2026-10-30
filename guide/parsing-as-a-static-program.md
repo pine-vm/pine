@@ -19,6 +19,8 @@ The incompleteness of this parser doesn't compromise correctness; it only limits
 
 The parser's coverage evolves with the demands of snapshot testing and performance optimization.
 
+When an `Eval` uses a literal that is not a valid encoded expression, the static parser preserves it as a `CrashingParseAndEval` node, including its environment. Compiler-generated error branches are therefore represented explicitly rather than mistaken for calls to unknown functions.
+
 ## Unifying Function Identifiers
 
 One of the most important challenges in parsing Pine programs is unifying function identifiers in function applications. Compilers produce different forms when translating function applications from source programs to Pine.
@@ -28,4 +30,3 @@ That is, for a given function application in the source program, a compiler migh
 To achieve the goals detailed above, we want the parser to treat equivalent function applications as using the same function identifier. That means the parser must develop proofs for the equivalence of various concrete forms.
 
 The goal of the parser implementation is not to develop comprehensive proofs that cover and unify all equivalent representations. Instead, our parser is limited to proofs for a few classes of representations. This means the parser works well with compilers that limit themselves to only emitting function applications in one of these supported shapes.
-

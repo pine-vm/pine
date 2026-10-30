@@ -188,9 +188,17 @@ public class OptimizeAndEmitValueFromStringTests
 
                     while (true)
                     {
-                        if (BuiltinFunctionSpecialized.length_as_int(PineValue.EmptyList) == 0)
+                        PineValue local_000 =
+                            BuiltinFunction.ValueFromBool(BuiltinFunctionSpecialized.length_as_int(PineValue.EmptyList) == 0);
+
+                        if (local_000 == PineKernelValues.TrueValue)
                         {
                             return local_param_1.EvaluateReverse();
+                        }
+
+                        if (local_000 == PineKernelValues.TrueValue)
+                        {
+                            throw new ParseExpressionException("TODO: Include details from encoded and env subexpressions");
                         }
 
                         {

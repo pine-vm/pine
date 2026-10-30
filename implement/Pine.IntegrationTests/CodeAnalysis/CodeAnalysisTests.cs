@@ -178,7 +178,7 @@ public class CodeAnalysisTests
 
         wholeProgramText.Trim().Should().Be(
             """"
-            Test.dictToShuffledList param_1_3 param_1_4 param_1_5 param_1_6 =
+            Test.dictToShuffledList param_1_1 param_1_3 param_1_4 param_1_5 param_1_6 =
                 if
                     Pine_kernel.equal
                         [ []
@@ -187,14 +187,21 @@ public class CodeAnalysisTests
                 then
                     []
 
-                else
+                else if
+                    Pine_kernel.equal
+                        [ param_1_1
+                        , RBNode_elm_builtin
+                        ]
+                then
                     Pine_kernel.concat
                         [ Test.dictToShuffledList
+                            param_1_5[1]
                             param_1_5[3]
                             param_1_5[4]
                             param_1_5[5]
                             param_1_5[6]
                         , Test.dictToShuffledList
+                            param_1_6[1]
                             param_1_6[3]
                             param_1_6[4]
                             param_1_6[5]
@@ -204,6 +211,9 @@ public class CodeAnalysisTests
                             ]
                           ]
                         ]
+
+                else
+                    <always_crash>
             """"
             .Trim());
     }

@@ -353,7 +353,7 @@ public static class CoreBasicsPrecompiledLeaves
 
         if (!b.IsList())
         {
-            throw new ParseExpressionException("Error in case-of block: No matching branch.");
+            throw new ParseExpressionException(ElmRuntimeErrorMessages.CaseNoMatch);
         }
 
         var lengthB = b.GetLength();

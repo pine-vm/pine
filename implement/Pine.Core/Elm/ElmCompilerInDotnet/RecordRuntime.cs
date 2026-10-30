@@ -80,7 +80,7 @@ public static class RecordRuntime
 
         // Reconstruct the record by prepending the tag to the flat updated-field stream:
         // concat([tag], updatedFields)
-        return
+        var result =
             Expression.BuiltinInst(
                 nameof(BuiltinFunction.concat),
                 Expression.ListInst(
@@ -88,6 +88,12 @@ public static class RecordRuntime
                     Expression.ListInst([recordTagExpr]),
                     updatedFieldsExpr
                     ]));
+
+        return
+            Expression.ConditionalInst(
+                IsRecord(recordExpr),
+                falseBranch: ElmRuntimeFailure.Emit(ElmRuntimeErrorMessages.RecordUpdateOnNonRecord),
+                trueBranch: result);
     }
 
     /// <summary>
@@ -121,7 +127,20 @@ public static class RecordRuntime
 
         // Base case: no more fields to process, return the processed list
         // (remaining is empty at this point, so we just return processed)
-        var baseCase = processedExpr;
+        var baseCase =
+            Expression.ConditionalInst(
+                BuiltinHelpers.ApplyBuiltinEqualBinary(updatesExpr, Expression.EmptyList),
+                falseBranch:
+                ElmRuntimeFailure.Emit(
+                    BuiltinHelpers.ApplyBuiltinConcat(
+                        [
+                        Expression.LitralInst(
+                            StringEncoding.ValueFromString(ElmRuntimeErrorMessages.RecordUpdateFieldNotFoundPrefix)),
+                        BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinHead(updatesExpr)),
+                        Expression.LitralInst(
+                            StringEncoding.ValueFromString(ElmRuntimeErrorMessages.RecordUpdateFieldNotFoundSuffix)),
+                        ])),
+                trueBranch: processedExpr);
 
         // Read the first (name, value) pair from the flat remaining stream.
         var firstFieldNameExpr = BuiltinHelpers.ApplyBuiltinHead(remainingExpr);
@@ -264,10 +283,16 @@ public static class RecordRuntime
                 recordFieldsExpr
                 ]);
 
-        return
+        var lookup =
             new Expression.Eval(
                 encoded: Expression.LitralInst(recursiveFunctionValue),
                 environment: recursiveCallEnv);
+
+        return
+            Expression.ConditionalInst(
+                IsRecord(recordExpr),
+                falseBranch: ElmRuntimeFailure.Emit(ElmRuntimeErrorMessages.RecordAccessOnNonRecord),
+                trueBranch: lookup);
     }
 
     /// <summary>
@@ -328,11 +353,28 @@ public static class RecordRuntime
                 falseBranch: recurseExpr);
 
         // If remaining is empty, we didn't find the field (shouldn't happen in valid Elm)
-        // Return empty list as error indicator
         return
             Expression.ConditionalInst(
                 condition: remainingIsEmpty,
-                trueBranch: Expression.EmptyList, // Field not found (error case)
+                trueBranch:
+                ElmRuntimeFailure.Emit(
+                    BuiltinHelpers.ApplyBuiltinConcat(
+                        [
+                        Expression.LitralInst(
+                            StringEncoding.ValueFromString(ElmRuntimeErrorMessages.RecordFieldNotFoundPrefix)),
+                        targetFieldNameExpr,
+                        Expression.LitralInst(
+                            StringEncoding.ValueFromString(ElmRuntimeErrorMessages.RecordFieldNotFoundSuffix)),
+                        ])),
                 falseBranch: searchLogic);
     }
+
+    private static Expression IsRecord(Expression value) =>
+        CoreLibraryModule.CoreBasics.Generic_Or(
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                BuiltinHelpers.ApplyBuiltinHead(value),
+                Expression.LitralInst(ElmValue.ElmRecordTypeTagNameAsValue)),
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                BuiltinHelpers.ApplyBuiltinHead(value),
+                Expression.LitralInst(ElmValue.ElmRecordTypeTagNameAsValue_2026)));
 }

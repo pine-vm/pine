@@ -428,7 +428,7 @@ public class FunctionApplicationOverheadTests
     /// <summary>
     /// Demonstrates overhead scaling with list length when applying a function
     /// parameter recursively. Mapping <c>increment</c> over a 3-element list
-    /// requires 89 instructions and 9 invocations. Each element adds
+    /// requires 64 instructions and 7 invocations. Each element adds
     /// a generic function application through ParseAndEval.
     /// </summary>
     [Fact]
@@ -454,7 +454,7 @@ public class FunctionApplicationOverheadTests
             BuildListCount: 3
             BuildListItemCount: 9
             LoopIterationCount: 0
-            InstructionCount: 58
+            InstructionCount: 64
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 4
             DeferredTemplateValueMaterializationCount: 0
@@ -913,7 +913,7 @@ public class FunctionApplicationOverheadTests
             BuildListCount: 21
             BuildListItemCount: 62
             LoopIterationCount: 0
-            InstructionCount: 354
+            InstructionCount: 396
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 21
             DeferredTemplateValueMaterializationCount: 0
@@ -964,7 +964,7 @@ public class FunctionApplicationOverheadTests
             BuildListCount: 3
             BuildListItemCount: 12
             LoopIterationCount: 0
-            InstructionCount: 58
+            InstructionCount: 64
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 4
             DeferredTemplateValueMaterializationCount: 0
@@ -1022,7 +1022,7 @@ public class FunctionApplicationOverheadTests
             BuildListCount: 21
             BuildListItemCount: 82
             LoopIterationCount: 0
-            InstructionCount: 348
+            InstructionCount: 390
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 21
             DeferredTemplateValueMaterializationCount: 0
@@ -1068,7 +1068,7 @@ public class FunctionApplicationOverheadTests
             BuildListCount: 3
             BuildListItemCount: 9
             LoopIterationCount: 0
-            InstructionCount: 58
+            InstructionCount: 68
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 4
             DeferredTemplateValueMaterializationCount: 0
@@ -1122,7 +1122,7 @@ public class FunctionApplicationOverheadTests
             BuildListCount: 21
             BuildListItemCount: 62
             LoopIterationCount: 0
-            InstructionCount: 354
+            InstructionCount: 432
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 21
             DeferredTemplateValueMaterializationCount: 0

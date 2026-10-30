@@ -246,7 +246,7 @@ public class ElmParserFileTests
             BuildListCount: 277
             BuildListItemCount: 1_420
             LoopIterationCount: 79
-            InstructionCount: 4_155
+            InstructionCount: 4_286
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
@@ -277,7 +277,7 @@ public class ElmParserFileTests
             BuildListCount: 342
             BuildListItemCount: 1_742
             LoopIterationCount: 79
-            InstructionCount: 5_095
+            InstructionCount: 5_297
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 0
             DeferredTemplateValueMaterializationCount: 0
