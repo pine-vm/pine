@@ -2,10 +2,14 @@ using AwesomeAssertions;
 using Pine.Core.Elm.Syntax;
 using Pine.Core.Elm.Syntax.Abstract;
 using Pine.Core.Functional;
+using Pine.Core.IO;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using Xunit;
 
 namespace Pine.Core.Tests.Elm.Syntax.Abstract;
@@ -17,13 +21,13 @@ public class RepositoryRoundtripTests
     {
         var repositoryRoot = FindRepositoryRoot();
         var failures = new List<string>();
+        var files = LoadRepositoryElmFiles(repositoryRoot);
 
-        foreach (var filePath in
-            Directory.EnumerateFiles(repositoryRoot, "*.elm", SearchOption.AllDirectories)
-            .Order(StringComparer.Ordinal))
+        files.Should().NotBeEmpty("the latest commit should contain Elm source files");
+
+        foreach (var (relativePath, contents) in files)
         {
-            var relativePath = Path.GetRelativePath(repositoryRoot, filePath);
-            var parseResult = ElmSyntaxParser.ParseModuleText(System.IO.File.ReadAllText(filePath));
+            var parseResult = ElmSyntaxParser.ParseModuleText(Encoding.UTF8.GetString(contents.Span));
 
             if (parseResult.IsOkOrNull() is not { } concreteFile)
             {
@@ -80,8 +84,113 @@ public class RepositoryRoundtripTests
         }
 
         failures.Should().BeEmpty(
-            "every parsable Elm file should roundtrip through the abstract and concrete syntax models:\n" +
+            "every parsable Elm file in the latest commit should roundtrip through the abstract and concrete syntax models:\n" +
             string.Join("\n", failures));
+    }
+
+    [Fact]
+    public void Repository_elm_corpus_reads_committed_contents_without_working_tree_files()
+    {
+        var repositoryRoot =
+            Path.Combine(Path.GetTempPath(), "pine-roundtrip-corpus-" + Guid.NewGuid().ToString("N"));
+
+        Directory.CreateDirectory(repositoryRoot);
+
+        try
+        {
+            var committedPaths = new[] { "Caf\u00e9.elm", "Tracked file.elm", "bin/Tracked.elm" };
+            var blob = WriteGitObject(repositoryRoot, "blob", Encoding.UTF8.GetBytes("committed source"));
+            var subtree =
+                WriteGitObject(repositoryRoot, "tree", TreeEntry("100644", "Tracked.elm", blob));
+
+            var tree =
+                WriteGitObject(
+                    repositoryRoot,
+                    "tree",
+                    [
+                        .. TreeEntry("100644", "Caf\u00e9.elm", blob),
+                        .. TreeEntry("100644", "Tracked file.elm", blob),
+                        .. TreeEntry("40000", "bin", subtree),
+                        .. TreeEntry("100644", "notes.txt", blob),
+                    ]);
+
+            var commit =
+                WriteGitObject(
+                    repositoryRoot,
+                    "commit",
+                    Encoding.UTF8.GetBytes(
+                        "tree " + tree + "\nauthor Fixture <fixture@example.com> 1760000000 +0000\n" +
+                        "committer Fixture <fixture@example.com> 1760000000 +0000\n\nCorpus fixture\n"));
+
+            System.IO.File.WriteAllText(Path.Combine(repositoryRoot, ".git", "HEAD"), commit + "\n");
+
+            foreach (var relativePath in committedPaths)
+            {
+                var path = Path.GetFullPath(relativePath, repositoryRoot);
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                System.IO.File.WriteAllText(path, "modified working-tree source");
+            }
+
+            foreach (var relativePath in new[]
+            {
+                "bin/Debug/net10.0/artifacts/elm-fuzz-tests/project/tests/Tests.elm",
+                "obj/Generated.elm",
+                "artifacts/elm-fuzz-tests/project/tests/Tests.elm",
+                "Untracked.elm",
+            })
+            {
+                var path = Path.GetFullPath(relativePath, repositoryRoot);
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                System.IO.File.WriteAllText(path, "temporary source");
+            }
+
+            var files = LoadRepositoryElmFiles(repositoryRoot);
+
+            foreach (var relativePath in committedPaths)
+            {
+                System.IO.File.Delete(Path.GetFullPath(relativePath, repositoryRoot));
+            }
+
+            Directory.Delete(Path.Combine(repositoryRoot, "bin"), recursive: true);
+            Directory.Delete(Path.Combine(repositoryRoot, "obj"), recursive: true);
+            Directory.Delete(Path.Combine(repositoryRoot, "artifacts"), recursive: true);
+
+            foreach (var corpus in new[] { files, LoadRepositoryElmFiles(repositoryRoot) })
+            {
+                corpus.Select(file => file.path).Should().Equal(committedPaths);
+                corpus.Select(file => Encoding.UTF8.GetString(file.contents.Span))
+                    .Should().Equal("committed source", "committed source", "committed source");
+            }
+        }
+        finally
+        {
+            Filesystem.DeleteLocalDirectoryRecursive(repositoryRoot);
+        }
+    }
+
+    // Read committed blobs, not temporary projects that parallel tests create and delete.
+    private static (string path, ReadOnlyMemory<byte> contents)[] LoadRepositoryElmFiles(string repositoryRoot) =>
+        GitCore.LoadFromLocalFiles.LoadSubdirectoryContentsFromHead(repositoryRoot, [])
+        .Select(file => (path: string.Join("/", file.Key), contents: file.Value))
+        .Where(file => file.path.EndsWith(".elm", StringComparison.Ordinal))
+        .OrderBy(file => file.path, StringComparer.Ordinal)
+        .ToArray();
+
+    private static byte[] TreeEntry(string mode, string name, string objectId) =>
+        [.. Encoding.UTF8.GetBytes(mode + " " + name + "\0"), .. Convert.FromHexString(objectId)];
+
+    private static string WriteGitObject(string repositoryRoot, string type, byte[] contents)
+    {
+        byte[] bytes = [.. Encoding.ASCII.GetBytes(type + " " + contents.Length + "\0"), .. contents];
+        var objectId = Convert.ToHexStringLower(SHA1.HashData(bytes));
+        var path = Path.Combine(repositoryRoot, ".git", "objects", objectId[..2], objectId[2..]);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+        using var file = System.IO.File.Create(path);
+        using var compressed = new ZLibStream(file, CompressionLevel.SmallestSize);
+        compressed.Write(bytes);
+
+        return objectId;
     }
 
     private static string DescribeFirstDifference(
