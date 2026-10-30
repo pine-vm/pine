@@ -1,11 +1,11 @@
-module ElmInteractiveSubmissionParser exposing (..)
+module ElmInteractiveSubmissionParser2024 exposing (..)
 
 import Elm.Parser
 import Elm.Syntax.Declaration
 import Elm.Syntax.Expression
 import Elm.Syntax.File
 import Elm.Syntax.Node
-import ElmCompiler exposing (InteractiveSubmission(..))
+import ElmCompiler2024 exposing (InteractiveSubmission(..))
 import Parser
 
 

@@ -9,7 +9,7 @@ using Xunit;
 
 namespace Pine.IntegrationTests;
 
-public class ElmInteractiveTests
+public class ElmInteractive2024Tests
 {
     private static string PathToCoreScenariosDirectory =>
         @"./../../../../test-and-train/elm-interactive-scenarios-core";
@@ -63,7 +63,7 @@ public class ElmInteractiveTests
 
         static ElmTime.ElmInteractive.IInteractiveSession newInteractiveSessionFromAppCode(
             FileTree? appCodeTree) =>
-            new ElmTime.ElmInteractive.InteractiveSessionPine(
+            new ElmTime.ElmInteractive.InteractiveSessionPine2024(
                 compilerSourceFiles: CompileElmProgramCodeFiles,
                 appCodeTree: appCodeTree,
                 overrideSkipLowering: null,
@@ -149,7 +149,7 @@ public class ElmInteractiveTests
         var console = (IConsole)StaticConsole.Instance;
 
         ElmTime.ElmInteractive.IInteractiveSession newInteractiveSessionFromAppCode(FileTree? appCodeTree) =>
-            new ElmTime.ElmInteractive.InteractiveSessionPine(
+            new ElmTime.ElmInteractive.InteractiveSessionPine2024(
                 compilerSourceFiles: CompileElmProgramCodeFiles,
                 appCodeTree: appCodeTree,
                 overrideSkipLowering: true,

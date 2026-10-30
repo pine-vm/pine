@@ -7594,14 +7594,14 @@ public class CSharpFormatTests
             private static readonly FrozenSet<DeclQualifiedName> s_includedDeclarationsDefault =
                 new[]
                 {
-                    new DeclQualifiedName(["Pine"], "stringFromValue"),
-                    new DeclQualifiedName(["Pine"], "valueFromString"),
+                    new DeclQualifiedName(["Pine2024"], "stringFromValue"),
+                    new DeclQualifiedName(["Pine2024"], "valueFromString"),
 
                     /*
                      * Would benefit more from memoization, not clear which variant is more efficient at the moment.
                      * 
-                    new DeclQualifiedName(["Pine"], "evaluateExpression"),
-                    new DeclQualifiedName(["Pine"], "encodeExpressionAsValue"),
+                    new DeclQualifiedName(["Pine2024"], "evaluateExpression"),
+                    new DeclQualifiedName(["Pine2024"], "encodeExpressionAsValue"),
                     */
                 }
                 .ToFrozenSet();

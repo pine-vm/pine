@@ -195,16 +195,16 @@ public record BundledPineToDotnet(
             DeclQualifiedName.Create(["Bitwise"], "shiftRightBy"),
             DeclQualifiedName.Create(["Bitwise"], "shiftRightZfBy"),
 
-            DeclQualifiedName.Create(["Pine"], "stringFromValue"),
-            DeclQualifiedName.Create(["Pine"], "valueFromString"),
-            DeclQualifiedName.Create(["Pine"], "applyKernelFunction"),
+            DeclQualifiedName.Create(["Pine2024"], "stringFromValue"),
+            DeclQualifiedName.Create(["Pine2024"], "valueFromString"),
+            DeclQualifiedName.Create(["Pine2024"], "applyKernelFunction"),
 
             /*
              * Would benefit more from memoization, not clear which variant is more efficient at the moment.
              * 
-            DeclQualifiedName.Create(["Pine"], "evaluateExpression"),
-            DeclQualifiedName.Create(["Pine"], "encodeExpressionAsValue"),
-            DeclQualifiedName.Create(["Pine"], "parseExpressionFromValue"),
+            DeclQualifiedName.Create(["Pine2024"], "evaluateExpression"),
+            DeclQualifiedName.Create(["Pine2024"], "encodeExpressionAsValue"),
+            DeclQualifiedName.Create(["Pine2024"], "parseExpressionFromValue"),
             */
         }
         .ToFrozenSet();

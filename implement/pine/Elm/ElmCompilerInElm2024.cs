@@ -19,9 +19,9 @@ using FunctionRecord = Pine.Core.CodeAnalysis.FunctionRecord;
 
 namespace Pine.Elm;
 
-public class ElmCompilerInElm
+public class ElmCompilerInElm2024
 {
-    private static readonly ConcurrentDictionary<FileTree, Task<Result<string, ElmCompilerInElm>>> s_buildCompilerFromSource =
+    private static readonly ConcurrentDictionary<FileTree, Task<Result<string, ElmCompilerInElm2024>>> s_buildCompilerFromSource =
         new();
 
     static public readonly Lazy<FileTree> ElmCoreAndKernelModuleFilesDefault =
@@ -97,7 +97,7 @@ public class ElmCompilerInElm
 
     private static readonly Core.CodeAnalysis.PineVMParseCache s_parseCache = new();
 
-    private ElmCompilerInElm(
+    private ElmCompilerInElm2024(
         PineValue compilerEnvironment,
         FunctionRecord compileParsedInteractiveSubmission,
         FunctionRecord expandElmInteractiveEnvironmentWithModules,
@@ -113,7 +113,7 @@ public class ElmCompilerInElm
         LanguageServiceInterface = languageServiceInterface;
     }
 
-    public static Task<Result<string, ElmCompilerInElm>> GetElmCompilerAsync(
+    public static Task<Result<string, ElmCompilerInElm2024>> GetElmCompilerAsync(
         FileTree compilerSourceFiles)
     {
         return
@@ -128,9 +128,9 @@ public class ElmCompilerInElm
     /// Typical applications for compiling the Elm compiler from source are verifying bootstrapping or
     /// experimenting with modifications to the emit stage.
     /// </summary>
-    public static Result<string, ElmCompilerInElm> BuildCompilerFromSourceFiles(
+    public static Result<string, ElmCompilerInElm2024> BuildCompilerFromSourceFiles(
         FileTree compilerSourceFiles,
-        ElmCompilerInElm? overrideElmCompiler = null)
+        ElmCompilerInElm2024? overrideElmCompiler = null)
     {
         var compilerWithPackagesTree =
             ElmCompilerFileTreeFromBundledFileTree(compilerSourceFiles);
@@ -140,16 +140,20 @@ public class ElmCompilerInElm
                 compilerWithPackagesTree,
                 rootDeclarations:
                 [
-                    Core.CodeAnalysis.DeclQualifiedName.Create(["ElmCompiler"], "compileParsedInteractiveSubmission"),
                     Core.CodeAnalysis.DeclQualifiedName.Create(
                         [
-                        "ElmCompiler"
+                        "ElmCompiler2024"
+                        ],
+                        "compileParsedInteractiveSubmission"),
+                    Core.CodeAnalysis.DeclQualifiedName.Create(
+                        [
+                        "ElmCompiler2024"
                         ],
                         "expandElmInteractiveEnvironmentWithModules"),
                     Core.CodeAnalysis.DeclQualifiedName.Create(["Elm", "Parser"], "parseToFile"),
                     Core.CodeAnalysis.DeclQualifiedName.Create(
                         [
-                        "ElmInteractiveSubmissionParser"
+                        "ElmInteractiveSubmissionParser2024"
                         ],
                         "parseInteractiveSubmissionFromString"),
                     Core.CodeAnalysis.DeclQualifiedName.Create(["LanguageService"], "initLanguageServiceState"),
@@ -171,9 +175,9 @@ public class ElmCompilerInElm
 
     public static IReadOnlyList<IReadOnlyList<string>> DefaultCompilerTreeRootModuleFilePaths =>
         [
-        ["src", "ElmCompiler.elm"],
+        ["src", "ElmCompiler2024.elm"],
         ["elm-syntax", "src", "Elm", "Parser.elm"],
-        ["src", "ElmInteractiveSubmissionParser.elm"],
+        ["src", "ElmInteractiveSubmissionParser2024.elm"],
         ["src", "LanguageService.elm"],
         ["src", "CompileElmAppMain.elm"],
         ];
@@ -242,7 +246,7 @@ public class ElmCompilerInElm
         FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
         bool skipLowering,
-        ElmCompilerInElm? overrideElmCompiler = null)
+        ElmCompilerInElm2024? overrideElmCompiler = null)
     {
         if (rootFilePaths.Count is 0 &&
             overrideElmCompiler is null &&
@@ -284,7 +288,7 @@ public class ElmCompilerInElm
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
         bool skipLowering,
         bool skipFilteringForSourceDirs,
-        ElmCompilerInElm? overrideElmCompiler = null)
+        ElmCompilerInElm2024? overrideElmCompiler = null)
     {
         Result<string, PineValue> ContinueWithBundledCompiler()
         {
@@ -379,7 +383,7 @@ public class ElmCompilerInElm
                 rootFilePaths);
 
         return
-            ElmTime.ElmInteractive.InteractiveSessionPine.CompileInteractiveEnvironment(
+            ElmTime.ElmInteractive.InteractiveSessionPine2024.CompileInteractiveEnvironment(
                 appCodeTree:
                 appCodeFilteredForRoots is null
                 ?
@@ -391,12 +395,12 @@ public class ElmCompilerInElm
                 skipFilteringForSourceDirs: skipFilteringForSourceDirs);
     }
 
-    public static Result<string, ElmCompilerInElm> ElmCompilerFromEnvValue(PineValue compiledEnv)
+    public static Result<string, ElmCompilerInElm2024> ElmCompilerFromEnvValue(PineValue compiledEnv)
     {
         var parseCompileSubmissionResult =
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                 interactiveEnvironment: compiledEnv,
-                moduleName: "ElmCompiler",
+                moduleName: "ElmCompiler2024",
                 declarationName: "compileParsedInteractiveSubmission",
                 s_parseCache);
 
@@ -416,7 +420,7 @@ public class ElmCompilerInElm
         var parseExpandEnvWithModulesResult =
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                 interactiveEnvironment: compiledEnv,
-                moduleName: "ElmCompiler",
+                moduleName: "ElmCompiler2024",
                 declarationName: "expandElmInteractiveEnvironmentWithModules",
                 s_parseCache);
 
@@ -456,7 +460,7 @@ public class ElmCompilerInElm
         var parseParseInteractiveSubmissionResult =
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                 interactiveEnvironment: compiledEnv,
-                moduleName: "ElmInteractiveSubmissionParser",
+                moduleName: "ElmInteractiveSubmissionParser2024",
                 declarationName: "parseInteractiveSubmissionFromString",
                 s_parseCache);
 
@@ -511,7 +515,7 @@ public class ElmCompilerInElm
         }
 
         return
-            new ElmCompilerInElm(
+            new ElmCompilerInElm2024(
                 compiledEnv,
                 compileParsedInteractiveSubmission:
                 compileParsedInteractiveSubmission.functionRecord,
@@ -628,7 +632,7 @@ public class ElmCompilerInElm
         return false;
     }
 
-    public static Result<string, ElmCompilerInElm> LoadCompilerFromBundleFile(string filePath)
+    public static Result<string, ElmCompilerInElm2024> LoadCompilerFromBundleFile(string filePath)
     {
         using var sourceFile =
             new System.IO.FileStream(

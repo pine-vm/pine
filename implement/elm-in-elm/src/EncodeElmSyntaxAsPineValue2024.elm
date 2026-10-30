@@ -1,4 +1,4 @@
-module EncodeElmSyntaxAsPineValue exposing (..)
+module EncodeElmSyntaxAsPineValue2024 exposing (..)
 
 import Common
 import Elm.Syntax.Declaration
@@ -15,14 +15,14 @@ import Elm.Syntax.Signature
 import Elm.Syntax.Type
 import Elm.Syntax.TypeAlias
 import Elm.Syntax.TypeAnnotation
-import ElmCompiler
-import Pine
+import ElmCompiler2024
+import Pine2024
 
 
-encodeInteractiveSubmissionAsPineValue : ElmCompiler.InteractiveSubmission -> Result String Pine.Value
+encodeInteractiveSubmissionAsPineValue : ElmCompiler2024.InteractiveSubmission -> Result String Pine2024.Value
 encodeInteractiveSubmissionAsPineValue submission =
     case submission of
-        ElmCompiler.ExpressionSubmission expr ->
+        ElmCompiler2024.ExpressionSubmission expr ->
             case encodeElmSyntaxExpressionAsPineValue expr of
                 Err err ->
                     Err ("Failed encoding expression: " ++ err)
@@ -35,7 +35,7 @@ encodeInteractiveSubmissionAsPineValue submission =
                             ]
                         )
 
-        ElmCompiler.DeclarationSubmission decl ->
+        ElmCompiler2024.DeclarationSubmission decl ->
             case encodeElmSyntaxDeclarationAsPineValue decl of
                 Err err ->
                     Err ("Failed encoding declaration: " ++ err)
@@ -49,7 +49,7 @@ encodeInteractiveSubmissionAsPineValue submission =
                         )
 
 
-encodeElmSyntaxFileAsPineValue : Elm.Syntax.File.File -> Result String Pine.Value
+encodeElmSyntaxFileAsPineValue : Elm.Syntax.File.File -> Result String Pine2024.Value
 encodeElmSyntaxFileAsPineValue elmSyntaxFile =
     case
         encodeElmSyntaxNodeAsPineValueResult
@@ -68,16 +68,16 @@ encodeElmSyntaxFileAsPineValue elmSyntaxFile =
                         encodeRecordAsPineValue
                             [ ( "moduleDefinition", moduleDefinitionValue )
                             , ( "imports"
-                              , Pine.ListValue
+                              , Pine2024.ListValue
                                     (List.map (encodeElmSyntaxNodeAsPineValue encodeElmSyntaxImportAsPineValue)
                                         elmSyntaxFile.imports
                                     )
                               )
                             , ( "declarations"
-                              , Pine.ListValue declarationsValues
+                              , Pine2024.ListValue declarationsValues
                               )
                             , ( "comments"
-                              , Pine.ListValue
+                              , Pine2024.ListValue
                                     (List.map (encodeElmSyntaxNodeAsPineValue encodeElmStringAsPineValue)
                                         elmSyntaxFile.comments
                                     )
@@ -86,7 +86,7 @@ encodeElmSyntaxFileAsPineValue elmSyntaxFile =
                     )
 
 
-encodeElmSyntaxModuleDefinitionAsPineValue : Elm.Syntax.Module.Module -> Result String Pine.Value
+encodeElmSyntaxModuleDefinitionAsPineValue : Elm.Syntax.Module.Module -> Result String Pine2024.Value
 encodeElmSyntaxModuleDefinitionAsPineValue elmSyntaxModuleDefinition =
     case elmSyntaxModuleDefinition of
         Elm.Syntax.Module.NormalModule normal ->
@@ -104,7 +104,7 @@ encodeElmSyntaxModuleDefinitionAsPineValue elmSyntaxModuleDefinition =
             Err "EffectModule is not implemented"
 
 
-encodeElmSyntaxDeclarationAsPineValue : Elm.Syntax.Declaration.Declaration -> Result String Pine.Value
+encodeElmSyntaxDeclarationAsPineValue : Elm.Syntax.Declaration.Declaration -> Result String Pine2024.Value
 encodeElmSyntaxDeclarationAsPineValue elmSyntaxDeclaration =
     case elmSyntaxDeclaration of
         Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
@@ -146,7 +146,7 @@ encodeElmSyntaxDeclarationAsPineValue elmSyntaxDeclaration =
             Err "Destructuring is not implemented"
 
 
-encodeElmSyntaxTypeAsPineValue : Elm.Syntax.Type.Type -> Pine.Value
+encodeElmSyntaxTypeAsPineValue : Elm.Syntax.Type.Type -> Pine2024.Value
 encodeElmSyntaxTypeAsPineValue elmSyntaxType =
     encodeRecordAsPineValue
         [ ( "documentation"
@@ -160,14 +160,14 @@ encodeElmSyntaxTypeAsPineValue elmSyntaxType =
                 elmSyntaxType.name
           )
         , ( "generics"
-          , Pine.ListValue
+          , Pine2024.ListValue
                 (List.map
                     (encodeElmSyntaxNodeAsPineValue encodeElmStringAsPineValue)
                     elmSyntaxType.generics
                 )
           )
         , ( "constructors"
-          , Pine.ListValue
+          , Pine2024.ListValue
                 (List.map (encodeElmSyntaxNodeAsPineValue encodeElmSyntaxValueConstructorAsPineValue)
                     elmSyntaxType.constructors
                 )
@@ -175,7 +175,7 @@ encodeElmSyntaxTypeAsPineValue elmSyntaxType =
         ]
 
 
-encodeElmSyntaxValueConstructorAsPineValue : Elm.Syntax.Type.ValueConstructor -> Pine.Value
+encodeElmSyntaxValueConstructorAsPineValue : Elm.Syntax.Type.ValueConstructor -> Pine2024.Value
 encodeElmSyntaxValueConstructorAsPineValue elmSyntaxValueConstructor =
     encodeRecordAsPineValue
         [ ( "name"
@@ -184,7 +184,7 @@ encodeElmSyntaxValueConstructorAsPineValue elmSyntaxValueConstructor =
                 elmSyntaxValueConstructor.name
           )
         , ( "arguments"
-          , Pine.ListValue
+          , Pine2024.ListValue
                 (List.map (encodeElmSyntaxNodeAsPineValue encodeElmSyntaxTypeAnnotationAsPineValue)
                     elmSyntaxValueConstructor.arguments
                 )
@@ -192,7 +192,7 @@ encodeElmSyntaxValueConstructorAsPineValue elmSyntaxValueConstructor =
         ]
 
 
-encodeElmSyntaxTypeAliasAsPineValue : Elm.Syntax.TypeAlias.TypeAlias -> Result String Pine.Value
+encodeElmSyntaxTypeAliasAsPineValue : Elm.Syntax.TypeAlias.TypeAlias -> Result String Pine2024.Value
 encodeElmSyntaxTypeAliasAsPineValue elmSyntaxTypeAlias =
     Ok
         (encodeRecordAsPineValue
@@ -207,7 +207,7 @@ encodeElmSyntaxTypeAliasAsPineValue elmSyntaxTypeAlias =
                     elmSyntaxTypeAlias.name
               )
             , ( "generics"
-              , Pine.ListValue
+              , Pine2024.ListValue
                     (List.map
                         (encodeElmSyntaxNodeAsPineValue encodeElmStringAsPineValue)
                         elmSyntaxTypeAlias.generics
@@ -222,7 +222,7 @@ encodeElmSyntaxTypeAliasAsPineValue elmSyntaxTypeAlias =
         )
 
 
-encodeElmSyntaxFunctionExpressionAsPineValue : Elm.Syntax.Expression.Function -> Result String Pine.Value
+encodeElmSyntaxFunctionExpressionAsPineValue : Elm.Syntax.Expression.Function -> Result String Pine2024.Value
 encodeElmSyntaxFunctionExpressionAsPineValue elmSyntaxFunctionExpression =
     encodeElmSyntaxNodeAsPineValueResult
         encodeElmSyntaxFunctionImplementationAsPineValue
@@ -247,7 +247,7 @@ encodeElmSyntaxFunctionExpressionAsPineValue elmSyntaxFunctionExpression =
             )
 
 
-encodeElmSyntaxFunctionImplementationAsPineValue : Elm.Syntax.Expression.FunctionImplementation -> Result String Pine.Value
+encodeElmSyntaxFunctionImplementationAsPineValue : Elm.Syntax.Expression.FunctionImplementation -> Result String Pine2024.Value
 encodeElmSyntaxFunctionImplementationAsPineValue elmSyntaxFunctionImplementation =
     elmSyntaxFunctionImplementation.arguments
         |> Common.resultListMapCombine
@@ -266,7 +266,7 @@ encodeElmSyntaxFunctionImplementationAsPineValue elmSyntaxFunctionImplementation
                                         elmSyntaxFunctionImplementation.name
                                   )
                                 , ( "arguments"
-                                  , Pine.ListValue argumentsValues
+                                  , Pine2024.ListValue argumentsValues
                                   )
                                 , ( "expression"
                                   , expressionValue
@@ -276,7 +276,7 @@ encodeElmSyntaxFunctionImplementationAsPineValue elmSyntaxFunctionImplementation
             )
 
 
-encodeElmSyntaxExpressionAsPineValue : Elm.Syntax.Expression.Expression -> Result String Pine.Value
+encodeElmSyntaxExpressionAsPineValue : Elm.Syntax.Expression.Expression -> Result String Pine2024.Value
 encodeElmSyntaxExpressionAsPineValue expression =
     case expression of
         Elm.Syntax.Expression.UnitExpr ->
@@ -293,7 +293,7 @@ encodeElmSyntaxExpressionAsPineValue expression =
                     (\expressionsValues ->
                         encodeTagAsPineValue
                             "ListExpr"
-                            [ Pine.ListValue expressionsValues ]
+                            [ Pine2024.ListValue expressionsValues ]
                     )
 
         Elm.Syntax.Expression.Application expressions ->
@@ -304,7 +304,7 @@ encodeElmSyntaxExpressionAsPineValue expression =
                     (\expressionsValues ->
                         encodeTagAsPineValue
                             "Application"
-                            [ Pine.ListValue expressionsValues ]
+                            [ Pine2024.ListValue expressionsValues ]
                     )
 
         Elm.Syntax.Expression.OperatorApplication string infixDirection leftExpression rightExpression ->
@@ -328,7 +328,7 @@ encodeElmSyntaxExpressionAsPineValue expression =
             Ok
                 (encodeTagAsPineValue
                     "FunctionOrValue"
-                    [ (List.map encodeElmStringAsPineValue >> Pine.ListValue)
+                    [ (List.map encodeElmStringAsPineValue >> Pine2024.ListValue)
                         moduleName
                     , encodeElmStringAsPineValue string
                     ]
@@ -361,10 +361,10 @@ encodeElmSyntaxExpressionAsPineValue expression =
             Ok (encodeTagAsPineValue "Operator" [ encodeElmStringAsPineValue string ])
 
         Elm.Syntax.Expression.Integer int ->
-            Ok (encodeTagAsPineValue "Integer" [ Pine.valueFromInt int ])
+            Ok (encodeTagAsPineValue "Integer" [ Pine2024.valueFromInt int ])
 
         Elm.Syntax.Expression.Hex int ->
-            Ok (encodeTagAsPineValue "Hex" [ Pine.valueFromInt int ])
+            Ok (encodeTagAsPineValue "Hex" [ Pine2024.valueFromInt int ])
 
         Elm.Syntax.Expression.Negation expressionNode ->
             encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxExpressionAsPineValue expressionNode
@@ -376,7 +376,7 @@ encodeElmSyntaxExpressionAsPineValue expression =
                     )
 
         Elm.Syntax.Expression.CharLiteral char ->
-            Ok (encodeTagAsPineValue "CharLiteral" [ Pine.valueFromChar char ])
+            Ok (encodeTagAsPineValue "CharLiteral" [ Pine2024.valueFromChar char ])
 
         Elm.Syntax.Expression.TupledExpression expressions ->
             expressions
@@ -386,7 +386,7 @@ encodeElmSyntaxExpressionAsPineValue expression =
                     (\expressionsValues ->
                         encodeTagAsPineValue
                             "TupledExpression"
-                            [ Pine.ListValue expressionsValues ]
+                            [ Pine2024.ListValue expressionsValues ]
                     )
 
         Elm.Syntax.Expression.ParenthesizedExpression expressionNode ->
@@ -433,7 +433,7 @@ encodeElmSyntaxExpressionAsPineValue expression =
                     (\recordSettersValues ->
                         encodeTagAsPineValue
                             "RecordExpr"
-                            [ Pine.ListValue recordSettersValues ]
+                            [ Pine2024.ListValue recordSettersValues ]
                     )
 
         Elm.Syntax.Expression.RecordAccess expressionNode stringNode ->
@@ -463,14 +463,14 @@ encodeElmSyntaxExpressionAsPineValue expression =
                         encodeTagAsPineValue
                             "RecordUpdateExpression"
                             [ encodeElmSyntaxNodeAsPineValue encodeElmStringAsPineValue stringNode
-                            , Pine.ListValue recordSettersValues
+                            , Pine2024.ListValue recordSettersValues
                             ]
                     )
 
         Elm.Syntax.Expression.Floatable float ->
             Ok
                 (encodeTagAsPineValue "Floatable"
-                    [ ElmCompiler.valueFromFloat float
+                    [ ElmCompiler2024.valueFromFloat float
                     ]
                 )
 
@@ -478,7 +478,7 @@ encodeElmSyntaxExpressionAsPineValue expression =
             Ok (encodeTagAsPineValue "GLSLExpression" [ encodeElmStringAsPineValue string_ ])
 
 
-encodeElmSyntaxInfixAsPineValue : Elm.Syntax.Infix.Infix -> Pine.Value
+encodeElmSyntaxInfixAsPineValue : Elm.Syntax.Infix.Infix -> Pine2024.Value
 encodeElmSyntaxInfixAsPineValue infix =
     encodeRecordAsPineValue
         [ ( "direction"
@@ -496,7 +496,7 @@ encodeElmSyntaxInfixAsPineValue infix =
         ]
 
 
-encodeElmSyntaxInfixDirectionAsPineValue : Elm.Syntax.Infix.InfixDirection -> Pine.Value
+encodeElmSyntaxInfixDirectionAsPineValue : Elm.Syntax.Infix.InfixDirection -> Pine2024.Value
 encodeElmSyntaxInfixDirectionAsPineValue infixDirection =
     case infixDirection of
         Elm.Syntax.Infix.Left ->
@@ -509,19 +509,19 @@ encodeElmSyntaxInfixDirectionAsPineValue infixDirection =
             encodeTagAsPineValue "Non" []
 
 
-encodeElmSyntaxRecordSetterAsPineValue : Elm.Syntax.Expression.RecordSetter -> Result String Pine.Value
+encodeElmSyntaxRecordSetterAsPineValue : Elm.Syntax.Expression.RecordSetter -> Result String Pine2024.Value
 encodeElmSyntaxRecordSetterAsPineValue ( stringNode, expressionNode ) =
     encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxExpressionAsPineValue expressionNode
         |> Result.map
             (\expressionNodeValue ->
-                Pine.ListValue
+                Pine2024.ListValue
                     [ encodeElmSyntaxNodeAsPineValue encodeElmStringAsPineValue stringNode
                     , expressionNodeValue
                     ]
             )
 
 
-encodeElmSyntaxLambdaAsPineValue : Elm.Syntax.Expression.Lambda -> Result String Pine.Value
+encodeElmSyntaxLambdaAsPineValue : Elm.Syntax.Expression.Lambda -> Result String Pine2024.Value
 encodeElmSyntaxLambdaAsPineValue lambda =
     lambda.args
         |> Common.resultListMapCombine
@@ -534,7 +534,7 @@ encodeElmSyntaxLambdaAsPineValue lambda =
                     |> Result.map
                         (\expressionValue ->
                             encodeRecordAsPineValue
-                                [ ( "args", Pine.ListValue argsValues )
+                                [ ( "args", Pine2024.ListValue argsValues )
                                 , ( "expression"
                                   , expressionValue
                                   )
@@ -543,7 +543,7 @@ encodeElmSyntaxLambdaAsPineValue lambda =
             )
 
 
-encodeElmSyntaxCaseBlockAsPineValue : Elm.Syntax.Expression.CaseBlock -> Result String Pine.Value
+encodeElmSyntaxCaseBlockAsPineValue : Elm.Syntax.Expression.CaseBlock -> Result String Pine2024.Value
 encodeElmSyntaxCaseBlockAsPineValue caseBlock =
     encodeElmSyntaxNodeAsPineValueResult
         encodeElmSyntaxExpressionAsPineValue
@@ -561,7 +561,7 @@ encodeElmSyntaxCaseBlockAsPineValue caseBlock =
                                             expressionNode
                                             |> Result.map
                                                 (\patternExpressionValue ->
-                                                    Pine.ListValue
+                                                    Pine2024.ListValue
                                                         [ patternValue
                                                         , patternExpressionValue
                                                         ]
@@ -575,17 +575,17 @@ encodeElmSyntaxCaseBlockAsPineValue caseBlock =
                                   , expressionValue
                                   )
                                 , ( "cases"
-                                  , Pine.ListValue casesValues
+                                  , Pine2024.ListValue casesValues
                                   )
                                 ]
                         )
             )
 
 
-encodeElmSyntaxLetBlockAsPineValue : Elm.Syntax.Expression.LetBlock -> Result String Pine.Value
+encodeElmSyntaxLetBlockAsPineValue : Elm.Syntax.Expression.LetBlock -> Result String Pine2024.Value
 encodeElmSyntaxLetBlockAsPineValue letBlock =
     let
-        encodeLetDeclarationAsPineValue : Elm.Syntax.Expression.LetDeclaration -> Result String Pine.Value
+        encodeLetDeclarationAsPineValue : Elm.Syntax.Expression.LetDeclaration -> Result String Pine2024.Value
         encodeLetDeclarationAsPineValue letDeclaration =
             case letDeclaration of
                 Elm.Syntax.Expression.LetFunction function ->
@@ -614,7 +614,7 @@ encodeElmSyntaxLetBlockAsPineValue letBlock =
                                         )
                             )
 
-        encodeLetDeclarationNodeAsPineValue : Elm.Syntax.Node.Node Elm.Syntax.Expression.LetDeclaration -> Result String Pine.Value
+        encodeLetDeclarationNodeAsPineValue : Elm.Syntax.Node.Node Elm.Syntax.Expression.LetDeclaration -> Result String Pine2024.Value
         encodeLetDeclarationNodeAsPineValue letDeclarationNode =
             encodeElmSyntaxNodeAsPineValueResult
                 encodeLetDeclarationAsPineValue
@@ -630,14 +630,14 @@ encodeElmSyntaxLetBlockAsPineValue letBlock =
                     |> Result.map
                         (\expressionValue ->
                             encodeRecordAsPineValue
-                                [ ( "declarations", Pine.ListValue declarationsValues )
+                                [ ( "declarations", Pine2024.ListValue declarationsValues )
                                 , ( "expression", expressionValue )
                                 ]
                         )
             )
 
 
-encodeElmSyntaxPatternAsPineValue : Elm.Syntax.Pattern.Pattern -> Result String Pine.Value
+encodeElmSyntaxPatternAsPineValue : Elm.Syntax.Pattern.Pattern -> Result String Pine2024.Value
 encodeElmSyntaxPatternAsPineValue pattern =
     case pattern of
         Elm.Syntax.Pattern.AllPattern ->
@@ -647,16 +647,16 @@ encodeElmSyntaxPatternAsPineValue pattern =
             Ok (encodeTagAsPineValue "UnitPattern" [])
 
         Elm.Syntax.Pattern.CharPattern char ->
-            Ok (encodeTagAsPineValue "CharPattern" [ Pine.valueFromChar char ])
+            Ok (encodeTagAsPineValue "CharPattern" [ Pine2024.valueFromChar char ])
 
         Elm.Syntax.Pattern.StringPattern string ->
             Ok (encodeTagAsPineValue "StringPattern" [ encodeElmStringAsPineValue string ])
 
         Elm.Syntax.Pattern.IntPattern int ->
-            Ok (encodeTagAsPineValue "IntPattern" [ Pine.valueFromInt int ])
+            Ok (encodeTagAsPineValue "IntPattern" [ Pine2024.valueFromInt int ])
 
         Elm.Syntax.Pattern.HexPattern int ->
-            Ok (encodeTagAsPineValue "HexPattern" [ Pine.valueFromInt int ])
+            Ok (encodeTagAsPineValue "HexPattern" [ Pine2024.valueFromInt int ])
 
         Elm.Syntax.Pattern.FloatPattern _ ->
             Err "Unsupported pattern: FloatPattern"
@@ -668,14 +668,14 @@ encodeElmSyntaxPatternAsPineValue pattern =
                     (\patternsValues ->
                         encodeTagAsPineValue
                             "TuplePattern"
-                            [ Pine.ListValue patternsValues ]
+                            [ Pine2024.ListValue patternsValues ]
                     )
 
         Elm.Syntax.Pattern.RecordPattern fieldsNodes ->
             Ok
                 (encodeTagAsPineValue
                     "RecordPattern"
-                    [ Pine.ListValue
+                    [ Pine2024.ListValue
                         (List.map (encodeElmSyntaxNodeAsPineValue encodeElmStringAsPineValue) fieldsNodes)
                     ]
                 )
@@ -703,7 +703,7 @@ encodeElmSyntaxPatternAsPineValue pattern =
                     (\patternsValues ->
                         encodeTagAsPineValue
                             "ListPattern"
-                            [ Pine.ListValue patternsValues ]
+                            [ Pine2024.ListValue patternsValues ]
                     )
 
         Elm.Syntax.Pattern.VarPattern string ->
@@ -718,7 +718,7 @@ encodeElmSyntaxPatternAsPineValue pattern =
                         encodeTagAsPineValue
                             "NamedPattern"
                             [ encodeElmSyntaxQualifiedNameRefAsPineValue qualifiedNameRef
-                            , Pine.ListValue patternsValues
+                            , Pine2024.ListValue patternsValues
                             ]
                     )
 
@@ -743,18 +743,18 @@ encodeElmSyntaxPatternAsPineValue pattern =
                     )
 
 
-encodeElmSyntaxQualifiedNameRefAsPineValue : Elm.Syntax.Pattern.QualifiedNameRef -> Pine.Value
+encodeElmSyntaxQualifiedNameRefAsPineValue : Elm.Syntax.Pattern.QualifiedNameRef -> Pine2024.Value
 encodeElmSyntaxQualifiedNameRefAsPineValue qualifiedNameRef =
     encodeRecordAsPineValue
         [ ( "moduleName"
-          , Pine.ListValue
+          , Pine2024.ListValue
                 (List.map encodeElmStringAsPineValue qualifiedNameRef.moduleName)
           )
         , ( "name", encodeElmStringAsPineValue qualifiedNameRef.name )
         ]
 
 
-encodeElmSyntaxSignatureAsPineValue : Elm.Syntax.Signature.Signature -> Pine.Value
+encodeElmSyntaxSignatureAsPineValue : Elm.Syntax.Signature.Signature -> Pine2024.Value
 encodeElmSyntaxSignatureAsPineValue elmSyntaxSignature =
     encodeRecordAsPineValue
         [ ( "name"
@@ -770,7 +770,7 @@ encodeElmSyntaxSignatureAsPineValue elmSyntaxSignature =
         ]
 
 
-encodeElmSyntaxTypeAnnotationAsPineValue : Elm.Syntax.TypeAnnotation.TypeAnnotation -> Pine.Value
+encodeElmSyntaxTypeAnnotationAsPineValue : Elm.Syntax.TypeAnnotation.TypeAnnotation -> Pine2024.Value
 encodeElmSyntaxTypeAnnotationAsPineValue typeAnnotation =
     case typeAnnotation of
         Elm.Syntax.TypeAnnotation.GenericType string ->
@@ -781,14 +781,14 @@ encodeElmSyntaxTypeAnnotationAsPineValue typeAnnotation =
                 "Typed"
                 [ encodeElmSyntaxNodeAsPineValue
                     (\( moduleName, string ) ->
-                        Pine.ListValue
-                            [ (List.map encodeElmStringAsPineValue >> Pine.ListValue)
+                        Pine2024.ListValue
+                            [ (List.map encodeElmStringAsPineValue >> Pine2024.ListValue)
                                 moduleName
                             , encodeElmStringAsPineValue string
                             ]
                     )
                     instantiatedNode
-                , Pine.ListValue
+                , Pine2024.ListValue
                     (List.map (encodeElmSyntaxNodeAsPineValue encodeElmSyntaxTypeAnnotationAsPineValue)
                         argumentsNodes
                     )
@@ -800,7 +800,7 @@ encodeElmSyntaxTypeAnnotationAsPineValue typeAnnotation =
         Elm.Syntax.TypeAnnotation.Tupled typeAnnotations ->
             encodeTagAsPineValue
                 "Tupled"
-                [ Pine.ListValue
+                [ Pine2024.ListValue
                     (List.map (encodeElmSyntaxNodeAsPineValue encodeElmSyntaxTypeAnnotationAsPineValue)
                         typeAnnotations
                     )
@@ -809,11 +809,11 @@ encodeElmSyntaxTypeAnnotationAsPineValue typeAnnotation =
         Elm.Syntax.TypeAnnotation.Record recordDefinition ->
             encodeTagAsPineValue
                 "Record"
-                [ Pine.ListValue
+                [ Pine2024.ListValue
                     (List.map
                         (encodeElmSyntaxNodeAsPineValue
                             (\( fieldNameNode, fieldTypeNode ) ->
-                                Pine.ListValue
+                                Pine2024.ListValue
                                     [ encodeElmSyntaxNodeAsPineValue encodeElmStringAsPineValue fieldNameNode
                                     , encodeElmSyntaxNodeAsPineValue encodeElmSyntaxTypeAnnotationAsPineValue fieldTypeNode
                                     ]
@@ -831,11 +831,11 @@ encodeElmSyntaxTypeAnnotationAsPineValue typeAnnotation =
                     nameNode
                 , encodeElmSyntaxNodeAsPineValue
                     (\recordDefinition ->
-                        Pine.ListValue
+                        Pine2024.ListValue
                             (List.map
                                 (encodeElmSyntaxNodeAsPineValue
                                     (\( fieldNameNode, fieldTypeNode ) ->
-                                        Pine.ListValue
+                                        Pine2024.ListValue
                                             [ encodeElmSyntaxNodeAsPineValue encodeElmStringAsPineValue fieldNameNode
                                             , encodeElmSyntaxNodeAsPineValue encodeElmSyntaxTypeAnnotationAsPineValue fieldTypeNode
                                             ]
@@ -855,17 +855,17 @@ encodeElmSyntaxTypeAnnotationAsPineValue typeAnnotation =
                 ]
 
 
-encodeElmSyntaxImportAsPineValue : Elm.Syntax.Import.Import -> Pine.Value
+encodeElmSyntaxImportAsPineValue : Elm.Syntax.Import.Import -> Pine2024.Value
 encodeElmSyntaxImportAsPineValue elmSyntaxImport =
     encodeRecordAsPineValue
         [ ( "moduleName"
           , encodeElmSyntaxNodeAsPineValue
-                (List.map encodeElmStringAsPineValue >> Pine.ListValue)
+                (List.map encodeElmStringAsPineValue >> Pine2024.ListValue)
                 elmSyntaxImport.moduleName
           )
         , ( "moduleAlias"
           , encodeMaybeAsPineValue
-                (encodeElmSyntaxNodeAsPineValue (List.map encodeElmStringAsPineValue >> Pine.ListValue))
+                (encodeElmSyntaxNodeAsPineValue (List.map encodeElmStringAsPineValue >> Pine2024.ListValue))
                 elmSyntaxImport.moduleAlias
           )
         , ( "exposingList"
@@ -876,7 +876,7 @@ encodeElmSyntaxImportAsPineValue elmSyntaxImport =
         ]
 
 
-encodeElmSyntaxImportExposingAsPineValue : Elm.Syntax.Exposing.Exposing -> Pine.Value
+encodeElmSyntaxImportExposingAsPineValue : Elm.Syntax.Exposing.Exposing -> Pine2024.Value
 encodeElmSyntaxImportExposingAsPineValue elmSyntaxImportExposing =
     case elmSyntaxImportExposing of
         Elm.Syntax.Exposing.All range ->
@@ -887,14 +887,14 @@ encodeElmSyntaxImportExposingAsPineValue elmSyntaxImportExposing =
         Elm.Syntax.Exposing.Explicit elmSyntaxTopLevelExposes ->
             encodeTagAsPineValue
                 "Explicit"
-                [ Pine.ListValue
+                [ Pine2024.ListValue
                     (List.map (encodeElmSyntaxNodeAsPineValue encodeElmSyntaxTopLevelExposeAsPineValue)
                         elmSyntaxTopLevelExposes
                     )
                 ]
 
 
-encodeElmSyntaxTopLevelExposeAsPineValue : Elm.Syntax.Exposing.TopLevelExpose -> Pine.Value
+encodeElmSyntaxTopLevelExposeAsPineValue : Elm.Syntax.Exposing.TopLevelExpose -> Pine2024.Value
 encodeElmSyntaxTopLevelExposeAsPineValue elmSyntaxTopLevelExpose =
     case elmSyntaxTopLevelExpose of
         Elm.Syntax.Exposing.InfixExpose string ->
@@ -920,12 +920,12 @@ encodeElmSyntaxTopLevelExposeAsPineValue elmSyntaxTopLevelExpose =
                 ]
 
 
-encodeElmSyntaxDefaultModuleDataAsPineValue : Elm.Syntax.Module.DefaultModuleData -> Pine.Value
+encodeElmSyntaxDefaultModuleDataAsPineValue : Elm.Syntax.Module.DefaultModuleData -> Pine2024.Value
 encodeElmSyntaxDefaultModuleDataAsPineValue defaultModuleData =
     encodeRecordAsPineValue
         [ ( "moduleName"
           , encodeElmSyntaxNodeAsPineValue
-                (List.map encodeElmStringAsPineValue >> Pine.ListValue)
+                (List.map encodeElmStringAsPineValue >> Pine2024.ListValue)
                 defaultModuleData.moduleName
           )
         , ( "exposingList"
@@ -936,7 +936,7 @@ encodeElmSyntaxDefaultModuleDataAsPineValue defaultModuleData =
         ]
 
 
-encodeElmSyntaxNodeAsPineValueResult : (a -> Result e Pine.Value) -> Elm.Syntax.Node.Node a -> Result e Pine.Value
+encodeElmSyntaxNodeAsPineValueResult : (a -> Result e Pine2024.Value) -> Elm.Syntax.Node.Node a -> Result e Pine2024.Value
 encodeElmSyntaxNodeAsPineValueResult encodeNodeContent (Elm.Syntax.Node.Node range nodeContent) =
     case encodeNodeContent nodeContent of
         Err error ->
@@ -952,7 +952,7 @@ encodeElmSyntaxNodeAsPineValueResult encodeNodeContent (Elm.Syntax.Node.Node ran
                 )
 
 
-encodeElmSyntaxNodeAsPineValue : (a -> Pine.Value) -> Elm.Syntax.Node.Node a -> Pine.Value
+encodeElmSyntaxNodeAsPineValue : (a -> Pine2024.Value) -> Elm.Syntax.Node.Node a -> Pine2024.Value
 encodeElmSyntaxNodeAsPineValue encodeNodeContent (Elm.Syntax.Node.Node range nodeContent) =
     encodeTagAsPineValue
         "Node"
@@ -961,7 +961,7 @@ encodeElmSyntaxNodeAsPineValue encodeNodeContent (Elm.Syntax.Node.Node range nod
         ]
 
 
-encodeElmSyntaxRangeAsPineValue : Elm.Syntax.Range.Range -> Pine.Value
+encodeElmSyntaxRangeAsPineValue : Elm.Syntax.Range.Range -> Pine2024.Value
 encodeElmSyntaxRangeAsPineValue range =
     encodeRecordAsPineValue
         [ ( "start", encodeElmSyntaxLocationAsPineValue range.start )
@@ -969,15 +969,15 @@ encodeElmSyntaxRangeAsPineValue range =
         ]
 
 
-encodeElmSyntaxLocationAsPineValue : Elm.Syntax.Range.Location -> Pine.Value
+encodeElmSyntaxLocationAsPineValue : Elm.Syntax.Range.Location -> Pine2024.Value
 encodeElmSyntaxLocationAsPineValue location =
     encodeRecordAsPineValue
-        [ ( "row", Pine.valueFromInt location.row )
-        , ( "column", Pine.valueFromInt location.column )
+        [ ( "row", Pine2024.valueFromInt location.row )
+        , ( "column", Pine2024.valueFromInt location.column )
         ]
 
 
-encodeMaybeAsPineValue : (a -> Pine.Value) -> Maybe a -> Pine.Value
+encodeMaybeAsPineValue : (a -> Pine2024.Value) -> Maybe a -> Pine2024.Value
 encodeMaybeAsPineValue encodeValue maybeValue =
     case maybeValue of
         Nothing ->
@@ -989,16 +989,16 @@ encodeMaybeAsPineValue encodeValue maybeValue =
                 [ encodeValue value ]
 
 
-encodeRecordAsPineValue : List ( String, Pine.Value ) -> Pine.Value
+encodeRecordAsPineValue : List ( String, Pine2024.Value ) -> Pine2024.Value
 encodeRecordAsPineValue recordFields =
-    Pine.ListValue
-        [ ElmCompiler.elmRecordTypeTagNameAsValue
-        , Pine.ListValue
-            [ Pine.ListValue
+    Pine2024.ListValue
+        [ ElmCompiler2024.elmRecordTypeTagNameAsValue
+        , Pine2024.ListValue
+            [ Pine2024.ListValue
                 (List.map
                     (\( fieldName, fieldValue ) ->
-                        Pine.ListValue
-                            [ Pine.valueFromString fieldName
+                        Pine2024.ListValue
+                            [ Pine2024.valueFromString fieldName
                             , fieldValue
                             ]
                     )
@@ -1008,19 +1008,19 @@ encodeRecordAsPineValue recordFields =
         ]
 
 
-encodeElmStringAsPineValue : String -> Pine.Value
+encodeElmStringAsPineValue : String -> Pine2024.Value
 encodeElmStringAsPineValue string =
-    ElmCompiler.valueFromString string
+    ElmCompiler2024.valueFromString string
 
 
-encodeIntAsPineValue : Int -> Pine.Value
+encodeIntAsPineValue : Int -> Pine2024.Value
 encodeIntAsPineValue int =
-    Pine.valueFromInt int
+    Pine2024.valueFromInt int
 
 
-encodeTagAsPineValue : String -> List Pine.Value -> Pine.Value
+encodeTagAsPineValue : String -> List Pine2024.Value -> Pine2024.Value
 encodeTagAsPineValue tagName tagArguments =
-    Pine.ListValue
-        [ Pine.valueFromString tagName
-        , Pine.ListValue tagArguments
+    Pine2024.ListValue
+        [ Pine2024.valueFromString tagName
+        , Pine2024.ListValue tagArguments
         ]

@@ -5,7 +5,7 @@ using System.Collections.Generic;
 
 namespace Pine.Elm;
 
-public class ElmCompilerCache
+public class ElmCompilerCache2024
 {
 
     private readonly Dictionary<PineValue, PineValue> _encodedForCompilerCache = [];

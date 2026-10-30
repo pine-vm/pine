@@ -9,8 +9,8 @@ import Element.Background
 import Element.Border
 import Element.Font
 import Element.Input
-import ElmInteractive
-import ElmInteractiveParser
+import ElmInteractive2024
+import ElmInteractiveParser2024
 import Frontend.ElmExplorer
 import Frontend.ElmSilentTeacher.Exercise as Exercise exposing (Exercise, ExerciseChallenge)
 import Html
@@ -18,7 +18,7 @@ import Html.Attributes as HA
 import Html.Events
 import Json.Decode
 import List.Extra
-import Pine
+import Pine2024
 import Random
 import Result.Extra
 import Svg
@@ -34,7 +34,7 @@ evalDelayFromUserInputMilliseconds =
 
 type alias State =
     { time : Time.Posix
-    , evaluationContextResult : Result String Pine.EvalEnvironment
+    , evaluationContextResult : Result String Pine2024.EvalEnvironment
     , trainingSession : TrainingSessionState
     }
 
@@ -88,7 +88,7 @@ type alias AnimatedProgressBar =
 type alias InteractiveState =
     { expression : String
     , lastUserInputExpressionTime : Time.Posix
-    , lastEvaluatedExpression : Maybe ( String, Result String ElmInteractive.SubmissionResponse )
+    , lastEvaluatedExpression : Maybe ( String, Result String ElmInteractive2024.SubmissionResponse )
     }
 
 
@@ -99,9 +99,9 @@ init =
             Time.millisToPosix 0
 
         evaluationContextResult =
-            ElmInteractiveParser.compileEvalContextForElmInteractive
-                (ElmInteractive.CustomModulesContext
-                    { includeCoreModules = Just ElmInteractive.OnlyCoreModules
+            ElmInteractiveParser2024.compileEvalContextForElmInteractive
+                (ElmInteractive2024.CustomModulesContext
+                    { includeCoreModules = Just ElmInteractive2024.OnlyCoreModules
                     , modulesTexts = []
                     }
                 )
@@ -133,7 +133,7 @@ init =
 
 
 initExerciseWorkspace :
-    { a | evaluationContextResult : Result String Pine.EvalEnvironment, time : Time.Posix }
+    { a | evaluationContextResult : Result String Pine2024.EvalEnvironment, time : Time.Posix }
     -> Exercise
     -> List ExerciseChallenge
     -> ExerciseWorkspace
@@ -551,7 +551,7 @@ workspaceUserInputEnterInteractive workspace =
 
 
 updateLastEvaluatedExpression :
-    { time : Time.Posix, evaluationContext : Result String Pine.EvalEnvironment }
+    { time : Time.Posix, evaluationContext : Result String Pine2024.EvalEnvironment }
     -> InteractiveState
     -> InteractiveState
 updateLastEvaluatedExpression config stateBefore =
@@ -582,7 +582,7 @@ updateLastEvaluatedExpression config stateBefore =
                                 Ok { displayText = "" }
 
                               else
-                                ElmInteractiveParser.submissionInInteractiveInPineContext evaluationContext expression
+                                ElmInteractiveParser2024.submissionInInteractiveInPineContext evaluationContext expression
                                     |> Result.map Tuple.second
                             )
         in
@@ -1058,9 +1058,9 @@ viewProgressBar { progressMicro } =
             ]
 
 
-computeSolutionFromExerciseInContext : Pine.EvalEnvironment -> ExerciseChallenge -> String
+computeSolutionFromExerciseInContext : Pine2024.EvalEnvironment -> ExerciseChallenge -> String
 computeSolutionFromExerciseInContext evaluationContext exerciseChallenge =
-    case ElmInteractiveParser.submissionInInteractiveInPineContext evaluationContext exerciseChallenge of
+    case ElmInteractiveParser2024.submissionInInteractiveInPineContext evaluationContext exerciseChallenge of
         Err error ->
             "Failed to evaluate: " ++ error
 

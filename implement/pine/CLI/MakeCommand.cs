@@ -489,10 +489,10 @@ public static class MakeCommand
 
             var parseCache = new Core.CodeAnalysis.PineVMParseCache();
 
-            var elmCompilerCache = new ElmCompilerCache();
+            var elmCompilerCache = new ElmCompilerCache2024();
 
             var compileResult =
-                InteractiveSessionPine.CompileInteractiveEnvironment(
+                InteractiveSessionPine2024.CompileInteractiveEnvironment(
                     appCodeTree: sourceFilesWithMergedPackages.files,
                     overrideSkipLowering: true,
                     entryPointsFilePaths: [pathToFileWithElmEntryPoint],

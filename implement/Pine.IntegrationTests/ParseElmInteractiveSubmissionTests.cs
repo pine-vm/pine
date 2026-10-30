@@ -57,7 +57,7 @@ public class ParseElmInteractiveSubmissionTests
         }
     }
 
-    static readonly ElmCompilerCache elmCompilerCache = new();
+    static readonly ElmCompilerCache2024 elmCompilerCache = new();
 
     public static ElmValue TestParsingSubmissionText(
         string submissionText,
@@ -96,7 +96,7 @@ public class ParseElmInteractiveSubmissionTests
         elmCompilerFromBundle.Should().NotBeNull("Elm compiler environment not found in bundled environments");
 
         var elmCompiler =
-            ElmCompilerInElm.ElmCompilerFromEnvValue(elmCompilerFromBundle)
+            ElmCompilerInElm2024.ElmCompilerFromEnvValue(elmCompilerFromBundle)
             .Extract(err => throw new Exception(err));
 
         var pineVMCache = new InvocationCache();

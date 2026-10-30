@@ -39,10 +39,10 @@ public class ElmLanguageServiceTests
 
 
         var compilerSourceFiles =
-            ElmCompilerInElm.CompilerSourceFilesDefault.Value;
+            ElmCompilerInElm2024.CompilerSourceFilesDefault.Value;
 
         var combinedSourceFiles =
-            ElmCompilerInElm.ElmCompilerFileTreeFromBundledFileTree(compilerSourceFiles);
+            ElmCompilerInElm2024.ElmCompilerFileTreeFromBundledFileTree(compilerSourceFiles);
 
         var elmCompilerFromBundleValue =
             Core.Elm.BundledElmEnvironments.BundledElmEnvironmentFromFileTree(combinedSourceFiles);
@@ -50,7 +50,7 @@ public class ElmLanguageServiceTests
         elmCompilerFromBundleValue.Should().NotBeNull();
 
         var elmCompiler =
-            ElmCompilerInElm.ElmCompilerFromEnvValue(elmCompilerFromBundleValue)
+            ElmCompilerInElm2024.ElmCompilerFromEnvValue(elmCompilerFromBundleValue)
             .Extract(err => throw new Exception(err));
 
         AssertHover(
@@ -104,10 +104,10 @@ public class ElmLanguageServiceTests
 
 
         var compilerSourceFiles =
-            ElmCompilerInElm.CompilerSourceFilesDefault.Value;
+            ElmCompilerInElm2024.CompilerSourceFilesDefault.Value;
 
         var combinedSourceFiles =
-            ElmCompilerInElm.ElmCompilerFileTreeFromBundledFileTree(compilerSourceFiles);
+            ElmCompilerInElm2024.ElmCompilerFileTreeFromBundledFileTree(compilerSourceFiles);
 
         var elmCompilerFromBundleValue =
             Core.Elm.BundledElmEnvironments.BundledElmEnvironmentFromFileTree(combinedSourceFiles);
@@ -115,7 +115,7 @@ public class ElmLanguageServiceTests
         elmCompilerFromBundleValue.Should().NotBeNull();
 
         var elmCompiler =
-            ElmCompilerInElm.ElmCompilerFromEnvValue(elmCompilerFromBundleValue)
+            ElmCompilerInElm2024.ElmCompilerFromEnvValue(elmCompilerFromBundleValue)
             .Extract(err => throw new Exception(err));
 
         var pineVMCache = new InvocationCache();

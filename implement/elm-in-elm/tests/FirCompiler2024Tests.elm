@@ -1,8 +1,8 @@
-module FirCompilerTests exposing (..)
+module FirCompiler2024Tests exposing (..)
 
 import Dict
 import Expect
-import FirCompiler
+import FirCompiler2024
 import Set
 import Test
 
@@ -41,7 +41,7 @@ computeRecursionDomainsTests =
                     (\_ ->
                         Expect.equal
                             expected
-                            (FirCompiler.recursionDomainsFromDeclarationDependencies input)
+                            (FirCompiler2024.recursionDomainsFromDeclarationDependencies input)
                     )
             )
             testCases

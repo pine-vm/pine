@@ -1,4 +1,4 @@
-module ElmCompiler exposing
+module ElmCompiler2024 exposing
     ( CompilationStack
     , ElmModuleChoiceType(..)
     , ElmModuleChoiceTypeTag(..)
@@ -48,7 +48,7 @@ import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
 import Elm.Syntax.Pattern
 import Elm.Syntax.TypeAnnotation
-import FirCompiler
+import FirCompiler2024
     exposing
         ( Deconstruction(..)
         , EmitStack
@@ -66,7 +66,7 @@ import FirCompiler
         , pineKernel_Head
         , pineKernel_Head_Pine
         )
-import Pine
+import Pine2024
 import Set
 
 
@@ -115,7 +115,7 @@ type ModuleImportTopLevelExpose
 
 
 type alias ElmModuleInCompilation =
-    { functionDeclarations : List ( String, Pine.Value )
+    { functionDeclarations : List ( String, Pine2024.Value )
     , typeDeclarations : List ( String, ElmModuleTypeDeclaration )
     }
 
@@ -143,9 +143,9 @@ elmStringTypeTagName =
     "String"
 
 
-elmStringTypeTagNameAsValue : Pine.Value
+elmStringTypeTagNameAsValue : Pine2024.Value
 elmStringTypeTagNameAsValue =
-    Pine.valueFromString elmStringTypeTagName
+    Pine2024.valueFromString elmStringTypeTagName
 
 
 elmRecordTypeTagName : String
@@ -153,9 +153,9 @@ elmRecordTypeTagName =
     "Elm_Record"
 
 
-elmRecordTypeTagNameAsValue : Pine.Value
+elmRecordTypeTagNameAsValue : Pine2024.Value
 elmRecordTypeTagNameAsValue =
-    Pine.valueFromString elmRecordTypeTagName
+    Pine2024.valueFromString elmRecordTypeTagName
 
 
 elmBytesTypeTagName : String
@@ -163,9 +163,9 @@ elmBytesTypeTagName =
     "Elm_Bytes"
 
 
-elmBytesTypeTagNameAsValue : Pine.Value
+elmBytesTypeTagNameAsValue : Pine2024.Value
 elmBytesTypeTagNameAsValue =
-    Pine.valueFromString elmBytesTypeTagName
+    Pine2024.valueFromString elmBytesTypeTagName
 
 
 elmFloatTypeTagName : String
@@ -173,9 +173,9 @@ elmFloatTypeTagName =
     "Elm_Float"
 
 
-elmFloatTypeTagNameAsValue : Pine.Value
+elmFloatTypeTagNameAsValue : Pine2024.Value
 elmFloatTypeTagNameAsValue =
-    Pine.valueFromString elmFloatTypeTagName
+    Pine2024.valueFromString elmFloatTypeTagName
 
 
 autoImportedModulesNames : List (List String)
@@ -242,14 +242,14 @@ elmValuesToExposeToGlobalDefault =
     ]
 
 
-elmDeclarationsOverrides : List ( List String, List ( String, Pine.Value ) )
+elmDeclarationsOverrides : List ( List String, List ( String, Pine2024.Value ) )
 elmDeclarationsOverrides =
     [ ( [ "Basics" ]
       , [ ( "True"
-          , Pine.trueValue
+          , Pine2024.trueValue
           )
         , ( "False"
-          , Pine.falseValue
+          , Pine2024.falseValue
           )
         ]
       )
@@ -276,9 +276,9 @@ elmDeclarationsOverridesExpressions =
 
 
 expandElmInteractiveEnvironmentWithModules :
-    Pine.Value
+    Pine2024.Value
     -> List ProjectParsedElmFile
-    -> Result String { addedModules : List ( List String, Pine.Value ), environment : Pine.Value }
+    -> Result String { addedModules : List ( List String, Pine2024.Value ), environment : Pine2024.Value }
 expandElmInteractiveEnvironmentWithModules environmentBefore newParsedElmModules =
     case
         Common.resultListMapCombine
@@ -323,9 +323,9 @@ expandElmInteractiveEnvironmentWithModules environmentBefore newParsedElmModules
 
 
 expandEnvWithModulesOrdered :
-    Pine.Value
+    Pine2024.Value
     -> List ProjectParsedElmFile
-    -> Result String { addedModules : List ( List String, Pine.Value ), environment : Pine.Value }
+    -> Result String { addedModules : List ( List String, Pine2024.Value ), environment : Pine2024.Value }
 expandEnvWithModulesOrdered environmentBefore newParsedElmModules =
     case getDeclarationsFromEnvironment environmentBefore of
         Err error ->
@@ -353,12 +353,12 @@ expandEnvWithModulesOrdered environmentBefore newParsedElmModules =
 
                         Ok newCompiledModules ->
                             let
-                                modulesValues : List ( List String, Pine.Value )
+                                modulesValues : List ( List String, Pine2024.Value )
                                 modulesValues =
                                     List.foldr
                                         (\( moduleName, moduleStruct ) aggregate ->
                                             let
-                                                moduleValue : Pine.Value
+                                                moduleValue : Pine2024.Value
                                                 moduleValue =
                                                     emitModuleValue moduleStruct
                                             in
@@ -371,7 +371,7 @@ expandEnvWithModulesOrdered environmentBefore newParsedElmModules =
                                 newEnvironmentListEntries =
                                     List.map
                                         (\( moduleName, moduleValue ) ->
-                                            Pine.valueFromContextExpansionWithName
+                                            Pine2024.valueFromContextExpansionWithName
                                                 ( String.join "." moduleName, moduleValue )
                                         )
                                         modulesValues
@@ -384,7 +384,7 @@ expandEnvWithModulesOrdered environmentBefore newParsedElmModules =
                             in
                             Ok
                                 { addedModules = modulesValues
-                                , environment = Pine.ListValue newEnvironmentList
+                                , environment = Pine2024.ListValue newEnvironmentList
                                 }
 
 
@@ -647,7 +647,7 @@ compileElmModuleIntoNamedExports availableModules moduleToTranslate =
                     ]
                 )
 
-        localFunctionsResult : Result String (List ( String, Pine.Value ))
+        localFunctionsResult : Result String (List ( String, Pine2024.Value ))
         localFunctionsResult =
             case
                 Common.resultListMapCombine
@@ -676,7 +676,7 @@ compileElmModuleIntoNamedExports availableModules moduleToTranslate =
 
         Ok functionDeclarations ->
             let
-                declarationsValuesForInfix : List ( String, Pine.Value )
+                declarationsValuesForInfix : List ( String, Pine2024.Value )
                 declarationsValuesForInfix =
                     List.foldr
                         (\( name, function ) aggregate ->
@@ -690,7 +690,7 @@ compileElmModuleIntoNamedExports availableModules moduleToTranslate =
                         []
                         redirectsForInfix
 
-                exportedFuncsLessInfix : List ( String, Pine.Value )
+                exportedFuncsLessInfix : List ( String, Pine2024.Value )
                 exportedFuncsLessInfix =
                     List.foldl
                         (\( declName, declValue ) aggregate ->
@@ -821,7 +821,7 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
             , knownTypes = []
             }
 
-        importedFunctionsBeforeParse : List ( List String, List ( String, Pine.Value ) )
+        importedFunctionsBeforeParse : List ( List String, List ( String, Pine2024.Value ) )
         importedFunctionsBeforeParse =
             List.map
                 (\( moduleName, availableModule ) ->
@@ -829,7 +829,7 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
                 )
                 (Dict.toList availableModules)
 
-        importedFunctions : List ( List String, List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) ) )
+        importedFunctions : List ( List String, List ( String, ( FirCompiler2024.EnvironmentFunctionEntry, Pine2024.Value ) ) )
         importedFunctions =
             List.map
                 (Tuple.mapSecond
@@ -837,19 +837,19 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
                         (\( declName, functionValue ) ->
                             let
                                 ( paramCount, expectedEnv ) =
-                                    case FirCompiler.parseFunctionRecordFromValueTagged functionValue of
+                                    case FirCompiler2024.parseFunctionRecordFromValueTagged functionValue of
                                         Err _ ->
                                             ( 0
-                                            , FirCompiler.IndependentEnvironment
+                                            , FirCompiler2024.IndependentEnvironment
                                             )
 
-                                        Ok (FirCompiler.ParsedFunctionValue _ _ parameterCount _ _) ->
+                                        Ok (FirCompiler2024.ParsedFunctionValue _ _ parameterCount _ _) ->
                                             ( parameterCount
-                                            , FirCompiler.ImportedEnvironment []
+                                            , FirCompiler2024.ImportedEnvironment []
                                             )
                             in
                             ( declName
-                            , ( FirCompiler.EnvironmentFunctionEntry paramCount expectedEnv
+                            , ( FirCompiler2024.EnvironmentFunctionEntry paramCount expectedEnv
                               , functionValue
                               )
                             )
@@ -858,7 +858,7 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
                 )
                 importedFunctionsBeforeParse
 
-        emitStack : FirCompiler.EmitStack
+        emitStack : FirCompiler2024.EmitStack
         emitStack =
             { importedFunctions = importedFunctions
             , importedFunctionsToInline = []
@@ -1060,13 +1060,13 @@ compileElmSyntaxExpression stackBefore elmExpression =
             Ok (LiteralExpression (valueFromString literal))
 
         Elm.Syntax.Expression.CharLiteral char ->
-            Ok (LiteralExpression (Pine.valueFromChar char))
+            Ok (LiteralExpression (Pine2024.valueFromChar char))
 
         Elm.Syntax.Expression.Integer integer ->
-            Ok (LiteralExpression (Pine.valueFromInt integer))
+            Ok (LiteralExpression (Pine2024.valueFromInt integer))
 
         Elm.Syntax.Expression.Hex integer ->
-            Ok (LiteralExpression (Pine.valueFromInt integer))
+            Ok (LiteralExpression (Pine2024.valueFromInt integer))
 
         Elm.Syntax.Expression.Negation (Elm.Syntax.Node.Node _ negatedElmExpression) ->
             case negatedElmExpression of
@@ -1074,7 +1074,7 @@ compileElmSyntaxExpression stackBefore elmExpression =
                     Ok (LiteralExpression (valueFromFloat -negatedFloat))
 
                 Elm.Syntax.Expression.Integer negatedInteger ->
-                    Ok (LiteralExpression (Pine.valueFromInt -negatedInteger))
+                    Ok (LiteralExpression (Pine2024.valueFromInt -negatedInteger))
 
                 _ ->
                     case compileElmSyntaxExpression stack negatedElmExpression of
@@ -1585,7 +1585,7 @@ inlineDeclBlockIfSimple blockDecls expression =
         aggregateRefs =
             List.concatMap
                 (\declExpr ->
-                    FirCompiler.listUnboundReferencesInExpression declExpr []
+                    FirCompiler2024.listUnboundReferencesInExpression declExpr []
                 )
                 (expression :: List.map Tuple.second blockDecls)
 
@@ -1593,7 +1593,7 @@ inlineDeclBlockIfSimple blockDecls expression =
         blockDeclsToConsider =
             List.filter
                 (\( declName, declExpr ) ->
-                    FirCompiler.containsAnyFunctionApplicationExpression declExpr
+                    FirCompiler2024.containsAnyFunctionApplicationExpression declExpr
                 )
                 blockDecls
 
@@ -1626,7 +1626,7 @@ inlineDeclBlockIfSimple blockDecls expression =
             expression
 
     else
-        FirCompiler.inlineLocalReferences
+        FirCompiler2024.inlineLocalReferences
             blockDecls
             expression
 
@@ -1822,7 +1822,7 @@ compileElmSyntaxRecord stack recordSetters =
                     Ok fieldExpression ->
                         Ok
                             (ListExpression
-                                [ LiteralExpression (Pine.valueFromString fieldName)
+                                [ LiteralExpression (Pine2024.valueFromString fieldName)
                                 , fieldExpression
                                 ]
                             )
@@ -1863,7 +1863,7 @@ compileRecordAccessExpression fieldName recordExpression =
         pineFunctionForRecordAccess
         (ListExpression
             [ recordExpression
-            , LiteralExpression (Pine.valueFromString fieldName)
+            , LiteralExpression (Pine2024.valueFromString fieldName)
             ]
         )
 
@@ -1909,7 +1909,7 @@ compileElmSyntaxRecordUpdate stack setters recordName =
                             (List.map
                                 (\( fieldName, fieldExpr ) ->
                                     ListExpression
-                                        [ LiteralExpression (Pine.valueFromString fieldName)
+                                        [ LiteralExpression (Pine2024.valueFromString fieldName)
                                         , fieldExpr
                                         ]
                                 )
@@ -1937,7 +1937,7 @@ compileElmSyntaxCaseBlock stack caseBlock =
             let
                 switchedExprFuncApps : List ( Expression, List Expression )
                 switchedExprFuncApps =
-                    FirCompiler.listFunctionAppExpressions expression
+                    FirCompiler2024.listFunctionAppExpressions expression
             in
             case switchedExprFuncApps of
                 [] ->
@@ -1959,7 +1959,7 @@ compileElmSyntaxCaseBlock stack caseBlock =
 
                         innerExpr : Expression
                         innerExpr =
-                            FirCompiler.ReferenceExpression [] pseudoParamName
+                            FirCompiler2024.ReferenceExpression [] pseudoParamName
                     in
                     case compileCaseBlockInline stack innerExpr caseBlock.cases of
                         Err err ->
@@ -2005,7 +2005,7 @@ compileCaseBlockInline stack caseBlockExpr caseBlockCases =
                                     (\conditionExpression nextConditionExpression ->
                                         ConditionalExpression
                                             conditionExpression
-                                            (LiteralExpression Pine.falseValue)
+                                            (LiteralExpression Pine2024.falseValue)
                                             nextConditionExpression
                                     )
                                     firstCondition
@@ -2019,9 +2019,9 @@ compileCaseBlockInline stack caseBlockExpr caseBlockCases =
                     conditionalFromCase
                     (PineFunctionApplicationExpression
                         -- Crash in case none of the branches match.
-                        (Pine.ParseAndEvalExpression
-                            (Pine.LiteralExpression stringAsValue_errorNoMatchingBranch)
-                            Pine.EnvironmentExpression
+                        (Pine2024.ParseAndEvalExpression
+                            (Pine2024.LiteralExpression stringAsValue_errorNoMatchingBranch)
+                            Pine2024.EnvironmentExpression
                         )
                         caseBlockExpr
                     )
@@ -2029,9 +2029,9 @@ compileCaseBlockInline stack caseBlockExpr caseBlockCases =
                 )
 
 
-stringAsValue_errorNoMatchingBranch : Pine.Value
+stringAsValue_errorNoMatchingBranch : Pine2024.Value
 stringAsValue_errorNoMatchingBranch =
-    Pine.computeValueFromString "Error in case-of block: No matching branch."
+    Pine2024.computeValueFromString "Error in case-of block: No matching branch."
 
 
 compileElmSyntaxCaseBlockCase :
@@ -2170,7 +2170,7 @@ compileElmSyntaxPattern compilation elmPattern =
                                                         [ KernelApplicationExpression
                                                             "length"
                                                             deconstructedExpression
-                                                        , LiteralExpression (Pine.valueFromInt 0)
+                                                        , LiteralExpression (Pine2024.valueFromInt 0)
                                                         ]
                                                     )
                                                 ]
@@ -2305,7 +2305,7 @@ compileElmSyntaxPattern compilation elmPattern =
 
                                                     Nothing ->
                                                         equalCondition
-                                                            [ LiteralExpression (Pine.valueFromString qualifiedName.name)
+                                                            [ LiteralExpression (Pine2024.valueFromString qualifiedName.name)
                                                             , pineKernel_Head deconstructedExpression
                                                             ]
                                                 ]
@@ -2352,13 +2352,13 @@ compileElmSyntaxPattern compilation elmPattern =
                                 )
 
         Elm.Syntax.Pattern.CharPattern char ->
-            compilePatternOnlyEqualsCondition (LiteralExpression (Pine.valueFromChar char))
+            compilePatternOnlyEqualsCondition (LiteralExpression (Pine2024.valueFromChar char))
 
         Elm.Syntax.Pattern.IntPattern int ->
-            compilePatternOnlyEqualsCondition (LiteralExpression (Pine.valueFromInt int))
+            compilePatternOnlyEqualsCondition (LiteralExpression (Pine2024.valueFromInt int))
 
         Elm.Syntax.Pattern.HexPattern int ->
-            compilePatternOnlyEqualsCondition (LiteralExpression (Pine.valueFromInt int))
+            compilePatternOnlyEqualsCondition (LiteralExpression (Pine2024.valueFromInt int))
 
         Elm.Syntax.Pattern.StringPattern string ->
             compilePatternOnlyEqualsCondition (LiteralExpression (valueFromString string))
@@ -2384,11 +2384,11 @@ compileElmSyntaxPattern compilation elmPattern =
                         (\(Elm.Syntax.Node.Node _ fieldName) ->
                             ( fieldName
                             , [ PineFunctionApplicationDeconstruction
-                                    (Pine.ParseAndEvalExpression
-                                        (Pine.LiteralExpression pineFunctionForRecordAccessAsValue)
-                                        (Pine.ListExpression
-                                            [ Pine.environmentExpr
-                                            , Pine.LiteralExpression (Pine.valueFromString fieldName)
+                                    (Pine2024.ParseAndEvalExpression
+                                        (Pine2024.LiteralExpression pineFunctionForRecordAccessAsValue)
+                                        (Pine2024.ListExpression
+                                            [ Pine2024.environmentExpr
+                                            , Pine2024.LiteralExpression (Pine2024.valueFromString fieldName)
                                             ]
                                         )
                                     )
@@ -2441,7 +2441,7 @@ compileElmSyntaxPatternListOrTupleItems compilation listItems addLengthCondition
             case elmSyntaxListPatternAsConst [] listItems of
                 Just literalValues ->
                     compilePatternOnlyEqualsCondition
-                        (LiteralExpression (Pine.ListValue literalValues))
+                        (LiteralExpression (Pine2024.ListValue literalValues))
 
                 Nothing ->
                     compileElmSyntaxPatternListOrTupleItemsGeneric
@@ -2451,9 +2451,9 @@ compileElmSyntaxPatternListOrTupleItems compilation listItems addLengthCondition
 
 
 elmSyntaxListPatternAsConst :
-    List Pine.Value
+    List Pine2024.Value
     -> List (Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern)
-    -> Maybe (List Pine.Value)
+    -> Maybe (List Pine2024.Value)
 elmSyntaxListPatternAsConst processedItems listItems =
     case listItems of
         (Elm.Syntax.Node.Node _ currentItemPattern) :: followingItems ->
@@ -2472,20 +2472,20 @@ elmSyntaxListPatternAsConst processedItems listItems =
 
 elmSyntaxPatternAsConst :
     Elm.Syntax.Pattern.Pattern
-    -> Maybe Pine.Value
+    -> Maybe Pine2024.Value
 elmSyntaxPatternAsConst currentItemPattern =
     case currentItemPattern of
         Elm.Syntax.Pattern.IntPattern int ->
-            Just (Pine.valueFromInt int)
+            Just (Pine2024.valueFromInt int)
 
         Elm.Syntax.Pattern.HexPattern int ->
-            Just (Pine.valueFromInt int)
+            Just (Pine2024.valueFromInt int)
 
         Elm.Syntax.Pattern.StringPattern string ->
             Just (valueFromString string)
 
         Elm.Syntax.Pattern.CharPattern char ->
-            Just (Pine.valueFromChar char)
+            Just (Pine2024.valueFromChar char)
 
         Elm.Syntax.Pattern.UnitPattern ->
             Just unitValue
@@ -2493,7 +2493,7 @@ elmSyntaxPatternAsConst currentItemPattern =
         Elm.Syntax.Pattern.ListPattern innerListItems ->
             case elmSyntaxListPatternAsConst [] innerListItems of
                 Just innerListValues ->
-                    Just (Pine.ListValue innerListValues)
+                    Just (Pine2024.ListValue innerListValues)
 
                 Nothing ->
                     Nothing
@@ -2501,25 +2501,25 @@ elmSyntaxPatternAsConst currentItemPattern =
         Elm.Syntax.Pattern.TuplePattern innerTupleItems ->
             case elmSyntaxListPatternAsConst [] innerTupleItems of
                 Just innerListValues ->
-                    Just (Pine.ListValue innerListValues)
+                    Just (Pine2024.ListValue innerListValues)
 
                 Nothing ->
                     Nothing
 
         Elm.Syntax.Pattern.NamedPattern qualifiedName choiceTypeArgumentPatterns ->
             if qualifiedName == { moduleName = [], name = "False" } then
-                Just Pine.falseValue
+                Just Pine2024.falseValue
 
             else if qualifiedName == { moduleName = [], name = "True" } then
-                Just Pine.trueValue
+                Just Pine2024.trueValue
 
             else
                 case elmSyntaxListPatternAsConst [] choiceTypeArgumentPatterns of
                     Just innerListValues ->
                         Just
-                            (Pine.ListValue
-                                [ Pine.valueFromString qualifiedName.name
-                                , Pine.ListValue innerListValues
+                            (Pine2024.ListValue
+                                [ Pine2024.valueFromString qualifiedName.name
+                                , Pine2024.ListValue innerListValues
                                 ]
                             )
 
@@ -2530,9 +2530,9 @@ elmSyntaxPatternAsConst currentItemPattern =
             case elmSyntaxPatternAsConst unconsLeft of
                 Just leftValue ->
                     case elmSyntaxPatternAsConst unconsRight of
-                        Just (Pine.ListValue rightList) ->
+                        Just (Pine2024.ListValue rightList) ->
                             Just
-                                (Pine.ListValue
+                                (Pine2024.ListValue
                                     (leftValue :: rightList)
                                 )
 
@@ -2584,15 +2584,15 @@ compileElmSyntaxPatternListOrTupleItemsGeneric compilation listItems addLengthCo
                                     ListExpression deconstructedList ->
                                         LiteralExpression
                                             (if List.length deconstructedList == expectedLength then
-                                                Pine.trueValue
+                                                Pine2024.trueValue
 
                                              else
-                                                Pine.falseValue
+                                                Pine2024.falseValue
                                             )
 
                                     _ ->
                                         equalCondition
-                                            [ LiteralExpression (Pine.valueFromInt expectedLength)
+                                            [ LiteralExpression (Pine2024.valueFromInt expectedLength)
                                             , countListElementsExpression deconstructedExpression
                                             ]
                                 ]
@@ -2672,7 +2672,7 @@ compilePatternOnlyEqualsCondition valueToCompare =
                 [ equalCondition [ deconstructedExpression, valueToCompare ] ]
             )
             ((valueToCompare /= ListExpression [])
-                && (valueToCompare /= LiteralExpression Pine.listValue_Empty)
+                && (valueToCompare /= LiteralExpression Pine2024.listValue_Empty)
             )
             []
         )
@@ -2767,28 +2767,28 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                                                 (KernelApplicationExpression
                                                     "int_is_sorted_asc"
                                                     (ListExpression
-                                                        [ LiteralExpression (Pine.valueFromInt 2)
+                                                        [ LiteralExpression (Pine2024.valueFromInt 2)
                                                         , KernelApplicationExpression "length" leftExprCompiled
                                                         ]
                                                     )
                                                 )
-                                                (LiteralExpression Pine.listValue_Empty)
+                                                (LiteralExpression Pine2024.listValue_Empty)
                                                 (ConditionalExpression
                                                     (KernelApplicationExpression
                                                         "int_is_sorted_asc"
                                                         (ListExpression
-                                                            [ LiteralExpression (Pine.valueFromInt 3)
+                                                            [ LiteralExpression (Pine2024.valueFromInt 3)
                                                             , KernelApplicationExpression "length" leftExprCompiled
                                                             ]
                                                         )
                                                     )
-                                                    (LiteralExpression (Pine.valueFromInt 0))
+                                                    (LiteralExpression (Pine2024.valueFromInt 0))
                                                     (KernelApplicationExpression
                                                         "reverse"
                                                         (KernelApplicationExpression
                                                             "skip"
                                                             (ListExpression
-                                                                [ LiteralExpression (Pine.valueFromInt 1)
+                                                                [ LiteralExpression (Pine2024.valueFromInt 1)
                                                                 , KernelApplicationExpression "reverse" leftExprCompiled
                                                                 ]
                                                             )
@@ -2805,28 +2805,28 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                                                 (KernelApplicationExpression
                                                     "int_is_sorted_asc"
                                                     (ListExpression
-                                                        [ LiteralExpression (Pine.valueFromInt 2)
+                                                        [ LiteralExpression (Pine2024.valueFromInt 2)
                                                         , KernelApplicationExpression "length" leftExprCompiled
                                                         ]
                                                     )
                                                 )
-                                                (LiteralExpression Pine.listValue_Empty)
+                                                (LiteralExpression Pine2024.listValue_Empty)
                                                 (ConditionalExpression
                                                     (KernelApplicationExpression
                                                         "int_is_sorted_asc"
                                                         (ListExpression
-                                                            [ LiteralExpression (Pine.valueFromInt 4)
+                                                            [ LiteralExpression (Pine2024.valueFromInt 4)
                                                             , KernelApplicationExpression "length" leftExprCompiled
                                                             ]
                                                         )
                                                     )
-                                                    (LiteralExpression (Pine.valueFromInt 0))
+                                                    (LiteralExpression (Pine2024.valueFromInt 0))
                                                     (KernelApplicationExpression
                                                         "reverse"
                                                         (KernelApplicationExpression
                                                             "skip"
                                                             (ListExpression
-                                                                [ LiteralExpression (Pine.valueFromInt 2)
+                                                                [ LiteralExpression (Pine2024.valueFromInt 2)
                                                                 , KernelApplicationExpression "reverse" leftExprCompiled
                                                                 ]
                                                             )
@@ -2998,9 +2998,9 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                                 List.concatMap
                                     (\stringExpr ->
                                         case stringExpr of
-                                            LiteralExpression (Pine.ListValue ({- 'String' tag -} _ :: (Pine.ListValue [ literalChars ]) :: _)) ->
+                                            LiteralExpression (Pine2024.ListValue ({- 'String' tag -} _ :: (Pine2024.ListValue [ literalChars ]) :: _)) ->
                                                 --  Some code uses syntax like ` var ++ "" ` to simplify (local) type inference.
-                                                if literalChars == Pine.BlobValue [] then
+                                                if literalChars == Pine2024.BlobValue [] then
                                                     []
 
                                                 else
@@ -3008,8 +3008,8 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                                                     ]
 
                                             _ ->
-                                                [ FirCompiler.listItemFromIndexExpression 0
-                                                    (FirCompiler.listItemFromIndexExpression 1 stringExpr)
+                                                [ FirCompiler2024.listItemFromIndexExpression 0
+                                                    (FirCompiler2024.listItemFromIndexExpression 1 stringExpr)
                                                 ]
                                     )
                                     expressions
@@ -3663,48 +3663,48 @@ expressionForDeconstruction deconstruction =
             PineFunctionApplicationExpression pineFunctionValue
 
 
-pineFunctionForRecordUpdateAsValue : Pine.Value
+pineFunctionForRecordUpdateAsValue : Pine2024.Value
 pineFunctionForRecordUpdateAsValue =
-    Pine.encodeExpressionAsValue pineFunctionForRecordUpdate
+    Pine2024.encodeExpressionAsValue pineFunctionForRecordUpdate
 
 
-pineFunctionForRecordUpdate : Pine.Expression
+pineFunctionForRecordUpdate : Pine2024.Expression
 pineFunctionForRecordUpdate =
     let
         recordExpression =
-            listItemFromIndexExpression_Pine 0 Pine.environmentExpr
+            listItemFromIndexExpression_Pine 0 Pine2024.environmentExpr
 
         recordFieldsExpression =
             pineKernel_Head_Pine (listItemFromIndexExpression_Pine 1 recordExpression)
 
         fieldsUpdatesExpression =
-            listItemFromIndexExpression_Pine 1 Pine.environmentExpr
+            listItemFromIndexExpression_Pine 1 Pine2024.environmentExpr
 
-        recursiveFunction : Pine.Value
+        recursiveFunction : Pine2024.Value
         recursiveFunction =
-            Pine.encodeExpressionAsValue recursiveFunctionToUpdateFieldsInRecord
+            Pine2024.encodeExpressionAsValue recursiveFunctionToUpdateFieldsInRecord
     in
-    Pine.ConditionalExpression
+    Pine2024.ConditionalExpression
         (equalCondition_Pine
-            [ Pine.LiteralExpression elmRecordTypeTagNameAsValue
+            [ Pine2024.LiteralExpression elmRecordTypeTagNameAsValue
             , pineKernel_Head_Pine recordExpression
             ]
         )
-        (Pine.ParseAndEvalExpression
-            (Pine.LiteralExpression
-                (Pine.computeValueFromString "invalid record update - not a record")
+        (Pine2024.ParseAndEvalExpression
+            (Pine2024.LiteralExpression
+                (Pine2024.computeValueFromString "invalid record update - not a record")
             )
             recordExpression
         )
-        (Pine.ListExpression
-            [ Pine.LiteralExpression elmRecordTypeTagNameAsValue
-            , Pine.ListExpression
-                [ Pine.ParseAndEvalExpression
-                    (Pine.LiteralExpression recursiveFunction)
-                    (Pine.ListExpression
-                        [ Pine.LiteralExpression recursiveFunction
+        (Pine2024.ListExpression
+            [ Pine2024.LiteralExpression elmRecordTypeTagNameAsValue
+            , Pine2024.ListExpression
+                [ Pine2024.ParseAndEvalExpression
+                    (Pine2024.LiteralExpression recursiveFunction)
+                    (Pine2024.ListExpression
+                        [ Pine2024.LiteralExpression recursiveFunction
                         , fieldsUpdatesExpression
-                        , Pine.ListExpression []
+                        , Pine2024.ListExpression []
                         , recordFieldsExpression
                         ]
                     )
@@ -3724,65 +3724,65 @@ Takes the following arguments:
 4.  The list of fields that are yet to be processed.
 
 -}
-recursiveFunctionToUpdateFieldsInRecord : Pine.Expression
+recursiveFunctionToUpdateFieldsInRecord : Pine2024.Expression
 recursiveFunctionToUpdateFieldsInRecord =
     let
-        functionReferenceLocalExpression : Pine.Expression
+        functionReferenceLocalExpression : Pine2024.Expression
         functionReferenceLocalExpression =
-            listItemFromIndexExpression_Pine 0 Pine.environmentExpr
+            listItemFromIndexExpression_Pine 0 Pine2024.environmentExpr
 
-        fieldPairsLocalExpression : Pine.Expression
+        fieldPairsLocalExpression : Pine2024.Expression
         fieldPairsLocalExpression =
-            listItemFromIndexExpression_Pine 1 Pine.environmentExpr
+            listItemFromIndexExpression_Pine 1 Pine2024.environmentExpr
 
-        processedFieldsLocalExpression : Pine.Expression
+        processedFieldsLocalExpression : Pine2024.Expression
         processedFieldsLocalExpression =
-            listItemFromIndexExpression_Pine 2 Pine.environmentExpr
+            listItemFromIndexExpression_Pine 2 Pine2024.environmentExpr
 
-        remainingFieldsLocalExpression : Pine.Expression
+        remainingFieldsLocalExpression : Pine2024.Expression
         remainingFieldsLocalExpression =
-            listItemFromIndexExpression_Pine 3 Pine.environmentExpr
+            listItemFromIndexExpression_Pine 3 Pine2024.environmentExpr
 
-        remainingFieldsNextLocalExpression : Pine.Expression
+        remainingFieldsNextLocalExpression : Pine2024.Expression
         remainingFieldsNextLocalExpression =
             listItemFromIndexExpression_Pine 0 remainingFieldsLocalExpression
 
-        firstFieldPairLocalExpression : Pine.Expression
+        firstFieldPairLocalExpression : Pine2024.Expression
         firstFieldPairLocalExpression =
             listItemFromIndexExpression_Pine 0 fieldPairsLocalExpression
 
-        firstFieldNameLocalExpression : Pine.Expression
+        firstFieldNameLocalExpression : Pine2024.Expression
         firstFieldNameLocalExpression =
             listItemFromIndexExpression_Pine 0 firstFieldPairLocalExpression
     in
-    Pine.ConditionalExpression
+    Pine2024.ConditionalExpression
         (equalCondition_Pine
-            [ Pine.ListExpression []
+            [ Pine2024.ListExpression []
             , fieldPairsLocalExpression
             ]
         )
-        (Pine.ConditionalExpression
+        (Pine2024.ConditionalExpression
             (equalCondition_Pine
-                [ Pine.ListExpression []
+                [ Pine2024.ListExpression []
                 , remainingFieldsLocalExpression
                 ]
             )
-            (Pine.ConditionalExpression
+            (Pine2024.ConditionalExpression
                 (equalCondition_Pine
                     [ listItemFromIndexExpression_Pine 0 remainingFieldsNextLocalExpression
                     , firstFieldNameLocalExpression
                     ]
                 )
-                (Pine.ParseAndEvalExpression
+                (Pine2024.ParseAndEvalExpression
                     functionReferenceLocalExpression
-                    (Pine.ListExpression
+                    (Pine2024.ListExpression
                         [ functionReferenceLocalExpression
                         , fieldPairsLocalExpression
-                        , Pine.KernelApplicationExpression
+                        , Pine2024.KernelApplicationExpression
                             "concat"
-                            (Pine.ListExpression
+                            (Pine2024.ListExpression
                                 [ processedFieldsLocalExpression
-                                , Pine.ListExpression
+                                , Pine2024.ListExpression
                                     [ remainingFieldsNextLocalExpression ]
                                 ]
                             )
@@ -3790,16 +3790,16 @@ recursiveFunctionToUpdateFieldsInRecord =
                         ]
                     )
                 )
-                (Pine.ParseAndEvalExpression
+                (Pine2024.ParseAndEvalExpression
                     functionReferenceLocalExpression
-                    (Pine.ListExpression
+                    (Pine2024.ListExpression
                         [ functionReferenceLocalExpression
                         , listSkipExpression_Pine 1 fieldPairsLocalExpression
-                        , Pine.KernelApplicationExpression
+                        , Pine2024.KernelApplicationExpression
                             "concat"
-                            (Pine.ListExpression
+                            (Pine2024.ListExpression
                                 [ processedFieldsLocalExpression
-                                , Pine.ListExpression
+                                , Pine2024.ListExpression
                                     [ firstFieldPairLocalExpression ]
                                 ]
                             )
@@ -3808,16 +3808,16 @@ recursiveFunctionToUpdateFieldsInRecord =
                     )
                 )
             )
-            (Pine.ParseAndEvalExpression
-                (Pine.LiteralExpression
-                    (Pine.computeValueFromString "invalid record update - field name not found")
+            (Pine2024.ParseAndEvalExpression
+                (Pine2024.LiteralExpression
+                    (Pine2024.computeValueFromString "invalid record update - field name not found")
                 )
                 firstFieldNameLocalExpression
             )
         )
-        (Pine.KernelApplicationExpression
+        (Pine2024.KernelApplicationExpression
             "concat"
-            (Pine.ListExpression
+            (Pine2024.ListExpression
                 [ processedFieldsLocalExpression
                 , remainingFieldsLocalExpression
                 ]
@@ -3825,39 +3825,39 @@ recursiveFunctionToUpdateFieldsInRecord =
         )
 
 
-pineFunctionForRecordAccessAsValue : Pine.Value
+pineFunctionForRecordAccessAsValue : Pine2024.Value
 pineFunctionForRecordAccessAsValue =
-    Pine.encodeExpressionAsValue pineFunctionForRecordAccess
+    Pine2024.encodeExpressionAsValue pineFunctionForRecordAccess
 
 
-pineFunctionForRecordAccess : Pine.Expression
+pineFunctionForRecordAccess : Pine2024.Expression
 pineFunctionForRecordAccess =
     let
         recordExpression =
-            listItemFromIndexExpression_Pine 0 Pine.environmentExpr
+            listItemFromIndexExpression_Pine 0 Pine2024.environmentExpr
 
         fieldNameLocalExpression =
-            listItemFromIndexExpression_Pine 1 Pine.environmentExpr
+            listItemFromIndexExpression_Pine 1 Pine2024.environmentExpr
 
         recordFieldsExpression =
             pineKernel_Head_Pine (listItemFromIndexExpression_Pine 1 recordExpression)
     in
-    Pine.ConditionalExpression
+    Pine2024.ConditionalExpression
         (equalCondition_Pine
-            [ Pine.LiteralExpression elmRecordTypeTagNameAsValue
+            [ Pine2024.LiteralExpression elmRecordTypeTagNameAsValue
             , pineKernel_Head_Pine recordExpression
             ]
         )
-        (Pine.ParseAndEvalExpression
-            (Pine.LiteralExpression
-                (Pine.computeValueFromString "invalid record access - not a record")
+        (Pine2024.ParseAndEvalExpression
+            (Pine2024.LiteralExpression
+                (Pine2024.computeValueFromString "invalid record access - not a record")
             )
             fieldNameLocalExpression
         )
-        (Pine.ParseAndEvalExpression
-            (Pine.LiteralExpression recursiveFunctionToLookupFieldInRecordAsValue)
-            (Pine.ListExpression
-                [ Pine.LiteralExpression recursiveFunctionToLookupFieldInRecordAsValue
+        (Pine2024.ParseAndEvalExpression
+            (Pine2024.LiteralExpression recursiveFunctionToLookupFieldInRecordAsValue)
+            (Pine2024.ListExpression
+                [ Pine2024.LiteralExpression recursiveFunctionToLookupFieldInRecordAsValue
                 , fieldNameLocalExpression
                 , recordFieldsExpression
                 ]
@@ -3865,40 +3865,40 @@ pineFunctionForRecordAccess =
         )
 
 
-recursiveFunctionToLookupFieldInRecordAsValue : Pine.Value
+recursiveFunctionToLookupFieldInRecordAsValue : Pine2024.Value
 recursiveFunctionToLookupFieldInRecordAsValue =
-    Pine.encodeExpressionAsValue recursiveFunctionToLookupFieldInRecord
+    Pine2024.encodeExpressionAsValue recursiveFunctionToLookupFieldInRecord
 
 
-recursiveFunctionToLookupFieldInRecord : Pine.Expression
+recursiveFunctionToLookupFieldInRecord : Pine2024.Expression
 recursiveFunctionToLookupFieldInRecord =
     let
         selfFunctionLocalExpression =
-            listItemFromIndexExpression_Pine 0 Pine.environmentExpr
+            listItemFromIndexExpression_Pine 0 Pine2024.environmentExpr
 
         fieldNameLocalExpression =
-            listItemFromIndexExpression_Pine 1 Pine.environmentExpr
+            listItemFromIndexExpression_Pine 1 Pine2024.environmentExpr
 
         remainingFieldsLocalExpression =
-            listItemFromIndexExpression_Pine 2 Pine.environmentExpr
+            listItemFromIndexExpression_Pine 2 Pine2024.environmentExpr
 
         continueWithRemainingExpression =
-            Pine.ParseAndEvalExpression
+            Pine2024.ParseAndEvalExpression
                 selfFunctionLocalExpression
-                (Pine.ListExpression
+                (Pine2024.ListExpression
                     [ selfFunctionLocalExpression
                     , fieldNameLocalExpression
                     , listSkipExpression_Pine 1 remainingFieldsLocalExpression
                     ]
                 )
     in
-    Pine.ConditionalExpression
+    Pine2024.ConditionalExpression
         (equalCondition_Pine
-            [ Pine.ListExpression []
+            [ Pine2024.ListExpression []
             , remainingFieldsLocalExpression
             ]
         )
-        (Pine.ConditionalExpression
+        (Pine2024.ConditionalExpression
             (equalCondition_Pine
                 [ remainingFieldsLocalExpression
                     |> listItemFromIndexExpression_Pine 0
@@ -3912,9 +3912,9 @@ recursiveFunctionToLookupFieldInRecord =
                 |> listItemFromIndexExpression_Pine 1
             )
         )
-        (Pine.ParseAndEvalExpression
-            (Pine.LiteralExpression
-                (Pine.computeValueFromString "invalid record access - field name not found")
+        (Pine2024.ParseAndEvalExpression
+            (Pine2024.LiteralExpression
+                (Pine2024.computeValueFromString "invalid record access - field name not found")
             )
             fieldNameLocalExpression
         )
@@ -4082,10 +4082,10 @@ compileLookupForInlineableDeclaration ( moduleName, name ) expression =
 
 {-| Encodes an Elm module into a transportable form.
 -}
-emitModuleValue : ElmModuleInCompilation -> Pine.Value
+emitModuleValue : ElmModuleInCompilation -> Pine2024.Value
 emitModuleValue parsedModule =
     let
-        typeDescriptions : List ( String, Pine.Value )
+        typeDescriptions : List ( String, Pine2024.Value )
         typeDescriptions =
             List.foldr
                 (\( typeName, typeDeclaration ) aggregate ->
@@ -4094,13 +4094,13 @@ emitModuleValue parsedModule =
                 []
                 parsedModule.typeDeclarations
     in
-    Pine.ListValue
-        (List.map Pine.valueFromContextExpansionWithName
+    Pine2024.ListValue
+        (List.map Pine2024.valueFromContextExpansionWithName
             (List.concat [ parsedModule.functionDeclarations, typeDescriptions ])
         )
 
 
-emitTypeDeclarationValue : ElmModuleTypeDeclaration -> Pine.Value
+emitTypeDeclarationValue : ElmModuleTypeDeclaration -> Pine2024.Value
 emitTypeDeclarationValue typeDeclaration =
     case typeDeclaration of
         ElmModuleChoiceTypeDeclaration choiceType ->
@@ -4110,16 +4110,16 @@ emitTypeDeclarationValue typeDeclaration =
             emitRecordConstructorValue fields
 
 
-emitChoiceTypeValue : ElmModuleChoiceType -> Pine.Value
+emitChoiceTypeValue : ElmModuleChoiceType -> Pine2024.Value
 emitChoiceTypeValue (ElmModuleChoiceType tags) =
-    Pine.valueFromContextExpansionWithName
+    Pine2024.valueFromContextExpansionWithName
         ( "ChoiceType"
-        , Pine.ListValue
+        , Pine2024.ListValue
             (List.foldr
                 (\( tagName, ElmModuleChoiceTypeTag argumentsCount ) aggregate ->
-                    Pine.ListValue
-                        [ Pine.valueFromString tagName
-                        , Pine.valueFromInt argumentsCount
+                    Pine2024.ListValue
+                        [ Pine2024.valueFromString tagName
+                        , Pine2024.valueFromInt argumentsCount
                         ]
                         :: aggregate
                 )
@@ -4129,19 +4129,19 @@ emitChoiceTypeValue (ElmModuleChoiceType tags) =
         )
 
 
-emitRecordConstructorValue : List String -> Pine.Value
+emitRecordConstructorValue : List String -> Pine2024.Value
 emitRecordConstructorValue fields =
-    Pine.valueFromContextExpansionWithName
+    Pine2024.valueFromContextExpansionWithName
         ( "RecordConstructor"
-        , Pine.ListValue
-            (List.map Pine.valueFromString fields)
+        , Pine2024.ListValue
+            (List.map Pine2024.valueFromString fields)
         )
 
 
 type alias EmittedRecursionDomain =
-    { emittedDeclarationsToShare : List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
-    , emittedDeclarationsToInline : List ( String, Pine.Value )
-    , exposedDeclarations : List ( String, Pine.Value )
+    { emittedDeclarationsToShare : List ( String, ( FirCompiler2024.EnvironmentFunctionEntry, Pine2024.Value ) )
+    , emittedDeclarationsToInline : List ( String, Pine2024.Value )
+    , exposedDeclarations : List ( String, Pine2024.Value )
     }
 
 
@@ -4149,7 +4149,7 @@ emitModuleFunctionDeclarations :
     EmitStack
     -> List ( String, Expression )
     -> List String
-    -> Result String (List ( String, Pine.Value ))
+    -> Result String (List ( String, Pine2024.Value ))
 emitModuleFunctionDeclarations emitStack allModuleDeclarations exposedDeclarationsNames =
     let
         declarationsDirectDependencies : Dict.Dict String (List String)
@@ -4158,7 +4158,7 @@ emitModuleFunctionDeclarations emitStack allModuleDeclarations exposedDeclaratio
                 (\( declName, declExpr ) aggregate ->
                     Dict.insert
                         declName
-                        (Common.listUnique (FirCompiler.listUnboundReferencesInExpression declExpr []))
+                        (Common.listUnique (FirCompiler2024.listUnboundReferencesInExpression declExpr []))
                         aggregate
                 )
                 Dict.empty
@@ -4166,7 +4166,7 @@ emitModuleFunctionDeclarations emitStack allModuleDeclarations exposedDeclaratio
 
         aggregateTransitiveDependencies : List String
         aggregateTransitiveDependencies =
-            FirCompiler.getTransitiveDependencies
+            FirCompiler2024.getTransitiveDependencies
                 declarationsDirectDependencies
                 exposedDeclarationsNames
 
@@ -4177,7 +4177,7 @@ emitModuleFunctionDeclarations emitStack allModuleDeclarations exposedDeclaratio
                     if List.member declarationName aggregateTransitiveDependencies then
                         ( declarationName
                         , Set.fromList
-                            (FirCompiler.getTransitiveDependencies
+                            (FirCompiler2024.getTransitiveDependencies
                                 declarationsDirectDependencies
                                 directDependencies
                             )
@@ -4206,7 +4206,7 @@ emitModuleFunctionDeclarations emitStack allModuleDeclarations exposedDeclaratio
 
         recursionDomains : List (Set.Set String)
         recursionDomains =
-            FirCompiler.recursionDomainsFromDeclarationDependencies
+            FirCompiler2024.recursionDomainsFromDeclarationDependencies
                 declarationsTransitiveDependencies
     in
     case
@@ -4233,8 +4233,8 @@ emitRecursionDomainsRecursive :
     ->
         { exposedDeclarationsNames : List String
         , allModuleDeclarations : List ( String, Expression )
-        , importedFunctionsToShare : List ( List String, List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) ) )
-        , importedFunctionsToInline : List ( List String, List ( String, Pine.Value ) )
+        , importedFunctionsToShare : List ( List String, List ( String, ( FirCompiler2024.EnvironmentFunctionEntry, Pine2024.Value ) ) )
+        , importedFunctionsToInline : List ( List String, List ( String, Pine2024.Value ) )
         , declarationsDirectDependencies : Dict.Dict String (List String)
         }
     -> List EmittedRecursionDomain
@@ -4267,8 +4267,8 @@ emitRecursionDomainsRecursive emitStack moduleConfig alreadyEmitted remainingRec
 emitRecursionDomain :
     { exposedDeclarationsNames : List String
     , allModuleDeclarations : List ( String, Expression )
-    , importedFunctionsToShare : List ( List String, List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) ) )
-    , importedFunctionsToInline : List ( List String, List ( String, Pine.Value ) )
+    , importedFunctionsToShare : List ( List String, List ( String, ( FirCompiler2024.EnvironmentFunctionEntry, Pine2024.Value ) ) )
+    , importedFunctionsToInline : List ( List String, List ( String, Pine2024.Value ) )
     , declarationsDirectDependencies : Dict.Dict String (List String)
     }
     -> EmitStack
@@ -4296,13 +4296,13 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                 []
                 allModuleDeclarations
 
-        prevEmittedDeclarationsToShare : List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
+        prevEmittedDeclarationsToShare : List ( String, ( FirCompiler2024.EnvironmentFunctionEntry, Pine2024.Value ) )
         prevEmittedDeclarationsToShare =
             List.concatMap
                 (\emittedDomain -> emittedDomain.emittedDeclarationsToShare)
                 alreadyEmitted
 
-        prevEmittedDeclarationsToInline : List ( String, Pine.Value )
+        prevEmittedDeclarationsToInline : List ( String, Pine2024.Value )
         prevEmittedDeclarationsToInline =
             List.concatMap
                 (\emittedDomain -> emittedDomain.emittedDeclarationsToInline)
@@ -4330,7 +4330,7 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                 )
                 recursionDomainDeclarations
 
-        importedFunctions : List ( List String, List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) ) )
+        importedFunctions : List ( List String, List ( String, ( FirCompiler2024.EnvironmentFunctionEntry, Pine2024.Value ) ) )
         importedFunctions =
             List.concat
                 [ [ ( [], prevEmittedDeclarationsToShare ) ]
@@ -4338,7 +4338,7 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                 ]
     in
     case
-        FirCompiler.emitDeclarationBlock
+        FirCompiler2024.emitDeclarationBlock
             { importedFunctions = importedFunctions
             , importedFunctionsToInline =
                 ( [], prevEmittedDeclarationsToInline ) :: importedFunctionsToInline
@@ -4347,15 +4347,15 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
             , skipApplyFunction = emitStack.skipApplyFunction
             }
             recursionDomainDeclarationsInBlock
-            (FirCompiler.DeclBlockClosureCaptures [])
-            (FirCompiler.DeclBlockRootDeps (List.map Tuple.second recursionDomainDeclarations))
+            (FirCompiler2024.DeclBlockClosureCaptures [])
+            (FirCompiler2024.DeclBlockRootDeps (List.map Tuple.second recursionDomainDeclarations))
     of
         Err err ->
             Err err
 
         Ok ( blockEmitStack, declBlockResult ) ->
             let
-                (FirCompiler.EmitDeclarationBlockResult newEnvFunctionsValues parseAndEmitFunction envFunctionsExpression) =
+                (FirCompiler2024.EmitDeclarationBlockResult newEnvFunctionsValues parseAndEmitFunction envFunctionsExpression) =
                     declBlockResult
             in
             case
@@ -4363,7 +4363,7 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                     |> Common.resultListMapCombine
                         (\( declName, declExpression ) ->
                             case Common.assocListGetWithIndex ( [], declName ) blockEmitStack.environmentFunctions of
-                                Just ( _, FirCompiler.EnvironmentFunctionEntry declParamCount _ ) ->
+                                Just ( _, FirCompiler2024.EnvironmentFunctionEntry declParamCount _ ) ->
                                     case Common.assocListGet declName newEnvFunctionsValues of
                                         Nothing ->
                                             Err ("Compiler error: Missing entry: " ++ declName)
@@ -4380,7 +4380,7 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
 
                                 Nothing ->
                                     let
-                                        ( FirCompiler.DeclBlockFunctionEntry parsedDeclarationParams _, emitDeclarationResult ) =
+                                        ( FirCompiler2024.DeclBlockFunctionEntry parsedDeclarationParams _, emitDeclarationResult ) =
                                             parseAndEmitFunction declExpression
                                     in
                                     case emitDeclarationResult of
@@ -4390,7 +4390,7 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                                         Ok declEmittedExpr ->
                                             let
                                                 innerExpressionValue =
-                                                    Pine.encodeExpressionAsValue declEmittedExpr
+                                                    Pine2024.encodeExpressionAsValue declEmittedExpr
                                             in
                                             Ok
                                                 ( declName
@@ -4421,7 +4421,7 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                                 Tuple.first
                                 blockEmitStack.environmentFunctions
 
-                        emittedDeclarationsFromBlock : List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
+                        emittedDeclarationsFromBlock : List ( String, ( FirCompiler2024.EnvironmentFunctionEntry, Pine2024.Value ) )
                         emittedDeclarationsFromBlock =
                             List.map
                                 (\( functionName, ( funcEntry, ( _, funcValue ) ) ) ->
@@ -4433,21 +4433,21 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                         emittedDeclarationsFromBlockNames =
                             List.map Tuple.first emittedDeclarationsFromBlock
 
-                        emittedDeclarationsFromExposed : List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
+                        emittedDeclarationsFromExposed : List ( String, ( FirCompiler2024.EnvironmentFunctionEntry, Pine2024.Value ) )
                         emittedDeclarationsFromExposed =
                             List.map
                                 (\( functionName, ( _, ( parameterCount, funcValue ) ) ) ->
                                     ( functionName
-                                    , ( FirCompiler.EnvironmentFunctionEntry
+                                    , ( FirCompiler2024.EnvironmentFunctionEntry
                                             parameterCount
-                                            (FirCompiler.LocalEnvironment expectedEnvironmentFunctions)
+                                            (FirCompiler2024.LocalEnvironment expectedEnvironmentFunctions)
                                       , funcValue
                                       )
                                     )
                                 )
                                 emittedForExposeOrReuse
 
-                        emittedDeclarationsBeforeReduce : List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
+                        emittedDeclarationsBeforeReduce : List ( String, ( FirCompiler2024.EnvironmentFunctionEntry, Pine2024.Value ) )
                         emittedDeclarationsBeforeReduce =
                             List.concat
                                 [ emittedDeclarationsFromBlock
@@ -4458,7 +4458,7 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                                     emittedDeclarationsFromExposed
                                 ]
 
-                        emittedDeclarations : List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
+                        emittedDeclarations : List ( String, ( FirCompiler2024.EnvironmentFunctionEntry, Pine2024.Value ) )
                         emittedDeclarations =
                             List.map (Tuple.mapSecond (attemptReduceBlockDecl declBlockResult))
                                 emittedDeclarationsBeforeReduce
@@ -4466,7 +4466,7 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                         ( emittedDeclarationsToShare, emittedDeclarationsToInline ) =
                             splitEmittedFunctionsToInline emittedDeclarations
 
-                        exposedDeclarationsResult : Result String (List ( String, Pine.Value ))
+                        exposedDeclarationsResult : Result String (List ( String, Pine2024.Value ))
                         exposedDeclarationsResult =
                             List.foldr
                                 (\( declName, ( _, ( parameterCount, emittedValue ) ) ) aggregateResult ->
@@ -4482,25 +4482,25 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
 
                                                     Nothing ->
                                                         let
-                                                            getFunctionInnerExpressionFromIndex : Int -> Pine.Expression
+                                                            getFunctionInnerExpressionFromIndex : Int -> Pine2024.Expression
                                                             getFunctionInnerExpressionFromIndex declarationIndex =
                                                                 let
                                                                     getEnvFunctionsExpression =
                                                                         listItemFromIndexExpression_Pine 0
-                                                                            Pine.environmentExpr
+                                                                            Pine2024.environmentExpr
                                                                 in
-                                                                Pine.LiteralExpression
-                                                                    (Pine.encodeExpressionAsValue
-                                                                        (Pine.ParseAndEvalExpression
-                                                                            (FirCompiler.listItemFromIndexExpression_Pine
+                                                                Pine2024.LiteralExpression
+                                                                    (Pine2024.encodeExpressionAsValue
+                                                                        (Pine2024.ParseAndEvalExpression
+                                                                            (FirCompiler2024.listItemFromIndexExpression_Pine
                                                                                 declarationIndex
                                                                                 getEnvFunctionsExpression
                                                                             )
-                                                                            Pine.environmentExpr
+                                                                            Pine2024.environmentExpr
                                                                         )
                                                                     )
 
-                                                            getFunctionInnerExpression : Pine.Expression
+                                                            getFunctionInnerExpression : Pine2024.Expression
                                                             getFunctionInnerExpression =
                                                                 case
                                                                     Common.assocListGetWithIndex
@@ -4511,18 +4511,18 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                                                                         getFunctionInnerExpressionFromIndex indexInBlock
 
                                                                     Nothing ->
-                                                                        Pine.LiteralExpression emittedValue
+                                                                        Pine2024.LiteralExpression emittedValue
                                                         in
                                                         case
                                                             evaluateAsIndependentExpression
                                                                 (if parameterCount == 0 && newEnvFunctionsValues == [] then
-                                                                    FirCompiler.emitWrapperForPartialApplicationZero
+                                                                    FirCompiler2024.emitWrapperForPartialApplicationZero
                                                                         { getFunctionInnerExpression = getFunctionInnerExpression
                                                                         , getEnvFunctionsExpression = envFunctionsExpression
                                                                         }
 
                                                                  else
-                                                                    FirCompiler.buildRecordOfPartiallyAppliedFunction
+                                                                    FirCompiler2024.buildRecordOfPartiallyAppliedFunction
                                                                         { getFunctionInnerExpression = getFunctionInnerExpression
                                                                         , parameterCount = parameterCount
                                                                         , getEnvFunctionsExpression = envFunctionsExpression
@@ -4540,7 +4540,7 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
 
                                                             Ok wrappedForExposeBeforeReduce ->
                                                                 let
-                                                                    wrappedForExpose : Pine.Value
+                                                                    wrappedForExpose : Pine2024.Value
                                                                     wrappedForExpose =
                                                                         attemptReduceBlockDeclFunction
                                                                             wrappedForExposeBeforeReduce
@@ -4566,20 +4566,20 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
 
 
 attemptReduceBlockDecl :
-    FirCompiler.EmitDeclarationBlockResult
-    -> ( FirCompiler.EnvironmentFunctionEntry, Pine.Value )
-    -> ( FirCompiler.EnvironmentFunctionEntry, Pine.Value )
-attemptReduceBlockDecl (FirCompiler.EmitDeclarationBlockResult _ _ envFunctionsExpression) blockDecl =
+    FirCompiler2024.EmitDeclarationBlockResult
+    -> ( FirCompiler2024.EnvironmentFunctionEntry, Pine2024.Value )
+    -> ( FirCompiler2024.EnvironmentFunctionEntry, Pine2024.Value )
+attemptReduceBlockDecl (FirCompiler2024.EmitDeclarationBlockResult _ _ envFunctionsExpression) blockDecl =
     let
-        ( FirCompiler.EnvironmentFunctionEntry funcParamCount _, funcValue ) =
+        ( FirCompiler2024.EnvironmentFunctionEntry funcParamCount _, funcValue ) =
             blockDecl
     in
     case funcParamCount of
         0 ->
             let
                 evaluatableExpr =
-                    FirCompiler.emitWrapperForPartialApplicationZero
-                        { getFunctionInnerExpression = Pine.LiteralExpression funcValue
+                    FirCompiler2024.emitWrapperForPartialApplicationZero
+                        { getFunctionInnerExpression = Pine2024.LiteralExpression funcValue
                         , getEnvFunctionsExpression = envFunctionsExpression
                         }
             in
@@ -4587,14 +4587,14 @@ attemptReduceBlockDecl (FirCompiler.EmitDeclarationBlockResult _ _ envFunctionsE
                 Ok reducedValue ->
                     let
                         reducedExpr =
-                            Pine.LiteralExpression reducedValue
+                            Pine2024.LiteralExpression reducedValue
                     in
                     if estimatePineValueSize reducedValue > estimatePineValueSize funcValue then
                         blockDecl
 
                     else
-                        ( FirCompiler.EnvironmentFunctionEntry 0 (FirCompiler.LocalEnvironment [])
-                        , Pine.encodeExpressionAsValue reducedExpr
+                        ( FirCompiler2024.EnvironmentFunctionEntry 0 (FirCompiler2024.LocalEnvironment [])
+                        , Pine2024.encodeExpressionAsValue reducedExpr
                         )
 
                 Err _ ->
@@ -4604,14 +4604,14 @@ attemptReduceBlockDecl (FirCompiler.EmitDeclarationBlockResult _ _ envFunctionsE
             blockDecl
 
 
-attemptReduceBlockDeclFunction : Pine.Value -> Pine.Value
+attemptReduceBlockDeclFunction : Pine2024.Value -> Pine2024.Value
 attemptReduceBlockDeclFunction originalDeclValue =
     case tryParseAsSimpleTaggedFunction originalDeclValue of
         Nothing ->
             originalDeclValue
 
         Just ( functionRecord, buildReplacement ) ->
-            case FirCompiler.tryReduceFunctionRecord functionRecord of
+            case FirCompiler2024.tryReduceFunctionRecord functionRecord of
                 Nothing ->
                     originalDeclValue
 
@@ -4623,13 +4623,13 @@ attemptReduceBlockDeclFunction originalDeclValue =
                     replacementValue
 
 
-tryParseAsSimpleTaggedFunction : Pine.Value -> Maybe ( FirCompiler.ParsedFunctionValue, FirCompiler.ParsedFunctionValue -> Pine.Value )
+tryParseAsSimpleTaggedFunction : Pine2024.Value -> Maybe ( FirCompiler2024.ParsedFunctionValue, FirCompiler2024.ParsedFunctionValue -> Pine2024.Value )
 tryParseAsSimpleTaggedFunction value =
-    case FirCompiler.parseFunctionRecordFromValueTagged value of
+    case FirCompiler2024.parseFunctionRecordFromValueTagged value of
         Ok parsedFunctionValue ->
             Just
                 ( parsedFunctionValue
-                , FirCompiler.emitFunctionRecordAsValueTagged
+                , FirCompiler2024.emitFunctionRecordAsValueTagged
                 )
 
         Err _ ->
@@ -4638,8 +4638,8 @@ tryParseAsSimpleTaggedFunction value =
                The declaration value is a choice type tag constructor containing a function record.
             -}
             case value of
-                Pine.ListValue [ tagValue, Pine.ListValue [ functionRecordValue ] ] ->
-                    case FirCompiler.parseFunctionRecordFromValueTagged functionRecordValue of
+                Pine2024.ListValue [ tagValue, Pine2024.ListValue [ functionRecordValue ] ] ->
+                    case FirCompiler2024.parseFunctionRecordFromValueTagged functionRecordValue of
                         Err _ ->
                             Nothing
 
@@ -4647,9 +4647,9 @@ tryParseAsSimpleTaggedFunction value =
                             Just
                                 ( parsedFunctionValue
                                 , \pfv ->
-                                    Pine.ListValue
+                                    Pine2024.ListValue
                                         [ tagValue
-                                        , Pine.ListValue [ FirCompiler.emitFunctionRecordAsValueTagged pfv ]
+                                        , Pine2024.ListValue [ FirCompiler2024.emitFunctionRecordAsValueTagged pfv ]
                                         ]
                                 )
 
@@ -4658,21 +4658,21 @@ tryParseAsSimpleTaggedFunction value =
 
 
 splitEmittedFunctionsToInline :
-    List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
-    -> ( List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) ), List ( String, Pine.Value ) )
+    List ( String, ( FirCompiler2024.EnvironmentFunctionEntry, Pine2024.Value ) )
+    -> ( List ( String, ( FirCompiler2024.EnvironmentFunctionEntry, Pine2024.Value ) ), List ( String, Pine2024.Value ) )
 splitEmittedFunctionsToInline emittedFunctions =
     List.foldr
         (\emittedFunction ( toShare, toInline ) ->
             let
-                ( declName, ( FirCompiler.EnvironmentFunctionEntry paramCount expectedEnv, declValue ) ) =
+                ( declName, ( FirCompiler2024.EnvironmentFunctionEntry paramCount expectedEnv, declValue ) ) =
                     emittedFunction
 
                 originalSize =
                     estimatePineValueSize declValue
 
                 continueSharing :
-                    ( List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
-                    , List ( String, Pine.Value )
+                    ( List ( String, ( FirCompiler2024.EnvironmentFunctionEntry, Pine2024.Value ) )
+                    , List ( String, Pine2024.Value )
                     )
                 continueSharing =
                     ( emittedFunction :: toShare, toInline )
@@ -4680,11 +4680,11 @@ splitEmittedFunctionsToInline emittedFunctions =
                 continueWithReduction :
                     ()
                     ->
-                        ( List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
-                        , List ( String, Pine.Value )
+                        ( List ( String, ( FirCompiler2024.EnvironmentFunctionEntry, Pine2024.Value ) )
+                        , List ( String, Pine2024.Value )
                         )
                 continueWithReduction () =
-                    case Pine.parseExpressionFromValue declValue of
+                    case Pine2024.parseExpressionFromValue declValue of
                         Err _ ->
                             {- This happened for an imported declaration 'Dict.empty'.
                                Maybe this happens for all declarations imported from parsed modules?
@@ -4715,10 +4715,10 @@ splitEmittedFunctionsToInline emittedFunctions =
             case paramCount of
                 0 ->
                     case expectedEnv of
-                        FirCompiler.IndependentEnvironment ->
+                        FirCompiler2024.IndependentEnvironment ->
                             continueWithReduction ()
 
-                        FirCompiler.LocalEnvironment [] ->
+                        FirCompiler2024.LocalEnvironment [] ->
                             continueWithReduction ()
 
                         _ ->
@@ -4732,17 +4732,17 @@ splitEmittedFunctionsToInline emittedFunctions =
 
 
 reportEmittedDeclarationsForErrorMsg :
-    List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
+    List ( String, ( FirCompiler2024.EnvironmentFunctionEntry, Pine2024.Value ) )
     -> List String
 reportEmittedDeclarationsForErrorMsg emittedDeclarations =
     List.map
-        (\( functionName, ( FirCompiler.EnvironmentFunctionEntry funcParamCount funcExpectedEnv, _ ) ) ->
+        (\( functionName, ( FirCompiler2024.EnvironmentFunctionEntry funcParamCount funcExpectedEnv, _ ) ) ->
             functionName
                 ++ " ("
                 ++ String.fromInt funcParamCount
                 ++ ") env = "
                 ++ (case funcExpectedEnv of
-                        FirCompiler.LocalEnvironment localEnvExpectedDecls ->
+                        FirCompiler2024.LocalEnvironment localEnvExpectedDecls ->
                             "local: "
                                 ++ String.fromInt (List.length localEnvExpectedDecls)
                                 ++ " ("
@@ -4753,10 +4753,10 @@ reportEmittedDeclarationsForErrorMsg emittedDeclarations =
                                     )
                                 ++ ")"
 
-                        FirCompiler.ImportedEnvironment _ ->
+                        FirCompiler2024.ImportedEnvironment _ ->
                             "imported"
 
-                        FirCompiler.IndependentEnvironment ->
+                        FirCompiler2024.IndependentEnvironment ->
                             "independent"
                    )
         )
@@ -4768,7 +4768,7 @@ compileElmChoiceTypeTagConstructor ( tagName, argumentsCount ) arguments =
     if List.length arguments == argumentsCount then
         let
             tagNameAsValue =
-                Pine.valueFromString tagName
+                Pine2024.valueFromString tagName
         in
         inlineElmSyntaxValueConstructor
             tagNameAsValue
@@ -4800,7 +4800,7 @@ applicableDeclarationFromConstructorExpression genericContructorExpression =
 {-| Directly inlines an application of a choice type tag constructor for cases where number of applied
 arguments matches the number of arguments of the constructor.
 -}
-inlineElmSyntaxValueConstructor : Pine.Value -> List Expression -> Expression
+inlineElmSyntaxValueConstructor : Pine2024.Value -> List Expression -> Expression
 inlineElmSyntaxValueConstructor tagNameAsValue arguments =
     ListExpression
         [ LiteralExpression tagNameAsValue
@@ -4808,72 +4808,72 @@ inlineElmSyntaxValueConstructor tagNameAsValue arguments =
         ]
 
 
-compileElmChoiceTypeTagConstructorValue : ( String, Int ) -> ( String, Pine.Value )
+compileElmChoiceTypeTagConstructorValue : ( String, Int ) -> ( String, Pine2024.Value )
 compileElmChoiceTypeTagConstructorValue ( tagName, argumentsCount ) =
     ( tagName
     , case argumentsCount of
         0 ->
-            Pine.ListValue
-                [ Pine.valueFromString tagName
-                , Pine.ListValue []
+            Pine2024.ListValue
+                [ Pine2024.valueFromString tagName
+                , Pine2024.ListValue []
                 ]
 
         1 ->
-            Pine.ListExpression
-                [ Pine.LiteralExpression (Pine.valueFromString tagName)
-                , Pine.ListExpression [ Pine.environmentExpr ]
+            Pine2024.ListExpression
+                [ Pine2024.LiteralExpression (Pine2024.valueFromString tagName)
+                , Pine2024.ListExpression [ Pine2024.environmentExpr ]
                 ]
-                |> Pine.encodeExpressionAsValue
+                |> Pine2024.encodeExpressionAsValue
 
         2 ->
-            Pine.ListExpression
-                [ Pine.LiteralExpression Pine.stringAsValue_List
-                , Pine.ListExpression
-                    [ Pine.ListExpression
-                        [ Pine.ListExpression
-                            [ Pine.LiteralExpression Pine.stringAsValue_Literal
-                            , Pine.LiteralExpression (Pine.ListValue [ Pine.valueFromString tagName ])
+            Pine2024.ListExpression
+                [ Pine2024.LiteralExpression Pine2024.stringAsValue_List
+                , Pine2024.ListExpression
+                    [ Pine2024.ListExpression
+                        [ Pine2024.ListExpression
+                            [ Pine2024.LiteralExpression Pine2024.stringAsValue_Literal
+                            , Pine2024.LiteralExpression (Pine2024.ListValue [ Pine2024.valueFromString tagName ])
                             ]
-                        , Pine.ListExpression
-                            [ Pine.LiteralExpression Pine.stringAsValue_List
-                            , Pine.ListExpression
-                                [ Pine.ListExpression
-                                    [ Pine.ListExpression
-                                        [ Pine.LiteralExpression Pine.stringAsValue_Literal
-                                        , Pine.ListExpression [ Pine.environmentExpr ]
+                        , Pine2024.ListExpression
+                            [ Pine2024.LiteralExpression Pine2024.stringAsValue_List
+                            , Pine2024.ListExpression
+                                [ Pine2024.ListExpression
+                                    [ Pine2024.ListExpression
+                                        [ Pine2024.LiteralExpression Pine2024.stringAsValue_Literal
+                                        , Pine2024.ListExpression [ Pine2024.environmentExpr ]
                                         ]
-                                    , Pine.environmentExpr
-                                        |> Pine.encodeExpressionAsValue
-                                        |> Pine.LiteralExpression
+                                    , Pine2024.environmentExpr
+                                        |> Pine2024.encodeExpressionAsValue
+                                        |> Pine2024.LiteralExpression
                                     ]
                                 ]
                             ]
                         ]
                     ]
                 ]
-                |> Pine.encodeExpressionAsValue
+                |> Pine2024.encodeExpressionAsValue
 
         _ ->
             case
                 evaluateAsIndependentExpression
-                    (emitWrapperForPartialApplication (Pine.ListExpression [])
+                    (emitWrapperForPartialApplication (Pine2024.ListExpression [])
                         argumentsCount
-                        (Pine.ListExpression
-                            [ Pine.LiteralExpression (Pine.valueFromString tagName)
+                        (Pine2024.ListExpression
+                            [ Pine2024.LiteralExpression (Pine2024.valueFromString tagName)
                             , List.range 0 (argumentsCount - 1)
                                 |> List.map
                                     (\paramIndex ->
-                                        Pine.environmentExpr
+                                        Pine2024.environmentExpr
                                             |> listItemFromIndexExpression_Pine 1
                                             |> listItemFromIndexExpression_Pine paramIndex
                                     )
-                                |> Pine.ListExpression
+                                |> Pine2024.ListExpression
                             ]
                         )
                     )
             of
                 Err _ ->
-                    Pine.valueFromString "Failed to compile choice type tag constructor"
+                    Pine2024.valueFromString "Failed to compile choice type tag constructor"
 
                 Ok wrappedForExpose ->
                     wrappedForExpose
@@ -4883,14 +4883,14 @@ compileElmChoiceTypeTagConstructorValue ( tagName, argumentsCount ) =
 compileElmRecordConstructor : List String -> (List Expression -> Expression)
 compileElmRecordConstructor recordFieldNames =
     let
-        recordFieldNamesStringAndValue : List ( String, Pine.Value )
+        recordFieldNamesStringAndValue : List ( String, Pine2024.Value )
         recordFieldNamesStringAndValue =
-            List.map (\asString -> ( asString, Pine.valueFromString asString )) recordFieldNames
+            List.map (\asString -> ( asString, Pine2024.valueFromString asString )) recordFieldNames
     in
     \arguments ->
         if List.length arguments == List.length recordFieldNamesStringAndValue then
             let
-                recordFieldsOrdered : List ( String, Pine.Value, Expression )
+                recordFieldsOrdered : List ( String, Pine2024.Value, Expression )
                 recordFieldsOrdered =
                     List.sortBy
                         (\( fieldName, _, _ ) -> fieldName)
@@ -4920,7 +4920,7 @@ compileElmRecordConstructor recordFieldNames =
 
         else
             let
-                recordFieldsOrdered : List ( String, Pine.Value )
+                recordFieldsOrdered : List ( String, Pine2024.Value )
                 recordFieldsOrdered =
                     List.sortBy Tuple.first recordFieldNamesStringAndValue
             in
@@ -5085,32 +5085,32 @@ getDirectDependenciesFromModule file =
         (List.concat [ implicit, explicit ])
 
 
-valueFromString : String -> Pine.Value
+valueFromString : String -> Pine2024.Value
 valueFromString string =
-    Pine.ListValue
+    Pine2024.ListValue
         [ elmStringTypeTagNameAsValue
-        , Pine.ListValue [ Pine.computeValueFromString string ]
+        , Pine2024.ListValue [ Pine2024.computeValueFromString string ]
         ]
 
 
-unitValue : Pine.Value
+unitValue : Pine2024.Value
 unitValue =
-    Pine.ListValue []
+    Pine2024.ListValue []
 
 
-valueFromFloat : Float -> Pine.Value
+valueFromFloat : Float -> Pine2024.Value
 valueFromFloat float =
     let
         ( numerator, denominator ) =
             searchRatioForFloat float
     in
     if denominator == 1 then
-        Pine.valueFromInt numerator
+        Pine2024.valueFromInt numerator
 
     else
-        Pine.ListValue
-            [ Pine.valueFromString elmFloatTypeTagName
-            , Pine.ListValue [ Pine.valueFromInt numerator, Pine.valueFromInt denominator ]
+        Pine2024.ListValue
+            [ Pine2024.valueFromString elmFloatTypeTagName
+            , Pine2024.ListValue [ Pine2024.valueFromInt numerator, Pine2024.valueFromInt denominator ]
             ]
 
 
@@ -5141,12 +5141,12 @@ searchRatioForPositiveFloat denom float =
 
 
 separateEnvironmentDeclarations :
-    List ( String, Pine.Value )
+    List ( String, Pine2024.Value )
     ->
         Result
             String
-            { modules : Dict.Dict Elm.Syntax.ModuleName.ModuleName ( Pine.Value, ElmModuleInCompilation )
-            , otherDeclarations : List ( String, Pine.Value )
+            { modules : Dict.Dict Elm.Syntax.ModuleName.ModuleName ( Pine2024.Value, ElmModuleInCompilation )
+            , otherDeclarations : List ( String, Pine2024.Value )
             }
 separateEnvironmentDeclarations environmentDeclarations =
     List.foldl
@@ -5187,29 +5187,29 @@ separateEnvironmentDeclarations environmentDeclarations =
         environmentDeclarations
 
 
-getDeclarationsFromEnvironment : Pine.Value -> Result String ( List Pine.Value, List ( String, Pine.Value ) )
+getDeclarationsFromEnvironment : Pine2024.Value -> Result String ( List Pine2024.Value, List ( String, Pine2024.Value ) )
 getDeclarationsFromEnvironment environment =
     case environment of
-        Pine.BlobValue _ ->
+        Pine2024.BlobValue _ ->
             Err "Is not a list but a blob"
 
-        Pine.ListValue environmentList ->
+        Pine2024.ListValue environmentList ->
             case
                 Common.resultListMapCombine
                     (\environmentEntry ->
                         case environmentEntry of
-                            Pine.BlobValue _ ->
+                            Pine2024.BlobValue _ ->
                                 Err "Failed parse env entry: Is not a list but a blob"
 
-                            Pine.ListValue [ nameValue, namedValue ] ->
-                                case Pine.stringFromValue nameValue of
+                            Pine2024.ListValue [ nameValue, namedValue ] ->
+                                case Pine2024.stringFromValue nameValue of
                                     Err err ->
                                         Err ("Failed parse env entry: Failed to parse name string: " ++ err)
 
                                     Ok name ->
                                         Ok ( name, namedValue )
 
-                            Pine.ListValue list ->
+                            Pine2024.ListValue list ->
                                 Err
                                     ("Failed parse env entry: Unexpected number of elements in environment entry list: Not 2 but "
                                         ++ String.fromInt (List.length list)
@@ -5230,7 +5230,7 @@ getDeclarationsFromEnvironment environment =
 
 {-| Reverses the encoding implemented in emitModuleValue, parsing the Elm module from the transportable form.
 -}
-parseModuleValue : List ( String, Pine.Value ) -> Result String ElmModuleInCompilation
+parseModuleValue : List ( String, Pine2024.Value ) -> Result String ElmModuleInCompilation
 parseModuleValue moduleValues =
     case
         List.foldr
@@ -5270,16 +5270,16 @@ parseModuleValue moduleValues =
                 }
 
 
-parseTypeDeclarationFromValueTagged : Pine.Value -> Result String ElmModuleTypeDeclaration
+parseTypeDeclarationFromValueTagged : Pine2024.Value -> Result String ElmModuleTypeDeclaration
 parseTypeDeclarationFromValueTagged value =
     case value of
-        Pine.BlobValue _ ->
+        Pine2024.BlobValue _ ->
             Err "Is not a list but a blob"
 
-        Pine.ListValue listItems ->
+        Pine2024.ListValue listItems ->
             case listItems of
                 [ typeTagValue, functionRecord ] ->
-                    case Pine.stringFromValue typeTagValue of
+                    case Pine2024.stringFromValue typeTagValue of
                         Err err ->
                             Err ("Failed to parse string: " ++ err)
 
@@ -5311,24 +5311,24 @@ parseTypeDeclarationFromValueTagged value =
                         )
 
 
-parseChoiceTypeFromValue : Pine.Value -> Result String ElmModuleChoiceType
+parseChoiceTypeFromValue : Pine2024.Value -> Result String ElmModuleChoiceType
 parseChoiceTypeFromValue value =
     case value of
-        Pine.ListValue listItems ->
+        Pine2024.ListValue listItems ->
             case
                 Common.resultListMapCombine
                     (\tagEntry ->
                         case tagEntry of
-                            Pine.BlobValue _ ->
+                            Pine2024.BlobValue _ ->
                                 Err "Is not a list but a blob"
 
-                            Pine.ListValue [ tagNameValue, argumentCountValue ] ->
-                                case Pine.stringFromValue tagNameValue of
+                            Pine2024.ListValue [ tagNameValue, argumentCountValue ] ->
+                                case Pine2024.stringFromValue tagNameValue of
                                     Err err ->
                                         Err ("Failed to parse string: " ++ err)
 
                                     Ok tagName ->
-                                        case Pine.intFromValue argumentCountValue of
+                                        case Pine2024.intFromValue argumentCountValue of
                                             Err err ->
                                                 Err ("Failed to parse int: " ++ err)
 
@@ -5338,7 +5338,7 @@ parseChoiceTypeFromValue value =
                                                     , ElmModuleChoiceTypeTag argumentsCount
                                                     )
 
-                            Pine.ListValue list ->
+                            Pine2024.ListValue list ->
                                 Err
                                     ("Unexpected number of elements in tag entry list: Not 2 but "
                                         ++ String.fromInt (List.length list)
@@ -5352,19 +5352,19 @@ parseChoiceTypeFromValue value =
                 Ok tags ->
                     Ok (ElmModuleChoiceType tags)
 
-        Pine.BlobValue _ ->
+        Pine2024.BlobValue _ ->
             Err "Is not a list but a blob"
 
 
-parseRecordConstructorFromValue : Pine.Value -> Result String (List String)
+parseRecordConstructorFromValue : Pine2024.Value -> Result String (List String)
 parseRecordConstructorFromValue value =
     case value of
-        Pine.ListValue listItems ->
+        Pine2024.ListValue listItems ->
             Common.resultListMapCombine
-                Pine.stringFromValue
+                Pine2024.stringFromValue
                 listItems
 
-        Pine.BlobValue _ ->
+        Pine2024.BlobValue _ ->
             Err "Is not a list but a blob"
 
 
@@ -5378,25 +5378,25 @@ stringStartsWithUpper string =
             Char.isUpper firstChar
 
 
-compileAndEvalParsedInteractiveSubmission : Pine.Value -> InteractiveSubmission -> Result String Pine.Value
+compileAndEvalParsedInteractiveSubmission : Pine2024.Value -> InteractiveSubmission -> Result String Pine2024.Value
 compileAndEvalParsedInteractiveSubmission environment submission =
     case compileParsedInteractiveSubmission environment submission of
         Err err ->
             Err ("Failed compile: " ++ err)
 
         Ok expression ->
-            case Pine.evaluateExpression (Pine.EvalEnvironment environment) expression of
+            case Pine2024.evaluateExpression (Pine2024.EvalEnvironment environment) expression of
                 Err err ->
-                    Err ("Failed eval: " ++ Pine.displayStringFromPineError err)
+                    Err ("Failed eval: " ++ Pine2024.displayStringFromPineError err)
 
                 Ok val ->
                     Ok val
 
 
 compileParsedInteractiveSubmission :
-    Pine.Value
+    Pine2024.Value
     -> InteractiveSubmission
-    -> Result String Pine.Expression
+    -> Result String Pine2024.Expression
 compileParsedInteractiveSubmission environment submission =
     case getDeclarationsFromEnvironment environment of
         Err err ->
@@ -5441,7 +5441,7 @@ compileParsedInteractiveSubmission environment submission =
 
                                         Ok ( _, functionDeclarationCompilation ) ->
                                             case
-                                                FirCompiler.emitExpressionInDeclarationBlock
+                                                FirCompiler2024.emitExpressionInDeclarationBlock
                                                     emitStackDefault
                                                     [ ( declarationName, functionDeclarationCompilation ) ]
                                                     functionDeclarationCompilation
@@ -5450,7 +5450,7 @@ compileParsedInteractiveSubmission environment submission =
                                                     Err err
 
                                                 Ok declExpression ->
-                                                    case FirCompiler.evaluateAsIndependentExpression declExpression of
+                                                    case FirCompiler2024.evaluateAsIndependentExpression declExpression of
                                                         Err err ->
                                                             Err ("Failed to compile Elm function declaration: " ++ err)
 
@@ -5458,18 +5458,18 @@ compileParsedInteractiveSubmission environment submission =
                                                             Ok
                                                                 (buildExpressionForNewStateAndResponse
                                                                     { newStateExpression =
-                                                                        Pine.KernelApplicationExpression
+                                                                        Pine2024.KernelApplicationExpression
                                                                             "concat"
-                                                                            (Pine.ListExpression
-                                                                                [ Pine.ListExpression
-                                                                                    [ Pine.LiteralExpression
-                                                                                        (Pine.valueFromContextExpansionWithName
+                                                                            (Pine2024.ListExpression
+                                                                                [ Pine2024.ListExpression
+                                                                                    [ Pine2024.LiteralExpression
+                                                                                        (Pine2024.valueFromContextExpansionWithName
                                                                                             ( declarationName
                                                                                             , declValue
                                                                                             )
                                                                                         )
                                                                                     ]
-                                                                                , Pine.EnvironmentExpression
+                                                                                , Pine2024.EnvironmentExpression
                                                                                 ]
                                                                             )
                                                                     , responseExpression =
@@ -5505,7 +5505,7 @@ compileParsedInteractiveSubmission environment submission =
                                         Err err
 
                                     Ok compiledExpr ->
-                                        FirCompiler.emitExpressionInDeclarationBlock
+                                        FirCompiler2024.emitExpressionInDeclarationBlock
                                             emitStack
                                             []
                                             compiledExpr
@@ -5516,7 +5516,7 @@ compileParsedInteractiveSubmission environment submission =
                                 Ok pineExpression ->
                                     Ok
                                         (buildExpressionForNewStateAndResponse
-                                            { newStateExpression = Pine.environmentExpr
+                                            { newStateExpression = Pine2024.environmentExpr
                                             , responseExpression = pineExpression
                                             }
                                         )
@@ -5524,7 +5524,7 @@ compileParsedInteractiveSubmission environment submission =
 
 compilationAndEmitStackFromInteractiveEnvironment :
     { modules : Dict.Dict Elm.Syntax.ModuleName.ModuleName ElmModuleInCompilation
-    , otherDeclarations : List ( String, Pine.Value )
+    , otherDeclarations : List ( String, Pine2024.Value )
     }
     -> ( CompilationStack, EmitStack )
 compilationAndEmitStackFromInteractiveEnvironment environmentDeclarations =
@@ -5571,20 +5571,20 @@ compilationAndEmitStackFromInteractiveEnvironment environmentDeclarations =
 
 
 buildExpressionForNewStateAndResponse :
-    { newStateExpression : Pine.Expression, responseExpression : Pine.Expression }
-    -> Pine.Expression
+    { newStateExpression : Pine2024.Expression, responseExpression : Pine2024.Expression }
+    -> Pine2024.Expression
 buildExpressionForNewStateAndResponse config =
-    Pine.ListExpression
+    Pine2024.ListExpression
         [ config.newStateExpression
         , config.responseExpression
         ]
 
 
-responseExpressionFromString : String -> Pine.Expression
+responseExpressionFromString : String -> Pine2024.Expression
 responseExpressionFromString str =
-    Pine.LiteralExpression
-        (Pine.ListValue
-            [ Pine.valueFromString "String"
-            , Pine.ListValue [ Pine.computeValueFromString str ]
+    Pine2024.LiteralExpression
+        (Pine2024.ListValue
+            [ Pine2024.valueFromString "String"
+            , Pine2024.ListValue [ Pine2024.computeValueFromString str ]
             ]
         )

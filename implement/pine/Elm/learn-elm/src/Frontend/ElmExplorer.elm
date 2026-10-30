@@ -12,18 +12,18 @@ import Element.Background
 import Element.Events
 import Element.Font
 import Element.Region
-import ElmCompiler
-import ElmCompilerConstruction
-import ElmInteractive
-import ElmInteractiveParser
-import FirCompiler
+import ElmCompiler2024
+import ElmCompilerConstruction2024
+import ElmInteractive2024
+import ElmInteractiveParser2024
+import FirCompiler2024
 import FontAwesome
 import FontAwesome.Solid
 import Frontend.BrowserApplicationInitWithTime
 import Html
 import Html.Attributes as HA
 import Html.Events
-import Pine
+import Pine2024
 import Result.Extra
 import Set
 import Time
@@ -33,9 +33,9 @@ import Url
 type alias State =
     { time : Time.Posix
     , expression : String
-    , evaluationContext : Result String Pine.EvalEnvironment
+    , evaluationContext : Result String Pine2024.EvalEnvironment
     , lastUserInputExpressionTime : Time.Posix
-    , lastEvaluatedExpression : Maybe ( String, Result String ElmInteractive.SubmissionResponse )
+    , lastEvaluatedExpression : Maybe ( String, Result String ElmInteractive2024.SubmissionResponse )
     , lastAddElmModuleAttempt : Maybe (Result String { compiledModuleSize : Int })
     , addElmModuleControl : Maybe AddModuleControlState
     , compilationExplorer : Maybe CompilationExplorerState
@@ -43,7 +43,7 @@ type alias State =
 
 
 type alias CompilationExplorerState =
-    { compiledContext : Pine.EvalEnvironment
+    { compiledContext : Pine2024.EvalEnvironment
     , rootNode : CompilationExplorerNode
     , expandedNodes : Set.Set (List String)
     }
@@ -67,7 +67,7 @@ type alias CompilationExplorerNode =
 
 
 type alias ExplorerValueCache =
-    { value : Pine.Value
+    { value : Pine2024.Value
     , valueSize : Int
     }
 
@@ -93,7 +93,7 @@ type alias ExplorerNodeParseSuccess =
 type alias InteractiveState =
     { expression : String
     , lastUserInputExpressionTime : Time.Posix
-    , lastEvaluatedExpression : Maybe ( String, Result String ElmInteractive.SubmissionResponse )
+    , lastEvaluatedExpression : Maybe ( String, Result String ElmInteractive2024.SubmissionResponse )
     }
 
 
@@ -118,10 +118,10 @@ evalDelayFromUserInputMilliseconds =
     500
 
 
-explorerValueCache : Pine.Value -> ExplorerValueCache
+explorerValueCache : Pine2024.Value -> ExplorerValueCache
 explorerValueCache value =
     { value = value
-    , valueSize = FirCompiler.estimatePineValueSize value
+    , valueSize = FirCompiler2024.estimatePineValueSize value
     }
 
 
@@ -129,7 +129,7 @@ init : Time.Posix -> ( State, Cmd Event )
 init time =
     ( { time = time
       , expression = ""
-      , evaluationContext = ElmInteractiveParser.compileEvalContextForElmInteractive ElmInteractive.DefaultContext
+      , evaluationContext = ElmInteractiveParser2024.compileEvalContextForElmInteractive ElmInteractive2024.DefaultContext
       , lastUserInputExpressionTime = Time.millisToPosix 0
       , lastEvaluatedExpression = Nothing
       , lastAddElmModuleAttempt = Nothing
@@ -266,9 +266,9 @@ update event stateBefore =
                     )
 
 
-initCompilationExplorer : Pine.EvalEnvironment -> CompilationExplorerState
-initCompilationExplorer (Pine.EvalEnvironment environmentValue) =
-    { compiledContext = Pine.EvalEnvironment environmentValue
+initCompilationExplorer : Pine2024.EvalEnvironment -> CompilationExplorerState
+initCompilationExplorer (Pine2024.EvalEnvironment environmentValue) =
+    { compiledContext = Pine2024.EvalEnvironment environmentValue
     , rootNode =
         { value = explorerValueCache environmentValue
         , category = RootNode
@@ -339,17 +339,17 @@ parseExpandedExplorerNodesWithPath path viewState node =
 
 parseElmExplorerNodeValue :
     CompilationNodeCategory
-    -> Pine.Value
+    -> Pine2024.Value
     -> Result String ExplorerNodeParseSuccess
 parseElmExplorerNodeValue nodeCategory nodeValue =
     case nodeCategory of
         RootNode ->
-            case ElmCompiler.getDeclarationsFromEnvironment nodeValue of
+            case ElmCompiler2024.getDeclarationsFromEnvironment nodeValue of
                 Err error ->
                     Err ("Failed to get declarations from environment: " ++ error)
 
                 Ok ( _, environmentBeforeDeclarations ) ->
-                    case ElmCompiler.separateEnvironmentDeclarations environmentBeforeDeclarations of
+                    case ElmCompiler2024.separateEnvironmentDeclarations environmentBeforeDeclarations of
                         Err err ->
                             Err ("Failed to separate declarations from environment: " ++ err)
 
@@ -376,8 +376,8 @@ parseElmExplorerNodeValue nodeCategory nodeValue =
 
         ElmModuleNode ->
             nodeValue
-                |> ElmCompiler.getDeclarationsFromEnvironment
-                |> Result.andThen (Tuple.second >> ElmCompiler.parseModuleValue)
+                |> ElmCompiler2024.getDeclarationsFromEnvironment
+                |> Result.andThen (Tuple.second >> ElmCompiler2024.parseModuleValue)
                 |> Result.map
                     (\parsedModule ->
                         { children =
@@ -400,7 +400,7 @@ parseElmExplorerNodeValue nodeCategory nodeValue =
             parseAsFunctionRecord nodeValue
 
         FunctionExpressionNode ->
-            case Pine.parseExpressionFromValue nodeValue of
+            case Pine2024.parseExpressionFromValue nodeValue of
                 Err err ->
                     Err ("Failed to parse expression: " ++ err)
 
@@ -409,7 +409,7 @@ parseElmExplorerNodeValue nodeCategory nodeValue =
                         childrenFunctionRecord : Dict.Dict String CompilationExplorerNode
                         childrenFunctionRecord =
                             case expression of
-                                Pine.LiteralExpression literalValue ->
+                                Pine2024.LiteralExpression literalValue ->
                                     case parseAsFunctionRecord literalValue of
                                         Err _ ->
                                             Dict.empty
@@ -436,7 +436,7 @@ parseElmExplorerNodeValue nodeCategory nodeValue =
                                                 { children = Dict.empty
                                                 , otherProperties =
                                                     [ ( "expression"
-                                                      , ElmCompilerConstruction.buildPineExpressionSyntax
+                                                      , ElmCompilerConstruction2024.buildPineExpressionSyntax
                                                             { attemptEncodeExpression = False }
                                                             expression
                                                             |> String.join "\n"
@@ -456,16 +456,16 @@ parseElmExplorerNodeValue nodeCategory nodeValue =
                         }
 
 
-parseAsFunctionRecord : Pine.Value -> Result String ExplorerNodeParseSuccess
+parseAsFunctionRecord : Pine2024.Value -> Result String ExplorerNodeParseSuccess
 parseAsFunctionRecord nodeValue =
-    case FirCompiler.parseFunctionRecordFromValueTagged nodeValue of
+    case FirCompiler2024.parseFunctionRecordFromValueTagged nodeValue of
         Err err ->
-            case ElmInteractive.pineValueAsElmValue nodeValue of
+            case ElmInteractive2024.pineValueAsElmValue nodeValue of
                 Err _ ->
                     Err ("Failed to parse function: " ++ err)
 
                 Ok elmValue ->
-                    case ElmInteractive.renderAsElmExpression elmValue of
+                    case ElmInteractive2024.renderAsElmExpression elmValue of
                         ( expressionText, _ ) ->
                             Ok
                                 { children = Dict.empty
@@ -476,7 +476,7 @@ parseAsFunctionRecord nodeValue =
                                     ]
                                 }
 
-        Ok (FirCompiler.ParsedFunctionValue innerFunctionValue _ parameterCount (FirCompiler.ParsedFunctionEnvFunctions envFunctions) argumentsAlreadyCollected) ->
+        Ok (FirCompiler2024.ParsedFunctionValue innerFunctionValue _ parameterCount (FirCompiler2024.ParsedFunctionEnvFunctions envFunctions) argumentsAlreadyCollected) ->
             let
                 envFunctionsChildren : Dict.Dict String CompilationExplorerNode
                 envFunctionsChildren =
@@ -515,16 +515,16 @@ parseAsFunctionRecord nodeValue =
                 }
 
 
-addElmModule : String -> State -> ( Result String { environment : Pine.Value, compiledModuleSize : Int }, ( State, Cmd Event ) )
+addElmModule : String -> State -> ( Result String { environment : Pine2024.Value, compiledModuleSize : Int }, ( State, Cmd Event ) )
 addElmModule elmModuleText stateBefore =
     let
-        addModuleResult : Result String { environment : Pine.Value, compiledModuleSize : Int }
+        addModuleResult : Result String { environment : Pine2024.Value, compiledModuleSize : Int }
         addModuleResult =
             case stateBefore.evaluationContext of
                 Err error ->
                     Err ("Failed to initialize the evaluation context: " ++ error)
 
-                Ok (Pine.EvalEnvironment environmentValue) ->
+                Ok (Pine2024.EvalEnvironment environmentValue) ->
                     parseElmModule elmModuleText
                         |> Result.andThen
                             (\( parsedModule, addModule ) ->
@@ -532,7 +532,7 @@ addElmModule elmModuleText stateBefore =
                                     |> Result.map
                                         (\{ environment, addedModule } ->
                                             { environment = environment
-                                            , compiledModuleSize = FirCompiler.estimatePineValueSize (Tuple.second addedModule)
+                                            , compiledModuleSize = FirCompiler2024.estimatePineValueSize (Tuple.second addedModule)
                                             }
                                         )
                             )
@@ -541,7 +541,7 @@ addElmModule elmModuleText stateBefore =
     , ( { stateBefore
             | evaluationContext =
                 addModuleResult
-                    |> Result.map (\{ environment } -> Pine.EvalEnvironment environment)
+                    |> Result.map (\{ environment } -> Pine2024.EvalEnvironment environment)
                     |> Result.Extra.orElse stateBefore.evaluationContext
             , lastAddElmModuleAttempt =
                 addModuleResult
@@ -558,11 +558,11 @@ parseElmModule :
     ->
         Result
             String
-            ( ElmCompiler.ProjectParsedElmFile
-            , Pine.Value -> Result String { addedModule : ( List String, Pine.Value ), environment : Pine.Value }
+            ( ElmCompiler2024.ProjectParsedElmFile
+            , Pine2024.Value -> Result String { addedModule : ( List String, Pine2024.Value ), environment : Pine2024.Value }
             )
 parseElmModule elmModuleText =
-    ElmInteractiveParser.expandElmInteractiveEnvironmentWithModuleTexts [ elmModuleText ]
+    ElmInteractiveParser2024.expandElmInteractiveEnvironmentWithModuleTexts [ elmModuleText ]
         |> Result.andThen
             (\( parsedModules, addModules ) ->
                 case parsedModules of
@@ -610,7 +610,7 @@ updateLastEvaluatedExpression stateBefore =
                                 Ok { displayText = "" }
 
                               else
-                                ElmInteractiveParser.submissionInInteractiveInPineContext evaluationContext expression
+                                ElmInteractiveParser2024.submissionInInteractiveInPineContext evaluationContext expression
                                     |> Result.map Tuple.second
                             )
         in

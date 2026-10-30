@@ -196,7 +196,7 @@ public class ElmAppCompilationComponentsTests
         s_elmCompilerCache.PineValueDecodedAsElmValue(pineValue)
         .Extract(err => throw new Exception($"Failed to decode PineValue as ElmValue: {err}"));
 
-    private static readonly ElmCompilerInElm s_elmCompilerInElm = LoadBundledElmCompilerInElm();
+    private static readonly ElmCompilerInElm2024 s_elmCompilerInElm = LoadBundledElmCompilerInElm();
 
     private static readonly Dictionary<Core.Runtime.IntermediateVM.EvalCacheEntryKey, PineValue> s_vmEvalCache = [];
 
@@ -204,14 +204,14 @@ public class ElmAppCompilationComponentsTests
 
     private static readonly Core.Runtime.IntermediateVM.PineVM s_pineVM = InitVM();
 
-    private static readonly ElmCompilerCache s_elmCompilerCache = new();
+    private static readonly ElmCompilerCache2024 s_elmCompilerCache = new();
 
     private static Core.Runtime.IntermediateVM.PineVM InitVM()
     {
         return SetupVM.Create(s_vmEvalCache, parseCache: s_parseCache);
     }
 
-    private static ElmCompilerInElm LoadBundledElmCompilerInElm()
+    private static ElmCompilerInElm2024 LoadBundledElmCompilerInElm()
     {
         var elmCompilerFromBundle =
             BundledElmEnvironments.BundledElmCompilerCompiledEnvValue()
@@ -219,7 +219,7 @@ public class ElmAppCompilationComponentsTests
             throw new Exception("Failed to load Elm compiler from bundle.");
 
         var elmCompiler =
-            ElmCompilerInElm.ElmCompilerFromEnvValue(elmCompilerFromBundle)
+            ElmCompilerInElm2024.ElmCompilerFromEnvValue(elmCompilerFromBundle)
             .Extract(err => throw new Exception(err));
 
         return elmCompiler;

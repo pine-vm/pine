@@ -1,116 +1,116 @@
-module ElmCompilerConstruction exposing (..)
+module ElmCompilerConstruction2024 exposing (..)
 
 import BigInt
-import FirCompiler
-import Pine
+import FirCompiler2024
+import Pine2024
 
 
-{-| This function returns an expression that evaluates to the encoding of the input expression. In other words, it is an inversion of `Pine.evaluateExpression emptyEnv >> Pine.parseExpressionFromValue`
+{-| This function returns an expression that evaluates to the encoding of the input expression. In other words, it is an inversion of `Pine2024.evaluateExpression emptyEnv >> Pine2024.parseExpressionFromValue`
 Most expressions have multiple valid encoded representations, and the one produced here supports building templates to bind the parent environment.
 One typical use case for these templates is wrapping a function to support the partial application of the wrapped function.
 -}
-generateTemplateEvaluatingToExpression : Pine.Expression -> Pine.Expression
+generateTemplateEvaluatingToExpression : Pine2024.Expression -> Pine2024.Expression
 generateTemplateEvaluatingToExpression expression =
     let
         buildFromTagAndArguments tagName arguments =
-            [ Pine.LiteralExpression (Pine.valueFromString tagName)
+            [ Pine2024.LiteralExpression (Pine2024.valueFromString tagName)
             , arguments
             ]
-                |> Pine.ListExpression
+                |> Pine2024.ListExpression
 
         buildRecordExpression fields =
             fields
                 |> List.map
                     (\( name, value ) ->
-                        [ Pine.LiteralExpression (Pine.valueFromString name)
+                        [ Pine2024.LiteralExpression (Pine2024.valueFromString name)
                         , value
                         ]
-                            |> Pine.ListExpression
+                            |> Pine2024.ListExpression
                     )
-                |> Pine.ListExpression
+                |> Pine2024.ListExpression
     in
     case expression of
-        Pine.ListExpression list ->
+        Pine2024.ListExpression list ->
             buildFromTagAndArguments
                 "List"
-                (Pine.ListExpression
-                    [ Pine.ListExpression (List.map generateTemplateEvaluatingToExpression list)
+                (Pine2024.ListExpression
+                    [ Pine2024.ListExpression (List.map generateTemplateEvaluatingToExpression list)
                     ]
                 )
 
-        Pine.LiteralExpression literal ->
+        Pine2024.LiteralExpression literal ->
             buildFromTagAndArguments
                 "Literal"
-                (Pine.ListExpression
-                    [ Pine.LiteralExpression literal
+                (Pine2024.ListExpression
+                    [ Pine2024.LiteralExpression literal
                     ]
                 )
 
-        Pine.ParseAndEvalExpression encodedExpr envExpr ->
+        Pine2024.ParseAndEvalExpression encodedExpr envExpr ->
             buildFromTagAndArguments
                 "ParseAndEval"
-                (Pine.ListExpression
+                (Pine2024.ListExpression
                     [ generateTemplateEvaluatingToExpression encodedExpr
                     , generateTemplateEvaluatingToExpression envExpr
                     ]
                 )
 
-        Pine.KernelApplicationExpression functionName input ->
+        Pine2024.KernelApplicationExpression functionName input ->
             buildFromTagAndArguments
                 "KernelApplication"
-                (Pine.ListExpression
-                    [ Pine.LiteralExpression (Pine.valueFromString functionName)
+                (Pine2024.ListExpression
+                    [ Pine2024.LiteralExpression (Pine2024.valueFromString functionName)
                     , generateTemplateEvaluatingToExpression input
                     ]
                 )
 
-        Pine.ConditionalExpression condition falseBranch trueBranch ->
+        Pine2024.ConditionalExpression condition falseBranch trueBranch ->
             buildFromTagAndArguments
                 "Conditional"
-                (Pine.ListExpression
+                (Pine2024.ListExpression
                     [ generateTemplateEvaluatingToExpression condition
                     , generateTemplateEvaluatingToExpression falseBranch
                     , generateTemplateEvaluatingToExpression trueBranch
                     ]
                 )
 
-        Pine.EnvironmentExpression ->
+        Pine2024.EnvironmentExpression ->
             buildFromTagAndArguments
                 "Environment"
-                (Pine.ListExpression [])
+                (Pine2024.ListExpression [])
 
-        Pine.StringTagExpression tag tagged ->
+        Pine2024.StringTagExpression tag tagged ->
             buildFromTagAndArguments
                 "StringTag"
-                (Pine.ListExpression
-                    [ Pine.LiteralExpression (Pine.valueFromString tag)
+                (Pine2024.ListExpression
+                    [ Pine2024.LiteralExpression (Pine2024.valueFromString tag)
                     , generateTemplateEvaluatingToExpression tagged
                     ]
                 )
 
 
-buildPineExpressionSyntax : { attemptEncodeExpression : Bool } -> Pine.Expression -> List String
+buildPineExpressionSyntax : { attemptEncodeExpression : Bool } -> Pine2024.Expression -> List String
 buildPineExpressionSyntax config expression =
     let
         maybeAsEncodedExpression =
             if not config.attemptEncodeExpression then
                 Nothing
 
-            else if FirCompiler.pineExpressionIsIndependent expression then
-                case Pine.evaluateExpression Pine.emptyEvalEnvironment expression of
+            else if FirCompiler2024.pineExpressionIsIndependent expression then
+                case Pine2024.evaluateExpression Pine2024.emptyEvalEnvironment expression of
                     Err _ ->
                         Nothing
 
                     Ok expressionValue ->
-                        case Pine.parseExpressionFromValue expressionValue of
+                        case Pine2024.parseExpressionFromValue expressionValue of
                             Err _ ->
                                 Nothing
 
                             Ok decodedExpression ->
                                 String.join "\n" (buildPineExpressionSyntax config decodedExpression)
                                     :: List.map indentString
-                                        [ "|> Pine.encodeExpressionAsValue"
-                                        , "|> Pine.LiteralExpression"
+                                        [ "|> Pine2024.encodeExpressionAsValue"
+                                        , "|> Pine2024.LiteralExpression"
                                         ]
                                     |> Just
 
@@ -160,18 +160,18 @@ buildPineExpressionSyntax config expression =
             tagName
                 :: List.map (wrapArgumentInParentheses >> indentString) arguments
 
-        printValueSyntax : Pine.Value -> List String
+        printValueSyntax : Pine2024.Value -> List String
         printValueSyntax literal =
             case literal of
-                Pine.ListValue itemsValues ->
+                Pine2024.ListValue itemsValues ->
                     case itemsValues of
                         [] ->
-                            [ "Pine.ListValue []" ]
+                            [ "Pine2024.ListValue []" ]
 
                         firstListItem :: otherListItems ->
                             let
                                 genericList () =
-                                    "Pine.ListValue"
+                                    "Pine2024.ListValue"
                                         :: (("[ " ++ String.join "\n" (printValueSyntax firstListItem))
                                                 :: List.map (printValueSyntax >> String.join "\n" >> (++) ", ") otherListItems
                                                 ++ [ "]" ]
@@ -182,17 +182,17 @@ buildPineExpressionSyntax config expression =
                                 genericList ()
 
                             else
-                                case Pine.stringFromValue literal of
+                                case Pine2024.stringFromValue literal of
                                     Ok asString ->
-                                        [ "Pine.valueFromString " ++ "\"" ++ asString ++ "\"" ]
+                                        [ "Pine2024.valueFromString " ++ "\"" ++ asString ++ "\"" ]
 
                                     Err _ ->
                                         genericList ()
 
-                Pine.BlobValue blob ->
-                    case Pine.bigIntFromBlobValue blob of
+                Pine2024.BlobValue blob ->
+                    case Pine2024.bigIntFromBlobValue blob of
                         Ok asInt ->
-                            [ "Pine.valueFromInt (" ++ BigInt.toString asInt ++ ")" ]
+                            [ "Pine2024.valueFromInt (" ++ BigInt.toString asInt ++ ")" ]
 
                         Err _ ->
                             [ "other-blob" ]
@@ -203,7 +203,7 @@ buildPineExpressionSyntax config expression =
 
         Nothing ->
             case expression of
-                Pine.LiteralExpression literal ->
+                Pine2024.LiteralExpression literal ->
                     let
                         valueSyntax =
                             printValueSyntax literal
@@ -216,9 +216,9 @@ buildPineExpressionSyntax config expression =
                             else
                                 " "
                     in
-                    [ "Pine.LiteralExpression" ++ separator ++ wrapArgumentInParentheses valueSyntax ]
+                    [ "Pine2024.LiteralExpression" ++ separator ++ wrapArgumentInParentheses valueSyntax ]
 
-                Pine.ListExpression list ->
+                Pine2024.ListExpression list ->
                     let
                         listSyntax =
                             case
@@ -237,12 +237,12 @@ buildPineExpressionSyntax config expression =
                                         ++ [ "]" ]
                     in
                     buildFromTagNameAndArguments
-                        "Pine.ListExpression"
+                        "Pine2024.ListExpression"
                         [ String.join "\n" listSyntax ]
 
-                Pine.ParseAndEvalExpression encodedExpr envExpr ->
+                Pine2024.ParseAndEvalExpression encodedExpr envExpr ->
                     buildFromTagNameAndArguments
-                        "Pine.ParseAndEvalExpression"
+                        "Pine2024.ParseAndEvalExpression"
                         [ buildRecordSyntax
                             [ ( "encoded"
                               , buildPineExpressionSyntax config encodedExpr
@@ -256,9 +256,9 @@ buildPineExpressionSyntax config expression =
                             |> String.join "\n"
                         ]
 
-                Pine.KernelApplicationExpression functionName input ->
+                Pine2024.KernelApplicationExpression functionName input ->
                     buildFromTagNameAndArguments
-                        "Pine.KernelApplicationExpression"
+                        "Pine2024.KernelApplicationExpression"
                         [ buildRecordSyntax
                             [ ( "function"
                               , "\"" ++ functionName ++ "\""
@@ -271,9 +271,9 @@ buildPineExpressionSyntax config expression =
                             |> String.join "\n"
                         ]
 
-                Pine.ConditionalExpression condition falseBranch trueBranch ->
+                Pine2024.ConditionalExpression condition falseBranch trueBranch ->
                     buildFromTagNameAndArguments
-                        "Pine.ConditionalExpression"
+                        "Pine2024.ConditionalExpression"
                         [ buildRecordSyntax
                             [ ( "condition"
                               , buildPineExpressionSyntax config condition
@@ -291,43 +291,43 @@ buildPineExpressionSyntax config expression =
                             |> String.join "\n"
                         ]
 
-                Pine.EnvironmentExpression ->
-                    [ "Pine.EnvironmentExpression" ]
+                Pine2024.EnvironmentExpression ->
+                    [ "Pine2024.EnvironmentExpression" ]
 
-                Pine.StringTagExpression tag tagged ->
+                Pine2024.StringTagExpression tag tagged ->
                     buildFromTagNameAndArguments
-                        "Pine.StringTagExpression"
+                        "Pine2024.StringTagExpression"
                         [ "\"" ++ tag ++ "\""
                         , buildPineExpressionSyntax config tagged
                             |> String.join "\n"
                         ]
 
 
-recursiveLiteralListToListExpression : Pine.Expression -> Pine.Expression
+recursiveLiteralListToListExpression : Pine2024.Expression -> Pine2024.Expression
 recursiveLiteralListToListExpression expression =
     let
         isBlobValue value =
             case value of
-                Pine.BlobValue _ ->
+                Pine2024.BlobValue _ ->
                     True
 
                 _ ->
                     False
     in
     case expression of
-        Pine.LiteralExpression (Pine.ListValue list) ->
+        Pine2024.LiteralExpression (Pine2024.ListValue list) ->
             if List.any isBlobValue list then
                 expression
 
             else
                 list
-                    |> List.map (Pine.LiteralExpression >> recursiveLiteralListToListExpression)
-                    |> Pine.ListExpression
+                    |> List.map (Pine2024.LiteralExpression >> recursiveLiteralListToListExpression)
+                    |> Pine2024.ListExpression
 
-        Pine.ListExpression list ->
+        Pine2024.ListExpression list ->
             list
                 |> List.map recursiveLiteralListToListExpression
-                |> Pine.ListExpression
+                |> Pine2024.ListExpression
 
         _ ->
             expression

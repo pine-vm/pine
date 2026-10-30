@@ -15,7 +15,11 @@ public class BundledFilesTests
         string[][] expectedPaths =
             [
                 ["elm.json"],
-                ["src", "ElmCompiler.elm"],
+                ["src", "ElmCompiler2024.elm"],
+                ["src", "Pine2024.elm"],
+                ["src", "Pine.elm"],
+                ["src", "ElmInteractive2024.elm"],
+                ["src", "FirCompiler2024.elm"],
                 ["elm-syntax", "src", "Elm", "Syntax", "Expression.elm"],
                 ["pine-elm-syntax", "elm.json"],
                 ["pine-elm-syntax", "src", "ElmSyntax", "Concrete", "Parser", "FromString.elm"]
@@ -29,6 +33,7 @@ public class BundledFilesTests
         }
 
         files.GetNodeAtPath(["elm-kernel-modules"]).Should().BeNull();
+        files.GetNodeAtPath(["src", "ElmCompiler.elm"]).Should().BeNull();
     }
 
     [Fact]
