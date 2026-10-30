@@ -2269,7 +2269,7 @@ public partial class ElmSyntaxInterpreter
 
                                 return
                                     MakeRuntimeError(
-                                        "Case expression did not match any arm.\nScrutinee value: "
+                                        ElmRuntimeErrorMessages.CaseNoMatch + "\nScrutinee value: "
                                         + renderedValue
                                         + scrutineeExprText,
                                         kstack);
@@ -2314,7 +2314,7 @@ public partial class ElmSyntaxInterpreter
 
                                     return
                                         MakeRuntimeError(
-                                            "Expected a record value to update, but got something else.\nValue: "
+                                            ElmRuntimeErrorMessages.RecordUpdateOnNonRecord + "\nValue: "
                                             + renderedValue,
                                             kstack);
                                 }
@@ -2403,8 +2403,8 @@ public partial class ElmSyntaxInterpreter
 
                                     return
                                         MakeRuntimeError(
-                                            "Cannot update field \"" + updateFieldName +
-                                            "\" because it does not exist on the record.\nRecord value: "
+                                            ElmRuntimeErrorMessages.RecordUpdateFieldNotFound(updateFieldName) +
+                                            "\nRecord value: "
                                             + renderedRecord,
                                             kstack);
                                 }
@@ -4456,8 +4456,7 @@ public partial class ElmSyntaxInterpreter
         }
 
         throw new System.Exception(
-            "Record does not contain a field named '"
-            + fieldName + "'.");
+            ElmRuntimeErrorMessages.RecordFieldNotFound(fieldName));
     }
 
     private static bool NamespacesEqual(IReadOnlyList<string> left, IReadOnlyList<string> right)

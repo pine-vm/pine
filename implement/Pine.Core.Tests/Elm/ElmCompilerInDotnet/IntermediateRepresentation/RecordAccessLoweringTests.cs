@@ -580,7 +580,8 @@ public class RecordAccessLoweringTests
                 select record = record.name
                 """);
 
-        lower.Should().Throw<InvalidOperationException>().WithMessage("*does not contain field 'name'*");
+        lower.Should().Throw<InvalidOperationException>()
+            .WithMessage(Pine.Core.Elm.ElmRuntimeErrorMessages.RecordFieldNotFound("name"));
     }
 
     [Fact]

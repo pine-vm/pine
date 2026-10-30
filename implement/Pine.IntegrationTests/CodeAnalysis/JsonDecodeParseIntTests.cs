@@ -251,7 +251,24 @@ public class JsonDecodeParseIntTests
                             )
                         ]
 
-                    else
+                    else if
+                        Pine_kernel.equal
+                            [ Pine_kernel.head
+                                (Pine_kernel.skip
+                                    [ 1
+                                    , Pine_kernel.head
+                                        (Test.parseUnsignedInt
+                                            param_1
+                                            (Pine_kernel.int_add
+                                                [ param_2
+                                                , 4
+                                                ]
+                                            ))
+                                    ]
+                                )
+                            , Err
+                            ]
+                    then
                         [ [ Blob 0x0000003c00000043000000680000006f0000006900000063000000650000003e
                           , Err
                           , Pine_kernel.head
@@ -281,6 +298,9 @@ public class JsonDecodeParseIntTests
                                 ]
                             )
                         ]
+
+                    else
+                        <always_crash>
 
                 else
                     Test.parseUnsignedInt
@@ -813,13 +833,11 @@ public class JsonDecodeParseIntTests
                     if (BuiltinFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: param_2, argument: param_1) ==
                         CommonReusedValues.Blob_Char_hyphen)
                     {
-                        PineValue local_001 = BuiltinFunctionSpecialized.int_add(4, param_2);
-                        PineValue local_003 = Test.parseUnsignedInt(param_1, local_001);
-                        PineValue local_004 = PineValueExtension.ValueFromPathOrEmptyList(local_003, [0]);
-                        PineValue local_008 = PineValueExtension.ValueFromPathOrEmptyList(local_003, [1]);
-                        PineValue local_010 = PineValueExtension.ValueFromPathOrEmptyList(local_004, [2]);
+                        PineValue local_000 = Test.parseUnsignedInt(param_1, BuiltinFunctionSpecialized.int_add(4, param_2));
+                        PineValue local_001 = PineValueExtension.ValueFromPathOrEmptyList(local_000, [0]);
+                        PineValue local_002 = PineValueExtension.ValueFromPathOrEmptyList(local_001, [1]);
 
-                        if (PineValueExtension.ValueFromPathOrEmptyList(local_004, [1]) == CommonReusedValues.Blob_Str_Ok)
+                        if (local_002 == CommonReusedValues.Blob_Str_Ok)
                         {
                             return
                                 PineValue.List(
@@ -828,18 +846,30 @@ public class JsonDecodeParseIntTests
                                         [
                                         CommonReusedValues.Blob_ffbe4088,
                                         CommonReusedValues.Blob_Str_Ok,
-                                        BuiltinFunctionSpecialized.int_mul(-1, local_010)
+                                        BuiltinFunctionSpecialized.int_mul(
+                                            -1,
+                                            PineValueExtension.ValueFromPathOrEmptyList(local_001, [2]))
                                         ]),
-                                    local_008
+                                    PineValueExtension.ValueFromPathOrEmptyList(local_000, [1])
                                     ]);
                         }
 
-                        return
-                            PineValue.List(
-                                [
-                                PineValue.List([CommonReusedValues.Blob_ffbe4088, CommonReusedValues.Blob_Str_Err, local_010]),
-                                local_008
-                                ]);
+                        if (local_002 == CommonReusedValues.Blob_Str_Err)
+                        {
+                            return
+                                PineValue.List(
+                                    [
+                                    PineValue.List(
+                                        [
+                                        CommonReusedValues.Blob_ffbe4088,
+                                        CommonReusedValues.Blob_Str_Err,
+                                        PineValueExtension.ValueFromPathOrEmptyList(local_001, [2])
+                                        ]),
+                                    PineValueExtension.ValueFromPathOrEmptyList(local_000, [1])
+                                    ]);
+                        }
+
+                        throw new ParseExpressionException("TODO: Include details from encoded and env subexpressions");
                     }
 
                     return Test.parseUnsignedInt(param_1, param_2);
@@ -1188,6 +1218,9 @@ public class JsonDecodeParseIntTests
 
                 public static readonly PineValue Blob_cfca8ee1 = StringEncoding.ValueFromString("Expecting a digit");
 
+                public static readonly PineValue Blob_7929018f =
+                    StringEncoding.ValueFromString("Case expression did not match any arm.");
+
                 public static readonly PineValue List_476058cb = PineValue.List([Blob_Str_Litral, PineValue.EmptyList]);
 
                 public static readonly PineValue List_d289000a = PineValue.List([Blob_Str_Litral, Blob_Int_neg_1]);
@@ -1270,6 +1303,8 @@ public class JsonDecodeParseIntTests
 
                 public static readonly PineValue List_1e9009b9 = PineValue.List([Blob_ffbe4088, Blob_Str_Err, List_df80c1a7]);
 
+                public static readonly PineValue List_d1564bbc = PineValue.List([Blob_Str_Litral, Blob_7929018f]);
+
                 public static readonly PineValue List_e4f998f4 = PineValue.List([Blob_Str_Builtin, Blob_Str_head, List_a6554f03]);
 
                 public static readonly PineValue List_076751a5 = PineValue.List([Blob_Str_Builtin, Blob_Str_head, List_7a36ad92]);
@@ -1277,6 +1312,8 @@ public class JsonDecodeParseIntTests
                 public static readonly PineValue List_5f6bd89b = PineValue.List([Blob_Str_Builtin, Blob_Str_head, List_f0f99078]);
 
                 public static readonly PineValue List_9097122f = PineValue.List([Blob_Str_Litral, List_1e9009b9]);
+
+                public static readonly PineValue List_493cfaff = PineValue.List([Blob_Str_Eval, List_d1564bbc, List_476058cb]);
 
                 public static readonly PineValue List_a4a8c1fa = PineValue.List([Blob_Str_List, List_e4f998f4, List_939614df]);
 
@@ -1644,10 +1681,14 @@ public class JsonDecodeParseIntTests
 
                 public static readonly PineValue List_daa0f3d1 = PineValue.List([Blob_Str_List, List_ff68b344, List_921b24bb]);
 
+                public static readonly PineValue List_2c8ab09b = PineValue.List([Blob_Str_List, List_ff68b344, List_fc06676b]);
+
                 public static readonly PineValue List_d1c5daf1 = PineValue.List([Blob_Str_Builtin, Blob_Str_equal, List_daa0f3d1]);
 
                 public static readonly PineValue List_b8336aa1 =
                     PineValue.List([Blob_Str_Builtin, Blob_Str_int_mul, List_6938069e]);
+
+                public static readonly PineValue List_187f829d = PineValue.List([Blob_Str_Builtin, Blob_Str_equal, List_2c8ab09b]);
 
                 public static readonly PineValue List_abae0318 =
                     PineValue.List([Blob_Str_List, List_285161ab, List_fc06676b, List_8416c676]);
@@ -1659,11 +1700,14 @@ public class JsonDecodeParseIntTests
 
                 public static readonly PineValue List_a42abe18 = PineValue.List([Blob_Str_List, List_2664c645, List_19f1a7c6]);
 
-                public static readonly PineValue List_dd637d78 =
-                    PineValue.List([Blob_Str_Conditional, List_d1c5daf1, List_f13f4625, List_a42abe18]);
+                public static readonly PineValue List_db7fe039 =
+                    PineValue.List([Blob_Str_Conditional, List_187f829d, List_493cfaff, List_f13f4625]);
 
-                public static readonly PineValue List_3dedc948 =
-                    PineValue.List([Blob_Str_Conditional, List_af975ca0, List_2823775d, List_dd637d78]);
+                public static readonly PineValue List_28cff076 =
+                    PineValue.List([Blob_Str_Conditional, List_d1c5daf1, List_db7fe039, List_a42abe18]);
+
+                public static readonly PineValue List_c5a7623d =
+                    PineValue.List([Blob_Str_Conditional, List_af975ca0, List_2823775d, List_28cff076]);
             }
             """".Trim());
     }

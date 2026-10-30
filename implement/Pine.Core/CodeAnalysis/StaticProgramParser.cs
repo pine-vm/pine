@@ -442,6 +442,27 @@ public class StaticProgramParser
 
         if (expression is Expression.Eval parseAndEvalExpr)
         {
+            if (parseAndEvalExpr.Encoded is Expression.Litral encodedLiteral &&
+                parseCache.ParseExpressionWithoutResultAllocation(encodedLiteral.Value).Expression is null)
+            {
+                var parseEnvironmentResult =
+                    ParseExpression(
+                        path,
+                        parseAndEvalExpr.Environment,
+                        envClass,
+                        parseConfig,
+                        parseCache);
+
+                return
+                    parseEnvironmentResult.Map(
+                        environment =>
+                        ((StaticExpression<IdentifierT>)
+                            new StaticExpression<IdentifierT>.CrashingParseAndEval(
+                                StaticExpression<IdentifierT>.LiteralInstance(encodedLiteral.Value),
+                                environment.current),
+                            environment.dependencies));
+            }
+
             return
                 ParseCurriedFunctionApplication(
                     path,

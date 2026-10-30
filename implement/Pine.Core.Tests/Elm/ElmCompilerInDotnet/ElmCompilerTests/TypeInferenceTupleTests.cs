@@ -179,13 +179,23 @@ public class TypeInferenceTupleTests
             """"
 
             Test.alfa param_1_0 =
-                Pine_builtin.int_mul
-                    [ param_1_0
-                    , Pine_builtin.int_add
-                        [ param_1_1
-                        , 17
+                if
+                    Pine_builtin.equal
+                        [ Pine_builtin.length
+                            param_1_0
+                        , 2
                         ]
-                    ]
+                then
+                    Pine_builtin.int_mul
+                        [ param_1_0
+                        , Pine_builtin.int_add
+                            [ param_1_1
+                            , 17
+                            ]
+                        ]
+
+                else
+                    <always_crash>
 
             """"
             .Trim());

@@ -185,6 +185,55 @@ public class StaticProgramParserTests
     }
 
     [Fact]
+    public void Function_conditional_with_invalid_encoded_expression_preserves_crashing_branch()
+    {
+        PineValue[] invalidEncodings =
+            [
+            PineValue.EmptyList,
+            StringEncoding.ValueFromString(""),
+            StringEncoding.ValueFromString("No matching case branch found"),
+            ];
+
+        foreach (var invalidEncoding in invalidEncodings)
+        {
+            var functionValue =
+                FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+                    innerExpression:
+                    new Expression.Conditional(
+                        condition: BuildParamReference(0),
+                        trueBranch: Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(71)),
+                        falseBranch:
+                        new Expression.Eval(
+                            encoded: Expression.LitralInst(invalidEncoding),
+                            environment: Expression.ListInst([BuildParamReference(0)]))),
+                    parameterCount: 1,
+                    envFunctions: []);
+
+            var parseResult =
+                StaticProgramParser.ParseProgram(
+                    roots:
+                    ImmutableDictionary<string, PineValue>.Empty
+                    .SetItem("decl", functionValue),
+                    parseConfig: StaticProgramParserConfig<string>.OptionalNullRequiredThrow(),
+                    parseCache: new PineVMParseCache())
+                .Extract(err => throw new System.Exception(RenderParseError(err)));
+
+            parseResult.Count.Should().Be(1);
+
+            parseResult["decl"].BodyExpression.Should().Be(
+                StaticExpression<string>.ConditionalInstance(
+                    condition: StaticExpression<string>.ParameterReference(0),
+                    trueBranch:
+                    StaticExpression<string>.LiteralInstance(IntegerEncoding.EncodeSignedInteger(71)),
+                    falseBranch:
+                    new StaticExpression<string>.CrashingParseAndEval(
+                        StaticExpression<string>.LiteralInstance(invalidEncoding),
+                        StaticExpression<string>.ListInstance(
+                            [StaticExpression<string>.ParameterReference(0)]))));
+        }
+    }
+
+    [Fact]
     public void Function_int_add_71()
     {
         var parseCache = new PineVMParseCache();
