@@ -123,6 +123,21 @@ public class CompileExpressionTests
                     var compiledInstructionsText =
                         InstructionsToText(compiled.Generic.Instructions);
 
+                    var persisted =
+                        StackInstructionTraceRenderer.RenderStackFrameInstructions(
+                            compiled.Generic,
+                            StackInstructionTraceRenderer.RenderingOptions.Persistence);
+
+                    var restored =
+                        StackInstructionTextFormat.ParseStackFrameInstructions(
+                            persisted.Text,
+                            hash => persisted.ObservedValues[hash]);
+
+                    StackInstructionTraceRenderer.RenderStackFrameInstructions(
+                        restored,
+                        StackInstructionTraceRenderer.RenderingOptions.Persistence)
+                        .Text.Should().Be(persisted.Text);
+
                     var instructionsPath = Path.Combine(caseDir, "instructions.txt");
                     var expectedInstructionsText = File.ReadAllText(instructionsPath).TrimEnd();
 

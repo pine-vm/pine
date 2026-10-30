@@ -1,5 +1,5 @@
 Local_Get ([ 0 ])
 Negate
 Pop (1)
-Push_Literal (List [0] (0))
+Push_Literal (List [0] (0 | hash 0xdda26649))
 Return

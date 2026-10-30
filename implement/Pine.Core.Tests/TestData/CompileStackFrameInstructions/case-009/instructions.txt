@@ -1,5 +1,5 @@
 Local_Get ([ 0 ])
-Jump_If_Equal_Const (Blob [1] (0x04), 3)
+Jump_If_Equal_Const (Blob [1] (0x04 | hash 0x06db1cc6), 3)
 Push_Literal (Blob [2] (int 17))
 Return
 Local_Get ([ 0, 0 ])

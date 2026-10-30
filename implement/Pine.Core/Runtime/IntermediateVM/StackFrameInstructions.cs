@@ -8,25 +8,65 @@ namespace Pine.Core.Runtime.IntermediateVM;
 /// <summary>
 /// Describes the compiled instructions and metadata for executing one stack frame in the intermediate VM.
 /// </summary>
-/// <param name="Parameters">The parameter layout exposed as locals when the frame starts.</param>
-/// <param name="Instructions">The instructions executed by the frame.</param>
-/// <param name="TrackEnvConstraint">Optional environment constraint associated with this instruction variant.</param>
-public record StackFrameInstructions(
-    StaticFunctionInterface Parameters,
-    IReadOnlyList<StackInstruction> Instructions,
-    PineValueClass? TrackEnvConstraint = null)
+public record StackFrameInstructions
 {
+    /// <summary>The parameter layout exposed as locals when the frame starts.</summary>
+    public StaticFunctionInterface Parameters { get; init; }
+
+    /// <summary>The instructions executed by the frame.</summary>
+    public IReadOnlyList<StackInstruction> Instructions { get; init; }
+
+    /// <summary>Optional environment constraint associated with this instruction variant.</summary>
+    public PineValueClass? TrackEnvConstraint { get; init; }
+
+    /// <summary>Constructs a frame and computes its resource requirements.</summary>
+    public StackFrameInstructions(
+        StaticFunctionInterface Parameters,
+        IReadOnlyList<StackInstruction> Instructions,
+        PineValueClass? TrackEnvConstraint = null)
+        : this(
+            Parameters,
+            Instructions,
+            TrackEnvConstraint,
+            ComputeLocalsCount(Instructions, Parameters),
+            ComputeMaxStackUsage(Instructions))
+    {
+    }
+
+    internal StackFrameInstructions(
+        StaticFunctionInterface parameters,
+        IReadOnlyList<StackInstruction> instructions,
+        PineValueClass? trackEnvConstraint,
+        int localsCount,
+        int maxStackUsage)
+    {
+        Parameters = parameters;
+        Instructions = instructions;
+        TrackEnvConstraint = trackEnvConstraint;
+        LocalsCount = localsCount;
+        MaxStackUsage = maxStackUsage;
+    }
+
+    /// <summary>Deconstructs a frame into its parameter layout, instructions, and constraint.</summary>
+    public void Deconstruct(
+        out StaticFunctionInterface Parameters,
+        out IReadOnlyList<StackInstruction> Instructions,
+        out PineValueClass? TrackEnvConstraint)
+    {
+        Parameters = this.Parameters;
+        Instructions = this.Instructions;
+        TrackEnvConstraint = this.TrackEnvConstraint;
+    }
+
     /// <summary>
     /// Total number of locals required to execute this frame, including parameter locals.
     /// </summary>
-    public int LocalsCount { init; get; } =
-        ComputeLocalsCount(Instructions, Parameters);
+    public int LocalsCount { init; get; }
 
     /// <summary>
     /// Maximum evaluation-stack depth required by these instructions.
     /// </summary>
-    public int MaxStackUsage { init; get; } =
-        ComputeMaxStackUsage(Instructions);
+    public int MaxStackUsage { init; get; }
 
     /// <summary>
     /// Computes the maximum stack depth required by a sequence of instructions.

@@ -9,9 +9,9 @@ Local_Get ([ 0 ])
 Build_List_With_Prefix (1, 1)
   Blob [2] (int 1)
 Equal_Binary
-Jump_If_Equal_Const (Blob [1] (0x04), 7)
+Jump_If_Equal_Const (Blob [1] (0x04 | hash 0x06db1cc6), 7)
 Local_Get ([ 1 ])
-Jump_If_Equal_Const (Blob [1] (0x04), 3)
+Jump_If_Equal_Const (Blob [1] (0x04 | hash 0x06db1cc6), 3)
 Push_Literal (Blob [2] (int 27))
 Return
 Push_Literal (Blob [2] (int 23))

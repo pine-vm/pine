@@ -1,8 +1,8 @@
 Local_Get ([ 0 ])
-Jump_If_Equal_Const (Blob [1] (0x04), 9)
+Jump_If_Equal_Const (Blob [1] (0x04 | hash 0x06db1cc6), 9)
 Local_Get ([ 0 ])
 Head_Generic
-Jump_If_Equal_Const (Blob [1] (0x04), 4)
+Jump_If_Equal_Const (Blob [1] (0x04 | hash 0x06db1cc6), 4)
 Local_Get ([ 0, 0 ])
 Eval_Binary
 Return

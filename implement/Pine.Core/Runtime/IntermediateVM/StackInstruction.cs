@@ -1,3 +1,4 @@
+using Pine.Core.Addressing;
 using Pine.Core.CLI;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Encodings;
@@ -7,6 +8,7 @@ using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Linq;
 using System.Numerics;
 
@@ -598,6 +600,8 @@ public record StackInstruction(
     ImmutableArray<int> LocalIndices = default,
     int? PopCount = null)
 {
+    internal const int MaxInlineSwitchCases = 32;
+
     internal ExpressionTemplatePlan? TemplatePlan { get; init; }
 
     internal bool TemplateProducer { get; init; }
@@ -1372,26 +1376,40 @@ public record StackInstruction(
                 LiteralDisplayStringDefault);
     }
 
-    private static string RenderLocalIndices(ImmutableArray<int> indices) =>
-        indices.IsDefaultOrEmpty ? "[ ]" : "[ " + string.Join(", ", indices) + " ]";
+    private static string RenderLocalIndices(
+        ImmutableArray<int> indices,
+        Func<PineValue, string> literalDisplayString) =>
+        indices.IsDefaultOrEmpty
+        ?
+        "[ ]"
+        :
+        indices.Length > 32
+        ?
+        literalDisplayString(StackInstructionMetadataEncoding.EncodePath(indices))
+        :
+        "[ " + string.Join(", ", indices) + " ]";
 
     /// <summary>
     /// Renders a human-readable display string for a single instruction,
+    /// optionally reporting whole list prefixes even when only their items are displayed.
     /// </summary>
     public static string RenderInstructionDisplay(
         StackInstruction instruction,
         Func<PineValue, string> literalDisplayString,
         int? detailLinesIndent = 2,
-        int? instructionIndex = null)
+        int? instructionIndex = null,
+        Func<Expression, string>? renderExpression = null,
+        InstructionDisplay? displayOverride = null,
+        Action<PineValue>? observeValue = null)
     {
-        var details = GetDetails(instruction, literalDisplayString);
-
         var rendered =
-            AddAbsoluteJumpDestinations(
+            displayOverride ??
+            GetDetails(
                 instruction,
-                details.Display(),
                 literalDisplayString,
-                instructionIndex);
+                renderExpression,
+                instructionIndex,
+                observeValue).Display();
 
         var argumentsText =
             rendered.Arguments.Count is 0
@@ -1403,6 +1421,7 @@ public record StackInstruction(
             + ")";
 
         var renderAsSubtraction =
+            displayOverride is null &&
             instruction.Kind is StackInstructionKind.Int_Mul_Const_Add_Binary &&
             instruction.IntegerLiteral == BigInteger.MinusOne;
 
@@ -1410,7 +1429,8 @@ public record StackInstruction(
 
         var headerText =
             instructionName + argumentsText +
-            (instruction.Kind is StackInstructionKind.Local_Set && instruction.PopCount is > 0
+            (displayOverride is null &&
+            instruction.Kind is StackInstructionKind.Local_Set && instruction.PopCount is > 0
             ?
             ", Pop(" + instruction.PopCount + ")"
             :
@@ -1433,57 +1453,13 @@ public record StackInstruction(
         return stringBuilder.ToString();
     }
 
-    private static InstructionDisplay AddAbsoluteJumpDestinations(
-        StackInstruction instruction,
-        InstructionDisplay display,
-        Func<PineValue, string> literalDisplayString,
-        int? instructionIndex)
-    {
-        if (instructionIndex is not { } currentIndex)
-            return display;
-
-        if (instruction.Kind is
-            StackInstructionKind.Jump_Const or
-            StackInstructionKind.Jump_If_Equal_Const or
-            StackInstructionKind.Jump_If_Length_Equal_Const)
-        {
-            var jumpOffset =
-                instruction.JumpOffset
-                ?? throw new Exception("Missing JumpOffset for jump instruction");
-
-            return
-                display with
-                {
-                    Arguments =
-                    [
-                    .. display.Arguments.Take(display.Arguments.Count - 1),
-                    jumpOffset + ", " + (currentIndex + jumpOffset)
-                    ]
-                };
-        }
-
-        if (instruction.Kind is
-            StackInstructionKind.Switch_Jump_If_Equal_Const or
-            StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const)
-        {
-            return
-                display with
-                {
-                    DetailLines =
-                    [
-                    .. EnumerateSwitchCases(instruction)
-                    .OrderBy(kvp => kvp.Value)
-                    .ThenBy(kvp => literalDisplayString(kvp.Key), StringComparer.Ordinal)
-                    .Select(
-                        kvp =>
-                        "case " + literalDisplayString(kvp.Key) +
-                        ": jump (" + kvp.Value + ", " + (currentIndex + kvp.Value) + ")")
-                    ]
-                };
-        }
-
-        return display;
-    }
+    private static string RenderJumpOffset(int jumpOffset, int? instructionIndex) =>
+        jumpOffset.ToString() +
+        (instructionIndex is { } currentIndex
+        ?
+        ", " + unchecked(currentIndex + jumpOffset)
+        :
+        "");
 
     /// <summary>
     /// Renders a human-readable display string for an invocation expression.
@@ -1491,35 +1467,38 @@ public record StackInstruction(
     public static string RenderInvocationExpression(
         Expression expression)
     {
-        if (expression is Expression.Environment)
-            return nameof(Expression.Environment);
-
-        if (expression is Expression.Litral literalExpression &&
-            StringEncoding.StringFromValue(literalExpression.Value).IsOkOrNull() is { } literalString)
-        {
-            return literalString;
-        }
-
-        return expression.ToString();
+        return
+            "hash 0x" +
+            Convert.ToHexStringLower(
+                PineValueHashTree.ComputeHash(ExpressionEncoding.EncodeExpressionAsValue(expression)).Span)[..8];
     }
 
     /// <summary>
     /// Returns a default human-readable display string for a <see cref="PineValue"/>,
     /// showing type, size, and a compact representation of the content.
     /// </summary>
-    public static string LiteralDisplayStringDefault(PineValue value) =>
-        value switch
+    public static string LiteralDisplayStringDefault(PineValue value)
+    {
+        var hash =
+            "hash 0x" + Convert.ToHexStringLower(PineValueHashTree.ComputeHash(value).Span)[..8];
+
+        return value switch
         {
             PineValue.BlobValue blob =>
             "Blob [" +
             CommandLineInterface.FormatIntegerForDisplay(blob.Bytes.Length) +
             "] ("
             +
-            (IntegerEncoding.ParseSignedIntegerRelaxed(blob.Bytes.Span).IsOkOrNullable() is { } asInt
+            (blob.Bytes.Length <= 32 &&
+            IntegerEncoding.ParseSignedIntegerStrict(blob.Bytes.Span).IsOkOrNullable() is { } asInt
             ?
-            "int " + asInt
+            "int " + asInt.ToString(CultureInfo.InvariantCulture)
             :
-            "0x" + Convert.ToHexStringLower(blob.Bytes.Span))
+            blob.Bytes.Length <= 32
+            ?
+            "0x" + Convert.ToHexStringLower(blob.Bytes.Span) + " | " + hash
+            :
+            hash)
             +
             ")",
 
@@ -1528,12 +1507,26 @@ public record StackInstruction(
             CommandLineInterface.FormatIntegerForDisplay(list.Items.Length) +
             "] (" +
             CommandLineInterface.FormatIntegerForDisplay(list.NodesCount) +
-            ")",
+            " | " + hash + ")",
 
             _ =>
             throw new NotImplementedException(
                 "Unknown PineValue: " + value)
         };
+    }
+
+    private static string? RenderIntegerLiteral(
+        BigInteger? integer,
+        Func<PineValue, string> literalDisplayString) =>
+        integer is not { } value
+        ?
+        null
+        :
+        value.GetByteCount() <= 32
+        ?
+        value.ToString(CultureInfo.InvariantCulture)
+        :
+        literalDisplayString(IntegerEncoding.EncodeSignedInteger(value));
 
 
     /// <summary>
@@ -1585,7 +1578,10 @@ public record StackInstruction(
     /// </summary>
     public static InstructionDetails GetDetails(
         StackInstruction instruction,
-        Func<PineValue, string> literalDisplayString) =>
+        Func<PineValue, string> literalDisplayString,
+        Func<Expression, string>? renderExpression = null,
+        int? instructionIndex = null,
+        Action<PineValue>? observeValue = null) =>
         instruction.Kind switch
         {
             StackInstructionKind.Push_Literal =>
@@ -1608,7 +1604,7 @@ public record StackInstruction(
                 PushCount: 0,
                 Display:
                 () => InstructionDisplay.WithoutDetailLines(
-                    [RenderLocalIndices(instruction.LocalIndices)])),
+                    [RenderLocalIndices(instruction.LocalIndices, literalDisplayString)])),
 
             StackInstructionKind.Local_Set_Literal =>
             new InstructionDetails(
@@ -1617,7 +1613,7 @@ public record StackInstruction(
                 Display:
                 () => InstructionDisplay.WithoutDetailLines(
                     [
-                    RenderLocalIndices(instruction.LocalIndices),
+                    RenderLocalIndices(instruction.LocalIndices, literalDisplayString),
                     literalDisplayString(
                         instruction.Literal?.Evaluate()
                         ?? throw new Exception("Missing Literal for LocalSetLiteral instruction"))
@@ -1634,7 +1630,7 @@ public record StackInstruction(
                 instruction.LocalIndices.Length,
                 Display:
                 () => InstructionDisplay.WithoutDetailLines(
-                    [RenderLocalIndices(instruction.LocalIndices)])),
+                    [RenderLocalIndices(instruction.LocalIndices, literalDisplayString)])),
 
             StackInstructionKind.Local_Int_Add_Const =>
             new InstructionDetails(
@@ -1643,8 +1639,8 @@ public record StackInstruction(
                 Display:
                 () => InstructionDisplay.WithoutDetailLines(
                     [
-                    RenderLocalIndices(instruction.LocalIndices),
-                    instruction.IntegerLiteral?.ToString()
+                    RenderLocalIndices(instruction.LocalIndices, literalDisplayString),
+                    RenderIntegerLiteral(instruction.IntegerLiteral, literalDisplayString)
                     ?? throw new Exception("Missing IntegerLiteral for LocalIntAddConst instruction")
                     ])),
 
@@ -1655,7 +1651,7 @@ public record StackInstruction(
                 Display:
                 () => InstructionDisplay.WithoutDetailLines(
                     [
-                    RenderLocalIndices(instruction.LocalIndices),
+                    RenderLocalIndices(instruction.LocalIndices, literalDisplayString),
                     instruction.SkipCount?.ToString()
                     ?? throw new Exception(
                         "Missing SkipCount for LocalGetSkipHeadConst instruction")
@@ -1690,7 +1686,7 @@ public record StackInstruction(
                 Display:
                 () => InstructionDisplay.WithoutDetailLines(
                     [
-                    instruction.IntegerLiteral?.ToString()
+                    RenderIntegerLiteral(instruction.IntegerLiteral, literalDisplayString)
                     ?? throw new Exception(
                         "Missing IntegerLiteral for LengthEqualConst instruction")
                     ])),
@@ -1878,7 +1874,7 @@ public record StackInstruction(
                     "Missing TakeCount for BuildListWithPrefix instruction"),
                 PushCount: 1,
                 Display:
-                () => Render_Build_List_With_Prefix_Details(instruction, literalDisplayString)),
+                () => Render_Build_List_With_Prefix_Details(instruction, literalDisplayString, observeValue)),
 
             StackInstructionKind.Equal_Binary =>
             new InstructionDetails(
@@ -1969,7 +1965,7 @@ public record StackInstruction(
                 Display:
                 () => InstructionDisplay.WithoutDetailLines(
                     [
-                    instruction.IntegerLiteral?.ToString()
+                    RenderIntegerLiteral(instruction.IntegerLiteral, literalDisplayString)
                     ?? throw new Exception(
                         "Missing IntegerLiteral for IntLessThanConst instruction")
                     ])),
@@ -1981,7 +1977,7 @@ public record StackInstruction(
                 Display:
                 () => InstructionDisplay.WithoutDetailLines(
                     [
-                    instruction.IntegerLiteral?.ToString()
+                    RenderIntegerLiteral(instruction.IntegerLiteral, literalDisplayString)
                     ?? throw new Exception(
                         "Missing IntegerLiteral for IntLessThanOrEqualConst instruction")
                     ])),
@@ -1993,7 +1989,7 @@ public record StackInstruction(
                 Display:
                 () => InstructionDisplay.WithoutDetailLines(
                     [
-                    instruction.IntegerLiteral?.ToString()
+                    RenderIntegerLiteral(instruction.IntegerLiteral, literalDisplayString)
                     ?? throw new Exception(
                         "Missing IntegerLiteral for Int_Unsigned_Less_Than_Or_Equal_Const instruction")
                     ])),
@@ -2005,7 +2001,7 @@ public record StackInstruction(
                 Display:
                 () => InstructionDisplay.WithoutDetailLines(
                     [
-                    instruction.IntegerLiteral?.ToString()
+                    RenderIntegerLiteral(instruction.IntegerLiteral, literalDisplayString)
                     ?? throw new Exception(
                         "Missing IntegerLiteral for IntGreaterThanOrEqualConst instruction")
                     ])),
@@ -2017,7 +2013,7 @@ public record StackInstruction(
                 Display:
                 () => InstructionDisplay.WithoutDetailLines(
                     [
-                    instruction.IntegerLiteral?.ToString()
+                    RenderIntegerLiteral(instruction.IntegerLiteral, literalDisplayString)
                     ?? throw new Exception(
                         "Missing IntegerLiteral for Int_Unsigned_Greater_Than_Or_Equal_Const instruction")
                     ])),
@@ -2034,9 +2030,10 @@ public record StackInstruction(
                         ?.Evaluate()
                         ?? throw new Exception(
                             "Missing Literal for Jump_If_Equal_Const instruction")),
-                    instruction.JumpOffset?.ToString()
-                    ?? throw new Exception(
-                        "Missing JumpOffset for Jump_If_Equal_Const instruction")
+                    RenderJumpOffset(
+                        instruction.JumpOffset
+                        ?? throw new Exception("Missing JumpOffset for Jump_If_Equal_Const instruction"),
+                        instructionIndex)
                     ])),
 
             StackInstructionKind.Jump_If_Length_Equal_Const =>
@@ -2046,12 +2043,13 @@ public record StackInstruction(
                 Display:
                 () => InstructionDisplay.WithoutDetailLines(
                     [
-                    instruction.IntegerLiteral?.ToString()
+                    RenderIntegerLiteral(instruction.IntegerLiteral, literalDisplayString)
                     ?? throw new Exception(
                         "Missing IntegerLiteral for Jump_If_Length_Equal_Const instruction"),
-                    instruction.JumpOffset?.ToString()
-                    ?? throw new Exception(
-                        "Missing JumpOffset for Jump_If_Length_Equal_Const instruction")
+                    RenderJumpOffset(
+                        instruction.JumpOffset
+                        ?? throw new Exception("Missing JumpOffset for Jump_If_Length_Equal_Const instruction"),
+                        instructionIndex)
                     ])),
 
             StackInstructionKind.Jump_Const =>
@@ -2061,9 +2059,10 @@ public record StackInstruction(
                 Display:
                 () => InstructionDisplay.WithoutDetailLines(
                     [
-                    instruction.JumpOffset?.ToString()
-                    ?? throw new Exception(
-                        "Missing JumpOffset for JumpConst instruction")
+                    RenderJumpOffset(
+                        instruction.JumpOffset
+                        ?? throw new Exception("Missing JumpOffset for JumpConst instruction"),
+                        instructionIndex)
                     ])),
 
             StackInstructionKind.Return =>
@@ -2115,7 +2114,7 @@ public record StackInstruction(
                 Display:
                 () => InstructionDisplay.WithoutDetailLines(
                     [
-                    RenderInvocationExpression(
+                    (renderExpression ?? RenderInvocationExpression)(
                         instruction.OptimizedInvocation?.Expression
                         ?? throw new Exception(
                             "Missing OptimizedInvocation for Invoke_StackFrame_Const instruction")),
@@ -2137,7 +2136,7 @@ public record StackInstruction(
                 Display:
                 () => InstructionDisplay.WithoutDetailLines(
                     [
-                    instruction.IntegerLiteral?.ToString()
+                    RenderIntegerLiteral(instruction.IntegerLiteral, literalDisplayString)
                     ?? throw new Exception(
                         "Missing IntegerLiteral for IntAddConst instruction")
                     ])),
@@ -2149,7 +2148,7 @@ public record StackInstruction(
                 Display:
                 () => InstructionDisplay.WithoutDetailLines(
                     [
-                    instruction.IntegerLiteral?.ToString()
+                    RenderIntegerLiteral(instruction.IntegerLiteral, literalDisplayString)
                     ?? throw new Exception(
                         "Missing IntegerLiteral for IntUnsignedAddConst instruction")
                     ])),
@@ -2172,7 +2171,7 @@ public record StackInstruction(
                 :
                 InstructionDisplay.WithoutDetailLines(
                     [
-                    instruction.IntegerLiteral?.ToString()
+                    RenderIntegerLiteral(instruction.IntegerLiteral, literalDisplayString)
                     ?? throw new Exception(
                         "Missing IntegerLiteral for IntMulConstAddBinary instruction")
                     ])),
@@ -2190,7 +2189,7 @@ public record StackInstruction(
                 Display:
                 () => InstructionDisplay.WithoutDetailLines(
                     [
-                    instruction.IntegerLiteral?.ToString()
+                    RenderIntegerLiteral(instruction.IntegerLiteral, literalDisplayString)
                     ?? throw new Exception(
                         "Missing IntegerLiteral for IntMulConst instruction")
                     ])),
@@ -2350,14 +2349,14 @@ public record StackInstruction(
                 PopCount: 1,
                 PushCount: 0,
                 Display:
-                () => Render_Switch_Jump_If_Equal_Const_Details(instruction, literalDisplayString)),
+                () => Render_Switch_Jump_If_Equal_Const_Details(instruction, literalDisplayString, instructionIndex)),
 
             StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const =>
             new InstructionDetails(
                 PopCount: 2,
                 PushCount: 0,
                 Display:
-                () => Render_Switch_Jump_If_Equal_Const_Details(instruction, literalDisplayString)),
+                () => Render_Switch_Jump_If_Equal_Const_Details(instruction, literalDisplayString, instructionIndex)),
 
             var otherKind =>
             throw new NotImplementedException(
@@ -2366,14 +2365,19 @@ public record StackInstruction(
 
     private static InstructionDisplay Render_Build_List_With_Prefix_Details(
         StackInstruction instruction,
-        Func<PineValue, string> literalDisplayString)
+        Func<PineValue, string> literalDisplayString,
+        Action<PineValue>? observeValue)
     {
-        var prefix =
+        var prefixItems =
             instruction.Literal
             ?.ListItemsOrNull()
             ??
             throw new Exception(
                 "Literal for BuildListWithPrefix instruction has no direct list representation");
+
+        var prefix = prefixItems.Select(item => item.Evaluate()).ToArray();
+        var prefixValue = PineValue.List(prefix);
+        observeValue?.Invoke(prefixValue);
 
         var takeCount =
             instruction.TakeCount
@@ -2383,45 +2387,72 @@ public record StackInstruction(
             new InstructionDisplay(
                 Arguments:
                 [
-                prefix.Count.ToString(),
+                prefix.Length.ToString(),
                 takeCount.ToString()
                 ],
                 DetailLines:
-                [.. prefix.Select(item => literalDisplayString(item.Evaluate()))]);
+                prefix.Length <= 8
+                ?
+                [.. prefix.Select(literalDisplayString)]
+                :
+                [literalDisplayString(prefixValue)]);
     }
 
     private static InstructionDisplay Render_Switch_Jump_If_Equal_Const_Details(
         StackInstruction instruction,
-        Func<PineValue, string> literalDisplayString)
+        Func<PineValue, string> literalDisplayString,
+        int? instructionIndex)
     {
+        var cases = EnumerateSwitchCases(instruction).ToArray();
+
+        var arguments =
+            instruction.Kind is StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const
+            ?
+            new[]
+            {
+                cases.Length.ToString(CultureInfo.InvariantCulture),
+                RenderIntegerLiteral(instruction.IntegerLiteral, literalDisplayString)
+                ?? throw new Exception("Missing skip count multiplier for slice switch instruction")
+            }
+            :
+            new[] { cases.Length.ToString(CultureInfo.InvariantCulture) };
+
+        if (cases.Length > MaxInlineSwitchCases)
+        {
+            var casesValue =
+                instruction.Kind is StackInstructionKind.Switch_Jump_If_Equal_Const
+                ?
+                StackInstructionMetadataEncoding.EncodeJumpTable(cases)
+                :
+                StackInstructionMetadataEncoding.EncodeSwitchCases(cases);
+
+            return
+                new(
+                    Arguments: arguments,
+                    DetailLines: ["cases " + literalDisplayString(casesValue)]);
+        }
+
         var entriesOrdered =
-            EnumerateSwitchCases(instruction)
-            .OrderBy(kvp => kvp.Value)
-            .ThenBy(kvp => literalDisplayString(kvp.Key), StringComparer.Ordinal)
+            cases.Select(item => (Literal: literalDisplayString(item.Key), JumpOffset: item.Value))
+            .OrderBy(item => item.JumpOffset)
+            .ThenBy(item => item.Literal, StringComparer.Ordinal)
             .ToArray();
 
         var detailLines = new string[entriesOrdered.Length];
 
         for (var i = 0; i < entriesOrdered.Length; i++)
         {
-            var kvp = entriesOrdered[i];
+            var item = entriesOrdered[i];
+            var jump = RenderJumpOffset(item.JumpOffset, instructionIndex);
 
             detailLines[i] =
-                "case " + literalDisplayString(kvp.Key) + ": jump " + kvp.Value;
+                "case " + item.Literal + ": jump " +
+                (instructionIndex.HasValue ? "(" + jump + ")" : jump);
         }
 
         return
             new InstructionDisplay(
-                Arguments:
-                instruction.Kind is StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const
-                ?
-                [
-                entriesOrdered.Length.ToString(),
-                (instruction.IntegerLiteral
-                ?? throw new Exception("Missing skip count multiplier for slice switch instruction")).ToString()
-                ]
-                :
-                [entriesOrdered.Length.ToString()],
+                Arguments: arguments,
                 DetailLines:
                 detailLines);
     }

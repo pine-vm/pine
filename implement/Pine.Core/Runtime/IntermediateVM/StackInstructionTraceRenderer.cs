@@ -5,16 +5,34 @@ using Pine.Core.Functional;
 using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Numerics;
 using System.Text.Json;
 
 namespace Pine.Core.Runtime.IntermediateVM;
 
 /// <summary>
-/// Renders sequences of executed PineVM stack instructions for diagnostics and documentation.
+/// Renders compiled and executed PineVM stack instructions for inspection and persistence.
 /// </summary>
 public static class StackInstructionTraceRenderer
 {
+    /// <summary>
+    /// Controls reference lengths and inclusion of the complete, parseable instruction metadata.
+    /// Persistence always uses full SHA256 references regardless of <see cref="HashHexLength"/>.
+    /// </summary>
+    public sealed record RenderingOptions(bool ForPersistence = false, int HashHexLength = 8)
+    {
+        /// <summary>Lossless rendering, including frame metadata and linked frames.</summary>
+        public static readonly RenderingOptions Persistence = new(ForPersistence: true, HashHexLength: 64);
+    }
+
+    /// <summary>
+    /// Rendered text and every referenced or inspected value, keyed by its full lowercase SHA256.
+    /// The caller is responsible for storing these values separately.
+    /// </summary>
+    public sealed record RenderedInstructions(string Text, IReadOnlyDictionary<string, PineValue> ObservedValues);
+
     /// <summary>
     /// One configurable way to render the contents of a blob literal.
     /// </summary>
@@ -23,6 +41,24 @@ public static class StackInstructionTraceRenderer
     /// </param>
     public readonly record struct BlobRepresentation(
         Func<PineValue.BlobValue, string?> Render);
+
+    private readonly record struct ParsedBlob(string? Utf32String, BigInteger? StrictInteger)
+    {
+        public bool HasCompleteRepresentation(int maxUtf32StringCharCount) =>
+            Utf32String is { } text && text.Length <= maxUtf32StringCharCount ||
+            StrictInteger is not null;
+    }
+
+    private sealed class ParsedBlobRepresentation(
+        Func<PineValue.BlobValue, ParsedBlob, string?> render,
+        int? maxUtf32StringCharCount = null)
+    {
+        public string? Render(PineValue.BlobValue blob) =>
+            render(blob, ParseBlob(blob, maxUtf32StringCharCount));
+
+        public string? Render(PineValue.BlobValue blob, ParsedBlob parsed) =>
+            render(blob, parsed);
+    }
 
     /// <summary>
     /// Context for a frame transition. Identifiers use "no-frame" at the root and "unknown-frame"
@@ -40,7 +76,7 @@ public static class StackInstructionTraceRenderer
     /// Default blob rendering configuration used by this renderer.
     /// <para>
     /// The default order is Base16 first, then UTF-32 string decoding, strict Pine integer decoding,
-    /// and the canonical hash for values that are neither strings nor integers.
+    /// and the canonical hash when neither bounded string nor integer rendering is complete.
     /// String, integer, and hash mappings contribute no text when they do not apply.
     /// </para>
     /// </summary>
@@ -82,29 +118,29 @@ public static class StackInstructionTraceRenderer
     {
         ArgumentOutOfRangeException.ThrowIfNegative(maxCharCount);
 
-        return
-            new BlobRepresentation(
-                blob =>
-                {
-                    if (blob.Bytes.Length is 0)
-                        return null;
+        string? RenderParsed(PineValue.BlobValue blob, ParsedBlob parsed)
+        {
+            if (blob.Bytes.Length is 0)
+                return null;
 
-                    if (StringEncoding.StringFromBlobValue(blob.Bytes).IsOkOrNull() is not { } asString)
-                        return NormalizeNoMatchRepresentation(noStringRepresentation);
+            if (parsed.Utf32String is not { } asString)
+                return NormalizeNoMatchRepresentation(noStringRepresentation);
 
-                    var limited =
-                        maxCharCount < asString.Length
-                        ?
-                        asString[..maxCharCount] + "..."
-                        :
-                        asString;
+            var limited =
+                maxCharCount < asString.Length
+                ?
+                asString[..maxCharCount] + "..."
+                :
+                asString;
 
-                    return "UTF32 " + JsonSerializer.Serialize(limited);
-                });
+            return "UTF32 " + JsonSerializer.Serialize(limited);
+        }
+
+        return new(new ParsedBlobRepresentation(RenderParsed).Render);
     }
 
     /// <summary>
-    /// Builds a blob representation that attempts to decode the blob as a strict Pine signed integer.
+    /// Builds a blob representation that decodes blobs of at most 32 bytes as strict Pine signed integers.
     /// </summary>
     /// <param name="noIntegerRepresentation">
     /// Optional fallback text to use when the blob is not a strictly encoded Pine integer. Supply whitespace or
@@ -113,15 +149,17 @@ public static class StackInstructionTraceRenderer
     public static BlobRepresentation BuildBlobRepresentationStrictPineInteger(
         string? noIntegerRepresentation = null)
     {
-        return
-            new BlobRepresentation(
-                blob =>
-                {
-                    if (IntegerEncoding.ParseSignedIntegerStrict(blob.Bytes.Span).IsOkOrNullable() is not { } asInteger)
-                        return NormalizeNoMatchRepresentation(noIntegerRepresentation);
+        string? RenderParsed(PineValue.BlobValue blob, ParsedBlob parsed)
+        {
+            if (parsed.StrictInteger is not { } asInteger)
+            {
+                return NormalizeNoMatchRepresentation(noIntegerRepresentation);
+            }
 
-                    return "int " + asInteger;
-                });
+            return "int " + asInteger.ToString(CultureInfo.InvariantCulture);
+        }
+
+        return new(new ParsedBlobRepresentation(RenderParsed, maxUtf32StringCharCount: 0).Render);
     }
 
     /// <summary>
@@ -139,27 +177,28 @@ public static class StackInstructionTraceRenderer
             noStringRepresentation: ""),
         BuildBlobRepresentationStrictPineInteger(
             noIntegerRepresentation: ""),
-        BuildBlobRepresentationCanonicalHash()
+        BuildBlobRepresentationCanonicalHash(maxUtf32StringCharCount)
         ];
 
     /// <summary>
-    /// Builds a blob representation containing its canonical Pine value hash, except for blobs that
-    /// are valid UTF-32 strings or strictly encoded Pine integers.
+    /// Builds a canonical hash representation, except for blobs with complete bounded string or integer renderings.
     /// </summary>
-    public static BlobRepresentation BuildBlobRepresentationCanonicalHash() =>
-        new(
-            blob =>
-            {
-                if (StringEncoding.StringFromBlobValue(blob.Bytes).IsOkOrNull() is not null ||
-                    IntegerEncoding.ParseSignedIntegerStrict(blob.Bytes.Span).IsOkOrNullable() is not null)
-                {
-                    return null;
-                }
+    public static BlobRepresentation BuildBlobRepresentationCanonicalHash(int maxUtf32StringCharCount = 32)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(maxUtf32StringCharCount);
 
-                return
-                    "hash 0x" +
-                    Convert.ToHexStringLower(PineValueHashTree.ComputeHash(blob).Span)[..8];
-            });
+        string? RenderParsed(PineValue.BlobValue blob, ParsedBlob parsed)
+        {
+            if (parsed.HasCompleteRepresentation(maxUtf32StringCharCount))
+                return null;
+
+            return
+                "hash 0x" +
+                Convert.ToHexStringLower(PineValueHashTree.ComputeHash(blob).Span)[..8];
+        }
+
+        return new(new ParsedBlobRepresentation(RenderParsed, maxUtf32StringCharCount).Render);
+    }
 
     /// <summary>
     /// Renders a sequence of executed stack instructions as text.
@@ -374,33 +413,66 @@ public static class StackInstructionTraceRenderer
         IReadOnlyList<BlobRepresentation>? blobRepresentations = null,
         Func<PineValue.BlobValue, IReadOnlyList<string>, string>? renderBlobContents = null)
     {
-        if (frameInstructions.Instructions.Count is 0)
+        return
+            RenderSequence(
+                frameInstructions.Instructions,
+                (instruction, index) =>
+                RenderInstruction(instruction, blobRepresentations, renderBlobContents, index),
+                value => RenderLiteral(value, blobRepresentations, renderBlobContents));
+    }
+
+    /// <summary>
+    /// Renders a frame using the shared instruction display. In persistence mode this also includes
+    /// parameter paths, constraints, resource limits, template plans, and the graph of linked frames.
+    /// </summary>
+    public static RenderedInstructions RenderStackFrameInstructions(
+        StackFrameInstructions frameInstructions,
+        RenderingOptions options) =>
+        StackInstructionTextFormat.Render(frameInstructions.Instructions, frameInstructions, options);
+
+    /// <summary>
+    /// Renders a sequence without requiring a valid executable frame. Persistence mode includes
+    /// all instruction fields and any linked frames. References can be resolved from the returned values.
+    /// </summary>
+    public static RenderedInstructions RenderInstructions(
+        IReadOnlyList<StackInstruction> instructions,
+        RenderingOptions options) =>
+        StackInstructionTextFormat.Render(instructions, null, options);
+
+    internal static string RenderSequence(
+        IReadOnlyList<StackInstruction> instructions,
+        Func<StackInstruction, int, string> render,
+        Func<PineValue, string> renderLiteral)
+    {
+        if (instructions.Count is 0)
             return "";
 
         var indexWidth =
-            (frameInstructions.Instructions.Count - 1).ToString().Length;
+            (instructions.Count - 1).ToString(CultureInfo.InvariantCulture).Length;
 
         var jumpsArrivingFrom =
-            BuildJumpsArrivingFrom(frameInstructions.Instructions);
+            BuildJumpsArrivingFrom(instructions);
 
-        var lines = new List<string>(frameInstructions.Instructions.Count + jumpsArrivingFrom.Count);
+        var lines = new List<string>(instructions.Count + jumpsArrivingFrom.Count);
 
-        for (var index = 0; index < frameInstructions.Instructions.Count; ++index)
+        for (var index = 0; index < instructions.Count; ++index)
         {
             if (jumpsArrivingFrom.TryGetValue(index, out var sourceIndexes))
             {
                 lines.Add(
                     "jumps_arriving_from " + sourceIndexes.Count +
-                    " (" + string.Join(", ", sourceIndexes) + ")");
+                    " (" +
+                    (sourceIndexes.Count <= 32
+                    ?
+                    string.Join(", ", sourceIndexes)
+                    :
+                    renderLiteral(StackInstructionMetadataEncoding.EncodePath(sourceIndexes))) +
+                    ")");
             }
 
             lines.Add(
-                index.ToString().PadLeft(indexWidth) + ": " +
-                RenderInstruction(
-                    frameInstructions.Instructions[index],
-                    blobRepresentations: blobRepresentations,
-                    renderBlobContents: renderBlobContents,
-                    instructionIndex: index));
+                index.ToString(CultureInfo.InvariantCulture).PadLeft(indexWidth) + ": " +
+                render(instructions[index], index));
         }
 
         return string.Join('\n', lines);
@@ -471,27 +543,62 @@ public static class StackInstructionTraceRenderer
                 entry => (IReadOnlyList<int>)[.. entry.Value.Order()]);
     }
 
-    private static string RenderLiteral(
+    internal static string RenderLiteral(
         PineValue value,
         IReadOnlyList<BlobRepresentation>? blobRepresentations,
-        Func<PineValue.BlobValue, IReadOnlyList<string>, string>? renderBlobContents)
+        Func<PineValue.BlobValue, IReadOnlyList<string>, string>? renderBlobContents,
+        Func<PineValue, string>? renderHash = null,
+        bool alwaysRenderHash = false,
+        bool invariantNumbers = false)
     {
+        var hash =
+            renderHash?.Invoke(value)
+            ??
+            "hash 0x" + Convert.ToHexStringLower(PineValueHashTree.ComputeHash(value).Span)[..8];
+
+        string Number(long number) =>
+            invariantNumbers
+            ?
+            number.ToString(CultureInfo.InvariantCulture)
+            :
+            CommandLineInterface.FormatIntegerForDisplay(number);
+
         if (value is not PineValue.BlobValue blob)
         {
-            var defaultDisplay = StackInstruction.LiteralDisplayStringDefault(value);
+            if (value is not PineValue.ListValue list)
+                throw new NotImplementedException("RenderLiteral does not handle value variant: " + value.GetType().Name);
 
-            return
-                defaultDisplay[..^1] +
-                " | hash 0x" +
-                Convert.ToHexStringLower(PineValueHashTree.ComputeHash(value).Span)[..8] +
-                ")";
+            return "List [" + Number(list.Items.Length) + "] (" + Number(list.NodesCount) + " | " + hash + ")";
+        }
+
+        ParsedBlob? parsed = null;
+
+        ParsedBlob ParseOnce()
+        {
+            if (parsed is { } existing)
+                return existing;
+
+            var result = ParseBlob(blob);
+            parsed = result;
+            return result;
         }
 
         var representations =
-            (blobRepresentations ?? DefaultBlobRepresentations)
-            .Select(representation => representation.Render(blob))
+            (blobRepresentations ?? DefaultBlobRepresentations.Take(3))
+            .Select(
+                representation =>
+                // Custom and multicast callbacks retain their original invocation behavior.
+                representation.Render.Target is ParsedBlobRepresentation parsedRepresentation &&
+                representation.Render == parsedRepresentation.Render
+                ?
+                parsedRepresentation.Render(blob, ParseOnce())
+                :
+                representation.Render(blob))
             .Select(text => text ?? "")
-            .ToArray();
+            .ToList();
+
+        if (alwaysRenderHash || blobRepresentations is null && !ParseOnce().HasCompleteRepresentation(32))
+            representations.Add(hash);
 
         var contents =
             renderBlobContents?.Invoke(blob, representations)
@@ -502,7 +609,7 @@ public static class StackInstructionTraceRenderer
 
         return
             "Blob [" +
-            CommandLineInterface.FormatIntegerForDisplay(blob.Bytes.Length) +
+            Number(blob.Bytes.Length) +
             "]"
             +
             (string.IsNullOrWhiteSpace(contents)
@@ -511,6 +618,19 @@ public static class StackInstructionTraceRenderer
             :
             " (" + contents + ")");
     }
+
+    private static ParsedBlob ParseBlob(PineValue.BlobValue blob, int? maxUtf32StringCharCount = null) =>
+        new(
+            maxUtf32StringCharCount is not { } limit || blob.Bytes.Length <= (long)limit * 4
+            ?
+            StringEncoding.StringFromBlobValue(blob.Bytes).IsOkOrNull()
+            :
+            null,
+            blob.Bytes.Length <= 32
+            ?
+            IntegerEncoding.ParseSignedIntegerStrict(blob.Bytes.Span).IsOkOrNullable()
+            :
+            null);
 
     private static string RenderBlobBase16(
         ReadOnlySpan<byte> bytes,

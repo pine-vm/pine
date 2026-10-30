@@ -2,11 +2,13 @@ using AwesomeAssertions;
 using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Encodings;
+using Pine.Core.Internal;
 using Pine.Core.PineLanguage;
 using Pine.Core.Runtime.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Linq;
 using Xunit;
 
@@ -14,6 +16,230 @@ namespace Pine.Core.Tests.Runtime.IntermediateVM;
 
 public class StackInstructionTraceRendererTests
 {
+    [Fact]
+    public void Jump_details_preserve_inspection_number_formatting()
+    {
+        var previous = CultureInfo.CurrentCulture;
+
+        try
+        {
+            var culture = (CultureInfo)CultureInfo.InvariantCulture.Clone();
+            culture.NumberFormat.NegativeSign = "minus";
+            CultureInfo.CurrentCulture = culture;
+            var instruction = StackInstruction.Jump_Unconditional(-2);
+
+            StackInstruction.RenderInstructionDisplay(instruction, _ => "literal")
+                .Should().Be("Jump_Const (minus2)");
+
+            StackInstruction.RenderInstructionDisplay(instruction, _ => "literal", instructionIndex: 1)
+                .Should().Be("Jump_Const (minus2, minus1)");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previous;
+        }
+    }
+
+    [Theory]
+    [InlineData(false, false, 0)]
+    [InlineData(false, true, 0)]
+    [InlineData(true, false, 0)]
+    [InlineData(true, true, 0)]
+    [InlineData(false, false, 32)]
+    [InlineData(false, true, 32)]
+    [InlineData(true, false, 32)]
+    [InlineData(true, true, 32)]
+    [InlineData(false, false, 33)]
+    [InlineData(false, true, 33)]
+    [InlineData(true, false, 33)]
+    [InlineData(true, true, 33)]
+    public void Switch_bounds_sorting_and_jump_destinations_reuse_each_rendered_case(
+        bool slice,
+        bool indexed,
+        int count)
+    {
+        var cases =
+            Enumerable.Range(0, count)
+            .Select(index => new SliceSwitchCase(IntegerEncoding.EncodeSignedInteger(index), 2))
+            .ToImmutableArray();
+
+        var instruction =
+            slice
+            ?
+            new StackInstruction(
+                StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const,
+                IntegerLiteral: 4,
+                SliceSwitchCases: cases)
+            :
+            new StackInstruction(
+                StackInstructionKind.Switch_Jump_If_Equal_Const,
+                SwitchJumpTable: cases.ToImmutableDictionary(item => item.Literal, item => item.JumpOffset));
+
+        var labels =
+            cases.Select((item, index) => (item.Literal, Text: $"value {count - index - 1:D2}"))
+            .ToDictionary(item => item.Literal, item => item.Text);
+
+        var observed = new HashSet<PineValue>();
+
+        string RenderLiteral(PineValue value)
+        {
+            observed.Add(value).Should().BeTrue("each case must be rendered only once");
+            return labels.GetValueOrDefault(value, "referenced cases");
+        }
+
+        var rendered =
+            StackInstruction.RenderInstructionDisplay(
+                instruction,
+                RenderLiteral,
+                instructionIndex: indexed ? 5 : null);
+
+        var details = rendered.Split('\n').Skip(1).Select(line => line.Trim());
+
+        if (count <= 32)
+        {
+            observed.SetEquals(cases.Select(item => item.Literal)).Should().BeTrue();
+
+            details.Should().Equal(
+                Enumerable.Range(0, count)
+                .Select(index => $"case value {index:D2}: jump " + (indexed ? "(2, 7)" : "2")));
+        }
+        else
+        {
+            observed.Should().ContainSingle().Which.Should().Be(
+                slice
+                ?
+                StackInstructionMetadataEncoding.EncodeSliceCases(cases)
+                :
+                StackInstructionMetadataEncoding.EncodeJumpTable(
+                    cases.Select(item => new KeyValuePair<PineValue, int>(item.Literal, item.JumpOffset))));
+
+            details.Should().Equal("cases referenced cases");
+        }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(8)]
+    [InlineData(9)]
+    public void List_prefix_bounds_and_observation_use_the_same_captured_value(int count)
+    {
+        var items = Enumerable.Range(0, count).Select(index => IntegerEncoding.EncodeSignedInteger(index)).ToArray();
+        var prefix = PineValue.List(items);
+        var observed = new List<PineValue>();
+        var displayed = new List<PineValue>();
+        var source = items.Select(PineValueInProcess.Create).ToList();
+
+        var rendered =
+            StackInstruction.RenderInstructionDisplay(
+                new StackInstruction(
+                    StackInstructionKind.Build_List_With_Prefix,
+                    Literal: PineValueInProcess.CreateList(source),
+                    TakeCount: 1),
+                value =>
+                {
+                    displayed.Add(value);
+                    return "value";
+                },
+                observeValue:
+                value =>
+                {
+                    observed.Add(value);
+                    source.Add(PineValueInProcess.EmptyBlob);
+                });
+
+        observed.Should().Equal(prefix);
+        displayed.Should().Equal(count <= 8 ? items : [prefix]);
+        rendered.Split('\n')[0].Should().Be($"Build_List_With_Prefix ({count}, 1)");
+
+        var listing =
+            StackInstructionTraceRenderer.RenderInstructions(
+                [StackInstruction.Build_List_With_Prefix(prefix, 1)],
+                new StackInstructionTraceRenderer.RenderingOptions());
+
+        var hash = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(prefix).Span);
+        listing.ObservedValues[hash].Should().Be(prefix);
+    }
+
+    [Fact]
+    public void Replacing_a_built_in_blob_callback_preserves_custom_rendering()
+    {
+        var representation =
+            StackInstructionTraceRenderer.BuildBlobRepresentationUtf32String(32) with
+            {
+                Render = _ => "custom representation"
+            };
+
+        var frame =
+            new StackFrameInstructions(
+                StaticFunctionInterface.ZeroParameters,
+                [StackInstruction.Push_Literal(StringEncoding.ValueFromString("text")), StackInstruction.Return]);
+
+        StackInstructionTraceRenderer.RenderStackFrameInstructions(frame, [representation])
+            .Should().Be("0: Push_Literal (Blob [16] (custom representation))\n1: Return");
+    }
+
+    [Fact]
+    public void Composing_callbacks_preserves_all_invocations_and_the_final_result()
+    {
+        var calls = 0;
+
+        Func<PineValue.BlobValue, string?> custom =
+            _ =>
+            {
+                ++calls;
+                return "custom";
+            };
+
+        var builtIn = StackInstructionTraceRenderer.BuildBlobRepresentationUtf32String(32);
+        var combined = new StackInstructionTraceRenderer.BlobRepresentation(custom + builtIn.Render);
+
+        var frame =
+            new StackFrameInstructions(
+                StaticFunctionInterface.ZeroParameters,
+                [StackInstruction.Push_Literal(StringEncoding.ValueFromString("text")), StackInstruction.Return]);
+
+        StackInstructionTraceRenderer.RenderStackFrameInstructions(frame, [combined])
+            .Should().Be("0: Push_Literal (Blob [16] (UTF32 \"text\"))\n1: Return");
+
+        calls.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    [InlineData(32)]
+    public void Composed_blob_rendering_matches_the_standalone_representations(int stringLimit)
+    {
+        var representations = StackInstructionTraceRenderer.BuildDefaultBlobRepresentations(2, stringLimit);
+
+        PineValue[] values =
+            [
+                StringEncoding.ValueFromString("abcdef"),
+                StringEncoding.ValueFromString(char.ConvertFromUtf32(0x1f600)),
+                IntegerEncoding.EncodeSignedInteger(3),
+                IntegerEncoding.EncodeSignedInteger(System.Numerics.BigInteger.One << 4000),
+                PineValue.Blob([255]),
+                PineValue.Blob([4, 0, 1])
+            ];
+
+        foreach (var value in values)
+        {
+            var blob = value.Should().BeOfType<PineValue.BlobValue>().Which;
+
+            var expected =
+                representations.Select(representation => representation.Render(blob))
+                .Where(text => !string.IsNullOrWhiteSpace(text));
+
+            var frame =
+                new StackFrameInstructions(
+                    StaticFunctionInterface.ZeroParameters,
+                    [StackInstruction.Push_Literal(blob), StackInstruction.Return]);
+
+            StackInstructionTraceRenderer.RenderStackFrameInstructions(frame, representations)
+                .Should().Be($"0: Push_Literal (Blob [{blob.Bytes.Length}] ({string.Join(" | ", expected)}))\n1: Return");
+        }
+    }
+
     [Fact]
     public void Local_instructions_render_indices_as_lists_and_use_unified_kinds()
     {
@@ -48,7 +274,7 @@ public class StackInstructionTraceRendererTests
     }
 
     [Fact]
-    public void Environment_expression_omits_invariant_stats_in_instruction_description()
+    public void Environment_expression_renders_as_its_encoded_value_hash()
     {
         var instruction =
             StackInstruction.Invoke_StackFrame_Const(
@@ -59,7 +285,7 @@ public class StackInstructionTraceRendererTests
             new StackFrameInstructions(
                 Parameters: StaticFunctionInterface.FromPathsSorted([]),
                 Instructions: [instruction, StackInstruction.Return]))
-            .Should().Contain("Invoke_StackFrame_Const (Environment, 0)");
+            .Should().Contain("Invoke_StackFrame_Const (hash 0xcb2c8951, 0)");
     }
 
     [Theory]
@@ -494,6 +720,6 @@ public class StackInstructionTraceRendererTests
                 ]);
 
         rendered.Should().Be(
-            "ip=1 Invoke_StackFrame_Const (increment, 1)");
+            "ip=1 Invoke_StackFrame_Const (hash 0x492b1e29, 1)");
     }
 }

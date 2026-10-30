@@ -4,6 +4,6 @@ Push_Literal (Blob [2] (int 17))
 Build_List (2)
 Local_Get ([ 0 ])
 Eval_Binary
-Push_Literal (Blob [0] (0x))
+Push_Literal (Blob [0] (0x | hash 0x473a0f4c))
 Build_List (2)
 Return
