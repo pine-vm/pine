@@ -2,8 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.Files;
 using Pine.Elm019;
 using Pine.WebBrowserTesting;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
+using StbImageSharp;
 using System;
 using System.Text;
 using System.Threading.Tasks;
@@ -57,7 +56,8 @@ public class WebBrowserTestingTests
 
         var screenshot = await page.TakeScreenshotAsync();
 
-        using var image = Image.Load<Rgba32>(screenshot.Span);
+        var image =
+            ImageResult.FromMemory(screenshot.ToArray(), ColorComponents.RedGreenBlueAlpha);
 
         image.Width.Should().Be(120);
         image.Height.Should().Be(90);
@@ -66,21 +66,18 @@ public class WebBrowserTestingTests
         var greenPixels = 0;
         var bluePixels = 0;
 
-        for (var y = 0; y < image.Height; y++)
+        for (var pixelOffset = 0; pixelOffset < image.Data.Length; pixelOffset += 4)
         {
-            for (var x = 0; x < image.Width; x++)
-            {
-                var pixel = image[x, y];
+            var pixel = image.Data.AsSpan(pixelOffset, 4);
 
-                if (pixel is { R: 255, G: 0, B: 0, A: 255 })
-                    redPixels++;
+            if (pixel is [255, 0, 0, 255])
+                redPixels++;
 
-                if (pixel is { R: 0, G: 255, B: 0, A: 255 })
-                    greenPixels++;
+            if (pixel is [0, 255, 0, 255])
+                greenPixels++;
 
-                if (pixel is { R: 0, G: 0, B: 255, A: 255 })
-                    bluePixels++;
-            }
+            if (pixel is [0, 0, 255, 255])
+                bluePixels++;
         }
 
         redPixels.Should().BeGreaterThan(1000);

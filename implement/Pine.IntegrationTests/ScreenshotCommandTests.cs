@@ -2,8 +2,7 @@ using AwesomeAssertions;
 using Pine.CLI;
 using Pine.Core.Files;
 using Pine.WebBrowserTesting;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
+using StbImageSharp;
 using System;
 using System.IO;
 using System.Text;
@@ -22,42 +21,31 @@ public class ScreenshotCommandTests
         const int ImageSize = CellsPerSide * CellSize;
 
         var cellColors =
-            new Rgba32[,]
+            new (byte R, byte G, byte B)[,]
             {
                 {
-                    new(230, 25, 75), new(60, 180, 75), new(255, 225, 25), new(0, 130, 200),
+                    (230, 25, 75), (60, 180, 75), (255, 225, 25), (0, 130, 200),
                 },
                 {
-                    new(245, 130, 48), new(145, 30, 180), new(70, 240, 240), new(240, 50, 230),
+                    (245, 130, 48), (145, 30, 180), (70, 240, 240), (240, 50, 230),
                 },
                 {
-                    new(210, 245, 60), new(250, 190, 212), new(0, 128, 128), new(220, 190, 255),
+                    (210, 245, 60), (250, 190, 212), (0, 128, 128), (220, 190, 255),
                 },
                 {
-                    new(170, 110, 40), new(255, 250, 200), new(128, 0, 0), new(0, 0, 128),
+                    (170, 110, 40), (255, 250, 200), (128, 0, 0), (0, 0, 128),
                 },
             };
 
-        ReadOnlyMemory<byte> embeddedImageBytes;
-
-        using (var embeddedImage = new Image<Rgba32>(ImageSize, ImageSize))
-        {
-            for (var cellY = 0; cellY < CellsPerSide; cellY++)
-            {
-                for (var cellX = 0; cellX < CellsPerSide; cellX++)
-                {
-                    for (var y = cellY * CellSize; y < (cellY + 1) * CellSize; y++)
-                    {
-                        for (var x = cellX * CellSize; x < (cellX + 1) * CellSize; x++)
-                            embeddedImage[x, y] = cellColors[cellY, cellX];
-                    }
-                }
-            }
-
-            using var embeddedImageStream = new MemoryStream();
-            embeddedImage.SaveAsPng(embeddedImageStream);
-            embeddedImageBytes = embeddedImageStream.ToArray();
-        }
+        // Fixed 40x40 RGB PNG: a 4x4 grid of 10x10 cells matching cellColors.
+        var embeddedImageBytes =
+            Convert.FromBase64String(
+                """
+                iVBORw0KGgoAAAANSUhEUgAAACgAAAAoCAIAAAADnC86AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMA
+                AA7DAcdvqGQAAACcSURBVFhH7c0hDoNAFIThdw1MdWWDRtdwF86w4QZcoxqNXt0gazDoNRjMVr9M3njCJJ8aMb/tTU90M1O3hrAx
+                MxhTOIYxhQmMKRzD2BXCx/gipsdMvEshSrsTCisMMYVjGLt5+Ht0xLmshKVE/JZKKKwwxBSOYezm4c/wJOqZiWRGwOBhTOEYnDkw
+                eBhTOAZnDgwexhSOwZkDg/MHKtU4mylCGF0AAAAASUVORK5CYII=
+                """);
 
         var elmJson =
             """
@@ -146,7 +134,8 @@ public class ScreenshotCommandTests
                     DeviceScaleFactor = 1,
                 });
 
-        using var screenshot = Image.Load<Rgba32>(screenshotBytes.Span);
+        var screenshot =
+            ImageResult.FromMemory(screenshotBytes.ToArray(), ColorComponents.RedGreenBlueAlpha);
 
         screenshot.Width.Should().Be(ImageSize);
         screenshot.Height.Should().Be(ImageSize);
@@ -155,10 +144,13 @@ public class ScreenshotCommandTests
         {
             for (var cellX = 0; cellX < CellsPerSide; cellX++)
             {
-                screenshot[
-                    cellX * CellSize + CellSize / 2,
-                    cellY * CellSize + CellSize / 2]
-                    .Should().Be(cellColors[cellY, cellX]);
+                var x = cellX * CellSize + CellSize / 2;
+                var y = cellY * CellSize + CellSize / 2;
+                var pixelOffset = (y * screenshot.Width + x) * 4;
+                var expectedColor = cellColors[cellY, cellX];
+
+                screenshot.Data.AsSpan(pixelOffset, 4).ToArray()
+                    .Should().Equal(expectedColor.R, expectedColor.G, expectedColor.B, 255);
             }
         }
     }
