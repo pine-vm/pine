@@ -2,6 +2,10 @@
 
 Consider these rules for any work with and on the implementation found in the Pine repository. These rules also apply to any pull requests opened on the Pine repository.
 
+## Design Principles
+
+Adhere to [Parse, don’t validate](https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/), and avoid repetition that increases the risk of future changes causing inconsistencies.
+
 ## Running Tests in .NET
 
 Since the .NET projects in this repository use the new [`Microsoft.Testing.Platform`](https://learn.microsoft.com/en-us/dotnet/core/testing/microsoft-testing-platform-intro?tabs=dotnetcli) the `dotnet test` command does not always work as usual.
@@ -82,4 +86,3 @@ switch (expression)
 The rule does **not** apply to switches over closed primitive sets (for example `int`, `bool`, `enum` types, or strings) where missing a value is not a forward-compatibility hazard.
 
 The point of the rule is to **guarantee a runtime crash the first time a new variant flows into a function that has not been updated**, so that incomplete handling is detected immediately during testing rather than being silently misinterpreted as a no-op or a wildcard fallback.
-
