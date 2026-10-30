@@ -16,7 +16,7 @@ using System.Linq;
 using System.Text;
 using Xunit;
 
-using InteractiveSessionPine = ElmTime.ElmInteractive.InteractiveSessionPine;
+using InteractiveSessionPine2024 = ElmTime.ElmInteractive.InteractiveSessionPine2024;
 
 namespace Pine.IntegrationTests;
 
@@ -47,8 +47,8 @@ public class PGOTests
         var appCodeTree = AppCodeTreeForElmModules([elmModule]);
 
         using var interactiveSession =
-            new InteractiveSessionPine(
-                ElmCompilerInElm.CompilerSourceFilesDefault.Value,
+            new InteractiveSessionPine2024(
+                ElmCompilerInElm2024.CompilerSourceFilesDefault.Value,
                 appCodeTree: appCodeTree,
                 overrideSkipLowering: true,
                 entryPointsFilePaths: null,
@@ -441,8 +441,8 @@ public class PGOTests
         var appCodeTree = AppCodeTreeForElmModules([elmModule]);
 
         using var interactiveSession =
-            new InteractiveSessionPine(
-                ElmCompilerInElm.CompilerSourceFilesDefault.Value,
+            new InteractiveSessionPine2024(
+                ElmCompilerInElm2024.CompilerSourceFilesDefault.Value,
                 appCodeTree: appCodeTree,
                 overrideSkipLowering: true,
                 entryPointsFilePaths: null,
@@ -1078,8 +1078,8 @@ public class PGOTests
         var appCodeTree = AppCodeTreeForElmModules([elmModule]);
 
         using var interactiveSession =
-            new InteractiveSessionPine(
-                ElmCompilerInElm.CompilerSourceFilesDefault.Value,
+            new InteractiveSessionPine2024(
+                ElmCompilerInElm2024.CompilerSourceFilesDefault.Value,
                 appCodeTree: appCodeTree,
                 overrideSkipLowering: true,
                 entryPointsFilePaths: null,
@@ -1516,8 +1516,8 @@ public class PGOTests
         var appCodeTree = AppCodeTreeForElmModules([elmModule]);
 
         using var interactiveSession =
-            new InteractiveSessionPine(
-                ElmCompilerInElm.CompilerSourceFilesDefault.Value,
+            new InteractiveSessionPine2024(
+                ElmCompilerInElm2024.CompilerSourceFilesDefault.Value,
                 appCodeTree: appCodeTree,
                 overrideSkipLowering: true,
                 entryPointsFilePaths: null,
@@ -1903,7 +1903,7 @@ public class PGOTests
     public static FileTree AppCodeTreeForElmModules(
         IReadOnlyList<string> elmModuleTexts)
     {
-        var compilerProgram = ElmCompilerInElm.CompilerSourceFilesDefault.Value;
+        var compilerProgram = ElmCompilerInElm2024.CompilerSourceFilesDefault.Value;
 
         var elmJson =
             """

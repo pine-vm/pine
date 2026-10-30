@@ -2373,9 +2373,9 @@ public class CodeAnalysisTests
 
             { DeclQualifiedName.Create(["Json","Decode"], "parseJsonStringToValue"), true },
 
-            { DeclQualifiedName.Create(["Pine"], "blobBytesFromChar"), true },
-            { DeclQualifiedName.Create(["Pine"], "intFromValue"), true },
-            { DeclQualifiedName.Create(["Pine"], "valueFromInt"), true },
+            { DeclQualifiedName.Create(["Pine2024"], "blobBytesFromChar"), true },
+            { DeclQualifiedName.Create(["Pine2024"], "intFromValue"), true },
+            { DeclQualifiedName.Create(["Pine2024"], "valueFromInt"), true },
         }
         .ToFrozenDictionary();
 

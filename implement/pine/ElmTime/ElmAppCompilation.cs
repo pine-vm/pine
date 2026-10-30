@@ -60,7 +60,7 @@ namespace ElmTime
             IReadOnlyList<string> workingDirectoryRelative,
             ElmAppInterfaceConfig interfaceConfig)
         {
-            var elmCompilerCache = new ElmCompilerCache();
+            var elmCompilerCache = new ElmCompilerCache2024();
 
             return
                 AsCompletelyLoweredElmApp(
@@ -74,7 +74,7 @@ namespace ElmTime
             IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> sourceFiles,
             IReadOnlyList<string> workingDirectoryRelative,
             ElmAppInterfaceConfig interfaceConfig,
-            ElmCompilerCache elmCompilerCache)
+            ElmCompilerCache2024 elmCompilerCache)
         {
             var clock = System.Diagnostics.Stopwatch.StartNew();
 
@@ -141,7 +141,7 @@ namespace ElmTime
             IReadOnlyList<string> workingDirectoryRelative,
             IReadOnlyList<string> compilationRootFilePath,
             IReadOnlyList<string> interfaceToHostRootModuleName,
-            ElmCompilerCache elmCompilerCache) =>
+            ElmCompilerCache2024 elmCompilerCache) =>
             AsCompletelyLoweredElmApp(
                 sourceFiles,
                 workingDirectoryRelative: workingDirectoryRelative,
@@ -156,7 +156,7 @@ namespace ElmTime
             IReadOnlyList<string> compilationRootFilePath,
             IReadOnlyList<string> interfaceToHostRootModuleName,
             IImmutableStack<StackFrame> stack,
-            ElmCompilerCache elmCompilerCache)
+            ElmCompilerCache2024 elmCompilerCache)
         {
             if (10 < stack.Count())
                 throw new Exception("Iteration stack depth > 10");
@@ -392,7 +392,7 @@ namespace ElmTime
             IReadOnlyList<string> compilationRootFilePath,
             IReadOnlyList<string> interfaceToHostRootModuleName,
             IReadOnlyList<(CompilerSerialInterface.DependencyKey key, ReadOnlyMemory<byte> value)> dependencies,
-            ElmCompilerCache elmCompilerCache)
+            ElmCompilerCache2024 elmCompilerCache)
         {
             var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -587,7 +587,7 @@ namespace ElmTime
 
         private static CompilationIterationResult ParseCompilationResult(
             PineValue response,
-            ElmCompilerCache elmCompilerCache)
+            ElmCompilerCache2024 elmCompilerCache)
         {
             return
                 ElmValueInterop.ParseElmResultValue(
@@ -608,7 +608,7 @@ namespace ElmTime
 
         private static IReadOnlyList<CompilerSerialInterface.LocatedCompilationError> ParseLocatedCompilationErrors(
             PineValue pineValue,
-            ElmCompilerCache elmCompilerCache)
+            ElmCompilerCache2024 elmCompilerCache)
         {
             if (pineValue is not PineValue.ListValue list)
             {
@@ -635,7 +635,7 @@ namespace ElmTime
 
         private static CompilerSerialInterface.LocatedCompilationError ParseLocatedCompilationError(
             PineValue pineValue,
-            ElmCompilerCache elmCompilerCache)
+            ElmCompilerCache2024 elmCompilerCache)
         {
             /*
 
@@ -698,7 +698,7 @@ namespace ElmTime
 
         public static CompilerSerialInterface.LocationInSourceFiles ParseLocationInSourceFiles(
             PineValue pineValue,
-            ElmCompilerCache elmCompilerCache)
+            ElmCompilerCache2024 elmCompilerCache)
         {
             var asElmValueResult =
                 elmCompilerCache.PineValueDecodedAsElmValue(pineValue);
@@ -747,7 +747,7 @@ namespace ElmTime
 
         private static CompilerSerialInterface.CompilationError ParseCompilationError(
             PineValue pineValue,
-            ElmCompilerCache elmCompilerCache)
+            ElmCompilerCache2024 elmCompilerCache)
         {
             /*
 
@@ -840,7 +840,7 @@ namespace ElmTime
 
         private static CompilerSerialInterface.DependencyKey ParseDependencyKey(
             PineValue pineValue,
-            ElmCompilerCache elmCompilerCache)
+            ElmCompilerCache2024 elmCompilerCache)
         {
             var asElmValueResult =
                 elmCompilerCache.PineValueDecodedAsElmValue(pineValue);
@@ -1036,7 +1036,7 @@ namespace ElmTime
 
         private static CompilationIterationSuccess ParseCompilationSuccess(
             PineValue pineValue,
-            ElmCompilerCache elmCompilerCache)
+            ElmCompilerCache2024 elmCompilerCache)
         {
             var parseTagResult = ElmValueEncoding.ParseAsTag(pineValue);
 
@@ -1162,7 +1162,7 @@ namespace ElmTime
 
         private static Result<string, CompilerSerialInterface.ElmMakeEntryPointKind> ParseElmMakeEntryPointKindResult(
             PineValue pineValue,
-            ElmCompilerCache elmCompilerCache)
+            ElmCompilerCache2024 elmCompilerCache)
         {
             var asElmValueResult =
                 elmCompilerCache.PineValueDecodedAsElmValue(pineValue);
@@ -1271,7 +1271,7 @@ namespace ElmTime
         /// dependencies) parsed and canonicalized for evaluation with
         /// <see cref="Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter"/>. This replaces the previous
         /// approach of applying the compiled compiler environment from
-        /// <see cref="BundledElmEnvironments"/> via <see cref="ElmCompilerInElm"/>.
+        /// <see cref="BundledElmEnvironments"/> via <see cref="ElmCompilerInElm2024"/>.
         /// </summary>
         public static readonly Lazy<Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter.Prepared> CompilerModulesPreparedForInterpreter =
             new(PrepareCompilerModulesForInterpreter);

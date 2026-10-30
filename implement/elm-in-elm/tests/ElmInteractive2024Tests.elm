@@ -1,12 +1,12 @@
-module ElmInteractiveTests exposing (..)
+module ElmInteractive2024Tests exposing (..)
 
 import BigInt
-import ElmCompiler
-import ElmInteractive exposing (ElmCoreModulesExtent(..), InteractiveContext(..))
-import ElmInteractiveParser
+import ElmCompiler2024
+import ElmInteractive2024 exposing (ElmCoreModulesExtent(..), InteractiveContext(..))
+import ElmInteractiveParser2024
 import Expect
 import Json.Encode
-import Pine
+import Pine2024
 import Test
 
 
@@ -508,7 +508,7 @@ alfa_decl param = [17, param]
 
 
 expectationForElmInteractiveScenario :
-    { context : ElmInteractive.InteractiveContext
+    { context : ElmInteractive2024.InteractiveContext
     , previousSubmissions : List String
     , submission : String
     , expectedValueElmExpression : String
@@ -516,7 +516,7 @@ expectationForElmInteractiveScenario :
     -> Expect.Expectation
 expectationForElmInteractiveScenario scenario =
     Expect.equal (Ok scenario.expectedValueElmExpression)
-        (ElmInteractiveParser.submissionInInteractive scenario.context scenario.previousSubmissions scenario.submission
+        (ElmInteractiveParser2024.submissionInInteractive scenario.context scenario.previousSubmissions scenario.submission
             |> Result.map .displayText
         )
 
@@ -526,33 +526,33 @@ floatValueRegressions =
     Test.describe "Float values and strings"
         [ Test.test "whole float literal encodes as an integer" <|
             \_ ->
-                ElmCompiler.valueFromFloat 1.0
-                    |> Expect.equal (Pine.valueFromInt 1)
+                ElmCompiler2024.valueFromFloat 1.0
+                    |> Expect.equal (Pine2024.valueFromInt 1)
         , Test.test "fractional float literal encodes as a rational" <|
             \_ ->
-                ElmCompiler.valueFromFloat 0.5
+                ElmCompiler2024.valueFromFloat 0.5
                     |> Expect.equal
-                        (Pine.ListValue
-                            [ Pine.valueFromString "Elm_Float"
-                            , Pine.ListValue [ Pine.valueFromInt 1, Pine.valueFromInt 2 ]
+                        (Pine2024.ListValue
+                            [ Pine2024.valueFromString "Elm_Float"
+                            , Pine2024.ListValue [ Pine2024.valueFromInt 1, Pine2024.valueFromInt 2 ]
                             ]
                         )
         , Test.test "decimal float literal encodes as a rational" <|
             \_ ->
-                ElmCompiler.valueFromFloat 0.7
+                ElmCompiler2024.valueFromFloat 0.7
                     |> Expect.equal
-                        (Pine.ListValue
-                            [ Pine.valueFromString "Elm_Float"
-                            , Pine.ListValue [ Pine.valueFromInt 7, Pine.valueFromInt 10 ]
+                        (Pine2024.ListValue
+                            [ Pine2024.valueFromString "Elm_Float"
+                            , Pine2024.ListValue [ Pine2024.valueFromInt 7, Pine2024.valueFromInt 10 ]
                             ]
                         )
         , Test.test "negative float literal encodes as a rational" <|
             \_ ->
-                ElmCompiler.valueFromFloat -0.7
+                ElmCompiler2024.valueFromFloat -0.7
                     |> Expect.equal
-                        (Pine.ListValue
-                            [ Pine.valueFromString "Elm_Float"
-                            , Pine.ListValue [ Pine.valueFromInt -7, Pine.valueFromInt 10 ]
+                        (Pine2024.ListValue
+                            [ Pine2024.valueFromString "Elm_Float"
+                            , Pine2024.ListValue [ Pine2024.valueFromInt -7, Pine2024.valueFromInt 10 ]
                             ]
                         )
         , Test.test "fromFloat returns a flat string" <|
@@ -575,83 +575,83 @@ evolutionStagesToMakeElmFunction : Test.Test
 evolutionStagesToMakeElmFunction =
     [ Test.test "Literal" <|
         \_ ->
-            Pine.ListExpression
-                [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                , Pine.ListExpression [ Pine.LiteralExpression (Pine.valueFromString "just a literal") ]
+            Pine2024.ListExpression
+                [ Pine2024.LiteralExpression (Pine2024.valueFromString "Literal")
+                , Pine2024.ListExpression [ Pine2024.LiteralExpression (Pine2024.valueFromString "just a literal") ]
                 ]
-                |> Pine.evaluateExpression Pine.emptyEvalEnvironment
-                |> Result.andThen (Pine.parseExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
+                |> Pine2024.evaluateExpression Pine2024.emptyEvalEnvironment
+                |> Result.andThen (Pine2024.parseExpressionFromValue >> Result.mapError Pine2024.DescribePathEnd)
                 |> Expect.equal
-                    (Ok (Pine.LiteralExpression (Pine.valueFromString "just a literal")))
+                    (Ok (Pine2024.LiteralExpression (Pine2024.valueFromString "just a literal")))
     , Test.test "List with one element" <|
         \_ ->
-            Pine.ListExpression
-                [ Pine.LiteralExpression (Pine.valueFromString "List")
-                , Pine.ListExpression
-                    [ Pine.ListExpression
-                        [ Pine.ListExpression
-                            [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                            , Pine.ListExpression [ Pine.LiteralExpression (Pine.valueFromString "test") ]
+            Pine2024.ListExpression
+                [ Pine2024.LiteralExpression (Pine2024.valueFromString "List")
+                , Pine2024.ListExpression
+                    [ Pine2024.ListExpression
+                        [ Pine2024.ListExpression
+                            [ Pine2024.LiteralExpression (Pine2024.valueFromString "Literal")
+                            , Pine2024.ListExpression [ Pine2024.LiteralExpression (Pine2024.valueFromString "test") ]
                             ]
                         ]
                     ]
                 ]
-                |> Pine.evaluateExpression Pine.emptyEvalEnvironment
-                |> Result.andThen (Pine.parseExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
+                |> Pine2024.evaluateExpression Pine2024.emptyEvalEnvironment
+                |> Result.andThen (Pine2024.parseExpressionFromValue >> Result.mapError Pine2024.DescribePathEnd)
                 |> Expect.equal
                     (Ok
-                        (Pine.ListExpression
-                            [ Pine.LiteralExpression (Pine.valueFromString "test") ]
+                        (Pine2024.ListExpression
+                            [ Pine2024.LiteralExpression (Pine2024.valueFromString "test") ]
                         )
                     )
     , Test.test "Kernel application with empty list" <|
         \_ ->
-            Pine.ListExpression
-                [ Pine.LiteralExpression (Pine.valueFromString "KernelApplication")
-                , Pine.ListExpression
-                    [ Pine.LiteralExpression (Pine.valueFromString "equal")
-                    , Pine.ListExpression
-                        [ Pine.LiteralExpression (Pine.valueFromString "List")
-                        , Pine.ListExpression [ Pine.LiteralExpression (Pine.ListValue []) ]
+            Pine2024.ListExpression
+                [ Pine2024.LiteralExpression (Pine2024.valueFromString "KernelApplication")
+                , Pine2024.ListExpression
+                    [ Pine2024.LiteralExpression (Pine2024.valueFromString "equal")
+                    , Pine2024.ListExpression
+                        [ Pine2024.LiteralExpression (Pine2024.valueFromString "List")
+                        , Pine2024.ListExpression [ Pine2024.LiteralExpression (Pine2024.ListValue []) ]
                         ]
                     ]
                 ]
-                |> Pine.evaluateExpression Pine.emptyEvalEnvironment
-                |> Result.andThen (Pine.parseExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
+                |> Pine2024.evaluateExpression Pine2024.emptyEvalEnvironment
+                |> Result.andThen (Pine2024.parseExpressionFromValue >> Result.mapError Pine2024.DescribePathEnd)
                 |> Expect.equal
                     (Ok
-                        (Pine.KernelApplicationExpression
+                        (Pine2024.KernelApplicationExpression
                             "equal"
-                            (Pine.ListExpression [])
+                            (Pine2024.ListExpression [])
                         )
                     )
     , Test.test "Kernel application concat" <|
         \_ ->
-            Pine.ListExpression
-                [ Pine.LiteralExpression (Pine.valueFromString "KernelApplication")
-                , Pine.ListExpression
-                    [ Pine.LiteralExpression (Pine.valueFromString "concat")
-                    , Pine.ListExpression
-                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                        , Pine.ListExpression [ Pine.EnvironmentExpression ]
+            Pine2024.ListExpression
+                [ Pine2024.LiteralExpression (Pine2024.valueFromString "KernelApplication")
+                , Pine2024.ListExpression
+                    [ Pine2024.LiteralExpression (Pine2024.valueFromString "concat")
+                    , Pine2024.ListExpression
+                        [ Pine2024.LiteralExpression (Pine2024.valueFromString "Literal")
+                        , Pine2024.ListExpression [ Pine2024.EnvironmentExpression ]
                         ]
                     ]
                 ]
-                |> Pine.evaluateExpression
-                    (Pine.evalEnvironmentFromList
-                        [ Pine.valueFromContextExpansionWithName
-                            ( "alfa", Pine.valueFromInt 123 )
+                |> Pine2024.evaluateExpression
+                    (Pine2024.evalEnvironmentFromList
+                        [ Pine2024.valueFromContextExpansionWithName
+                            ( "alfa", Pine2024.valueFromInt 123 )
                         ]
                     )
-                |> Result.andThen (Pine.parseExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
+                |> Result.andThen (Pine2024.parseExpressionFromValue >> Result.mapError Pine2024.DescribePathEnd)
                 |> Expect.equal
                     (Ok
-                        (Pine.KernelApplicationExpression
+                        (Pine2024.KernelApplicationExpression
                             "concat"
-                            (Pine.LiteralExpression
-                                (Pine.ListValue
-                                    [ Pine.valueFromContextExpansionWithName
-                                        ( "alfa", Pine.valueFromInt 123 )
+                            (Pine2024.LiteralExpression
+                                (Pine2024.ListValue
+                                    [ Pine2024.valueFromContextExpansionWithName
+                                        ( "alfa", Pine2024.valueFromInt 123 )
                                     ]
                                 )
                             )
@@ -659,46 +659,46 @@ evolutionStagesToMakeElmFunction =
                     )
     , Test.test "Kernel application concat with context" <|
         \_ ->
-            Pine.ListExpression
-                [ Pine.LiteralExpression (Pine.valueFromString "KernelApplication")
-                , Pine.ListExpression
-                    [ Pine.LiteralExpression (Pine.valueFromString "concat")
-                    , Pine.ListExpression
-                        [ Pine.LiteralExpression (Pine.valueFromString "List")
-                        , Pine.ListExpression
-                            [ Pine.ListExpression
-                                [ Pine.ListExpression
-                                    [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                    , Pine.ListExpression [ Pine.EnvironmentExpression ]
+            Pine2024.ListExpression
+                [ Pine2024.LiteralExpression (Pine2024.valueFromString "KernelApplication")
+                , Pine2024.ListExpression
+                    [ Pine2024.LiteralExpression (Pine2024.valueFromString "concat")
+                    , Pine2024.ListExpression
+                        [ Pine2024.LiteralExpression (Pine2024.valueFromString "List")
+                        , Pine2024.ListExpression
+                            [ Pine2024.ListExpression
+                                [ Pine2024.ListExpression
+                                    [ Pine2024.LiteralExpression (Pine2024.valueFromString "Literal")
+                                    , Pine2024.ListExpression [ Pine2024.EnvironmentExpression ]
                                     ]
-                                , Pine.ListExpression
-                                    [ Pine.LiteralExpression (Pine.valueFromString "Environment")
-                                    , Pine.ListExpression []
+                                , Pine2024.ListExpression
+                                    [ Pine2024.LiteralExpression (Pine2024.valueFromString "Environment")
+                                    , Pine2024.ListExpression []
                                     ]
                                 ]
                             ]
                         ]
                     ]
                 ]
-                |> Pine.evaluateExpression
-                    (Pine.evalEnvironmentFromList
-                        [ Pine.valueFromContextExpansionWithName
-                            ( "beta", Pine.valueFromInt 345 )
+                |> Pine2024.evaluateExpression
+                    (Pine2024.evalEnvironmentFromList
+                        [ Pine2024.valueFromContextExpansionWithName
+                            ( "beta", Pine2024.valueFromInt 345 )
                         ]
                     )
-                |> Result.andThen (Pine.parseExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
+                |> Result.andThen (Pine2024.parseExpressionFromValue >> Result.mapError Pine2024.DescribePathEnd)
                 |> Expect.equal
                     (Ok
-                        (Pine.KernelApplicationExpression
+                        (Pine2024.KernelApplicationExpression
                             "concat"
-                            (Pine.ListExpression
-                                [ Pine.LiteralExpression
-                                    (Pine.ListValue
-                                        [ Pine.valueFromContextExpansionWithName
-                                            ( "beta", Pine.valueFromInt 345 )
+                            (Pine2024.ListExpression
+                                [ Pine2024.LiteralExpression
+                                    (Pine2024.ListValue
+                                        [ Pine2024.valueFromContextExpansionWithName
+                                            ( "beta", Pine2024.valueFromInt 345 )
                                         ]
                                     )
-                                , Pine.EnvironmentExpression
+                                , Pine2024.EnvironmentExpression
                                 ]
                             )
                         )
@@ -711,21 +711,21 @@ encodeDecodeChoiceTypeDeclarationTest : Test.Test
 encodeDecodeChoiceTypeDeclarationTest =
     Test.test "Encode and decode Elm module choice type" <|
         \_ ->
-            ElmCompiler.ElmModuleChoiceType
-                [ ( "Variant_Alfa", ElmCompiler.ElmModuleChoiceTypeTag 0 )
-                , ( "Variant_Beta", ElmCompiler.ElmModuleChoiceTypeTag 1 )
-                , ( "Variant_Gamma", ElmCompiler.ElmModuleChoiceTypeTag 2 )
+            ElmCompiler2024.ElmModuleChoiceType
+                [ ( "Variant_Alfa", ElmCompiler2024.ElmModuleChoiceTypeTag 0 )
+                , ( "Variant_Beta", ElmCompiler2024.ElmModuleChoiceTypeTag 1 )
+                , ( "Variant_Gamma", ElmCompiler2024.ElmModuleChoiceTypeTag 2 )
                 ]
-                |> ElmCompiler.ElmModuleChoiceTypeDeclaration
-                |> ElmCompiler.emitTypeDeclarationValue
-                |> ElmCompiler.parseTypeDeclarationFromValueTagged
+                |> ElmCompiler2024.ElmModuleChoiceTypeDeclaration
+                |> ElmCompiler2024.emitTypeDeclarationValue
+                |> ElmCompiler2024.parseTypeDeclarationFromValueTagged
                 |> Expect.equal
                     (Ok
-                        (ElmCompiler.ElmModuleChoiceTypeDeclaration
-                            (ElmCompiler.ElmModuleChoiceType
-                                [ ( "Variant_Alfa", ElmCompiler.ElmModuleChoiceTypeTag 0 )
-                                , ( "Variant_Beta", ElmCompiler.ElmModuleChoiceTypeTag 1 )
-                                , ( "Variant_Gamma", ElmCompiler.ElmModuleChoiceTypeTag 2 )
+                        (ElmCompiler2024.ElmModuleChoiceTypeDeclaration
+                            (ElmCompiler2024.ElmModuleChoiceType
+                                [ ( "Variant_Alfa", ElmCompiler2024.ElmModuleChoiceTypeTag 0 )
+                                , ( "Variant_Beta", ElmCompiler2024.ElmModuleChoiceTypeTag 1 )
+                                , ( "Variant_Gamma", ElmCompiler2024.ElmModuleChoiceTypeTag 2 )
                                 ]
                             )
                         )
@@ -738,29 +738,29 @@ testCompileRecordAccessPineExpression =
         \_ ->
             let
                 recordValue =
-                    Pine.ListValue
-                        [ ElmCompiler.elmRecordTypeTagNameAsValue
-                        , Pine.ListValue
-                            [ Pine.ListValue
-                                [ Pine.ListValue
-                                    [ Pine.valueFromString "alfa"
-                                    , Pine.valueFromInt 123
+                    Pine2024.ListValue
+                        [ ElmCompiler2024.elmRecordTypeTagNameAsValue
+                        , Pine2024.ListValue
+                            [ Pine2024.ListValue
+                                [ Pine2024.ListValue
+                                    [ Pine2024.valueFromString "alfa"
+                                    , Pine2024.valueFromInt 123
                                     ]
                                 ]
                             ]
                         ]
             in
-            Pine.ParseAndEvalExpression
-                (Pine.LiteralExpression ElmCompiler.pineFunctionForRecordAccessAsValue)
-                (Pine.ListExpression
-                    [ Pine.LiteralExpression recordValue
-                    , Pine.LiteralExpression (Pine.valueFromString "alfa")
+            Pine2024.ParseAndEvalExpression
+                (Pine2024.LiteralExpression ElmCompiler2024.pineFunctionForRecordAccessAsValue)
+                (Pine2024.ListExpression
+                    [ Pine2024.LiteralExpression recordValue
+                    , Pine2024.LiteralExpression (Pine2024.valueFromString "alfa")
                     ]
                 )
-                |> Pine.evaluateExpression Pine.emptyEvalEnvironment
-                |> Result.mapError Pine.displayStringFromPineError
-                |> Result.andThen ElmInteractive.pineValueAsElmValue
-                |> Expect.equal (Ok (ElmInteractive.ElmInteger (BigInt.fromInt 123)))
+                |> Pine2024.evaluateExpression Pine2024.emptyEvalEnvironment
+                |> Result.mapError Pine2024.displayStringFromPineError
+                |> Result.andThen ElmInteractive2024.pineValueAsElmValue
+                |> Expect.equal (Ok (ElmInteractive2024.ElmInteger (BigInt.fromInt 123)))
 
 
 testCompileRecordUpdatePineExpression : Test.Test
@@ -770,37 +770,37 @@ testCompileRecordUpdatePineExpression =
             \_ ->
                 let
                     recordValue =
-                        Pine.ListValue
-                            [ ElmCompiler.elmRecordTypeTagNameAsValue
-                            , Pine.ListValue
-                                [ Pine.ListValue
-                                    [ Pine.ListValue
-                                        [ Pine.valueFromString "alfa"
-                                        , Pine.valueFromInt 123
+                        Pine2024.ListValue
+                            [ ElmCompiler2024.elmRecordTypeTagNameAsValue
+                            , Pine2024.ListValue
+                                [ Pine2024.ListValue
+                                    [ Pine2024.ListValue
+                                        [ Pine2024.valueFromString "alfa"
+                                        , Pine2024.valueFromInt 123
                                         ]
                                     ]
                                 ]
                             ]
                 in
-                Pine.ParseAndEvalExpression
-                    (Pine.LiteralExpression ElmCompiler.pineFunctionForRecordUpdateAsValue)
-                    (Pine.ListExpression
-                        [ Pine.LiteralExpression recordValue
-                        , Pine.ListExpression
-                            [ Pine.ListExpression
-                                [ Pine.LiteralExpression (Pine.valueFromString "alfa")
-                                , Pine.LiteralExpression (Pine.valueFromInt 456)
+                Pine2024.ParseAndEvalExpression
+                    (Pine2024.LiteralExpression ElmCompiler2024.pineFunctionForRecordUpdateAsValue)
+                    (Pine2024.ListExpression
+                        [ Pine2024.LiteralExpression recordValue
+                        , Pine2024.ListExpression
+                            [ Pine2024.ListExpression
+                                [ Pine2024.LiteralExpression (Pine2024.valueFromString "alfa")
+                                , Pine2024.LiteralExpression (Pine2024.valueFromInt 456)
                                 ]
                             ]
                         ]
                     )
-                    |> Pine.evaluateExpression Pine.emptyEvalEnvironment
-                    |> Result.mapError Pine.displayStringFromPineError
-                    |> Result.andThen ElmInteractive.pineValueAsElmValue
+                    |> Pine2024.evaluateExpression Pine2024.emptyEvalEnvironment
+                    |> Result.mapError Pine2024.displayStringFromPineError
+                    |> Result.andThen ElmInteractive2024.pineValueAsElmValue
                     |> Expect.equal
                         (Ok
-                            (ElmInteractive.ElmRecord
-                                [ ( "alfa", ElmInteractive.ElmInteger (BigInt.fromInt 456) )
+                            (ElmInteractive2024.ElmRecord
+                                [ ( "alfa", ElmInteractive2024.ElmInteger (BigInt.fromInt 456) )
                                 ]
                             )
                         )
@@ -808,42 +808,42 @@ testCompileRecordUpdatePineExpression =
             \_ ->
                 let
                     recordValue =
-                        Pine.ListValue
-                            [ ElmCompiler.elmRecordTypeTagNameAsValue
-                            , Pine.ListValue
-                                [ Pine.ListValue
-                                    [ Pine.ListValue
-                                        [ Pine.valueFromString "alfa"
-                                        , Pine.valueFromInt 11
+                        Pine2024.ListValue
+                            [ ElmCompiler2024.elmRecordTypeTagNameAsValue
+                            , Pine2024.ListValue
+                                [ Pine2024.ListValue
+                                    [ Pine2024.ListValue
+                                        [ Pine2024.valueFromString "alfa"
+                                        , Pine2024.valueFromInt 11
                                         ]
-                                    , Pine.ListValue
-                                        [ Pine.valueFromString "beta"
-                                        , Pine.valueFromInt 13
+                                    , Pine2024.ListValue
+                                        [ Pine2024.valueFromString "beta"
+                                        , Pine2024.valueFromInt 13
                                         ]
                                     ]
                                 ]
                             ]
                 in
-                Pine.ParseAndEvalExpression
-                    (Pine.LiteralExpression ElmCompiler.pineFunctionForRecordUpdateAsValue)
-                    (Pine.ListExpression
-                        [ Pine.LiteralExpression recordValue
-                        , Pine.ListExpression
-                            [ Pine.ListExpression
-                                [ Pine.LiteralExpression (Pine.valueFromString "alfa")
-                                , Pine.LiteralExpression (Pine.valueFromInt 21)
+                Pine2024.ParseAndEvalExpression
+                    (Pine2024.LiteralExpression ElmCompiler2024.pineFunctionForRecordUpdateAsValue)
+                    (Pine2024.ListExpression
+                        [ Pine2024.LiteralExpression recordValue
+                        , Pine2024.ListExpression
+                            [ Pine2024.ListExpression
+                                [ Pine2024.LiteralExpression (Pine2024.valueFromString "alfa")
+                                , Pine2024.LiteralExpression (Pine2024.valueFromInt 21)
                                 ]
                             ]
                         ]
                     )
-                    |> Pine.evaluateExpression Pine.emptyEvalEnvironment
-                    |> Result.mapError Pine.displayStringFromPineError
-                    |> Result.andThen ElmInteractive.pineValueAsElmValue
+                    |> Pine2024.evaluateExpression Pine2024.emptyEvalEnvironment
+                    |> Result.mapError Pine2024.displayStringFromPineError
+                    |> Result.andThen ElmInteractive2024.pineValueAsElmValue
                     |> Expect.equal
                         (Ok
-                            (ElmInteractive.ElmRecord
-                                [ ( "alfa", ElmInteractive.ElmInteger (BigInt.fromInt 21) )
-                                , ( "beta", ElmInteractive.ElmInteger (BigInt.fromInt 13) )
+                            (ElmInteractive2024.ElmRecord
+                                [ ( "alfa", ElmInteractive2024.ElmInteger (BigInt.fromInt 21) )
+                                , ( "beta", ElmInteractive2024.ElmInteger (BigInt.fromInt 13) )
                                 ]
                             )
                         )
@@ -851,42 +851,42 @@ testCompileRecordUpdatePineExpression =
             \_ ->
                 let
                     recordValue =
-                        Pine.ListValue
-                            [ ElmCompiler.elmRecordTypeTagNameAsValue
-                            , Pine.ListValue
-                                [ Pine.ListValue
-                                    [ Pine.ListValue
-                                        [ Pine.valueFromString "alfa"
-                                        , Pine.valueFromInt 11
+                        Pine2024.ListValue
+                            [ ElmCompiler2024.elmRecordTypeTagNameAsValue
+                            , Pine2024.ListValue
+                                [ Pine2024.ListValue
+                                    [ Pine2024.ListValue
+                                        [ Pine2024.valueFromString "alfa"
+                                        , Pine2024.valueFromInt 11
                                         ]
-                                    , Pine.ListValue
-                                        [ Pine.valueFromString "beta"
-                                        , Pine.valueFromInt 13
+                                    , Pine2024.ListValue
+                                        [ Pine2024.valueFromString "beta"
+                                        , Pine2024.valueFromInt 13
                                         ]
                                     ]
                                 ]
                             ]
                 in
-                Pine.ParseAndEvalExpression
-                    (Pine.LiteralExpression ElmCompiler.pineFunctionForRecordUpdateAsValue)
-                    (Pine.ListExpression
-                        [ Pine.LiteralExpression recordValue
-                        , Pine.ListExpression
-                            [ Pine.ListExpression
-                                [ Pine.LiteralExpression (Pine.valueFromString "beta")
-                                , Pine.LiteralExpression (Pine.valueFromInt 31)
+                Pine2024.ParseAndEvalExpression
+                    (Pine2024.LiteralExpression ElmCompiler2024.pineFunctionForRecordUpdateAsValue)
+                    (Pine2024.ListExpression
+                        [ Pine2024.LiteralExpression recordValue
+                        , Pine2024.ListExpression
+                            [ Pine2024.ListExpression
+                                [ Pine2024.LiteralExpression (Pine2024.valueFromString "beta")
+                                , Pine2024.LiteralExpression (Pine2024.valueFromInt 31)
                                 ]
                             ]
                         ]
                     )
-                    |> Pine.evaluateExpression Pine.emptyEvalEnvironment
-                    |> Result.mapError Pine.displayStringFromPineError
-                    |> Result.andThen ElmInteractive.pineValueAsElmValue
+                    |> Pine2024.evaluateExpression Pine2024.emptyEvalEnvironment
+                    |> Result.mapError Pine2024.displayStringFromPineError
+                    |> Result.andThen ElmInteractive2024.pineValueAsElmValue
                     |> Expect.equal
                         (Ok
-                            (ElmInteractive.ElmRecord
-                                [ ( "alfa", ElmInteractive.ElmInteger (BigInt.fromInt 11) )
-                                , ( "beta", ElmInteractive.ElmInteger (BigInt.fromInt 31) )
+                            (ElmInteractive2024.ElmRecord
+                                [ ( "alfa", ElmInteractive2024.ElmInteger (BigInt.fromInt 11) )
+                                , ( "beta", ElmInteractive2024.ElmInteger (BigInt.fromInt 31) )
                                 ]
                             )
                         )

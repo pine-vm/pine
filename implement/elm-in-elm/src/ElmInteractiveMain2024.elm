@@ -1,20 +1,20 @@
-module ElmInteractiveMain exposing (..)
+module ElmInteractiveMain2024 exposing (..)
 
 import Base64
 import Bytes
 import Dict
 import Elm.Syntax.File
-import ElmCompiler
-import ElmInteractive
+import ElmCompiler2024
+import ElmInteractive2024
 import ElmInteractiveCoreModules
 import ElmInteractiveKernelModules
-import ElmInteractiveParser
-import ElmInteractiveSubmissionParser
-import EncodeElmSyntaxAsPineValue
+import ElmInteractiveParser2024
+import ElmInteractiveSubmissionParser2024
+import EncodeElmSyntaxAsPineValue2024
 import Json.Decode
 import Json.Encode
 import Parser
-import Pine
+import Pine2024
 import Platform
 
 
@@ -26,7 +26,7 @@ type alias EvaluateSubmissionArguments =
 
 
 type alias CompileElmInteractiveEnvironmentRequest =
-    { environmentBefore : Pine.Value
+    { environmentBefore : Pine2024.Value
     , modulesTexts : List String
     }
 
@@ -42,22 +42,22 @@ parseElmModuleTextToPineValue moduleTextJson =
             moduleTextJson
                 |> Json.Decode.decodeString Json.Decode.string
                 |> Result.mapError Json.Decode.errorToString
-                |> Result.andThen ElmInteractiveParser.parseElmModuleTextToPineValue
+                |> Result.andThen ElmInteractiveParser2024.parseElmModuleTextToPineValue
     in
     result
-        |> json_encode_Result Json.Encode.string (ElmInteractive.json_encode_pineValue Dict.empty)
+        |> json_encode_Result Json.Encode.string (ElmInteractive2024.json_encode_pineValue Dict.empty)
         |> Json.Encode.encode 0
 
 
 parseElmModuleText : String -> Result (List Parser.DeadEnd) Elm.Syntax.File.File
 parseElmModuleText =
-    ElmInteractiveSubmissionParser.parseElmModuleText
+    ElmInteractiveSubmissionParser2024.parseElmModuleText
 
 
 parseInteractiveSubmissionToPineValue : String -> String
 parseInteractiveSubmissionToPineValue submission =
-    ElmInteractiveSubmissionParser.parseInteractiveSubmissionFromString submission
-        |> Result.andThen EncodeElmSyntaxAsPineValue.encodeInteractiveSubmissionAsPineValue
+    ElmInteractiveSubmissionParser2024.parseInteractiveSubmissionFromString submission
+        |> Result.andThen EncodeElmSyntaxAsPineValue2024.encodeInteractiveSubmissionAsPineValue
         |> Result.map (json_encode_pineValue Dict.empty)
         |> json_encode_Result Json.Encode.string identity
         |> Json.Encode.encode 0
@@ -78,9 +78,9 @@ evaluateSubmissionInInteractive argumentsJson =
                 Json.Encode.object
                     [ ( "DecodedArguments"
                       , case
-                            ElmInteractiveParser.submissionInInteractive
-                                (ElmInteractive.CustomModulesContext
-                                    { includeCoreModules = Just ElmInteractive.CoreAndOtherKernelModules
+                            ElmInteractiveParser2024.submissionInInteractive
+                                (ElmInteractive2024.CustomModulesContext
+                                    { includeCoreModules = Just ElmInteractive2024.CoreAndOtherKernelModules
                                     , modulesTexts = args.modulesTexts
                                     }
                                 )
@@ -114,7 +114,7 @@ compileInteractiveEnvironment =
         >> Result.mapError (Json.Decode.errorToString >> (++) "Failed to decode arguments: ")
         >> Result.andThen
             (\( environmentDict, { modulesTexts, environmentBefore } ) ->
-                ElmInteractiveParser.expandElmInteractiveEnvironmentWithModuleTexts
+                ElmInteractiveParser2024.expandElmInteractiveEnvironmentWithModuleTexts
                     modulesTexts
                     |> Result.andThen
                         (\( _, addModules ) -> addModules environmentBefore)
@@ -132,8 +132,8 @@ compileInteractiveSubmission requestJson =
         |> Result.mapError (Json.Decode.errorToString >> (++) "Failed to decode request: ")
         |> Result.andThen
             (\( ( environment, environmentDict ), submission ) ->
-                ElmInteractiveParser.compileInteractiveSubmission environment submission
-                    |> Result.map Pine.encodeExpressionAsValue
+                ElmInteractiveParser2024.compileInteractiveSubmission environment submission
+                    |> Result.map Pine2024.encodeExpressionAsValue
                     |> Result.map (json_encode_pineValue environmentDict)
             )
         |> json_encode_Result Json.Encode.string identity
@@ -145,12 +145,12 @@ submissionResponseFromResponsePineValue response =
     response
         |> Json.Decode.decodeString json_decode_pineValue
         |> Result.mapError Json.Decode.errorToString
-        |> Result.andThen (Tuple.first >> ElmInteractive.submissionResponseFromResponsePineValue)
+        |> Result.andThen (Tuple.first >> ElmInteractive2024.submissionResponseFromResponsePineValue)
         |> json_encode_Result Json.Encode.string jsonEncodeSubmissionResponse
         |> Json.Encode.encode 0
 
 
-jsonEncodeSubmissionResponse : ElmInteractive.SubmissionResponse -> Json.Encode.Value
+jsonEncodeSubmissionResponse : ElmInteractive2024.SubmissionResponse -> Json.Encode.Value
 jsonEncodeSubmissionResponse submissionResponse =
     Json.Encode.object
         [ ( "displayText"
@@ -169,7 +169,7 @@ jsonDecodeEvaluateSubmissionArguments =
 
 json_Decode_compileInteractiveEnvironment :
     Json.Decode.Decoder
-        ( Dict.Dict String Pine.Value
+        ( Dict.Dict String Pine2024.Value
         , CompileElmInteractiveEnvironmentRequest
         )
 json_Decode_compileInteractiveEnvironment =
@@ -181,7 +181,7 @@ json_Decode_compileInteractiveEnvironment =
         (Json.Decode.field "modulesTexts" (Json.Decode.list Json.Decode.string))
 
 
-json_Decode_compileInteractiveSubmission : Json.Decode.Decoder ( ( Pine.Value, Dict.Dict String Pine.Value ), String )
+json_Decode_compileInteractiveSubmission : Json.Decode.Decoder ( ( Pine2024.Value, Dict.Dict String Pine2024.Value ), String )
 json_Decode_compileInteractiveSubmission =
     Json.Decode.map2
         (\environment submission -> ( environment, submission ))
@@ -189,14 +189,14 @@ json_Decode_compileInteractiveSubmission =
         (Json.Decode.field "submission" Json.Decode.string)
 
 
-json_encode_pineValue : Dict.Dict String Pine.Value -> Pine.Value -> Json.Encode.Value
+json_encode_pineValue : Dict.Dict String Pine2024.Value -> Pine2024.Value -> Json.Encode.Value
 json_encode_pineValue =
-    ElmInteractive.json_encode_pineValue
+    ElmInteractive2024.json_encode_pineValue
 
 
-json_decode_pineValue : Json.Decode.Decoder ( Pine.Value, Dict.Dict String Pine.Value )
+json_decode_pineValue : Json.Decode.Decoder ( Pine2024.Value, Dict.Dict String Pine2024.Value )
 json_decode_pineValue =
-    ElmInteractive.json_decode_pineValue
+    ElmInteractive2024.json_decode_pineValue
 
 
 {-| Support function-level dead code elimination (<https://elm-lang.org/blog/small-assets-without-the-headache>)
@@ -214,7 +214,7 @@ main =
             , f = getDefaultElmCoreModulesTexts
             , g = parseElmModuleTextToPineValue
             , h = parseInteractiveSubmissionToPineValue
-            , i = ElmCompiler.compileAndEvalParsedInteractiveSubmission
+            , i = ElmCompiler2024.compileAndEvalParsedInteractiveSubmission
             }
                 |> always ( (), Cmd.none )
                 |> always

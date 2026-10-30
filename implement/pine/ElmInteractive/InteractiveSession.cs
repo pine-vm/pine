@@ -19,7 +19,7 @@ public interface IInteractiveSession : IDisposable
         engineType switch
         {
             ElmEngineType.Pine pineConfig =>
-            new InteractiveSessionPine(
+            new InteractiveSessionPine2024(
                 compilerSourceFiles: compilerSourceFiles,
                 appCodeTree: appCodeTree,
                 overrideSkipLowering: null,

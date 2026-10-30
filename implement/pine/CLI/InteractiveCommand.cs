@@ -83,7 +83,7 @@ public static class InteractiveCommand
     private static (Option<string?> elmCompilerOption, Func<IConsole, FileTree> loadElmCompilerFromOption)
         CreateElmCompilerOption()
     {
-        var defaultCompiler = ElmCompilerInElm.CompilerSourceFilesDefault.Value;
+        var defaultCompiler = ElmCompilerInElm2024.CompilerSourceFilesDefault.Value;
 
         var elmCompilerOption = new Option<string?>("--elm-compiler");
 
@@ -519,7 +519,7 @@ public static class InteractiveCommand
                 {
                     console.WriteLine("Got option to save session state to " + saveToFile + "...");
 
-                    if (interactiveSession is not InteractiveSessionPine pineSession)
+                    if (interactiveSession is not InteractiveSessionPine2024 pineSession)
                     {
                         console.WriteLine(
                             "Cannot save session state for this engine type: " + interactiveSession.GetType().Name);
@@ -608,7 +608,7 @@ public static class InteractiveCommand
     private static (Option<string?> elmCompilerOption, Func<ParseResult, IConsole, FileTree> loadElmCompilerFromOption)
         CreateElmCompilerOption(Command cmd)
     {
-        var defaultCompiler = ElmCompilerInElm.CompilerSourceFilesDefault.Value;
+        var defaultCompiler = ElmCompilerInElm2024.CompilerSourceFilesDefault.Value;
 
         var elmCompilerOption =
             new Option<string?>("--elm-compiler")
@@ -632,7 +632,7 @@ public static class InteractiveCommand
                     .tree;
             }
 
-            return ElmCompilerInElm.CompilerSourceFilesDefault.Value;
+            return ElmCompilerInElm2024.CompilerSourceFilesDefault.Value;
         }
 
         return (elmCompilerOption, parseElmCompilerFromOption);

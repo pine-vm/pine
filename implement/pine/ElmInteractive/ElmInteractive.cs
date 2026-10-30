@@ -478,7 +478,7 @@ public class ElmInteractive
         var treeWithKernelModules =
             mergeKernelModules
             ?
-            InteractiveSessionPine.MergeDefaultElmCoreAndKernelModules(treeFiltered)
+            InteractiveSessionPine2024.MergeDefaultElmCoreAndKernelModules(treeFiltered)
             :
             treeFiltered;
 

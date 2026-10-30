@@ -1,4 +1,4 @@
-module ElmInteractive exposing (..)
+module ElmInteractive2024 exposing (..)
 
 import BigInt
 import Common
@@ -6,7 +6,7 @@ import Dict
 import Elm.Syntax.Declaration
 import Elm.Syntax.Expression
 import Elm.Syntax.File
-import ElmCompiler
+import ElmCompiler2024
     exposing
         ( ProjectParsedElmFile
         , elmBytesTypeTagNameAsValue
@@ -15,10 +15,10 @@ import ElmCompiler
         , elmStringTypeTagNameAsValue
         , stringStartsWithUpper
         )
-import FirCompiler exposing (Expression(..))
+import FirCompiler2024 exposing (Expression(..))
 import Json.Decode
 import Json.Encode
-import Pine
+import Pine2024
 import Set
 
 
@@ -53,7 +53,7 @@ type ElmValue
     | ElmInternal String
 
 
-submissionResponseFromResponsePineValue : Pine.Value -> Result String SubmissionResponse
+submissionResponseFromResponsePineValue : Pine2024.Value -> Result String SubmissionResponse
 submissionResponseFromResponsePineValue responseValue =
     case pineValueAsElmValue responseValue of
         Err error ->
@@ -261,17 +261,17 @@ elmFloatToFloat numerator denominator =
                     Just (toFloat numeratorInt / toFloat denominatorInt)
 
 
-pineValueAsElmValue : Pine.Value -> Result String ElmValue
+pineValueAsElmValue : Pine2024.Value -> Result String ElmValue
 pineValueAsElmValue pineValue =
-    if pineValue == Pine.trueValue then
+    if pineValue == Pine2024.trueValue then
         Ok (ElmTag "True" [])
 
-    else if pineValue == Pine.falseValue then
+    else if pineValue == Pine2024.falseValue then
         Ok (ElmTag "False" [])
 
     else
         case pineValue of
-            Pine.BlobValue blobValue ->
+            Pine2024.BlobValue blobValue ->
                 case blobValue of
                     [] ->
                         Ok (ElmInternal "empty-blob")
@@ -279,11 +279,11 @@ pineValueAsElmValue pineValue =
                     firstByte :: _ ->
                         if firstByte == 4 || firstByte == 2 then
                             blobValue
-                                |> Pine.bigIntFromBlobValue
+                                |> Pine2024.bigIntFromBlobValue
                                 |> Result.map ElmInteger
 
                         else if 10 < List.length blobValue then
-                            case Pine.parseExpressionFromValue pineValue of
+                            case Pine2024.parseExpressionFromValue pineValue of
                                 Ok _ ->
                                     Ok (ElmInternal "expression")
 
@@ -291,12 +291,12 @@ pineValueAsElmValue pineValue =
                                     Ok (ElmInternal "___error_skipped_large_blob___")
 
                         else
-                            Pine.intFromUnsignedBlobValue blobValue 0
+                            Pine2024.intFromUnsignedBlobValue blobValue 0
                                 |> Char.fromCode
                                 |> ElmChar
                                 |> Ok
 
-            Pine.ListValue list ->
+            Pine2024.ListValue list ->
                 let
                     genericList () =
                         case
@@ -309,10 +309,10 @@ pineValueAsElmValue pineValue =
                                 Ok (ElmList listValues)
                 in
                 case list of
-                    [ tagValue, Pine.ListValue tagArguments ] ->
+                    [ tagValue, Pine2024.ListValue tagArguments ] ->
                         if tagValue == elmBytesTypeTagNameAsValue then
                             case tagArguments of
-                                [ Pine.BlobValue blob ] ->
+                                [ Pine2024.BlobValue blob ] ->
                                     Ok (ElmBytes blob)
 
                                 _ ->
@@ -321,7 +321,7 @@ pineValueAsElmValue pineValue =
                         else if tagValue == elmStringTypeTagNameAsValue then
                             case tagArguments of
                                 [ stringValue ] ->
-                                    case Pine.stringFromValue stringValue of
+                                    case Pine2024.stringFromValue stringValue of
                                         Err error ->
                                             Err ("Failed to parse value under String tag: " ++ error)
 
@@ -346,13 +346,13 @@ pineValueAsElmValue pineValue =
 
                         else if tagValue == elmFloatTypeTagNameAsValue then
                             case tagArguments of
-                                [ Pine.BlobValue numeratorValue, Pine.BlobValue denominatorValue ] ->
-                                    case Pine.bigIntFromBlobValue numeratorValue of
+                                [ Pine2024.BlobValue numeratorValue, Pine2024.BlobValue denominatorValue ] ->
+                                    case Pine2024.bigIntFromBlobValue numeratorValue of
                                         Err error ->
                                             Err ("Failed to parse numerator: " ++ error)
 
                                         Ok numerator ->
-                                            case Pine.bigIntFromBlobValue denominatorValue of
+                                            case Pine2024.bigIntFromBlobValue denominatorValue of
                                                 Err error ->
                                                     Err ("Failed to parse denominator: " ++ error)
 
@@ -363,7 +363,7 @@ pineValueAsElmValue pineValue =
                                     Err "Unexpected shape under Float tag"
 
                         else
-                            case Pine.stringFromValue tagValue of
+                            case Pine2024.stringFromValue tagValue of
                                 Err _ ->
                                     genericList ()
 
@@ -385,16 +385,16 @@ pineValueAsElmValue pineValue =
                         genericList ()
 
 
-pineValueAsElmRecord : Pine.Value -> Result String ElmValue
+pineValueAsElmRecord : Pine2024.Value -> Result String ElmValue
 pineValueAsElmRecord value =
     let
-        tryMapToRecordField : Pine.Value -> Result String ( String, ElmValue )
+        tryMapToRecordField : Pine2024.Value -> Result String ( String, ElmValue )
         tryMapToRecordField possiblyRecordField =
             case possiblyRecordField of
-                Pine.ListValue fieldListItems ->
+                Pine2024.ListValue fieldListItems ->
                     case fieldListItems of
                         [ fieldNameValue, fieldValue ] ->
-                            case Pine.stringFromValue fieldNameValue of
+                            case Pine2024.stringFromValue fieldNameValue of
                                 Err error ->
                                     Err ("Failed to parse field name: " ++ error)
 
@@ -422,7 +422,7 @@ pineValueAsElmRecord value =
                     Err "Not a list."
     in
     case value of
-        Pine.ListValue recordFieldList ->
+        Pine2024.ListValue recordFieldList ->
             case
                 recordFieldList
                     |> Common.resultListMapCombine tryMapToRecordField
@@ -581,14 +581,14 @@ parsedElmFileRecordFromSeparatelyParsedSyntax ( fileText, parsedModule ) =
     }
 
 
-json_encode_pineValue : Dict.Dict String Pine.Value -> Pine.Value -> Json.Encode.Value
+json_encode_pineValue : Dict.Dict String Pine2024.Value -> Pine2024.Value -> Json.Encode.Value
 json_encode_pineValue dictionary value =
     let
         dicts =
             Dict.foldl
                 (\entryName entryValue aggregate ->
                     case entryValue of
-                        Pine.BlobValue blob ->
+                        Pine2024.BlobValue blob ->
                             if List.length blob < 3 then
                                 aggregate
 
@@ -597,7 +597,7 @@ json_encode_pineValue dictionary value =
                                     | blobDict = Dict.insert blob entryName aggregate.blobDict
                                 }
 
-                        Pine.ListValue list ->
+                        Pine2024.ListValue list ->
                             if list == [] then
                                 aggregate
 
@@ -625,13 +625,13 @@ json_encode_pineValue dictionary value =
 
 json_encode_pineValue_Internal :
     { blobDict : Dict.Dict (List Int) String
-    , listDict : Dict.Dict Int (List ( List Pine.Value, String ))
+    , listDict : Dict.Dict Int (List ( List Pine2024.Value, String ))
     }
-    -> Pine.Value
+    -> Pine2024.Value
     -> Json.Encode.Value
 json_encode_pineValue_Internal dictionary value =
     case value of
-        Pine.ListValue list ->
+        Pine2024.ListValue list ->
             let
                 defaultListEncoding () =
                     if list == [] then
@@ -664,7 +664,7 @@ json_encode_pineValue_Internal dictionary value =
                                       )
                                     ]
 
-        Pine.BlobValue blob ->
+        Pine2024.BlobValue blob ->
             let
                 defaultBlobEncoding () =
                     Json.Encode.object
@@ -782,14 +782,14 @@ jsonEncodeEmptyBlob =
         ]
 
 
-json_decode_pineValue : Json.Decode.Decoder ( Pine.Value, Dict.Dict String Pine.Value )
+json_decode_pineValue : Json.Decode.Decoder ( Pine2024.Value, Dict.Dict String Pine2024.Value )
 json_decode_pineValue =
     json_decode_pineValueWithDictionary Dict.empty
 
 
 json_decode_pineValueWithDictionary :
-    Dict.Dict String Pine.Value
-    -> Json.Decode.Decoder ( Pine.Value, Dict.Dict String Pine.Value )
+    Dict.Dict String Pine2024.Value
+    -> Json.Decode.Decoder ( Pine2024.Value, Dict.Dict String Pine2024.Value )
 json_decode_pineValueWithDictionary parentDictionary =
     json_decode_optionalNullableField "Dictionary" json_decode_pineValueDictionary
         |> Json.Decode.andThen
@@ -822,7 +822,7 @@ json_decode_pineValueDictionary =
         |> Json.Decode.map Dict.fromList
 
 
-resolveDictionaryToLiteralValues : Dict.Dict String PineValueSupportingReference -> Result String (Dict.Dict String Pine.Value)
+resolveDictionaryToLiteralValues : Dict.Dict String PineValueSupportingReference -> Result String (Dict.Dict String Pine2024.Value)
 resolveDictionaryToLiteralValues dictionary =
     dictionary
         |> Dict.toList
@@ -848,7 +848,7 @@ resolvePineValueReferenceToLiteralRecursive :
     Set.Set String
     -> Dict.Dict String PineValueSupportingReference
     -> PineValueSupportingReference
-    -> Result ( List String, String ) Pine.Value
+    -> Result ( List String, String ) Pine2024.Value
 resolvePineValueReferenceToLiteralRecursive stack dictionary valueSupportingRef =
     case valueSupportingRef of
         LiteralValue literal ->
@@ -858,7 +858,7 @@ resolvePineValueReferenceToLiteralRecursive stack dictionary valueSupportingRef 
             Common.resultListMapCombine
                 (resolvePineValueReferenceToLiteralRecursive stack dictionary)
                 list
-                |> Result.map Pine.ListValue
+                |> Result.map Pine2024.ListValue
 
         ReferenceValue reference ->
             if Set.member reference stack then
@@ -904,7 +904,7 @@ json_decode_pineValueDictionaryEntry =
         (Json.Decode.field "value" json_decode_pineValueSupportingReference)
 
 
-json_decode_pineValueApplyingDictionary : Dict.Dict String Pine.Value -> Json.Decode.Decoder Pine.Value
+json_decode_pineValueApplyingDictionary : Dict.Dict String Pine2024.Value -> Json.Decode.Decoder Pine2024.Value
 json_decode_pineValueApplyingDictionary dictionary =
     json_decode_pineValueGeneric
         { decodeListElement =
@@ -913,7 +913,7 @@ json_decode_pineValueApplyingDictionary dictionary =
                     Json.Decode.map Tuple.first
                         (json_decode_pineValueWithDictionary dictionary)
                 )
-        , consList = Pine.ListValue
+        , consList = Pine2024.ListValue
         , decodeReference =
             \reference ->
                 case Dict.get reference dictionary of
@@ -938,7 +938,7 @@ json_decode_pineValueSupportingReference =
 
 type PineValueSupportingReference
     = ListSupportingReference (List PineValueSupportingReference)
-    | LiteralValue Pine.Value
+    | LiteralValue Pine2024.Value
     | ReferenceValue String
 
 
@@ -946,7 +946,7 @@ type alias DecodePineValueConfig value listElement =
     { decodeListElement : Json.Decode.Decoder listElement
     , consList : List listElement -> value
     , decodeReference : String -> Json.Decode.Decoder value
-    , consLiteral : Pine.Value -> value
+    , consLiteral : Pine2024.Value -> value
     }
 
 
@@ -956,11 +956,11 @@ json_decode_pineValueGeneric config =
         [ Json.Decode.field "List"
             (Json.Decode.list config.decodeListElement |> Json.Decode.map config.consList)
         , Json.Decode.field "BlobAsInt" Json.Decode.int
-            |> Json.Decode.map (Pine.valueFromInt >> config.consLiteral)
+            |> Json.Decode.map (Pine2024.valueFromInt >> config.consLiteral)
         , Json.Decode.field "ListAsString" Json.Decode.string
-            |> Json.Decode.map (Pine.valueFromString >> config.consLiteral)
+            |> Json.Decode.map (Pine2024.valueFromString >> config.consLiteral)
         , Json.Decode.field "Blob" (Json.Decode.list Json.Decode.int)
-            |> Json.Decode.map (Pine.BlobValue >> config.consLiteral)
+            |> Json.Decode.map (Pine2024.BlobValue >> config.consLiteral)
         , Json.Decode.field "Reference"
             (Json.Decode.string
                 |> Json.Decode.andThen config.decodeReference
@@ -968,16 +968,16 @@ json_decode_pineValueGeneric config =
         ]
 
 
-pineListValueFastHash : List Pine.Value -> Int
+pineListValueFastHash : List Pine2024.Value -> Int
 pineListValueFastHash list =
     let
-        calculateEntryHash : Pine.Value -> Int
+        calculateEntryHash : Pine2024.Value -> Int
         calculateEntryHash entry =
             case entry of
-                Pine.BlobValue blob ->
+                Pine2024.BlobValue blob ->
                     71 * List.length blob
 
-                Pine.ListValue innerList ->
+                Pine2024.ListValue innerList ->
                     7919 * List.length innerList
     in
     case list of
@@ -1019,7 +1019,7 @@ expressionAsJson expression =
     (case expression of
         LiteralExpression literal ->
             [ ( "Literal"
-              , case Pine.stringFromValue literal of
+              , case Pine2024.stringFromValue literal of
                     Err _ ->
                         Json.Encode.object []
 

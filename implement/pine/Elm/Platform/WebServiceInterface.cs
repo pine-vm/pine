@@ -882,7 +882,7 @@ type alias LoadDependencyStruct =
 
     public static Result<string, WebServiceEventResponse> ParseWebServiceConfigInit(
         PineValue pineValue,
-        ElmCompilerCache elmCompilerCache,
+        ElmCompilerCache2024 elmCompilerCache,
         PineVMParseCache parseCache)
     {
         return ParseWebServiceEventResponse(pineValue, elmCompilerCache, parseCache);
@@ -890,7 +890,7 @@ type alias LoadDependencyStruct =
 
     public static Result<string, WebServiceEventResponse> ParseWebServiceEventResponse(
         PineValue pineValue,
-        ElmCompilerCache elmCompilerCache,
+        ElmCompilerCache2024 elmCompilerCache,
         PineVMParseCache parseCache)
     {
         if (pineValue is not PineValue.ListValue listValue)
@@ -947,7 +947,7 @@ type alias LoadDependencyStruct =
 
     public static Result<string, Command> ParseCommand(
         PineValue pineValue,
-        ElmCompilerCache elmCompilerCache,
+        ElmCompilerCache2024 elmCompilerCache,
         PineVMParseCache parseCache)
     {
         var asTagResult = ElmValueEncoding.ParseAsTag(pineValue);
@@ -1193,7 +1193,7 @@ type alias LoadDependencyStruct =
     public static Result<string, CreateVolatileProcessNativeCommandStruct>
         ParseCreateVolatileProcessNativeCommandStruct(
         PineValue pineValue,
-        ElmCompilerCache elmCompilerCache,
+        ElmCompilerCache2024 elmCompilerCache,
         PineVMParseCache parseCache)
     {
         var parseRecordResult =
@@ -1273,7 +1273,7 @@ type alias LoadDependencyStruct =
     public static Result<string, CreateVolatileProcessNativeRequestStruct>
         ParseCreateVolatileProcessNativeRequestStruct(
         PineValue pineValue,
-        ElmCompilerCache elmCompilerCache)
+        ElmCompilerCache2024 elmCompilerCache)
     {
         var asElmValueResult =
             elmCompilerCache.PineValueDecodedAsElmValue(pineValue);
@@ -1441,7 +1441,7 @@ type alias LoadDependencyStruct =
     public static Result<string, ProcessEnvironmentVariableStruct>
         ParseProcessEnvironmentVariableStruct(
         ElmValue elmValue,
-        ElmCompilerCache elmCompilerCache)
+        ElmCompilerCache2024 elmCompilerCache)
     {
         if (elmValue is not ElmValue.ElmRecord elmRecordValue)
         {
@@ -1485,7 +1485,7 @@ type alias LoadDependencyStruct =
 
     public static Result<string, RespondToHttpRequestStruct> ParseRespondToHttpRequestStruct(
         PineValue pineValue,
-        ElmCompilerCache elmCompilerCache)
+        ElmCompilerCache2024 elmCompilerCache)
     {
         var asElmValueResult =
             elmCompilerCache.PineValueDecodedAsElmValue(pineValue);
@@ -1555,7 +1555,7 @@ type alias LoadDependencyStruct =
 
     public static Result<string, HttpResponse> ParseHttpResponse(
         ElmValue elmValue,
-        ElmCompilerCache elmCompilerCache)
+        ElmCompilerCache2024 elmCompilerCache)
     {
         if (elmValue is not ElmValue.ElmRecord elmRecordValue)
         {
@@ -1657,7 +1657,7 @@ type alias LoadDependencyStruct =
 
     public static Result<string, HttpHeader> ParseHttpHeader(
         ElmValue elmValue,
-        ElmCompilerCache elmCompilerCache)
+        ElmCompilerCache2024 elmCompilerCache)
     {
         if (elmValue is not ElmValue.ElmRecord elmRecordValue)
         {
@@ -1712,7 +1712,7 @@ type alias LoadDependencyStruct =
 
     public static Result<string, CreateVolatileProcessStruct> ParseCreateVolatileProcessStruct(
         PineValue pineValue,
-        ElmCompilerCache elmCompilerCache,
+        ElmCompilerCache2024 elmCompilerCache,
         PineVMParseCache parseCache)
     {
         var asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged_2025(pineValue);
@@ -1790,7 +1790,7 @@ type alias LoadDependencyStruct =
 
     public static Result<string, RequestToVolatileProcessStruct> ParseRequestToVolatileProcessStruct(
         PineValue pineValue,
-        ElmCompilerCache elmCompilerCache,
+        ElmCompilerCache2024 elmCompilerCache,
         PineVMParseCache parseCache)
     {
         var asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged_2025(pineValue);
@@ -1897,7 +1897,7 @@ type alias LoadDependencyStruct =
 
     public static Result<string, WriteToVolatileProcessNativeStdInStruct> ParseWriteToVolatileProcessNativeStdInStruct(
         PineValue pineValue,
-        ElmCompilerCache elmCompilerCache,
+        ElmCompilerCache2024 elmCompilerCache,
         PineVMParseCache parseCache)
     {
         var asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged_2025(pineValue);
@@ -2005,7 +2005,7 @@ type alias LoadDependencyStruct =
 
     public static Result<string, ReadAllFromVolatileProcessNativeStruct> ParseReadAllFromVolatileProcessNativeStruct(
         PineValue pineValue,
-        ElmCompilerCache elmCompilerCache,
+        ElmCompilerCache2024 elmCompilerCache,
         PineVMParseCache parseCache)
     {
         var asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged_2025(pineValue);
@@ -2084,7 +2084,7 @@ type alias LoadDependencyStruct =
     public static Result<string, Result<RequestToVolatileProcessError, RequestToVolatileProcessComplete>>
         ParseRequestToVolatileProcessResult(
         PineValue pineValue,
-        ElmCompilerCache elmCompilerCache)
+        ElmCompilerCache2024 elmCompilerCache)
     {
         return
             ElmValueInterop.ParseElmResultValue(
@@ -2141,7 +2141,7 @@ type alias LoadDependencyStruct =
 
     public static Result<string, RequestToVolatileProcessError> ParseRequestToVolatileProcessError(
         PineValue pineValue,
-        ElmCompilerCache elmCompilerCache)
+        ElmCompilerCache2024 elmCompilerCache)
     {
         var asElmValueResult = elmCompilerCache.PineValueDecodedAsElmValue(pineValue);
 
@@ -2173,7 +2173,7 @@ type alias LoadDependencyStruct =
 
     public static Result<string, RequestToVolatileProcessComplete> ParseRequestToVolatileProcessComplete(
         PineValue pineValue,
-        ElmCompilerCache elmCompilerCache)
+        ElmCompilerCache2024 elmCompilerCache)
     {
         var asElmValueResult = elmCompilerCache.PineValueDecodedAsElmValue(pineValue);
 
@@ -2287,7 +2287,7 @@ type alias LoadDependencyStruct =
                 (int)durationInMilliseconds);
     }
 
-    private static readonly ElmCompilerCache s_elmCompilerCache = new();
+    private static readonly ElmCompilerCache2024 s_elmCompilerCache = new();
 
     private static readonly PineVMParseCache s_parseCache = new();
 
@@ -2344,7 +2344,7 @@ type alias LoadDependencyStruct =
                 additionalRootFilePaths: [entryFileName]);
 
         var pineVMAndCache =
-            ElmTime.ElmInteractive.InteractiveSessionPine.BuildPineVM(
+            ElmTime.ElmInteractive.InteractiveSessionPine2024.BuildPineVM(
                 caching: true,
                 autoPGO: null);
 
@@ -2411,7 +2411,7 @@ type alias LoadDependencyStruct =
         }
 
         var compiled =
-            ElmTime.ElmInteractive.InteractiveSessionPine.CompileInteractiveEnvironment(
+            ElmTime.ElmInteractive.InteractiveSessionPine2024.CompileInteractiveEnvironment(
                 appCodeTree: compilationUnitsPrepared.files,
                 overrideSkipLowering: true,
                 entryPointsFilePaths: [["src", "Backend", "InterfaceToHost_Root.elm"], entryFileName],

@@ -119,14 +119,14 @@ public static class CompileInteractiveEnvCommand
                         ", ",
                         rootFilePaths.Select(path => string.Join("/", path))));
 
-                ElmCompilerInElm? overrideElmCompiler = null;
+                ElmCompilerInElm2024? overrideElmCompiler = null;
 
                 if (overrideCompiler is { } overrideCompilerPath)
                 {
                     Console.WriteLine("Using Elm compiler from " + overrideCompilerPath);
 
                     overrideElmCompiler =
-                        ElmCompilerInElm.LoadCompilerFromBundleFile(overrideCompilerPath)
+                        ElmCompilerInElm2024.LoadCompilerFromBundleFile(overrideCompilerPath)
                         .Extract(
                             err =>
                             throw new Exception("Failed to load Elm compiler from " + overrideCompilerPath + ": " + err));
@@ -145,7 +145,7 @@ public static class CompileInteractiveEnvCommand
                         sourceTree =>
                         {
                             var compiledEnv =
-                                ElmCompilerInElm.LoadOrCompileInteractiveEnvironment(
+                                ElmCompilerInElm2024.LoadOrCompileInteractiveEnvironment(
                                     sourceTree,
                                     rootFilePaths: rootFilePaths,
                                     skipLowering: skipLowering,

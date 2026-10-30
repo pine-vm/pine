@@ -140,7 +140,7 @@ public class ElmTimeJsonAdapter
 
             compiledApp = evaluatedRoots.Extract(error => throw new System.Exception(error));
 
-            ElmCompilerCache elmEncodingCache = new();
+            ElmCompilerCache2024 elmEncodingCache = new();
 
             var parseEnvResult =
                 ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledApp);
@@ -483,7 +483,7 @@ public class ElmTimeJsonAdapter
             ParseExposedFunctionDictEntryValue(
             PineValue dictItemValue,
             PineVMParseCache parseCache,
-            ElmCompilerCache elmEncodingCache)
+            ElmCompilerCache2024 elmEncodingCache)
         {
             if (dictItemValue is not PineValue.ListValue dictItem)
             {
@@ -609,7 +609,7 @@ public class ElmTimeJsonAdapter
 
         public static Result<string, ExposedFunctionDescription> ParseExposedFunctionDescription(
             PineValue exposedFunctionDescriptionValue,
-            ElmCompilerCache elmEncodingCache)
+            ElmCompilerCache2024 elmEncodingCache)
         {
             var asElmValueResult =
                 elmEncodingCache.PineValueDecodedAsElmValue(exposedFunctionDescriptionValue);

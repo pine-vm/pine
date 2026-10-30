@@ -18,16 +18,16 @@ using System.Linq;
 using System.Text;
 using Xunit;
 
-using InteractiveSessionPine = ElmTime.ElmInteractive.InteractiveSessionPine;
+using InteractiveSessionPine2024 = ElmTime.ElmInteractive.InteractiveSessionPine2024;
 
 namespace Pine.IntegrationTests;
 
-public class CompileElmCompilerTests
+public class CompileElmCompiler2024Tests
 {
     static IReadOnlyList<string> CompilerPackageSources =>
-        ElmCompilerInElm.CompilerPackageSources;
+        ElmCompilerInElm2024.CompilerPackageSources;
 
-    private static readonly ElmCompilerCache elmCompilerCache = new();
+    private static readonly ElmCompilerCache2024 elmCompilerCache = new();
 
 
     [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
@@ -35,10 +35,10 @@ public class CompileElmCompilerTests
     {
         using var pgoShare = new DynamicPGOShare();
 
-        var compilerProgram = ElmCompilerInElm.CompilerSourceFilesDefault.Value;
+        var compilerProgram = ElmCompilerInElm2024.CompilerSourceFilesDefault.Value;
 
         using var interactiveSession =
-            new InteractiveSessionPine(
+            new InteractiveSessionPine2024(
                 compilerProgram,
                 appCodeTree: (AppCompilationUnits?)null,
                 overrideSkipLowering: true,
@@ -143,7 +143,7 @@ public class CompileElmCompilerTests
             Core.Elm.ElmInElm.BundledFiles.CompilerSourceContainerFilesDefault.Value;
 
         var elmCompiler =
-            (await ElmCompilerInElm.GetElmCompilerAsync(compilerProgram))
+            (await ElmCompilerInElm2024.GetElmCompilerAsync(compilerProgram))
             .Extract(err => throw new Exception(err));
 
         var pineVMCache = new InvocationCache();
@@ -275,10 +275,10 @@ public class CompileElmCompilerTests
     {
         using var pgoShare = new DynamicPGOShare();
 
-        var compilerProgram = ElmCompilerInElm.CompilerSourceFilesDefault.Value;
+        var compilerProgram = ElmCompilerInElm2024.CompilerSourceFilesDefault.Value;
 
         using var interactiveSession =
-            new InteractiveSessionPine(
+            new InteractiveSessionPine2024(
                 compilerProgram,
                 overrideSkipLowering: true,
                 appCodeTree: (AppCompilationUnits?)null,
@@ -364,7 +364,7 @@ public class CompileElmCompilerTests
             .ToImmutableArray();
 
         var elmCoreLibraryModulesTexts =
-            ElmCompilerInElm.ElmCoreAndKernelModulesByName.Value
+            ElmCompilerInElm2024.ElmCoreAndKernelModulesByName.Value
             .Select(kv => kv.Value);
 
         var elmModulesTexts = elmCoreLibraryModulesTexts;
@@ -382,7 +382,7 @@ public class CompileElmCompilerTests
 
         var rootElmFile =
             allAvailableElmFiles
-            .First(c => c.blobAtPath.path.SequenceEqual(["src", "ElmCompiler.elm"]));
+            .First(c => c.blobAtPath.path.SequenceEqual(["src", "ElmCompiler2024.elm"]));
 
         var elmModulesTextsForElmCompiler =
             Core.Elm.Syntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
@@ -403,7 +403,7 @@ public class CompileElmCompilerTests
                 aggregate.SetNodeAtPathSorted(elmModule.path, FileTree.File(elmModule.fileContent)));
 
         using var compilerInteractiveSession =
-            new InteractiveSessionPine(
+            new InteractiveSessionPine2024(
                 compilerSourceFiles: compilerProgram,
                 appCodeTree: compilerWithPackagesTree,
                 overrideSkipLowering: true,
@@ -433,7 +433,7 @@ public class CompileElmCompilerTests
             var (_, declaration) =
                 ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                     interactiveEnvironment: interactiveInitialState,
-                    moduleName: "Pine",
+                    moduleName: "Pine2024",
                     declarationName: "stringAsValue_Function",
                     pineVM.ParseCache)
                 .Extract(err => throw new Exception(err));
@@ -470,7 +470,7 @@ public class CompileElmCompilerTests
             throw new Exception("Failed to load Elm compiler from bundle.");
 
         var bundledElmCompiler =
-            ElmCompilerInElm.ElmCompilerFromEnvValue(elmCompilerFromBundle)
+            ElmCompilerInElm2024.ElmCompilerFromEnvValue(elmCompilerFromBundle)
             .Extract(err => throw new Exception(err));
 
         Result<string, KeyValuePair<IReadOnlyList<string>, (string moduleText, PineValue parsed)>> TryParseModuleText(
@@ -507,7 +507,7 @@ public class CompileElmCompilerTests
         var (_, declExpandInteractiveEnv) =
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                 interactiveEnvironment: interactiveInitialState,
-                moduleName: "ElmCompiler",
+                moduleName: "ElmCompiler2024",
                 declarationName: "expandElmInteractiveEnvironmentWithModules",
                 pineVM.ParseCache)
             .Extract(err => throw new Exception(err));
@@ -546,8 +546,8 @@ public class CompileElmCompilerTests
         var pineValueEmptyListInCompiler =
             ElmValueEncoding.ElmValueAsPineValue(pineValueEmptyListElmValue);
 
-        // var (optimizingPineVM, pineVMCache) = InteractiveSessionPine.BuildPineVM(caching: true, autoPGO: pgoShare);
-        var (optimizingPineVM, pineVMCache) = InteractiveSessionPine.BuildPineVM(caching: true, autoPGO: null);
+        // var (optimizingPineVM, pineVMCache) = InteractiveSessionPine2024.BuildPineVM(caching: true, autoPGO: pgoShare);
+        var (optimizingPineVM, pineVMCache) = InteractiveSessionPine2024.BuildPineVM(caching: true, autoPGO: null);
 
         {
             var compilerResponseValue =
@@ -698,7 +698,7 @@ public class CompileElmCompilerTests
                     FileTree.File(Encoding.UTF8.GetBytes(simpleElmModuleText)));
 
             using var newCompilerInteractiveSession =
-                new InteractiveSessionPine(
+                new InteractiveSessionPine2024(
                     overrideSkipLowering: true,
                     compilerSourceFiles: compilerProgram,
                     appCodeTree: simpleElmModuleAppCodeTree,
@@ -825,7 +825,7 @@ public class CompileElmCompilerTests
                     TreeNodeWithStringPath.Blob(Encoding.UTF8.GetBytes(simpleElmModuleText)));
 
             using var newCompilerInteractiveSession =
-                new InteractiveSessionPine(
+                new InteractiveSessionPine2024(
                     compileElmProgramCodeFiles: compilerProgram,
                     initialState: null,
                     appCodeTree: simpleElmModuleAppCodeTree,
@@ -957,7 +957,7 @@ public class CompileElmCompilerTests
                         TreeNodeWithStringPath.Blob(Encoding.UTF8.GetBytes(simpleElmModuleText)));
 
                 using var newCompilerInteractiveSession =
-                    new InteractiveSessionPine(
+                    new InteractiveSessionPine2024(
                         compilerSourceFiles: compilerProgram,
                         initialState: null,
                         appCodeTree: simpleElmModuleAppCodeTree,
@@ -1301,7 +1301,7 @@ public class CompileElmCompilerTests
     public static Result<string, IReadOnlyList<Func<Result<string, (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent)>>>>
         ShallowParseEnvironmentListEncodedInCompiler(
         PineValue interactiveEnvironment,
-        ElmCompilerCache elmCompilerCache)
+        ElmCompilerCache2024 elmCompilerCache)
     {
         /*
          * Since the return value from the compiler is of type 'PineValue', the outermost list also contains the tag 'ListValue'.

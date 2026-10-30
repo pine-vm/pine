@@ -30,7 +30,7 @@ namespace ElmTime.ElmInteractive;
 /// requires adapting the legacy submission compiler's runtime environment protocol; this class
 /// does not yet implement lazy seed indexing or source-backed submission history.
 /// </remarks>
-public class InteractiveSessionPine(
+public class InteractiveSessionPine2024(
     FileTree compilerSourceFiles,
     AppCompilationUnits? appCodeTree,
     bool? overrideSkipLowering,
@@ -48,8 +48,8 @@ public class InteractiveSessionPine(
                 entryPointsFilePaths: entryPointsFilePaths,
                 skipFilteringForSourceDirs: false));
 
-    private readonly Result<string, ElmCompilerInElm> _buildCompilerResult =
-        ElmCompilerInElm.GetElmCompilerAsync(compilerSourceFiles).Result;
+    private readonly Result<string, ElmCompilerInElm2024> _buildCompilerResult =
+        ElmCompilerInElm2024.GetElmCompilerAsync(compilerSourceFiles).Result;
 
     private readonly IPineVM _pineVM = pineVMAndCache.pineVM;
 
@@ -66,12 +66,12 @@ public class InteractiveSessionPine(
      * TODO: Move these caches to a dedicated scope to enable for better control over reuse/disposal.
      * */
 
-    static readonly ElmCompilerCache elmCompilerCache = new();
+    static readonly ElmCompilerCache2024 elmCompilerCache = new();
 
     static readonly ConcurrentDictionary<string, Result<string, KeyValuePair<IReadOnlyList<string>, PineValue>>> TryParseModuleTextCache =
         new();
 
-    public InteractiveSessionPine(
+    public InteractiveSessionPine2024(
         FileTree compilerSourceFiles,
         FileTree? appCodeTree,
         bool? overrideSkipLowering,
@@ -92,7 +92,7 @@ public class InteractiveSessionPine(
     {
     }
 
-    public InteractiveSessionPine(
+    public InteractiveSessionPine2024(
         FileTree compilerSourceFiles,
         AppCompilationUnits? appCodeTree,
         bool? overrideSkipLowering,
@@ -112,7 +112,7 @@ public class InteractiveSessionPine(
     {
     }
 
-    public InteractiveSessionPine(
+    public InteractiveSessionPine2024(
         FileTree compilerSourceFiles,
         FileTree? appCodeTree,
         bool? overrideSkipLowering,
@@ -129,7 +129,7 @@ public class InteractiveSessionPine(
     {
     }
 
-    public InteractiveSessionPine(
+    public InteractiveSessionPine2024(
         FileTree compilerSourceFiles,
         AppCompilationUnits? appCodeTree,
         bool? overrideSkipLowering,
@@ -237,7 +237,7 @@ public class InteractiveSessionPine(
         FileTree appCodeTree) =>
         MergeDefaultElmCoreAndKernelModules(
             appCodeTree,
-            ElmCompilerInElm.ElmCoreAndKernelModuleFilesDefault.Value);
+            ElmCompilerInElm2024.ElmCoreAndKernelModuleFilesDefault.Value);
 
     public static FileTree MergeDefaultElmCoreAndKernelModules(
         FileTree appCodeTree,
@@ -369,7 +369,7 @@ public class InteractiveSessionPine(
 
     static Result<string, KeyValuePair<IReadOnlyList<string>, PineValue>> CachedTryParseModuleText(
         string moduleText,
-        ElmCompilerInElm elmCompiler,
+        ElmCompilerInElm2024 elmCompiler,
         IPineVM pineVM) =>
         TryParseModuleTextCache
         .GetOrAdd(
@@ -379,7 +379,7 @@ public class InteractiveSessionPine(
 
     static Result<string, KeyValuePair<IReadOnlyList<string>, PineValue>> TryParseModuleText(
         string moduleText,
-        ElmCompilerInElm elmCompiler,
+        ElmCompilerInElm2024 elmCompiler,
         IPineVM pineVM)
     {
         var parseNameResult =
@@ -452,7 +452,7 @@ public class InteractiveSessionPine(
     }
 
     public static Result<string, PineValue> ParseInteractiveSubmission(
-        ElmCompilerInElm elmCompiler,
+        ElmCompilerInElm2024 elmCompiler,
         IPineVM pineVM,
         string submission,
         Action<string>? addInspectionLogEntry)
@@ -732,7 +732,7 @@ public class InteractiveSessionPine(
                 evalCache: cache);
 
         var profilingSession =
-            new InteractiveSessionPine(
+            new InteractiveSessionPine2024(
                 compilerSourceFiles: compileElmProgramCodeFiles,
                 appCodeTree: (AppCompilationUnits?)null,
                 overrideSkipLowering: false,

@@ -1,12 +1,12 @@
-module ElmInteractiveParser exposing (..)
+module ElmInteractiveParser2024 exposing (..)
 
 import Common
-import ElmCompiler
+import ElmCompiler2024
     exposing
         ( InteractiveSubmission(..)
         , ProjectParsedElmFile
         )
-import ElmInteractive
+import ElmInteractive2024
     exposing
         ( ElmCoreModulesExtent(..)
         , InteractiveContext(..)
@@ -16,18 +16,18 @@ import ElmInteractive
         )
 import ElmInteractiveCoreModules
 import ElmInteractiveKernelModules
-import ElmInteractiveSubmissionParser
+import ElmInteractiveSubmissionParser2024
     exposing
         ( parseElmModuleText
         , parseInteractiveSubmissionFromString
         , parserDeadEndToString
         , parserDeadEndsToString
         )
-import EncodeElmSyntaxAsPineValue
-import Pine
+import EncodeElmSyntaxAsPineValue2024
+import Pine2024
 
 
-compileEvalContextForElmInteractive : InteractiveContext -> Result String Pine.EvalEnvironment
+compileEvalContextForElmInteractive : InteractiveContext -> Result String Pine2024.EvalEnvironment
 compileEvalContextForElmInteractive context =
     let
         contextModulesTextsBatches : List (List String)
@@ -66,8 +66,8 @@ compileEvalContextForElmInteractive context =
                                 )
                     )
             )
-            (Ok (Pine.ListValue []))
-        |> Result.map Pine.EvalEnvironment
+            (Ok (Pine2024.ListValue []))
+        |> Result.map Pine2024.EvalEnvironment
 
 
 expandElmInteractiveEnvironmentWithModuleTexts :
@@ -76,7 +76,7 @@ expandElmInteractiveEnvironmentWithModuleTexts :
         Result
             String
             ( List ProjectParsedElmFile
-            , Pine.Value -> Result String { addedModules : List ( List String, Pine.Value ), environment : Pine.Value }
+            , Pine2024.Value -> Result String { addedModules : List ( List String, Pine2024.Value ), environment : Pine2024.Value }
             )
 expandElmInteractiveEnvironmentWithModuleTexts contextModulesTexts =
     contextModulesTexts
@@ -85,7 +85,7 @@ expandElmInteractiveEnvironmentWithModuleTexts contextModulesTexts =
             (\parsedModules ->
                 ( parsedModules
                 , \environmentBefore ->
-                    ElmCompiler.expandElmInteractiveEnvironmentWithModules environmentBefore parsedModules
+                    ElmCompiler2024.expandElmInteractiveEnvironmentWithModules environmentBefore parsedModules
                 )
             )
 
@@ -100,7 +100,7 @@ submissionInInteractive context previousSubmissions submission =
             submissionWithHistoryInInteractive initialContext previousSubmissions submission
 
 
-submissionWithHistoryInInteractive : Pine.EvalEnvironment -> List String -> String -> Result String SubmissionResponse
+submissionWithHistoryInInteractive : Pine2024.EvalEnvironment -> List String -> String -> Result String SubmissionResponse
 submissionWithHistoryInInteractive initialContext previousSubmissions submission =
     case previousSubmissions of
         [] ->
@@ -116,23 +116,23 @@ submissionWithHistoryInInteractive initialContext previousSubmissions submission
                     submissionWithHistoryInInteractive expressionContext remainingPreviousSubmissions submission
 
 
-submissionInInteractiveInPineContext : Pine.EvalEnvironment -> String -> Result String ( Pine.EvalEnvironment, SubmissionResponse )
-submissionInInteractiveInPineContext (Pine.EvalEnvironment envValue) submission =
+submissionInInteractiveInPineContext : Pine2024.EvalEnvironment -> String -> Result String ( Pine2024.EvalEnvironment, SubmissionResponse )
+submissionInInteractiveInPineContext (Pine2024.EvalEnvironment envValue) submission =
     compileInteractiveSubmission envValue submission
         |> Result.andThen
             (\pineExpression ->
-                case Pine.evaluateExpression (Pine.EvalEnvironment envValue) pineExpression of
+                case Pine2024.evaluateExpression (Pine2024.EvalEnvironment envValue) pineExpression of
                     Err error ->
-                        Err ("Failed to evaluate expression:\n" ++ Pine.displayStringFromPineError error)
+                        Err ("Failed to evaluate expression:\n" ++ Pine2024.displayStringFromPineError error)
 
-                    Ok (Pine.BlobValue _) ->
+                    Ok (Pine2024.BlobValue _) ->
                         Err "Type mismatch: Pine expression evaluated to a blob"
 
-                    Ok (Pine.ListValue [ newState, responseValue ]) ->
+                    Ok (Pine2024.ListValue [ newState, responseValue ]) ->
                         submissionResponseFromResponsePineValue responseValue
-                            |> Result.map (Tuple.pair (Pine.EvalEnvironment newState))
+                            |> Result.map (Tuple.pair (Pine2024.EvalEnvironment newState))
 
-                    Ok (Pine.ListValue resultList) ->
+                    Ok (Pine2024.ListValue resultList) ->
                         Err
                             ("Type mismatch: Pine expression evaluated to a list with unexpected number of elements: "
                                 ++ String.fromInt (List.length resultList)
@@ -145,20 +145,20 @@ submissionInInteractiveInPineContext (Pine.EvalEnvironment envValue) submission 
 The first element contains the new interactive session state for the possible next submission.
 The second element contains the response, the value to display to the user.
 -}
-compileInteractiveSubmission : Pine.Value -> String -> Result String Pine.Expression
+compileInteractiveSubmission : Pine2024.Value -> String -> Result String Pine2024.Expression
 compileInteractiveSubmission environment submission =
     case parseInteractiveSubmissionFromString submission of
         Err error ->
             Ok
-                (ElmCompiler.buildExpressionForNewStateAndResponse
-                    { newStateExpression = Pine.environmentExpr
+                (ElmCompiler2024.buildExpressionForNewStateAndResponse
+                    { newStateExpression = Pine2024.environmentExpr
                     , responseExpression =
-                        ElmCompiler.responseExpressionFromString ("Failed to parse submission: " ++ error)
+                        ElmCompiler2024.responseExpressionFromString ("Failed to parse submission: " ++ error)
                     }
                 )
 
         Ok parseOk ->
-            ElmCompiler.compileParsedInteractiveSubmission environment parseOk
+            ElmCompiler2024.compileParsedInteractiveSubmission environment parseOk
 
 
 parsedElmFileFromOnlyFileText : String -> Result String ProjectParsedElmFile
@@ -183,14 +183,14 @@ parsedElmFileFromOnlyFileText fileText =
                 )
 
 
-parseElmModuleTextToPineValue : String -> Result String Pine.Value
+parseElmModuleTextToPineValue : String -> Result String Pine2024.Value
 parseElmModuleTextToPineValue elmModule =
     case parseElmModuleText elmModule of
         Err deadEnds ->
             Err ("Failed to parse this as module text: " ++ parserDeadEndsToString deadEnds)
 
         Ok file ->
-            case EncodeElmSyntaxAsPineValue.encodeElmSyntaxFileAsPineValue file of
+            case EncodeElmSyntaxAsPineValue2024.encodeElmSyntaxFileAsPineValue file of
                 Err error ->
                     Err ("Failed to encode the parsed module as Pine value: " ++ error)
 
