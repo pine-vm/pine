@@ -85,6 +85,26 @@ public static partial class ValueEncodingBinaryDeterministic
         }
 
         /// <summary>
+        /// The evaluation delegate rejected an Eval, or no evaluation delegate was supplied.
+        /// </summary>
+        /// <param name="Offset">Offset of the Eval entry.</param>
+        /// <param name="EncodedExpression">The already resolved encoded expression value.</param>
+        /// <param name="Environment">The already resolved environment value.</param>
+        /// <param name="Reason">The delegate's rejection reason, or a description of the missing delegate.</param>
+        public sealed record EvalRejected(
+            long Offset,
+            PineValue EncodedExpression,
+            PineValue Environment,
+            string Reason)
+            : DecodeError
+        {
+            /// <inheritdoc/>
+            public override string ToString() =>
+                "Eval at offset " + Offset + " rejected: " + Reason +
+                " Encoded expression: " + EncodedExpression + "; Environment: " + Environment + ".";
+        }
+
+        /// <summary>
         /// The delegate for resolving external references returned no value for the reference
         /// in the entry starting at <paramref name="Offset"/>.
         /// </summary>

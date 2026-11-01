@@ -19,13 +19,14 @@ namespace Pine.Core.Tests.Encodings;
 /// the on-the-wire format and observable behaviour, so that future refactors (or migration
 /// to a more generalized implementation) can be validated against the existing format.
 ///
-/// The tests cover three orthogonal aspects:
+/// The tests cover four aspects:
 ///   1. The constants of the public API (tag identifiers, tag size).
 ///   2. The exact byte layout of the encoded form for representative small inputs
 ///      (header layout, big-endian length encoding, padding bytes, reference offsets).
 ///   3. Round-trip equality across a broad variety of inputs (empty, deeply nested,
 ///      mixed, large, all byte values, sharing of components, etc.) along with the
 ///      decode-time interning behaviour.
+///   4. Decode-only external references and caller-controlled Eval entries.
 /// </summary>
 public class ValueEncodingBinaryDeterministicTests
 {
@@ -191,6 +192,7 @@ public class ValueEncodingBinaryDeterministicTests
         ValueEncodingBinaryDeterministic.TagList.Should().Be(3);
         ValueEncodingBinaryDeterministic.TagReferenceInteral.Should().Be(4);
         ValueEncodingBinaryDeterministic.TagReferenceExternal256.Should().Be(5);
+        ValueEncodingBinaryDeterministic.TagEval.Should().Be(6);
         ValueEncodingBinaryDeterministic.ReferenceExternal256Length.Should().Be(32);
     }
 
@@ -1065,7 +1067,7 @@ public class ValueEncodingBinaryDeterministicTests
     }
 
     [Fact]
-    public void Encode_does_not_emit_external_references()
+    public void Encode_does_not_emit_external_references_or_evals()
     {
         var composition =
             PineValue.List(
@@ -1077,6 +1079,468 @@ public class ValueEncodingBinaryDeterministicTests
 
         // The walk only accepts blob, list, and internal reference entries.
         CountReferenceMarkers(encoded).Should().BeGreaterThan(0);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Eval entries                                                       */
+    /* ------------------------------------------------------------------ */
+
+    [Fact]
+    public void Decode_evaluates_literal_arguments_at_root_via_delegate()
+    {
+        var encodedExpression = PineValue.List(PineValue.Blob([1, 2]), PineValue.EmptyList);
+        var environment = PineValue.Blob([3, 4, 5]);
+        var evaluatedValue = PineValue.List(PineValue.Blob([6]), PineValue.EmptyBlob);
+        var evalCount = 0;
+
+        var decoded =
+            DecodeRootExpectingOk(
+                EncodeEval(EncodeToBytes(encodedExpression), EncodeToBytes(environment)),
+                evaluate:
+                (expression, env) =>
+                {
+                    expression.Should().Be(encodedExpression);
+                    env.Should().Be(environment);
+                    evalCount++;
+
+                    return evaluatedValue;
+                });
+
+        decoded.Should().BeSameAs(evaluatedValue);
+        evalCount.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(0, 1)]
+    [InlineData(0, 2)]
+    [InlineData(1, 0)]
+    [InlineData(1, 1)]
+    [InlineData(1, 2)]
+    [InlineData(2, 0)]
+    [InlineData(2, 1)]
+    [InlineData(2, 2)]
+    public void Decode_evaluates_all_combinations_of_literal_and_reference_arguments(
+        int expressionKind,
+        int environmentKind)
+    {
+        var encodedExpression = PineValue.List(PineValue.Blob([1]), PineValue.EmptyList);
+        var environment = PineValue.Blob([2, 3]);
+        var evaluatedValue = PineValue.List(environment, encodedExpression);
+        var expressionBytes = EncodeToBytes(encodedExpression);
+        var environmentBytes = EncodeToBytes(environment);
+        var expressionReference = ExternalReferenceBytes(seed: 1);
+        var environmentReference = ExternalReferenceBytes(seed: 2);
+        var evalAddress = 8 + expressionBytes.Length + environmentBytes.Length;
+
+        var evalExpression =
+            EncodeArgument(expressionKind, expressionBytes, expressionReference, 8, evalAddress + 4);
+
+        var evalEnvironment =
+            EncodeArgument(
+                environmentKind,
+                environmentBytes,
+                environmentReference,
+                8 + expressionBytes.Length,
+                evalAddress + 4 + evalExpression.Length);
+
+        var encoded =
+            Concat(
+                Int32Sequence(ValueEncodingBinaryDeterministic.TagList, 3),
+                expressionBytes,
+                environmentBytes,
+                EncodeEval(evalExpression, evalEnvironment));
+
+        var evalCount = 0;
+        var resolveCount = 0;
+
+        var decoded =
+            DecodeRootExpectingOk(
+                encoded,
+                resolveExternalReference:
+                reference =>
+                {
+                    resolveCount++;
+
+                    return
+                        reference.Span.SequenceEqual(expressionReference)
+                        ?
+                        encodedExpression
+                        :
+                        reference.Span.SequenceEqual(environmentReference)
+                        ?
+                        environment
+                        :
+                        null;
+                },
+                evaluate:
+                (expression, env) =>
+                {
+                    expression.Should().Be(encodedExpression);
+                    env.Should().Be(environment);
+                    evalCount++;
+
+                    return evaluatedValue;
+                });
+
+        decoded.Should().Be(PineValue.List(encodedExpression, environment, evaluatedValue));
+        evalCount.Should().Be(1);
+        resolveCount.Should().Be((expressionKind is 2 ? 1 : 0) + (environmentKind is 2 ? 1 : 0));
+
+        static byte[] EncodeArgument(int kind, byte[] literal, byte[] externalReference, int address, int offset) =>
+            kind switch
+            {
+                0 => literal,
+                1 => Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceInteral, address - (offset + 4)),
+                2 => EncodeExternalReference(externalReference),
+
+                _ =>
+                throw new ArgumentOutOfRangeException(nameof(kind)),
+            };
+    }
+
+    [Fact]
+    public void Decode_resolves_nested_evals_in_expression_and_environment_before_outer_eval()
+    {
+        var firstExpression = PineValue.Blob([1]);
+        var secondExpression = PineValue.Blob([2]);
+        var firstResult = PineValue.Blob([3]);
+        var secondResult = PineValue.List(PineValue.Blob([4]));
+        var outerResult = PineValue.Blob([5]);
+
+        var encoded =
+            EncodeEval(
+                Concat(
+                    Int32Sequence(ValueEncodingBinaryDeterministic.TagList, 2),
+                    EncodeEval(EncodeToBytes(firstExpression), EncodeToBytes(PineValue.EmptyList)),
+                    EncodeToBytes(PineValue.EmptyBlob)),
+                EncodeEval(EncodeToBytes(secondExpression), EncodeToBytes(PineValue.EmptyBlob)));
+
+        var invocations = new List<(PineValue Expression, PineValue Environment)>();
+
+        var decoded =
+            DecodeRootExpectingOk(
+                encoded,
+                evaluate:
+                (expression, environment) =>
+                {
+                    invocations.Add((expression, environment));
+
+                    return
+                        expression == firstExpression
+                        ?
+                        firstResult
+                        :
+                        expression == secondExpression
+                        ?
+                        secondResult
+                        :
+                        outerResult;
+                });
+
+        decoded.Should().BeSameAs(outerResult);
+
+        invocations.Should().Equal(
+            (firstExpression, PineValue.EmptyList),
+            (secondExpression, PineValue.EmptyBlob),
+            (PineValue.List(firstResult, PineValue.EmptyBlob), secondResult));
+    }
+
+    [Fact]
+    public void Decode_reuses_completed_eval_result_for_references_and_later_eval_arguments()
+    {
+        var firstResult = PineValue.List(PineValue.Blob([1]));
+        var secondResult = PineValue.Blob([2]);
+        var firstEval = EncodeEval(EncodeToBytes(PineValue.EmptyBlob), EncodeToBytes(PineValue.EmptyList));
+        var referenceAddress = 8 + firstEval.Length;
+        var secondEvalAddress = referenceAddress + 8;
+
+        var encoded =
+            Concat(
+                Int32Sequence(ValueEncodingBinaryDeterministic.TagList, 3),
+                firstEval,
+                Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceInteral, 8 - (referenceAddress + 4)),
+                EncodeEval(
+                    Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceInteral, 8 - (secondEvalAddress + 8)),
+                    Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceInteral, 8 - (secondEvalAddress + 16))));
+
+        var invocations = new List<(PineValue Expression, PineValue Environment)>();
+
+        var decoded =
+            DecodeRootExpectingOk(
+                encoded,
+                evaluate:
+                (expression, environment) =>
+                {
+                    invocations.Add((expression, environment));
+
+                    return invocations.Count is 1 ? firstResult : secondResult;
+                });
+
+        decoded.Should().Be(PineValue.List(firstResult, firstResult, secondResult));
+        ((PineValue.ListValue)decoded).Items.Span[1].Should().BeSameAs(firstResult);
+
+        invocations.Should().Equal(
+            (PineValue.EmptyBlob, PineValue.EmptyList),
+            (firstResult, firstResult));
+    }
+
+    [Fact]
+    public void Decode_invokes_delegate_for_each_eval_even_when_arguments_are_identical()
+    {
+        var eval = EncodeEval(EncodeToBytes(PineValue.EmptyBlob), EncodeToBytes(PineValue.EmptyList));
+        var encoded = Concat(Int32Sequence(ValueEncodingBinaryDeterministic.TagList, 2), eval, eval);
+        var evalCount = 0;
+
+        var decoded =
+            DecodeRootExpectingOk(
+                encoded,
+                evaluate: (_, _) => IntegerEncoding.EncodeSignedInteger(++evalCount));
+
+        decoded.Should().Be(
+            PineValue.List(IntegerEncoding.EncodeSignedInteger(1), IntegerEncoding.EncodeSignedInteger(2)));
+
+        evalCount.Should().Be(2);
+    }
+
+    [Fact]
+    public void Decode_aborts_on_eval_rejected_by_function_whitelist()
+    {
+        var allowedExpression = PineValue.Blob([1]);
+        var rejectedExpression = PineValue.Blob([2]);
+        var environment = PineValue.List(PineValue.Blob([3]));
+        var allowedEval = EncodeEval(EncodeToBytes(allowedExpression), EncodeToBytes(environment));
+        var rejectedEval = EncodeEval(EncodeToBytes(rejectedExpression), EncodeToBytes(environment));
+
+        var encoded =
+            Concat(
+                Int32Sequence(ValueEncodingBinaryDeterministic.TagList, 3),
+                allowedEval,
+                rejectedEval,
+                allowedEval);
+
+        var evalCount = 0;
+
+        var result =
+            ValueEncodingBinaryDeterministic.DecodeRoot(
+                encoded,
+                evaluate:
+                (expression, env) =>
+                {
+                    evalCount++;
+
+                    return
+                        expression == allowedExpression
+                        ?
+                        Result<string, PineValue>.ok(env)
+                        :
+                        Result<string, PineValue>.err("Function is not whitelisted.");
+                });
+
+        var rejection =
+            new DecodeError.EvalRejected(
+                Offset: 8 + allowedEval.Length,
+                EncodedExpression: rejectedExpression,
+                Environment: environment,
+                Reason: "Function is not whitelisted.");
+
+        result.Should().Be(Result<DecodeError, PineValue>.err(rejection));
+        evalCount.Should().Be(2);
+        rejection.ToString().Should().Contain("offset " + rejection.Offset);
+        rejection.ToString().Should().Contain(rejection.Reason);
+        rejection.ToString().Should().Contain("Encoded expression: " + rejectedExpression);
+        rejection.ToString().Should().Contain("Environment: " + environment);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Decode_eval_rejection_includes_resolved_reference_arguments(bool external)
+    {
+        var expression = PineValue.List(PineValue.Blob([1]));
+        var environment = PineValue.Blob([2]);
+        var expressionBytes = EncodeToBytes(expression);
+        var environmentBytes = EncodeToBytes(environment);
+        var evalAddress = 8 + expressionBytes.Length + environmentBytes.Length;
+        var expressionReference = ExternalReferenceBytes(seed: 1);
+        var environmentReference = ExternalReferenceBytes(seed: 2);
+
+        var encoded =
+            Concat(
+                Int32Sequence(ValueEncodingBinaryDeterministic.TagList, 3),
+                expressionBytes,
+                environmentBytes,
+                EncodeEval(
+                    external
+                    ?
+                    EncodeExternalReference(expressionReference)
+                    :
+                    Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceInteral, 8 - (evalAddress + 8)),
+                    external
+                    ?
+                    EncodeExternalReference(environmentReference)
+                    :
+                    Int32Sequence(
+                        ValueEncodingBinaryDeterministic.TagReferenceInteral,
+                        8 + expressionBytes.Length - (evalAddress + 16))));
+
+        var result =
+            ValueEncodingBinaryDeterministic.DecodeRoot(
+                encoded,
+                resolveExternalReference:
+                reference =>
+                reference.Span.SequenceEqual(expressionReference)
+                ?
+                expression
+                :
+                reference.Span.SequenceEqual(environmentReference)
+                ?
+                environment
+                :
+                null,
+                evaluate: (_, _) => Result<string, PineValue>.err("Eval rejected."));
+
+        result.Should().Be(
+            Result<DecodeError, PineValue>.err(
+                new DecodeError.EvalRejected(evalAddress, expression, environment, "Eval rejected.")));
+    }
+
+    [Fact]
+    public void Decode_returns_eval_rejection_with_arguments_when_no_delegate_given()
+    {
+        var expression = PineValue.List(PineValue.Blob([1]));
+        var environment = PineValue.Blob([2]);
+
+        var encoded = EncodeEval(EncodeToBytes(expression), EncodeToBytes(environment));
+
+        DecodeRootExpectingErr(encoded).Should().Be(
+            new DecodeError.EvalRejected(0, expression, environment, "No evaluation delegate was provided."));
+    }
+
+    [Fact]
+    public void Decode_returns_err_for_every_truncated_eval_without_invoking_delegate()
+    {
+        var encoded =
+            EncodeEval(
+                EncodeToBytes(PineValue.List(PineValue.Blob([1, 2]))),
+                EncodeToBytes(PineValue.List(PineValue.Blob([3]))));
+
+        var evalCount = 0;
+
+        for (var length = 0; length < encoded.Length; length++)
+        {
+            ValueEncodingBinaryDeterministic.DecodeRoot(
+                encoded.AsMemory(0, length),
+                evaluate:
+                (_, _) =>
+                {
+                    evalCount++;
+                    return PineValue.EmptyList;
+                })
+                .IsErr().Should().BeTrue("truncated to " + length + " bytes");
+        }
+
+        evalCount.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Decode_rejects_reference_to_incomplete_eval_without_invoking_delegate(bool inEnvironment)
+    {
+        var encoded =
+            inEnvironment
+            ?
+            EncodeEval(
+                EncodeToBytes(PineValue.EmptyList),
+                Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceInteral, -16))
+            :
+            EncodeEval(
+                Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceInteral, -8),
+                EncodeToBytes(PineValue.EmptyList));
+
+        var evalCount = 0;
+
+        var result =
+            ValueEncodingBinaryDeterministic.DecodeRoot(
+                encoded,
+                evaluate:
+                (_, _) =>
+                {
+                    evalCount++;
+                    return PineValue.EmptyList;
+                });
+
+        result.Should().Be(
+            Result<DecodeError, PineValue>.err(
+                new DecodeError.InvalidInternalReference(Offset: inEnvironment ? 12 : 4, ReferencedAddress: 0)));
+
+        evalCount.Should().Be(0);
+    }
+
+    [Fact]
+    public void Decode_aborts_before_eval_when_argument_external_reference_is_not_found()
+    {
+        var reference = ExternalReferenceBytes(seed: 1);
+        var encoded = EncodeEval(EncodeToBytes(PineValue.EmptyList), EncodeExternalReference(reference));
+        var evalCount = 0;
+
+        var result =
+            ValueEncodingBinaryDeterministic.DecodeRoot(
+                encoded,
+                resolveExternalReference: _ => null,
+                evaluate:
+                (_, _) =>
+                {
+                    evalCount++;
+                    return PineValue.EmptyList;
+                });
+
+        result.Should().Be(
+            Result<DecodeError, PineValue>.err(
+                new DecodeError.ExternalReferenceNotFound(Offset: 12, Reference: reference)));
+
+        evalCount.Should().Be(0);
+    }
+
+    [Fact]
+    public void Decode_deeply_nested_evals_without_stack_overflow()
+    {
+        const int depth = 100_000;
+
+        using var stream = new MemoryStream();
+
+        var evalTag = Int32Sequence(ValueEncodingBinaryDeterministic.TagEval);
+
+        for (var i = 0; i < depth; i++)
+        {
+            stream.Write(evalTag);
+        }
+
+        ValueEncodingBinaryDeterministic.Encode(stream, PineValue.EmptyBlob);
+
+        var environment = EncodeToBytes(PineValue.EmptyList);
+
+        for (var i = 0; i < depth; i++)
+        {
+            stream.Write(environment);
+        }
+
+        var evalCount = 0;
+
+        var decoded =
+            DecodeRootExpectingOk(
+                stream.ToArray(),
+                evaluate:
+                (expression, env) =>
+                {
+                    env.Should().Be(PineValue.EmptyList);
+                    evalCount++;
+                    return expression;
+                });
+
+        decoded.Should().BeSameAs(PineValue.EmptyBlob);
+        evalCount.Should().Be(depth);
     }
 
     /* ------------------------------------------------------------------ */
@@ -1096,14 +1560,16 @@ public class ValueEncodingBinaryDeterministicTests
         ReadOnlyMemory<byte> sourceBytes,
         IReadOnlyDictionary<int, FrozenSet<PineValue.BlobValue>>? blobInstancesToReuse = null,
         IReadOnlyDictionary<int, FrozenSet<PineValue.ListValue>>? listInstancesToReuse = null,
-        Func<ReadOnlyMemory<byte>, PineValue?>? resolveExternalReference = null)
+        Func<ReadOnlyMemory<byte>, PineValue?>? resolveExternalReference = null,
+        Func<PineValue, PineValue, Result<string, PineValue>>? evaluate = null)
     {
         var decodeResult =
             ValueEncodingBinaryDeterministic.DecodeRoot(
                 sourceBytes,
                 blobInstancesToReuse: blobInstancesToReuse,
                 listInstancesToReuse: listInstancesToReuse,
-                resolveExternalReference: resolveExternalReference);
+                resolveExternalReference: resolveExternalReference,
+                evaluate: evaluate);
 
         if (decodeResult is Result<DecodeError, PineValue>.Ok ok)
         {
@@ -1139,6 +1605,9 @@ public class ValueEncodingBinaryDeterministicTests
 
     private static byte[] EncodeExternalReference(byte[] reference) =>
         Concat(Int32Sequence(ValueEncodingBinaryDeterministic.TagReferenceExternal256), reference);
+
+    private static byte[] EncodeEval(byte[] encodedExpression, byte[] environment) =>
+        Concat(Int32Sequence(ValueEncodingBinaryDeterministic.TagEval), encodedExpression, environment);
 
     private static byte[] Concat(params byte[][] parts) =>
         [.. parts.SelectMany(part => part)];
