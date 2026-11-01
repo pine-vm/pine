@@ -648,8 +648,42 @@ public static class CoreDebug
                 falseBranch: Expression.LitralInst(PineKernelValues.FalseValue),
                 trueBranch: blobHasIntegerSign);
 
+        var characterCode =
+            BuiltinHelpers.ApplyBuiltinConcat([LiteralByte(4), rendererValue]);
+
+        var isCharacter =
+            CoreBasics.Generic_And(
+                BuiltinHelpers.ApplyBuiltinEqualBinary(blobLength, LiteralInt(4)),
+                CoreBasics.Generic_And(
+                    BuiltinHelpers.ApplyBuiltinEqualBinary(blobSign, LiteralByte(0)),
+                    CoreBasics.Generic_And(
+                        Expression.BuiltinInst(
+                            nameof(BuiltinFunction.int_is_sorted_asc),
+                            Expression.ListInst([characterCode, LiteralInt(0x10ffff)])),
+                        CoreBasics.Generic_Not(
+                            Expression.BuiltinInst(
+                                nameof(BuiltinFunction.int_is_sorted_asc),
+                                Expression.ListInst([LiteralInt(0xd800), characterCode, LiteralInt(0xdfff)]))))));
+
         var blobResult =
-            WrapString(LiteralText("<blob>"));
+            WrapString(
+                Expression.ConditionalInst(
+                    BuiltinHelpers.ApplyBuiltinEqualBinary(
+                        rendererValue,
+                        Expression.LitralInst(PineKernelValues.TrueValue)),
+                    trueBranch: LiteralText("True"),
+                    falseBranch:
+                    Expression.ConditionalInst(
+                        BuiltinHelpers.ApplyBuiltinEqualBinary(
+                            rendererValue,
+                            Expression.LitralInst(PineKernelValues.FalseValue)),
+                        trueBranch: LiteralText("False"),
+                        falseBranch:
+                        Expression.ConditionalInst(
+                            isCharacter,
+                            trueBranch:
+                            BuiltinHelpers.ApplyBuiltinConcat([LiteralText("'"), rendererValue, LiteralText("'")]),
+                            falseBranch: LiteralText("<blob>")))));
 
         var rendererBody =
             Expression.ConditionalInst(
