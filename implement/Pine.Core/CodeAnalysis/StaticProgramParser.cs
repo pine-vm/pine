@@ -457,10 +457,10 @@ public class StaticProgramParser
                     parseEnvironmentResult.Map(
                         environment =>
                         ((StaticExpression<IdentifierT>)
-                            new StaticExpression<IdentifierT>.CrashingParseAndEval(
-                                StaticExpression<IdentifierT>.LiteralInstance(encodedLiteral.Value),
-                                environment.current),
-                            environment.dependencies));
+                        new StaticExpression<IdentifierT>.CrashingParseAndEval(
+                            StaticExpression<IdentifierT>.LiteralInstance(encodedLiteral.Value),
+                            environment.current),
+                        environment.dependencies));
             }
 
             return
