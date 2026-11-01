@@ -1,1 +1,1 @@
-invalid record access - not a record
+Attempted to access a field on a non-record value.

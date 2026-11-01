@@ -65,6 +65,34 @@ public partial class ElmSyntaxInterpreter
             ResolveBasicsModBy);
 
         builder.Add(
+            DeclQualifiedName.Create(["Bitwise"], "and"),
+            ResolveBitwiseAnd);
+
+        builder.Add(
+            DeclQualifiedName.Create(["Bitwise"], "or"),
+            ResolveBitwiseOr);
+
+        builder.Add(
+            DeclQualifiedName.Create(["Bitwise"], "xor"),
+            ResolveBitwiseXor);
+
+        builder.Add(
+            DeclQualifiedName.Create(["Bitwise"], "complement"),
+            ResolveBitwiseComplement);
+
+        builder.Add(
+            DeclQualifiedName.Create(["Bitwise"], "shiftLeftBy"),
+            ResolveBitwiseShiftLeftBy);
+
+        builder.Add(
+            DeclQualifiedName.Create(["Bitwise"], "shiftRightBy"),
+            ResolveBitwiseShiftRightBy);
+
+        builder.Add(
+            DeclQualifiedName.Create(["Bitwise"], "shiftRightZfBy"),
+            ResolveBitwiseShiftRightZfBy);
+
+        builder.Add(
             DeclQualifiedName.Create(["Json", "Decode"], "parseValue"),
             ResolveJsonDecodeParseValue);
 
@@ -979,9 +1007,9 @@ public partial class ElmSyntaxInterpreter
     }
 
     // Code points whose four-byte big-endian encoding terminates a line for String.lines.
-    private const uint s_lineFeedCodePoint = '\n';
+    private const uint LineFeedCodePoint = '\n';
 
-    private const uint s_carriageReturnCodePoint = '\r';
+    private const uint CarriageReturnCodePoint = '\r';
 
     /// <summary>
     /// Reads the four-byte big-endian UTF-32 code point at <paramref name="charOffset"/>, or returns
@@ -1031,13 +1059,13 @@ public partial class ElmSyntaxInterpreter
             }
 
             // '\r\n' is treated as a single line separator.
-            if (nextChar is s_carriageReturnCodePoint && CodePointAt(span, offset + 4) is s_lineFeedCodePoint)
+            if (nextChar is CarriageReturnCodePoint && CodePointAt(span, offset + 4) is LineFeedCodePoint)
             {
                 lines.Add(MakeElmString(charsBytes[currentLineStart..offset]));
                 offset += 8;
                 currentLineStart = offset;
             }
-            else if (nextChar is s_lineFeedCodePoint || nextChar is s_carriageReturnCodePoint)
+            else if (nextChar is LineFeedCodePoint || nextChar is CarriageReturnCodePoint)
             {
                 lines.Add(MakeElmString(charsBytes[currentLineStart..offset]));
                 offset += 4;

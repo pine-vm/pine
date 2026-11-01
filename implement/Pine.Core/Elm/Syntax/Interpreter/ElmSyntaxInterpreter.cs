@@ -904,6 +904,7 @@ public partial class ElmSyntaxInterpreter
         var combined =
             CombineResolvers(
                 [
+                DebugResolver,
                 app => PineBuiltinResolverCounting(app, invocationCounter),
                 app => UserDefinedResolver(app, declarations),
                 ]);
@@ -994,6 +995,7 @@ public partial class ElmSyntaxInterpreter
         var combined =
             CombineResolvers(
                 [
+                DebugResolver,
                 app => PineBuiltinResolverCounting(app, invocationCounter),
                 app => UserDefinedResolver(app, declarations),
                 ]);
@@ -1815,9 +1817,21 @@ public partial class ElmSyntaxInterpreter
                                 break;
                             }
 
+                            if (!ContainsOpaque(value) && value.GetLength() is 4 &&
+                                PineValueInProcess.AreEqual(value.GetElementAt(1), ElmValue.ElmFloatTypeTagNameAsValue) &&
+                                value.GetElementAt(2).AsInteger() is { } numerator)
+                            {
+                                currentValue =
+                                    ElmValueInProcess.CreateChoice(
+                                        s_elmFloatTagName,
+                                        [PineValueInProcess.CreateInteger(-numerator), value.GetElementAt(3)]);
+
+                                break;
+                            }
+
                             return
                                 MakeRuntimeError(
-                                    "Negation is only implemented for integer values, got "
+                                    "Negation requires an integer or float value, got "
                                     + RenderArgumentForError(value).rendered,
                                     kstack);
                         }
@@ -4430,7 +4444,7 @@ public partial class ElmSyntaxInterpreter
                 ElmValue.RenderAsElmExpression(ToElm(recordValue)).expressionString;
 
             throw new System.Exception(
-                "Attempted to access a field on a non-record value.\nValue: "
+                ElmRuntimeErrorMessages.RecordAccessOnNonRecord + "\nValue: "
                 + renderedValue);
         }
 
@@ -4514,6 +4528,7 @@ public partial class ElmSyntaxInterpreter
             CombineResolvers(
                 [
                 ApplicationResolver(customFunctionResolvers ?? ImmutableDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>.Empty),
+                DebugResolver,
                 PineBuiltinResolver,
                 app => UserDefinedResolver(app, resolverIndex)
                 ]);

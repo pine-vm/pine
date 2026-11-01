@@ -269,10 +269,7 @@ public partial class ExpressionCompiler
         // RecordRuntime.PineFunctionForRecordAccessAsValue compares against
         // the stored field name, which does NOT include the dot, so we
         // strip it here. Without this, the lookup never matches and falls
-        // through to the "field not found" branch, producing
-        // PineValue.EmptyList — which then crashes the surrounding
-        // ParseAndEval with an "expressionValue is string ''" / empty-list
-        // diagnostic when the result is invoked or used as a function.
+        // through to the runtime's "field not found" diagnostic.
         var fieldName = expr.FieldName;
 
         // Build a 1-argument function: \record -> record.fieldName

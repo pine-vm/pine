@@ -1,8 +1,12 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
+using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
+using Pine.Core.Elm.Syntax.Interpreter;
 using Pine.Core.Encodings;
 using Pine.Core.Functional;
+using Pine.Core.Internal;
 using Pine.Core.PineLanguage;
 using Pine.Core.Runtime;
 using System;
@@ -13,6 +17,86 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 
 public class RuntimeErrorParityTests
 {
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Record_runtime_failures_share_interpreter_diagnostics(bool update, bool missingField)
+    {
+        var record =
+            missingField
+            ?
+            ElmValueEncoding.ElmRecordAsPineValue([("present", IntegerEncoding.EncodeSignedInteger(1))])
+            :
+            IntegerEncoding.EncodeSignedInteger(1234);
+
+        var field = StringEncoding.ValueFromString("missing");
+
+        var argument =
+            update
+            ?
+            PineValue.List([PineValue.List([field, IntegerEncoding.EncodeSignedInteger(2)])])
+            :
+            field;
+
+        var environment = PineValue.List([record, argument]);
+
+        var function =
+            update
+            ?
+            RecordRuntime.PineFunctionForRecordUpdateAsValue
+            :
+            RecordRuntime.PineFunctionForRecordAccessAsValue;
+
+        var expression =
+            ExpressionEncoding.ParseExpressionFromValue(function).Extract(error => throw new Exception(error));
+
+        var expected =
+            update
+            ?
+            missingField
+            ?
+            ElmRuntimeErrorMessages.RecordUpdateFieldNotFound("missing")
+            :
+            ElmRuntimeErrorMessages.RecordUpdateOnNonRecord
+            :
+            missingField
+            ?
+            ElmRuntimeErrorMessages.RecordFieldNotFound("missing")
+            :
+            ElmRuntimeErrorMessages.RecordAccessOnNonRecord;
+
+        foreach (var vm in new IPineVM[]
+        {
+            DirectInterpreter.WithoutEvalCaching(new PineVMParseCache()),
+            ElmCompilerTestHelper.PineVMForProfiling(_ => { }),
+        })
+        {
+            Failure(() => vm.EvaluateExpression(expression, environment)).Should().Contain(expected);
+        }
+
+        var leaf =
+            update
+            ?
+            CoreRecordPrecompiledLeaves.RecordUpdateLeafDelegate(PineValueInProcess.Create(environment))
+            :
+            CoreRecordPrecompiledLeaves.RecordAccessLeafDelegate(PineValueInProcess.Create(environment));
+
+        leaf.Should().BeNull("invalid inputs must fall through to the diagnostic-producing runtime, not succeed");
+
+        var source =
+            missingField
+            ?
+            update ? "let r = { present = 1 } in { r | missing = 2 }" : "{ present = 1 }.missing"
+            :
+            update ? "let r = 1234 in { r | missing = 2 }" : "let r = 1234 in r.missing";
+
+        ElmInterpreterEnvironment.Create(Array.Empty<string>())
+            .Extract(error => throw new Exception(error)).Evaluate(source)
+            .IsErrOrNull()!.Message.Should().Contain(expected);
+    }
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(true, false)]

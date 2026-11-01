@@ -15,7 +15,7 @@ using System.Text;
 
 namespace ElmTime.ElmInteractive;
 
-public class TestElmInteractive
+public partial class TestElmInteractive
 {
 
     [System.Text.Json.Serialization.JsonConverter(typeof(JsonConverterForChoiceType))]
@@ -105,7 +105,7 @@ public class TestElmInteractive
                     elementSelector:
                     treeNode =>
                     ParseScenario(treeNode.component)
-                    .Extract(err => throw new Exception("Failed parsing scenario: " + err))),
+                    .Extract(err => throw new Exception("Failed parsing scenario '" + treeNode.name + "': " + err))),
 
                 _ =>
                 throw new InvalidOperationException("Unexpected scenarios tree type: " + scenariosTree.GetType().FullName),
@@ -383,28 +383,20 @@ public class TestElmInteractive
         var appCodeTree =
             scenarioTree.GetNodeAtPath(["context-app"]);
 
+        if (appCodeTree is FileTree.FileNode)
+            return "Expected context-app to be a directory.";
+
         var stepsDirectory =
             scenarioTree.GetNodeAtPath(["steps"]);
 
-        var testScenarioSteps =
-            stepsDirectory switch
-            {
-                null =>
-                throw new Exception(nameof(stepsDirectory) + " is null"),
+        if (stepsDirectory is not FileTree.DirectoryNode { Items.Count: > 0 } directory)
+            return "Expected a nonempty steps directory.";
 
-                not null =>
-                stepsDirectory.Map(
-                    fromFile: _ => throw new Exception(nameof(stepsDirectory) + " is blob"),
-                    fromDirectory:
-                    tree =>
-                    0 < tree.Count
-                    ?
-                    tree
-                    :
-                    throw new Exception("Found no stepsDirectories"))
-            };
+        if (directory.Items.Any(item => item.component is not FileTree.DirectoryNode))
+            return "Expected every item in steps to be a step directory.";
 
-        var stepsNames = testScenarioSteps.Select(s => s.itemName).ToImmutableList();
+        var testScenarioSteps = directory.Items.OrderBy(item => item.name, StringComparer.Ordinal).ToImmutableArray();
+        var stepsNames = testScenarioSteps.Select(s => s.name).ToImmutableList();
 
         if (!stepsNames.Order().SequenceEqual(stepsNames.OrderByNatural()))
         {
@@ -419,10 +411,10 @@ public class TestElmInteractive
             .Select(
                 sessionStep =>
                 {
-                    var stepName = sessionStep.itemName;
+                    var stepName = sessionStep.name;
 
                     return
-                        ParseScenarioStep(sessionStep.itemValue)
+                        ParseScenarioStep(sessionStep.component)
                         .MapError(err => "Failed to parse step " + stepName + ": " + err)
                         .Map(parsedStep => (stepName, parsedStep));
                 })
@@ -445,6 +437,9 @@ public class TestElmInteractive
             Encoding.UTF8.GetString(expectedErrorContainsBlob.Bytes.Span)
             :
             null;
+
+        if (expectedResponse is not null && expectedErrorContains is not null)
+            return "A step cannot expect both a value and an error.";
 
         return
             (sessionStep.GetNodeAtPath(["submission.txt"]) switch

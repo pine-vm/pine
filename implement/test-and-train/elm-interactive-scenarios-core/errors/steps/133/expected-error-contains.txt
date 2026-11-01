@@ -1,1 +1,1 @@
-invalid record update - not a record
+Expected a record value to update, but got something else.

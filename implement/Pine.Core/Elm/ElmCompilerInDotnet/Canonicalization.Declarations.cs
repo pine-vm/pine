@@ -59,6 +59,23 @@ public partial class Canonicalization
         ImplicitImportConfig? implicitImports = null,
         DeclarationCache? cache = null,
         IReadOnlyDictionary<string, ElmModuleTypeInterface>? moduleTypeInterfaces = null,
+        bool useSourceModuleTypeInterfaces = true) =>
+        CanonicalizeDeclarations(
+            sources,
+            roots,
+            implicitImports,
+            cache,
+            canonicalizedDependencies: null,
+            moduleTypeInterfaces,
+            useSourceModuleTypeInterfaces);
+
+    internal static Result<string, DeclarationCanonicalizationResult> CanonicalizeDeclarations(
+        IReadOnlyList<File> sources,
+        IReadOnlyCollection<DeclQualifiedName> roots,
+        ImplicitImportConfig? implicitImports,
+        DeclarationCache? cache,
+        IReadOnlySet<DeclQualifiedName>? canonicalizedDependencies,
+        IReadOnlyDictionary<string, ElmModuleTypeInterface>? moduleTypeInterfaces = null,
         bool useSourceModuleTypeInterfaces = true)
     {
         if (roots.Count is 0)
@@ -302,6 +319,16 @@ public partial class Canonicalization
         {
             var (file, declaration) = declarations[name][0];
             var context = contexts[file];
+
+            // Existing interpreter modules already carry frozen references. Rechecking those
+            // bodies in the newest submission's scope could reinterpret lowered private calls.
+            if (canonicalizedDependencies?.Contains(name) is true)
+            {
+                results[name] = new(declaration, []);
+                references[name] = [];
+                sourceReferences[name] = [];
+                continue;
+            }
 
             if (cache is not null && cache.TryGet(declaration, context, out var cached))
             {

@@ -1,1 +1,1 @@
-Error in case-of block: No matching branch
+Case expression did not match any arm.
