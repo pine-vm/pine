@@ -31,15 +31,31 @@ internal sealed record ExpressionTemplatePlan(
         PineVMParseCache parseCache,
         DirectInterpreterCounters? counters = null)
     {
+        if (parseCache.TemplateProofs.TryResolve(templateValue, parseCache) is { } shared)
+            return shared;
+
+        return
+            TryParseTemplateUncached(
+                templateValue,
+                new TemplateValueRecipe.Constant(templateValue),
+                parseCache,
+                0);
+    }
+
+    internal static ExpressionTemplatePlan? TryParseTemplateUncached(
+        PineValue templateValue,
+        TemplateValueRecipe current,
+        PineVMParseCache parseCache,
+        int environmentOffset)
+    {
         var budget = new RecognitionBudget();
-        TemplateValueRecipe current = new TemplateValueRecipe.Constant(templateValue);
         var intermediates = new List<TemplateValueRecipe>();
         (PineValue Code, int Stage)? lastInvariantConstructor = null;
 
         for (var stage = 0; stage < 256; ++stage)
         {
             PineVMWorkProfile.Current?.Count(PineVMWorkProfile.Metric.RecognizerStages);
-            var environment = TemplateValueRecipe.EnvironmentSlot(stage);
+            var environment = TemplateValueRecipe.EnvironmentSlot(stage + environmentOffset);
             var constructedNodes = new Dictionary<TemplateValueRecipe, TemplateValueRecipe?>();
             var constructed = TryConstruct(current, environment, budget, 0, constructedNodes);
 
@@ -108,7 +124,7 @@ internal sealed record ExpressionTemplatePlan(
                         constructorBody,
                         boundary.Stage + 1,
                         [.. intermediates.GetRange(0, boundary.Stage)],
-                        TemplateValueRecipe.EnvironmentSlot(boundary.Stage));
+                        TemplateValueRecipe.EnvironmentSlot(boundary.Stage + environmentOffset));
             }
 
             return null;
@@ -123,7 +139,7 @@ internal sealed record ExpressionTemplatePlan(
         PineVMParseCache parseCache,
         RecognitionBudget budget)
     {
-        if (!budget.CheckValue(value))
+        if (!parseCache.TemplateProofs.CheckValue(value, budget))
             return null;
 
         var parsed = parseCache.ParseExpression(value).IsOkOrNull();
@@ -237,11 +253,36 @@ internal sealed record ExpressionTemplatePlan(
 
     private static readonly PineValue s_evalTag = StringEncoding.ValueFromString("Eval");
 
-    internal sealed class RecognitionBudget
+    internal sealed class RecognitionBudget(bool reportFailures = true)
     {
-        private int _remaining = 16_384;
+        internal const int MaxNodes = 16_384;
+
+        internal const int MaxDepth = 128;
+
+        private int _remaining = MaxNodes;
+
+        internal int Consumed => MaxNodes - _remaining;
 
         public bool Exhausted { get; private set; }
+
+        internal bool ApplyValueProof(int? nodes)
+        {
+            var profile = PineVMWorkProfile.Current;
+            profile?.Checkpoint();
+
+            if (Exhausted || nodes is null || nodes.Value > _remaining)
+            {
+                if (!Exhausted)
+                    profile?.Count(PineVMWorkProfile.Metric.RecognizerBudgetFailures);
+
+                Exhausted = true;
+                profile?.Count(PineVMWorkProfile.Metric.FixedCodeBudgetRejections);
+                return false;
+            }
+
+            _remaining -= nodes.Value;
+            return true;
+        }
 
         public bool Visit(int depth)
         {
@@ -249,9 +290,9 @@ internal sealed record ExpressionTemplatePlan(
             profile?.Count(PineVMWorkProfile.Metric.RecognizerVisits);
             profile?.Checkpoint();
 
-            if (Exhausted || depth > 128 || --_remaining < 0)
+            if (Exhausted || depth > MaxDepth || --_remaining < 0)
             {
-                if (!Exhausted)
+                if (!Exhausted && reportFailures)
                     profile?.Count(PineVMWorkProfile.Metric.RecognizerBudgetFailures);
 
                 Exhausted = true;
@@ -265,7 +306,7 @@ internal sealed record ExpressionTemplatePlan(
         {
             if (count > _remaining)
             {
-                if (!Exhausted)
+                if (!Exhausted && reportFailures)
                     PineVMWorkProfile.Current?.Count(PineVMWorkProfile.Metric.RecognizerBudgetFailures);
 
                 Exhausted = true;
@@ -282,6 +323,8 @@ internal sealed record ExpressionTemplatePlan(
 
             while (pending.TryPop(out var item))
             {
+                PineVMWorkProfile.Current?.Count(PineVMWorkProfile.Metric.FixedCodeProofVisits);
+
                 if (!Visit(item.Depth))
                     return false;
 
@@ -293,7 +336,7 @@ internal sealed record ExpressionTemplatePlan(
                     case PineValue.ListValue list:
                         if (list.Items.Length > _remaining)
                         {
-                            if (!Exhausted)
+                            if (!Exhausted && reportFailures)
                                 PineVMWorkProfile.Current?.Count(PineVMWorkProfile.Metric.RecognizerBudgetFailures);
 
                             Exhausted = true;

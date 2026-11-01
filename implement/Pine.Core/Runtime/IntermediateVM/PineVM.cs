@@ -3724,13 +3724,21 @@ public class PineVM : ICancellablePineVM
         Expression expression,
         PineValueInProcess envValue)
     {
+        var profile = PineVMWorkProfile.Current;
+        profile?.DirectTemplates.Recognize(expression);
+
         if (expression.EvalCount > 0)
             return null;
 
         if (expression.BuiltinCount is not 0)
             return null;
 
-        return EvalDirect(expression, envValue);
+        return
+            profile is null
+            ?
+            EvalDirect(expression, envValue)
+            :
+            profile.DirectTemplates.Apply(expression, envValue, profile);
     }
 
     internal static (PineValueInProcess value, EvalWorkCounters evalWorkCounters)? EvalDirect(

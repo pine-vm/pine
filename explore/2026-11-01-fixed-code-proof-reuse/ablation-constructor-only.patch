@@ -1,0 +1,16 @@
+diff --git a/implement/Pine.Core/Runtime/IntermediateVM/ExpressionTemplateProofCache.cs b/implement/Pine.Core/Runtime/IntermediateVM/ExpressionTemplateProofCache.cs
+--- a/implement/Pine.Core/Runtime/IntermediateVM/ExpressionTemplateProofCache.cs
++++ b/implement/Pine.Core/Runtime/IntermediateVM/ExpressionTemplateProofCache.cs
+@@ -67,11 +67,4 @@
+     internal bool CheckValue(PineValue value, ExpressionTemplatePlan.RecognitionBudget budget)
+     {
+-        var profile = PineVMWorkProfile.Current;
+-        profile?.Count(PineVMWorkProfile.Metric.FixedCodeProofProbes);
+-        if (_values.TryGetValue(value, out var proof))
+-            profile?.Count(PineVMWorkProfile.Metric.FixedCodeProofHits);
+-        else
+-            proof = _values.GetOrAdd(value, static key => new ValueProof(CountBoundedValue(key)));
+-
+-        return budget.ApplyValueProof(proof.Nodes);
++        return budget.CheckValue(value);
+     }
