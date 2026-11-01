@@ -2950,7 +2950,7 @@ public class Avh4Format
 
         private static IReadOnlyList<IReadOnlyList<Node<TopLevelExpose>>> SingleItemGroups(
             SeparatedSyntaxList<Node<TopLevelExpose>> items) =>
-            SyntaxList.Map(items, item => (IReadOnlyList<Node<TopLevelExpose>>)new[] { item });
+            SyntaxList.Map(items, item => (IReadOnlyList<Node<TopLevelExpose>>)[item]);
 
         /// <summary>
         /// Extracts @docs groups from a documentation comment.

@@ -2415,7 +2415,7 @@ public record StackInstruction(
                 ?? throw new Exception("Missing skip count multiplier for slice switch instruction")
             }
             :
-            new[] { cases.Length.ToString(CultureInfo.InvariantCulture) };
+            [cases.Length.ToString(CultureInfo.InvariantCulture)];
 
         if (cases.Length > MaxInlineSwitchCases)
         {

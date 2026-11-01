@@ -447,7 +447,7 @@ public sealed class RunWatchCommandTests : IDisposable
             await error.NextWaiting();
             File.ReadAllBytes(destination).Should().Equal(original);
 
-            var changed = declaration == "text" ? Encoding.UTF8.GetBytes("new encoding") : new byte[] { 1, 2, 3 };
+            var changed = declaration == "text" ? Encoding.UTF8.GetBytes("new encoding") : [1, 2, 3];
             File.WriteAllBytes(input, changed);
             await error.NextWaiting();
             File.ReadAllBytes(destination).Should().Equal(changed);
