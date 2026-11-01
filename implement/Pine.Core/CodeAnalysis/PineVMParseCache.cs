@@ -1,7 +1,10 @@
 using Pine.Core.Encodings;
 using Pine.Core.Functional;
 using Pine.Core.PineLanguage;
+using Pine.Core.Runtime.IntermediateVM;
+using System;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 
 namespace Pine.Core.CodeAnalysis;
 
@@ -10,6 +13,14 @@ namespace Pine.Core.CodeAnalysis;
 /// </summary>
 public class PineVMParseCache
 {
+    internal ExpressionTemplateProofCache TemplateProofs { get; } = new();
+
+    /// <summary>Distinct parameterized constructor shapes, including uncertain shapes.</summary>
+    public int TemplateConstructorProofCount => TemplateProofs.ConstructorCount;
+
+    /// <summary>Distinct exact fixed-code values with bounded recognition proofs.</summary>
+    public int TemplateBoundedValueProofCount => TemplateProofs.BoundedValueCount;
+
     private readonly ConcurrentDictionary<
         PineValue,
         ExpressionEncoding2026.ParseExpressionResult>
@@ -40,8 +51,33 @@ public class PineVMParseCache
     }
 
     internal ExpressionEncoding2026.ParseExpressionResult ParseExpressionWithoutResultAllocation(
-        PineValue expressionValue) =>
-        ExpressionEncoding.ParseExpressionFromValueViaPostOrder(
-            expressionValue,
-            _parseExprCache);
+        PineValue expressionValue)
+    {
+        var profile = PineVMWorkProfile.Current;
+
+        if (profile is null)
+            return ExpressionEncoding.ParseExpressionFromValueViaPostOrder(expressionValue, _parseExprCache);
+
+        var hit = _parseExprCache.ContainsKey(expressionValue);
+        var count = hit ? 0 : _parseExprCache.Count;
+        var bytes = GC.GetAllocatedBytesForCurrentThread();
+        var ticks = Stopwatch.GetTimestamp();
+
+        var parsed =
+            ExpressionEncoding.ParseExpressionFromValueViaPostOrder(
+                expressionValue,
+                _parseExprCache);
+
+        var elapsed = Stopwatch.GetTimestamp() - ticks;
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - bytes;
+
+        profile.DirectTemplates.Parsed(
+            parsed.Expression,
+            hit,
+            hit ? 0 : _parseExprCache.Count - count,
+            allocated,
+            elapsed);
+
+        return parsed;
+    }
 }

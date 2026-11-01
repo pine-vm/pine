@@ -1,0 +1,11 @@
+diff --git a/implement/Pine.Core/Runtime/IntermediateVM/ExpressionTemplatePlan.cs b/implement/Pine.Core/Runtime/IntermediateVM/ExpressionTemplatePlan.cs
+--- a/implement/Pine.Core/Runtime/IntermediateVM/ExpressionTemplatePlan.cs
++++ b/implement/Pine.Core/Runtime/IntermediateVM/ExpressionTemplatePlan.cs
+@@ -33,7 +33,4 @@
+     {
+-        if (parseCache.TemplateProofs.TryResolve(templateValue, parseCache) is { } shared)
+-            return shared;
+-
+         return TryParseTemplateUncached(
+             templateValue, new TemplateValueRecipe.Constant(templateValue), parseCache, 0);
+     }

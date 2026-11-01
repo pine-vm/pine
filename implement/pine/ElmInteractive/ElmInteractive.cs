@@ -1,6 +1,5 @@
 using Pine.Core.Addressing;
 using Pine.Core.Elm;
-using Pine.Core.Elm.Elm019;
 using Pine.Core.Encodings;
 using Pine.Core.Files;
 using Pine.Core.Functional;
@@ -461,7 +460,8 @@ public class ElmInteractive
             ?
             appCodeTree
             :
-            CompileTree(appCodeTree);
+            ElmInterpreterAppPreparation.LowerAppSourceTree(appCodeTree)
+            .Extract(error => throw new Exception(error));
 
         // After lowering we can remove all Elm modules not in the dependency tree of the entry points.
 
@@ -489,65 +489,6 @@ public class ElmInteractive
             .Select(
                 appCodeFile => (appCodeFile.Key, appCodeFile.Value, Encoding.UTF8.GetString(appCodeFile.Value.Span)))
             ];
-    }
-
-    private static FileTree CompileTree(FileTree sourceTree)
-    {
-        if (sourceTree.GetNodeAtPath(["elm.json"]) is not FileTree.FileNode elmJsonFile)
-            return sourceTree;
-
-        var elmJsonFileParsed =
-            System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile.Bytes.Span);
-
-        IReadOnlyList<IReadOnlyList<string>> elmJsonSourceDirectories =
-            [
-            ..(elmJsonFileParsed?.SourceDirectories ?? [])
-            .Select(flat => flat.Split('/', '\\'))
-            ];
-
-        bool filePathIsUnderElmJsonSourceDirectories(IReadOnlyList<string> filePath)
-        {
-            return
-                elmJsonSourceDirectories
-                .Any(sourceDir => filePath.Take(sourceDir.Count).SequenceEqual(sourceDir));
-        }
-
-        var sourceFiles = FileTreeExtensions.ToFlatDictionaryWithPathComparer(sourceTree);
-
-        if (sourceFiles.Count is 0)
-            return sourceTree;
-
-        var compilationRootFilePath =
-            sourceFiles
-            .Where(c => c.Key[c.Key.Count - 1].EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(c => c.Key.Count)
-            .OrderBy(c => filePathIsUnderElmJsonSourceDirectories(c.Key) ? 0 : 1)
-            .FirstOrDefault()
-            .Key;
-
-        if (compilationRootFilePath.Count is 0)
-            return sourceTree;
-
-        var compilationResult =
-            ElmAppCompilation.AsCompletelyLoweredElmApp(
-                sourceFiles: FileTreeExtensions.ToFlatDictionaryWithPathComparer(sourceTree),
-                workingDirectoryRelative: [],
-                ElmAppInterfaceConfig.Default with { CompilationRootFilePath = compilationRootFilePath });
-
-        return
-            compilationResult
-            .Unpack(
-                fromErr:
-                compilationError =>
-                {
-                    var errorMessage =
-                        "\n" + ElmAppCompilation.CompileCompilationErrorsDisplayText(compilationError) + "\n";
-
-                    Console.WriteLine(errorMessage);
-
-                    throw new Exception(errorMessage);
-                },
-                fromOk: compilationOk => FileTree.FromSetOfFilesWithStringPath(compilationOk.Result.CompiledFiles));
     }
 
     public record EvaluatedStruct(

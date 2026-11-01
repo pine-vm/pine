@@ -100,6 +100,7 @@ public class RepositoryRoundtripTests
         {
             var committedPaths = new[] { "Caf\u00e9.elm", "Tracked file.elm", "bin/Tracked.elm" };
             var blob = WriteGitObject(repositoryRoot, "blob", Encoding.UTF8.GetBytes("committed source"));
+
             var subtree =
                 WriteGitObject(repositoryRoot, "tree", TreeEntry("100644", "Tracked.elm", blob));
 
@@ -158,6 +159,7 @@ public class RepositoryRoundtripTests
             foreach (var corpus in new[] { files, LoadRepositoryElmFiles(repositoryRoot) })
             {
                 corpus.Select(file => file.path).Should().Equal(committedPaths);
+
                 corpus.Select(file => Encoding.UTF8.GetString(file.contents.Span))
                     .Should().Equal("committed source", "committed source", "committed source");
             }

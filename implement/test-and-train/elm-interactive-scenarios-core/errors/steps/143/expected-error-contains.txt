@@ -1,1 +1,1 @@
-invalid record update - field name not found
+Cannot update field "gamma" because it does not exist on the record.

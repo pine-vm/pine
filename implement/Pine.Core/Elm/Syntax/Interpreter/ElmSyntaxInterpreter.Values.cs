@@ -234,6 +234,15 @@ public partial class ElmSyntaxInterpreter
                 "Cannot convert a closure to an ElmValue. Closures cannot be returned from resolvers or captured in ElmValues; they can only be applied to arguments within the resolver's execution.");
         }
 
+        if (IsOpaque(value))
+        {
+            if (renderClosuresForError)
+                return new ElmValue.ElmInternal("function");
+
+            throw new System.NotSupportedException(
+                "Cannot convert a function constructor or record-access function to an ElmValue.");
+        }
+
         if (ContainsOpaque(value))
         {
             return ToElmStructural(value, visiting, renderClosuresForError);

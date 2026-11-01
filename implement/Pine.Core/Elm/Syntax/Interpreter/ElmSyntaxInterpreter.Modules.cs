@@ -4,6 +4,7 @@ using Pine.Core.Elm.Syntax.Abstract;
 using Pine.Core.Functional;
 using Pine.Core.Internal;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text.Json.Serialization;
 
@@ -178,6 +179,7 @@ public partial class ElmSyntaxInterpreter
 
         var resolverIndex = GetDeclarationResolverIndex(prepared.Declarations);
 
+        resolvers.Add(DebugResolver);
         resolvers.Add(app => PineBuiltinResolverCounting(app, invocationCounter));
         resolvers.Add(app => UserDefinedResolver(app, resolverIndex));
 
@@ -288,21 +290,37 @@ public partial class ElmSyntaxInterpreter
                 "Unexpected canonicalization result type: " + canonicalizeResult.GetType().FullName);
         }
 
+        foreach (var (moduleName, (_, errors, _)) in canonicalized)
+        {
+            if (errors.Count is not 0)
+            {
+                return
+                    "Failed canonicalization in module " + string.Join(".", moduleName) + ":\n" +
+                    string.Join("\n", errors.Select(ElmCompiler.RenderCanonicalizationError));
+            }
+        }
+
+        return PrepareCanonicalModules([.. canonicalized.Values.Select(result => result.File)]);
+    }
+
+    /// <summary>
+    /// Prepares modules whose references have already been canonicalized. This does not resolve
+    /// names again, so it can also prepare an incremental module referencing an existing program.
+    /// The caller must retain that program's declarations when combining the result.
+    /// Disable closed-expression reduction to prepare without executing any subexpressions.
+    /// </summary>
+    public static Prepared PrepareCanonicalModules(
+        IReadOnlyList<Concrete.File> modules,
+        bool reduceClosedExpressions = true)
+    {
         // Build a prepared declarations dictionary keyed by full module-qualified name. For
         // InfixDeclaration entries, the key uses the operator symbol as DeclName (so
         // BuildInfixOperatorMap finds them).
         var declarations = new Dictionary<DeclQualifiedName, AbstractDeclaration>();
 
-        foreach (var (moduleNameKey, (canonicalizedFile, errors, shadowings)) in canonicalized)
+        foreach (var canonicalizedFile in modules)
         {
-            if (errors.Count is not 0)
-            {
-                var moduleNameStr = string.Join(".", moduleNameKey);
-
-                var errMessages = string.Join("\n", errors.Select(ElmCompiler.RenderCanonicalizationError));
-
-                return "Failed canonicalization in module " + moduleNameStr + ":\n" + errMessages;
-            }
+            var moduleNameKey = Concrete.Module.GetModuleName(canonicalizedFile.ModuleDefinition.Value).Value;
 
             var abstractFile = ConvertFromConcrete.FromFile(canonicalizedFile);
 
@@ -330,7 +348,13 @@ public partial class ElmSyntaxInterpreter
             }
         }
 
-        return new Prepared(PrepareDeclarations(declarations));
+        return
+            new Prepared(
+                reduceClosedExpressions
+                ?
+                PrepareDeclarations(declarations).ToImmutableDictionary()
+                :
+                declarations.ToImmutableDictionary(item => item.Key, item => PrepareDeclaration(item.Value)));
     }
 
     private static File OptimizeSyntax(File file)

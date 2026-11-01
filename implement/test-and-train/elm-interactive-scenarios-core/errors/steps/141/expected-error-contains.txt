@@ -1,1 +1,1 @@
-invalid record access - field name not found
+Record does not contain a field named 'gamma'.

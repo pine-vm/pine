@@ -683,6 +683,33 @@ public partial class Canonicalization
         return shadowings;
     }
 
+    internal static IReadOnlyDictionary<string, ImmutableArray<string>> UniqueExportedConstructors(
+        IReadOnlyList<File> modules)
+    {
+        var exports = BuildModuleExportsMap(modules);
+        var candidates = new List<(string name, ImmutableArray<string> module)>();
+
+        foreach (var file in modules)
+        {
+            var moduleName = Module.GetModuleName(file.ModuleDefinition.Value).Value;
+            var exposed = exports[string.Join(".", moduleName)];
+
+            foreach (var choice in file.Declarations.Select(node => node.Value).OfType<Declaration.ChoiceTypeDeclaration>())
+            {
+                foreach (var constructor in choice.TypeDeclaration.Constructors)
+                {
+                    if (exposed.ValueExports.Contains(constructor.Value.Name.Value))
+                        candidates.Add((constructor.Value.Name.Value, [.. moduleName]));
+                }
+            }
+        }
+
+        return
+            candidates.GroupBy(item => item.name, StringComparer.Ordinal)
+            .Where(group => group.Count() is 1)
+            .ToImmutableDictionary(group => group.Key, group => group.Single().module, StringComparer.Ordinal);
+    }
+
     private static ImmutableDictionary<string, ModuleExports> BuildModuleExportsMap(
         IReadOnlyList<File> modules)
     {

@@ -42,6 +42,14 @@ public static partial class ValueEncodingBinaryDeterministic
     public const int TagReferenceExternal256 = 5;
 
     /// <summary>
+    /// Tag identifier indicating an Eval, followed by the encoded expression value and then the environment value.
+    /// Both arguments are decoded normally, including resolving internal and external references and nested Evals.
+    /// Decoding evaluates the resolved arguments via a delegate supplied by the caller.
+    /// Encoding does not emit this tag.
+    /// </summary>
+    public const int TagEval = 6;
+
+    /// <summary>
     /// Number of bytes identifying the referenced value in an entry tagged with <see cref="TagReferenceExternal256"/>.
     /// </summary>
     public const int ReferenceExternal256Length = 32;
@@ -203,6 +211,14 @@ public static partial class ValueEncodingBinaryDeterministic
     /// It receives the <see cref="ReferenceExternal256Length"/> bytes of the reference and returns the referenced value,
     /// or null if not found. When this delegate is not given, every external reference is treated as not found.
     /// </param>
+    /// <param name="evaluate">
+    /// Optional delegate for entries tagged with <see cref="TagEval"/>. It receives the already resolved
+    /// encoded expression value and environment value and returns the resulting value or a rejection reason.
+    /// Each Eval entry invokes the delegate once, after both arguments have been decoded.
+    /// Internal references to a completed Eval reuse its result without invoking the delegate again.
+    /// When this delegate is not given, every Eval is rejected.
+    /// Rejection aborts decoding with <see cref="DecodeError.EvalRejected"/>, including both resolved arguments.
+    /// </param>
     /// <returns>
     /// The decoded PineValue instance, or a description of the error if decoding failed.
     /// </returns>
@@ -210,7 +226,8 @@ public static partial class ValueEncodingBinaryDeterministic
         ReadOnlyMemory<byte> sourceBytes,
         IReadOnlyDictionary<int, FrozenSet<PineValue.BlobValue>>? blobInstancesToReuse = null,
         IReadOnlyDictionary<int, FrozenSet<PineValue.ListValue>>? listInstancesToReuse = null,
-        Func<ReadOnlyMemory<byte>, PineValue?>? resolveExternalReference = null)
+        Func<ReadOnlyMemory<byte>, PineValue?>? resolveExternalReference = null,
+        Func<PineValue, PineValue, Result<string, PineValue>>? evaluate = null)
     {
         var decoded = new Dictionary<long, PineValue>();
 
@@ -238,7 +255,7 @@ public static partial class ValueEncodingBinaryDeterministic
 
         // Use an explicit stack rather than recursion so that deeply nested
         // values do not overflow the call stack.
-        var pendingLists = new Stack<PendingList>();
+        var pendingValues = new Stack<PendingValue>();
 
         while (true)
         {
@@ -320,12 +337,18 @@ public static partial class ValueEncodingBinaryDeterministic
 
                 if (itemCount is not 0)
                 {
-                    pendingLists.Push(new PendingList(startAddress, new PineValue[itemCount]));
+                    pendingValues.Push(new PendingValue(startAddress, tag, new PineValue[itemCount]));
 
                     continue;
                 }
 
                 completedValue = CompleteList(startAddress, []);
+            }
+            else if (tag is TagEval)
+            {
+                pendingValues.Push(new PendingValue(startAddress, tag, new PineValue[2]));
+
+                continue;
             }
             else if (tag is TagBlob)
             {
@@ -378,10 +401,10 @@ public static partial class ValueEncodingBinaryDeterministic
                 return new DecodeError.UnknownTag(Offset: startAddress, Tag: tag);
             }
 
-            // Deliver the completed value to the enclosing lists, completing them in turn when full.
+            // Deliver the completed value to the enclosing lists or Evals, completing them in turn when full.
             while (true)
             {
-                if (!pendingLists.TryPeek(out var parent))
+                if (!pendingValues.TryPeek(out var parent))
                 {
                     return completedValue;
                 }
@@ -395,9 +418,57 @@ public static partial class ValueEncodingBinaryDeterministic
                     break;
                 }
 
-                pendingLists.Pop();
+                pendingValues.Pop();
 
-                completedValue = CompleteList(parent.StartAddress, parent.Items);
+                switch (parent.Tag)
+                {
+                    case TagList:
+                        completedValue = CompleteList(parent.StartAddress, parent.Items);
+                        break;
+
+                    case TagEval:
+                        var encodedExpression = parent.Items[0];
+                        var environment = parent.Items[1];
+
+                        if (evaluate is null)
+                        {
+                            return
+                                new DecodeError.EvalRejected(
+                                    Offset: parent.StartAddress,
+                                    EncodedExpression: encodedExpression,
+                                    Environment: environment,
+                                    Reason: "No evaluation delegate was provided.");
+                        }
+
+                        var evaluationResult = evaluate(encodedExpression, environment);
+
+                        switch (evaluationResult)
+                        {
+                            case Result<string, PineValue>.Ok ok:
+                                completedValue = ok.Value;
+                                decoded[parent.StartAddress] = completedValue;
+                                break;
+
+                            case Result<string, PineValue>.Err err:
+                                return
+                                    new DecodeError.EvalRejected(
+                                        Offset: parent.StartAddress,
+                                        EncodedExpression: encodedExpression,
+                                        Environment: environment,
+                                        Reason: err.Value);
+
+                            default:
+                                throw new NotImplementedException(
+                                    "DecodeRoot does not handle evaluation result variant: " +
+                                    evaluationResult.GetType().Name);
+                        }
+
+                        break;
+
+                    default:
+                        throw new NotImplementedException(
+                            "DecodeRoot does not handle pending value tag: " + parent.Tag);
+                }
             }
         }
 
@@ -421,9 +492,11 @@ public static partial class ValueEncodingBinaryDeterministic
         }
     }
 
-    private sealed class PendingList(int startAddress, PineValue[] items)
+    private sealed class PendingValue(int startAddress, int tag, PineValue[] items)
     {
         public int StartAddress { get; } = startAddress;
+
+        public int Tag { get; } = tag;
 
         public PineValue[] Items { get; } = items;
 

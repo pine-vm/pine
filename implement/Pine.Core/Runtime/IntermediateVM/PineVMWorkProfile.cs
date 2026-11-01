@@ -234,6 +234,38 @@ public sealed class PineVMWorkProfile : IDisposable
         RecognizerVisits,
         /// <summary>Recognizer budget-limit encounters, not necessarily distinct failed recognition attempts.</summary>
         RecognizerBudgetFailures,
+        /// <summary>Encoded constructor nodes inspected to select a parameterized proof.</summary>
+        TemplateShapeVisits,
+        /// <summary>Canonical shape child arrays allocated while selecting a constructor proof.</summary>
+        TemplateShapeKeyArrays,
+        /// <summary>Immediate slots in canonical shape child arrays.</summary>
+        TemplateShapeKeyItems,
+        /// <summary>Parameterized constructor proof cache probes.</summary>
+        TemplateShapeProbes,
+        /// <summary>Parameterized constructor proof cache hits, including uncertain shapes.</summary>
+        TemplateShapeHits,
+        /// <summary>Parameterized constructor proof factory executions, including races.</summary>
+        TemplateShapeFactories,
+        /// <summary>Successful parameterized proof applications to exact bound values.</summary>
+        TemplateShapeApplications,
+        /// <summary>Uncertain parameterized shapes falling back to exact-value recognition.</summary>
+        TemplateShapeFallbacks,
+        /// <summary>Recipe nodes visited while binding a parameterized proof.</summary>
+        TemplateShapeBindingVisits,
+        /// <summary>Recipe child arrays allocated while binding a parameterized proof.</summary>
+        TemplateShapeBindingArrays,
+        /// <summary>Immediate slots in arrays allocated while rebinding constructor recipes.</summary>
+        TemplateShapeBindingItems,
+        /// <summary>Exact fixed-code bounded-proof cache probes.</summary>
+        FixedCodeProofProbes,
+        /// <summary>Exact fixed-code bounded-proof cache hits, including budget negatives.</summary>
+        FixedCodeProofHits,
+        /// <summary>Exact fixed-code bounded-proof factory executions, including races.</summary>
+        FixedCodeProofFactories,
+        /// <summary>Physical value nodes examined while establishing fixed-code bounded proofs.</summary>
+        FixedCodeProofVisits,
+        /// <summary>Bounded-proof applications rejecting a recognizer's remaining budget.</summary>
+        FixedCodeBudgetRejections,
         /// <summary>Number of metric slots; sentinel excluded from recorded measurements.</summary>
         Count
     }
@@ -646,6 +678,9 @@ public sealed class PineVMWorkProfile : IDisposable
 
     /// <summary>Reads one direct-site counter.</summary>
     public long this[Metric metric] => _counts[(int)metric];
+
+    /// <summary>Separate simple direct-eval template measurements, excluding deferred/IR plan application.</summary>
+    public DirectEvalTemplateMetrics DirectTemplates { get; } = new();
 
     /// <summary>
     /// Sum of disjoint covered runtime allocation sites, excluding profiling metadata.

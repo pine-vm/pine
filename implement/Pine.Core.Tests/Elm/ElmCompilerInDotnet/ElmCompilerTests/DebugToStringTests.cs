@@ -15,6 +15,18 @@ public class DebugToStringTests
     public static IEnumerable<object[]> GenericValues()
     {
         yield return [IntegerEncoding.EncodeSignedInteger(11), "11"];
+        yield return [IntegerEncoding.EncodeSignedInteger(-1234567890123456789), "-1234567890123456789"];
+        yield return [PineKernelValues.TrueValue, "True"];
+        yield return [PineKernelValues.FalseValue, "False"];
+        yield return [ElmValueEncoding.ElmCharAsPineValue('a'), "'a'"];
+        yield return [ElmValueEncoding.ElmCharAsPineValue(0x1f600), "'😀'"];
+        yield return [ElmValueEncoding.ElmValueAsPineValue(ElmValue.ElmFloat.NotNormalized(1, 10)), "0.1"];
+        yield return [ElmValueEncoding.ElmValueAsPineValue(ElmValue.ElmFloat.NotNormalized(-1, 2)), "-0.5"];
+        yield return [ElmValueEncoding.ElmValueAsPineValue(ElmValue.ElmFloat.NotNormalized(1, 3)), "0.3333333333333333"];
+        yield return [ElmValueEncoding.ElmValueAsPineValue(ElmValue.ElmFloat.NotNormalized(0, 0)), "NaN"];
+        yield return [ElmValueEncoding.ElmValueAsPineValue(ElmValue.ElmFloat.NotNormalized(1, 0)), "Infinity"];
+        yield return [ElmValueEncoding.ElmValueAsPineValue(ElmValue.ElmFloat.NotNormalized(-1, 0)), "-Infinity"];
+        yield return [PineValue.Blob([255]), "<blob>"];
         yield return [ElmValueEncoding.StringAsPineValue("hello"), "\"hello\""];
         yield return [PineValue.EmptyList, "[]"];
 
@@ -104,6 +116,10 @@ public class DebugToStringTests
 
     [Theory]
     [InlineData("11", "11")]
+    [InlineData("True", "True")]
+    [InlineData("False", "False")]
+    [InlineData("'a'", "'a'")]
+    [InlineData("0.1", "0.1")]
     [InlineData("\"hello\"", "\"hello\"")]
     [InlineData("[]", "[]")]
     [InlineData("[ 11, 13, 17, 19 ]", "[11,13,17,19]")]
