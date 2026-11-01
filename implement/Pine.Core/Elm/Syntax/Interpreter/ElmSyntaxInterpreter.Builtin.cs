@@ -660,12 +660,6 @@ public partial class ElmSyntaxInterpreter
                 segments.Add(MakeElmString(stringBytes.Slice(offset, 4)));
             }
 
-            // An empty string still yields a single empty segment in Elm.
-            if (stringBytes.Length is 0)
-            {
-                segments.Add(MakeElmString(System.ReadOnlyMemory<byte>.Empty));
-            }
-
             return PineValueInProcess.CreateList(segments);
         }
 
@@ -1386,7 +1380,7 @@ public partial class ElmSyntaxInterpreter
             return (beforeOnly, 1);
         }
 
-        if (ParseUnsignedInt(beforeSep) is not { } beforeSepInt ||
+        if ((beforeSep.Length is 0 ? System.Numerics.BigInteger.Zero : ParseUnsignedInt(beforeSep)) is not { } beforeSepInt ||
             ParseUnsignedInt(afterSep) is not { } afterSepInt)
         {
             return (0, null);

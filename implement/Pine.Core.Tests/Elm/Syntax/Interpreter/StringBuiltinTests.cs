@@ -62,6 +62,7 @@ public class StringBuiltinTests
     [InlineData("String.split \",\" \",a,\"", "[ \"\", \"a\", \"\" ]")]
     [InlineData("String.split \", \" \"a, b, c\"", "[ \"a\", \"b\", \"c\" ]")]
     [InlineData("String.split \"\" \"abc\"", "[ \"a\", \"b\", \"c\" ]")]
+    [InlineData("String.split \"\" \"\"", "[]")]
     public void Split_matches_Elm_semantics(string expression, string expected) =>
         AssertEvaluatesEqual(expression, expected);
 
@@ -365,6 +366,23 @@ public class StringBuiltinTests
     public void ToFloat_of_malformed_input_is_Nothing(string expression, string expected) =>
         AssertEvaluatesEqual(expression, expected);
 
+    [Theory]
+    [InlineData(".0", "Just 0")]
+    [InlineData("-.0", "Just 0")]
+    [InlineData(".1", "Just 0.1")]
+    [InlineData("-.1", "Just -0.1")]
+    public void ToFloat_accepts_an_empty_integer_part(string number, string expected)
+    {
+        var (result, _) =
+            Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter.ParseAndInterpretWithCounters(
+                "String.toFloat \"" + number + "\"",
+                s_prepared.Value);
+
+        Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter.RenderAsElmExpression(
+            result.Extract(error => throw new System.Exception(error.ToString())))
+            .expressionString.Should().Be(expected);
+    }
+
     // toFloat of scientific notation round-trips through fromFloat to a plain decimal.
     [Theory]
     [InlineData("15e-1", "1.5")]
@@ -407,6 +425,9 @@ public class StringBuiltinTests
     [InlineData("String.trimLeft \"  hats  \"")]
     [InlineData("String.trimRight \"  hats  \"")]
     [InlineData("String.toFloat \"1.5\"")]
+    [InlineData("String.toFloat \".1\"")]
+    [InlineData("String.toFloat \"-.0\"")]
+    [InlineData("String.split \"\" \"\"")]
     [InlineData("String.toFloat \"-3.14\"")]
     [InlineData("String.toFloat \"15e-1\"")]
     [InlineData("String.toFloat \"1.5E2\"")]
