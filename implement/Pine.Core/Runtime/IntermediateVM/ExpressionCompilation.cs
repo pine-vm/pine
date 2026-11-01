@@ -877,6 +877,10 @@ public record ExpressionCompilation(
         if (expression.EvalCount is 0)
             return expression;
 
+        // Keep native arithmetic patterns intact for instruction selection.
+        if (PineIRCompiler.TryParseIntDivision(expression) is not null)
+            return expression;
+
         var cacheKey = (expression, conditionCount);
 
         if (cache.TryGetValue(cacheKey, out var cached))

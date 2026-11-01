@@ -274,6 +274,14 @@ public sealed partial record PineControlFlowGraph
                     Escape(TerminatorInput(block, values, 1));
                     break;
 
+                case PineControlFlowTerminator.IntDivision division:
+                    foreach (var input in division.Inputs)
+                    {
+                        Escape(values.GetValueOrDefault(input, ListOrigin.Other));
+                    }
+
+                    break;
+
                 case PineControlFlowTerminator.Switch switchTerminator:
                     for (var depth = 0; depth < switchTerminator.PopCount; depth++)
                     {

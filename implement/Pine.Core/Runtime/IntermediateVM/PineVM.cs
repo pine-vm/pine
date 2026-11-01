@@ -2464,6 +2464,73 @@ public class PineVM : ICancellablePineVM
                             continue;
                         }
 
+                    case StackInstructionKind.Int_Div_Const:
+                        {
+                            var divisor =
+                                currentInstruction.IntegerLiteral is { IsZero: false } constant
+                                ?
+                                constant
+                                :
+                                throw new InvalidOperationException("Int_Div_Const requires a nonzero IntegerLiteral.");
+
+                            var dividend = currentFrame.PopTopmostFromStack();
+
+                            currentFrame.PushInstructionResult(
+                                dividend.AsInteger() is { } integer
+                                ?
+                                PineValueInProcess.CreateInteger(integer / divisor)
+                                :
+                                PineValueInProcess.CreateInteger(0));
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Int_Div_Binary:
+                        {
+                            if ((currentInstruction.Literal is null) == (currentInstruction.JumpOffset is null))
+                            {
+                                throw new InvalidOperationException(
+                                    "Int_Div_Binary requires exactly one of Literal or JumpOffset.");
+                            }
+
+                            if (currentInstruction.JumpOffset is not null &&
+                                CheckCancellation() is { } cancellationError)
+                            {
+                                return cancellationError;
+                            }
+
+                            var divisor = currentFrame.PopTopmostFromStack().AsInteger();
+                            var dividend = currentFrame.PopTopmostFromStack().AsInteger();
+
+                            if (divisor is { IsZero: true })
+                            {
+                                if (currentInstruction.JumpOffset is { } jumpOffset)
+                                {
+                                    currentFrame.InstructionPointer += jumpOffset;
+
+                                    if (jumpOffset < 0 &&
+                                        IncrementLoopIterationCountAndEnforceLimits(currentFrame) is { } loopLimitError)
+                                    {
+                                        return loopLimitError;
+                                    }
+
+                                    continue;
+                                }
+
+                                currentFrame.PushInstructionResult(currentInstruction.Literal!);
+                                continue;
+                            }
+
+                            currentFrame.PushInstructionResult(
+                                dividend is { } dividendInt && divisor is { } divisorInt
+                                ?
+                                PineValueInProcess.CreateInteger(dividendInt / divisorInt)
+                                :
+                                PineValueInProcess.CreateInteger(0));
+
+                            continue;
+                        }
+
                     case StackInstructionKind.Int_Mul_Const:
                         {
                             var right =

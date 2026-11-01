@@ -481,6 +481,18 @@ public class PineIRCompiler
                     StackInstruction.Local_Get(localIndex));
         }
 
+        if (TryParseIntDivision(expr) is { } division)
+        {
+            return
+                CompileIntDivision(
+                    division.Dividend,
+                    division.Divisor,
+                    division.DivisionByZero,
+                    context,
+                    prior,
+                    parseCache);
+        }
+
         switch (expr)
         {
             case Expression.Litral literalExpr:
@@ -531,6 +543,72 @@ public class PineIRCompiler
                 throw new NotImplementedException(
                     "Unexpected expression type: " + expr.GetType().Name);
         }
+    }
+
+    internal static (Expression Dividend, Expression Divisor, Expression DivisionByZero)? TryParseIntDivision(
+        Expression expression)
+    {
+        // TODO: Implement.
+
+        return TryParseIntDivisionWithConstantDivisor(expression);
+    }
+
+    private static (Expression Dividend, Expression Divisor, Expression DivisionByZero)?
+        TryParseIntDivisionWithConstantDivisor(Expression expression)
+    {
+        // TODO: Implement recognition of integer division with constant divisor.
+
+        return null;
+    }
+
+    /// <summary>
+    /// Compiles integer division, specializing a nonzero constant divisor and embedding a
+    /// literal zero result when possible. Other zero handlers remain structured control flow.
+    /// </summary>
+    public static NodeCompilationResult CompileIntDivision(
+        Expression dividend,
+        Expression divisor,
+        Expression divisionByZero,
+        CompilationContext context,
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
+    {
+        if (TryParse_IndependentSignedIntegerRelaxed(divisor, parseCache) is { } constant)
+        {
+            if (constant.IsZero)
+            {
+                if (dividend.EvalCount > 0)
+                {
+                    prior =
+                        prior.ContinueWithExpression(dividend, context, parseCache)
+                        .AppendInstruction(StackInstruction.Pop);
+                }
+
+                return CompileExpressionTransitive(divisionByZero, context, prior, parseCache);
+            }
+
+            return
+                prior.ContinueWithExpression(dividend, context, parseCache)
+                .AppendInstruction(StackInstruction.Int_Div_Const(constant));
+        }
+
+        var afterOperands =
+            prior.ContinueWithExpression(dividend, context, parseCache)
+            .ContinueWithExpression(divisor, context, parseCache);
+
+        if (TryEvalIndependent(divisionByZero, parseCache) is { } defaultValue)
+        {
+            return afterOperands.AppendInstruction(StackInstruction.Int_Div_Binary(defaultValue));
+        }
+
+        var handler =
+            CompileExpressionTransitive(
+                divisionByZero,
+                context,
+                new NodeCompilationResult(PineControlFlowFragment.Empty, afterOperands.LocalsSet),
+                parseCache);
+
+        return afterOperands.AppendNode(new PineControlFlowNode.IntDivision(handler.Fragment));
     }
 
     /// <summary>

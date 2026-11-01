@@ -364,6 +364,21 @@ public enum StackInstructionKind
     Int_Mul_Generic,
 
     /// <summary>
+    /// Divides the top stack integer by the nonzero <see cref="StackInstruction.IntegerLiteral"/>,
+    /// truncating toward zero. Non-integer operands produce integer zero, matching the division expression.
+    /// </summary>
+    Int_Div_Const,
+
+    /// <summary>
+    /// Divides the second stack integer by the top integer, truncating toward zero.
+    /// Exactly one of <see cref="StackInstruction.Literal"/> (the zero-divisor result) or
+    /// <see cref="StackInstruction.JumpOffset"/> (the zero-divisor handler) must be set.
+    /// A zero-divisor jump consumes both operands without pushing a result.
+    /// Non-integer operands produce integer zero without jumping unless the divisor is zero.
+    /// </summary>
+    Int_Div_Binary,
+
+    /// <summary>
     /// Bitwise AND all items in the list from the top value on the stack.
     /// Not yet implemented in the VM; will throw at runtime.
     /// </summary>
@@ -957,6 +972,28 @@ public record StackInstruction(
     /// </summary>
     public static readonly StackInstruction Int_Mul_Generic =
         new(StackInstructionKind.Int_Mul_Generic);
+
+    /// <summary>
+    /// Creates division by a nonzero constant.
+    /// </summary>
+    public static StackInstruction Int_Div_Const(BigInteger divisor) =>
+        divisor.IsZero
+        ?
+        throw new ArgumentOutOfRangeException(nameof(divisor), "The constant divisor must be nonzero.")
+        :
+        new(StackInstructionKind.Int_Div_Const, IntegerLiteral: divisor);
+
+    /// <summary>
+    /// Creates binary division with a literal result for a zero divisor.
+    /// </summary>
+    public static StackInstruction Int_Div_Binary(PineValue divisionByZero) =>
+        new(StackInstructionKind.Int_Div_Binary, Literal: PineValueInProcess.Create(divisionByZero));
+
+    /// <summary>
+    /// Creates binary division that jumps to a handler for a zero divisor.
+    /// </summary>
+    public static StackInstruction Int_Div_Binary(int jumpOffset) =>
+        new(StackInstructionKind.Int_Div_Binary, JumpOffset: jumpOffset);
 
     /// <summary>
     /// A pre-built <see cref="StackInstructionKind.Skip_Binary"/> instruction.
@@ -2199,6 +2236,36 @@ public record StackInstruction(
                 PopCount: 1,
                 PushCount: 1,
                 Display: InstructionDetails.DisplayNoDetails),
+
+            StackInstructionKind.Int_Div_Const =>
+            instruction.IntegerLiteral is not { IsZero: false }
+            ?
+            throw new InvalidOperationException("Int_Div_Const requires a nonzero IntegerLiteral.")
+            :
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                Display:
+                () => InstructionDisplay.WithoutDetailLines(
+                    [RenderIntegerLiteral(instruction.IntegerLiteral, literalDisplayString)!])),
+
+            StackInstructionKind.Int_Div_Binary =>
+            (instruction.Literal is null) == (instruction.JumpOffset is null)
+            ?
+            throw new InvalidOperationException("Int_Div_Binary requires exactly one of Literal or JumpOffset.")
+            :
+            new InstructionDetails(
+                PopCount: 2,
+                PushCount: 1,
+                Display:
+                () => InstructionDisplay.WithoutDetailLines(
+                    [
+                    instruction.Literal is { } divisionByZero
+                    ?
+                    literalDisplayString(divisionByZero.Evaluate())
+                    :
+                    RenderJumpOffset(instruction.JumpOffset!.Value, instructionIndex)
+                    ])),
 
             StackInstructionKind.Bit_And_Generic =>
             new InstructionDetails(

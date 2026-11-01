@@ -79,6 +79,18 @@ public abstract record PineControlFlowTerminator
         PineValue Literal) : PineControlFlowTerminator;
 
     /// <summary>
+    /// Consumes two integers, passing the quotient only to the fall-through successor.
+    /// A zero divisor transfers control to the handler without producing a value.
+    /// </summary>
+    public sealed record IntDivision(
+        PineBlockId FallThrough,
+        PineBlockId DivisionByZero,
+        ImmutableArray<PineVirtualValueId> FallThroughArguments,
+        ImmutableArray<PineVirtualValueId> DivisionByZeroArguments,
+        ImmutableArray<PineVirtualValueId> Inputs,
+        PineVirtualValueId Result) : PineControlFlowTerminator;
+
+    /// <summary>
     /// Consumes the scrutinee and transfers control based on an ordered equality jump table.
     /// </summary>
     public sealed record Switch(
@@ -256,6 +268,27 @@ public sealed partial record PineControlFlowGraph(
                                 Literal: conditional.Literal);
 
                         return Join(arguments.Length + 1, [fallThroughEnd, branchEnd]);
+                    }
+
+                case PineControlFlowNode.IntDivision division:
+                    {
+                        var inputs = Pop(current, 2);
+                        var arguments = current.Stack.ToImmutableArray();
+                        var result = NewValue();
+                        var fallThroughStart = StartBlock(arguments.Length + 1);
+                        var zeroStart = StartBlock(arguments.Length);
+                        var zeroEnd = Emit(division.DivisionByZero, zeroStart);
+
+                        current.Terminator =
+                            new PineControlFlowTerminator.IntDivision(
+                                fallThroughStart.Id,
+                                zeroStart.Id,
+                                [.. arguments, result],
+                                arguments,
+                                inputs,
+                                result);
+
+                        return Join(arguments.Length + 1, [fallThroughStart, zeroEnd]);
                     }
 
                 case PineControlFlowNode.Switch switchNode:
@@ -956,14 +989,23 @@ public sealed partial record PineControlFlowGraph(
             PineControlFlowTerminator.ConditionalJump conditional =>
             conditional.FallThrough,
 
+            PineControlFlowTerminator.IntDivision division =>
+            division.FallThrough,
+
             PineControlFlowTerminator.Switch switchTerminator =>
             switchTerminator.FallThrough,
 
             PineControlFlowTerminator.Invoke invoke =>
             invoke.Continuation,
 
+            PineControlFlowTerminator.Return or
+            PineControlFlowTerminator.Jump or
+            PineControlFlowTerminator.TailInvoke =>
+            null,
+
             _ =>
-            null
+            throw new NotImplementedException(
+                "RequiredFallthroughTarget does not handle terminator variant: " + terminator.GetType().Name)
         };
 
     private static PineControlFlowTerminator RedirectTargets(
@@ -982,6 +1024,13 @@ public sealed partial record PineControlFlowGraph(
             {
                 FallThrough = redirect(conditional.FallThrough),
                 Branch = redirect(conditional.Branch)
+            },
+
+            PineControlFlowTerminator.IntDivision division =>
+            division with
+            {
+                FallThrough = redirect(division.FallThrough),
+                DivisionByZero = redirect(division.DivisionByZero)
             },
 
             PineControlFlowTerminator.Switch switchTerminator =>
@@ -1210,6 +1259,19 @@ public sealed partial record PineControlFlowGraph(
 
                     break;
 
+                case PineControlFlowTerminator.IntDivision division:
+                    result.Add(
+                        StackInstruction.Int_Div_Binary(
+                            firstInstructionIndexByBlock[division.DivisionByZero] - result.Count));
+
+                    if (division.FallThrough.Value != block.Id.Value + 1)
+                    {
+                        throw new InvalidOperationException(
+                            $"Division fall-through from block {block.Id.Value} is not laid out next.");
+                    }
+
+                    break;
+
                 case PineControlFlowTerminator.Switch switchTerminator:
                     if (switchTerminator.Kind is PineSwitchKind.SliceSkipVarEqual)
                     {
@@ -1288,6 +1350,11 @@ public sealed partial record PineControlFlowGraph(
                 yield return (conditional.Branch, conditional.BranchArguments);
                 yield break;
 
+            case PineControlFlowTerminator.IntDivision division:
+                yield return (division.FallThrough, division.FallThroughArguments);
+                yield return (division.DivisionByZero, division.DivisionByZeroArguments);
+                yield break;
+
             case PineControlFlowTerminator.Switch switchTerminator:
                 yield return (switchTerminator.FallThrough, switchTerminator.Arguments);
 
@@ -1332,6 +1399,7 @@ public sealed partial record PineControlFlowGraph(
             PineControlFlowTerminator.Return => 1,
             PineControlFlowTerminator.Jump jump => jump.IsFallThrough ? 0 : 1,
             PineControlFlowTerminator.ConditionalJump => 1,
+            PineControlFlowTerminator.IntDivision => 1,
             PineControlFlowTerminator.Switch => 1,
             PineControlFlowTerminator.Invoke => 1,
             PineControlFlowTerminator.TailInvoke => 2,
