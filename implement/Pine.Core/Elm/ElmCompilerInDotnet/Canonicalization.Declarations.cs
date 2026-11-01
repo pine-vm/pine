@@ -76,8 +76,12 @@ public partial class Canonicalization
         DeclarationCache? cache,
         IReadOnlySet<DeclQualifiedName>? canonicalizedDependencies,
         IReadOnlyDictionary<string, ElmModuleTypeInterface>? moduleTypeInterfaces = null,
-        bool useSourceModuleTypeInterfaces = true)
+        bool useSourceModuleTypeInterfaces = true,
+        bool preserveOperatorApplications = false)
     {
+        if (preserveOperatorApplications && cache is not null)
+            throw new ArgumentException("Syntax-preserving canonicalization requires a separate, uncached preparation.", nameof(cache));
+
         if (roots.Count is 0)
         {
             return
@@ -100,7 +104,11 @@ public partial class Canonicalization
             .Select(group => group.Key)
             .ToHashSet(StringComparer.Ordinal);
 
-        var contexts = files.ToDictionary(file => file, file => BuildContext(file, exports, infixes, implicitImports));
+        var contexts = files.ToDictionary(file => file, file =>
+            BuildContext(file, exports, infixes, implicitImports) with
+            {
+                PreserveOperatorApplications = preserveOperatorApplications
+            });
         var declarations = new Dictionary<DeclQualifiedName, List<(File file, Node<Declaration> declaration)>>();
 
         var symbols =

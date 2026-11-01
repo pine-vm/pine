@@ -1,0 +1,415 @@
+{
+  "baselineCommit": "c5efc2d95449fe9112170c4c80b34d12671ed63c",
+  "sdk": "10.0.403",
+  "cpu": "AMD EPYC 9V74 80-Core Processor (2 allocated logical CPUs)",
+  "runs": [
+    {
+      "engine": "syntax",
+      "shape": "direct",
+      "count": 100,
+      "repetitions": 5,
+      "framework": ".NET 10.0.14",
+      "os": "Ubuntu 24.04.3 LTS",
+      "processors": 2,
+      "results": [
+        {
+          "iteration": 0,
+          "elapsedMs": 5950.9059,
+          "allocatedBytes": 1370253128,
+          "sourceMs": 560.7979,
+          "preparationMs": 5243.8788,
+          "discoveryMs": 123.2155
+        },
+        {
+          "iteration": 1,
+          "elapsedMs": 229.0197,
+          "allocatedBytes": 71700704,
+          "sourceMs": 127.1612,
+          "preparationMs": 75.5519,
+          "discoveryMs": 25.8379
+        },
+        {
+          "iteration": 2,
+          "elapsedMs": 198.563,
+          "allocatedBytes": 71692208,
+          "sourceMs": 116.9848,
+          "preparationMs": 51.7482,
+          "discoveryMs": 29.5457
+        },
+        {
+          "iteration": 3,
+          "elapsedMs": 234.4763,
+          "allocatedBytes": 71693792,
+          "sourceMs": 151.8716,
+          "preparationMs": 58.2478,
+          "discoveryMs": 24.1057
+        },
+        {
+          "iteration": 4,
+          "elapsedMs": 247.6789,
+          "allocatedBytes": 71694088,
+          "sourceMs": 146.6121,
+          "preparationMs": 49.2226,
+          "discoveryMs": 51.5808
+        }
+      ]
+    },
+    {
+      "engine": "compiler",
+      "shape": "direct",
+      "count": 100,
+      "repetitions": 5,
+      "framework": ".NET 10.0.14",
+      "os": "Ubuntu 24.04.3 LTS",
+      "processors": 2,
+      "results": [
+        {
+          "iteration": 0,
+          "elapsedMs": 8468.1146,
+          "allocatedBytes": 2105636080,
+          "sourceMs": null,
+          "preparationMs": null,
+          "discoveryMs": null
+        },
+        {
+          "iteration": 1,
+          "elapsedMs": 571.0159,
+          "allocatedBytes": 181150816,
+          "sourceMs": null,
+          "preparationMs": null,
+          "discoveryMs": null
+        },
+        {
+          "iteration": 2,
+          "elapsedMs": 612.2396,
+          "allocatedBytes": 181134816,
+          "sourceMs": null,
+          "preparationMs": null,
+          "discoveryMs": null
+        },
+        {
+          "iteration": 3,
+          "elapsedMs": 558.5552,
+          "allocatedBytes": 181048704,
+          "sourceMs": null,
+          "preparationMs": null,
+          "discoveryMs": null
+        },
+        {
+          "iteration": 4,
+          "elapsedMs": 572.2171,
+          "allocatedBytes": 181053400,
+          "sourceMs": null,
+          "preparationMs": null,
+          "discoveryMs": null
+        }
+      ]
+    },
+    {
+      "engine": "syntax",
+      "shape": "direct",
+      "count": 1000,
+      "repetitions": 5,
+      "framework": ".NET 10.0.14",
+      "os": "Ubuntu 24.04.3 LTS",
+      "processors": 2,
+      "results": [
+        {
+          "iteration": 0,
+          "elapsedMs": 5802.1062,
+          "allocatedBytes": 1475039912,
+          "sourceMs": 593.0746,
+          "preparationMs": 4845.1847,
+          "discoveryMs": 341.9226
+        },
+        {
+          "iteration": 1,
+          "elapsedMs": 510.2614,
+          "allocatedBytes": 176352928,
+          "sourceMs": 201.2286,
+          "preparationMs": 113.4555,
+          "discoveryMs": 194.4126
+        },
+        {
+          "iteration": 2,
+          "elapsedMs": 513.211,
+          "allocatedBytes": 176354480,
+          "sourceMs": 234.8096,
+          "preparationMs": 87.7928,
+          "discoveryMs": 189.6888
+        },
+        {
+          "iteration": 3,
+          "elapsedMs": 511.8131,
+          "allocatedBytes": 176354480,
+          "sourceMs": 232.0311,
+          "preparationMs": 83.5875,
+          "discoveryMs": 195.4334
+        },
+        {
+          "iteration": 4,
+          "elapsedMs": 541.2307,
+          "allocatedBytes": 176330240,
+          "sourceMs": 174.3093,
+          "preparationMs": 89.7756,
+          "discoveryMs": 276.6172
+        }
+      ]
+    },
+    {
+      "engine": "compiler",
+      "shape": "direct",
+      "count": 1000,
+      "repetitions": 5,
+      "framework": ".NET 10.0.14",
+      "os": "Ubuntu 24.04.3 LTS",
+      "processors": 2,
+      "results": [
+        {
+          "iteration": 0,
+          "elapsedMs": 10917.3092,
+          "allocatedBytes": 2394299416,
+          "sourceMs": null,
+          "preparationMs": null,
+          "discoveryMs": null
+        },
+        {
+          "iteration": 1,
+          "elapsedMs": 1640.0052,
+          "allocatedBytes": 467260696,
+          "sourceMs": null,
+          "preparationMs": null,
+          "discoveryMs": null
+        },
+        {
+          "iteration": 2,
+          "elapsedMs": 1590.2312,
+          "allocatedBytes": 467052848,
+          "sourceMs": null,
+          "preparationMs": null,
+          "discoveryMs": null
+        },
+        {
+          "iteration": 3,
+          "elapsedMs": 1462.2158,
+          "allocatedBytes": 462620464,
+          "sourceMs": null,
+          "preparationMs": null,
+          "discoveryMs": null
+        },
+        {
+          "iteration": 4,
+          "elapsedMs": 847.935,
+          "allocatedBytes": 462577720,
+          "sourceMs": null,
+          "preparationMs": null,
+          "discoveryMs": null
+        }
+      ]
+    },
+    {
+      "engine": "syntax",
+      "shape": "generated",
+      "count": 100,
+      "repetitions": 5,
+      "framework": ".NET 10.0.14",
+      "os": "Ubuntu 24.04.3 LTS",
+      "processors": 2,
+      "results": [
+        {
+          "iteration": 0,
+          "elapsedMs": 5582.9689,
+          "allocatedBytes": 1368083616,
+          "sourceMs": 533.9861,
+          "preparationMs": 4899.3166,
+          "discoveryMs": 127.1423
+        },
+        {
+          "iteration": 1,
+          "elapsedMs": 220.5939,
+          "allocatedBytes": 69672760,
+          "sourceMs": 118.7991,
+          "preparationMs": 74.0532,
+          "discoveryMs": 27.3051
+        },
+        {
+          "iteration": 2,
+          "elapsedMs": 201.8199,
+          "allocatedBytes": 69535024,
+          "sourceMs": 113.0919,
+          "preparationMs": 55.7937,
+          "discoveryMs": 32.5842
+        },
+        {
+          "iteration": 3,
+          "elapsedMs": 234.8856,
+          "allocatedBytes": 69535024,
+          "sourceMs": 140.8067,
+          "preparationMs": 67.4164,
+          "discoveryMs": 26.4035
+        },
+        {
+          "iteration": 4,
+          "elapsedMs": 215.801,
+          "allocatedBytes": 69532840,
+          "sourceMs": 139.0939,
+          "preparationMs": 47.4945,
+          "discoveryMs": 28.9757
+        }
+      ]
+    },
+    {
+      "engine": "compiler",
+      "shape": "generated",
+      "count": 100,
+      "repetitions": 5,
+      "framework": ".NET 10.0.14",
+      "os": "Ubuntu 24.04.3 LTS",
+      "processors": 2,
+      "results": [
+        {
+          "iteration": 0,
+          "elapsedMs": 8353.0704,
+          "allocatedBytes": 2097084656,
+          "sourceMs": null,
+          "preparationMs": null,
+          "discoveryMs": null
+        },
+        {
+          "iteration": 1,
+          "elapsedMs": 533.6434,
+          "allocatedBytes": 172831504,
+          "sourceMs": null,
+          "preparationMs": null,
+          "discoveryMs": null
+        },
+        {
+          "iteration": 2,
+          "elapsedMs": 603.2159,
+          "allocatedBytes": 172811184,
+          "sourceMs": null,
+          "preparationMs": null,
+          "discoveryMs": null
+        },
+        {
+          "iteration": 3,
+          "elapsedMs": 553.8963,
+          "allocatedBytes": 172820792,
+          "sourceMs": null,
+          "preparationMs": null,
+          "discoveryMs": null
+        },
+        {
+          "iteration": 4,
+          "elapsedMs": 552.2412,
+          "allocatedBytes": 172830552,
+          "sourceMs": null,
+          "preparationMs": null,
+          "discoveryMs": null
+        }
+      ]
+    },
+    {
+      "engine": "syntax",
+      "shape": "generated",
+      "count": 1000,
+      "repetitions": 5,
+      "framework": ".NET 10.0.14",
+      "os": "Ubuntu 24.04.3 LTS",
+      "processors": 2,
+      "results": [
+        {
+          "iteration": 0,
+          "elapsedMs": 5651.939,
+          "allocatedBytes": 1452974080,
+          "sourceMs": 550.7911,
+          "preparationMs": 4737.8126,
+          "discoveryMs": 341.3684
+        },
+        {
+          "iteration": 1,
+          "elapsedMs": 392.2247,
+          "allocatedBytes": 154536824,
+          "sourceMs": 124.7907,
+          "preparationMs": 58.0534,
+          "discoveryMs": 208.2494
+        },
+        {
+          "iteration": 2,
+          "elapsedMs": 421.7874,
+          "allocatedBytes": 154427664,
+          "sourceMs": 155.5529,
+          "preparationMs": 50.5037,
+          "discoveryMs": 214.9071
+        },
+        {
+          "iteration": 3,
+          "elapsedMs": 417.3533,
+          "allocatedBytes": 154427664,
+          "sourceMs": 161.9086,
+          "preparationMs": 52.5196,
+          "discoveryMs": 202.1364
+        },
+        {
+          "iteration": 4,
+          "elapsedMs": 392.3664,
+          "allocatedBytes": 154427928,
+          "sourceMs": 143.7819,
+          "preparationMs": 46.7414,
+          "discoveryMs": 201.1407
+        }
+      ]
+    },
+    {
+      "engine": "compiler",
+      "shape": "generated",
+      "count": 1000,
+      "repetitions": 5,
+      "framework": ".NET 10.0.14",
+      "os": "Ubuntu 24.04.3 LTS",
+      "processors": 2,
+      "results": [
+        {
+          "iteration": 0,
+          "elapsedMs": 11038.5847,
+          "allocatedBytes": 2201992144,
+          "sourceMs": null,
+          "preparationMs": null,
+          "discoveryMs": null
+        },
+        {
+          "iteration": 1,
+          "elapsedMs": 967.1837,
+          "allocatedBytes": 276285344,
+          "sourceMs": null,
+          "preparationMs": null,
+          "discoveryMs": null
+        },
+        {
+          "iteration": 2,
+          "elapsedMs": 1031.8801,
+          "allocatedBytes": 276328072,
+          "sourceMs": null,
+          "preparationMs": null,
+          "discoveryMs": null
+        },
+        {
+          "iteration": 3,
+          "elapsedMs": 1011.0129,
+          "allocatedBytes": 276404904,
+          "sourceMs": null,
+          "preparationMs": null,
+          "discoveryMs": null
+        },
+        {
+          "iteration": 4,
+          "elapsedMs": 836.2048,
+          "allocatedBytes": 276446728,
+          "sourceMs": null,
+          "preparationMs": null,
+          "discoveryMs": null
+        }
+      ]
+    }
+  ]
+}

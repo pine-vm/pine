@@ -6,6 +6,7 @@ using Pine.Core.Encodings;
 using Pine.Core.Functional;
 using Pine.Core.Internal;
 using Pine.Core.PineLanguage;
+using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -290,6 +291,14 @@ public partial class ElmSyntaxInterpreter
         long? InstructionCountLimit,
         int? ContinuationDepthLimit)
     {
+        /// <summary>
+        /// Optional, reference-keyed observers for successful results of selected prepared expressions.
+        /// </summary>
+        public IReadOnlyDictionary<PreparedExpression, Action<PineValueInProcess>>? ExpressionObservers { get; init; }
+
+        /// <summary>Cancels interpretation cooperatively, including recursive test construction.</summary>
+        public System.Threading.CancellationToken CancellationToken { get; init; }
+
         /// <summary>
         /// Bounded defaults used by interpreter entry points without an explicit configuration.
         /// </summary>
@@ -846,6 +855,10 @@ public partial class ElmSyntaxInterpreter
 
         foreach (var (declName, declaration) in declarations)
         {
+            // Syntax-preserving canonicalization qualifies operator targets without introducing an application node.
+            if (declaration is PreparedDeclaration.FunctionDeclaration)
+                map[declName.FullName] = declName;
+
             if (declaration is PreparedDeclaration.InfixDeclaration infixDecl)
             {
                 map[infixDecl.Infix.Operator] =
@@ -1081,6 +1094,8 @@ public partial class ElmSyntaxInterpreter
 
     private abstract record Kont
     {
+        public sealed record ObserveResult(Action<PineValueInProcess> Observer) : Kont;
+
         /// <summary>Apply integer negation to the returned value.</summary>
         public sealed record Negate : Kont;
 
@@ -1324,6 +1339,8 @@ public partial class ElmSyntaxInterpreter
 
         while (true)
         {
+            evaluationConfig.CancellationToken.ThrowIfCancellationRequested();
+
             invocationLogger.OnInstructionLoop();
             instructionCount++;
 
@@ -1351,6 +1368,9 @@ public partial class ElmSyntaxInterpreter
 
             if (currentExpr is not null)
             {
+                if (evaluationConfig.ExpressionObservers?.TryGetValue(currentExpr, out var observer) is true)
+                    kstack.Push(new Kont.ObserveResult(observer));
+
                 // ---- Eval mode ------------------------------------------------
 
                 switch (currentExpr)
@@ -1809,6 +1829,10 @@ public partial class ElmSyntaxInterpreter
 
                 switch (top)
                 {
+                    case Kont.ObserveResult observe:
+                        observe.Observer(value);
+                        break;
+
                     case Kont.Negate:
                         {
                             if (!ContainsOpaque(value) && value.AsInteger() is { } intValue)
@@ -4277,6 +4301,9 @@ public partial class ElmSyntaxInterpreter
 
             return PineValueInProcess.Take((int)count, source);
         }
+
+        if (functionName is nameof(BuiltinFunction.length))
+            return MakeInteger(input.GetLength());
 
         var resultPine = BuiltinFunction.ApplyFunctionGeneric(functionName, input.Evaluate());
 

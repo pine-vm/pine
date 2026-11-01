@@ -4,7 +4,9 @@ Research date: **2026-11-01**.
 
 ## Conclusions
 
-For Pine, the strongest combination is **VS Code's native Testing API for the UX, compiler-backed discovery in the language server, and a small, explicitly versioned testing extension to the existing LSP connection**. Discovery and execution should reuse `Pine.Core.Elm.Testing`, not reimplement Elm test semantics in TypeScript or parse the CLI's terminal output.
+For Pine, the strongest combination is **VS Code's native Testing API for the UX, semantic discovery in the language server, and a small, explicitly versioned testing extension to the existing LSP connection**. Discovery and execution should reuse `Pine.Core.Elm.Testing`, not reimplement Elm test semantics in TypeScript or parse the CLI's terminal output.
+
+The [implementation follow-up](syntax-discovery.md) now provides syntax-interpreter discovery with test-ID source navigation and a measured comparison against compiler/PineVM discovery. PineVM remains the execution backend.
 
 **rust-analyzer is the most directly relevant Rust editor design, and my preferred productivity reference for this project.** It puts semantic discovery in the language server, exposes both local run actions and a workspace test tree, and keeps its VS Code adapter relatively thin. This is a design judgment about fit and feedback-loop quality, not a measured claim that it outperforms every Rust IDE. Its experimental test protocol also has limitations worth avoiding.
 
@@ -424,7 +426,7 @@ Initially allow one active run per project and keep language-service requests re
 
 The **core runner** should own Elm test semantics, exact selection, preparation, fuzzing, and execution events. The **language-server host** should own source synchronization, project resolution, scheduling/cancellation, and transport DTOs. The **VS Code adapter** should own `TestController`/`TestRun` state and presentation.
 
-Separating reusable preparation/discovery from execution is preferable to repeatedly invoking today's combined `CompileAndRunTests` just to populate each tree node. The implementation should reuse its compiler/evaluation logic rather than create a competing discovery engine. Preserve current exposed-declaration, `only`/`skip`, fuzz-seed, and dependency behavior unless deliberately changing and documenting them.
+Separating reusable preparation/discovery from execution is preferable to repeatedly invoking today's combined `CompileAndRunTests` just to populate each tree node. Reuse dependency resolution and actual Elm test-library semantics rather than approximate syntax matching. The syntax interpreter can construct and enumerate test values without compiling test roots; the compiler/PineVM path remains responsible for execution. Preserve current exposed-declaration, `only`/`skip`, fuzz-seed, and dependency behavior unless deliberately changing and documenting them.
 
 Reuse existing parsing/compilation/VM caches where safe, but do not share mutable run state between editing and testing. VM-backed execution does not require another OS process or another WebSocket listener. A separately launched runner is a reasonable later isolation/deployment option, not a prerequisite for the UX.
 

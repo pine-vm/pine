@@ -282,7 +282,7 @@ public partial class ElmSyntaxInterpreter
         // Record (new flat format): [recordTag, fieldName0, fieldValue0, fieldName1, fieldValue1, ...].
         if (items.Count >= 1 &&
             (items.Count & 1) == 1 &&
-            !IsOpaque(items[0]) &&
+            !ContainsOpaque(items[0]) &&
             ElmValue.IsFlatRecordTypeTag(items[0].Evaluate()))
         {
             var fieldCount = (items.Count - 1) / 2;
@@ -306,9 +306,9 @@ public partial class ElmSyntaxInterpreter
 
         // Choice-type tag: [<Choice>, tagName, tagArg0, ...].
         if (items.Count >= 2 &&
-            !IsOpaque(items[0]) &&
+            !ContainsOpaque(items[0]) &&
             ElmValue.IsFlatChoiceTypeTag(items[0].Evaluate()) &&
-            !IsOpaque(items[1]) &&
+            !ContainsOpaque(items[1]) &&
             StringEncoding.StringFromValue(items[1].Evaluate()).IsOkOrNull() is { } tagName &&
             ElmValueEncoding.StringIsValidTagName(tagName))
         {

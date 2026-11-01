@@ -49,6 +49,9 @@ public partial class Canonicalization
         Func<CodeAnalysis.DeclQualifiedName, bool, SymbolAvailability>? LookupAvailability = null,
         InputObservations? Inputs = null)
     {
+        // Source-query preparation keeps binary nodes, qualifying their operator targets instead of lowering.
+        internal bool PreserveOperatorApplications { get; init; }
+
         public bool ContainsModuleDeclaration(string name, bool? typeReference = null)
         {
             var value = ModuleDeclarations(typeReference).Contains(name);
@@ -2083,7 +2086,14 @@ public partial class Canonicalization
                 CanonicalizationResultExtensions.Map2(
                     leftResult,
                     rightResult,
-                    (left, right) => (Expression)new Expression.Application(funcNode, [left, right]));
+                    (left, right) =>
+                    context.PreserveOperatorApplications
+                    ?
+                    (Expression)new Expression.OperatorApplication(
+                        new Node<string>(opApp.Operator.Range, string.Join(".", funcMapping.ModuleName.Append(funcMapping.FunctionName))),
+                        opApp.Direction, left, right)
+                    :
+                    new Expression.Application(funcNode, [left, right]));
 
             return
                 result with
