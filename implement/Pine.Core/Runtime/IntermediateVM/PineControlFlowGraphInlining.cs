@@ -158,6 +158,20 @@ public sealed partial record PineControlFlowGraph
 
                     break;
 
+                case PineControlFlowTerminator.IntDivision division:
+                    terminator =
+                        division with
+                        {
+                            FallThrough = oldToNew[division.FallThrough],
+                            DivisionByZero = oldToNew[division.DivisionByZero],
+                            FallThroughArguments = EdgeArguments(division.FallThroughArguments),
+                            DivisionByZeroArguments = EdgeArguments(division.DivisionByZeroArguments),
+                            Inputs = RemapValues(division.Inputs),
+                            Result = RemapValue(division.Result)
+                        };
+
+                    break;
+
                 case PineControlFlowTerminator.Switch switchTerminator:
                     terminator =
                         switchTerminator with

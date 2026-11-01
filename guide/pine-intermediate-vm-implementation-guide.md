@@ -107,6 +107,28 @@ Recognizing recursive functions as such at compile time is important for thoroug
 
 ## Performance Optimizations
 
+### Integer Division Instructions
+
+`PineIRCompiler` recognizes the Elm core integer-division expression in its applied
+and inlined forms. The inliner preserves recognized division expressions for native
+instruction selection.
+
+`Int_Div_Const` divides the top stack integer by its nonzero `IntegerLiteral`.
+`Int_Div_Binary` divides the second stack integer by the top integer. Both truncate
+toward zero and produce integer zero for non-integer operands, matching the original
+division expression.
+
+`Int_Div_Binary` requires exactly one zero-divisor action: `Literal` supplies the
+default result, or `JumpOffset` transfers control to a handler. The jump consumes both
+operands without pushing a result; the handler must produce the result instead.
+The successful path pushes the quotient. Offsets are relative to the division
+instruction, like other jumps. Backward zero-divisor jumps count against the loop
+quota, and jump-form division observes cooperative cancellation.
+
+Computed zero handlers are represented structurally in the control-flow graph.
+Their offsets are assigned only when lowering to stack instructions, and stack
+resource analysis accounts for the different successor stack depths.
+
 ### Optimized Invocation Interfaces
 
 In canonical representations of programs, we package all arguments into a single value and pass it to the `Eval` environment. Since `Environment` is the only kind of reference in the Pine language, the arguments packed in there must also include program code at least when using recursive functions.

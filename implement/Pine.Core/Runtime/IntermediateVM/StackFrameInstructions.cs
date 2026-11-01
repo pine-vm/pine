@@ -75,7 +75,7 @@ public record StackFrameInstructions
     public static int ComputeMaxStackUsage(
         IReadOnlyList<StackInstruction> instructions)
     {
-        IEnumerable<int> GetSuccessors(
+        IEnumerable<(int Index, int StackAdjustment)> GetSuccessors(
             int instructionIndex)
         {
             var inst = instructions[instructionIndex];
@@ -87,10 +87,11 @@ public record StackFrameInstructions
 
                 case StackInstructionKind.Jump_Const:
 
-                    yield return
+                    yield return (
                         instructionIndex +
                         (inst.JumpOffset ?? throw new InvalidOperationException(
-                            $"Jump without offset at {instructionIndex}."));
+                            $"Jump without offset at {instructionIndex}.")),
+                        0);
 
                     break;
 
@@ -98,23 +99,34 @@ public record StackFrameInstructions
                 case StackInstructionKind.Jump_If_Length_Equal_Const:
 
                     // fall-through
-                    yield return instructionIndex + 1;
+                    yield return (instructionIndex + 1, 0);
 
-                    yield return
+                    yield return (
                         instructionIndex +
                         (inst.JumpOffset ?? throw new InvalidOperationException(
-                            $"Jump without offset at {instructionIndex}."));
+                            $"Jump without offset at {instructionIndex}.")),
+                        0);
+
+                    break;
+
+                case StackInstructionKind.Int_Div_Binary:
+                    yield return (instructionIndex + 1, 0);
+
+                    if (inst.JumpOffset is { } zeroOffset)
+                    {
+                        yield return (instructionIndex + zeroOffset, -1);
+                    }
 
                     break;
 
                 case StackInstructionKind.Switch_Jump_If_Equal_Const:
                 case StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const:
 
-                    yield return instructionIndex + 1;
+                    yield return (instructionIndex + 1, 0);
 
                     foreach (var switchCase in StackInstruction.EnumerateSwitchCases(inst))
                     {
-                        yield return instructionIndex + switchCase.Value;
+                        yield return (instructionIndex + switchCase.Value, 0);
                     }
 
                     break;
@@ -122,7 +134,7 @@ public record StackFrameInstructions
                 default:
 
                     // ordinary instruction
-                    yield return instructionIndex + 1;
+                    yield return (instructionIndex + 1, 0);
                     break;
             }
         }
@@ -154,27 +166,29 @@ public record StackFrameInstructions
 
             var outDepth = inDepth + delta;
 
-            if (outDepth < 0)
+            if (inDepth < instructionDetails.PopCount)
                 throw new InvalidOperationException($"Stack under-flow at instruction {instructionIndex}.");
 
             maxDepth = Math.Max(maxDepth, outDepth);
 
-            foreach (var successorIndex in GetSuccessors(instructionIndex))
+            foreach (var (successorIndex, stackAdjustment) in GetSuccessors(instructionIndex))
             {
+                var successorDepth = outDepth + stackAdjustment;
+
                 if (successorIndex >= instructions.Count)
                     continue;
 
                 if (stackDepthIn[successorIndex] is null)
                 {
-                    stackDepthIn[successorIndex] = outDepth;
+                    stackDepthIn[successorIndex] = successorDepth;
                     worklist.Push(successorIndex);
                 }
-                else if (stackDepthIn[successorIndex] != outDepth)
+                else if (stackDepthIn[successorIndex] != successorDepth)
                 {
                     // Byte-code would be ill-formed; surface a clear error.
                     throw new InvalidOperationException(
                         $"Inconsistent stack depth at {successorIndex} " +
-                        $"({stackDepthIn[successorIndex]} vs {outDepth}).");
+                        $"({stackDepthIn[successorIndex]} vs {successorDepth}).");
                 }
             }
         }

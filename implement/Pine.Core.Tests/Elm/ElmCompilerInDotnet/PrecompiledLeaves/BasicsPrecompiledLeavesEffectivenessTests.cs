@@ -360,13 +360,11 @@ public class BasicsPrecompiledLeavesEffectivenessTests
     }
 
     /// <summary>
-    /// Same 2 × 2 matrix, but for <c>Basics.idiv</c> (the <c>//</c> operator). Without the leaf,
-    /// dividing a much larger dividend costs strictly more invocations/instructions than dividing
-    /// a small one (the scaling-by-16 recursive algorithm needs more steps); with the
-    /// <c>idivHelper</c> leaf registered, both collapse to a single short-circuited invocation.
+    /// Native division instructions keep <c>Basics.idiv</c> work independent of the dividend's
+    /// magnitude, with or without the <c>idivHelper</c> precompiled leaf.
     /// </summary>
     [Fact]
-    public void Basics_idiv_leaf_short_circuits_recursion()
+    public void Basics_idiv_instructions_eliminate_recursion_without_leaves()
     {
         var functionValue = GetTestFunction("idivide");
 
@@ -394,15 +392,15 @@ public class BasicsPrecompiledLeavesEffectivenessTests
         complexWithLeaves.value.Should().Be(ElmValue.Integer(33_333_333));
 
         (complexNoLeaves.counters.InvocationCount + complexNoLeaves.counters.LoopIterationCount)
-            .Should().BeGreaterThan(
+            .Should().Be(
             simpleNoLeaves.counters.InvocationCount + simpleNoLeaves.counters.LoopIterationCount,
             because:
-            "without precompiled leaves dividing a much larger dividend must cost more invocations or loop iterations");
+            "native division eliminates recursion even without precompiled leaves");
 
         complexNoLeaves.counters.InstructionCount
-            .Should().BeGreaterThan(
+            .Should().Be(
             simpleNoLeaves.counters.InstructionCount,
-            because: "without precompiled leaves dividing a much larger dividend must execute more instructions");
+            because: "native division instruction counts do not depend on the dividend's magnitude");
 
         complexWithLeaves.counters.InvocationCount
             .Should().Be(
@@ -491,15 +489,11 @@ public class BasicsPrecompiledLeavesEffectivenessTests
     }
 
     /// <summary>
-    /// Verifies that <c>Basics.modBy</c> transitively benefits from the <c>idivHelper</c>
-    /// precompiled leaf even though <c>modBy</c> has no dedicated leaf of its own: its only
-    /// variable-cost part is the nested <c>idiv</c> call reached via
-    /// <c>modBy -&gt; remainderBy -&gt; idiv</c>. Registering only the <c>idivHelper</c> leaf
-    /// (not a modBy- or eq-specific leaf) already makes the evaluation work counters constant across
-    /// small and large inputs.
+    /// Native division also makes the work for <c>Basics.modBy</c> independent of input
+    /// magnitude, through <c>modBy -&gt; remainderBy -&gt; idiv</c>, without requiring a leaf.
     /// </summary>
     [Fact]
-    public void ModBy_transitively_benefits_from_idiv_leaf_short_circuit()
+    public void ModBy_uses_native_division_without_leaves()
     {
         var functionValue = GetTestFunction("modByOf");
 
@@ -528,39 +522,34 @@ public class BasicsPrecompiledLeavesEffectivenessTests
         simpleWithIdivLeaf.value.Should().Be(ElmValue.Integer(1));
         complexWithIdivLeaf.value.Should().Be(ElmValue.Integer(1));
 
-        // Without any leaves: the larger value must show evidence of recursion through the
-        // nested idivHelper — strictly more invocations/loop iterations and instructions.
         (complexNoLeaves.counters.InvocationCount + complexNoLeaves.counters.LoopIterationCount)
-            .Should().BeGreaterThan(
+            .Should().Be(
             simpleNoLeaves.counters.InvocationCount + simpleNoLeaves.counters.LoopIterationCount,
             because:
-            "without precompiled leaves modBy's nested idiv recursion must cost more invocations or loop iterations for a larger value");
+            "native division eliminates modBy's nested division recursion without precompiled leaves");
 
         complexNoLeaves.counters.InstructionCount
-            .Should().BeGreaterThan(
+            .Should().Be(
             simpleNoLeaves.counters.InstructionCount,
             because:
-            "without precompiled leaves modBy's nested idiv recursion must execute more instructions for a larger value");
+            "native division instruction counts do not depend on input magnitude");
 
-        // With only the idivHelper leaf registered (no dedicated modBy leaf): the performance
-        // counters must already be constant, since modBy's only variable-cost part is the
-        // nested idiv call.
         complexWithIdivLeaf.counters.InvocationCount
             .Should().Be(
             simpleWithIdivLeaf.counters.InvocationCount,
             because:
-            "modBy's only variable-cost part is the nested idiv call, so the idivHelper leaf alone must make invocation counts constant");
+            "registering the helper leaf must preserve constant invocation counts");
 
         complexWithIdivLeaf.counters.LoopIterationCount
             .Should().Be(
             simpleWithIdivLeaf.counters.LoopIterationCount,
             because:
-            "modBy's only variable-cost part is the nested idiv call, so the idivHelper leaf alone must make loop-iteration counts constant");
+            "registering the helper leaf must preserve constant loop-iteration counts");
 
         complexWithIdivLeaf.counters.InstructionCount
             .Should().Be(
             simpleWithIdivLeaf.counters.InstructionCount,
             because:
-            "modBy's only variable-cost part is the nested idiv call, so the idivHelper leaf alone must make instruction counts constant");
+            "registering the helper leaf must preserve constant instruction counts");
     }
 }

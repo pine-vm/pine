@@ -421,6 +421,7 @@ public sealed partial record PineControlFlowGraph
                         case PineControlFlowTerminator.Return:
                         case PineControlFlowTerminator.Jump:
                         case PineControlFlowTerminator.ConditionalJump:
+                        case PineControlFlowTerminator.IntDivision:
                         case PineControlFlowTerminator.Switch:
                         case PineControlFlowTerminator.Invoke:
                         case PineControlFlowTerminator.TailInvoke:

@@ -58,7 +58,8 @@ public abstract record PineControlFlowNode
         /// </summary>
         public Operation(StackInstruction instruction)
         {
-            if (IsControlTransfer(instruction.Kind))
+            if (IsControlTransfer(instruction.Kind) ||
+                instruction.Kind is StackInstructionKind.Int_Div_Binary && instruction.JumpOffset is not null)
             {
                 throw new ArgumentException(
                     "Control transfers must be modeled structurally, not as operation: " + instruction.Kind,
@@ -84,6 +85,12 @@ public abstract record PineControlFlowNode
         PineControlFlowFragment FallThrough,
         PineControlFlowFragment Branch)
         : PineControlFlowNode;
+
+    /// <summary>
+    /// Consumes dividend and divisor, leaving their quotient unless the divisor is zero.
+    /// In that case, executes <see cref="DivisionByZero"/> to produce the result.
+    /// </summary>
+    public sealed record IntDivision(PineControlFlowFragment DivisionByZero) : PineControlFlowNode;
 
     /// <summary>
     /// Pops the scrutinee (one value for <see cref="PineSwitchKind.Equal"/>, source and skip count for

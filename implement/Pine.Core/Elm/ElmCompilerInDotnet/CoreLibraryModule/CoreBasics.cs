@@ -1737,7 +1737,7 @@ public partial class CoreBasics
         return BinaryFunctionValue(Generic_ComposeL);
     }
 
-    private static Expression Internal_Int_div(
+    internal static Expression Internal_Int_div(
         Expression dividend,
         Expression divisor)
     {

@@ -513,6 +513,9 @@ public static class StackInstructionTraceRenderer
                     StackInstructionKind.Jump_If_Length_Equal_Const =>
                     instruction.JumpOffset is { } jumpOffset ? [jumpOffset] : [],
 
+                    StackInstructionKind.Int_Div_Binary =>
+                    instruction.JumpOffset is { } divisionJumpOffset ? [divisionJumpOffset] : [],
+
                     StackInstructionKind.Switch_Jump_If_Equal_Const or
                     StackInstructionKind.Switch_Jump_If_Slice_Skip_Var_Equal_Const =>
                     StackInstruction
