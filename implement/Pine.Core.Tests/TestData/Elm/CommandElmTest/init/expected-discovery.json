@@ -1,0 +1,49 @@
+{
+  "Items": [
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/0",
+      "ParentId": null,
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [],
+        "Name": "Implement the first test. See https://package.elm-lang.org/packages/elm-explorations/test/latest for how to do this!",
+        "FullPath": "tests/Tests.elm/Implement the first test. See https://package.elm-lang.org/packages/elm-explorations/test/latest for how to do this!"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Todo",
+      "Selection": "Included",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": 1,
+      "ExecutionFilter": "=tests/Tests.elm/Implement the first test. See https://package.elm-lang.org/packages/elm-explorations/test/latest for how to do this!",
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "suite",
+        "ExpressionPath": {
+          "Steps": []
+        },
+        "Range": {
+          "Start": {
+            "Row": 8,
+            "Column": 5
+          },
+          "End": {
+            "Row": 8,
+            "Column": 133
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    }
+  ],
+  "HasOnly": false
+}

@@ -1,0 +1,550 @@
+{
+  "Items": [
+    {
+      "Id": "elm-test:tests%2FTests.elm#ordinary/0",
+      "ParentId": null,
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [],
+        "Name": "other root",
+        "FullPath": "tests/Tests.elm/other root"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "ordinary",
+      "Kind": "Unit",
+      "Selection": "ExcludedByOnly",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": 1,
+      "ExecutionFilter": null,
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "ordinary",
+        "ExpressionPath": {
+          "Steps": []
+        },
+        "Range": {
+          "Start": {
+            "Row": 10,
+            "Column": 5
+          },
+          "End": {
+            "Row": 10,
+            "Column": 76
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    },
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/group/0",
+      "ParentId": null,
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [],
+        "Name": "Focus",
+        "FullPath": "tests/Tests.elm/Focus"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Group",
+      "Selection": "Included",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": null,
+      "ExecutionFilter": null,
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "suite",
+        "ExpressionPath": {
+          "Steps": []
+        },
+        "Range": {
+          "Start": {
+            "Row": 15,
+            "Column": 5
+          },
+          "End": {
+            "Row": 29,
+            "Column": 10
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    },
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/0",
+      "ParentId": "elm-test:tests%2FTests.elm#suite/group/0",
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [
+          "Focus"
+        ],
+        "Name": "not focused",
+        "FullPath": "tests/Tests.elm/Focus/not focused"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Todo",
+      "Selection": "ExcludedByOnly",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": null,
+      "ExecutionFilter": null,
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "suite",
+        "ExpressionPath": {
+          "Steps": [
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                0
+              ]
+            }
+          ]
+        },
+        "Range": {
+          "Start": {
+            "Row": 16,
+            "Column": 11
+          },
+          "End": {
+            "Row": 16,
+            "Column": 34
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    },
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/group/1",
+      "ParentId": "elm-test:tests%2FTests.elm#suite/group/0",
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [
+          "Focus"
+        ],
+        "Name": "ordinary group",
+        "FullPath": "tests/Tests.elm/Focus/ordinary group"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Group",
+      "Selection": "ExcludedByOnly",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": null,
+      "ExecutionFilter": null,
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "suite",
+        "ExpressionPath": {
+          "Steps": [
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                1
+              ]
+            }
+          ]
+        },
+        "Range": {
+          "Start": {
+            "Row": 17,
+            "Column": 11
+          },
+          "End": {
+            "Row": 18,
+            "Column": 73
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    },
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/1",
+      "ParentId": "elm-test:tests%2FTests.elm#suite/group/1",
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [
+          "Focus",
+          "ordinary group"
+        ],
+        "Name": "excluded",
+        "FullPath": "tests/Tests.elm/Focus/ordinary group/excluded"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Unit",
+      "Selection": "ExcludedByOnly",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": null,
+      "ExecutionFilter": null,
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "suite",
+        "ExpressionPath": {
+          "Steps": [
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                1
+              ]
+            },
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                0
+              ]
+            }
+          ]
+        },
+        "Range": {
+          "Start": {
+            "Row": 18,
+            "Column": 15
+          },
+          "End": {
+            "Row": 18,
+            "Column": 71
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    },
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/group/2",
+      "ParentId": "elm-test:tests%2FTests.elm#suite/group/0",
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [
+          "Focus"
+        ],
+        "Name": "focused group",
+        "FullPath": "tests/Tests.elm/Focus/focused group"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Group",
+      "Selection": "Included",
+      "IsOnly": true,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": null,
+      "ExecutionFilter": null,
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "suite",
+        "ExpressionPath": {
+          "Steps": [
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                1
+              ]
+            }
+          ]
+        },
+        "Range": {
+          "Start": {
+            "Row": 20,
+            "Column": 14
+          },
+          "End": {
+            "Row": 26,
+            "Column": 18
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    },
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/2",
+      "ParentId": "elm-test:tests%2FTests.elm#suite/group/2",
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [
+          "Focus",
+          "focused group"
+        ],
+        "Name": "selected",
+        "FullPath": "tests/Tests.elm/Focus/focused group/selected"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Unit",
+      "Selection": "Included",
+      "IsOnly": true,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": 2,
+      "ExecutionFilter": "=tests/Tests.elm/Focus/focused group/selected",
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "suite",
+        "ExpressionPath": {
+          "Steps": [
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                1
+              ]
+            },
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                0
+              ]
+            }
+          ]
+        },
+        "Range": {
+          "Start": {
+            "Row": 21,
+            "Column": 19
+          },
+          "End": {
+            "Row": 21,
+            "Column": 60
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    },
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/3",
+      "ParentId": "elm-test:tests%2FTests.elm#suite/group/2",
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [
+          "Focus",
+          "focused group"
+        ],
+        "Name": "selected fuzz",
+        "FullPath": "tests/Tests.elm/Focus/focused group/selected fuzz"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Fuzz",
+      "Selection": "Included",
+      "IsOnly": true,
+      "IsEmptyGroup": false,
+      "FuzzRuns": 3,
+      "DiscoveryIndex": 3,
+      "ExecutionFilter": "=tests/Tests.elm/Focus/focused group/selected fuzz",
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "suite",
+        "ExpressionPath": {
+          "Steps": [
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                1
+              ]
+            },
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                1
+              ]
+            }
+          ]
+        },
+        "Range": {
+          "Start": {
+            "Row": 22,
+            "Column": 19
+          },
+          "End": {
+            "Row": 25,
+            "Column": 40
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    },
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/4",
+      "ParentId": "elm-test:tests%2FTests.elm#suite/group/0",
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [
+          "Focus"
+        ],
+        "Name": "skip wins",
+        "FullPath": "tests/Tests.elm/Focus/skip wins"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Todo",
+      "Selection": "Skipped",
+      "IsOnly": true,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": null,
+      "ExecutionFilter": null,
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "suite",
+        "ExpressionPath": {
+          "Steps": [
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                3
+              ]
+            },
+            {
+              "Child": [
+                1
+              ]
+            },
+            {
+              "Child": [
+                1
+              ]
+            }
+          ]
+        },
+        "Range": {
+          "Start": {
+            "Row": 28,
+            "Column": 33
+          },
+          "End": {
+            "Row": 28,
+            "Column": 54
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    }
+  ],
+  "HasOnly": true
+}

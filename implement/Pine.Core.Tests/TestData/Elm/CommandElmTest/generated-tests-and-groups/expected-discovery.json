@@ -1,0 +1,257 @@
+{
+  "Items": [
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/group/0",
+      "ParentId": null,
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [],
+        "Name": "generated suite",
+        "FullPath": "tests/Tests.elm/generated suite"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Group",
+      "Selection": "Included",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": null,
+      "ExecutionFilter": null,
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "suite",
+        "ExpressionPath": {
+          "Steps": []
+        },
+        "Range": {
+          "Start": {
+            "Row": 9,
+            "Column": 5
+          },
+          "End": {
+            "Row": 9,
+            "Column": 70
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    },
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/group/1",
+      "ParentId": "elm-test:tests%2FTests.elm#suite/group/0",
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [
+          "generated suite"
+        ],
+        "Name": "group 1",
+        "FullPath": "tests/Tests.elm/generated suite/group 1"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Group",
+      "Selection": "Included",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": null,
+      "ExecutionFilter": null,
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Factory",
+            "src/Factory.elm",
+            "elm.json",
+            false
+          ]
+        },
+        "DeclarationName": "group",
+        "ExpressionPath": {
+          "Steps": []
+        },
+        "Range": {
+          "Start": {
+            "Row": 9,
+            "Column": 5
+          },
+          "End": {
+            "Row": 10,
+            "Column": 68
+          }
+        },
+        "FilePath": "src/Factory.elm"
+      }
+    },
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/0",
+      "ParentId": "elm-test:tests%2FTests.elm#suite/group/1",
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [
+          "generated suite",
+          "group 1"
+        ],
+        "Name": "generated",
+        "FullPath": "tests/Tests.elm/generated suite/group 1/generated"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Unit",
+      "Selection": "Included",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": 1,
+      "ExecutionFilter": "=tests/Tests.elm/generated suite/group 1/generated",
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Factory",
+            "src/Factory.elm",
+            "elm.json",
+            false
+          ]
+        },
+        "DeclarationName": "group",
+        "ExpressionPath": {
+          "Steps": [
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                0
+              ]
+            }
+          ]
+        },
+        "Range": {
+          "Start": {
+            "Row": 10,
+            "Column": 11
+          },
+          "End": {
+            "Row": 10,
+            "Column": 66
+          }
+        },
+        "FilePath": "src/Factory.elm"
+      }
+    },
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/group/2",
+      "ParentId": "elm-test:tests%2FTests.elm#suite/group/0",
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [
+          "generated suite"
+        ],
+        "Name": "group 2",
+        "FullPath": "tests/Tests.elm/generated suite/group 2"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Group",
+      "Selection": "Included",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": null,
+      "ExecutionFilter": null,
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Factory",
+            "src/Factory.elm",
+            "elm.json",
+            false
+          ]
+        },
+        "DeclarationName": "group",
+        "ExpressionPath": {
+          "Steps": []
+        },
+        "Range": {
+          "Start": {
+            "Row": 9,
+            "Column": 5
+          },
+          "End": {
+            "Row": 10,
+            "Column": 68
+          }
+        },
+        "FilePath": "src/Factory.elm"
+      }
+    },
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/1",
+      "ParentId": "elm-test:tests%2FTests.elm#suite/group/2",
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [
+          "generated suite",
+          "group 2"
+        ],
+        "Name": "generated",
+        "FullPath": "tests/Tests.elm/generated suite/group 2/generated"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Unit",
+      "Selection": "Included",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": 2,
+      "ExecutionFilter": "=tests/Tests.elm/generated suite/group 2/generated",
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Factory",
+            "src/Factory.elm",
+            "elm.json",
+            false
+          ]
+        },
+        "DeclarationName": "group",
+        "ExpressionPath": {
+          "Steps": [
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                0
+              ]
+            }
+          ]
+        },
+        "Range": {
+          "Start": {
+            "Row": 10,
+            "Column": 11
+          },
+          "End": {
+            "Row": 10,
+            "Column": 66
+          }
+        },
+        "FilePath": "src/Factory.elm"
+      }
+    }
+  ],
+  "HasOnly": false
+}

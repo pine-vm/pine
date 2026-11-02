@@ -1,0 +1,93 @@
+{
+  "Items": [
+    {
+      "Id": "elm-test:tests%2FFirstTests.elm#suite/0",
+      "ParentId": null,
+      "ListedTest": {
+        "FilePath": "tests/FirstTests.elm",
+        "DescriptionPath": [],
+        "Name": "first test",
+        "FullPath": "tests/FirstTests.elm/first test"
+      },
+      "RootModuleName": "FirstTests",
+      "RootDeclarationName": "suite",
+      "Kind": "Unit",
+      "Selection": "Included",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": 1,
+      "ExecutionFilter": "=tests/FirstTests.elm/first test",
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "FirstTests",
+            "tests/FirstTests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "suite",
+        "ExpressionPath": {
+          "Steps": []
+        },
+        "Range": {
+          "Start": {
+            "Row": 9,
+            "Column": 5
+          },
+          "End": {
+            "Row": 11,
+            "Column": 24
+          }
+        },
+        "FilePath": "tests/FirstTests.elm"
+      }
+    },
+    {
+      "Id": "elm-test:tests%2FSecondTests.elm#suite/0",
+      "ParentId": null,
+      "ListedTest": {
+        "FilePath": "tests/SecondTests.elm",
+        "DescriptionPath": [],
+        "Name": "second test",
+        "FullPath": "tests/SecondTests.elm/second test"
+      },
+      "RootModuleName": "SecondTests",
+      "RootDeclarationName": "suite",
+      "Kind": "Unit",
+      "Selection": "Included",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": 2,
+      "ExecutionFilter": "=tests/SecondTests.elm/second test",
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "SecondTests",
+            "tests/SecondTests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "suite",
+        "ExpressionPath": {
+          "Steps": []
+        },
+        "Range": {
+          "Start": {
+            "Row": 9,
+            "Column": 5
+          },
+          "End": {
+            "Row": 11,
+            "Column": 24
+          }
+        },
+        "FilePath": "tests/SecondTests.elm"
+      }
+    }
+  ],
+  "HasOnly": false
+}

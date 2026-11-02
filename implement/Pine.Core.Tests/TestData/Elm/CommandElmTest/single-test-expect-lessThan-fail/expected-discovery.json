@@ -1,0 +1,49 @@
+{
+  "Items": [
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/0",
+      "ParentId": null,
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [],
+        "Name": "A Test Title",
+        "FullPath": "tests/Tests.elm/A Test Title"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Unit",
+      "Selection": "Included",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": 1,
+      "ExecutionFilter": "=tests/Tests.elm/A Test Title",
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "suite",
+        "ExpressionPath": {
+          "Steps": []
+        },
+        "Range": {
+          "Start": {
+            "Row": 9,
+            "Column": 5
+          },
+          "End": {
+            "Row": 12,
+            "Column": 38
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    }
+  ],
+  "HasOnly": false
+}

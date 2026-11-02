@@ -1,0 +1,579 @@
+{
+  "Items": [
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/group/0",
+      "ParentId": null,
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [],
+        "Name": "All tests",
+        "FullPath": "tests/Tests.elm/All tests"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Group",
+      "Selection": "Included",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": null,
+      "ExecutionFilter": null,
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "suite",
+        "ExpressionPath": {
+          "Steps": []
+        },
+        "Range": {
+          "Start": {
+            "Row": 10,
+            "Column": 5
+          },
+          "End": {
+            "Row": 25,
+            "Column": 10
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    },
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/0",
+      "ParentId": "elm-test:tests%2FTests.elm#suite/group/0",
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [
+          "All tests"
+        ],
+        "Name": "runs",
+        "FullPath": "tests/Tests.elm/All tests/runs"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Unit",
+      "Selection": "Included",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": 1,
+      "ExecutionFilter": "=tests/Tests.elm/All tests/runs",
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "suite",
+        "ExpressionPath": {
+          "Steps": [
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                0
+              ]
+            }
+          ]
+        },
+        "Range": {
+          "Start": {
+            "Row": 11,
+            "Column": 11
+          },
+          "End": {
+            "Row": 11,
+            "Column": 48
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    },
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/1",
+      "ParentId": "elm-test:tests%2FTests.elm#suite/group/0",
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [
+          "All tests"
+        ],
+        "Name": "skipped unit",
+        "FullPath": "tests/Tests.elm/All tests/skipped unit"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Unit",
+      "Selection": "Skipped",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": null,
+      "ExecutionFilter": null,
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "suite",
+        "ExpressionPath": {
+          "Steps": [
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                1
+              ]
+            },
+            {
+              "Child": [
+                1
+              ]
+            }
+          ]
+        },
+        "Range": {
+          "Start": {
+            "Row": 12,
+            "Column": 22
+          },
+          "End": {
+            "Row": 12,
+            "Column": 82
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    },
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/group/1",
+      "ParentId": "elm-test:tests%2FTests.elm#suite/group/0",
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [
+          "All tests"
+        ],
+        "Name": "skipped group",
+        "FullPath": "tests/Tests.elm/All tests/skipped group"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Group",
+      "Selection": "Skipped",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": null,
+      "ExecutionFilter": null,
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "suite",
+        "ExpressionPath": {
+          "Steps": [
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                1
+              ]
+            }
+          ]
+        },
+        "Range": {
+          "Start": {
+            "Row": 14,
+            "Column": 14
+          },
+          "End": {
+            "Row": 21,
+            "Column": 18
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    },
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/2",
+      "ParentId": "elm-test:tests%2FTests.elm#suite/group/1",
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [
+          "All tests",
+          "skipped group"
+        ],
+        "Name": "child unit",
+        "FullPath": "tests/Tests.elm/All tests/skipped group/child unit"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Unit",
+      "Selection": "Skipped",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": null,
+      "ExecutionFilter": null,
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "suite",
+        "ExpressionPath": {
+          "Steps": [
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                1
+              ]
+            },
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                0
+              ]
+            }
+          ]
+        },
+        "Range": {
+          "Start": {
+            "Row": 15,
+            "Column": 19
+          },
+          "End": {
+            "Row": 15,
+            "Column": 77
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    },
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/3",
+      "ParentId": "elm-test:tests%2FTests.elm#suite/group/1",
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [
+          "All tests",
+          "skipped group"
+        ],
+        "Name": "skipped fuzz",
+        "FullPath": "tests/Tests.elm/All tests/skipped group/skipped fuzz"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Fuzz",
+      "Selection": "Skipped",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": 7,
+      "DiscoveryIndex": null,
+      "ExecutionFilter": null,
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "suite",
+        "ExpressionPath": {
+          "Steps": [
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                1
+              ]
+            },
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                1
+              ]
+            }
+          ]
+        },
+        "Range": {
+          "Start": {
+            "Row": 16,
+            "Column": 19
+          },
+          "End": {
+            "Row": 19,
+            "Column": 55
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    },
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/4",
+      "ParentId": "elm-test:tests%2FTests.elm#suite/group/1",
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [
+          "All tests",
+          "skipped group"
+        ],
+        "Name": "skipped todo",
+        "FullPath": "tests/Tests.elm/All tests/skipped group/skipped todo"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Todo",
+      "Selection": "Skipped",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": null,
+      "ExecutionFilter": null,
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "suite",
+        "ExpressionPath": {
+          "Steps": [
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                1
+              ]
+            },
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                2
+              ]
+            }
+          ]
+        },
+        "Range": {
+          "Start": {
+            "Row": 20,
+            "Column": 19
+          },
+          "End": {
+            "Row": 20,
+            "Column": 43
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    },
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/group/2",
+      "ParentId": "elm-test:tests%2FTests.elm#suite/group/0",
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [
+          "All tests"
+        ],
+        "Name": "nested",
+        "FullPath": "tests/Tests.elm/All tests/nested"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Group",
+      "Selection": "Skipped",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": null,
+      "ExecutionFilter": null,
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "suite",
+        "ExpressionPath": {
+          "Steps": [
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                3
+              ]
+            }
+          ]
+        },
+        "Range": {
+          "Start": {
+            "Row": 23,
+            "Column": 11
+          },
+          "End": {
+            "Row": 24,
+            "Column": 60
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    },
+    {
+      "Id": "elm-test:tests%2FTests.elm#suite/5",
+      "ParentId": "elm-test:tests%2FTests.elm#suite/group/2",
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [
+          "All tests",
+          "nested"
+        ],
+        "Name": "skipped placeholder",
+        "FullPath": "tests/Tests.elm/All tests/nested/skipped placeholder"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "suite",
+      "Kind": "Todo",
+      "Selection": "Skipped",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": null,
+      "ExecutionFilter": null,
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "suite",
+        "ExpressionPath": {
+          "Steps": [
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                3
+              ]
+            },
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                0
+              ]
+            },
+            {
+              "Child": [
+                1
+              ]
+            }
+          ]
+        },
+        "Range": {
+          "Start": {
+            "Row": 24,
+            "Column": 26
+          },
+          "End": {
+            "Row": 24,
+            "Column": 57
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    }
+  ],
+  "HasOnly": false
+}

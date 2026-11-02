@@ -1061,7 +1061,7 @@ public static class ElmTestRunner
             };
     }
 
-    private static bool IsDeclarationExposed(
+    internal static bool IsDeclarationExposed(
         SyntaxTypes.Module module,
         string declarationName)
     {

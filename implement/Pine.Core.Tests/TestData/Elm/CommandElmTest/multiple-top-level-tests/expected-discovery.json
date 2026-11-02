@@ -1,0 +1,150 @@
+{
+  "Items": [
+    {
+      "Id": "elm-test:tests%2FTests.elm#firstTest/0",
+      "ParentId": null,
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [],
+        "Name": "first test",
+        "FullPath": "tests/Tests.elm/first test"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "firstTest",
+      "Kind": "Unit",
+      "Selection": "Included",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": 1,
+      "ExecutionFilter": "=tests/Tests.elm/first test",
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "firstTest",
+        "ExpressionPath": {
+          "Steps": []
+        },
+        "Range": {
+          "Start": {
+            "Row": 9,
+            "Column": 5
+          },
+          "End": {
+            "Row": 11,
+            "Column": 24
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    },
+    {
+      "Id": "elm-test:tests%2FTests.elm#secondGroup/group/0",
+      "ParentId": null,
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [],
+        "Name": "second group",
+        "FullPath": "tests/Tests.elm/second group"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "secondGroup",
+      "Kind": "Group",
+      "Selection": "Included",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": null,
+      "ExecutionFilter": null,
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "secondGroup",
+        "ExpressionPath": {
+          "Steps": []
+        },
+        "Range": {
+          "Start": {
+            "Row": 21,
+            "Column": 5
+          },
+          "End": {
+            "Row": 25,
+            "Column": 10
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    },
+    {
+      "Id": "elm-test:tests%2FTests.elm#secondGroup/0",
+      "ParentId": "elm-test:tests%2FTests.elm#secondGroup/group/0",
+      "ListedTest": {
+        "FilePath": "tests/Tests.elm",
+        "DescriptionPath": [
+          "second group"
+        ],
+        "Name": "second test",
+        "FullPath": "tests/Tests.elm/second group/second test"
+      },
+      "RootModuleName": "Tests",
+      "RootDeclarationName": "secondGroup",
+      "Kind": "Unit",
+      "Selection": "Included",
+      "IsOnly": false,
+      "IsEmptyGroup": false,
+      "FuzzRuns": null,
+      "DiscoveryIndex": 2,
+      "ExecutionFilter": "=tests/Tests.elm/second group/second test",
+      "SourceLocation": {
+        "ModuleOrigin": {
+          "Project": [
+            "Tests",
+            "tests/Tests.elm",
+            "elm.json",
+            true
+          ]
+        },
+        "DeclarationName": "secondGroup",
+        "ExpressionPath": {
+          "Steps": [
+            {
+              "Child": [
+                2
+              ]
+            },
+            {
+              "Child": [
+                0
+              ]
+            }
+          ]
+        },
+        "Range": {
+          "Start": {
+            "Row": 22,
+            "Column": 11
+          },
+          "End": {
+            "Row": 24,
+            "Column": 28
+          }
+        },
+        "FilePath": "tests/Tests.elm"
+      }
+    }
+  ],
+  "HasOnly": false
+}

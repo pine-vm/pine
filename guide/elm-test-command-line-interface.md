@@ -2,6 +2,58 @@
 
 Run Elm tests using the [`elm-explorations/test` package](https://github.com/elm-explorations/test)
 
+## Core discovery and editor navigation
+
+`Pine.Core.Elm.Testing.ElmTestDiscovery.DiscoverTests` provides a separate syntax-interpreter
+discovery API for editor integrations. It evaluates test construction (including helpers,
+computed labels and generated suites), then uses the resolved Elm test library to enumerate
+leaves. Assertion and fuzz callbacks are not run. The CLI still uses the existing compiler/PineVM
+discovery and execution path; no language-server protocol or VS Code UI is introduced here.
+
+`result.Items` is a complete inventory in parent-before-child order, including
+`describe` groups, empty groups, skipped tests and tests excluded by `Test.only`.
+Each entry contains an ID, optional parent ID, listing metadata, discovery-root identity,
+semantic kind (`Group`, `Unit`, `Fuzz`, `Todo`), effective selection
+(`Included`, `Skipped`, `ExcludedByOnly`), inherited `IsOnly`, empty-group flag,
+fuzz run count when applicable, and a required source location. These fields let
+editor hosts choose group/test/skipped icons without inferring semantics from labels.
+Groups whose children are all skipped are also marked skipped. `result.HasOnly`
+records effective focus selection across roots.
+
+`result.Tests` is the backwards-compatible selected, nonempty leaf view matching
+the current CLI listing, not the complete inventory. Selected leaves also have
+their existing runner discovery index and exact execution filter. Phase timings
+are available on the result.
+
+`result.GetSourceLocation(testId)` returns the original module/source provenance and a
+one-based, end-exclusive Elm syntax range for any inventory item, including groups and
+skipped tests. Unknown IDs throw. Source locations address the
+innermost observed construction expression: a generated test normally navigates to its
+factory body, so several IDs can share one location.
+
+Discovery preserves range-free AST node paths and projects them onto the corresponding CST,
+following [`ElmSyntax.Path`](../implement/elm-in-elm/pine-elm-syntax/src/ElmSyntax/Path.elm).
+Parentheses are transparent; record fields are addressed by name and occurrence, not their
+sorted AST positions. Results refer to the source set used for discovery, not live documents.
+IDs identify a project-relative root and structural leaf/group ordinal, not a persistent
+semantic identity: inserting or reordering entries can change them. Skipped and excluded
+leaves retain inventory IDs, so toggling a sibling's skip status does not renumber them.
+Editor hosts must manage document freshness.
+
+`result.GetExecutionFilter(testId)` translates an ID to the existing runner's exact path or
+discovery-ordinal selector for a selected leaf; groups and unselected items are rejected.
+It must be used with the same project sources. Execution remains
+on PineVM; syntax-interpreter closures are never transferred to it.
+
+Every scenario under `Pine.Core.Tests/TestData/Elm/CommandElmTest` has an
+`expected-discovery.json` expectation. The scenario test compares the complete semantic
+inventory and navigation data, excluding only elapsed times, and checks selected-listing
+parity with compiler/PineVM discovery.
+
+See the [implementation and performance comparison](../explore/2026-11-01-elm-editor-test-discovery-and-execution/syntax-discovery.md).
+
+## Command-line options
+
 ```console
 Arguments:
   <source>  Elm project directory or GitHub/GitLab tree URL. Defaults to the current directory.

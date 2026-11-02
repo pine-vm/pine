@@ -13,6 +13,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using Xunit;
 
@@ -487,6 +489,82 @@ public class ElmTestTests
         var summary = TestResultSummary.RenderSummary(results);
 
         results.Where(result => !result.Passed).Should().BeEmpty(summary);
+    }
+
+    [Fact]
+    public void Verify_elm_test_discovery_for_scenarios_from_files()
+    {
+        var options = new JsonSerializerOptions { WriteIndented = true };
+
+        var results =
+            TestResultSummary.RunFileBasedTestCases(
+                Path.Combine("Elm", "CommandElmTest"),
+                caseDirectory =>
+                {
+                    var appDirectory = Path.Combine(caseDirectory, "input-app");
+                    var discovery = ElmTestDiscovery.DiscoverTests(appDirectory);
+                    var seen = new Dictionary<string, ElmTestDiscoveryItem>(StringComparer.Ordinal);
+
+                    foreach (var item in discovery.Items)
+                    {
+                        seen.TryAdd(item.Id, item).Should().BeTrue("every discovery ID must be unique");
+
+                        if (item.ParentId is { } parentId)
+                        {
+                            seen[parentId].Kind.Should().Be(
+                                ElmTestDiscoveryItemKind.Group,
+                                "parents precede their children");
+                        }
+
+                        var source = discovery.GetSourceLocation(item.Id);
+                        source.Should().Be(item.SourceLocation);
+                        source.Range.Start.Row.Should().BePositive();
+                        source.Range.Start.Column.Should().BePositive();
+
+                        (source.Range.End.Row > source.Range.Start.Row ||
+                        source.Range.End.Row == source.Range.Start.Row &&
+                        source.Range.End.Column > source.Range.Start.Column)
+                            .Should().BeTrue("every item must have a nonempty navigation range");
+
+                        File.Exists(Path.Combine(appDirectory, source.FilePath)).Should().BeTrue(
+                            "these scenarios navigate to project-owned source files");
+
+                        if (item.ExecutionFilter is { } filter)
+                            discovery.GetExecutionFilter(item.Id).Should().Be(filter);
+                    }
+
+                    var listed =
+                        ElmTestRunner.CompileAndRunTests(appDirectory, listTests: true)
+                        .Should().BeOfType<ElmTestRun.Listed>().Which;
+
+                    discovery.Tests.Select(test => test.ListedTest).Should().Equal(listed.Tests);
+                    discovery.Tests.Should().OnlyContain(test => test.SourceLocation != null);
+
+                    // Snapshot the complete semantic model; elapsed times are the only nondeterministic fields.
+                    var json = JsonSerializer.SerializeToNode(discovery, options)!.AsObject();
+                    json.Remove(nameof(ElmTestDiscoveryResult.Duration));
+                    json.Remove(nameof(ElmTestDiscoveryResult.SourcePreparationDuration));
+                    json.Remove(nameof(ElmTestDiscoveryResult.InterpreterPreparationDuration));
+                    json.Remove(nameof(ElmTestDiscoveryResult.DiscoveryDuration));
+                    var actual = json.ToJsonString(options);
+                    var expectationPath = Path.Combine(caseDirectory, "expected-discovery.json");
+
+                    if (!File.Exists(expectationPath) ||
+                        JsonNode.Parse(File.ReadAllText(expectationPath))!.ToJsonString(options) != actual)
+                    {
+                        var artifacts = Path.Combine("artifacts", "test-logs", "ElmTestDiscovery");
+                        Directory.CreateDirectory(artifacts);
+
+                        File.WriteAllText(
+                            Path.Combine(artifacts, Path.GetFileName(caseDirectory) + ".json"),
+                            actual + "\n");
+                    }
+
+                    var expected = JsonNode.Parse(File.ReadAllText(expectationPath))!.ToJsonString(options);
+                    return (expected, actual);
+                });
+
+        results.Where(result => !result.Passed).Should().BeEmpty(TestResultSummary.RenderSummary(results));
     }
 
 
