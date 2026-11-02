@@ -23,8 +23,8 @@ namespace Pine.Core.Tests.Elm.Syntax.Interpreter;
 /// <see cref="InterpreterTestHelper.EvaluateInModulesToPineValue(string, ElmInterpreter.Prepared)"/>
 /// and compared against the <see cref="PineValue"/> of an expected Elm expression. Operating
 /// on the <see cref="PineValue"/> directly avoids any conversion to <see cref="ElmValue"/>;
-/// none of these functions accepts a function argument, so plain-data operands always
-/// materialize cleanly.
+/// the equality operands may contain functions, but the boolean results always materialize
+/// cleanly. Function-bearing operands are covered by <see cref="FunctionEqualityTests"/>.
 /// <para>
 /// <c>eq</c> / <c>neq</c> are exercised both via direct application and via their infix
 /// operators (<c>==</c> and <c>/=</c>), and <c>idiv</c> / <c>mul</c> both via direct

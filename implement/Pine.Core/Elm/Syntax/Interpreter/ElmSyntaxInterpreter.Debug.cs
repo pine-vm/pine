@@ -1,4 +1,3 @@
-using Pine.Core.Elm.Syntax.Abstract;
 using Pine.Core.Encodings;
 using Pine.Core.Internal;
 using Pine.Core.PineLanguage;
@@ -37,15 +36,7 @@ public partial class ElmSyntaxInterpreter
             // Native Debug functions also need callable values for currying and higher-order use.
             return
                 new ApplicationResolution.ContinueWithFunction(
-                    new PreparedFunctionImplementation(
-                        name,
-                        [.. parameters.Select(parameter => (Pattern)new Pattern.VarPattern(parameter))],
-                        new PreparedExpression.Application(
-                            new PreparedExpression.Identifier(application.FunctionName),
-                            [
-                            .. parameters.Select(
-                                parameter => (PreparedExpression)PreparedExpression.Identifier.Create([], parameter))
-                            ])));
+                    PrepareNativeFunction(application.FunctionName, parameters));
         }
 
         return name switch

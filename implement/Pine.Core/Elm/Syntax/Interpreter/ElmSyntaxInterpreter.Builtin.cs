@@ -238,6 +238,26 @@ public partial class ElmSyntaxInterpreter
         return builder.ToImmutable();
     }
 
+    // Reuse generated bodies so repeated native function references have stable closure identities.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<
+        DeclQualifiedName,
+        PreparedFunctionImplementation>
+        s_nativeFunctionImplementations = new();
+
+    private static PreparedFunctionImplementation PrepareNativeFunction(
+        DeclQualifiedName name,
+        IReadOnlyList<string> parameters) =>
+        s_nativeFunctionImplementations.GetOrAdd(
+            name,
+            static (name, parameters) =>
+            new(
+                name.DeclName,
+                [.. parameters.Select(parameter => new Abstract.Pattern.VarPattern(parameter))],
+                new PreparedExpression.Application(
+                    new PreparedExpression.Identifier(name),
+                    [.. parameters.Select(parameter => PreparedExpression.Identifier.Create([], parameter))])),
+            parameters);
+
     private static ApplicationResolution? ResolveNativeFunction(Application application)
     {
         if (application.FunctionName.Namespaces.Count != 1 || application.FunctionName.Namespaces[0] != "Basics")
@@ -260,12 +280,7 @@ public partial class ElmSyntaxInterpreter
         // Curried native calls must return through the saturated resolver, not the fallback Elm body.
         return
             new ApplicationResolution.ContinueWithFunction(
-                new(
-                    name.DeclName,
-                    [.. parameters.Select(parameter => new Abstract.Pattern.VarPattern(parameter))],
-                    new PreparedExpression.Application(
-                        new PreparedExpression.Identifier(name),
-                        [.. parameters.Select(parameter => PreparedExpression.Identifier.Create([], parameter))])),
+                PrepareNativeFunction(name, parameters),
                 name);
     }
 
@@ -494,8 +509,9 @@ public partial class ElmSyntaxInterpreter
     /// <c>Float</c> values are compared up to their numerator/denominator ratio.
     /// </para>
     /// <para>
-    /// As in Elm, comparing values that contain functions is not supported and surfaces as a runtime
-    /// exception (raised while evaluating the operands).
+    /// Functions compare by closure source identity and structurally compared collected arguments and
+    /// captured bindings. Fully applied choice values compare structurally, without declaration
+    /// identity, including when their arguments contain functions.
     /// </para>
     /// </summary>
     internal static PineValueInProcess? ResolveBasicsEq(IReadOnlyList<PineValueInProcess> arguments)
@@ -508,7 +524,7 @@ public partial class ElmSyntaxInterpreter
 
         return
             PineValueInProcess.CreateBool(
-                CoreBasicsPrecompiledLeaves.BasicsEqual(arguments[0], arguments[1]));
+                ElmValuesEqualInProcess(arguments[0], arguments[1]));
     }
 
     /// <summary>
@@ -525,7 +541,20 @@ public partial class ElmSyntaxInterpreter
 
         return
             PineValueInProcess.CreateBool(
-                !CoreBasicsPrecompiledLeaves.BasicsEqual(arguments[0], arguments[1]));
+                !ElmValuesEqualInProcess(arguments[0], arguments[1]));
+    }
+
+    private static bool ElmValuesEqualInProcess(PineValueInProcess left, PineValueInProcess right)
+    {
+        if (IsOpaque(left) || IsOpaque(right))
+            return ValuesEqualInProcess(left, right);
+
+        return
+            CoreBasicsPrecompiledLeaves.BasicsEqual(
+                left,
+                right,
+                ValuesEqualInProcess,
+                ElmValuesEqualInProcess);
     }
 
     /// <summary>

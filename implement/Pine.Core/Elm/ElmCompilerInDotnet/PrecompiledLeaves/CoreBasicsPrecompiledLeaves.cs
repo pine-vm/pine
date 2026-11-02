@@ -481,6 +481,18 @@ public static class CoreBasicsPrecompiledLeaves
 
     // ========== .NET implementations of Basics.eq (deep structural equality) ==========
 
+    private static readonly PineValueInProcess s_floatTypeTagName =
+        PineValueInProcess.Create(ElmValue.ElmFloatTypeTagNameAsValue);
+
+    private static readonly PineValueInProcess s_stringTypeTagName =
+        PineValueInProcess.Create(ElmValue.ElmStringTypeTagNameAsValue);
+
+    private static readonly PineValueInProcess s_dictNotEmptyTagName =
+        PineValueInProcess.Create(ElmValue.ElmDictNotEmptyTagNameAsValue);
+
+    private static readonly PineValueInProcess s_setTypeTagName =
+        PineValueInProcess.Create(ElmValue.ElmSetTypeTagNameAsValue);
+
     internal static PineValueInProcess BasicsEq(
         PineValueInProcess a,
         PineValueInProcess b) =>
@@ -488,9 +500,20 @@ public static class CoreBasicsPrecompiledLeaves
 
     internal static bool BasicsEqual(
         PineValueInProcess a,
-        PineValueInProcess b)
+        PineValueInProcess b) =>
+        BasicsEqual(a, b, PineValueInProcess.AreEqual, BasicsEqual);
+
+    /// <summary>
+    /// Shares Elm's numeric and collection equality rules with callers that supply their own
+    /// structural and recursive comparisons, including interpreters with opaque function values.
+    /// </summary>
+    internal static bool BasicsEqual(
+        PineValueInProcess a,
+        PineValueInProcess b,
+        Func<PineValueInProcess, PineValueInProcess, bool> structurallyEqual,
+        Func<PineValueInProcess, PineValueInProcess, bool> recursivelyEqual)
     {
-        if (PineValueInProcess.AreEqual(a, b))
+        if (structurallyEqual(a, b))
         {
             return true;
         }
@@ -499,10 +522,10 @@ public static class CoreBasicsPrecompiledLeaves
         var bTag = b.ValueInProcessFromPathOrEmptyList([1]);
 
         var aIsFloat =
-            PineValueInProcess.AreEqual(aTag, ElmValue.ElmFloatTypeTagNameAsValue);
+            structurallyEqual(aTag, s_floatTypeTagName);
 
         var bIsFloat =
-            PineValueInProcess.AreEqual(bTag, ElmValue.ElmFloatTypeTagNameAsValue);
+            structurallyEqual(bTag, s_floatTypeTagName);
 
         if (aIsFloat)
         {
@@ -547,30 +570,32 @@ public static class CoreBasicsPrecompiledLeaves
             return false;
         }
 
-        if (PineValueInProcess.AreEqual(aTag, ElmValue.ElmStringTypeTagNameAsValue))
+        if (structurallyEqual(aTag, s_stringTypeTagName))
         {
             return false;
         }
 
-        if (PineValueInProcess.AreEqual(aTag, ElmValue.ElmDictNotEmptyTagNameAsValue))
+        if (structurallyEqual(aTag, s_dictNotEmptyTagName))
         {
             return
                 ListsEqualRecursive(
                     DictToListRecursive(a),
-                    DictToListRecursive(b));
+                    DictToListRecursive(b),
+                    recursivelyEqual);
         }
 
-        if (PineValueInProcess.AreEqual(aTag, ElmValue.ElmSetTypeTagNameAsValue))
+        if (structurallyEqual(aTag, s_setTypeTagName))
         {
             return
                 ListsEqualRecursive(
                     DictKeysRecursive(a.ValueInProcessFromPathOrEmptyList([2])),
-                    DictKeysRecursive(b.ValueInProcessFromPathOrEmptyList([2])));
+                    DictKeysRecursive(b.ValueInProcessFromPathOrEmptyList([2])),
+                    recursivelyEqual);
         }
 
         for (var i = 0; i < lengthA; ++i)
         {
-            if (!BasicsEqual(a.GetElementAt(i), b.GetElementAt(i)))
+            if (!recursivelyEqual(a.GetElementAt(i), b.GetElementAt(i)))
             {
                 return false;
             }
@@ -640,7 +665,8 @@ public static class CoreBasicsPrecompiledLeaves
 
     private static bool ListsEqualRecursive(
         IReadOnlyList<PineValueInProcess> listA,
-        IReadOnlyList<PineValueInProcess> listB)
+        IReadOnlyList<PineValueInProcess> listB,
+        Func<PineValueInProcess, PineValueInProcess, bool> recursivelyEqual)
     {
         if (listA.Count != listB.Count)
         {
@@ -649,7 +675,7 @@ public static class CoreBasicsPrecompiledLeaves
 
         for (var i = 0; i < listA.Count; ++i)
         {
-            if (!BasicsEqual(listA[i], listB[i]))
+            if (!recursivelyEqual(listA[i], listB[i]))
             {
                 return false;
             }

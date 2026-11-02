@@ -4218,6 +4218,24 @@ public partial class ElmSyntaxInterpreter
         string functionName,
         PineValueInProcess input)
     {
+        if (functionName is nameof(BuiltinFunction.equal) && input.IsList())
+        {
+            var length = input.GetLength();
+
+            if (length is 0)
+                return PineValueInProcess.KernelTrueValue;
+
+            var first = input.GetElementAt(0);
+
+            for (var i = 1; i < length; ++i)
+            {
+                if (!ValuesEqualInProcess(first, input.GetElementAt(i)))
+                    return PineValueInProcess.KernelFalseValue;
+            }
+
+            return PineValueInProcess.KernelTrueValue;
+        }
+
         if (functionName is nameof(BuiltinFunction.concat))
         {
             return PineValueInProcess.Concat(input);
