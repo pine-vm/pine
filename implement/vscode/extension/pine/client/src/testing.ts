@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import * as vscode from 'vscode';
+import { extensionIdentity } from './identity';
 import {
     ElmTestEvent, ElmTestItem, ElmTestResult, ElmTestRunParams, FuzzSettings,
     TestInventory, TestLocation, TestingTransport, selectedLeafIds, stableTestKey
@@ -52,7 +53,10 @@ interface Replay {
 }
 
 export function testLocation(location: TestLocation): vscode.Location {
-    return new vscode.Location(vscode.Uri.parse(location.uri), new vscode.Range(
+    const uri = vscode.Uri.parse(location.uri);
+    return new vscode.Location(
+        uri.scheme === 'pine-test-source' ? uri.with({ scheme: extensionIdentity.testSourceScheme }) : uri,
+        new vscode.Range(
         location.range.start.line, location.range.start.character,
         location.range.end.line, location.range.end.character));
 }
@@ -99,13 +103,17 @@ export class PineTestController implements vscode.Disposable {
     constructor(
         private readonly transport: TestingTransport,
         private readonly output: vscode.OutputChannel,
-        public readonly controller = vscode.tests.createTestController('pine.elm', 'Elm tests')
+        public readonly controller = vscode.tests.createTestController(
+            extensionIdentity.testControllerId,
+            extensionIdentity.commandPrefix === 'pine' ? 'Elm tests' : `${extensionIdentity.displayName}: Elm tests`)
     ) {
         this.profile = controller.createRunProfile(
             'Run Elm tests', vscode.TestRunProfileKind.Run,
             (request, token) => this.run(request, token), true, undefined, true);
         this.profile.configureHandler = () =>
-            vscode.commands.executeCommand('workbench.action.openSettings', '@ext:Pine.pine pine.testing');
+            vscode.commands.executeCommand(
+                'workbench.action.openSettings',
+                `@ext:${extensionIdentity.extensionId} ${extensionIdentity.testingConfiguration}`);
         controller.refreshHandler = token => this.refresh(token);
         controller.resolveHandler = () => this.refresh();
         this.disposables.push(
@@ -133,11 +141,11 @@ export class PineTestController implements vscode.Disposable {
             }),
             vscode.workspace.onDidChangeWorkspaceFolders(() => this.invalidate()),
             vscode.workspace.onDidChangeConfiguration(event => {
-                if (event.affectsConfiguration('pine.testing')) {
+                if (event.affectsConfiguration(extensionIdentity.testingConfiguration)) {
                     this.invalidate();
                 }
             }),
-            vscode.workspace.registerTextDocumentContentProvider('pine-test-source', {
+            vscode.workspace.registerTextDocumentContentProvider(extensionIdentity.testSourceScheme, {
                 provideTextDocumentContent: async (uri, token) => {
                     // VS Code has already decoded these URI components.
                     const projectUri = uri.query.startsWith('project=') ? uri.query.slice('project='.length) : undefined;
@@ -350,10 +358,11 @@ export class PineTestController implements vscode.Disposable {
             const occurrence = occurrences.get(base) ?? 0;
             occurrences.set(base, occurrence + 1);
             const key = base + '#' + occurrence;
+            const location = testLocation(item.location);
             const created = this.controller.createTestItem(
                 JSON.stringify([inventory.projectUri, inventory.version, inventory.discoveryId, key]),
-                item.label, vscode.Uri.parse(item.location.uri));
-            created.range = testLocation(item.location).range;
+                item.label, location.uri);
+            created.range = location.range;
             created.description = [
                 item.kind === 'Fuzz' ? `fuzz (${item.fuzzRuns} runs)` : item.kind === 'Todo' ? 'TODO' : '',
                 item.selection === 'Skipped' ? 'skipped' : item.selection === 'ExcludedByOnly' ? 'excluded by Test.only' : '',
@@ -462,7 +471,7 @@ export class PineTestController implements vscode.Disposable {
             return undefined;
         }
         return JSON.stringify(projects.map(([uri, project]) => {
-            const config = vscode.workspace.getConfiguration('pine.testing', vscode.Uri.parse(uri));
+            const config = vscode.workspace.getConfiguration(extensionIdentity.testingConfiguration, vscode.Uri.parse(uri));
             return [uri, project.inventory.version, project.inventory.discoveryId, config.get('seed'), config.get('fuzzRuns')];
         }));
     }
@@ -520,7 +529,7 @@ export class PineTestController implements vscode.Disposable {
                 if (replay && (replay.version !== inventory.version || replay.discoveryId !== inventory.discoveryId)) {
                     throw new Error('Source changed since this fuzz result. Run the current test before replaying it.');
                 }
-                const config = vscode.workspace.getConfiguration('pine.testing', vscode.Uri.parse(uri));
+                const config = vscode.workspace.getConfiguration(extensionIdentity.testingConfiguration, vscode.Uri.parse(uri));
                 const parameters: ElmTestRunParams = {
                     projectUri: inventory.projectUri,
                     version: inventory.version,
@@ -643,7 +652,7 @@ export class PineTestController implements vscode.Disposable {
         const currentInventory = this.projects.get(this.metadata.get(item).projectUri)?.inventory;
         const historical = currentInventory?.version !== context.parameters.version;
         const historicalUri = source &&
-            `pine-test-source:/${context.parameters.version}/${source.sourcePath.split('/').map(encodeURIComponent).join('/')}?project=${encodeURIComponent(context.parameters.projectUri)}`;
+            `${extensionIdentity.testSourceScheme}:/${context.parameters.version}/${source.sourcePath.split('/').map(encodeURIComponent).join('/')}?project=${encodeURIComponent(context.parameters.projectUri)}`;
         const messages = testMessages(historical && source ? {
             ...result,
             messages: result.messages.map(message =>
