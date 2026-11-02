@@ -44,12 +44,13 @@ public abstract record ElmValue
     /// <summary>
     /// Corresponding to the Elm expression 'True'.
     /// </summary>
-    public static readonly ElmValue TrueValue = TagInstance("True", []);
+    // Cache construction itself consumes these values; do not enter ReusedInstances during type initialization.
+    public static readonly ElmValue TrueValue = new ElmTag("True", []);
 
     /// <summary>
     /// Corresponding to the Elm expression 'False'.
     /// </summary>
-    public static readonly ElmValue FalseValue = TagInstance("False", []);
+    public static readonly ElmValue FalseValue = new ElmTag("False", []);
 
     /// <inheritdoc/>
     override public string ToString() =>
@@ -218,7 +219,7 @@ public abstract record ElmValue
     /// Represents an empty Elm dictionary.
     /// </summary>
     public static readonly ElmValue EmptyDict =
-        TagInstance(ElmDictEmptyTagName, []);
+        new ElmTag(ElmDictEmptyTagName, []);
 
     /// <summary>
     /// Creates an <see cref="ElmList"/> instance from a read-only list of <see cref="ElmValue"/> items.
