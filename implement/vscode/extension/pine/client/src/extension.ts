@@ -1,5 +1,6 @@
 import * as path from 'path';
-import { commands, workspace, ExtensionContext, window, Location, OutputChannel, Position, Uri } from 'vscode';
+import { commands, workspace, ExtensionContext, window, Location, OutputChannel, Position, TestItem, Uri } from 'vscode';
+import { PineTestingFeature } from './testingFeature';
 
 import {
     CloseAction,
@@ -67,7 +68,7 @@ function sanitizePathFromSettings(input: string): string {
     return withoutQuotes;
 }
 
-export function activate(context: ExtensionContext) {
+export async function activate(context: ExtensionContext): Promise<void> {
 
     pineOutputChannel.appendLine("Pine extension activated.");
 
@@ -80,7 +81,7 @@ export function activate(context: ExtensionContext) {
         synchronize: {
             // Notify the server about file changes
             fileEvents: [
-                workspace.createFileSystemWatcher('**/.elm'),
+                workspace.createFileSystemWatcher('**/*.elm'),
                 workspace.createFileSystemWatcher('**/elm.json')
             ]
         },
@@ -145,6 +146,19 @@ export function activate(context: ExtensionContext) {
         clientOptions
     );
 
+    const testing = new PineTestingFeature(client, pineOutputChannel);
+    client.registerFeature(testing);
+    const replay = (item?: TestItem, copy = false) => {
+        if (!testing.testing) {
+            return window.showWarningMessage('This Pine language server does not support Elm testing. Update Pine to enable testing protocol v1.');
+        }
+        return testing.testing.replay(item, copy);
+    };
+    context.subscriptions.push(
+        testing,
+        commands.registerCommand('pine.tests.replay', (item?: TestItem) => replay(item)),
+        commands.registerCommand('pine.tests.copyReproduction', (item?: TestItem) => replay(item, true)));
+
     context.subscriptions.push(
         commands.registerCommand(
             'pine.showLanguageServerClientLog',
@@ -159,7 +173,8 @@ export function activate(context: ExtensionContext) {
     console.log("client start...");
 
     // Start the client. This will also launch the server
-    client.start();
+    await client.start();
+    void testing.testing?.refresh();
     console.log("client started");
 
 }

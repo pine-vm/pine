@@ -199,6 +199,6 @@ public sealed class FileSystemWorkspace : ILanguageServerWorkspace
                     "Only file URIs are supported: " + documentUri);
         }
 
-        return uri.LocalPath;
+        return WorkspaceDocumentUri.Normalize(uri).LocalPath;
     }
 }

@@ -72,19 +72,27 @@ public static class ElmTestDiscovery
         ElmDependencyResolutionConfiguration? resolutionConfiguration = null,
         IElmPackageProvider? packageProvider = null,
         CancellationToken cancellationToken = default,
-        string? projectDirectory = null)
+        string? projectDirectory = null,
+        IReadOnlyList<string>? manifestPath = null,
+        ElmTestExecutionSettings? executionSettings = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var watch = Stopwatch.StartNew();
         var files = projectTree.EnumerateFilesTransitive().ToArray();
+        manifestPath ??= ["elm.json"];
+        var projectPath = manifestPath.Take(manifestPath.Count - 1).ToArray();
+        var testsPath = projectPath.Append("tests").ToArray();
 
         var nestedProjects =
-            files.Where(file => file.path.Count > 1 && file.path[^1] == "elm.json")
+            files.Where(
+                file => file.path.Count > manifestPath.Count && file.path[^1] == "elm.json" &&
+                    file.path.Take(projectPath.Length).SequenceEqual(projectPath))
             .Select(file => file.path.Take(file.path.Count - 1).ToArray()).ToArray();
 
         var roots =
             files.Where(
-                file => file.path.Count > 1 && file.path[0] == "tests" &&
+                file => file.path.Count > testsPath.Length &&
+                    file.path.Take(testsPath.Length).SequenceEqual(testsPath) &&
                     file.path[^1].EndsWith(".elm", StringComparison.OrdinalIgnoreCase) &&
                     !file.path.Any(segment => segment is ".git" or "elm-stuff") &&
                     !nestedProjects.Any(nested => file.path.Take(nested.Length).SequenceEqual(nested)))
@@ -94,7 +102,11 @@ public static class ElmTestDiscovery
             .ToArray();
 
         if (roots.Length == 0)
-            return new([], hasOnly: false) { Duration = watch.Elapsed };
+        {
+            var manifest = ElmDependencyResolver.ReadManifest(projectTree, manifestPath);
+            ElmDependencyResolver.ValidateManifestShape(manifest, string.Join('/', manifestPath));
+            return new([], hasOnly: false) { Duration = watch.Elapsed, SourceFiles = projectTree };
+        }
 
         resolutionConfiguration ??= ElmTestRunner.DefaultResolutionConfiguration.Value;
 
@@ -108,7 +120,7 @@ public static class ElmTestDiscovery
         var build =
             ElmResolvedBuildPreparation.PrepareForDeclarationDemandAsync(
                 projectTree,
-                ["elm.json"],
+                manifestPath,
                 [.. roots.Select(root => root.path)],
                 resolutionConfiguration,
                 packageProvider,
@@ -134,7 +146,7 @@ public static class ElmTestDiscovery
         var sourcePreparationDuration = watch.Elapsed;
 
         return
-            DiscoverTests(build, declarations, cancellationToken) with
+            DiscoverTests(build, declarations, cancellationToken, executionSettings) with
             {
                 SourcePreparationDuration = sourcePreparationDuration,
                 Duration = watch.Elapsed
@@ -630,6 +642,10 @@ public static class ElmTestDiscovery
                 hasOnly)
             {
                 HasSkipped = hasSkipped,
+                SourceFiles = build.OriginalSources,
+                ResolutionFingerprint = build.Resolution.Fingerprint,
+                ConfigureExecution =
+                (settings, token) => DiscoverTests(build, testRoots, token, settings),
                 CompileExecution =
                 ids =>
                 {
@@ -906,7 +922,34 @@ public sealed record ElmTestDiscoveryResult
     [JsonIgnore]
     public bool HasSkipped { get; init; }
 
+    /// <summary>Exact original sources for navigation, including resolved packages and substitutions.</summary>
+    [JsonIgnore]
+    public FileTree SourceFiles { get; init; } = FileTree.EmptyTree;
+
+    /// <summary>Fingerprint of the exact dependency resolution and compiler used for discovery.</summary>
+    [JsonIgnore]
+    public string? ResolutionFingerprint { get; init; }
+
     internal Func<IReadOnlySet<string>, ImmutableDictionary<string, ElmTestExecutionEntry>>? CompileExecution { get; init; }
+
+    internal Func<ElmTestExecutionSettings, CancellationToken, ElmTestDiscoveryResult>? ConfigureExecution { get; init; }
+
+    /// <summary>Prepares fresh runners against the same resolved sources, without resolving dependencies again.</summary>
+    public ElmTestDiscoveryResult WithExecutionSettings(
+        ElmTestExecutionSettings settings,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return
+            Items.IsEmpty
+            ?
+            this
+            :
+            (ConfigureExecution ??
+            throw new InvalidOperationException("This discovery result has no resolved source environment."))
+                (settings, cancellationToken);
+    }
 
     /// <summary>Compiles selected runnable tests to independent Pine evaluations without replaying construction.</summary>
     public ImmutableDictionary<string, ElmTestExecutionEntry> PrepareExecution(IEnumerable<string>? testIds = null)

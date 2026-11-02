@@ -11,7 +11,8 @@
 	},
 	"publisher": "Pine",
 	"categories": [
-		"Programming Languages"
+		"Programming Languages",
+		"Testing"
 	],
 	"icon": "src/pine-icon.png",
 	"keywords": [
@@ -21,7 +22,7 @@
 		"url": "https://github.com/sponsors/Viir"
 	},
 	"engines": {
-		"vscode": "^1.75.0"
+		"vscode": "^1.93.0"
 	},
 	"activationEvents": [
 		"workspaceContains:**/elm.json"
@@ -59,12 +60,49 @@
 			{
 				"command": "pine.showLanguageServerClientLog",
 				"title": "Pine: Show Language Server Client Log"
+			},
+			{
+				"command": "pine.tests.replay",
+				"title": "Pine: Replay Elm Fuzz Test"
+			},
+			{
+				"command": "pine.tests.copyReproduction",
+				"title": "Pine: Copy Elm Fuzz Reproduction Command"
 			}
 		],
+		"menus": {
+			"testing/item/context": [
+				{
+					"command": "pine.tests.replay",
+					"when": "testControllerId == pine.elm",
+					"group": "inline"
+				},
+				{
+					"command": "pine.tests.copyReproduction",
+					"when": "testControllerId == pine.elm"
+				}
+			]
+		},
 		"configuration": {
 			"type": "object",
 			"title": "Pine",
 			"properties": {
+				"pine.testing.fuzzRuns": {
+					"scope": "resource",
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 4294967295,
+					"default": 100,
+					"description": "Default number of examples per Elm fuzz test. Test.fuzzWith can override this."
+				},
+				"pine.testing.seed": {
+					"scope": "resource",
+					"type": ["integer", "null"],
+					"minimum": 0,
+					"maximum": 4294967295,
+					"default": null,
+					"description": "Elm fuzz seed. Null selects a fresh seed per run; replay uses the recorded seed."
+				},
 				"pineLanguageServer.trace.server": {
 					"scope": "window",
 					"type": "string",
@@ -99,7 +137,7 @@
 		"@typescript-eslint/eslint-plugin": "^7.18.0",
 		"@typescript-eslint/parser": "^7.18.0",
 		"eslint": "^8.57.0",
-		"mocha": "^12.0.0",
+		"mocha": "^11.7.5",
 		"typescript": "^5.6.2"
 	}
 }
