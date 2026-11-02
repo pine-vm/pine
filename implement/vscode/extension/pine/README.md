@@ -40,3 +40,41 @@ Visual Studio Code is available for Mac, Windows, and Linux.
 1. Install VS Code from <https://code.visualstudio.com/>
 2. Follow [this link](https://marketplace.visualstudio.com/items?itemName=Pine.pine) to install the VS Code extension
 3. Make sure you have Pine installed: <https://pine.build/download>
+
+### Build a side-by-side development package
+
+With Node.js 22 or later installed, run from this directory:
+
+```shell
+npm ci
+npm run test:package
+npm run package:dev
+```
+
+The VSIX is written to `out/pine-dev-<version>.vsix`. Install it using
+**Extensions: Install from VSIX...**, or:
+
+```shell
+code --install-extension out/pine-dev-0.3.7.vsix
+```
+
+This package is **Pine Dev** (`Pine.pine-dev`); the release manifest is not modified.
+Its settings are independent of the installed release:
+
+```json
+{
+    "pineDevLanguageServer.pathToPineExecutableFile": "C:\\path\\to\\pine.exe",
+    "pineDevLanguageServer.trace.server": "verbose",
+    "pineDev.testing.fuzzRuns": 100,
+    "pineDev.testing.seed": null
+}
+```
+
+An empty executable path still uses `pine` from `PATH`. The language server is not
+bundled; point the setting at your local build to test server changes.
+Commands and output channels are labeled **Pine Dev**, and the Test Explorer
+controller and versioned test-source documents have separate IDs.
+
+Both extensions can be installed together, but enabling both in the same workspace
+runs two language servers and can duplicate language features and tests. Disable
+the release extension **for this workspace** while testing Pine Dev if desired.

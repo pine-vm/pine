@@ -1,6 +1,7 @@
 import * as path from 'path';
 import { commands, workspace, ExtensionContext, window, Location, OutputChannel, Position, TestItem, Uri } from 'vscode';
 import { PineTestingFeature } from './testingFeature';
+import { extensionIdentity, localizeCodeLens } from './identity';
 
 import {
     CloseAction,
@@ -26,12 +27,12 @@ const logDir: string =
     "./ls-log/";
 
 const pineOutputChannel: OutputChannel =
-    window.createOutputChannel("Pine Logs");
+    window.createOutputChannel(`${extensionIdentity.displayName} Logs`);
 
 function buildServerOptions(context: ExtensionContext): ServerOptions {
 
     const config =
-        workspace.getConfiguration('pineLanguageServer');
+        workspace.getConfiguration(extensionIdentity.languageServerConfiguration);
 
     const customPath =
         sanitizePathFromSettings(
@@ -70,7 +71,7 @@ function sanitizePathFromSettings(input: string): string {
 
 export async function activate(context: ExtensionContext): Promise<void> {
 
-    pineOutputChannel.appendLine("Pine extension activated.");
+    pineOutputChannel.appendLine(`${extensionIdentity.displayName} extension activated.`);
 
     const serverOptions: ServerOptions = buildServerOptions(context);
 
@@ -78,6 +79,16 @@ export async function activate(context: ExtensionContext): Promise<void> {
     const clientOptions: LanguageClientOptions = {
         // Register the server for plain text documents
         documentSelector: [{ scheme: 'file', language: 'elm' }],
+        middleware: {
+            provideCodeLenses: async (document, token, next) => {
+                const lenses = await next(document, token);
+                return lenses?.map(lens => localizeCodeLens(lens));
+            },
+            resolveCodeLens: async (lens, token, next) => {
+                const resolved = await next(lens, token);
+                return resolved ? localizeCodeLens(resolved) : resolved;
+            }
+        },
         synchronize: {
             // Notify the server about file changes
             fileEvents: [
@@ -140,8 +151,8 @@ export async function activate(context: ExtensionContext): Promise<void> {
 
     // Create the language client and start the client.
     client = new LanguageClient(
-        'pineLanguageServer',
-        'Pine Language Server Client',
+        extensionIdentity.languageServerConfiguration,
+        `${extensionIdentity.displayName} Language Server Client`,
         serverOptions,
         clientOptions
     );
@@ -156,17 +167,17 @@ export async function activate(context: ExtensionContext): Promise<void> {
     };
     context.subscriptions.push(
         testing,
-        commands.registerCommand('pine.tests.replay', (item?: TestItem) => replay(item)),
-        commands.registerCommand('pine.tests.copyReproduction', (item?: TestItem) => replay(item, true)));
+        commands.registerCommand(`${extensionIdentity.commandPrefix}.tests.replay`, (item?: TestItem) => replay(item)),
+        commands.registerCommand(`${extensionIdentity.commandPrefix}.tests.copyReproduction`, (item?: TestItem) => replay(item, true)));
 
     context.subscriptions.push(
         commands.registerCommand(
-            'pine.showLanguageServerClientLog',
+            `${extensionIdentity.commandPrefix}.showLanguageServerClientLog`,
             () => client.outputChannel.show()));
 
     context.subscriptions.push(
         commands.registerCommand(
-            'pine.client.peekReferences',
+            `${extensionIdentity.commandPrefix}.client.peekReferences`,
             (documentUri: unknown, position: unknown) =>
                 showReferences(documentUri, position)));
 
