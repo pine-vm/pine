@@ -391,7 +391,7 @@ public partial class ElmCompiler
             };
     }
 
-    private static IReadOnlyList<CompilationError.DeclarationDependencyChainItem> BuildSourceDependencyChain(
+    internal static IReadOnlyList<CompilationError.DeclarationDependencyChainItem> BuildSourceDependencyChain(
         IReadOnlyList<DeclQualifiedName> declarations,
         IReadOnlyList<ConcreteSyntax.File> sources,
         IReadOnlyDictionary<string, string> paths,
@@ -474,7 +474,7 @@ public partial class ElmCompiler
         return chain;
     }
 
-    private static CompilationError.CanonicalizationDiagnostic CompleteCanonicalizationDiagnostic(
+    internal static CompilationError.CanonicalizationDiagnostic CompleteCanonicalizationDiagnostic(
         CompilationError.CanonicalizationDiagnostic diagnostic,
         IReadOnlyList<ConcreteSyntax.File> sources,
         IReadOnlyDictionary<string, string> paths)

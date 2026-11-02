@@ -5,6 +5,8 @@ using Pine.Core.Internal;
 using Pine.Core.PineLanguage;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
+using System.Numerics;
 
 namespace Pine.Core.Elm.Syntax.Interpreter;
 
@@ -63,6 +65,15 @@ public partial class ElmSyntaxInterpreter
         builder.Add(
             DeclQualifiedName.Create(["Basics"], "modBy"),
             ResolveBasicsModBy);
+
+        builder.Add(DeclQualifiedName.Create(["Basics"], "fdiv"), ResolveBasicsFdiv);
+        builder.Add(DeclQualifiedName.Create(["Basics"], "logBase"), ResolveBasicsLogBase);
+        builder.Add(DeclQualifiedName.Create(["Basics"], "ceiling"), ResolveBasicsCeiling);
+        builder.Add(DeclQualifiedName.Create(["Basics"], "abs"), ResolveBasicsAbs);
+
+        builder.Add(
+            DeclQualifiedName.Create(["Basics"], "toFloat"),
+            arguments => arguments.Count == 1 ? arguments[0] : null);
 
         builder.Add(
             DeclQualifiedName.Create(["Bitwise"], "and"),
@@ -225,6 +236,172 @@ public partial class ElmSyntaxInterpreter
             ResolveCharIsAlphaNum);
 
         return builder.ToImmutable();
+    }
+
+    private static ApplicationResolution? ResolveNativeFunction(Application application)
+    {
+        if (application.FunctionName.Namespaces.Count != 1 || application.FunctionName.Namespaces[0] != "Basics")
+            return null;
+
+        var name = application.FunctionName;
+
+        var parameters =
+            name.DeclName switch
+            {
+                "fdiv" or "logBase" or "add" or "sub" => new[] { "a", "b" },
+                "ceiling" or "abs" or "toFloat" => ["a"],
+
+                _ =>
+                null
+            };
+
+        if (parameters is null)
+            return null;
+        // Curried native calls must return through the saturated resolver, not the fallback Elm body.
+        return
+            new ApplicationResolution.ContinueWithFunction(
+                new(
+                    name.DeclName,
+                    [.. parameters.Select(parameter => new Abstract.Pattern.VarPattern(parameter))],
+                    new PreparedExpression.Application(
+                        new PreparedExpression.Identifier(name),
+                        [.. parameters.Select(parameter => PreparedExpression.Identifier.Create([], parameter))])),
+                name);
+    }
+
+    private static (BigInteger Numerator, BigInteger Denominator) NumberParts(PineValueInProcess value)
+    {
+        if (AsPlainInteger(value) is { } integer)
+            return (integer, BigInteger.One);
+
+        if (IsElmFloat(value.Evaluate(), out var numerator, out var denominator))
+        {
+            return
+                (PineValueInProcess.Create(numerator).AsInteger() ??
+                throw new System.InvalidOperationException("Float numerator is not an integer."),
+                PineValueInProcess.Create(denominator).AsInteger() ??
+                throw new System.InvalidOperationException("Float denominator is not an integer."));
+        }
+
+        throw new System.InvalidOperationException(
+            "Expected an Elm number, got: " + RenderAsElmExpression(value).expressionString);
+    }
+
+    private static PineValueInProcess RationalResult(BigInteger numerator, BigInteger denominator)
+    {
+        if (denominator.Sign < 0)
+            (numerator, denominator) = (-numerator, -denominator);
+        // Match native NormalizeFloatResult, which also reduces arithmetic 0/0 to integer zero.
+        if (numerator == 0)
+            return PineValueInProcess.CreateInteger(0);
+
+        if (denominator == 1 || denominator != 0 && numerator % denominator == 0)
+            return PineValueInProcess.CreateInteger(numerator / denominator);
+
+        return ToProcess(ElmValue.ElmFloat.NotNormalized(numerator, denominator));
+    }
+
+    private static PineValueInProcess? ResolveBasicsFdiv(IReadOnlyList<PineValueInProcess> arguments)
+    {
+        if (arguments.Count != 2)
+            return null;
+
+        var left = NumberParts(arguments[0]);
+        var right = NumberParts(arguments[1]);
+        return RationalResult(left.Numerator * right.Denominator, left.Denominator * right.Numerator);
+    }
+
+    private static PineValueInProcess? ResolveBasicsCeiling(IReadOnlyList<PineValueInProcess> arguments)
+    {
+        if (arguments.Count != 1)
+            return null;
+
+        var number = NumberParts(arguments[0]);
+        var quotient = number.Denominator == 0 ? 0 : number.Numerator / number.Denominator;
+        return PineValueInProcess.CreateInteger(quotient * number.Denominator < number.Numerator ? quotient + 1 : quotient);
+    }
+
+    private static PineValueInProcess? ResolveBasicsAbs(IReadOnlyList<PineValueInProcess> arguments)
+    {
+        if (arguments.Count != 1)
+            return null;
+
+        var number = NumberParts(arguments[0]);
+
+        return
+            number.Numerator.Sign * number.Denominator.Sign < 0
+            ?
+            RationalResult(-number.Numerator, number.Denominator)
+            :
+            arguments[0];
+    }
+
+    private static PineValueInProcess? ResolveBasicsLogBase(IReadOnlyList<PineValueInProcess> arguments)
+    {
+        if (arguments.Count != 2)
+            return null;
+
+        var basis = NumberParts(arguments[0]);
+        var number = NumberParts(arguments[1]);
+
+        if (basis.Numerator <= 0 || basis.Denominator <= 0 || number.Numerator <= 0 || number.Denominator <= 0 ||
+            basis.Numerator == basis.Denominator)
+        {
+            return ToProcess(ElmValue.ElmFloat.NotNormalized(0, 0));
+        }
+
+        // Match CoreBasics' 48-bit, quantized binary logarithm, including its integral-result snap.
+        static BigInteger BinaryLog(BigInteger numerator, BigInteger denominator)
+        {
+            BigInteger scale = BigInteger.One << 48;
+            BigInteger result = 0;
+
+            while (numerator < denominator)
+            {
+                numerator *= 2;
+                result -= scale;
+            }
+
+            while (numerator >= denominator * 2)
+            {
+                denominator *= 2;
+                result += scale;
+            }
+
+            for (var bit = 1; bit <= 48; bit++)
+            {
+                numerator *= numerator;
+                denominator *= denominator;
+
+                if (numerator >= denominator * 2)
+                {
+                    denominator *= 2;
+                    result += scale >> bit;
+                }
+
+                numerator = numerator * scale / denominator;
+                denominator = scale;
+            }
+
+            return result;
+        }
+
+        var resultNumerator = BinaryLog(number.Numerator, number.Denominator);
+        var resultDenominator = BinaryLog(basis.Numerator, basis.Denominator);
+
+        if (resultDenominator.Sign < 0)
+            (resultNumerator, resultDenominator) = (-resultNumerator, -resultDenominator);
+
+        if (resultDenominator == 0)
+            return RationalResult(resultNumerator, resultDenominator);
+
+        var nearest =
+            (BigInteger.Abs(resultNumerator) * 2 + resultDenominator) / (resultDenominator * 2) * resultNumerator.Sign;
+
+        if (BigInteger.Abs(resultNumerator - nearest * resultDenominator) * 1_000_000_000_000 < resultDenominator)
+            return PineValueInProcess.CreateInteger(nearest);
+
+        return RationalResult(resultNumerator, resultDenominator);
     }
 
     private static ImmutableDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>
@@ -435,10 +612,7 @@ public partial class ElmSyntaxInterpreter
     }
 
     /// <summary>
-    /// Builtin implementation of <c>Basics.add</c> (the <c>+</c> operator) for integer operands,
-    /// mirroring <c>elm-kernel-modules/Basics.elm</c> (<c>add a b = Pine_kernel.int_add [ a, b ]</c>).
-    /// When either operand is not a plain integer (for example a <c>Float</c>), the builtin defers to
-    /// the user-defined implementation.
+    /// Implements <c>Basics.add</c> on integers and rational floats.
     /// </summary>
     internal static PineValueInProcess? ResolveBasicsAdd(IReadOnlyList<PineValueInProcess> arguments)
     {
@@ -448,22 +622,17 @@ public partial class ElmSyntaxInterpreter
             return null;
         }
 
-        if (AsPlainInteger(arguments[0]) is not { } leftInteger ||
-            AsPlainInteger(arguments[1]) is not { } rightInteger)
-        {
-            // At least one operand is not a plain integer (for example a Float): defer.
-            return null;
-        }
+        var left = NumberParts(arguments[0]);
+        var right = NumberParts(arguments[1]);
 
-        return PineValueInProcess.CreateInteger(leftInteger + rightInteger);
+        return
+            RationalResult(
+                left.Numerator * right.Denominator + right.Numerator * left.Denominator,
+                left.Denominator * right.Denominator);
     }
 
     /// <summary>
-    /// Builtin implementation of <c>Basics.sub</c> (the <c>-</c> operator) for integer operands,
-    /// mirroring <c>elm-kernel-modules/Basics.elm</c>
-    /// (<c>sub a b = Pine_kernel.int_add [ a, Pine_kernel.int_mul [ -1, b ] ]</c>). When either
-    /// operand is not a plain integer (for example a <c>Float</c>), the builtin defers to the
-    /// user-defined implementation.
+    /// Implements <c>Basics.sub</c> on integers and rational floats.
     /// </summary>
     internal static PineValueInProcess? ResolveBasicsSub(IReadOnlyList<PineValueInProcess> arguments)
     {
@@ -473,14 +642,13 @@ public partial class ElmSyntaxInterpreter
             return null;
         }
 
-        if (AsPlainInteger(arguments[0]) is not { } leftInteger ||
-            AsPlainInteger(arguments[1]) is not { } rightInteger)
-        {
-            // At least one operand is not a plain integer (for example a Float): defer.
-            return null;
-        }
+        var left = NumberParts(arguments[0]);
+        var right = NumberParts(arguments[1]);
 
-        return PineValueInProcess.CreateInteger(leftInteger - rightInteger);
+        return
+            RationalResult(
+                left.Numerator * right.Denominator - right.Numerator * left.Denominator,
+                left.Denominator * right.Denominator);
     }
 
     /// <summary>

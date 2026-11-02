@@ -51,8 +51,8 @@ internal sealed record TestBudgetOptions(
         var options =
             new TestBudgetOptions(
                 new("--budget") { Description = "Shortcut setting both invocation and loop budgets; explicit per-kind options override it." },
-                new("--invocation-budget") { Description = "Command-wide VM invocation budget, including preparation." },
-                new("--loop-budget") { Description = "Command-wide backward-jump iteration budget, including preparation." },
+                new("--invocation-budget") { Description = "Command-wide VM invocation budget for test execution." },
+                new("--loop-budget") { Description = "Command-wide backward-jump iteration budget for test execution." },
                 new("--timeout") { Description = "Cooperative wall-clock timeout in seconds, including preparation." },
                 new("--max-stack-depth") { Description = "VM stack-depth safety limit.", DefaultValueFactory = _ => 100_000 });
 

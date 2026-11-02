@@ -4,11 +4,11 @@ Run Elm tests using the [`elm-explorations/test` package](https://github.com/elm
 
 ## Core discovery and editor navigation
 
-`Pine.Core.Elm.Testing.ElmTestDiscovery.DiscoverTests` provides a separate syntax-interpreter
-discovery API for editor integrations. It evaluates test construction (including helpers,
+`Pine.Core.Elm.Testing.ElmTestDiscovery.DiscoverTests` provides syntax-interpreter
+discovery shared by the CLI and future editor integrations. It evaluates test construction (including helpers,
 computed labels and generated suites), then uses the resolved Elm test library to enumerate
-leaves. Assertion and fuzz callbacks are not run. The CLI still uses the existing compiler/PineVM
-discovery and execution path; no language-server protocol or VS Code UI is introduced here.
+leaves. Assertion and fuzz callbacks are not run during discovery. Both `--list-tests` and ordinary
+`elm test` use this path; execution remains on PineVM. No language-server protocol or VS Code UI is introduced here.
 
 `result.Items` is a complete inventory in parent-before-child order, including
 `describe` groups, empty groups, skipped tests and tests excluded by `Test.only`.
@@ -20,8 +20,9 @@ editor hosts choose group/test/skipped icons without inferring semantics from la
 Groups whose children are all skipped are also marked skipped. `result.HasOnly`
 records effective focus selection across roots.
 
-`result.Tests` is the backwards-compatible selected, nonempty leaf view matching
-the current CLI listing, not the complete inventory. Selected leaves also have
+`result.Tests` is the backwards-compatible selected, nonempty leaf view,
+not the complete inventory. CLI listings also include skipped leaves from `Items`,
+with a ` (skipped)` suffix and dim styling when color is enabled. Selected leaves also have
 their existing runner discovery index and exact execution filter. Phase timings
 are available on the result.
 
@@ -42,8 +43,19 @@ Editor hosts must manage document freshness.
 
 `result.GetExecutionFilter(testId)` translates an ID to the existing runner's exact path or
 discovery-ordinal selector for a selected leaf; groups and unselected items are rejected.
-It must be used with the same project sources. Execution remains
-on PineVM; syntax-interpreter closures are never transferred to it.
+It must be used with the same project sources.
+
+`result.PrepareExecution(testIds)` compiles selected runnable closures and their captured values
+into independent Pine evaluations: an expression plus its environment value for each test ID.
+Omitting IDs selects all runnable leaves; TODOs have no executable entry. Suite construction is
+not replayed on PineVM. The CLI uses `ElmTestRunner.DiscoverAndRunTests` to discover, filter,
+compile these entry points and run them with the existing worker, fuzz and result-rendering machinery.
+Closure compilation uses the source compiler's operator lowering, including pipelines and
+short-circuit Boolean operators, before creating resolved compiler IR.
+The older `CompileAndRunTests` API retains compiler/PineVM discovery for compatibility and comparisons.
+
+`Debug.log` is currently silent during test discovery and execution: its value is preserved
+without producing log output. This also applies to captured, partially applied and higher-order loggers.
 
 Every scenario under `Pine.Core.Tests/TestData/Elm/CommandElmTest` has an
 `expected-discovery.json` expectation. The scenario test compares the complete semantic
@@ -84,8 +96,8 @@ Options:
   --offline                                Resolve packages using only local registry metadata and sources; make no network requests.
   --dependency-report <dependency-report>  Write the full dependency resolution report as JSON, including rejected branches and conflicts.
   --budget <budget>                        Shortcut setting both invocation and loop budgets; explicit per-kind options override it.
-  --invocation-budget <invocation-budget>  Command-wide VM invocation budget, including preparation.
-  --loop-budget <loop-budget>              Command-wide backward-jump iteration budget, including preparation.
+  --invocation-budget <invocation-budget>  Command-wide VM invocation budget for test execution.
+  --loop-budget <loop-budget>              Command-wide backward-jump iteration budget for test execution.
   --timeout <timeout>                      Cooperative wall-clock timeout in seconds, including preparation.
   --max-stack-depth <max-stack-depth>      VM stack-depth safety limit. [default: 100_000]
   -?, -h, --help                           Show help and usage information
@@ -133,14 +145,13 @@ source directories.
 Use `--report-durations` to show independently measured timings using the instrumentation's
 phase labels:
 
-- `compilation`: source loading, dependency resolution, and compilation of the test environment.
-- `preparation`: constructing test values, preparing runners, discovering tests, and filtering.
+- `compilation`: source loading, dependency resolution, and test-root identification.
+- `preparation`: syntax-based construction/discovery, filtering, and compilation of the selected runtime closures.
 - `execution`: running the selected tests, including worker setup and result processing.
 
 Both `preparation` and `execution` include a `VM calls (sum)` breakdown, measured around each
-VM evaluation. Preparation includes evaluating exposed zero-parameter declarations (even
-non-test values) and calling the test bridge's `prepare` function. Execution includes evaluating
-the selected test runners. These are summed call durations, not exclusive phase durations:
+VM evaluation. Preparation uses the syntax interpreter, not a PineVM, so its VM-call duration is zero.
+Execution includes evaluating the selected test runners. These are summed call durations, not exclusive phase durations:
 parallel execution calls overlap, so their sum can exceed the execution wall-clock duration.
 
 ## Watch mode
@@ -159,8 +170,8 @@ another attempt. Press Ctrl+C to stop.
 
 With `--report-durations`, each completed run prints its own timings. They describe the latest run, not time spent waiting for edits or accumulated time since watch mode started.
 
-Watch mode retains compilation caches, a generational invocation-result cache, and a learned caching
-policy across reruns. Successful evaluations from preparation and test execution feed bounded
+Watch mode retains source/VM caches, a generational invocation-result cache, and a learned caching
+policy across reruns. Successful test execution evaluations feed bounded
 background learning within the same process. Learning uses isolated PineVM instances and separate
 caches; it does not consume the test run's execution budget.
 
@@ -198,11 +209,12 @@ preparation and other tests. This prevents cache warming and scheduling from cha
 work counters. For fuzz tests, use a fixed `--seed` and `--fuzz` to reproduce the work.
 
 Terminal statistics, expression rankings and the JSON report aggregate work across all selected
-tests. Preparation is counted once per command and remains separate from execution in
-`CountersByPhase`; execution counters sum the independently profiled tests. JSON `SelectedTests`
+tests. Preparation is timed once per command, but VM work counters and invocation caching now
+cover execution only. Execution counters sum the independently profiled tests. JSON `SelectedTests`
 lists all selected runnable test paths in discovery order; `SelectedTest` remains populated only
 for a single-test selection. Invocation/loop budgets and the timeout still apply to the entire
-command, including preparation, not independently to each test. Timeouts and cancellation can
+command's execution, not independently to each test. The cooperative wall-clock timeout also
+covers source preparation and syntax discovery. Timeouts and cancellation can
 stop at different points in the computation; elapsed time and periodic stack samples are not
 deterministic evaluation work counters.
 

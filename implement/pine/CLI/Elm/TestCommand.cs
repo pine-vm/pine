@@ -791,7 +791,7 @@ public static class TestCommand
             testRun =
                 cacheSession is not null
                 ?
-                ElmTestRunner.CompileAndRunTests(
+                ElmTestRunner.DiscoverAndRunTests(
                     cacheSession: cacheSession,
                     appDirectory: projectSource.DirectoryPath,
                     workers: resolvedWorkers,
@@ -809,7 +809,7 @@ public static class TestCommand
                     instrumentation: instrumentation,
                     onTestsSelected: WriteRunningMessage)
                 :
-                ElmTestRunner.CompileAndRunTests(
+                ElmTestRunner.DiscoverAndRunTests(
                     appDirectory: projectSource.DirectoryPath,
                     workers: resolvedWorkers,
                     resolutionConfiguration: resolutionConfiguration,
@@ -965,7 +965,8 @@ public static class TestCommand
                 listed.Tests,
                 listed.FilteredOutTests,
                 filterApplied: filter is not null,
-                useColor: resolvedColorMode is not CommandLineColorMode.Never);
+                useColor: resolvedColorMode is not CommandLineColorMode.Never,
+                skippedTests: listed.SkippedTests);
 
             return 0;
         }
@@ -1155,16 +1156,20 @@ public static class TestCommand
         IReadOnlyList<ListedTest> tests,
         IReadOnlyList<ListedTest> filteredOutTests,
         bool filterApplied,
-        bool useColor)
+        bool useColor,
+        IReadOnlyList<ListedTest>? skippedTests = null)
     {
+        skippedTests ??= [];
+        var listedCount = tests.Count + skippedTests.Count;
+
         var tree =
             new Tree(
                 new Text(
                     filterApplied
                     ?
-                    $"Tests remaining after filtering ({tests.Count})"
+                    $"Tests remaining after filtering ({listedCount})"
                     :
-                    $"Available tests ({tests.Count})",
+                    $"Available tests ({listedCount})",
                     ListStyle(TestCommandTheme.ListHeading)))
             {
                 Guide = TreeGuide.Line,
@@ -1172,8 +1177,9 @@ public static class TestCommand
             };
 
         foreach (var testsInFile in
-            tests.Select(test => (test, filteredOut: false))
-            .Concat(filteredOutTests.Select(test => (test, filteredOut: true)))
+            tests.Select(test => (test, filteredOut: false, skipped: false))
+            .Concat(skippedTests.Select(test => (test, filteredOut: false, skipped: true)))
+            .Concat(filteredOutTests.Select(test => (test, filteredOut: true, skipped: false)))
             .GroupBy(entry => entry.test.FilePath, StringComparer.Ordinal)
             .OrderBy(group => group.Key, StringComparer.Ordinal))
         {
@@ -1204,20 +1210,19 @@ public static class TestCommand
 
     private static void AddDescriptionNodes(
         TreeNode parent,
-        IReadOnlyList<(ListedTest test, bool filteredOut)> tests,
+        IReadOnlyList<(ListedTest test, bool filteredOut, bool skipped)> tests,
         int descriptionDepth,
         bool useColor)
     {
-        foreach (var test in
+        foreach (var entry in
             tests
             .Where(entry => !entry.filteredOut && entry.test.DescriptionPath.Count == descriptionDepth)
-            .Select(entry => entry.test)
-            .OrderBy(test => test.Name, StringComparer.Ordinal))
+            .OrderBy(entry => entry.test.Name, StringComparer.Ordinal))
         {
             parent.AddNode(
                 new Text(
-                    test.Name,
-                    ListStyle(TestCommandTheme.ListTest)));
+                    entry.test.Name + (entry.skipped ? " (skipped)" : ""),
+                    ListStyle(entry.skipped ? TestCommandTheme.Dark : TestCommandTheme.ListTest)));
         }
 
         foreach (var testsInDescription in

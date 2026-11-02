@@ -1,7 +1,11 @@
 using AwesomeAssertions;
+using AwesomeAssertions.Execution;
+using Pine.Core.Elm;
+using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Elm.Syntax;
 using Pine.Core.Elm.Syntax.Interpreter;
 using Pine.Core.Elm.Testing;
+using Pine.Core.Files;
 using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Generic;
@@ -13,11 +17,288 @@ using Xunit;
 
 using Concrete = Pine.Core.Elm.Syntax.Concrete;
 using ConvertFromConcrete = Pine.Core.Elm.Syntax.Abstract.ConvertFromConcrete;
+using IntermediatePineVM = Pine.Core.Runtime.IntermediateVM.PineVM;
 
 namespace Pine.Core.Tests.Elm.ElmTest;
 
 public class ElmTestDiscoveryTests
 {
+    [Theory]
+    [InlineData("""suite = Test.test "pass" (\_ -> Expect.pass)""")]
+    [InlineData("""suite = Test.describe "generated" (List.map (\n -> Test.test (String.fromInt n) (\_ -> Expect.equal n n)) [ 1, 2 ])""")]
+    [InlineData("""
+        suite =
+            let
+                even n = if n == 0 then True else odd (n - 1)
+                odd n = if n == 0 then False else even (n - 1)
+            in
+            Test.test "recursive" (\_ -> Expect.equal True (even 4))
+        """)]
+    [InlineData("""
+        suite =
+            let
+                expected = 3
+                check = Expect.equal expected
+            in
+            Test.test "partial" (\_ -> check 3)
+        """)]
+    [InlineData("""
+        suite =
+            let
+                state = { wrap = Just, read = .answer, original = { answer = 7 } }
+            in
+            Test.test "function record" (\_ -> Expect.equal (Just 7) (state.wrap (state.read state.original)))
+        """)]
+    [InlineData("""
+        type alias Holder = { fn : Int -> Int, answer : Int }
+        suite =
+            let
+                make = Holder ((+) 2)
+            in
+            Test.test "record constructor" (\_ -> Expect.equal 5 ((make 3).fn (make 3).answer))
+        """)]
+    [InlineData("""
+        suite =
+            let
+                n = 7
+                add n = n + 1
+                record = { answer = n }
+                changed = { record | answer = 1 }
+            in
+            Test.test "shadowing" (\_ -> Expect.equal 2 (add changed.answer))
+        """)]
+    [InlineData("""
+        suite = Test.test "direct log" (\_ -> Expect.equal 42 (Debug.log "ignored" 42))
+        """)]
+    [InlineData("""
+        logged value = Debug.log "ignored" (value + 1)
+        suite = Test.test "helper log" (\_ -> Expect.equal 42 (logged 41))
+        """)]
+    [InlineData("""
+        suite =
+            let
+                log = Debug.log "ignored"
+            in
+            Test.test "captured log" (\_ -> Expect.equal 42 (log 42))
+        """)]
+    [InlineData("""
+        suite =
+            let
+                state = { log = Debug.log }
+            in
+            Test.test "higher order log" (\_ -> Expect.equal 42 (state.log "ignored" 42))
+        """)]
+    [InlineData("""
+        suite = Test.test "logged function" (\_ -> Expect.equal 42 (Debug.log "ignored" ((+) 1) 41))
+        """)]
+    [InlineData("""
+        suite = Test.test "ignored message" (\_ -> Expect.equal 42 (Debug.log (Debug.todo "message must not run") 42))
+        """)]
+    public void Syntax_test_discovery_compiles_captured_runners_to_Pine_evaluations(string declarations) =>
+        AssertCompiledRunnersPass(declarations);
+
+    [Theory]
+    [InlineData("""
+        type Expression = Environment | Builtin String Expression | Label Expression
+        evaluate expression environment =
+            case expression of
+                Environment -> Ok environment
+                Builtin name input ->
+                    evaluate input environment
+                        |> Result.mapError ((++) "input: ")
+                        |> Result.andThen (applyBuiltin name)
+                Label tagged -> evaluate tagged environment
+        applyBuiltin name input =
+            case name of
+                "head" -> Ok (List.take 1 input)
+                _ -> Err "unknown"
+        suite =
+            let
+                environment = [ 7, 9 ]
+                run expression = evaluate expression environment
+                head = Builtin "head" Environment
+            in
+            Test.test "captured pipeline" (\_ -> Expect.equal (Ok [ 7 ]) (run (Label head)))
+        """)]
+    [InlineData("""
+        fail input = case input of
+            Just value -> value
+        suite = Test.test "lazy and" (\_ -> Expect.equal False (False && fail Nothing))
+        """)]
+    [InlineData("""
+        fail input = case input of
+            Just value -> value
+        suite = Test.test "lazy or" (\_ -> Expect.equal True (True || fail Nothing))
+        """)]
+    public void Syntax_test_execution_preserves_operator_semantics(string declarations) =>
+        AssertCompiledRunnersPass(declarations);
+
+    [Theory]
+    [InlineData("PineTests.elm", "Label leaves evaluation unchanged")]
+    [InlineData("ElmInteractive2024Tests.elm", "floor 0.1")]
+    [InlineData("LanguageService/CompletionTests.elm", "Function arguments are suggested within their scope")]
+    public void Syntax_test_execution_preserves_bundled_project_semantics(string testFile, string selector)
+    {
+        var sources =
+            FileTree.FromSetOfFiles(
+                BundledFiles.CompilerSourceContainerFilesDefault.Value.EnumerateFilesTransitive()
+                .Where(
+                    file => file.path[0] != "tests" ||
+                        string.Join('/', file.path.Skip(1)) == testFile ||
+                        file.path.SequenceEqual(["tests", "LanguageService", "TestHelpers.elm"]))
+                .Select(file => (file.path, file.fileContent)));
+
+        var discovery = ElmTestDiscovery.DiscoverTests(sources);
+
+        var selected =
+            discovery.Tests.Where(
+                test => test.ListedTest.Name == selector ||
+                    test.ListedTest.DescriptionPath.Contains(selector)).ToArray();
+
+        selected.Should().NotBeEmpty();
+        var entries = discovery.PrepareExecution(selected.Select(test => test.Id));
+        entries.Should().HaveCount(selected.Length);
+        using var cacheSession = new ElmTestRunCacheSession();
+
+        var vm =
+            IntermediatePineVM.CreateCustom(
+                evalCache: null,
+                evaluationConfigDefault: ElmTestRunner.DefaultEvaluationConfig,
+                reportFunctionApplication: null,
+                compilationEnvClasses: null,
+                disableReductionInCompilation: false,
+                selectPrecompiled: null,
+                skipInlineForExpression: _ => false,
+                enableTailRecursionOptimization: true,
+                parseCache: null,
+                precompiledLeaves: cacheSession.PrecompiledLeaves,
+                reportEnterPrecompiledLeaf: null,
+                reportExitPrecompiledLeaf: null,
+                optimizationParametersSerial: null,
+                cacheFileStore: null,
+                invocationCache: cacheSession.InvocationCache);
+
+        foreach (var test in selected)
+        {
+            using var scope = new AssertionScope(test.ListedTest.Name);
+            var evaluation = entries[test.Id].Evaluation;
+
+            var value =
+                vm.EvaluateExpression(evaluation.Expression, evaluation.Environment)
+                .Extract(error => throw new InvalidOperationException(error));
+
+            AssertPassingExpectations(value);
+        }
+    }
+
+    private static void AssertCompiledRunnersPass(string declarations)
+    {
+        using var project = new ElmFuzzTests.Project(declarations);
+        var discovery = ElmTestDiscovery.DiscoverTests(project.Directory);
+        var entries = discovery.PrepareExecution();
+        entries.Should().HaveCount(discovery.Tests.Length);
+        var vm = ElmCompilerInDotnet.ElmCompilerTestHelper.PineVMForProfiling(_ => { });
+
+        foreach (var test in discovery.Tests)
+        {
+            var evaluation = entries[test.Id].Evaluation;
+
+            var value =
+                vm.EvaluateExpression(evaluation.Expression, evaluation.Environment)
+                .Extract(error => throw new InvalidOperationException(error));
+
+            AssertPassingExpectations(value);
+        }
+    }
+
+    [Fact]
+    public void Syntax_test_execution_does_not_repeat_suite_construction()
+    {
+        using var project =
+            new ElmFuzzTests.Project(
+                """
+                slow n = if n == 0 then 42 else slow (n - 1)
+                suite =
+                    let captured = slow 2000
+                    in Test.test "captured" (\_ -> Expect.equal 42 captured)
+                """);
+
+        var discovery = ElmTestDiscovery.DiscoverTests(project.Directory);
+        var test = discovery.Tests.Single();
+        var evaluation = discovery.PrepareExecution([test.Id])[test.Id].Evaluation;
+
+        var report =
+            ElmCompilerInDotnet.ElmCompilerTestHelper.EvaluateWithProfiling(
+                evaluation.Expression,
+                evaluation.Environment).evalReport;
+
+        AssertPassingExpectations(report.ReturnValue.Evaluate());
+        report.InvocationCount.Should().BeLessThan(2000);
+        report.LoopIterationCount.Should().BeLessThan(2000);
+    }
+
+    [Fact]
+    public void Syntax_listing_includes_skipped_tests_without_creating_execution_VMs()
+    {
+        using var project =
+            new ElmFuzzTests.Project(
+                """
+                suite = Test.describe "group"
+                    [ Test.test "active" (\_ -> Expect.pass)
+                    , Test.skip (Test.test "skipped" (\_ -> Debug.todo "must never execute"))
+                    ]
+                """);
+
+        var listed =
+            ElmTestRunner.DiscoverAndRunTests(
+                project.Directory,
+                listTests: true,
+                pineVmFactory: (_, _) => throw new InvalidOperationException("Listing must not create an execution VM"))
+            .Should().BeOfType<ElmTestRun.Listed>().Subject;
+
+        listed.Tests.Should().ContainSingle().Which.Name.Should().Be("active");
+        listed.SkippedTests.Should().ContainSingle().Which.Name.Should().Be("skipped");
+
+        var completed =
+            ElmTestRunner.DiscoverAndRunTests(project.Directory)
+            .Should().BeOfType<ElmTestRun.Completed>().Subject;
+
+        completed.Tests.Should().ContainSingle().Which.Kind.Should().Be(CompletedTestKind.Passed);
+        completed.IncompleteReason.Should().Contain("Test.skip");
+    }
+
+    [Fact]
+    public void Syntax_execution_preparation_omits_TODOs_and_rejects_nonselected_IDs()
+    {
+        using var project =
+            new ElmFuzzTests.Project(
+                """suite = Test.describe "group" [ Test.todo "todo", Test.skip (Test.todo "skipped") ]""");
+
+        var discovery = ElmTestDiscovery.DiscoverTests(project.Directory);
+        discovery.PrepareExecution().Should().BeEmpty();
+        var group = discovery.Items.Single(item => item.Kind == ElmTestDiscoveryItemKind.Group);
+        var skipped = discovery.Items.Single(item => item.Selection == ElmTestDiscoverySelection.Skipped);
+        var compileGroup = () => discovery.PrepareExecution([group.Id]);
+        var compileSkipped = () => discovery.PrepareExecution([skipped.Id]);
+        var compileUnknown = () => discovery.PrepareExecution(["unknown"]);
+        compileGroup.Should().Throw<InvalidOperationException>().WithMessage("*group or is not selected*");
+        compileSkipped.Should().Throw<InvalidOperationException>().WithMessage("*group or is not selected*");
+        compileUnknown.Should().Throw<KeyNotFoundException>();
+    }
+
+    private static void AssertPassingExpectations(PineValue value)
+    {
+        var decoded =
+            ElmValueEncoding.PineValueAsElmValue(value, null, null)
+            .Extract(error => throw new InvalidOperationException(error));
+
+        var expectations = decoded.Should().BeOfType<ElmValue.ElmList>().Subject.Items;
+        expectations.Should().NotBeEmpty();
+
+        foreach (var expectation in expectations)
+            expectation.Should().BeOfType<ElmValue.ElmTag>().Subject.TagName.Should().Be("Pass");
+    }
+
     [Fact]
     public void Syntax_test_discovery_resolves_test_IDs_to_exact_nested_source_expressions()
     {
@@ -525,7 +806,7 @@ public class ElmTestDiscoveryTests
             "module Tests exposing (suite)\nsuite = Missing.value\n");
 
         var discover = () => ElmTestDiscovery.DiscoverTests(project.Directory);
-        discover.Should().Throw<InvalidOperationException>().WithMessage("*canonicalizing*Tests.suite*");
+        discover.Should().Throw<Core.Elm.ElmCompilerInDotnet.ElmCompilationException>().WithMessage("*Tests.suite*");
     }
 
     [Fact]

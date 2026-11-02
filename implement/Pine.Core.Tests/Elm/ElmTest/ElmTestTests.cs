@@ -477,13 +477,15 @@ public class ElmTestTests
     }
 
 
-    [Fact]
-    public void Verify_elm_test_results_for_scenarios_from_files()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Verify_elm_test_results_for_scenarios_from_files(bool syntaxDiscovery)
     {
         var results =
             TestResultSummary.RunFileBasedTestCases(
                 Path.Combine("Elm", "CommandElmTest"),
-                RunTestCase,
+                directory => RunTestCase(directory, syntaxDiscovery),
                 trimWhitespace: true);
 
         var summary = TestResultSummary.RenderSummary(results);
@@ -568,7 +570,7 @@ public class ElmTestTests
     }
 
 
-    private static (string expected, string actual) RunTestCase(string caseDirectory)
+    private static (string expected, string actual) RunTestCase(string caseDirectory, bool syntaxDiscovery)
     {
         var expectationFiles =
             Directory.GetFiles(caseDirectory, "expected-*.txt", SearchOption.TopDirectoryOnly)
@@ -582,6 +584,12 @@ public class ElmTestTests
         }
 
         var testRun =
+            syntaxDiscovery
+            ?
+            ElmTestRunner.DiscoverAndRunTests(
+                Path.Combine(caseDirectory, "input-app"),
+                pineVm: ElmCompilerTestHelper.PineVMForProfiling(_ => { }))
+            :
             ElmTestRunner.CompileAndRunTests(
                 Path.Combine(caseDirectory, "input-app"),
                 ElmCompilerTestHelper.PineVMForProfiling(_ => { }));

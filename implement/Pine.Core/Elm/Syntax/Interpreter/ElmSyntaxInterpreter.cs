@@ -853,6 +853,9 @@ public partial class ElmSyntaxInterpreter
     {
         var map = new Dictionary<string, DeclQualifiedName>();
 
+        foreach (var name in s_builtinFunctionResolvers.Keys)
+            map[name.FullName] = name;
+
         foreach (var (declName, declaration) in declarations)
         {
             // Syntax-preserving canonicalization qualifies operator targets without introducing an application node.
@@ -4555,6 +4558,8 @@ public partial class ElmSyntaxInterpreter
             CombineResolvers(
                 [
                 ApplicationResolver(customFunctionResolvers ?? ImmutableDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>.Empty),
+                app =>
+                customFunctionResolvers?.ContainsKey(app.FunctionName) == true ? ResolveNativeFunction(app) : null,
                 DebugResolver,
                 PineBuiltinResolver,
                 app => UserDefinedResolver(app, resolverIndex)

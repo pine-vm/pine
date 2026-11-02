@@ -30,7 +30,7 @@ public class ElmFuzzTests
                 """);
 
         var result =
-            ElmTestRunner.CompileAndRunTests(project.Directory, fuzzOptions: new() { Seed = 42, Runs = 10 })
+            ElmTestRunner.DiscoverAndRunTests(project.Directory, fuzzOptions: new() { Seed = 42, Runs = 10 })
             .Should().BeOfType<ElmTestRun.Completed>().Subject;
 
         result.Tests.Should().HaveCount(2);
@@ -90,15 +90,15 @@ public class ElmFuzzTests
         var first = Run(project, runs: 2);
 
         var parallel =
-            ElmTestRunner.CompileAndRunTests(
+            ElmTestRunner.DiscoverAndRunTests(
                 project.Directory,
                 3,
-                (_, _) => ElmCompilerTestHelper.PineVMForProfiling(_ => { }),
+                pineVmFactory: (_, _) => ElmCompilerTestHelper.PineVMForProfiling(_ => { }),
                 fuzzOptions: new() { Seed = 42, Runs = 2 })
             .Should().BeOfType<ElmTestRun.Completed>().Subject;
 
         var filtered =
-            ElmTestRunner.CompileAndRunTests(
+            ElmTestRunner.DiscoverAndRunTests(
                 project.Directory,
                 filter: "failure",
                 fuzzOptions: new() { Seed = 42, Runs = 2 })
@@ -109,6 +109,13 @@ public class ElmFuzzTests
         failure.Fuzz.OriginalChoices.Should().NotBeEmpty();
         filtered.Tests.Should().ContainSingle().Which.Should().BeEquivalentTo(failure);
         parallel.Tests.Should().BeEquivalentTo(first.Tests, options => options.WithStrictOrdering());
+
+        var compilerResult =
+            ElmTestRunner.CompileAndRunTests(
+                project.Directory,
+                fuzzOptions: new() { Seed = 42, Runs = 2 }).Should().BeOfType<ElmTestRun.Completed>().Which;
+
+        first.Tests.Should().BeEquivalentTo(compilerResult.Tests, options => options.WithStrictOrdering());
     }
 
     [Fact]
@@ -125,7 +132,7 @@ public class ElmFuzzTests
                 """);
 
         var listed =
-            ElmTestRunner.CompileAndRunTests(project.Directory, listTests: true)
+            ElmTestRunner.DiscoverAndRunTests(project.Directory, listTests: true)
             .Should().BeOfType<ElmTestRun.Listed>().Subject;
 
         listed.Tests.Should().HaveCount(3);
@@ -138,7 +145,7 @@ public class ElmFuzzTests
         run.Tests.Single(test => test.Path.Last() == "exhausted").Fuzz!.FailureReason.Should().Contain("InvalidFuzzer");
 
         var errored =
-            ElmTestRunner.CompileAndRunTests(
+            ElmTestRunner.DiscoverAndRunTests(
                 project.Directory,
                 pineVm: new ErrorVm(),
                 filter: "crash",
@@ -191,7 +198,7 @@ public class ElmFuzzTests
     }
 
     private static ElmTestRun.Completed Run(Project project, uint runs) =>
-        ElmTestRunner.CompileAndRunTests(project.Directory, fuzzOptions: new() { Seed = 42, Runs = runs })
+        ElmTestRunner.DiscoverAndRunTests(project.Directory, fuzzOptions: new() { Seed = 42, Runs = runs })
         .Should().BeOfType<ElmTestRun.Completed>().Subject;
 
     [Fact]

@@ -1041,7 +1041,7 @@ public class TestWatchCommandTests
             first.Compiled.Should().BeGreaterThan(0);
             first.Templates.Should().BeGreaterThan(0);
             first.Sources.Should().BeGreaterThan(0);
-            first.Canonical.Should().BeGreaterThan(0);
+            first.Canonical.Should().Be(0, "syntax discovery does not use the compiler canonicalization cache");
             first.Session.GenerationalInvocations.Should().NotBeNull();
             first.Session.InvocationCache.Should().BeSameAs(first.Session.GenerationalInvocations);
             first.Session.InvocationResults.Count.Should().Be(0);
@@ -1127,6 +1127,9 @@ public class TestWatchCommandTests
 
         try
         {
+            (await completed.Reader.ReadAsync().AsTask().WaitAsync(s_wait)).Should().BeSameAs(session);
+            (await output.NextRun()).Should().Contain("TEST RUN PASSED").And.Contain("Passed:   1");
+            watcher.RaiseChange();
             (await completed.Reader.ReadAsync().AsTask().WaitAsync(s_wait)).Should().BeSameAs(session);
             (await output.NextRun()).Should().Contain("TEST RUN PASSED").And.Contain("Passed:   1");
             (await switched.Task.WaitAsync(s_wait)).Should().Contain("baseline-cost=").And.Contain("selected-cost=");

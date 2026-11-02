@@ -3,12 +3,14 @@ using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
 using Pine.Core.Internal;
 using Pine.Core.PineLanguage;
+using Pine.Core.Tests.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
 using Xunit;
 
 using ElmInterpreter = Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter;
+using NativeBasics = Pine.Core.Elm.ElmCompilerInDotnet.CoreLibraryModule.CoreBasics;
 
 namespace Pine.Core.Tests.Elm.Syntax.Interpreter;
 
@@ -49,6 +51,67 @@ public class BasicsEqualityAndArithmeticBuiltinTests
 
     private static void AssertEvaluatesEqual(string expression, string expectedExpression) =>
         Evaluate(expression).Should().Be(Evaluate(expectedExpression));
+
+    [Theory]
+    [InlineData("fdiv", "3", "2")]
+    [InlineData("fdiv", "1.5", "-0.5")]
+    [InlineData("fdiv", "-5", "2")]
+    [InlineData("fdiv", "1", "0")]
+    [InlineData("fdiv", "0", "0")]
+    [InlineData("add", "1.5", "2")]
+    [InlineData("add", "1", "-0.5")]
+    [InlineData("sub", "32.0", "0.5")]
+    [InlineData("sub", "0.25", "0.5")]
+    [InlineData("logBase", "2", "3")]
+    [InlineData("logBase", "2", "1114111")]
+    [InlineData("logBase", "10", "1000")]
+    [InlineData("logBase", "0.5", "8")]
+    [InlineData("logBase", "3", "0.25")]
+    [InlineData("logBase", "1", "10")]
+    [InlineData("logBase", "2", "0")]
+    [InlineData("logBase", "-2", "3")]
+    public void Numeric_builtins_match_compiler_native_rational_semantics(string name, string left, string right)
+    {
+        var function =
+            name switch
+            {
+                "fdiv" => NativeBasics.Float_div_FunctionValue(),
+                "add" => NativeBasics.Add_FunctionValue(),
+                "sub" => NativeBasics.Sub_FunctionValue(),
+                "logBase" => NativeBasics.LogBase_FunctionValue(),
+
+                _ =>
+                throw new ArgumentOutOfRangeException(nameof(name))
+            };
+
+        var expected = CoreLibraryTestHelper.ApplyGenericPine(function, [Evaluate(left), Evaluate(right)]);
+        var actual = Evaluate("Basics." + name + " (" + left + ") (" + right + ")");
+
+        if (name != "logBase")
+            actual.Should().Be(expected);
+
+        ElmValueEncoding.PineValueAsElmValue(actual, null, null).Extract(error => throw new Exception(error))
+            .Should().Be(
+            ElmValueEncoding.PineValueAsElmValue(expected, null, null).Extract(error => throw new Exception(error)));
+    }
+
+    [Theory]
+    [InlineData("-1.5")]
+    [InlineData("0")]
+    [InlineData("0.5")]
+    [InlineData("2.0")]
+    public void Ceiling_builtin_matches_compiler_native_semantics(string argument) =>
+        Evaluate("Basics.ceiling (" + argument + ")").Should().Be(
+            CoreLibraryTestHelper.ApplyGenericPine(NativeBasics.Ceiling_FunctionValue(), [Evaluate(argument)]));
+
+    [Theory]
+    [InlineData("(Basics.fdiv 6) 2", "3")]
+    [InlineData("List.map (Basics.logBase 2) [ 1, 2, 4, 8 ]", "[ 0, 1, 2, 3 ]")]
+    [InlineData("List.map Basics.ceiling [ 0.5, 1.5 ]", "[ 1, 2 ]")]
+    [InlineData("List.map Basics.abs [ -0.5, 1.5 ]", "[ 0.5, 1.5 ]")]
+    [InlineData("List.sum [ 0.5, 1.5 ]", "2")]
+    public void Native_numeric_functions_support_partial_application(string expression, string expected) =>
+        AssertEvaluatesEqual(expression, expected);
 
     [Fact]
     public void Compare_and_equality_short_circuit_identical_unevaluated_values()

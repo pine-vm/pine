@@ -175,6 +175,8 @@ public partial class ElmSyntaxInterpreter
                     ExtendBuiltinFunctionResolversWithAliases(
                         prepared.Declarations,
                         s_builtinFunctionResolvers)));
+
+            resolvers.Add(ResolveNativeFunction);
         }
 
         var resolverIndex = GetDeclarationResolverIndex(prepared.Declarations);

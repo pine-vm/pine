@@ -22,6 +22,100 @@ namespace Pine.IntegrationTests.CLI.Elm;
 
 public class TestCommandTests
 {
+    [Theory]
+    [InlineData(true, true, 0)]
+    [InlineData(false, true, 0)]
+    [InlineData(false, false, 1)]
+    public void Debug_log_is_silent_and_preserves_test_values(bool listTests, bool passing, int expectedExit)
+    {
+        var directory =
+            CreateTestProject(
+                $$"""
+                module Tests exposing (suite)
+                import Debug as Diagnostic
+                import Expect
+                import Test
+                logged value = Diagnostic.log "ignored-helper-message" (value + 1)
+                suite =
+                    Diagnostic.log "ignored-discovery-message"
+                        (Test.test "logged test" (\_ -> Diagnostic.log "ignored-expectation-message" (Expect.equal {{(passing ? 42 : 43)}} (logged 41))))
+                """);
+
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            TestCommand.Execute(
+                directory,
+                listTests: listTests,
+                console: console,
+                errorConsole: console,
+                offline: true,
+                seed: 0).Should().Be(expectedExit, output.ToString());
+
+            var text = output.ToString();
+            text.Should().NotContain("ignored-").And.NotContain("Error:");
+            text.Should().Contain(listTests ? "Available tests (1)" : passing ? "TEST RUN PASSED" : "TEST RUN FAILED");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(false, null, 3)]
+    [InlineData(true, null, 3)]
+    [InlineData(false, "skipped unit", 1)]
+    [InlineData(false, "hidden", 1)]
+    public void List_tests_retains_skipped_leaves_with_a_visible_marker(bool color, string? filter, int expectedCount)
+    {
+        var directory =
+            CreateTestProject(
+                """
+                module Tests exposing (suite)
+                import Expect
+                import Test
+                suite =
+                    Test.describe "suite"
+                        [ Test.test "active" (\_ -> Expect.pass)
+                        , Test.skip (Test.test "skipped unit" (\_ -> Expect.fail "must not run"))
+                        , Test.skip (Test.describe "skipped group" [ Test.todo "hidden" ])
+                        ]
+                """);
+
+        var (console, output) = CreateConsole(color ? AnsiSupport.Yes : AnsiSupport.No);
+
+        try
+        {
+            TestCommand.Execute(
+                directory,
+                listTests: true,
+                filter: filter,
+                console: console,
+                colorMode: color ? CommandLineColorMode.Always : CommandLineColorMode.Never).Should().Be(0);
+
+            output.ToString().Should().Contain(
+                filter is null
+                ?
+                $"Available tests ({expectedCount})"
+                :
+                $"Tests remaining after filtering ({expectedCount})");
+
+            output.ToString().Should().Contain("(skipped)").And.NotContain("Running");
+
+            if (filter is null)
+                output.ToString().Should().Contain("active").And.Contain("skipped unit").And.Contain("hidden");
+
+            if (color)
+                output.ToString().Should().Contain("\u001b[2m");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Fact]
     public void Work_profile_constructor_comparison_options_parse_and_require_a_work_profile()
     {
@@ -1416,7 +1510,7 @@ public class TestCommandTests
         .Errors.Should().NotBeEmpty();
 
     [Fact]
-    public void Instrument_stops_preparation_prints_immediate_stats_then_saves_json_and_its_sha256()
+    public void Instrument_stops_execution_prints_immediate_stats_then_saves_json_and_its_sha256()
     {
         var project =
             CreateTestProject(
@@ -1424,7 +1518,8 @@ public class TestCommandTests
                 module Tests exposing (suite)
                 import Test
                 import Expect
-                suite = Test.test "one" (\_ -> Expect.pass)
+                count n = if n < 1 then 0 else 1 + count (n - 1)
+                suite = Test.test "one" (\_ -> Expect.equal 100 (count 100))
                 """);
 
         var (console, output) = CreateConsole(AnsiSupport.No);
@@ -1441,7 +1536,7 @@ public class TestCommandTests
                         OutputPath = path,
                         Top = 1,
                         ShowExpressions = true,
-                        Instrumentation = new() { InvocationBudget = 1, IncludeInputs = true, IncludeLocals = true },
+                        Instrumentation = new() { LoopBudget = 1, IncludeInputs = true, IncludeLocals = true },
                     },
                     instrumentation => TestCommand.Execute(
                         project,
@@ -1456,7 +1551,7 @@ public class TestCommandTests
             result.Should().Be(2);
             var text = output.ToString();
 
-            text.Should().Contain("Execution stopped.").And.Contain("invocations: 2")
+            text.Should().Contain("Execution stopped.").And.Contain("LoopIterationCount")
                 .And.Contain("Saving all recorded").And.Contain("Overall instrumentation stats.")
                 .And.Contain("Pine expression ranking").And.Contain("Last recorded stack trace");
 
@@ -1470,7 +1565,7 @@ public class TestCommandTests
             text.Should().Contain(Convert.ToHexStringLower(SHA256.HashData(file)));
             using var json = JsonDocument.Parse(File.ReadAllText(path));
             json.RootElement.GetProperty("SchemaVersion").GetInt32().Should().Be(2);
-            json.RootElement.GetProperty("Summary").GetProperty("Phase").GetString().Should().Be("preparation");
+            json.RootElement.GetProperty("Summary").GetProperty("Phase").GetString().Should().Be("execution");
             json.RootElement.GetProperty("Expressions").GetArrayLength().Should().BeGreaterThan(0);
             json.RootElement.GetProperty("Values").EnumerateObject().Should().NotBeEmpty();
         }
@@ -1932,7 +2027,7 @@ public class TestCommandTests
     }
 
     [Fact]
-    public void Ordinary_command_budget_stops_preparation_without_requiring_a_single_test_filter()
+    public void Ordinary_command_budget_stops_execution_without_requiring_a_single_test_filter()
     {
         var project =
             CreateTestProject(
@@ -1940,7 +2035,8 @@ public class TestCommandTests
                 module Tests exposing (suite)
                 import Test
                 import Expect
-                suite = Test.describe "group" [ Test.test "first" (\_ -> Expect.pass), Test.test "second" (\_ -> Expect.pass) ]
+                count n = if n < 1 then 0 else 1 + count (n - 1)
+                suite = Test.describe "group" [ Test.test "first" (\_ -> Expect.equal 100 (count 100)), Test.test "second" (\_ -> Expect.pass) ]
                 """);
 
         var (console, output) = CreateConsole(AnsiSupport.No);
@@ -1952,13 +2048,12 @@ public class TestCommandTests
                 console: console,
                 errorConsole: console,
                 offline: true,
-                evaluationOptions: new() { InvocationBudget = 1 })
+                evaluationOptions: new() { LoopBudget = 1 })
                 .Should().Be(2);
 
-            output.ToString().Should().Contain("Execution stopped.").And.Contain("InvocationCount")
-                .And.Contain("Elm test preparation: tests/Tests.elm (Tests.suite)")
-                .And.Contain("The individual test has not been constructed yet")
-                .And.Contain("pine elm test profile").And.Contain("--filter 'tests/Tests.elm/**'")
+            output.ToString().Should().Contain("Execution stopped.").And.Contain("LoopIterationCount")
+                .And.Contain("Elm test: tests/Tests.elm")
+                .And.Contain("pine elm test profile").And.Contain("--filter '=tests/Tests.elm/group/first'")
                 .And.NotContain("exactly one runnable").And.NotContain("Saving all recorded");
         }
         finally

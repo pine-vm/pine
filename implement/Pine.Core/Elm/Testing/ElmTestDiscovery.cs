@@ -2,10 +2,12 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Interpreter;
 using Pine.Core.Encodings;
 using Pine.Core.Files;
 using Pine.Core.Internal;
 using Pine.Core.IO;
+using Pine.Core.PineLanguage;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -146,7 +148,8 @@ public static class ElmTestDiscovery
     public static ElmTestDiscoveryResult DiscoverTests(
         ElmResolvedBuild build,
         IReadOnlyList<DeclQualifiedName> testRoots,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ElmTestExecutionSettings? executionSettings = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -206,6 +209,8 @@ public static class ElmTestDiscovery
 
         var valueSources = new Dictionary<PineValueInProcess, SourceSite>(ReferenceEqualityComparer.Instance);
         var describeValues = new HashSet<PineValueInProcess>(ReferenceEqualityComparer.Instance);
+        var sourcePaths = build.CompilerModuleOrigins.ToDictionary(entry => entry.Key, entry => entry.Value.SourcePath);
+        var sourceModules = modules.Values.ToArray();
 
         foreach (var (name, result) in canonical.Declarations)
         {
@@ -213,9 +218,24 @@ public static class ElmTestDiscovery
 
             if (result.Errors.Count > 0)
             {
-                throw new InvalidOperationException(
-                    "Failed canonicalizing test discovery declaration " + name.FullName +
-                    ": " + string.Join("; ", result.Errors));
+                var chain =
+                    ElmCompiler.BuildSourceDependencyChain(
+                        canonical.DependencyChains[name],
+                        sourceModules,
+                        sourcePaths,
+                        canonical.References);
+
+                var diagnostic =
+                    new CompilationError.CanonicalizationErrors(
+                        [
+                            .. result.Errors.Select(
+                                error => ElmCompiler.CompleteCanonicalizationDiagnostic(
+                                    new(name.FullName, sourcePaths[string.Join('.', name.Namespaces)], error, chain),
+                                    sourceModules,
+                                    sourcePaths))
+                        ]);
+
+                throw new ElmCompilationException("Failed compiling Elm tests: " + diagnostic);
             }
 
             // Keep the AST shape: lowering/reduction would invalidate its paths into the original CST.
@@ -284,6 +304,8 @@ public static class ElmTestDiscovery
         var inventory = new List<DiscoveryItem>();
         var executableLeaves = new List<DiscoveryItem>();
         var hasOnly = false;
+        var hasSkipped = false;
+        executionSettings ??= new(0, 100);
 
         foreach (var root in testRoots)
         {
@@ -313,14 +335,14 @@ public static class ElmTestDiscovery
                 parent: null,
                 only: false,
                 skipped: false,
-                fuzzRuns: 100);
+                fuzzRuns: executionSettings.FuzzRuns);
 
             var runners =
                 Interpreter.Interpret(
                     bridge,
                     [
-                        PineValueInProcess.Create(IntegerEncoding.EncodeSignedInteger(100)),
-                        PineValueInProcess.Create(IntegerEncoding.EncodeSignedInteger(0)), value
+                        PineValueInProcess.Create(IntegerEncoding.EncodeSignedInteger(executionSettings.FuzzRuns)),
+                        PineValueInProcess.Create(IntegerEncoding.EncodeSignedInteger(executionSettings.Seed)), value
                     ],
                     program,
                     config with { ExpressionObservers = null })
@@ -336,6 +358,7 @@ public static class ElmTestDiscovery
 
             var only = tag == "Only";
             hasOnly |= only;
+            hasSkipped |= tag == "Skipping";
 
             if (tag == "Invalid")
             {
@@ -362,6 +385,17 @@ public static class ElmTestDiscovery
 
                 source.SelectedByRunner = true;
                 source.RootOnly = only;
+                source.Runner = Field(runner, "run");
+
+                if (kind == "fuzz")
+                {
+                    source.Fuzz =
+                        new(
+                            executionSettings,
+                            ElmString(Field(runner, "seedState")),
+                            checked((uint)IntegerEncoding.ParseSignedIntegerStrict(Field(runner, "runs").Evaluate())
+                            .Extract(error => throw new InvalidOperationException(error))));
+                }
 
                 if (kind == "empty")
                     continue;
@@ -595,6 +629,40 @@ public static class ElmTestDiscovery
                 ],
                 hasOnly)
             {
+                HasSkipped = hasSkipped,
+                CompileExecution =
+                ids =>
+                {
+                    var selected =
+                        inventory.Where(
+                            item => ids.Contains(item.Id) &&
+                                item.Selection == ElmTestDiscoverySelection.Included &&
+                                item.Kind is ElmTestDiscoveryItemKind.Unit or ElmTestDiscoveryItemKind.Fuzz).ToArray();
+
+                    if (selected.Length == 0)
+                        return ImmutableDictionary<string, ElmTestExecutionEntry>.Empty;
+
+                    var evaluations =
+                        Interpreter.CompileApplicationsToPine(
+                            [
+                                .. selected.Select(
+                                    item =>
+                                    (item.Runner ??
+                                    throw new InvalidOperationException("Discovered test has no runner: " + item.Id),
+                                    (IReadOnlyList<PineValueInProcess>)[
+                                    PineValueInProcess.Create(PineValue.EmptyList)
+                                    ]))
+                            ],
+                            canonical.Declarations.ToImmutableDictionary(
+                                entry => entry.Key,
+                                entry => Abstract.ConvertFromConcrete.FromDeclaration(entry.Value.Value.Value)),
+                            cancellationToken);
+
+                    return
+                        selected.Select(
+                            (item, index) => new ElmTestExecutionEntry(item.Id, evaluations[index], item.Fuzz))
+                        .ToImmutableDictionary(entry => entry.Id, StringComparer.Ordinal);
+                },
                 InterpreterPreparationDuration = interpreterPreparationDuration,
                 DiscoveryDuration = watch.Elapsed - interpreterPreparationDuration,
                 Duration = watch.Elapsed
@@ -642,6 +710,10 @@ public static class ElmTestDiscovery
         public bool RootOnly { get; set; }
 
         public ElmTestDiscoverySelection Selection { get; set; }
+
+        public PineValueInProcess? Runner { get; set; }
+
+        public ElmFuzzResult? Fuzz { get; set; }
     }
 
     private static string? TestTag(PineValueInProcess value)
@@ -722,6 +794,9 @@ public static class ElmTestDiscovery
 /// <summary>A selected leaf discovered without compilation, with a required navigation target.</summary>
 public sealed record ElmDiscoveredTest(
     string Id, ListedTest ListedTest, string Kind, int DiscoveryIndex, ElmTestSourceLocation SourceLocation);
+
+/// <summary>Executable handoff for a discovered test; no interpreter state is needed by PineVM.</summary>
+public sealed record ElmTestExecutionEntry(string Id, PineEvaluation Evaluation, ElmFuzzResult? Fuzz);
 
 /// <summary>Semantic kind used to distinguish group, unit, fuzz and todo icons without inspecting labels.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<ElmTestDiscoveryItemKind>))]
@@ -827,7 +902,27 @@ public sealed record ElmTestDiscoveryResult
     /// <summary>Whether the test library found effective Test.only selection in any root.</summary>
     public bool HasOnly { get; }
 
-    /// <summary>The selected nonempty leaves, matching the existing CLI list-tests view.</summary>
+    /// <summary>Whether runner preparation reports an incomplete suite due to Test.skip.</summary>
+    [JsonIgnore]
+    public bool HasSkipped { get; init; }
+
+    internal Func<IReadOnlySet<string>, ImmutableDictionary<string, ElmTestExecutionEntry>>? CompileExecution { get; init; }
+
+    /// <summary>Compiles selected runnable tests to independent Pine evaluations without replaying construction.</summary>
+    public ImmutableDictionary<string, ElmTestExecutionEntry> PrepareExecution(IEnumerable<string>? testIds = null)
+    {
+        var ids = (testIds ?? Tests.Select(test => test.Id)).ToHashSet(StringComparer.Ordinal);
+
+        foreach (var id in ids)
+            GetExecutionFilter(id);
+
+        if (ids.Count == 0)
+            return ImmutableDictionary<string, ElmTestExecutionEntry>.Empty;
+
+        return (CompileExecution ?? throw new InvalidOperationException("This discovery result has no prepared code."))(ids);
+    }
+
+    /// <summary>The selected nonempty leaves. CLI listings also show skipped leaves from <see cref="Items"/>.</summary>
     [JsonIgnore]
     public ImmutableArray<ElmDiscoveredTest> Tests { get; }
 

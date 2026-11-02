@@ -2,6 +2,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.Elm019;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Syntax.Interpreter;
 using Pine.Core.Encodings;
 using Pine.Core.Files;
 using Pine.Core.Functional;
@@ -63,6 +64,46 @@ public static class ElmTestRunner
             Math.Min(
                 processorCount / 2,
                 processorCount - 2));
+
+    /// <summary>
+    /// Discovers with the Elm syntax interpreter, then hands standalone Pine evaluations to execution VMs.
+    /// VM budgets, profiling and invocation caches cover execution only.
+    /// </summary>
+    public static ElmTestRun DiscoverAndRunTests(
+        string appDirectory,
+        int workers = 1,
+        IPineVM? pineVm = null,
+        Func<IInvocationCacheAccess, PineVMSharedCaches, IPineVM>? pineVmFactory = null,
+        ElmTestRunCacheSession? cacheSession = null,
+        string? filter = null,
+        bool listTests = false,
+        ElmDependencyResolutionConfiguration? resolutionConfiguration = null,
+        IElmPackageProvider? packageProvider = null,
+        Action<ElmDependencyResolutionReport>? onDependenciesResolved = null,
+        ElmFuzzOptions? fuzzOptions = null,
+        ElmTestInstrumentation? instrumentation = null,
+        Action<int, int>? onTestsSelected = null)
+    {
+        cacheSession?.ValidateInstrumentation(instrumentation);
+
+        return
+            CompileAndRunTests(
+                appDirectory,
+                pineVm,
+                filter,
+                listTests,
+                workers,
+                pineVmFactory,
+                onTestsDiscovered: null,
+                resolutionConfiguration,
+                packageProvider,
+                onDependenciesResolved,
+                fuzzOptions,
+                instrumentation,
+                cacheSession,
+                onTestsSelected,
+                useSyntaxDiscovery: true);
+    }
 
 
     /// <summary>
@@ -278,7 +319,8 @@ public static class ElmTestRunner
         ElmFuzzOptions? fuzzOptions,
         ElmTestInstrumentation? instrumentation,
         ElmTestRunCacheSession? cacheSession,
-        Action<int, int>? onTestsSelected)
+        Action<int, int>? onTestsSelected,
+        bool useSyntaxDiscovery = false)
     {
         if (workers < 1)
             throw new ArgumentOutOfRangeException(nameof(workers), "Worker count must be at least one.");
@@ -470,166 +512,236 @@ public static class ElmTestRunner
 
         // Diagnostic profiles retain their original VM/cache boundaries and evaluation accounting.
         var diagnosticPreparationVm =
-            instrumentation is { RecordDiagnostics: true } ? CreatePreparationVm(preparationInvocationCache) : null;
+            !useSyntaxDiscovery && instrumentation is { RecordDiagnostics: true }
+            ?
+            CreatePreparationVm(preparationInvocationCache)
+            :
+            null;
 
         TResult RunPreparation<TResult>(Func<IPineVM, TResult> evaluate) =>
             diagnosticPreparationVm is { } vm ? evaluate(vm) : preparationContext.Run(evaluate);
 
-        var (compiledEnvironment, _) =
-            ElmCompiler.CompileResolvedEnvironment(
-                build,
-                rootDeclarations: compilationRoots,
-                sourceParseCache: cacheSession?.SourceParsing,
-                canonicalizationCache: cacheSession?.DeclarationCanonicalization)
-            .Extract(error => throw new ElmCompilationException("Failed compiling Elm tests: " + error));
+        (ElmInteractiveEnvironment.ParsedInteractiveEnvironment Environment, FunctionRecord Prepare)? compiledPreparation =
+            null;
 
-        var parsedEnvironment =
-            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnvironment)
-            .Extract(error => throw new InvalidOperationException("Failed parsing compiled Elm tests: " + error));
+        if (!useSyntaxDiscovery)
+        {
+            var (compiledEnvironment, _) =
+                ElmCompiler.CompileResolvedEnvironment(
+                    build,
+                    rootDeclarations: compilationRoots,
+                    sourceParseCache: cacheSession?.SourceParsing,
+                    canonicalizationCache: cacheSession?.DeclarationCanonicalization)
+                .Extract(error => throw new ElmCompilationException("Failed compiling Elm tests: " + error));
 
-        instrumentation?.RegisterDeclarations(parsedEnvironment);
+            var environment =
+                ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnvironment)
+                .Extract(error => throw new InvalidOperationException("Failed parsing compiled Elm tests: " + error));
 
-        var discoveredTests = new List<DiscoveredTest>();
+            instrumentation?.RegisterDeclarations(environment);
 
-        var prepareFunction =
-            FunctionRecord.ParseFunctionRecordTagged(
-                parsedEnvironment.Modules.Single(module => module.moduleName == bridgeName).moduleContent.FunctionDeclarations["prepare"],
-                preparationCaches.ParsedExpressions).Extract(error => throw new InvalidOperationException(error));
+            var prepare =
+                FunctionRecord.ParseFunctionRecordTagged(
+                    environment.Modules.Single(module => module.moduleName == bridgeName).moduleContent.FunctionDeclarations["prepare"],
+                    preparationCaches.ParsedExpressions).Extract(error => throw new InvalidOperationException(error));
 
-        var hasOnly = false;
-        var hasSkipped = false;
+            compiledPreparation = (environment, prepare);
+        }
 
         compilationScope.Dispose();
 
         using var preparationPhaseScope =
             new TimedScope(() => instrumentation?.EnterScope("preparation", appDirectory));
 
-        foreach (var testModule in testModules.Where(module => !module.exposedZeroParameterDeclarations.IsEmpty))
+        var discoveredTests = new List<DiscoveredTest>();
+        var hasOnly = false;
+        var hasSkipped = false;
+        ElmTestDiscoveryResult? syntaxDiscovery = null;
+        var skippedListed = new List<ListedTest>();
+
+        if (useSyntaxDiscovery)
         {
-            var (compilerModuleName, origin) = projectModules[testModule.moduleNameText];
+            syntaxDiscovery =
+                ElmTestDiscovery.DiscoverTests(
+                    build,
+                    testDeclarationNames,
+                    instrumentation?.CancellationToken ?? default,
+                    executionSettings);
 
-            var compiledTestModule =
-                parsedEnvironment.Modules
-                .FirstOrDefault(module => module.moduleName == compilerModuleName);
+            hasOnly = syntaxDiscovery.HasOnly;
+            hasSkipped = syntaxDiscovery.HasSkipped;
 
-            if (compiledTestModule.moduleContent is null)
+            skippedListed.AddRange(
+                syntaxDiscovery.Items.Where(
+                    item => item.Kind != ElmTestDiscoveryItemKind.Group &&
+                        item.Selection == ElmTestDiscoverySelection.Skipped).Select(item => item.ListedTest));
+
+            foreach (var item in syntaxDiscovery.Items.Where(
+                item =>
+                item.Selection == ElmTestDiscoverySelection.Included &&
+                (item.Kind != ElmTestDiscoveryItemKind.Group || item.IsEmptyGroup)))
             {
-                throw new InvalidOperationException(
-                    $"Did not find compiled Elm module '{compilerModuleName}' " +
-                    $"for project test module '{origin.ModuleName}' in '{origin.SourcePath}' " +
-                    $"(manifest '{origin.ManifestPath}')");
+                var listed = item.ListedTest;
+
+                discoveredTests.Add(
+                    new(
+                        listed.FilePath,
+                        [.. listed.DescriptionPath, listed.Name],
+                        item.Kind switch
+                        {
+                            ElmTestDiscoveryItemKind.Unit or ElmTestDiscoveryItemKind.Fuzz =>
+                            DiscoveredTestKind.Runnable,
+
+                            ElmTestDiscoveryItemKind.Todo => DiscoveredTestKind.Todo,
+                            ElmTestDiscoveryItemKind.Group => DiscoveredTestKind.EmptyGroup,
+
+                            _ =>
+                            throw new NotImplementedException("Unknown discovery kind: " + item.Kind)
+                        },
+                        null)
+                    {
+                        Id = item.Id,
+                        DiscoveryIndex = item.DiscoveryIndex ?? 0,
+                        Only = item.IsOnly
+                    });
             }
+        }
+        else
+        {
+            var (parsedEnvironment, prepareFunction) =
+                compiledPreparation ??
+                throw new InvalidOperationException("Compiler discovery has no preparation function.");
 
-            foreach (var declarationName in testModule.exposedZeroParameterDeclarations)
+            foreach (var testModule in testModules.Where(module => !module.exposedZeroParameterDeclarations.IsEmpty))
             {
-                using var preparationScope =
-                    instrumentation?.EnterScope("preparation",
-                        testModule.filePathText + " (" + testModule.moduleNameText + "." + declarationName + ")",
-                        testModule.filePathText + "/**");
+                var (compilerModuleName, origin) = projectModules[testModule.moduleNameText];
 
-                if (!compiledTestModule.moduleContent.FunctionDeclarations.TryGetValue(
-                    declarationName,
-                    out var declarationWrapper))
+                var compiledTestModule =
+                    parsedEnvironment.Modules
+                    .FirstOrDefault(module => module.moduleName == compilerModuleName);
+
+                if (compiledTestModule.moduleContent is null)
                 {
                     throw new InvalidOperationException(
-                        "Did not find declaration '" +
-                        origin.ModuleName + "." + declarationName + "' in '" + origin.SourcePath + "'");
+                        $"Did not find compiled Elm module '{compilerModuleName}' " +
+                        $"for project test module '{origin.ModuleName}' in '{origin.SourcePath}' " +
+                        $"(manifest '{origin.ManifestPath}')");
                 }
 
-                var declarationValue =
-                    RunPreparation(
-                        vm =>
-                        ElmSourceCompilation.EvaluateZeroParameterRoot(
-                            declarationWrapper,
-                            vm,
-                            preparationCaches.ParsedExpressions))
-                    .Extract(
-                        error => throw new InvalidOperationException("Failed constructing Elm test value: " + error));
-
-                if (!IsTestValue(declarationValue))
-                    continue;
-
-                var prepared =
-                    RunPreparation(
-                        vm =>
-                        ElmInteractiveEnvironment.ApplyFunction(
-                            vm,
-                            prepareFunction,
-                            [
-                            IntegerEncoding.EncodeSignedInteger(executionSettings.FuzzRuns),
-                            IntegerEncoding.EncodeSignedInteger(executionSettings.Seed), declarationValue
-                            ]))
-                    .Extract(error => throw new InvalidOperationException("Failed preparing Elm tests: " + error));
-
-                var (preparedTag, preparedArguments) = ParseTaggedValue(prepared);
-
-                if (preparedTag is "Invalid")
+                foreach (var declarationName in testModule.exposedZeroParameterDeclarations)
                 {
-                    discoveredTests.Add(
-                        new(testModule.filePathText, [declarationName], DiscoveredTestKind.Invalid, null)
-                        {
-                            PreparationError = ParseElmString(preparedArguments.Span[0])
-                        });
+                    using var preparationScope =
+                        instrumentation?.EnterScope("preparation",
+                            testModule.filePathText + " (" + testModule.moduleNameText + "." + declarationName + ")",
+                            testModule.filePathText + "/**");
 
-                    continue;
-                }
+                    if (!compiledTestModule.moduleContent.FunctionDeclarations.TryGetValue(
+                        declarationName,
+                        out var declarationWrapper))
+                    {
+                        throw new InvalidOperationException(
+                            "Did not find declaration '" +
+                            origin.ModuleName + "." + declarationName + "' in '" + origin.SourcePath + "'");
+                    }
 
-                if (preparedTag is not ("Plain" or "Only" or "Skipping") ||
-                    preparedArguments.Span[0] is not PineValue.ListValue runners)
-                {
-                    throw new InvalidOperationException("Invalid seeded test runners: " + preparedTag);
-                }
+                    var declarationValue =
+                        RunPreparation(
+                            vm =>
+                            ElmSourceCompilation.EvaluateZeroParameterRoot(
+                                declarationWrapper,
+                                vm,
+                                preparationCaches.ParsedExpressions))
+                        .Extract(
+                            error => throw new InvalidOperationException("Failed constructing Elm test value: " + error));
 
-                hasOnly |= preparedTag is "Only";
-                hasSkipped |= preparedTag is "Skipping";
+                    if (!IsTestValue(declarationValue))
+                        continue;
 
-                foreach (var runner in runners.Items.Span)
-                {
-                    var labels = ParseList(Field(runner, "labels")).Select(ParseElmString).Reverse().ToArray();
-                    var kind = ParseElmString(Field(runner, "kind"));
-                    var path = labels.Length is 0 ? [declarationName] : labels;
+                    var prepared =
+                        RunPreparation(
+                            vm =>
+                            ElmInteractiveEnvironment.ApplyFunction(
+                                vm,
+                                prepareFunction,
+                                [
+                                IntegerEncoding.EncodeSignedInteger(executionSettings.FuzzRuns),
+                                IntegerEncoding.EncodeSignedInteger(executionSettings.Seed), declarationValue
+                                ]))
+                        .Extract(error => throw new InvalidOperationException("Failed preparing Elm tests: " + error));
 
-                    discoveredTests.Add(
-                        new(
-                            testModule.filePathText,
-                            path,
-                            kind switch
+                    var (preparedTag, preparedArguments) = ParseTaggedValue(prepared);
+
+                    if (preparedTag is "Invalid")
+                    {
+                        discoveredTests.Add(
+                            new(testModule.filePathText, [declarationName], DiscoveredTestKind.Invalid, null)
                             {
-                                "todo" => DiscoveredTestKind.Todo,
-                                "empty" => DiscoveredTestKind.EmptyGroup,
-                                "unit" or "fuzz" => DiscoveredTestKind.Runnable,
+                                PreparationError = ParseElmString(preparedArguments.Span[0])
+                            });
 
-                                _ =>
-                                throw new InvalidOperationException("Unknown runner kind: " + kind),
-                            },
-                            Field(runner, "run"))
-                        {
-                            Only = preparedTag is "Only",
-                            Fuzz =
-                            kind is "fuzz"
-                            ?
+                        continue;
+                    }
+
+                    if (preparedTag is not ("Plain" or "Only" or "Skipping") ||
+                        preparedArguments.Span[0] is not PineValue.ListValue runners)
+                    {
+                        throw new InvalidOperationException("Invalid seeded test runners: " + preparedTag);
+                    }
+
+                    hasOnly |= preparedTag is "Only";
+                    hasSkipped |= preparedTag is "Skipping";
+
+                    foreach (var runner in runners.Items.Span)
+                    {
+                        var labels = ParseList(Field(runner, "labels")).Select(ParseElmString).Reverse().ToArray();
+                        var kind = ParseElmString(Field(runner, "kind"));
+                        var path = labels.Length is 0 ? [declarationName] : labels;
+
+                        discoveredTests.Add(
                             new(
-                                executionSettings,
-                                ParseElmString(Field(runner, "seedState")),
-                                (uint)ParseInteger(Field(runner, "runs")))
-                            :
-                            null,
-                        });
+                                testModule.filePathText,
+                                path,
+                                kind switch
+                                {
+                                    "todo" => DiscoveredTestKind.Todo,
+                                    "empty" => DiscoveredTestKind.EmptyGroup,
+                                    "unit" or "fuzz" => DiscoveredTestKind.Runnable,
+
+                                    _ =>
+                                    throw new InvalidOperationException("Unknown runner kind: " + kind),
+                                },
+                                Field(runner, "run"))
+                            {
+                                Only = preparedTag is "Only",
+                                Fuzz =
+                                kind is "fuzz"
+                                ?
+                                new(
+                                    executionSettings,
+                                    ParseElmString(Field(runner, "seedState")),
+                                    (uint)ParseInteger(Field(runner, "runs")))
+                                :
+                                null,
+                            });
+                    }
                 }
             }
         }
 
         var allFound = discoveredTests.Where(test => test.Kind is not DiscoveredTestKind.EmptyGroup).ToArray();
 
-        for (var index = 0; index < allFound.Length; index++)
-            allFound[index].DiscoveryIndex = index + 1;
+        if (!useSyntaxDiscovery)
+        {
+            for (var index = 0; index < allFound.Length; index++)
+                allFound[index].DiscoveryIndex = index + 1;
+        }
 
         var allFoundListed = allFound.Select(ToListedTest).ToArray();
 
         string ExactFilter(DiscoveredTest test) =>
             ElmTestFilter.ExactSelector(ToListedTest(test), test.DiscoveryIndex, allFoundListed);
 
-        if (hasOnly)
+        if (hasOnly && !useSyntaxDiscovery)
             discoveredTests.RemoveAll(test => !test.Only && test.Kind != DiscoveredTestKind.Invalid);
 
         var selectableTests = discoveredTests.Where(test => test.Kind is DiscoveredTestKind.Runnable).ToArray();
@@ -638,6 +750,9 @@ public static class ElmTestRunner
         if (filter is { } filterExpression)
         {
             var parsedFilter = new ElmTestFilter(filterExpression);
+            var filteredSkipped = skippedListed.Where(test => !parsedFilter.Matches(test, 0)).ToArray();
+            skippedListed.RemoveAll(test => !parsedFilter.Matches(test, 0));
+            filteredOutTests.AddRange(filteredSkipped);
 
             var availableTests =
                 discoveredTests
@@ -659,7 +774,8 @@ public static class ElmTestRunner
                     return true;
                 });
 
-            if (!discoveredTests.Any(test => test.Kind is not DiscoveredTestKind.EmptyGroup))
+            if (!discoveredTests.Any(test => test.Kind is not DiscoveredTestKind.EmptyGroup) &&
+                !(listTests && skippedListed.Count > 0))
             {
                 if (instrumentation is { RecordDiagnostics: true })
                 {
@@ -716,7 +832,23 @@ public static class ElmTestRunner
                     .Where(test => test.Kind is not DiscoveredTestKind.EmptyGroup)
                     .Select(ToListedTest)
                     ],
-                    filteredOutTests);
+                    filteredOutTests)
+                {
+                    SkippedTests = skippedListed
+                };
+        }
+
+        if (syntaxDiscovery is not null)
+        {
+            var entries =
+                syntaxDiscovery.PrepareExecution(
+                    discoveredTests.Where(test => test.Kind == DiscoveredTestKind.Runnable).Select(test => test.Id!));
+
+            foreach (var test in discoveredTests.Where(test => test.Kind == DiscoveredTestKind.Runnable))
+            {
+                test.Evaluation = entries[test.Id!].Evaluation;
+                test.Fuzz = entries[test.Id!].Fuzz;
+            }
         }
 
         preparationPhaseScope.Dispose();
@@ -946,17 +1078,17 @@ public static class ElmTestRunner
                     failure: null);
         }
 
-        if (discoveredTest.Thunk is null)
-            throw new InvalidOperationException("Runnable test has no thunk");
-
-        var functionRecord =
-            FunctionRecord.ParseFunctionRecordTagged(discoveredTest.Thunk, parseCache)
-            .Extract(error => throw new InvalidOperationException("Failed parsing test thunk: " + error));
-
         var expectationResult =
+            discoveredTest.Evaluation is { } evaluation
+            ?
+            pineVm.EvaluateExpression(evaluation.Expression, evaluation.Environment)
+            :
             ElmInteractiveEnvironment.ApplyFunction(
                 pineVm,
-                functionRecord,
+                FunctionRecord.ParseFunctionRecordTagged(
+                    discoveredTest.Thunk ?? throw new InvalidOperationException("Runnable test has no entry point"),
+                    parseCache)
+                .Extract(error => throw new InvalidOperationException("Failed parsing test thunk: " + error)),
                 [PineValue.EmptyList]);
 
         if (expectationResult.IsErrOrNull() is { } evaluationError)
@@ -1437,11 +1569,15 @@ public static class ElmTestRunner
         DiscoveredTestKind Kind,
         PineValue? Thunk)
     {
+        public string? Id { get; init; }
+
+        public PineEvaluation? Evaluation { get; set; }
+
         public int DiscoveryIndex { get; set; }
 
         public bool Only { get; init; }
 
-        public ElmFuzzResult? Fuzz { get; init; }
+        public ElmFuzzResult? Fuzz { get; set; }
 
         public string? PreparationError { get; init; }
     }
@@ -1887,6 +2023,9 @@ public abstract record ElmTestRun
         /// </summary>
         public IReadOnlyList<ListedTest> Tests { get; init; }
 
+        /// <summary>Explicitly skipped tests retained for listing, but never passed to execution.</summary>
+        public IReadOnlyList<ListedTest> SkippedTests { get; init; } = [];
+
         /// <summary>
         /// Gets individual tests excluded by the filter, preserving their file and group paths.
         /// </summary>
@@ -1897,6 +2036,7 @@ public abstract record ElmTestRun
             ReferenceEquals(this, other) ||
             (other is not null &&
             Tests.SequenceEqual(other.Tests) &&
+            SkippedTests.SequenceEqual(other.SkippedTests) &&
             FilteredOutTests.SequenceEqual(other.FilteredOutTests));
 
         /// <inheritdoc/>
@@ -1907,6 +2047,9 @@ public abstract record ElmTestRun
             hashCode.Add(Tests.Count);
 
             foreach (var test in Tests)
+                hashCode.Add(test);
+
+            foreach (var test in SkippedTests)
                 hashCode.Add(test);
 
             hashCode.Add(FilteredOutTests.Count);
