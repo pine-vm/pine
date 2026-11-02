@@ -4278,6 +4278,9 @@ public partial class ElmSyntaxInterpreter
             return PineValueInProcess.Take((int)count, source);
         }
 
+        if (functionName is nameof(BuiltinFunction.length))
+            return MakeInteger(input.GetLength());
+
         var resultPine = BuiltinFunction.ApplyFunctionGeneric(functionName, input.Evaluate());
 
         return PineValueInProcess.Create(resultPine);
