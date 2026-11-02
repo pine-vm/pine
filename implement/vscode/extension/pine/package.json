@@ -126,12 +126,15 @@
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"compile": "tsc -b",
+		"package:dev": "npm run compile && node ./scripts/package-dev.cjs",
+		"test:package": "npm run compile && node --test ./scripts/package-dev.test.cjs",
 		"watch": "tsc -b -w",
 		"lint": "eslint ./client/src --ext .ts,.tsx",
 		"postinstall": "cd client && npm install && cd ..",
 		"test": "sh ./scripts/e2e.sh"
 	},
 	"devDependencies": {
+		"@vscode/vsce": "^3.6.2",
 		"@types/mocha": "^10.0.6",
 		"@types/node": "^20",
 		"@typescript-eslint/eslint-plugin": "^7.18.0",
