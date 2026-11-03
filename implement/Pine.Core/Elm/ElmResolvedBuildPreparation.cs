@@ -792,6 +792,7 @@ public static class ElmResolvedBuildPreparation
             build with
             {
                 Sources = prepared,
+                OriginalSources = build.Sources,
                 CompilerModuleNames = compilerNames.ToImmutable(),
                 CompilerModuleSourcePaths =
                 compilerNames.ToImmutableDictionary(item => item.Value, item => item.Key, StringComparer.Ordinal),
@@ -1324,6 +1325,7 @@ public static class ElmResolvedBuildPreparation
             build with
             {
                 Sources = prepared,
+                OriginalSources = build.Sources,
                 CompilerModuleNames = compilerNames,
                 CompilerModuleSourcePaths =
                 compilerNames.ToImmutableDictionary(item => item.Value, item => item.Key, StringComparer.Ordinal),

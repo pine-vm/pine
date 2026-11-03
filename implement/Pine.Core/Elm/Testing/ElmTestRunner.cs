@@ -1046,10 +1046,59 @@ public static class ElmTestRunner
         }
     }
 
+    /// <summary>Executes one syntax-discovered entry using the same VM, cache and result decoding as the CLI.</summary>
+    public static CompletedTest ExecuteDiscoveredTest(
+        ElmTestDiscoveryItem item,
+        ElmTestExecutionEntry? entry,
+        ElmTestRunCacheSession cacheSession,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (item.Selection is not ElmTestDiscoverySelection.Included)
+            throw new ArgumentException("Cannot execute an excluded test: " + item.Id, nameof(item));
+
+        var kind =
+            item.Kind switch
+            {
+                ElmTestDiscoveryItemKind.Todo => DiscoveredTestKind.Todo,
+                ElmTestDiscoveryItemKind.Group when item.IsEmptyGroup => DiscoveredTestKind.EmptyGroup,
+
+                ElmTestDiscoveryItemKind.Unit or ElmTestDiscoveryItemKind.Fuzz when entry?.Id == item.Id =>
+                DiscoveredTestKind.Runnable,
+
+                _ =>
+                throw new ArgumentException("No executable entry for test: " + item.Id, nameof(entry))
+            };
+
+        var test =
+            new DiscoveredTest(
+                item.ListedTest.FilePath,
+                [.. item.ListedTest.DescriptionPath, item.ListedTest.Name],
+                kind,
+                Thunk: null)
+            {
+                Id = item.Id,
+                Evaluation = entry?.Evaluation,
+                Fuzz = entry?.Fuzz
+            };
+
+        return
+            cacheSession.CreateExecutionContext(
+                invocationCache =>
+                CreatePineVm(
+                    invocationCache,
+                    cacheSession.VmCaches,
+                    cacheSession.PrecompiledLeaves,
+                    cacheSession.InvocationCacheConfiguration))
+            .Run(vm => RunTest(test, vm, cacheSession.VmCaches.ParsedExpressions, cancellationToken));
+    }
+
     private static CompletedTest RunTest(
         DiscoveredTest discoveredTest,
         IPineVM pineVm,
-        PineVMParseCache parseCache)
+        PineVMParseCache parseCache,
+        CancellationToken cancellationToken = default)
     {
         if (discoveredTest.Kind is DiscoveredTestKind.Invalid)
         {
@@ -1081,6 +1130,10 @@ public static class ElmTestRunner
         var expectationResult =
             discoveredTest.Evaluation is { } evaluation
             ?
+            pineVm is ICancellablePineVM cancellableVm
+            ?
+            cancellableVm.EvaluateExpression(evaluation.Expression, evaluation.Environment, cancellationToken)
+            :
             pineVm.EvaluateExpression(evaluation.Expression, evaluation.Environment)
             :
             ElmInteractiveEnvironment.ApplyFunction(
@@ -1091,6 +1144,8 @@ public static class ElmTestRunner
                 .Extract(error => throw new InvalidOperationException("Failed parsing test thunk: " + error)),
                 [PineValue.EmptyList]);
 
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (expectationResult.IsErrOrNull() is { } evaluationError)
         {
             return
@@ -1100,6 +1155,7 @@ public static class ElmTestRunner
                     new MessageFailure(
                         message: "Failed evaluating test: " + evaluationError))
                 {
+                    EvaluationError = evaluationError,
                     Fuzz = discoveredTest.Fuzz is { } fuzz ? fuzz with { EvaluationError = evaluationError } : null,
                 };
         }
@@ -1783,6 +1839,9 @@ public sealed record CompletedTest
 
     /// <summary>Generation, replay and shrinking metadata, present only for a fuzz property.</summary>
     public ElmFuzzResult? Fuzz { get; init; }
+
+    /// <summary>A VM error rather than a failed expectation, when execution did not return normally.</summary>
+    public string? EvaluationError { get; init; }
 
     /// <summary>
     /// Deconstructs the completed Elm test.

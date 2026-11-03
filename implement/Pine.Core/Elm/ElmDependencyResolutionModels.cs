@@ -466,6 +466,9 @@ public sealed record ElmResolvedBuild(
     /// <summary>Selected project sources before compiler namespace rewriting, with their original contents.</summary>
     public FileTree ProjectSources { get; init; } = FileTree.EmptyTree;
 
+    /// <summary>Original project and package contents, before compiler namespace rewriting.</summary>
+    public FileTree OriginalSources { get; init; } = FileTree.EmptyTree;
+
     /// <summary>SHA-256 of the selected, unmodified project sources.</summary>
     public string? ProjectSourceFingerprint { get; init; }
 

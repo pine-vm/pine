@@ -1,5 +1,13 @@
 # Language Server Design and Implementation
 
+## Versioned Elm testing
+
+The opt-in [Elm testing protocol](elm-testing-language-server-protocol.md) exposes
+complete source-located inventories, immutable Git-commit/Pine-file-tree versions,
+streamed cancellable execution and fuzz replay. The VS Code extension presents
+current-workspace tests through the native Testing API; other clients can address
+multiple versions independently.
+
 ## Compiler-Backed Analysis and Queries
 
 The [2026-10-07 frontend design contract](../explore/internal-analysis/2026-10-07-frontend-compiler-design.md#agreed-implementation-contract) defines compiler integration. The default host now uses `ElmCompilerDiagnosticsProvider` rather than invoking `elm make` for source diagnostics; the external adapter remains available to callers that explicitly select it.

@@ -27,6 +27,8 @@ public sealed record FileStoreMount
         if (!string.IsNullOrEmpty(rootUri.Query) || !string.IsNullOrEmpty(rootUri.Fragment))
             throw new ArgumentException("The mount root must not contain a query or fragment.", nameof(rootUri));
 
+        rootUri = WorkspaceDocumentUri.Normalize(rootUri);
+
         RootUri =
             rootUri.AbsoluteUri.EndsWith("/", StringComparison.Ordinal)
             ?
@@ -341,6 +343,8 @@ public sealed class WorkspaceFromFileStoreMounts : ILanguageServerWorkspace
                     WorkspaceAccessErrorKind.InvalidUri,
                     "Document URIs with a query or fragment are not supported: " + documentUri);
         }
+
+        uri = WorkspaceDocumentUri.Normalize(uri);
 
         try
         {

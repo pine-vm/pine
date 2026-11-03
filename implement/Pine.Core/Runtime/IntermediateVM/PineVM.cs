@@ -7,6 +7,7 @@ using Pine.Core.IO;
 using Pine.Core.PineLanguage;
 using Pine.Core.PineVM;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -18,6 +19,10 @@ namespace Pine.Core.Runtime.IntermediateVM;
 /// <summary>
 /// Evaluates Pine expressions by compiling them to intermediate instructions and executing them with optional specialization, caching, and precompiled leaves.
 /// </summary>
+/// <remarks>
+/// Default compilation caches support concurrent access. Caller-supplied caches and diagnostic callbacks
+/// must also support concurrent access when sharing a VM across evaluations.
+/// </remarks>
 public class PineVM : ICancellablePineVM
 {
     private readonly IInvocationCacheAccess? _invocationCache;
@@ -272,7 +277,7 @@ public class PineVM : ICancellablePineVM
                 workProfile: workProfile,
                 reducedExpressionCache:
                 reducedExpressionCache ??
-                new Dictionary<(Expression, ReductionConfig), Expression>());
+                new ConcurrentDictionary<(Expression, ReductionConfig), Expression>());
 
     }
 

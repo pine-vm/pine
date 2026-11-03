@@ -5,7 +5,8 @@ namespace Pine.Core.LanguageServerProtocol;
 /// </summary>
 public record ClientCapabilities(
     ClientCapabilitiesWorkspace? Workspace,
-    TextDocumentClientCapabilities? TextDocument);
+    TextDocumentClientCapabilities? TextDocument,
+    PineClientExperimentalCapabilities? Experimental = null);
 
 
 /// <summary>
