@@ -2,12 +2,84 @@ using AwesomeAssertions;
 using Pine.Core.Encodings;
 using Pine.Core.Functional;
 using Pine.Core.PineLanguage;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace Pine.Core.Tests.Runtime.IntermediateVM;
 
 public class PineVMTests
 {
+    [Fact]
+    public async Task Default_reduction_cache_supports_parallel_compilation()
+    {
+        var vm =
+            Core.Runtime.IntermediateVM.PineVM.CreateCustom(
+                evalCache: null,
+                evaluationConfigDefault: null,
+                reportFunctionApplication: null,
+                compilationEnvClasses: null,
+                disableReductionInCompilation: false,
+                selectPrecompiled: null,
+                skipInlineForExpression: _ => false,
+                enableTailRecursionOptimization: false,
+                parseCache: null,
+                precompiledLeaves: null,
+                reportEnterPrecompiledLeaf: null,
+                reportExitPrecompiledLeaf: null,
+                optimizationParametersSerial: null,
+                cacheFileStore: null);
+
+        const int workerCount = 8;
+        const int expressionsPerWorker = 128;
+
+        using var start = new Barrier(workerCount);
+
+        var workers =
+            Enumerable.Range(0, workerCount).Select(
+                worker =>
+                Task.Factory.StartNew(
+                    () =>
+                    {
+                        start.SignalAndWait();
+
+                        for (var index = 0; index < expressionsPerWorker; index++)
+                        {
+                            var number = worker * expressionsPerWorker + index;
+
+                            var expression =
+                                Expression.BuiltinInst(
+                                    nameof(BuiltinFunction.int_add),
+                                    Expression.ListInst(
+                                        [
+                                        Expression.EnvironmentInstance,
+                                        Expression.BuiltinInst(
+                                            nameof(BuiltinFunction.int_add),
+                                            Expression.ListInst(
+                                                [
+                                                Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(number)),
+                                                Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(1))
+                                                ]))
+                                        ]));
+
+                            var environment = IntegerEncoding.EncodeSignedInteger(10_000);
+
+                            var expected =
+                                Result<string, PineValue>.ok(
+                                    IntegerEncoding.EncodeSignedInteger(10_001 + number));
+
+                            vm.EvaluateExpression(expression, environment).Should().Be(expected);
+                            vm.EvaluateExpression(expression, environment).Should().Be(expected);
+                        }
+                    },
+                    CancellationToken.None,
+                    TaskCreationOptions.LongRunning,
+                    TaskScheduler.Default)).ToArray();
+
+        await Task.WhenAll(workers);
+    }
+
     [Fact]
     public void Evaluate_expression()
     {

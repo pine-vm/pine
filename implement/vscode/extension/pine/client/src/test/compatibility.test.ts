@@ -38,5 +38,6 @@ suite('Older language-server compatibility', () => {
         assert.ok(methods.includes('textDocument/references'));
         assert.ok(!methods.includes('textDocument/codeLens'));
         assert.ok(!methods.includes('codeLens/resolve'));
+        assert.ok(!methods.some(method => method.startsWith('pine/tests/')));
     });
 });

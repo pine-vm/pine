@@ -35,10 +35,64 @@ public record LanguageServerRpcTarget(
 
             Server.SetCodeLensRefreshPublisher(
                 value is null ? null : RequestCodeLensRefreshAsync);
+
+            Server.SetTestingPublishers(
+                value is null ? null : PublishTestingEventAsync,
+                value is null ? null : PublishTestingChanged);
         }
     }
 
     private bool shutdown;
+
+    [JsonRpcMethod("pine/tests/discover", UseSingleObjectParameterDeserialization = true)]
+    public Task<PineTestsDiscoverResult> TestsDiscover(
+        PineTestsDiscoverParams parameters,
+        CancellationToken cancellationToken) =>
+        TestingRequest(() => Server.TestsDiscoverAsync(parameters, cancellationToken));
+
+    [JsonRpcMethod("pine/tests/run", UseSingleObjectParameterDeserialization = true)]
+    public Task<PineTestsRunResult> TestsRun(
+        PineTestsRunParams parameters,
+        CancellationToken cancellationToken) =>
+        TestingRequest(() => Server.TestsRunAsync(parameters, cancellationToken));
+
+    [JsonRpcMethod("pine/tests/source", UseSingleObjectParameterDeserialization = true)]
+    public Task<PineTestsSourceResult> TestsSource(PineTestsSourceParams parameters) =>
+        TestingRequest(() => Task.FromResult(Server.TestsSource(parameters)));
+
+    private static async Task<T> TestingRequest<T>(Func<Task<T>> request)
+    {
+        try
+        {
+            return await request().ConfigureAwait(false);
+        }
+        catch (Core.Elm.LanguageServer.PineTestingProtocolException exception)
+        {
+            throw new LocalRpcException(exception.Message)
+            {
+                ErrorCode = -32001,
+                ErrorData = new PineTestingError(exception.Code, exception.Message)
+            };
+        }
+    }
+
+    private Task PublishTestingEventAsync(PineTestsEvent parameters) =>
+        JsonRpc?.NotifyWithParameterObjectAsync("pine/tests/event", parameters) ?? Task.CompletedTask;
+
+    private void PublishTestingChanged(PineTestsChangedParams parameters)
+    {
+        if (JsonRpc is not { } rpc)
+            return;
+
+        _ =
+            rpc.NotifyWithParameterObjectAsync("pine/tests/changed", parameters).ContinueWith(
+                task =>
+                {
+                    if (task.Exception is { } exception)
+                        Log("Failed publishing test invalidation: " + exception);
+                },
+                TaskScheduler.Default);
+    }
 
     private void Log(string message)
     {

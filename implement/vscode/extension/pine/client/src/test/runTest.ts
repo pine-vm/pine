@@ -9,6 +9,8 @@ import * as path from 'path';
 import { runTests } from '@vscode/test-electron';
 
 async function main() {
+	const userDataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pine-vscode-'));
+	const oldServerRequestLog = path.join(os.tmpdir(), `pine-old-language-server-${process.pid}.log`);
 	try {
 		// The folder containing the Extension Manifest package.json
 		// Passed to `--extensionDevelopmentPath`
@@ -19,15 +21,15 @@ async function main() {
 		const extensionTestsPath = path.resolve(__dirname, './index');
 		const currentServerWorkspace = path.resolve(__dirname, '../../testFixture');
 		const oldServerWorkspace = path.resolve(__dirname, '../../testFixture-old');
-		const oldServerRequestLog = path.join(
-			os.tmpdir(),
-			`pine-old-language-server-${process.pid}.log`);
+		const vscodeExecutablePath = process.env.VSCODE_EXECUTABLE_PATH || undefined;
+		const sandboxArgs = process.platform === 'linux' && process.getuid?.() === 0 ? ['--no-sandbox'] : [];
 
 		// Download VS Code, unzip it and run the integration test
 		await runTests({
 			extensionDevelopmentPath,
 			extensionTestsPath,
-			launchArgs: [currentServerWorkspace]
+			vscodeExecutablePath,
+			launchArgs: [currentServerWorkspace, `--user-data-dir=${path.join(userDataRoot, 'current')}`, ...sandboxArgs]
 		});
 
 		fs.writeFileSync(oldServerRequestLog, '');
@@ -35,7 +37,8 @@ async function main() {
 		await runTests({
 			extensionDevelopmentPath,
 			extensionTestsPath,
-			launchArgs: [oldServerWorkspace],
+			vscodeExecutablePath,
+			launchArgs: [oldServerWorkspace, `--user-data-dir=${path.join(userDataRoot, 'old')}`, ...sandboxArgs],
 			extensionTestsEnv: {
 				...process.env,
 				CODE_TESTS_WORKSPACE: oldServerWorkspace,
@@ -45,10 +48,12 @@ async function main() {
 			}
 		});
 
-		fs.rmSync(oldServerRequestLog, { force: true });
 	} catch (err) {
-		console.error('Failed to run tests');
-		process.exit(1);
+		console.error('Failed to run tests', err);
+		process.exitCode = 1;
+	} finally {
+		fs.rmSync(oldServerRequestLog, { force: true });
+		fs.rmSync(userDataRoot, { recursive: true, force: true });
 	}
 }
 

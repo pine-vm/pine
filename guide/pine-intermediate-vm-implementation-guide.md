@@ -93,6 +93,18 @@ instrumentation, set it to `true` so the final snapshot includes that work.
 Evaluation counters exclude compilation and diagnostic serialization. Even execution
 work comparisons require a controlled invocation-cache policy and configuration.
 
+## Concurrent compilation and cache ownership
+
+The intermediate VM's default parsing, expression encoding, template-plan,
+sequential-IR compilation, and reduction caches support concurrent access.
+Different expressions can compile concurrently on the same VM, so a reduction
+cache must support simultaneous reads and writes even though compilation of the
+same expression is coordinated.
+
+Caller-supplied caches and diagnostic callbacks must also be safe for concurrent
+use when sharing a VM. `PineVMSharedCaches` provides thread-safe compilation caches
+for reuse across VM instances with identical compilation configuration.
+
 ## Compilation Units and Specializations
 
 When compiling Pine expressions to sequential representations, the most common specialization targets a subset of `Environment` values. Under such constraints, expressions that depend on `Environment` can be reduced and simplified at compile time.

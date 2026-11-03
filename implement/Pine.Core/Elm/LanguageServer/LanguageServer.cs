@@ -41,7 +41,8 @@ namespace Pine.Core.Elm.LanguageServer;
 /// provider here to avoid running a compiler on every formatting request.
 /// </param>
 /// <param name="timeProvider">Optional clock for periodic cache-statistics logging.</param>
-public class LanguageServer(
+/// <param name="testCommitSource">Optional host adapter for exact local Git test snapshots.</param>
+public partial class LanguageServer(
     ILanguageServiceSessionFactory sessionFactory,
     ILanguageServerWorkspace workspace,
     IElmPackageSource elmPackageSource,
@@ -50,7 +51,8 @@ public class LanguageServer(
     LanguageServerOptions options,
     System.Action<string>? logDelegate = null,
     IDiagnosticsProvider? formattingDiagnosticsProvider = null,
-    System.TimeProvider? timeProvider = null)
+    System.TimeProvider? timeProvider = null,
+    IElmTestCommitSource? testCommitSource = null)
     : IDocumentTextSource, System.IDisposable
 {
     private readonly Lock _statisticsLogLock = new();
@@ -293,6 +295,12 @@ public class LanguageServer(
     /// <summary>Stops logging and disposes the session. Safe during initialization or repeated calls.</summary>
     public void Dispose()
     {
+        lock (_testingServiceLock)
+        {
+            _disposed = true;
+            _testingService?.Dispose();
+        }
+
         lock (_statisticsLogLock)
         {
             _disposed = true;
@@ -400,6 +408,32 @@ public class LanguageServer(
                     ReferencesProvider = true,
 
                     CodeLensProvider = new CodeLensOptions(ResolveProvider: true),
+
+                    Experimental =
+                    initializeParams.Capabilities.Experimental?.PineTests?.ProtocolVersion == 1
+                    ?
+                    new PineServerExperimentalCapabilities(
+                        new PineTestsServerCapabilities(
+                            ProtocolVersion: 1,
+                            VersionKinds:
+                            testCommitSource is null
+                            ?
+                            [
+                            "workspace",
+                            "file-tree"
+                            ]
+                            :
+                            [
+                            "workspace",
+                            "file-tree",
+                            "commit"
+                            ],
+                            ChangeNotifications: true,
+                            SourceText: true,
+                            FuzzReplay: true,
+                            RetainedVersions: LanguageServerTestingService.RetainedVersions))
+                    :
+                    null,
 
                     RenameProvider = true,
 
@@ -797,6 +831,7 @@ public class LanguageServer(
             else
             {
                 _clientTextDocumentContents[decodedUri] = textDocument.Text;
+                _testingDocumentUris[decodedUri] = textDocument.Uri;
                 _clientTextDocumentVersions[decodedUri] = textDocument.Version;
                 IncrementDocumentGenerationLocked(decodedUri);
 
@@ -891,6 +926,7 @@ public class LanguageServer(
             else
             {
                 _clientTextDocumentContents[textDocumentUri] = newContent;
+                _testingDocumentUris[textDocumentUri] = textDocument.Uri;
                 _clientTextDocumentVersions[textDocumentUri] = textDocument.Version;
                 IncrementDocumentGenerationLocked(textDocumentUri);
 
@@ -1100,6 +1136,7 @@ public class LanguageServer(
             _languageServiceDocumentVersions.Remove(decodedUri);
             _clientTextDocumentContents.TryRemove(decodedUri, out var _);
             _clientTextDocumentVersions.TryRemove(decodedUri, out var _);
+            _testingDocumentUris.Remove(decodedUri);
             _closedTextDocuments[decodedUri] = 0;
             closeGeneration = IncrementDocumentGenerationLocked(decodedUri);
         }
@@ -3080,7 +3117,10 @@ public class LanguageServer(
 
     private void BumpSourceRevision()
     {
-        Interlocked.Increment(ref _sourceRevision);
+        var revision = Interlocked.Increment(ref _sourceRevision);
+
+        if (_initializeParams?.Capabilities.Experimental?.PineTests?.ProtocolVersion == 1)
+            _publishTestingChanged?.Invoke(new(revision));
     }
 
     /// <summary>

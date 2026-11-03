@@ -1,12 +1,16 @@
 using AwesomeAssertions;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
+using Pine.Core.Encodings;
 using Pine.Core.Internal;
 using Pine.Core.PineLanguage;
+using Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 using Pine.Core.Tests.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
+using System.Threading.Tasks;
 using Xunit;
 
 using ElmInterpreter = Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter;
@@ -93,6 +97,39 @@ public class BasicsEqualityAndArithmeticBuiltinTests
         ElmValueEncoding.PineValueAsElmValue(actual, null, null).Extract(error => throw new Exception(error))
             .Should().Be(
             ElmValueEncoding.PineValueAsElmValue(expected, null, null).Extract(error => throw new Exception(error)));
+    }
+
+    [Fact]
+    public void Numeric_reference_evaluation_is_safe_across_parallel_calls()
+    {
+        var function = NativeBasics.LogBase_FunctionValue();
+        var referenceVM = ElmCompilerTestHelper.PineVMForProfiling(_ => { });
+        var logarithmBase = IntegerEncoding.EncodeSignedInteger(2);
+
+        var arguments =
+            Enumerable.Range(0, 16)
+            .Select(index => IntegerEncoding.EncodeSignedInteger(1_114_111 + index))
+            .ToArray();
+
+        var expected =
+            arguments.Select(
+                argument =>
+                CoreLibraryTestHelper.ApplyGenericPine(function, [logarithmBase, argument], referenceVM))
+            .ToArray();
+
+        Parallel.For(
+            0,
+            arguments.Length,
+            new ParallelOptions { MaxDegreeOfParallelism = 8 },
+            index =>
+            {
+                var actual = CoreLibraryTestHelper.ApplyGenericPine(function, [logarithmBase, arguments[index]]);
+
+                actual.Should().Be(expected[index]);
+
+                ElmValueEncoding.PineValueAsElmValue(actual, null, null)
+                    .Extract(error => throw new Exception(error)).Should().NotBeNull();
+            });
     }
 
     [Theory]

@@ -172,7 +172,8 @@ public static class LanguageServerComposition
                 documentFormatter: CreateDocumentFormatter(logDelegate),
                 options: new LanguageServerOptions(serverVersion: pineAppVersionId),
                 logDelegate: logDelegate,
-                formattingDiagnosticsProvider: syntaxDiagnosticsProvider);
+                formattingDiagnosticsProvider: syntaxDiagnosticsProvider,
+                testCommitSource: new GitElmTestCommitSource());
 
         documentTextSource.Inner = languageServer;
 

@@ -5,10 +5,12 @@ Run Elm tests using the [`elm-explorations/test` package](https://github.com/elm
 ## Core discovery and editor navigation
 
 `Pine.Core.Elm.Testing.ElmTestDiscovery.DiscoverTests` provides syntax-interpreter
-discovery shared by the CLI and future editor integrations. It evaluates test construction (including helpers,
+discovery shared by the CLI and editor integrations. It evaluates test construction (including helpers,
 computed labels and generated suites), then uses the resolved Elm test library to enumerate
 leaves. Assertion and fuzz callbacks are not run during discovery. Both `--list-tests` and ordinary
-`elm test` use this path; execution remains on PineVM. No language-server protocol or VS Code UI is introduced here.
+`elm test` use this path; execution remains on PineVM. The
+[versioned language-server protocol and VS Code Test Explorer](elm-testing-language-server-protocol.md)
+reuse this discovery and execution machinery.
 
 `result.Items` is a complete inventory in parent-before-child order, including
 `describe` groups, empty groups, skipped tests and tests excluded by `Test.only`.

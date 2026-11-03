@@ -1,5 +1,12 @@
 # Pine Changelog - Implement
 
+## 2026-11-03 - Elm testing in the language server and VS Code
+
++ Added opt-in Pine testing protocol v1 for complete, source-located test discovery, streamed execution, cancellation and fuzz replay, including groups, skipped tests and `Test.only` exclusions.
++ Added independently addressable Git commit (`commit-<sha>`) and canonical Pine FileTree (`file-tree-<sha>`) source versions for discovery and execution. Retained inventories freeze dependency resolution and bind selected test IDs to their discovery identity.
++ Added native VS Code Test Explorer integration with source navigation, scoped and continuous runs, failure comparisons, and fuzz replay/reproduction commands. The initial UI follows current workspace contents, including unsaved edits.
++ Raised the required VS Code version to 1.93. Older language servers remain usable without testing features. See the [versioned testing protocol specification](../guide/elm-testing-language-server-protocol.md).
+
 ## 2026-10-25 - expand CLI `apply` command - Watch batch inputs
 
 + Added `--watch` to `pine  apply` and batch-mode `pine  run`: rerun after local input file changes, including editor-style file replacement, with debouncing, cancellation, and recovery after failed evaluations.
