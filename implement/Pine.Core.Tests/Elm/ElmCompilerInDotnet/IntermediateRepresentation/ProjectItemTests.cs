@@ -226,20 +226,20 @@ public class ProjectItemTests
             new[] { "First", "Second" }
             .Select(
                 name =>
-                new Abstract.File(
+                new File(
                     new Module.NormalModule(
-                        new Abstract.DefaultModuleData([name], new Exposing.All())),
-                    [new Abstract.Import(["Unused"], null, null)],
+                        new DefaultModuleData([name], new Exposing.All())),
+                    [new Import(["Unused"], null, null)],
                     [
                     new Declaration.FunctionDeclaration(
-                        new Abstract.FunctionStruct(
+                        new FunctionStruct(
                             null,
-                            new Abstract.FunctionImplementation("value", [], Abstract.Expression.UnitExpr.Instance)))
+                            new FunctionImplementation("value", [], Abstract.Expression.UnitExpr.Instance)))
                     ]))
             .Append(
-                new Abstract.File(
+                new File(
                     new Module.NormalModule(
-                        new Abstract.DefaultModuleData(["Empty"], new Exposing.All())),
+                        new DefaultModuleData(["Empty"], new Exposing.All())),
                     [],
                     []))
             .ToArray();

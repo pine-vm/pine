@@ -7,7 +7,6 @@ using System.Collections.Generic;
 using Xunit;
 
 using AbstractSyntax = Pine.Core.Elm.Syntax.Abstract;
-using ConcreteSyntax = Pine.Core.Elm.Syntax.Concrete;
 using ElmFormatter = Pine.Core.Elm.Syntax.Avh4Format;
 using LegacySyntax = Pine.Core.Elm.Syntax.Compatibility.Stil4mElmSyntax7;
 using Range = Pine.Core.Elm.Syntax.Concrete.Range;
@@ -46,20 +45,20 @@ public class IndexedSyntaxTraversalTests
     [InlineData(4)]
     public void Syntax_conversions_traverse_application_and_separated_lists_by_index(int count)
     {
-        var nodes = new Node<ConcreteSyntax.Expression>[count];
+        var nodes = new Node<Expression>[count];
 
         for (var i = 0; i < count; i++)
-            nodes[i] = Node<ConcreteSyntax.Expression>(new ConcreteSyntax.Expression.IntegerLiteral(i.ToString()));
+            nodes[i] = Node<Expression>(new Expression.IntegerLiteral(i.ToString()));
 
         var function =
-            Node<ConcreteSyntax.Expression>(new ConcreteSyntax.Expression.Identifier(["Basics"], "identity"));
+            Node<Expression>(new Expression.Identifier(["Basics"], "identity"));
 
-        var list = new ConcreteSyntax.Expression.ListExpr(Separated(nodes));
+        var list = new Expression.ListExpr(Separated(nodes));
 
         var application =
-            new ConcreteSyntax.Expression.Application(
+            new Expression.Application(
                 function,
-                new IndexOnlyList<Node<ConcreteSyntax.Expression>>(nodes));
+                new IndexOnlyList<Node<Expression>>(nodes));
 
         var abstractList = AbstractSyntax.ConvertFromConcrete.FromExpression(list);
         var abstractApplication = AbstractSyntax.ConvertFromConcrete.FromExpression(application);
@@ -72,14 +71,14 @@ public class IndexedSyntaxTraversalTests
         var restoredAbstractList =
             AbstractSyntax.ConvertToConcrete.ToExpression(
                 new AbstractSyntax.Expression.ListExpr(new IndexOnlyList<AbstractSyntax.Expression>(abstractElements)))
-            .Should().BeOfType<ConcreteSyntax.Expression.ListExpr>().Subject;
+            .Should().BeOfType<Expression.ListExpr>().Subject;
 
         var restoredAbstractApplication =
             AbstractSyntax.ConvertToConcrete.ToExpression(
                 new AbstractSyntax.Expression.Application(
                     AbstractSyntax.Expression.Identifier.Create(["Basics"], "identity"),
                     new IndexOnlyList<AbstractSyntax.Expression>(abstractArguments)))
-            .Should().BeOfType<ConcreteSyntax.Expression.Application>().Subject;
+            .Should().BeOfType<Expression.Application>().Subject;
 
         var legacyList =
             LegacySyntax.FromFullSyntaxModel.Convert(list)
@@ -93,13 +92,13 @@ public class IndexedSyntaxTraversalTests
             LegacySyntax.ToFullSyntaxModel.Convert(
                 new LegacySyntax.Expression.ListExpr(
                     new IndexOnlyList<Node<LegacySyntax.Expression>>(legacyList.Elements)))
-            .Should().BeOfType<ConcreteSyntax.Expression.ListExpr>().Subject;
+            .Should().BeOfType<Expression.ListExpr>().Subject;
 
         var restoredLegacyApplication =
             LegacySyntax.ToFullSyntaxModel.Convert(
                 new LegacySyntax.Expression.Application(
                     new IndexOnlyList<Node<LegacySyntax.Expression>>(legacyApplication.Arguments)))
-            .Should().BeOfType<ConcreteSyntax.Expression.Application>().Subject;
+            .Should().BeOfType<Expression.Application>().Subject;
 
         restoredAbstractList.Elements.Count.Should().Be(count);
         restoredAbstractApplication.Arguments.Count.Should().Be(count);
@@ -111,16 +110,16 @@ public class IndexedSyntaxTraversalTests
         {
             var expected = i.ToString();
 
-            restoredAbstractList.Elements[i].Value.Should().BeOfType<ConcreteSyntax.Expression.IntegerLiteral>()
+            restoredAbstractList.Elements[i].Value.Should().BeOfType<Expression.IntegerLiteral>()
                 .Subject.LiteralText.Should().Be(expected);
 
-            restoredAbstractApplication.Arguments[i].Value.Should().BeOfType<ConcreteSyntax.Expression.IntegerLiteral>()
+            restoredAbstractApplication.Arguments[i].Value.Should().BeOfType<Expression.IntegerLiteral>()
                 .Subject.LiteralText.Should().Be(expected);
 
-            restoredLegacyList.Elements[i].Value.Should().BeOfType<ConcreteSyntax.Expression.IntegerLiteral>()
+            restoredLegacyList.Elements[i].Value.Should().BeOfType<Expression.IntegerLiteral>()
                 .Subject.LiteralText.Should().Be(expected);
 
-            restoredLegacyApplication.Arguments[i].Value.Should().BeOfType<ConcreteSyntax.Expression.IntegerLiteral>()
+            restoredLegacyApplication.Arguments[i].Value.Should().BeOfType<Expression.IntegerLiteral>()
                 .Subject.LiteralText.Should().Be(expected);
         }
     }
@@ -181,8 +180,8 @@ public class IndexedSyntaxTraversalTests
         var indexed =
             parsed with
             {
-                Imports = new IndexOnlyList<Node<ConcreteSyntax.Import>>(parsed.Imports),
-                Declarations = new IndexOnlyList<Node<ConcreteSyntax.Declaration>>(parsed.Declarations),
+                Imports = new IndexOnlyList<Node<Import>>(parsed.Imports),
+                Declarations = new IndexOnlyList<Node<Declaration>>(parsed.Declarations),
                 Comments = new IndexOnlyList<Node<string>>(parsed.Comments),
                 IncompleteDeclarations = new IndexOnlyList<Node<IncompleteDeclaration>>(parsed.IncompleteDeclarations)
             };
@@ -227,7 +226,7 @@ public class IndexedSyntaxTraversalTests
             ElmSyntaxParser.ParseModuleText("module Example exposing (..)\n\nimport Same.Module\n")
             .Extract(error => throw new Exception(error.ToString()));
 
-        var imports = new Node<ConcreteSyntax.Import>[24];
+        var imports = new Node<Import>[24];
 
         for (var i = 0; i < imports.Length; i++)
         {
@@ -248,7 +247,7 @@ public class IndexedSyntaxTraversalTests
         }
 
         var formatted =
-            ElmFormatter.Format(parsed with { Imports = new IndexOnlyList<Node<ConcreteSyntax.Import>>(imports) });
+            ElmFormatter.Format(parsed with { Imports = new IndexOnlyList<Node<Import>>(imports) });
 
         formatted.Imports.Count.Should().Be(imports.Length);
 

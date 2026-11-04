@@ -581,7 +581,7 @@ public class RecordAccessLoweringTests
                 """);
 
         lower.Should().Throw<InvalidOperationException>()
-            .WithMessage(Pine.Core.Elm.ElmRuntimeErrorMessages.RecordFieldNotFound("name"));
+            .WithMessage(ElmRuntimeErrorMessages.RecordFieldNotFound("name"));
     }
 
     [Fact]

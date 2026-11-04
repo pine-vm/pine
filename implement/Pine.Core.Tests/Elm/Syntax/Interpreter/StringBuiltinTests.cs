@@ -374,12 +374,12 @@ public class StringBuiltinTests
     public void ToFloat_accepts_an_empty_integer_part(string number, string expected)
     {
         var (result, _) =
-            Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter.ParseAndInterpretWithCounters(
+            ElmInterpreter.ParseAndInterpretWithCounters(
                 "String.toFloat \"" + number + "\"",
                 s_prepared.Value);
 
-        Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter.RenderAsElmExpression(
-            result.Extract(error => throw new System.Exception(error.ToString())))
+        ElmInterpreter.RenderAsElmExpression(
+            result.Extract(error => throw new Exception(error.ToString())))
             .expressionString.Should().Be(expected);
     }
 

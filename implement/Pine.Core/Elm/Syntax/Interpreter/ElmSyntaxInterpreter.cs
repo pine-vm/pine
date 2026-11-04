@@ -59,7 +59,7 @@ public sealed record ElmCallStackFrame(
         // The in-process arguments have no structural hash that is consistent with
         // ValuesEqualInProcess (PineValueInProcess uses reference identity), so the argument
         // count is the strongest structural component that keeps equal frames in the same bucket.
-        var hash = new System.HashCode();
+        var hash = new HashCode();
         hash.Add(FunctionName);
         hash.Add(Arguments.Count);
 
@@ -181,7 +181,7 @@ public sealed record ElmInterpretationError(
     /// <inheritdoc/>
     public override int GetHashCode()
     {
-        var hash = new System.HashCode();
+        var hash = new HashCode();
         hash.Add(Message);
         hash.Add(QuotaExceeded);
 
@@ -239,7 +239,7 @@ public sealed record ElmInterpretationError(
 /// </summary>
 internal sealed class ElmInterpretationException(
     ElmInterpretationError error,
-    System.Exception? innerException = null) : System.Exception(error.ToString(), innerException)
+    Exception? innerException = null) : Exception(error.ToString(), innerException)
 {
     public ElmInterpretationError Error { get; } = error;
 }
@@ -443,7 +443,7 @@ public partial class ElmSyntaxInterpreter
 
         if (parseResult.IsOkOrNull() is not { } rootExpression)
         {
-            throw new System.NotImplementedException(
+            throw new NotImplementedException(
                 $"Unexpected parse result type: {parseResult.GetType().FullName}");
         }
 
@@ -541,11 +541,11 @@ public partial class ElmSyntaxInterpreter
     /// </returns>
     public static Result<ElmInterpretationError, PineValueInProcess> Interpret(
         Concrete.Expression rootExpression,
-        System.Func<Application, ApplicationResolution> resolveApplication) =>
+        Func<Application, ApplicationResolution> resolveApplication) =>
         Interpret(rootExpression, resolveApplication, infixOperators: null);
 
     /// <summary>
-    /// As <see cref="Interpret(Concrete.Expression, System.Func{Application, ApplicationResolution})"/>,
+    /// As <see cref="Interpret(Concrete.Expression, Func{Application, ApplicationResolution})"/>,
     /// but additionally consults <paramref name="infixOperators"/> when translating
     /// <see cref="Concrete.Expression.OperatorApplication"/> and
     /// <see cref="Concrete.Expression.PrefixOperator"/> nodes to ordinary function
@@ -554,7 +554,7 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     public static Result<ElmInterpretationError, PineValueInProcess> Interpret(
         Concrete.Expression rootExpression,
-        System.Func<Application, ApplicationResolution> resolveApplication,
+        Func<Application, ApplicationResolution> resolveApplication,
         IReadOnlyDictionary<string, DeclQualifiedName>? infixOperators)
         =>
         Interpret(
@@ -569,7 +569,7 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     public static Result<ElmInterpretationError, PineValueInProcess> Interpret(
         Concrete.Expression rootExpression,
-        System.Func<Application, ApplicationResolution> resolveApplication,
+        Func<Application, ApplicationResolution> resolveApplication,
         IReadOnlyDictionary<string, DeclQualifiedName>? infixOperators,
         EvaluationConfig evaluationConfig)
     {
@@ -688,18 +688,18 @@ public partial class ElmSyntaxInterpreter
     public static Result<ElmInterpretationError, PineValueInProcess> Interpret(
         DeclQualifiedName functionName,
         IReadOnlyList<PineValueInProcess> arguments,
-        System.Func<Application, ApplicationResolution> resolveApplication) =>
+        Func<Application, ApplicationResolution> resolveApplication) =>
         Interpret(functionName, arguments, resolveApplication, infixOperators: null);
 
     /// <summary>
-    /// As <see cref="Interpret(DeclQualifiedName, IReadOnlyList{PineValueInProcess}, System.Func{Application, ApplicationResolution})"/>,
+    /// As <see cref="Interpret(DeclQualifiedName, IReadOnlyList{PineValueInProcess}, Func{Application, ApplicationResolution})"/>,
     /// but additionally consults <paramref name="infixOperators"/> for source-defined infix
     /// operator dispatch.
     /// </summary>
     public static Result<ElmInterpretationError, PineValueInProcess> Interpret(
         DeclQualifiedName functionName,
         IReadOnlyList<PineValueInProcess> arguments,
-        System.Func<Application, ApplicationResolution> resolveApplication,
+        Func<Application, ApplicationResolution> resolveApplication,
         IReadOnlyDictionary<string, DeclQualifiedName>? infixOperators)
         =>
         Interpret(
@@ -715,7 +715,7 @@ public partial class ElmSyntaxInterpreter
     public static Result<ElmInterpretationError, PineValueInProcess> Interpret(
         DeclQualifiedName functionName,
         IReadOnlyList<PineValueInProcess> arguments,
-        System.Func<Application, ApplicationResolution> resolveApplication,
+        Func<Application, ApplicationResolution> resolveApplication,
         IReadOnlyDictionary<string, DeclQualifiedName>? infixOperators,
         EvaluationConfig evaluationConfig)
     {
@@ -777,7 +777,7 @@ public partial class ElmSyntaxInterpreter
 
         if (parseResult.IsOkOrNull() is not { } rootExpression)
         {
-            throw new System.NotImplementedException(
+            throw new NotImplementedException(
                 "Unexpected parse result type: " + parseResult.GetType().FullName);
         }
 
@@ -821,7 +821,7 @@ public partial class ElmSyntaxInterpreter
 
         if (parseResult.IsOkOrNull() is not { } rootExpression)
         {
-            throw new System.NotImplementedException(
+            throw new NotImplementedException(
                 "Unexpected parse result type: " + parseResult.GetType().FullName);
         }
 
@@ -911,7 +911,7 @@ public partial class ElmSyntaxInterpreter
 
         if (parseResult.IsOkOrNull() is not { } rootExpression)
         {
-            throw new System.NotImplementedException(
+            throw new NotImplementedException(
                 "Unexpected parse result type: " + parseResult.GetType().FullName);
         }
 
@@ -964,7 +964,7 @@ public partial class ElmSyntaxInterpreter
         ParseAndInterpretWithCounters(
         string rootExpressionText,
         IReadOnlyDictionary<DeclQualifiedName, Concrete.Declaration> declarations,
-        System.Action<ApplicationLogEntry> onApplication)
+        Action<ApplicationLogEntry> onApplication)
         =>
         ParseAndInterpretWithCounters(
             rootExpressionText,
@@ -980,7 +980,7 @@ public partial class ElmSyntaxInterpreter
         ParseAndInterpretWithCounters(
         string rootExpressionText,
         IReadOnlyDictionary<DeclQualifiedName, Concrete.Declaration> declarations,
-        System.Action<ApplicationLogEntry> onApplication,
+        Action<ApplicationLogEntry> onApplication,
         EvaluationConfig evaluationConfig)
     {
         var parseResult = ParseRootExpression(rootExpressionText);
@@ -992,7 +992,7 @@ public partial class ElmSyntaxInterpreter
 
         if (parseResult.IsOkOrNull() is not { } rootExpression)
         {
-            throw new System.NotImplementedException(
+            throw new NotImplementedException(
                 "Unexpected parse result type: " + parseResult.GetType().FullName);
         }
 
@@ -1003,7 +1003,7 @@ public partial class ElmSyntaxInterpreter
         InterpretWithCounters(
         Concrete.Expression rootExpression,
         IReadOnlyDictionary<DeclQualifiedName, Concrete.Declaration> declarations,
-        System.Action<ApplicationLogEntry> onApplication,
+        Action<ApplicationLogEntry> onApplication,
         EvaluationConfig evaluationConfig)
     {
         var invocationCounter = new InvocationCounter(onApplication);
@@ -1061,7 +1061,7 @@ public partial class ElmSyntaxInterpreter
 
         if (parseResult.IsOkOrNull() is not { } parsedExpression)
         {
-            throw new System.NotImplementedException(
+            throw new NotImplementedException(
                 "Unexpected parse result type: " + parseResult.GetType().FullName);
         }
 
@@ -1263,14 +1263,14 @@ public partial class ElmSyntaxInterpreter
     /// Entry point of the trampoline. At most one of <paramref name="initialExpression"/>
     /// and <paramref name="initialApplication"/> is non-null:
     /// expression-evaluation starts from <paramref name="initialExpression"/>; direct-call
-    /// entry points (<see cref="Interpret(DeclQualifiedName, IReadOnlyList{PineValueInProcess}, System.Func{Application, ApplicationResolution})"/>)
+    /// entry points (<see cref="Interpret(DeclQualifiedName, IReadOnlyList{PineValueInProcess}, Func{Application, ApplicationResolution})"/>)
     /// start by resolving <paramref name="initialApplication"/>.
     /// </summary>
     private static Result<ElmInterpretationError, PineValueInProcess> RunTrampoline(
         PreparedExpression? initialExpression,
         ApplicationContext initialEnv,
         Application? initialApplication,
-        System.Func<Application, ApplicationResolution> resolveApplication,
+        Func<Application, ApplicationResolution> resolveApplication,
         IReadOnlyDictionary<string, DeclQualifiedName>? infixOperators,
         IInvocationLogger? invocationLogger = null,
         EvaluationConfig? evaluationConfig = null)
@@ -1313,7 +1313,7 @@ public partial class ElmSyntaxInterpreter
                         break;
 
                     default:
-                        throw new System.NotImplementedException(
+                        throw new NotImplementedException(
                             "Unexpected ApplyCallOutcome shape.");
                 }
             }
@@ -1324,7 +1324,7 @@ public partial class ElmSyntaxInterpreter
                     return applyErr;
                 }
 
-                throw new System.NotImplementedException(
+                throw new NotImplementedException(
                     "ApplyResolvedCall did not return a value or an error: " + applyCallResult.GetType().FullName);
             }
         }
@@ -1332,7 +1332,7 @@ public partial class ElmSyntaxInterpreter
         {
             if (initialExpression is null)
             {
-                throw new System.ArgumentException(
+                throw new ArgumentException(
                     "RunTrampoline requires either initialExpression or initialApplication.");
             }
 
@@ -1510,7 +1510,7 @@ public partial class ElmSyntaxInterpreter
                                         break;
 
                                     default:
-                                        throw new System.NotImplementedException(
+                                        throw new NotImplementedException(
                                             $"Unknown ApplyCallOutcome: {outcome}");
                                 }
 
@@ -1523,7 +1523,7 @@ public partial class ElmSyntaxInterpreter
                                     return error;
                                 }
 
-                                throw new System.NotImplementedException(
+                                throw new NotImplementedException(
                                     "Unexpected type of application result: " + applyResult.GetType().FullName);
                             }
                         }
@@ -1664,7 +1664,7 @@ public partial class ElmSyntaxInterpreter
                                         return beginNextErr;
                                     }
 
-                                    throw new System.NotImplementedException(
+                                    throw new NotImplementedException(
                                         "Unexpected type of result: " + beginNextResult.GetType().FullName);
                                 }
                             }
@@ -1675,7 +1675,7 @@ public partial class ElmSyntaxInterpreter
                                     return prepareErr;
                                 }
 
-                                throw new System.NotImplementedException(
+                                throw new NotImplementedException(
                                     "Unexpected type of result: " + prepareResult.GetType().FullName);
                             }
                         }
@@ -1804,11 +1804,11 @@ public partial class ElmSyntaxInterpreter
                         }
 
                     case PreparedExpression.GLSLExpression:
-                        throw new System.NotImplementedException(
+                        throw new NotImplementedException(
                             "RunTrampoline does not handle expression variant: " + currentExpr.GetType().Name);
 
                     default:
-                        throw new System.NotImplementedException(
+                        throw new NotImplementedException(
                             "RunTrampoline does not handle expression variant: " + currentExpr.GetType().Name);
                 }
             }
@@ -1820,7 +1820,7 @@ public partial class ElmSyntaxInterpreter
                 {
                     if (currentValue is null)
                     {
-                        throw new System.InvalidOperationException(
+                        throw new InvalidOperationException(
                             "Trampoline terminated without a value.");
                     }
 
@@ -1977,7 +1977,7 @@ public partial class ElmSyntaxInterpreter
                                             break;
 
                                         default:
-                                            throw new System.NotImplementedException(
+                                            throw new NotImplementedException(
                                                 $"Unknown ApplyCallOutcome: {localOutcome.GetType().FullName}");
                                     }
                                 }
@@ -1993,7 +1993,7 @@ public partial class ElmSyntaxInterpreter
                                     if (localResult.IsErrOrNull() is { } localErr)
                                         return localErr;
 
-                                    throw new System.NotImplementedException(
+                                    throw new NotImplementedException(
                                         $"ApplyFunctionValue returned a result that is neither Ok nor Err: {localResult.GetType().FullName}");
                                 }
 
@@ -2025,7 +2025,7 @@ public partial class ElmSyntaxInterpreter
                                         break;
 
                                     default:
-                                        throw new System.NotImplementedException(
+                                        throw new NotImplementedException(
                                             $"Unknown ApplyCallOutcome: {outcome.GetType().FullName}");
                                 }
 
@@ -2036,7 +2036,7 @@ public partial class ElmSyntaxInterpreter
                                 if (applyResult.IsErrOrNull() is { } applyErr)
                                     return applyErr;
 
-                                throw new System.NotImplementedException(
+                                throw new NotImplementedException(
                                     $"ApplyFunctionOrValue returned a result that is neither Ok nor Err: {applyResult.GetType().FullName}");
                             }
                         }
@@ -2101,7 +2101,7 @@ public partial class ElmSyntaxInterpreter
                             if (applyResult.IsErrOrNull() is { } applyErr)
                                 return applyErr;
 
-                            throw new System.NotImplementedException(
+                            throw new NotImplementedException(
                                 $"ApplyFunctionValue returned a result that is neither Ok nor Err: {applyResult.GetType().FullName}");
                         }
 
@@ -2140,7 +2140,7 @@ public partial class ElmSyntaxInterpreter
                             if (afterCallApplyResult.IsErrOrNull() is { } afterCallApplyErr)
                                 return afterCallApplyErr;
 
-                            throw new System.NotImplementedException(
+                            throw new NotImplementedException(
                                 $"ApplyFunctionValue (for AfterCall) returned a result that is neither Ok nor Err: {afterCallApplyResult.GetType().FullName}");
                         }
 
@@ -2168,7 +2168,7 @@ public partial class ElmSyntaxInterpreter
                             if (beginNextResult.IsErrOrNull() is { } beginNextErr)
                                 return beginNextErr;
 
-                            throw new System.NotImplementedException(
+                            throw new NotImplementedException(
                                 $"BeginNextLetDecl returned a result that is neither Ok nor Err: {beginNextResult.GetType().FullName}");
                         }
 
@@ -2188,7 +2188,7 @@ public partial class ElmSyntaxInterpreter
                                     letBindDestructure.Extended[boundName] = boundValue;
                                 }
                             }
-                            catch (System.Exception ex)
+                            catch (Exception ex)
                             {
                                 return MakeRuntimeError(ex.Message, kstack);
                             }
@@ -2211,7 +2211,7 @@ public partial class ElmSyntaxInterpreter
                                 if (beginNextResult.IsErrOrNull() is { } beginNextErr)
                                     return beginNextErr;
 
-                                throw new System.NotImplementedException(
+                                throw new NotImplementedException(
                                     $"BeginNextLetDecl returned a result that is neither Ok nor Err: {beginNextResult.GetType().FullName}");
                             }
 
@@ -2287,7 +2287,7 @@ public partial class ElmSyntaxInterpreter
                                         }
 
                                     default:
-                                        throw new System.NotImplementedException(
+                                        throw new NotImplementedException(
                                             "Kont.MatchCase does not handle dispatch step variant: " +
                                             step.GetType().Name);
                                 }
@@ -2333,7 +2333,7 @@ public partial class ElmSyntaxInterpreter
 
                                 currentValue = fieldValue;
                             }
-                            catch (System.Exception ex)
+                            catch (Exception ex)
                             {
                                 return MakeRuntimeError(ex.Message, kstack);
                             }
@@ -2458,7 +2458,7 @@ public partial class ElmSyntaxInterpreter
                         }
 
                     default:
-                        throw new System.InvalidOperationException(
+                        throw new InvalidOperationException(
                             "Unknown continuation kind: " + top.GetType().FullName);
                 }
             }
@@ -2490,7 +2490,7 @@ public partial class ElmSyntaxInterpreter
     /// <see cref="ApplicationLogEntry"/> event to a caller-supplied delegate so callers
     /// can build a richer trace without re-implementing the counting logic.
     /// </summary>
-    private sealed class InvocationCounter(System.Action<ApplicationLogEntry>? onApplication) : IInvocationLogger
+    private sealed class InvocationCounter(Action<ApplicationLogEntry>? onApplication) : IInvocationLogger
     {
         /// <summary>
         /// Optional delegate invoked on every direct or function-value application. Receives
@@ -2498,7 +2498,7 @@ public partial class ElmSyntaxInterpreter
         /// would append to its log. Counter updates happen first; this delegate is fired
         /// afterwards so an exception from it leaves the counters in a consistent state.
         /// </summary>
-        private readonly System.Action<ApplicationLogEntry>? _onApplication = onApplication;
+        private readonly Action<ApplicationLogEntry>? _onApplication = onApplication;
 
         public InvocationCounter()
             : this(onApplication: null)
@@ -2563,7 +2563,7 @@ public partial class ElmSyntaxInterpreter
         PreparedExpression.Identifier functionOrValue,
         IReadOnlyList<PineValueInProcess> arguments,
         ApplicationContext env,
-        System.Func<Application, ApplicationResolution> resolveApplication,
+        Func<Application, ApplicationResolution> resolveApplication,
         Stack<Kont> kstack,
         IInvocationLogger invocationLogger)
     {
@@ -2584,7 +2584,7 @@ public partial class ElmSyntaxInterpreter
 
     private static Result<ElmInterpretationError, ApplyCallOutcome> ApplyResolvedCall(
         Application application,
-        System.Func<Application, ApplicationResolution> resolveApplication,
+        Func<Application, ApplicationResolution> resolveApplication,
         Stack<Kont> kstack,
         IInvocationLogger invocationLogger)
     {
@@ -2594,7 +2594,7 @@ public partial class ElmSyntaxInterpreter
         {
             resolution = resolveApplication(application);
         }
-        catch (System.Exception ex)
+        catch (Exception ex)
         {
             return
                 MakeRuntimeError(
@@ -2681,7 +2681,7 @@ public partial class ElmSyntaxInterpreter
                                 saturatingArgs[i],
                                 bindings);
                         }
-                        catch (System.Exception ex)
+                        catch (Exception ex)
                         {
                             return MakeRuntimeError(ex.Message, kstack);
                         }
@@ -2724,7 +2724,7 @@ public partial class ElmSyntaxInterpreter
                 }
 
             default:
-                throw new System.NotImplementedException(
+                throw new NotImplementedException(
                     "Unknown application resolution type: " + resolution.GetType().FullName);
         }
     }
@@ -2785,7 +2785,7 @@ public partial class ElmSyntaxInterpreter
 
                     currentValue = fieldValue;
                 }
-                catch (System.Exception ex)
+                catch (Exception ex)
                 {
                     return MakeRuntimeError(ex.Message, kstack);
                 }
@@ -2857,7 +2857,7 @@ public partial class ElmSyntaxInterpreter
                 var fields =
                     recordTypeConstructor.FieldNames
                     .Select((name, i) => (name.FieldName, name.FieldNameValue, combinedArgs[i]))
-                    .OrderBy(f => f.FieldName, System.StringComparer.Ordinal);
+                    .OrderBy(f => f.FieldName, StringComparer.Ordinal);
 
                 var finalValue =
                     BuildRecordValue([.. fields]);
@@ -2977,7 +2977,7 @@ public partial class ElmSyntaxInterpreter
                 break;
 
             default:
-                throw new System.NotImplementedException(
+                throw new NotImplementedException(
                     "Unknown ElmClosureInProcess.SourceRef shape: " + closure.Source.GetType().FullName);
         }
 
@@ -2997,7 +2997,7 @@ public partial class ElmSyntaxInterpreter
                     bodyBindings[boundName] = boundValue;
                 }
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 return MakeRuntimeError(ex.Message, kstack);
             }
@@ -3138,7 +3138,7 @@ public partial class ElmSyntaxInterpreter
                     }
 
                 default:
-                    throw new System.NotImplementedException(
+                    throw new NotImplementedException(
                         "Let declaration type not implemented: " + declNode.GetType().FullName);
             }
         }
@@ -3373,7 +3373,7 @@ public partial class ElmSyntaxInterpreter
                     ld.Expression,
 
                     _ =>
-                    throw new System.InvalidOperationException(
+                    throw new InvalidOperationException(
                         "Unexpected let declaration shape in non-function decl list: "
                         + nonFunctionDecls[i].GetType().FullName),
                 };
@@ -3559,7 +3559,7 @@ public partial class ElmSyntaxInterpreter
                 break;
 
             default:
-                throw new System.NotImplementedException(
+                throw new NotImplementedException(
                     "Pattern type not implemented in CollectPatternNames: "
                     + pattern.GetType().FullName);
         }
@@ -3684,7 +3684,7 @@ public partial class ElmSyntaxInterpreter
                                 }
 
                             default:
-                                throw new System.NotImplementedException(
+                                throw new NotImplementedException(
                                     "CollectFreeNames does not handle case dispatch step variant: " +
                                     step.GetType().Name);
                         }
@@ -3764,7 +3764,7 @@ public partial class ElmSyntaxInterpreter
                 // references — both of which are loud failure modes preferable to
                 // silent miscompilation, and would be straightforward to fix by
                 // extending this switch.
-                throw new System.NotImplementedException(
+                throw new NotImplementedException(
                     "Expression type not implemented in CollectFreeNames: "
                     + expression.GetType().FullName);
         }
@@ -3824,7 +3824,7 @@ public partial class ElmSyntaxInterpreter
                 "Continuation depth",
 
                 _ =>
-                throw new System.NotImplementedException(
+                throw new NotImplementedException(
                     nameof(MakeQuotaExhaustedError) +
                     " does not handle evaluation quota kind: " +
                     quotaKind),
@@ -4009,7 +4009,7 @@ public partial class ElmSyntaxInterpreter
                 }
 
             default:
-                throw new System.NotImplementedException(
+                throw new NotImplementedException(
                     "Matching pattern of type " + pattern.GetType().FullName + " is not implemented.");
         }
     }
@@ -4090,7 +4090,7 @@ public partial class ElmSyntaxInterpreter
 
                         if (fieldValue is null)
                         {
-                            throw new System.InvalidOperationException(
+                            throw new InvalidOperationException(
                                 "Record pattern references field '"
                                 + field.FieldName
                                 + "' which is not present on the value.");
@@ -4116,7 +4116,7 @@ public partial class ElmSyntaxInterpreter
 
                     if (!PineValueInProcess.AreEqual(tagNameItem, tagEncoded))
                     {
-                        throw new System.InvalidOperationException(
+                        throw new InvalidOperationException(
                             "Cannot bind named pattern '"
                             + namedPattern.Name.Name
                             + "' to value of type "
@@ -4132,7 +4132,7 @@ public partial class ElmSyntaxInterpreter
                 }
 
             default:
-                throw new System.NotImplementedException(
+                throw new NotImplementedException(
                     "Binding pattern of type " + pattern.GetType().FullName + " is not implemented.");
         }
     }
@@ -4151,8 +4151,8 @@ public partial class ElmSyntaxInterpreter
     /// <summary>
     /// Builds an application resolver that dispatches by qualified function name and lets each registered delegate decline handling by returning null.
     /// </summary>
-    public static System.Func<Application, ApplicationResolution?> ApplicationResolver(
-        IReadOnlyDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>> functionResolvers)
+    public static Func<Application, ApplicationResolution?> ApplicationResolver(
+        IReadOnlyDictionary<DeclQualifiedName, Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>> functionResolvers)
     {
         ApplicationResolution? TryResolve(Application application)
         {
@@ -4204,7 +4204,7 @@ public partial class ElmSyntaxInterpreter
         {
             // Multiple arguments are illegal.
 
-            throw new System.ArgumentException(
+            throw new ArgumentException(
                 "Unexpected number of arguments for Pine builtin/kernel function application. Function '" +
                 application.FunctionName.FullName + "' received " + application.Arguments.Count + " arguments.");
         }
@@ -4491,7 +4491,7 @@ public partial class ElmSyntaxInterpreter
             var renderedValue =
                 ElmValue.RenderAsElmExpression(ToElm(recordValue)).expressionString;
 
-            throw new System.Exception(
+            throw new Exception(
                 ElmRuntimeErrorMessages.RecordAccessOnNonRecord + "\nValue: "
                 + renderedValue);
         }
@@ -4517,7 +4517,7 @@ public partial class ElmSyntaxInterpreter
             }
         }
 
-        throw new System.Exception(
+        throw new Exception(
             ElmRuntimeErrorMessages.RecordFieldNotFound(fieldName));
     }
 
@@ -4538,9 +4538,9 @@ public partial class ElmSyntaxInterpreter
     /// <summary>
     /// Default resolver for applications of named functions.
     /// </summary>
-    public static System.Func<Application, ApplicationResolution> BuildResolvers(
+    public static Func<Application, ApplicationResolution> BuildResolvers(
         IReadOnlyDictionary<DeclQualifiedName, Concrete.Declaration> declarations,
-        IReadOnlyDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>? customFunctionResolvers = null)
+        IReadOnlyDictionary<DeclQualifiedName, Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>? customFunctionResolvers = null)
     {
         return BuildResolvers(GetOrConvertDeclarations(declarations), customFunctionResolvers);
     }
@@ -4548,7 +4548,7 @@ public partial class ElmSyntaxInterpreter
     /// <summary>
     /// Default resolver for applications of named functions.
     /// </summary>
-    public static System.Func<Application, ApplicationResolution> BuildResolvers(
+    public static Func<Application, ApplicationResolution> BuildResolvers(
         IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> declarations)
     {
         var declarationSnapshot =
@@ -4566,16 +4566,16 @@ public partial class ElmSyntaxInterpreter
     /// <summary>
     /// Default resolver for applications of named functions.
     /// </summary>
-    public static System.Func<Application, ApplicationResolution> BuildResolvers(
+    public static Func<Application, ApplicationResolution> BuildResolvers(
         IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> declarations,
-        IReadOnlyDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>? customFunctionResolvers)
+        IReadOnlyDictionary<DeclQualifiedName, Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>? customFunctionResolvers)
     {
         var resolverIndex = GetDeclarationResolverIndex(declarations);
 
         return
             CombineResolvers(
                 [
-                ApplicationResolver(customFunctionResolvers ?? ImmutableDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>.Empty),
+                ApplicationResolver(customFunctionResolvers ?? ImmutableDictionary<DeclQualifiedName, Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>.Empty),
                 app =>
                 customFunctionResolvers?.ContainsKey(app.FunctionName) == true ? ResolveNativeFunction(app) : null,
                 DebugResolver,
@@ -4588,8 +4588,8 @@ public partial class ElmSyntaxInterpreter
     /// Combines multiple fallible resolvers into a single total resolver: each candidate is tried in order;
     /// the first non-null result wins. Throws if no candidate matches.
     /// </summary>
-    public static System.Func<Application, ApplicationResolution> CombineResolvers(
-        IReadOnlyList<System.Func<Application, ApplicationResolution?>> resolvers)
+    public static Func<Application, ApplicationResolution> CombineResolvers(
+        IReadOnlyList<Func<Application, ApplicationResolution?>> resolvers)
     {
         return
             application =>
@@ -4602,7 +4602,7 @@ public partial class ElmSyntaxInterpreter
                         return resolution;
                 }
 
-                throw new System.InvalidOperationException(
+                throw new InvalidOperationException(
                     "No resolver matched application of '" + application.FunctionName.FullName + "'.");
             };
     }

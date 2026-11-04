@@ -44,7 +44,7 @@ public class ElmCompilerDiagnosticsProviderTests
             (await provider.GetDiagnosticsAsync(
                 VirtualWorkspace.DocumentUri("src", "Main.elm"),
                 CancellationToken.None))
-            .Extract(error => throw new System.Exception(error.Message));
+            .Extract(error => throw new Exception(error.Message));
 
         var main =
             diagnostics.Should().ContainSingle(
@@ -121,7 +121,7 @@ public class ElmCompilerDiagnosticsProviderTests
             (await provider.GetDiagnosticsAsync(
                 VirtualWorkspace.DocumentUri("src", "Main.elm"),
                 CancellationToken.None))
-            .Extract(error => throw new System.Exception(error.Message));
+            .Extract(error => throw new Exception(error.Message));
 
         result.Should().ContainSingle().Which.Diagnostics.Should().BeEmpty();
     }
@@ -173,7 +173,7 @@ public class ElmCompilerDiagnosticsProviderTests
             (await provider.GetDiagnosticsAsync(
                 VirtualWorkspace.DocumentUri("src", "CompileElmApp.elm"),
                 CancellationToken.None))
-            .Extract(error => throw new System.Exception(error.Message));
+            .Extract(error => throw new Exception(error.Message));
 
         result.Should().HaveCount(2);
         result.Should().OnlyContain(document => document.Diagnostics.Count == 0);
@@ -403,12 +403,12 @@ public class ElmCompilerDiagnosticsProviderTests
             (await provider.GetDiagnosticsAsync(
                 VirtualWorkspace.DocumentUri("src", "Main.elm"),
                 CancellationToken.None))
-            .Extract(error => throw new System.Exception(error.Message));
+            .Extract(error => throw new Exception(error.Message));
 
         diagnostics.Should().ContainSingle().Which.Diagnostics.Should().BeEmpty();
 
         ElmCompiler.QueryDeclaration(preparedBuild!, DeclQualifiedName.Create(["Main"], "encode"))
-            .Extract(error => throw new System.Exception(error))
+            .Extract(error => throw new Exception(error))
             .Diagnostics.Should().BeEmpty();
     }
 
@@ -452,12 +452,12 @@ public class ElmCompilerDiagnosticsProviderTests
             (await provider.GetDiagnosticsAsync(
                 VirtualWorkspace.DocumentUri("src", "Main.elm"),
                 CancellationToken.None))
-            .Extract(error => throw new System.Exception(error.Message));
+            .Extract(error => throw new Exception(error.Message));
 
         diagnostics.Should().ContainSingle().Which.Diagnostics.Should().BeEmpty();
 
         ElmCompiler.QueryDeclaration(preparedBuild!, DeclQualifiedName.Create(moduleName.Split('.'), "value"))
-            .Extract(error => throw new System.Exception(error))
+            .Extract(error => throw new Exception(error))
             .Diagnostics.Should().BeEmpty();
     }
 
@@ -487,7 +487,7 @@ public class ElmCompilerDiagnosticsProviderTests
             (await provider.GetDiagnosticsAsync(
                 VirtualWorkspace.DocumentUri("src", "Main.elm"),
                 CancellationToken.None))
-            .Extract(error => throw new System.Exception(error.Message));
+            .Extract(error => throw new Exception(error.Message));
 
         result.Should().HaveCount(2);
 
@@ -530,7 +530,7 @@ public class ElmCompilerDiagnosticsProviderTests
 
         var before =
             (await provider.GetDiagnosticsAsync(otherUri, CancellationToken.None))
-            .Extract(error => throw new System.Exception(error.Message));
+            .Extract(error => throw new Exception(error.Message));
 
         before.Should().Contain(document => document.DocumentUri == otherUri && document.Diagnostics.Count > 0);
 
@@ -540,7 +540,7 @@ public class ElmCompilerDiagnosticsProviderTests
             (await provider.GetDiagnosticsAsync(
                 VirtualWorkspace.DocumentUri("src", "Main.elm"),
                 CancellationToken.None))
-            .Extract(error => throw new System.Exception(error.Message));
+            .Extract(error => throw new Exception(error.Message));
 
         after.Should().Contain(document => document.DocumentUri == otherUri && document.Diagnostics.Count == 0);
 
@@ -549,7 +549,7 @@ public class ElmCompilerDiagnosticsProviderTests
 
         var unsaved =
             (await provider.GetDiagnosticsAsync(newUri, CancellationToken.None))
-            .Extract(error => throw new System.Exception(error.Message));
+            .Extract(error => throw new Exception(error.Message));
 
         unsaved.Should().Contain(document => document.DocumentUri == newUri && document.Diagnostics.Count > 0);
     }

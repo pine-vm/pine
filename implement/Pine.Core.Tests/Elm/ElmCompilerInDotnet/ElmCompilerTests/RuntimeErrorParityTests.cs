@@ -144,7 +144,7 @@ public class RuntimeErrorParityTests
                     new Expression.Eval(Expression.LitralInst(function), Expression.EnvironmentInstance),
                     IntegerEncoding.EncodeSignedInteger(3))
                 :
-                Core.CodeAnalysis.ElmInteractiveEnvironment.ApplyFunction(
+                ElmInteractiveEnvironment.ApplyFunction(
                     vm,
                     record,
                     [

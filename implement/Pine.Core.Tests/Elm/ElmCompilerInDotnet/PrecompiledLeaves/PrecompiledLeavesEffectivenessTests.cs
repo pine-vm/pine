@@ -104,9 +104,9 @@ public class PrecompiledLeavesEffectivenessTests
     /// Builds an intermediate VM with all optimizations disabled (for repeatable
     /// profiling) and the supplied precompiled-leaves dictionary.
     /// </summary>
-    private static Pine.Core.Runtime.IntermediateVM.PineVM CreateVM(
+    private static Core.Runtime.IntermediateVM.PineVM CreateVM(
         IReadOnlyDictionary<PineValue, PrecompiledLeaf> precompiledLeaves) =>
-        Pine.Core.Runtime.IntermediateVM.PineVM.CreateCustom(
+        Core.Runtime.IntermediateVM.PineVM.CreateCustom(
             evalCache: null,
             evaluationConfigDefault: null,
             reportFunctionApplication: _ => { },

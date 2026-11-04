@@ -54,10 +54,10 @@ internal sealed record RunCompilation(
 
         var functions =
             syntax.Declarations
-            .Where(node => node.Value is Core.Elm.Syntax.Concrete.Declaration.FunctionDeclaration)
+            .Where(node => node.Value is Declaration.FunctionDeclaration)
             .Select(
                 node =>
-                (node.Range, Function: ((Core.Elm.Syntax.Concrete.Declaration.FunctionDeclaration)node.Value).Function))
+                (node.Range, Function: ((Declaration.FunctionDeclaration)node.Value).Function))
             .ToArray();
 
         var declaration = source.Declaration;
@@ -162,13 +162,13 @@ internal sealed record RunCompilation(
                 syntax.Imports.Select(node => node.Value)
                 .FirstOrDefault(item => string.Join(".", item.ModuleName.Value) == sourceName);
 
-            if (import?.ExposingList?.ExposingList.Value is Core.Elm.Syntax.Concrete.Exposing.All ||
-                import?.ExposingList?.ExposingList.Value is Core.Elm.Syntax.Concrete.Exposing.Explicit exposed &&
+            if (import?.ExposingList?.ExposingList.Value is Exposing.All ||
+                import?.ExposingList?.ExposingList.Value is Exposing.Explicit exposed &&
                 exposed.Nodes.Any(
                     node =>
-                    node.Value is Core.Elm.Syntax.Concrete.TopLevelExpose.TypeOrAliasExpose type &&
+                    node.Value is TopLevelExpose.TypeOrAliasExpose type &&
                     type.Name == choice.TypeName ||
-                    node.Value is Core.Elm.Syntax.Concrete.TopLevelExpose.TypeExpose openType &&
+                    node.Value is TopLevelExpose.TypeExpose openType &&
                     openType.ExposedType.Name == choice.TypeName))
             {
                 return choice.TypeName;

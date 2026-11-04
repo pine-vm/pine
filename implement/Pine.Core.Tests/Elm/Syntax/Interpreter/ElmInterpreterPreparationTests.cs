@@ -283,7 +283,7 @@ public class ElmInterpreterPreparationTests
         Evaluate(empty, "42").Should().Be("42");
 
         var syntax =
-            Pine.Core.Elm.Syntax.ElmSyntaxParser.ParseModuleText("module Custom exposing (..)\nvalue = 42")
+            Core.Elm.Syntax.ElmSyntaxParser.ParseModuleText("module Custom exposing (..)\nvalue = 42")
             .Extract(error => throw new Exception(error.ToString()));
 
         var environment = ElmInterpreterEnvironment.Create([syntax]).Extract(error => throw new Exception(error));

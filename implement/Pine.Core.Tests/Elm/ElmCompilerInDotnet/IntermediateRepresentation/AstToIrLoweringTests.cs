@@ -80,7 +80,7 @@ public class AstToIrLoweringTests
 
     [Theory]
     [MemberData(nameof(FromCanonicalSyntaxTests.Expressions), MemberType = typeof(FromCanonicalSyntaxTests))]
-    public void AST_to_IR_lowering_handles_every_expression_variant(Core.Elm.Syntax.Abstract.Expression expression) =>
+    public void AST_to_IR_lowering_handles_every_expression_variant(Expression expression) =>
         Lower(expression, new TypeAnnotation.GenericType("a")).Should().NotBeNull();
 
     public static IEnumerable<object[]> ExactFloatFractions()
@@ -107,7 +107,7 @@ public class AstToIrLoweringTests
     {
         var body =
             Lower(
-                new Core.Elm.Syntax.Abstract.Expression.FloatLiteral(numerator, denominator),
+                new Expression.FloatLiteral(numerator, denominator),
                 new TypeAnnotation.Typed(["Basics"], "Float", []));
 
         body.Should().BeOfType<IR.Expression.LiteralValue>().Which.Value.Should().Be(
@@ -167,16 +167,16 @@ public class AstToIrLoweringTests
         var left = Expression.Identifier.Create([], "left");
         var right = Expression.Identifier.Create([], "right");
 
-        Core.Elm.Syntax.Abstract.Expression[] expressions =
+        Expression[] expressions =
             [
-            new Core.Elm.Syntax.Abstract.Expression.OperatorApplication(operation, InfixDirection.Left, left, right),
-            new Core.Elm.Syntax.Abstract.Expression.Application(
-                new Core.Elm.Syntax.Abstract.Expression.PrefixOperator(operation),
+            new Expression.OperatorApplication(operation, InfixDirection.Left, left, right),
+            new Expression.Application(
+                new Expression.PrefixOperator(operation),
                 [
                 left,
                 right
                 ]),
-            new Core.Elm.Syntax.Abstract.Expression.Application(
+            new Expression.Application(
                 Expression.Identifier.Create(["Basics"], functionName),
                 [
                 left,
@@ -204,26 +204,26 @@ public class AstToIrLoweringTests
         TypeAnnotation type =
             typeName is "appendable"
             ?
-            new Pine.Core.Elm.Syntax.Abstract.TypeAnnotation.GenericType(typeName)
+            new AST.TypeAnnotation.GenericType(typeName)
             :
-            new Pine.Core.Elm.Syntax.Abstract.TypeAnnotation.Typed(
+            new AST.TypeAnnotation.Typed(
                 [typeName],
                 typeName,
-                typeName is "List" ? [new Pine.Core.Elm.Syntax.Abstract.TypeAnnotation.GenericType("a")] : []);
+                typeName is "List" ? [new AST.TypeAnnotation.GenericType("a")] : []);
 
         var left = Expression.Identifier.Create([], "left");
         var right = Expression.Identifier.Create([], "right");
 
-        Core.Elm.Syntax.Abstract.Expression[] expressions =
+        Expression[] expressions =
             [
-            new Core.Elm.Syntax.Abstract.Expression.OperatorApplication("++", InfixDirection.Left, left, right),
-            new Core.Elm.Syntax.Abstract.Expression.Application(
-                new Core.Elm.Syntax.Abstract.Expression.PrefixOperator("++"),
+            new Expression.OperatorApplication("++", InfixDirection.Left, left, right),
+            new Expression.Application(
+                new Expression.PrefixOperator("++"),
                 [
                 left,
                 right
                 ]),
-            new Core.Elm.Syntax.Abstract.Expression.Application(
+            new Expression.Application(
                 Expression.Identifier.Create(["Basics"], "append"),
                 [
                 left,
@@ -249,12 +249,12 @@ public class AstToIrLoweringTests
         TypeAnnotation type =
             typeName is "number"
             ?
-            new Pine.Core.Elm.Syntax.Abstract.TypeAnnotation.GenericType(typeName)
+            new AST.TypeAnnotation.GenericType(typeName)
             :
-            new Pine.Core.Elm.Syntax.Abstract.TypeAnnotation.Typed(["Basics"], typeName, []);
+            new AST.TypeAnnotation.Typed(["Basics"], typeName, []);
 
         var expression =
-            new Core.Elm.Syntax.Abstract.Expression.Application(
+            new Expression.Application(
                 Expression.Identifier.Create(["Basics"], "add"),
                 [Expression.Identifier.Create([], "left"), Expression.Identifier.Create([], "right")]);
 
@@ -427,17 +427,17 @@ public class AstToIrLoweringTests
             .Should().Be(new ElmValue.ElmList([ElmValue.Integer(1), ElmValue.Integer(2)]));
     }
 
-    private static IR.Expression Lower(Core.Elm.Syntax.Abstract.Expression expression, TypeAnnotation type)
+    private static IR.Expression Lower(Expression expression, TypeAnnotation type)
     {
         var declaration =
             new Declaration.FunctionDeclaration(
-                new AST.FunctionStruct(
-                    new AST.Signature(
+                new FunctionStruct(
+                    new Signature(
                         "select",
                         new TypeAnnotation.FunctionTypeAnnotation(
                             type,
                             new TypeAnnotation.FunctionTypeAnnotation(type, type))),
-                    new AST.FunctionImplementation(
+                    new FunctionImplementation(
                         "select",
                         [
                         new Pattern.VarPattern("left"),

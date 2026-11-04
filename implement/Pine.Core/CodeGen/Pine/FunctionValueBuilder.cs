@@ -111,7 +111,7 @@ public static class FunctionValueBuilder
 
     /// <summary>
     /// Builds a function value as a simple template that can be evaluated directly via
-    /// <see cref="Core.Runtime.IntermediateVM.PineVM.DirectEvalIfSimpleTemplate(Expression, Internal.PineValueInProcess)"/>
+    /// <see cref="Runtime.IntermediateVM.PineVM.DirectEvalIfSimpleTemplate(Expression, Internal.PineValueInProcess)"/>
     /// meaning the intermediate states reached via partial application contain no
     /// builtin/kernel expressions and no eval expressions.
     /// </summary>

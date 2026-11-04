@@ -783,8 +783,8 @@ public class ElmTestDiscoveryTests
 
         var interpret =
             () => program.Invoke(
-                Pine.Core.CodeAnalysis.DeclQualifiedName.FromString("Loop.loop"),
-                [Pine.Core.Internal.PineValueInProcess.Create(PineValue.EmptyList)],
+                Core.CodeAnalysis.DeclQualifiedName.FromString("Loop.loop"),
+                [Core.Internal.PineValueInProcess.Create(PineValue.EmptyList)],
                 ElmSyntaxInterpreter.EvaluationConfig.Default with { CancellationToken = new CancellationToken(true) });
 
         interpret.Should().Throw<OperationCanceledException>();

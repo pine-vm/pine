@@ -146,7 +146,7 @@ public class Pine2026ModuleTests
                 [.. arguments.Select(ElmValueInterop.PineValueEncodedAsInElmCompiler)]);
 
         return
-            ElmValueInterop.ParseElmValueAsCommonResult<Result<string, PineValue>>(
+            ElmValueInterop.ParseElmValueAsCommonResult(
                 result,
                 err => err is ElmValue.ElmString text
                 ?

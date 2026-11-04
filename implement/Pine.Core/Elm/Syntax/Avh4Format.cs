@@ -1881,7 +1881,7 @@ public class Avh4Format
                     originalIncompleteDeclarations,
                     firstDeclaration?.Range.Start.Row);
 
-            IReadOnlyList<Node<Import>> originalLeadingImports = normalizedImports;
+            var originalLeadingImports = normalizedImports;
 
             if (firstDeclaration is not null)
             {
