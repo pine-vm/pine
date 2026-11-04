@@ -250,7 +250,7 @@ public static class TestProfileCommand
             Write($"Phase: {summary.Phase}; context: {summary.Context}", s_mutedStyle);
 
             Write(
-                $"Elapsed: {CommandLineInterface.FormatIntegerForDisplay((long)Math.Round(summary.ElapsedMilliseconds))} ms; " +
+                $"Elapsed: {CommandLineInterface.FormatDuration(TimeSpan.FromMilliseconds(summary.ElapsedMilliseconds))}; " +
                 $"invocations: {CommandLineInterface.FormatIntegerForDisplay(summary.Counters.InvocationCount)}; " +
                 $"loops: {CommandLineInterface.FormatIntegerForDisplay(summary.Counters.LoopIterationCount)}; " +
                 $"instructions: {CommandLineInterface.FormatIntegerForDisplay(summary.Counters.InstructionCount)}");

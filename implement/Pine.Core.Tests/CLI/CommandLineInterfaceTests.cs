@@ -1,11 +1,41 @@
 using AwesomeAssertions;
 using Pine.Core.CLI;
+using System;
+using System.Globalization;
 using Xunit;
 
 namespace Pine.Core.Tests.CLI;
 
 public class CommandLineInterfaceTests
 {
+    [Theory]
+    [InlineData(0, "0 ms")]
+    [InlineData(0.1, "0 ms")]
+    [InlineData(12.6, "13 ms")]
+    [InlineData(999, "999 ms")]
+    [InlineData(999.9, "1000 ms")]
+    [InlineData(1000, "1.00 s")]
+    [InlineData(1001, "1.00 s")]
+    [InlineData(1234, "1.23 s")]
+    [InlineData(12345, "12.35 s")]
+    [InlineData(60000, "60.00 s")]
+    public void Format_duration_selects_units_before_rounding_and_is_culture_invariant(
+        double milliseconds,
+        string expected)
+    {
+        var previousCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fr-FR");
+            CommandLineInterface.FormatDuration(TimeSpan.FromMilliseconds(milliseconds)).Should().Be(expected);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
+    }
+
     [Theory]
     [InlineData(0, "0")]
     [InlineData(999, "999")]

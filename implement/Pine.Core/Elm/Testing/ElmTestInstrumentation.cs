@@ -278,7 +278,7 @@ public sealed class ElmTestInstrumentation : IDisposable
     private readonly Dictionary<string, EvalWorkCountersByOrigin> _completedByPhase =
         new(StringComparer.Ordinal)
         {
-            ["preparation"] = default,
+            ["discovery"] = default,
             ["execution"] = default
         };
 

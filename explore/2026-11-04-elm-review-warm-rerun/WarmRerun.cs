@@ -263,9 +263,9 @@ internal static class WarmRerun
 
             var coreSession = session ?? throw new InvalidOperationException("No core cache session.");
             var before = coreSession.GetCacheStatisticsSnapshot();
-            var (build, roots) = Measure("load-resolve-parse", LoadBuild);
+            var (build, roots) = Measure("source-resolution", LoadBuild);
             var discovery =
-                Measure("discover", () =>
+                Measure("discovery", () =>
                     ElmTestDiscovery.DiscoverTests(build, roots, cancellation.Token, settings, coreSession.DiscoveryCaches));
             var selected =
                 discovery.Items.Where(item =>
@@ -276,13 +276,13 @@ internal static class WarmRerun
             if (selected.Length != 79)
                 throw new InvalidOperationException($"Expected 79 selected tests, got {selected.Length}.");
 
-            var entries = Measure("compile-selected-closures", () =>
+            var entries = Measure("runner-compilation", () =>
             {
                 using var invocation = coreSession.BeginCompilationInvocation();
                 return discovery.PrepareExecution(selected.Select(item => item.Id),
                     cancellationToken: cancellation.Token, compilationCaches: coreSession.CompilationCaches);
             });
-            var completed = Measure("execute", () =>
+            var completed = Measure("execution", () =>
                 selected.Select(item =>
                     ElmTestRunner.ExecuteDiscoveredTest(
                         item, entries[item.Id], coreSession, cancellation.Token)).ToArray());
@@ -306,8 +306,9 @@ internal static class WarmRerun
                 Utc = DateTime.UtcNow,
                 WallMs = totalWatch.Elapsed.TotalMilliseconds,
                 Phases = phases,
-                InterpreterPreparationMs = discovery.InterpreterPreparationDuration.TotalMilliseconds,
-                DiscoveryMs = discovery.DiscoveryDuration.TotalMilliseconds,
+                DeclarationPreparationMs = discovery.DeclarationPreparationDuration.TotalMilliseconds,
+                TestConstructionMs = discovery.TestConstructionDuration.TotalMilliseconds,
+                InventoryProjectionMs = discovery.InventoryProjectionDuration.TotalMilliseconds,
                 Roots = roots.Length,
                 Modules = build.CompilerModuleSyntax.Count,
                 Items = discovery.Items.Length,

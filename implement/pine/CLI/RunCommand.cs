@@ -87,7 +87,7 @@ public static class RunCommand
         var colorOption = FormatCommandShared.CreateColorOption();
 
         var durationsOption =
-            new Option<bool>("--report-durations") { Description = "Report compilation and execution durations on stderr." };
+            new Option<bool>("--report-durations") { Description = "Report source loading, resolution/compilation, and execution durations on stderr." };
 
         var timeoutOption =
             new Option<double?>("--timeout") { Description = "Cooperative whole-command timeout; default unit is seconds." };
@@ -185,7 +185,10 @@ public static class RunCommand
         using var consoleCancellation = Elm.TestBudgetOptions.RegisterCancellation(tracker);
         var token = tracker.CancellationToken;
         var stopwatch = Stopwatch.StartNew();
+        var sourceLoadingDuration = TimeSpan.Zero;
         var compilationDuration = TimeSpan.Zero;
+        var sourceLoadingStarted = false;
+        var sourceLoaded = false;
         var executionStarted = false;
         var watchStarted = false;
 
@@ -228,11 +231,21 @@ public static class RunCommand
 
             RunCompilation Compile()
             {
-                using var scope = tracker.EnterScope("compilation", entryPoint);
-                programSource = sourceLoader.Read(entryPoint, inputDirectory, token);
+                stopwatch.Restart();
+                sourceLoadingStarted = true;
 
-                if (selectedDeclaration is not null)
-                    programSource = programSource with { Declaration = selectedDeclaration, Line = null };
+                using (tracker.EnterScope("source-loading", entryPoint))
+                {
+                    programSource = sourceLoader.Read(entryPoint, inputDirectory, token);
+
+                    if (selectedDeclaration is not null)
+                        programSource = programSource with { Declaration = selectedDeclaration, Line = null };
+
+                    sourceLoadingDuration = stopwatch.Elapsed;
+                    sourceLoaded = true;
+                }
+
+                using var scope = tracker.EnterScope("source-resolution-and-compilation", entryPoint);
 
                 var result =
                     RunCompilation.Compile(
@@ -249,7 +262,7 @@ public static class RunCommand
                             batchOnly,
                             token)));
 
-                compilationDuration = stopwatch.Elapsed;
+                compilationDuration = stopwatch.Elapsed - sourceLoadingDuration;
                 executionStarted = true;
                 return result;
             }
@@ -404,7 +417,9 @@ public static class RunCommand
                                 }
 
                                 stopwatch.Restart();
+                                sourceLoadingDuration = TimeSpan.Zero;
                                 compilationDuration = TimeSpan.Zero;
+                                sourceLoaded = false;
                                 executionStarted = false;
                             }
 
@@ -632,23 +647,26 @@ public static class RunCommand
 
         void WriteDurations()
         {
-            if (reportDurations)
+            if (reportDurations && sourceLoadingStarted)
             {
                 error.WriteLine(
-                    "compilation: " +
-                    (executionStarted ? compilationDuration : stopwatch.Elapsed).TotalSeconds.ToString(
-                        "F3",
-                        System.Globalization.CultureInfo.InvariantCulture) +
-                    " s");
+                    "source loading: " +
+                    CommandLineInterface.FormatDuration(sourceLoaded ? sourceLoadingDuration : stopwatch.Elapsed));
+
+                if (sourceLoaded)
+                {
+                    error.WriteLine(
+                        "dependency resolution and compilation: " +
+                        CommandLineInterface.FormatDuration(
+                            executionStarted ? compilationDuration : stopwatch.Elapsed - sourceLoadingDuration));
+                }
 
                 if (executionStarted)
                 {
                     error.WriteLine(
                         "execution: " +
-                        (stopwatch.Elapsed - compilationDuration).TotalSeconds.ToString(
-                            "F3",
-                            System.Globalization.CultureInfo.InvariantCulture) +
-                        " s");
+                        CommandLineInterface.FormatDuration(
+                            stopwatch.Elapsed - sourceLoadingDuration - compilationDuration));
                 }
             }
         }

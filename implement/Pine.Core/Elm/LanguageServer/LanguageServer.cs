@@ -697,7 +697,7 @@ public partial class LanguageServer(
             " Elm modules and " +
             aggregateElmJsonFiles.Count +
             " elm.json files in " +
-            CommandLineInterface.FormatIntegerForDisplay((int)aggregateClock.Elapsed.TotalMilliseconds) + " ms");
+            CommandLineInterface.FormatDuration(aggregateClock.Elapsed));
 
         LoadDirectDependenciesFromElmJsonFiles(languageServiceState);
 
@@ -1697,7 +1697,7 @@ public partial class LanguageServer(
             Log(
                 "Loaded package: " + dependency.Key.PackageName + " " + dependency.Key.VersionTag +
                 ": Added " + packageContent.Modules.Count + " Elm modules in " +
-                CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) + " ms");
+                CommandLineInterface.FormatDuration(clock.Elapsed));
         }
     }
 
@@ -1736,8 +1736,8 @@ public partial class LanguageServer(
             Log(
                 "Formatting request " + requestSequence + " failed while capturing source for " +
                 textDocumentUri + " after " +
-                CommandLineInterface.FormatIntegerForDisplay(totalClock.ElapsedMilliseconds) +
-                " ms: " + exception);
+                CommandLineInterface.FormatDuration(totalClock.Elapsed) +
+                ": " + exception);
 
             return [];
         }
@@ -1747,12 +1747,12 @@ public partial class LanguageServer(
             Log(
                 "Formatting request " + requestSequence + " found no source for " +
                 textDocumentUri + " after " +
-                CommandLineInterface.FormatIntegerForDisplay(totalClock.ElapsedMilliseconds) +
-                " ms; document-state lock wait: " +
-                FormatDurationMilliseconds(documentStateLockWaitMilliseconds) +
-                " ms; workspace read: " +
-                FormatDurationMilliseconds(workspaceReadMilliseconds) +
-                " ms; returning no edits");
+                CommandLineInterface.FormatDuration(totalClock.Elapsed) +
+                "; document-state lock wait: " +
+                FormatDurationFromMilliseconds(documentStateLockWaitMilliseconds) +
+                "; workspace read: " +
+                FormatDurationFromMilliseconds(workspaceReadMilliseconds) +
+                "; returning no edits");
 
             return [];
         }
@@ -1762,12 +1762,12 @@ public partial class LanguageServer(
         Log(
             "Formatting request " + requestSequence + " captured " + snapshot.SourceOrigin +
             " source for " + textDocumentUri + " after " +
-            CommandLineInterface.FormatIntegerForDisplay(totalClock.ElapsedMilliseconds) +
-            " ms; document-state lock wait: " +
-            FormatDurationMilliseconds(documentStateLockWaitMilliseconds) +
-            " ms; workspace read: " +
-            FormatDurationMilliseconds(workspaceReadMilliseconds) +
-            " ms; client version: " + FormatOptionalInteger(snapshot.ClientVersion) +
+            CommandLineInterface.FormatDuration(totalClock.Elapsed) +
+            "; document-state lock wait: " +
+            FormatDurationFromMilliseconds(documentStateLockWaitMilliseconds) +
+            "; workspace read: " +
+            FormatDurationFromMilliseconds(workspaceReadMilliseconds) +
+            "; client version: " + FormatOptionalInteger(snapshot.ClientVersion) +
             "; document generation: " + snapshot.DocumentGeneration +
             "; pending document update: " + FormatOptionalInteger(snapshot.PendingUpdateSequence) +
             "; language-service version: " + FormatOptionalInteger(snapshot.LanguageServiceVersion) +
@@ -2168,8 +2168,8 @@ public partial class LanguageServer(
     private static string FormatOptionalInteger(long? value) =>
         value?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none";
 
-    private static string FormatDurationMilliseconds(double value) =>
-        value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+    private static string FormatDurationFromMilliseconds(double value) =>
+        CommandLineInterface.FormatDuration(System.TimeSpan.FromMilliseconds(value));
 
     /// <summary>
     /// Provides hover information for a text document position.

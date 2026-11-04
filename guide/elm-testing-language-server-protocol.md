@@ -322,7 +322,9 @@ does not check out historical sources. Protocol replay avoids that ambiguity.
 ```
 
 Sequence numbers start at 1 and strictly increase within a run. Phases are
-`waiting`, `discovery`, `preparation`, `running`. Test states are `queued`,
+`waiting`, `discovery`, `runner-compilation`, `running`. `runner-compilation` covers
+selected callback/capture export and compilation to Pine, including reseeding when settings change;
+it replaces the former, less specific `preparation` phase label. Test states are `queued`,
 `started`, `passed`, `failed`, `errored`, `skipped`; terminal test events contain
 `result`. Nonexecuting selections need not emit `started`. An accepted run ends
 with an `end` event whose state matches its terminal status.

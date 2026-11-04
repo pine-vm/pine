@@ -220,7 +220,7 @@ public static class TestCommand
             new Option<bool>("--report-durations")
             {
                 Description =
-                "Show compilation, preparation, and execution durations, including summed VM-call timings."
+                "Show source resolution, discovery, runner compilation, and execution durations."
             };
 
         var seedOption =
@@ -979,18 +979,9 @@ public static class TestCommand
                 completed.Tests,
                 includeTestDetails: true,
                 duration: completed.Duration,
-                compilationDuration:
-                reportDurations
-                ?
-                completed.CompilationDuration
-                :
-                null,
+                phaseDurations: reportDurations ? completed.Durations : null,
                 includeRunningMessage: false,
-                incompleteReason: completed.IncompleteReason,
-                preparationDuration: reportDurations ? completed.PreparationDuration : null,
-                executionDuration: reportDurations ? completed.ExecutionDuration : null,
-                preparationVmDuration: reportDurations ? completed.PreparationVmDuration : null,
-                executionVmDuration: reportDurations ? completed.ExecutionVmDuration : null);
+                incompleteReason: completed.IncompleteReason);
 
         if (resolvedColorMode is CommandLineColorMode.Never)
         {
@@ -1051,18 +1042,23 @@ public static class TestCommand
         if (summary.Phase is "execution")
             writer.WriteLine("Elm test: " + summary.Context);
 
-        else if (summary.Phase is "preparation")
+        else if (summary.Phase is "discovery")
         {
-            writer.WriteLine("Elm test preparation: " + summary.Context);
+            writer.WriteLine("Elm test discovery: " + summary.Context);
 
             writer.WriteLine(
-                "The individual test has not been constructed yet; this identifies its source declaration.");
+                "Discovery and selection have not completed; assertion execution has not started.");
         }
         else
         {
             writer.WriteLine(
                 "Elm test phase: " + summary.Phase + "; context: " +
-                (summary.Phase is "compilation" && ElmTestProjectSource.IsRemote(source) ? source : summary.Context));
+                (summary.Phase is "source-resolution" or "environment-compilation" &&
+                ElmTestProjectSource.IsRemote(source)
+                ?
+                source
+                :
+                summary.Context));
         }
 
         writer.WriteLine(
@@ -1098,7 +1094,7 @@ public static class TestCommand
 
         writer.WriteLine("  " + command);
 
-        if (summary.Phase is "preparation")
+        if (summary.Phase is "discovery")
         {
             writer.WriteLine(
                 "All test declarations are prepared before filtering; --filter cannot guarantee bypassing preparation.");

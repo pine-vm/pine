@@ -49,6 +49,13 @@ more distinct edits. Priming must pass all 79 tests.
 GC mode, core assembly hash/MVID, settings, and cache policy.
 `harness-results.json` retains phase wall time, process CPU, allocation, GC,
 inventory sizes, package versions, failure messages, and cache snapshots.
+Core phase identifiers are `source-resolution`, `discovery`, `runner-compilation`
+and `execution`. Discovery additionally records `DeclarationPreparationMs`,
+`TestConstructionMs` and `InventoryProjectionMs`. Historical artifacts used
+`load-resolve-parse`, `discover`, `compile-selected-closures` and `execute`;
+their `InterpreterPreparationMs` is now `DeclarationPreparationMs`, while their
+`DiscoveryMs` combined construction and inventory projection. JSON numbers remain
+milliseconds, regardless of the units selected for human-readable CLI output.
 Core runs also retain canonical, prepared, operator-lowering and semantic-function entry counts.
 Both modes report new canonical/prepared entries per round; these are publications, not
 VM invocation hits, and should not be interpreted as miss counts during concurrent eviction.

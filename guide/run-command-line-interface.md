@@ -26,7 +26,7 @@ Batch input/output options:
 
 Options for both commands:
   --color <Always|Auto|Never>     Diagnostic color; overrides PINE_TERM_COLOR.
-  --report-durations            Report compilation and execution durations on stderr.
+  --report-durations            Report source loading, resolution/compilation, and execution durations on stderr.
   --timeout <duration>          Cooperative whole-command timeout; default unit is seconds.
   -?, -h, --help                Show help and usage information.
 ```
@@ -364,9 +364,12 @@ Batch input hints and prompts also go to stderr. Application output still follow
 
 `--color` affects Pine's diagnostics and type signatures, not batch result data or
 application output. Cursor-control capability is detected independently of color.
-`--report-durations` reports `compilation` (including declaration selection, loading, and dependency
-resolution) and `execution`. Execution includes batch input/output conversion and
+`--report-durations` reports `source loading`, `dependency resolution and compilation`
+(including declaration selection), and `execution`. Execution includes batch input/output conversion and
 time waiting at the input prompt, or the application's runtime until it exits.
+Only stages reached by the command are printed; a failed stage reports its elapsed work.
+Durations below one second use rounded milliseconds (`725 ms`); durations at or above
+one second use seconds with two decimal places (`1.00 s`, `12.35 s`).
 
 `--timeout 30` or `--timeout 500ms` sets a cooperative wall-clock deadline for the
 whole command, including remote loading, declaration selection, and waiting at a batch input prompt.

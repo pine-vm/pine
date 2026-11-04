@@ -43,7 +43,7 @@ public class ElmTestInstrumentationTests
         caches.ExpressionCompilations.GetOrAdd(expression, () => new(new(instructions, []), new string('0', 64), null));
         var vm = profile.CreateVm(new ConcurrentInvocationCache(), caches);
 
-        using (profile.EnterScope("preparation", "suite"))
+        using (profile.EnterScope("discovery", "suite"))
             vm.EvaluateExpression(expression, PineValue.EmptyList).IsOkOrNull().Should().NotBeNull();
 
         var prepared = profile.GetSummary();
@@ -57,7 +57,7 @@ public class ElmTestInstrumentationTests
         var summary = profile.GetSummary();
         summary.Counters.BuildListCount.Should().Be(3);
         summary.Counters.BuildListItemCount.Should().Be(9);
-        summary.CountersByPhase["preparation"].Total.BuildListItemCount.Should().Be(3);
+        summary.CountersByPhase["discovery"].Total.BuildListItemCount.Should().Be(3);
         summary.CountersByPhase["execution"].Total.BuildListItemCount.Should().Be(6);
         prepared.CountersByPhase["execution"].Total.Should().Be(default(EvalWorkCounters));
 
@@ -111,14 +111,14 @@ public class ElmTestInstrumentationTests
             intermediateExpression,
             () => new(new(instructions, []), new string('0', 64), null));
 
-        using (profile.EnterScope("preparation", "deferred template"))
+        using (profile.EnterScope("discovery", "deferred template"))
         {
             profile.CreateVm(new ConcurrentInvocationCache(), caches)
                 .EvaluateExpression(intermediateExpression, PineValue.EmptyList).IsOkOrNull().Should().NotBeNull();
         }
 
         var summary = profile.GetSummary();
-        var origins = summary.CountersByPhase["preparation"];
+        var origins = summary.CountersByPhase["discovery"];
         origins.DeferredTemplateValueMaterialization.DeferredTemplateValueMaterializationCount.Should().Be(1);
         origins.DeferredTemplateValueMaterialization.DirectInterpreterInvocationCount.Should().Be(0);
         origins.DeferredTemplateValueMaterialization.DirectInterpreterEvalCount.Should().Be(0);
@@ -252,7 +252,7 @@ public class ElmTestInstrumentationTests
                 OnProgress = _ => progressReports++,
             };
 
-        using var scope = profile.EnterScope("preparation", "loop");
+        using var scope = profile.EnterScope("discovery", "loop");
         var expression = Expression.EnvironmentInstance;
 
         Action evaluate =

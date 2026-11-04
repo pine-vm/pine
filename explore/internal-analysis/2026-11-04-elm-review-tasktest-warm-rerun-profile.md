@@ -16,6 +16,7 @@ below deliberately retain their original baselines; descriptions of the original
 | LSP settings/preparation/empty-selection overhead | Implemented; language-service follow-up |
 | Operator lowering and reachable semantic IR conversion | Implemented; memory defaults and opt-in file-store cascade |
 | Syntax-preserving canonical/prepared declarations | Implemented; measured follow-up below |
+| Accurate phase boundaries and adaptive duration formatting | Implemented; phase-reporting follow-up below |
 | Canonical observed-input manifests on disk | Not implemented; memory entries validate observations |
 | Prepared-declaration persistence | Implemented opt-in, using versioned SHA-256 and existing codecs |
 | Root construction, captured executable graphs, SCC emission and test-result caches | Still future work |
@@ -358,6 +359,8 @@ runner/instrumentation, and language-service testing coverage also passed.
 
 ### Phase names conceal important work
 
+The following describes the **original output and boundaries**, not current phase reporting.
+
 In the syntax-discovery path of
 [`ElmTestRunner`](../../implement/Pine.Core/Elm/Testing/ElmTestRunner.cs),
 the reported "compilation" scope mostly covers project loading, test-root
@@ -376,6 +379,41 @@ is waiting or cheap.
 `elm test profile` is unsuitable for reproducing this warm scenario: diagnostic
 profiles reject a supplied cache session and isolate test execution caches.
 External attachment to an already warmed process preserves the real cache path.
+
+#### Implemented phase-reporting follow-up
+
+The CLI now separates `source loading and resolution` (`source-resolution`),
+`test discovery and selection` (`discovery`), `runner compilation`
+(`runner-compilation`) and `test execution` (`execution`). Selected callback/capture
+export, operator lowering, semantic conversion and Pine compilation no longer hide
+inside a generic preparation number. These identifiers also drive instrumentation
+progress, stopped-run diagnostics, phase work counters and the retained profiler.
+
+Discovery reports nested `declaration preparation`, `test construction and seeding`,
+and `inventory and source mapping` timings. The boundaries include current source
+observers, bridge seeding, global selection, selector construction, navigation and
+inventory indexes; source parsing/dependency resolution is separate. CLI filtering
+and bookkeeping also belong to the discovery parent. Standalone discovery includes
+filesystem loading in its source-resolution measurement and its total.
+
+Syntax discovery no longer prints a zero PineVM discovery timer. Execution retains
+`PineVM calls (sum)`, explicitly separate from wall time. Compiler/PineVM discovery
+instead measures an additional `environment compilation`
+phase before discovery and has meaningful discovery VM sums, but no syntax-runner
+compilation phase. CLI diagnostic profiles use the syntax-discovery phase boundaries.
+Optional measurements are omitted, not synthesized. Totals sum
+top-level phases only, not nested discovery components or overlapping VM sums.
+The language-server lifecycle calls callback preparation `runner-compilation`.
+The shared `run`/`apply` duration surface likewise separates source loading from
+dependency resolution/compilation and execution.
+
+Human-readable totals, phases, VM sums and profile elapsed times use milliseconds
+below one second and seconds with two decimal places at or above one second.
+Machine-readable durations retain their declared units. The profiler's new
+`DeclarationPreparationMs`, `TestConstructionMs` and `InventoryProjectionMs`
+replace the historical preparation/combined-discovery pair. Historical tables and
+artifact names in this report deliberately retain their original labels and units;
+no new performance comparison is implied by this instrumentation-only change.
 
 ### Sampled stack evidence
 

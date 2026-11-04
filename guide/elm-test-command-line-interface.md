@@ -244,7 +244,7 @@ Options:
   --list-tests                             List tests without running them.
   --watch                                  Rerun tests on file changes.
   --workers <workers>                      Number of worker threads. Defaults to 11.
-  --report-durations                       Show detailed durations, including compilation and test execution.
+  --report-durations                       Show source resolution, discovery, runner compilation, and execution durations.
   --seed <seed>                            Initial unsigned 32-bit random seed for fuzz tests. Defaults to a new random seed.
   --fuzz <fuzz>                            Number of iterations per fuzz test. Must be positive. Defaults to 100. [default: 100]
   --offline                                Resolve packages using only local registry metadata and sources; make no network requests.
@@ -296,17 +296,39 @@ source directories.
 
 ## Duration reporting
 
-Use `--report-durations` to show independently measured timings using the instrumentation's
-phase labels:
+Use `--report-durations` to show independently measured wall-clock phases:
 
-- `compilation`: source loading, dependency resolution, and test-root identification.
-- `preparation`: syntax-based construction/discovery, filtering, and compilation of the selected runtime closures.
-- `execution`: running the selected tests, including worker setup and result processing.
+| Displayed phase | Instrumentation identifier | Work measured |
+|---|---|---|
+| source loading and resolution | `source-resolution` | Local source loading, parsing, test-root identification and dependency resolution |
+| test discovery and selection | `discovery` | Constructing test trees, seeding runners, projecting the inventory and applying the filter |
+| runner compilation | `runner-compilation` | Exporting selected callbacks and their captures, lowering operators, converting semantic IR and compiling to Pine |
+| test execution | `execution` | Running selected tests, including worker setup and result decoding |
 
-Both `preparation` and `execution` include a `VM calls (sum)` breakdown, measured around each
-VM evaluation. Preparation uses the syntax interpreter, not a PineVM, so its VM-call duration is zero.
-Execution includes evaluating the selected test runners. These are summed call durations, not exclusive phase durations:
-parallel execution calls overlap, so their sum can exceed the execution wall-clock duration.
+Discovery also reports nested `declaration preparation`, `test construction and seeding`,
+and `inventory and source mapping` durations. These distinguish canonicalization/interpreter
+setup, root interpretation/bridge seeding, and global selection/selectors/navigation/indexing.
+The parent additionally includes CLI selection/bookkeeping, so the children need not sum to it.
+`ElmTestRun.Completed.Durations` exposes this breakdown as `ElmTestRunDurations`;
+its `Total` sums only top-level phases. Standalone discovery exposes
+`SourceResolutionDuration`, `DeclarationPreparationDuration`, `TestConstructionDuration`
+and `InventoryProjectionDuration`, with `Duration` covering the complete call.
+
+Compiler/PineVM discovery, retained by `CompileAndRunTests`, additionally
+reports `environment compilation` (`environment-compilation`) before discovery. It does not
+export syntax closures, so it has no separate `runner compilation` duration.
+The CLI's diagnostic profiles use the syntax-discovery phases, including runner compilation.
+
+`PineVM calls (sum)` appears beneath execution and, for compiler-based discovery only,
+discovery. Syntax discovery does not use a PineVM and no longer prints a misleading zero
+VM timer. These are summed call durations, not exclusive phase durations: parallel calls can
+overlap and exceed the phase's wall-clock duration. Nested timings and VM sums are not added
+to the total. Absent measurements are omitted rather than inferred.
+
+Human-readable totals, phase durations and profile elapsed times use rounded milliseconds
+below one second (`725 ms`), and seconds with two decimal places at or above one second
+(`1.00 s`, `12.35 s`). The threshold is applied before rounding. Numeric JSON and protocol
+fields retain their documented units.
 
 ## Watch mode
 
