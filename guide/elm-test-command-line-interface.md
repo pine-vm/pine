@@ -41,6 +41,12 @@ leaves. Assertion and fuzz callbacks are not run during discovery. Both `--list-
 [versioned language-server protocol and VS Code Test Explorer](elm-testing-language-server-protocol.md)
 reuse this discovery and execution machinery.
 
+Each discovery freezes its prepared declarations into one immutable program snapshot,
+allowing interpreter invocations to reuse the resolver index. Exact execution selectors
+share a single case-sensitive full-path frequency index rather than scanning the inventory
+for every leaf. These indexes are local to the discovery/run, not cross-run caches;
+duplicate paths retain discovery-ordinal selectors.
+
 `result.Items` is a complete inventory in parent-before-child order, including
 `describe` groups, empty groups, skipped tests and tests excluded by `Test.only`.
 Each entry contains an ID, optional parent ID, listing metadata, discovery-root identity,

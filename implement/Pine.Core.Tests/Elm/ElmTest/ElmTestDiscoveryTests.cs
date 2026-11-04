@@ -721,6 +721,38 @@ public class ElmTestDiscoveryTests
     }
 
     [Fact]
+    public void Syntax_test_discovery_exact_paths_include_only_excluded_leaves_but_not_skipped_leaves_or_groups()
+    {
+        using var project =
+            new ElmFuzzTests.Project(
+                """
+                suite = Test.todo "same"
+                second = Test.only (Test.todo "unique")
+                third = Test.only (Test.todo "same")
+                fourth = Test.skip (Test.todo "unique")
+                fifth = Test.describe "unique" []
+                """);
+
+        var file = Path.Combine(project.Directory, "tests", "Tests.elm");
+        File.WriteAllText(
+            file,
+            File.ReadAllText(file).Replace("exposing (suite)", "exposing (suite, second, third, fourth, fifth)"));
+        var discovery = ElmTestDiscovery.DiscoverTests(project.Directory);
+
+        discovery.Tests.Select(test => test.DiscoveryIndex).Should().Equal(2, 3);
+        discovery.GetExecutionFilter(discovery.Tests[0].Id).Should().Be("=tests/Tests.elm/unique");
+        discovery.GetExecutionFilter(discovery.Tests[1].Id).Should().Be("#3");
+
+        discovery.Items.Single(item => item.RootDeclarationName == "suite").Selection.Should().Be(
+            ElmTestDiscoverySelection.ExcludedByOnly);
+        discovery.Items.Single(item => item.RootDeclarationName == "fourth").Selection.Should().Be(
+            ElmTestDiscoverySelection.Skipped);
+        discovery.Items.Where(item => item.Kind == ElmTestDiscoveryItemKind.Group ||
+            item.Selection != ElmTestDiscoverySelection.Included)
+            .Should().OnlyContain(item => item.ExecutionFilter == null);
+    }
+
+    [Fact]
     public void Syntax_test_discovery_keeps_paths_inside_operator_operands_and_record_updates()
     {
         const string expression = """Test.test ("case " ++ String.fromInt n) (\_ -> Expect.pass)""";

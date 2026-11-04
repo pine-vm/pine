@@ -303,7 +303,8 @@ public static class ElmTestDiscovery
             }
         }
 
-        var program = new Interpreter.Prepared(prepared);
+        // Keep the resolver index keyed to one immutable snapshot across root and bridge calls.
+        var program = new Interpreter.Prepared(prepared.ToImmutableDictionary());
 
         var config =
             Interpreter.EvaluationConfig.Default with
@@ -597,7 +598,7 @@ public static class ElmTestDiscovery
                 ElmTestDiscoverySelection.ExcludedByOnly;
         }
 
-        var listedLeaves = executableLeaves.Select(leaf => leaf.ListedTest).ToArray();
+        var fullPathCounts = ElmTestFilter.CountFullPaths(executableLeaves.Select(leaf => leaf.ListedTest));
 
         return
             new(
@@ -633,7 +634,7 @@ public static class ElmTestDiscovery
                                     item.Selection == ElmTestDiscoverySelection.Included &&
                                     item.DiscoveryIndex is { } index
                                     ?
-                                    ElmTestFilter.ExactSelector(item.ListedTest, index, listedLeaves)
+                                    ElmTestFilter.ExactSelector(item.ListedTest, index, fullPathCounts)
                                     :
                                     null,
                                     location);

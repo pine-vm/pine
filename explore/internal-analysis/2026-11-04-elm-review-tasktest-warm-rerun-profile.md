@@ -25,7 +25,8 @@ A temporary combined experiment tested an immutable program snapshot and a
 single full-path frequency index. It reduced median edited-rerun latency from
 **53.72 to 24.03 seconds (55.3%)** and median total allocation from **36.45 to
 10.87 GB (70.2%)**, without adding a persistent or cross-run discovery cache.
-These experimental implementation changes were removed. The report and
+The experimental patch was removed after profiling; the subsequent explicit
+implementation request is covered in section D below. The report and
 [reusable profiling tool](../2026-11-04-elm-review-warm-rerun/README.md) are retained
 so interventions can be measured against the same workload later.
 
@@ -264,6 +265,57 @@ This is a combined experiment, not an attribution of independent speedups to
 each change. It validates this fixture and mutation, not every possible selector,
 concurrency, or discovery edge case. The patch was removed rather than silently
 shipping an optimization as part of a profiling/report task.
+
+### D. Production implementation follow-up
+
+After the separate implementation request, discovery now creates one immutable
+prepared-declaration snapshot and builds one ordinal, full-path frequency index
+before projecting inventory entries. The runner's diagnostic/suggestion selectors
+also reuse one frequency index instead of rescanning all discovered tests.
+The existing public `ExactSelector` API remains available.
+
+Frequency keys are the existing `ListedTest.FullPath` strings, not structural
+`ListedTest` equality: normalized file separators and description segments containing
+slashes can produce duplicate strings. Comparisons remain case-sensitive and literal.
+Discovery counts the same executable-leaf population as before, including roots
+excluded by global `Test.only`, but excluding skipped leaves and empty groups.
+Selectors for ambiguous paths retain their original discovery ordinals.
+No cross-run or persistent cache was added.
+
+The retained profiler was rebuilt against this implementation and run without
+attached diagnostics, using the same pinned fixture, retained generational session,
+serial execution, offline dependency resolution, seed, fuzz count, excluded priming,
+and three successive productive edits:
+
+| Phase, milliseconds | Edit 1 | Edit 2 | Edit 3 |
+|---|---:|---:|---:|
+| Load, resolve, parse, build identities | 1,238 | 1,103 | 765 |
+| Discover inventory | **6,292** | **5,509** | **5,783** |
+| Compile selected closures to Pine | 7,256 | 7,778 | 7,188 |
+| Execute 79 tests | 5,045 | 6,149 | 5,185 |
+| Total | **19,860** | **20,561** | **18,947** |
+| Outcome | 78 / 1 | 78 / 1 | 78 / 1 |
+
+| Median across three edited reruns | Original baseline | Implementation | Reduction |
+|---|---:|---:|---:|
+| Total wall time | 53.72 s | 19.86 s | **63.0%** |
+| Discovery wall time | 37.94 s | 5.78 s | **84.8%** |
+| Total allocation | 36.45 GB | 10.87 GB | **70.2%** |
+| Discovery allocation | 27.83 GB | 2.24 GB | **91.9%** |
+
+The inventory remained 5,214 entries, with 1,009 roots and 422 modules.
+Each edited run produced only the specified failing test. Declaration/reverse-tree
+counts, execution-cache before/after snapshots, and reduced-expression entry counts
+matched the original baseline. The fixture was restored byte-for-byte.
+The host/runtime and GC mode were unchanged; these are sequential measurements,
+not a randomized comparison. The additional wall-time improvement over section C
+must not be attributed to the small implementation differences; discovery time and
+allocation reproduce the experiment's main result.
+
+Regression coverage checks normalized and colliding literal paths, case sensitivity,
+duplicate ordinals, single-pass frequency construction, global-only exclusion,
+skips, and empty groups. Existing discovery/navigation, compiler-vs-syntax fixture,
+runner/instrumentation, and language-service testing coverage also passed.
 
 ## Where preparation time goes
 
@@ -848,6 +900,8 @@ the session's `files/` directory:
   trace-analyzer/{trace-analyzer.csproj,Program.cs}
   analyze-speedscope.py
   combined-experiment/{harness.log,harness-results.json}
+  implemented-fast-path/{metadata.json,harness-results.json}
+  implemented-fast-path.log
 ```
 
 The raw NetTrace is about 109 MiB and the speedscope export about 158 MiB;
@@ -870,4 +924,10 @@ c285056a50ce57b406d2517894474039898b302df7497993ba380549c85ef901
 
 combined-experiment/harness-results.json
 0d0a30c2b33cd57ddb7f60eb6d2f41ec5fddbe9cc7f8c16316114ff13682363e
+
+implemented-fast-path/harness-results.json
+0eca0248ce49544210d2d0187b385c36d327ba6900c04e5d6294434d6c304d5c
+
+implemented-fast-path/metadata.json
+cd19976aaa4fbd8786e2a6b89d265c765890c534e609043c323f5f6d5376988b
 ```
