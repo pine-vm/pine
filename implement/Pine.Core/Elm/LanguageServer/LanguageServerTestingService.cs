@@ -7,6 +7,7 @@ using Pine.Core.LanguageServerProtocol;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -98,8 +99,11 @@ public sealed class LanguageServerTestingService(
 
         public SemaphoreSlim DiscoveryGate { get; } = new(1, 1);
 
-        public ElmTestDiscoveryResult? Discovery;
+        public SnapshotDiscovery? Discovery;
     }
+
+    private sealed record SnapshotDiscovery(
+        ElmTestDiscoveryResult Inventory, string Id, IReadOnlyDictionary<string, Location> Locations);
 
     /// <summary>Hash of the canonical sorted Pine FileTree encoding, not Git's tree hash or a JSON digest.</summary>
     public static string TreeHashOf(FileTree tree) =>
@@ -128,9 +132,10 @@ public sealed class LanguageServerTestingService(
         {
             await _workCapacity.WaitAsync(token).ConfigureAwait(false);
             capacityHeld = true;
-            var discovery = await DiscoveryAsync(snapshot, token).ConfigureAwait(false);
+            var retained = await DiscoveryAsync(snapshot, token).ConfigureAwait(false);
+            var discovery = retained.Inventory;
 
-            var items = discovery.Items.Select(item => ToProtocolItem(snapshot, discovery, item)).ToArray();
+            var items = discovery.Items.Select(item => ToProtocolItem(retained, item)).ToArray();
 
             return
                 new(
@@ -144,7 +149,7 @@ public sealed class LanguageServerTestingService(
                     discovery.HasSkipped,
                     Volatile.Read(ref snapshot.DocumentVersions),
                     discovery.ResolutionFingerprint,
-                    DiscoveryId: DiscoveryId(snapshot, discovery));
+                    DiscoveryId: retained.Id);
         }
         catch (Exception exception) when (IsPreparationError(exception))
         {
@@ -231,9 +236,10 @@ public sealed class LanguageServerTestingService(
             capacityHeld = true;
 
             await Send("phase", state: "discovery").ConfigureAwait(false);
-            var inventory = await DiscoveryAsync(snapshot, token).ConfigureAwait(false);
-            resolutionFingerprint = inventory.ResolutionFingerprint;
-            discoveryId = DiscoveryId(snapshot, inventory);
+            var retained = await DiscoveryAsync(snapshot, token).ConfigureAwait(false);
+            var discovery = retained.Inventory;
+            resolutionFingerprint = discovery.ResolutionFingerprint;
+            discoveryId = retained.Id;
 
             if (parameters.DiscoveryId is { } expected && expected != discoveryId)
             {
@@ -249,10 +255,6 @@ public sealed class LanguageServerTestingService(
                     "Selected runs require the discoveryId returned by discovery.");
             }
 
-            var discovery =
-                await Task.Run(() => inventory.WithExecutionSettings(settings, token), token).ConfigureAwait(false);
-
-            resolutionFingerprint = discovery.ResolutionFingerprint;
             incomplete = discovery.HasOnly || discovery.HasSkipped;
             selected = Select(discovery, parameters.Include, parameters.Exclude);
 
@@ -270,8 +272,7 @@ public sealed class LanguageServerTestingService(
                 {
                     result =
                         ToProtocolResult(
-                            snapshot,
-                            discovery,
+                            retained,
                             item,
                             new CompletedTest([], CompletedTestKind.FailedEmptyGroup, null),
                             TimeSpan.Zero,
@@ -300,51 +301,52 @@ public sealed class LanguageServerTestingService(
             }
 
             await Send("phase", state: "preparation").ConfigureAwait(false);
+            token.ThrowIfCancellationRequested();
 
-            var executableIds =
+            var executable =
                 selected.Where(
                     item => item.Selection is ElmTestDiscoverySelection.Included &&
                         item.Kind is ElmTestDiscoveryItemKind.Unit or ElmTestDiscoveryItemKind.Fuzz)
-                .Select(item => item.Id).ToArray();
+                .ToArray();
 
             var entries =
+                executable.Length == 0
+                ?
+                ImmutableDictionary<string, ElmTestExecutionEntry>.Empty
+                :
                 await Task.Run(
                     () =>
                     {
-                        var prepared = discovery.PrepareExecution(executableIds);
-
-                        if (executableIds.Length > 0)
-                            _ = _cache.Value;
-
+                        var prepared = discovery.PrepareExecution(executable.Select(item => item.Id), settings, token);
+                        _ = _cache.Value;
                         token.ThrowIfCancellationRequested();
                         return prepared;
                     },
                     token).ConfigureAwait(false);
 
             await Send("phase", state: "running").ConfigureAwait(false);
+            token.ThrowIfCancellationRequested();
 
-            foreach (var item in selected.Where(
-                item =>
-                item.Selection is ElmTestDiscoverySelection.Included &&
-                item.Kind is ElmTestDiscoveryItemKind.Unit or ElmTestDiscoveryItemKind.Fuzz))
+            if (executable.Length > 0)
             {
-                token.ThrowIfCancellationRequested();
-                await Send("test", item.Id, "started").ConfigureAwait(false);
-                var watch = Stopwatch.StartNew();
+                await Task.Run(
+                    async () =>
+                    {
+                        foreach (var item in executable)
+                        {
+                            token.ThrowIfCancellationRequested();
+                            await Send("test", item.Id, "started").ConfigureAwait(false);
+                            var watch = Stopwatch.StartNew();
 
-                var completed =
-                    await Task.Run(
-                        () => ElmTestRunner.ExecuteDiscoveredTest(
-                            item,
-                            entries.GetValueOrDefault(item.Id),
-                            _cache.Value,
-                            token),
-                        token).ConfigureAwait(false);
+                            var completed =
+                                ElmTestRunner.ExecuteDiscoveredTest(item, entries[item.Id], _cache.Value, token);
 
-                var result = ToProtocolResult(snapshot, discovery, item, completed, watch.Elapsed, settings);
-
-                results.Add(result);
-                await Send("test", item.Id, result.State, result).ConfigureAwait(false);
+                            var result = ToProtocolResult(retained, item, completed, watch.Elapsed, settings);
+                            results.Add(result);
+                            await Send("test", item.Id, result.State, result).ConfigureAwait(false);
+                        }
+                    },
+                    token).ConfigureAwait(false);
             }
 
             status = "completed";
@@ -448,7 +450,7 @@ public sealed class LanguageServerTestingService(
         }
     }
 
-    private async Task<ElmTestDiscoveryResult> DiscoveryAsync(Snapshot snapshot, CancellationToken token)
+    private async Task<SnapshotDiscovery> DiscoveryAsync(Snapshot snapshot, CancellationToken token)
     {
         await snapshot.DiscoveryGate.WaitAsync(token).ConfigureAwait(false);
 
@@ -461,14 +463,27 @@ public sealed class LanguageServerTestingService(
 
             var discovery =
                 await Task.Run(
-                    () => ElmTestDiscovery.DiscoverTests(
-                        snapshot.Source.Files,
-                        packageProvider: packageProvider,
-                        cancellationToken: token,
-                        manifestPath: manifestPath),
+                    () =>
+                    {
+                        var inventory =
+                            ElmTestDiscovery.DiscoverTests(
+                                snapshot.Source.Files,
+                                packageProvider: packageProvider,
+                                cancellationToken: token,
+                                manifestPath: manifestPath);
+
+                        token.ThrowIfCancellationRequested();
+
+                        return
+                            new SnapshotDiscovery(
+                                inventory,
+                                DiscoveryId(snapshot, inventory),
+                                BuildLocations(snapshot, inventory, token));
+                    },
                     token).ConfigureAwait(false);
 
-            Volatile.Write(ref snapshot.NavigationSources, discovery.SourceFiles);
+            token.ThrowIfCancellationRequested();
+            Volatile.Write(ref snapshot.NavigationSources, discovery.Inventory.SourceFiles);
             return snapshot.Discovery = discovery;
         }
         finally
@@ -765,7 +780,7 @@ public sealed class LanguageServerTestingService(
         IReadOnlyList<string>? include,
         IReadOnlyList<string>? exclude)
     {
-        var byId = discovery.Items.ToDictionary(item => item.Id, StringComparer.Ordinal);
+        var byId = discovery.ItemsById;
         var included = include?.ToHashSet(StringComparer.Ordinal);
         var excluded = (exclude ?? []).ToHashSet(StringComparer.Ordinal);
 
@@ -774,6 +789,9 @@ public sealed class LanguageServerTestingService(
             if (!byId.ContainsKey(id))
                 throw new PineTestingProtocolException("unknownTest", "Unknown test ID in the requested version: " + id);
         }
+
+        if (included is { Count: 0 })
+            return [];
 
         return
             discovery.Items.Where(
@@ -797,8 +815,7 @@ public sealed class LanguageServerTestingService(
     }
 
     private static PineTestItem ToProtocolItem(
-        Snapshot snapshot,
-        ElmTestDiscoveryResult discovery,
+        SnapshotDiscovery discovery,
         ElmTestDiscoveryItem item) =>
         new(
             item.Id,
@@ -814,64 +831,82 @@ public sealed class LanguageServerTestingService(
             item.IsEmptyGroup,
             item.FuzzRuns,
             item.SourceLocation.FilePath,
-            LocationFor(snapshot, discovery, item));
+            discovery.Locations[item.Id]);
 
-    private static Location LocationFor(Snapshot snapshot, ElmTestDiscoveryResult discovery, ElmTestDiscoveryItem item)
+    private static IReadOnlyDictionary<string, Location> BuildLocations(
+        Snapshot snapshot, ElmTestDiscoveryResult discovery, CancellationToken token)
     {
-        var source = item.SourceLocation;
-        var path = source.FilePath.Split('/');
+        var locations = new Dictionary<string, Location>(StringComparer.Ordinal);
 
-        var node =
-            discovery.SourceFiles.GetNodeAtPath(path) as FileTree.FileNode
-            ?? throw new InvalidOperationException("Missing original source for discovered test: " + source.FilePath);
-
-        var text = s_utf8.GetString(node.Bytes.Span);
-        var lines = text.Split('\n');
-
-        var uri =
-            snapshot.Source.Files.GetNodeAtPath(path) is FileTree.FileNode
-            ?
-            new Uri(new Uri(snapshot.Source.RootUri), string.Join('/', path.Select(Uri.EscapeDataString))).AbsoluteUri
-            :
-            SourceUri(snapshot.ProjectUri, snapshot.Version, source.FilePath);
-
-        return new(uri, new ProtocolRange(ConvertPosition(source.Range.Start), ConvertPosition(source.Range.End)));
-
-        Position ConvertPosition(SyntaxLocation location)
+        foreach (var group in discovery.Items.GroupBy(item => item.SourceLocation.FilePath, StringComparer.Ordinal))
         {
-            if (location.Row < 1 || location.Row > lines.Length || location.Column < 1)
-                throw new InvalidOperationException("Invalid Elm test source position in " + source.FilePath);
+            token.ThrowIfCancellationRequested();
+            var path = group.Key.Split('/');
 
-            var line = lines[location.Row - 1];
-            var column = 0;
-            var utf16 = 0;
+            var node =
+                discovery.SourceFiles.GetNodeAtPath(path) as FileTree.FileNode
+                ?? throw new InvalidOperationException("Missing original source for discovered test: " + group.Key);
 
-            foreach (var rune in line.EnumerateRunes())
+            var lines = s_utf8.GetString(node.Bytes.Span).Split('\n');
+
+            var uri =
+                snapshot.Source.Files.GetNodeAtPath(path) is FileTree.FileNode
+                ?
+                new Uri(
+                    new Uri(snapshot.Source.RootUri),
+                    string.Join('/', path.Select(Uri.EscapeDataString))).AbsoluteUri
+                :
+                SourceUri(snapshot.ProjectUri, snapshot.Version, group.Key);
+
+            foreach (var item in group)
             {
-                if (column == location.Column - 1)
-                    break;
+                token.ThrowIfCancellationRequested();
+                var range = item.SourceLocation.Range;
 
-                ++column;
-                utf16 += rune.Utf16SequenceLength;
+                locations.Add(
+                    item.Id,
+                    new(
+                        uri,
+                        new ProtocolRange(ConvertPosition(range.Start), ConvertPosition(range.End))));
             }
 
-            if (column != location.Column - 1)
-                throw new InvalidOperationException("Elm test source position exceeds line length in " + source.FilePath);
+            Position ConvertPosition(SyntaxLocation location)
+            {
+                if (location.Row < 1 || location.Row > lines.Length || location.Column < 1)
+                    throw new InvalidOperationException("Invalid Elm test source position in " + group.Key);
 
-            return new(checked((uint)location.Row - 1), checked((uint)utf16));
+                var line = lines[location.Row - 1];
+                var column = 0;
+                var utf16 = 0;
+
+                foreach (var rune in line.EnumerateRunes())
+                {
+                    if (column == location.Column - 1)
+                        break;
+
+                    ++column;
+                    utf16 += rune.Utf16SequenceLength;
+                }
+
+                if (column != location.Column - 1)
+                    throw new InvalidOperationException("Elm test source position exceeds line length in " + group.Key);
+
+                return new(checked((uint)location.Row - 1), checked((uint)utf16));
+            }
         }
+
+        return locations;
     }
 
     private static PineTestResult ToProtocolResult(
-        Snapshot snapshot,
-        ElmTestDiscoveryResult discovery,
+        SnapshotDiscovery discovery,
         ElmTestDiscoveryItem item,
         CompletedTest completed,
         TimeSpan duration,
         ElmTestExecutionSettings settings)
     {
         var messages = new List<PineTestMessage>();
-        var location = LocationFor(snapshot, discovery, item);
+        var location = discovery.Locations[item.Id];
 
         switch (completed.Failure)
         {
