@@ -843,6 +843,7 @@ public static class ElmTestRunner
         if (syntaxDiscovery is not null)
         {
             using var compilationInvocation = cacheSession?.BeginCompilationInvocation();
+
             var entries =
                 syntaxDiscovery.PrepareExecution(
                     discoveredTests.Where(test => test.Kind == DiscoveredTestKind.Runnable).Select(test => test.Id!),

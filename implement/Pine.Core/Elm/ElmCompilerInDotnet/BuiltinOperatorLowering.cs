@@ -123,6 +123,7 @@ public static class BuiltinOperatorLowering
             ImmutableDictionary.CreateBuilder<DeclQualifiedName, Declaration>();
 
         var environmentHash = cache is null ? null : SourceCompilationCaches.EnvironmentHash(declarations);
+
         var configurationKey =
             $"builtin-operator-lowering-v1/{configuration.LowerBuiltinOperators}/{configuration.LowerElmCoreBasics}";
 
@@ -136,7 +137,11 @@ public static class BuiltinOperatorLowering
                 continue;
             }
 
-            var input = environmentHash is null ? null :
+            var input =
+                environmentHash is null
+                ?
+                null
+                :
                 new SourceTransformationInput(key, decl, environmentHash, configurationKey);
 
             if (input is not null && cache!.TryGetValue(input, out var cached))

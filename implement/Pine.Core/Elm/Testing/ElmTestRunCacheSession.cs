@@ -41,13 +41,17 @@ public sealed class ElmTestRunCacheSession(
         compilationCaches ?? SourceCompilationCaches.CreateInMemory();
 
     private readonly Lock _compilationGate = new();
+
     private readonly HashSet<long> _activeCompilations = [];
+
     private readonly Dictionary<IMarkerCacheLifetime<long>, CompilationMaintenance> _compilationMaintenance = [];
+
     private long _compilationMarker;
 
     private sealed class CompilationMaintenance(int budget)
     {
         public int? PendingBudget = budget;
+
         public TaskCompletionSource Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
@@ -58,8 +62,11 @@ public sealed class ElmTestRunCacheSession(
     public IDisposable BeginCompilationInvocation()
     {
         var marker = Interlocked.Increment(ref _compilationMarker);
+
         lock (_compilationGate)
+        {
             _activeCompilations.Add(marker);
+        }
 
         try
         {
@@ -73,7 +80,10 @@ public sealed class ElmTestRunCacheSession(
         catch
         {
             lock (_compilationGate)
+            {
                 _activeCompilations.Remove(marker);
+            }
+
             throw;
         }
     }
@@ -91,7 +101,9 @@ public sealed class ElmTestRunCacheSession(
                 return;
 
             lock (owner._compilationGate)
+            {
                 owner._activeCompilations.Remove(marker);
+            }
 
             foreach (var (cache, usage) in caches)
             {
@@ -102,6 +114,7 @@ public sealed class ElmTestRunCacheSession(
 
                 var budget = (int)Math.Min(int.MaxValue, 2L * used);
                 CompilationMaintenance maintenance;
+
                 lock (owner._compilationGate)
                 {
                     if (owner._compilationMaintenance.TryGetValue(cache, out var existing))
@@ -130,6 +143,7 @@ public sealed class ElmTestRunCacheSession(
             while (true)
             {
                 int budget;
+
                 lock (_compilationGate)
                 {
                     if (maintenance.PendingBudget is not { } pending)
@@ -149,7 +163,10 @@ public sealed class ElmTestRunCacheSession(
         catch (Exception exception)
         {
             lock (_compilationGate)
+            {
                 _compilationMaintenance.Remove(cache);
+            }
+
             maintenance.Completion.SetException(exception);
             _ = maintenance.Completion.Task.Exception;
             Trace.TraceError("Source-transformation cache maintenance failed: " + exception);
@@ -159,9 +176,12 @@ public sealed class ElmTestRunCacheSession(
         {
             lock (_compilationGate)
             {
-                return _activeCompilations.Contains(entryMarker)
-                    ? new CacheRetention.Retain()
-                    : new CacheRetention.Ranked(entryMarker);
+                return
+                    _activeCompilations.Contains(entryMarker)
+                    ?
+                    new CacheRetention.Retain()
+                    :
+                    new CacheRetention.Ranked(entryMarker);
             }
         }
     }
@@ -170,7 +190,9 @@ public sealed class ElmTestRunCacheSession(
     public Task WaitForCompilationMaintenanceAsync()
     {
         lock (_compilationGate)
+        {
             return Task.WhenAll(_compilationMaintenance.Values.Select(item => item.Completion.Task));
+        }
     }
 
     /// <summary>Compilation, parsing, encoding and reduction caches shared by preparation and workers.</summary>

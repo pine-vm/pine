@@ -143,12 +143,20 @@ public static class FromCanonicalSyntax
         var immutableFunctionTypes = functionTypes.ToImmutable();
         var immutableConstructorTypes = constructorTypes.ToImmutable();
         var functionNames = sourceFunctions.Select(entry => entry.Key).ToHashSet();
-        var environmentHash = cache is null ? null :
+
+        var environmentHash =
+            cache is null
+            ?
+            null
+            :
             SourceCompilationCaches.EnvironmentHash(declarations, immutableFunctionTypes);
+
         var functions = ImmutableDictionary.CreateBuilder<FunctionId, Function>();
         var bindingNames = ImmutableDictionary.CreateBuilder<BindingId, string>();
-        var evidence = ImmutableDictionary.CreateBuilder<Expression, GenericRecordAccessEvidence>(
-            ReferenceEqualityComparer.Instance);
+
+        var evidence =
+            ImmutableDictionary.CreateBuilder<Expression, GenericRecordAccessEvidence>(
+                ReferenceEqualityComparer.Instance);
 
         foreach (var (name, declaration) in sourceFunctions.OrderBy(entry => entry.Key))
         {
@@ -157,7 +165,11 @@ public static class FromCanonicalSyntax
             if (selectedFunctions is not null && !selectedFunctions.Contains(name))
                 continue;
 
-            var input = environmentHash is null ? null :
+            var input =
+                environmentHash is null
+                ?
+                null
+                :
                 new SourceTransformationInput(name, declaration, environmentHash, "canonical-semantic-function-v1");
 
             LoweredSourceFunction lowered;
@@ -168,8 +180,15 @@ public static class FromCanonicalSyntax
             }
             else
             {
-                var rewriter = new Rewriter(aliasTypes, immutableFunctionTypes, immutableConstructorTypes,
-                    environment, functionNames, constructorNames);
+                var rewriter =
+                    new Rewriter(
+                        aliasTypes,
+                        immutableFunctionTypes,
+                        immutableConstructorTypes,
+                        environment,
+                        functionNames,
+                        constructorNames);
+
                 var function = rewriter.RewriteFunction(((Declaration.FunctionDeclaration)declaration).Function, name);
                 lowered = new(function, rewriter.BindingNames.ToImmutable(), rewriter.Evidence.ToImmutable());
                 cancellationToken.ThrowIfCancellationRequested();

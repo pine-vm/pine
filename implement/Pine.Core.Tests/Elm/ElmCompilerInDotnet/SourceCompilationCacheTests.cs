@@ -28,7 +28,9 @@ public class SourceCompilationCacheTests
     {
         private readonly ICache<SourceTransformationInput, T> _cache =
             backing ?? new MemoryCache<SourceTransformationInput, T, long>(0);
+
         public List<SourceTransformationInput> Hits { get; } = [];
+
         public List<SourceTransformationInput> Misses { get; } = [];
 
         public bool TryGetValue(SourceTransformationInput key, [MaybeNullWhen(false)] out T value)
@@ -90,22 +92,32 @@ public class SourceCompilationCacheTests
     [Fact]
     public void Semantic_pruning_keeps_all_type_metadata_and_original_reference_classification()
     {
-        var declarations = Parse(
-            """
-            type alias Person = { age : Int }
-            type Choice = Yes | No
-            helper n = n
-            unused n = n
-            root n = helper n
-            """);
+        var declarations =
+            Parse(
+                """
+                type alias Person = { age : Int }
+                type Choice = Yes | No
+                helper n = n
+                unused n = n
+                root n = helper n
+                """);
+
         var full = Model.FromCanonicalSyntax.Lower(declarations);
-        var selected = Model.FromCanonicalSyntax.Lower(declarations, selectedFunctions: new HashSet<DeclQualifiedName>
-        {
-            Name("root")
-        });
+
+        var selected =
+            Model.FromCanonicalSyntax.Lower(
+                declarations,
+                selectedFunctions:
+                new HashSet<DeclQualifiedName>
+                {
+                    Name("root")
+                });
+
         selected.Program.Functions.Should().ContainSingle();
+
         selected.Program.Functions[new Model.FunctionId.Source(Name("root"))]
             .Should().Be(full.Program.Functions[new Model.FunctionId.Source(Name("root"))]);
+
         selected.Program.SourceDeclarations.Should().Equal(full.Program.SourceDeclarations);
     }
 
@@ -119,19 +131,24 @@ public class SourceCompilationCacheTests
         cache.Reset();
         _ = BuiltinOperatorLowering.Apply(declarations, new(false, true), cache);
         var second = cache.Misses.Single();
-        var clonedSyntax = ElmSyntaxAbstractJson.FromJsonString<Declaration>(
-            ElmSyntaxAbstractJson.ToJsonString(first.Syntax));
+
+        var clonedSyntax =
+            ElmSyntaxAbstractJson.FromJsonString<Declaration>(
+                ElmSyntaxAbstractJson.ToJsonString(first.Syntax));
 
         first.ComputeHash().Length.Should().Be(32);
         (first with { Syntax = clonedSyntax }).ComputeHash().ToArray().Should().Equal(first.ComputeHash().ToArray());
-        var hashes = new[]
-        {
-            first,
-            second,
-            first with { Name = Name("other") },
-            first with { EnvironmentHash = "different" },
-            first with { Syntax = Parse("root a b = a - b")[Name("root")] }
-        }.Select(input => Convert.ToHexString(input.ComputeHash().Span)).ToArray();
+
+        var hashes =
+            new[]
+            {
+                first,
+                second,
+                first with { Name = Name("other") },
+                first with { EnvironmentHash = "different" },
+                first with { Syntax = Parse("root a b = a - b")[Name("root")] }
+            }.Select(input => Convert.ToHexString(input.ComputeHash().Span)).ToArray();
+
         hashes.Distinct().Should().HaveCount(hashes.Length);
     }
 
@@ -143,6 +160,7 @@ public class SourceCompilationCacheTests
         var second = new TrackingCache<LoweredSourceFunction>();
         _ = Model.FromCanonicalSyntax.Lower(Parse(source), first);
         _ = Model.FromCanonicalSyntax.Lower(Parse(source).Reverse().ToImmutableDictionary(), second);
+
         first.Misses.Select(input => Convert.ToHexString(input.ComputeHash().Span))
             .Should().Equal(second.Misses.Select(input => Convert.ToHexString(input.ComputeHash().Span)));
     }
@@ -151,15 +169,21 @@ public class SourceCompilationCacheTests
     public void Persistent_layers_restore_both_models_in_fresh_cache_instances()
     {
         var store = new FileStoreFromConcurrentDictionary();
+
         const string source =
             """
             helper : Int -> Int
             helper n = n + 1
             root record = { x = record.x, call = \n -> helper n }
             """;
+
         var first = SourceCompilationCaches.CreateInMemory(store);
-        var expected = Model.FromCanonicalSyntax.Lower(LowerOperators(Parse(source), first.OperatorLowering),
-            first.SemanticFunctions);
+
+        var expected =
+            Model.FromCanonicalSyntax.Lower(
+                LowerOperators(Parse(source), first.OperatorLowering),
+                first.SemanticFunctions);
+
         var fresh = SourceCompilationCaches.CreateInMemory(store);
         var operators = new TrackingCache<Declaration>(fresh.OperatorLowering);
         var semantic = new TrackingCache<LoweredSourceFunction>(fresh.SemanticFunctions);
@@ -172,8 +196,10 @@ public class SourceCompilationCacheTests
         actual.GenericAccessEvidence.Should().NotBeEmpty();
 
         var nodes = new HashSet<Model.Expression>(ReferenceEqualityComparer.Instance);
+
         foreach (var function in actual.Program.Functions.Values)
             Visit(function.Body);
+
         actual.GenericAccessEvidence.Keys.Should().OnlyContain(node => nodes.Contains(node));
 
         Model.Expression Visit(Model.Expression expression)
@@ -189,20 +215,36 @@ public class SourceCompilationCacheTests
     {
         var owner = new Model.FunctionId.Source(Name("root"));
         var binding = new Model.BindingId.Local(owner, 0);
-        var expression = new Model.Expression.RecordAccess(
-            new Model.Expression.ReferenceExpression(new Model.Reference.Local(binding)), "answer");
-        TypeInference.InferredType type = new TypeInference.InferredType.OpenRecordType("row",
-            [("answer", new TypeInference.InferredType.TupleType([
-                new TypeInference.InferredType.ChoiceType(["Module"], "Choice",
-                    [new TypeInference.InferredType.TypeVariable("a", TypeVariableConstraint.Comparable)]),
-                new TypeInference.InferredType.RecordType([("x", new TypeInference.InferredType.IntType())])
-            ]))]);
-        var value = new LoweredSourceFunction(
-            new(new([new Model.Pattern.VarPattern(binding)]), expression),
-            ImmutableDictionary<Model.BindingId, string>.Empty.Add(binding, "record"),
-            ImmutableDictionary.Create<Model.Expression, GenericRecordAccessEvidence>(
-                ReferenceEqualityComparer.Instance).Add(expression,
-                new(type, RecordOperationProvenance.NonIdentifierRecordExpression)));
+
+        var expression =
+            new Model.Expression.RecordAccess(
+                new Model.Expression.ReferenceExpression(new Model.Reference.Local(binding)),
+                "answer");
+
+        TypeInference.InferredType type =
+            new TypeInference.InferredType.OpenRecordType(
+                "row",
+                [
+                    ("answer",
+                    new TypeInference.InferredType.TupleType(
+                        [
+                        new TypeInference.InferredType.ChoiceType(
+                            ["Module"],
+                            "Choice",
+                            [new TypeInference.InferredType.TypeVariable("a", TypeVariableConstraint.Comparable)]),
+                        new TypeInference.InferredType.RecordType([("x", new TypeInference.InferredType.IntType())])
+                        ]))
+                ]);
+
+        var value =
+            new LoweredSourceFunction(
+                new(new([new Model.Pattern.VarPattern(binding)]), expression),
+                ImmutableDictionary<Model.BindingId, string>.Empty.Add(binding, "record"),
+                ImmutableDictionary.Create<Model.Expression, GenericRecordAccessEvidence>(
+                    ReferenceEqualityComparer.Instance).Add(
+                    expression,
+                    new(type, RecordOperationProvenance.NonIdentifierRecordExpression)));
+
         var codec = SourceCompilationCaches.SemanticCodec;
         var bytes = codec.Encode(value);
         var restored = codec.Decode(bytes);
@@ -230,9 +272,12 @@ public class SourceCompilationCacheTests
         var caches = SourceCompilationCaches.CreateInMemory();
         await using var session = new ElmTestRunCacheSession(compilationCaches: caches);
         var syntax = Parse("root n = n")[Name("root")];
-        var inputs = Enumerable.Range(0, 7)
+
+        var inputs =
+            Enumerable.Range(0, 7)
             .Select(index => new SourceTransformationInput(Name("root"), syntax, "environment", "variant-" + index))
             .ToArray();
+
         foreach (var input in inputs.Take(6))
             caches.OperatorLowering.Set(input, syntax);
 
@@ -241,14 +286,17 @@ public class SourceCompilationCacheTests
             caches.OperatorLowering.TryGetValue(inputs[0], out _).Should().BeTrue();
             caches.OperatorLowering.TryGetValue(inputs[1], out _).Should().BeTrue();
         }
+
         await session.WaitForCompilationMaintenanceAsync();
         caches.OperatorLifetime!.Count.Should().Be(6, "the trigger is strictly greater than 3 * used");
         caches.OperatorLowering.Set(inputs[6], syntax);
+
         using (session.BeginCompilationInvocation())
         {
             caches.OperatorLowering.TryGetValue(inputs[0], out _).Should().BeTrue();
             caches.OperatorLowering.TryGetValue(inputs[1], out _).Should().BeTrue();
         }
+
         await session.WaitForCompilationMaintenanceAsync();
         caches.OperatorLifetime.Count.Should().Be(4);
         caches.OperatorLowering.TryGetValue(inputs[0], out _).Should().BeTrue();
@@ -260,18 +308,26 @@ public class SourceCompilationCacheTests
     private sealed class BlockingLifetime : IMarkerCacheLifetime<long>
     {
         public int Count => 100;
+
         public int WorkingSet = 10;
+
         public List<int> Budgets { get; } = [];
+
         public List<Func<long, CacheRetention>> Policies { get; } = [];
+
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public long Marker;
+
         public ICacheUsage SetMarker(long marker)
         {
             Marker = marker;
             return new FixedUsage(WorkingSet);
         }
 
-        public Task TrimAsync(int budget, Func<long, CacheRetention> retention,
+        public Task TrimAsync(
+            int budget,
+            Func<long, CacheRetention> retention,
             CancellationToken cancellationToken = default)
         {
             Budgets.Add(budget);
@@ -284,18 +340,26 @@ public class SourceCompilationCacheTests
     public async Task Concurrent_cleanup_coalesces_latest_budget_and_pins_active_invocations()
     {
         var lifetime = new BlockingLifetime();
-        var caches = SourceCompilationCaches.CreateInMemory() with
-        {
-            OperatorLifetime = lifetime,
-            SemanticLifetime = null
-        };
+
+        var caches =
+            SourceCompilationCaches.CreateInMemory() with
+            {
+                OperatorLifetime = lifetime,
+                SemanticLifetime = null
+            };
+
         await using var session = new ElmTestRunCacheSession(compilationCaches: caches);
-        using (session.BeginCompilationInvocation()) { }
+
+        using (session.BeginCompilationInvocation())
+        {
+        }
+
         lifetime.Budgets.Should().Equal(20);
 
         try
         {
             lifetime.WorkingSet = 2;
+
             using (session.BeginCompilationInvocation())
             {
                 lifetime.Marker.Should().Be(2);
@@ -333,13 +397,21 @@ public class SourceCompilationCacheTests
 
     private static ImmutableDictionary<DeclQualifiedName, Declaration> Parse(string declarations)
     {
-        var parsed = ElmSyntaxParser.ParseModuleText("module Test exposing (..)\n" + declarations + "\n")
+        var parsed =
+            ElmSyntaxParser.ParseModuleText("module Test exposing (..)\n" + declarations + "\n")
             .Extract(error => throw new Exception(error.ToString()));
-        var canonical = Canonicalization.CanonicalizeOrThrow([parsed])
+
+        var canonical =
+            Canonicalization.CanonicalizeOrThrow([parsed])
             .Extract(error => throw new Exception(error));
-        return ElmCompiler.FlattenModulesToDeclarationDictionary(
-            [.. canonical.Values.Select(module =>
-                ConvertFromConcrete.FromFile(module.Extract(error => throw new Exception(error))))]);
+
+        return
+            ElmCompiler.FlattenModulesToDeclarationDictionary(
+                [
+                    .. canonical.Values.Select(
+                        module =>
+                        ConvertFromConcrete.FromFile(module.Extract(error => throw new Exception(error))))
+                ]);
     }
 
     private static ImmutableDictionary<DeclQualifiedName, Declaration> LowerOperators(
@@ -350,7 +422,10 @@ public class SourceCompilationCacheTests
     private static void AssertEquivalent(Model.SourceLoweringResult actual, Model.SourceLoweringResult expected)
     {
         var options = Model.CompilerModelJson.CreateOptions();
-        JsonSerializer.Serialize(actual.Program, options).Should().Be(JsonSerializer.Serialize(expected.Program, options));
+
+        JsonSerializer.Serialize(actual.Program, options).Should().Be(
+            JsonSerializer.Serialize(expected.Program, options));
+
         actual.GenericAccessEvidence.Count.Should().Be(expected.GenericAccessEvidence.Count);
     }
 }

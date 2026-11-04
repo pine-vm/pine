@@ -1,7 +1,7 @@
 using AwesomeAssertions;
 using Pine.Core.Addressing;
-using Pine.Core.Elm.LanguageServer;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Elm.LanguageServer;
 using Pine.Core.Encodings;
 using Pine.Core.Files;
 using Pine.Core.Functional;
@@ -58,10 +58,15 @@ public class LanguageServerTestingTests
             answer _ = 42
             suite = Test.test "answer" (\_ -> Expect.equal 42 (answer 0))
             """;
+
         var current = Tree(declarations);
         var caches = SourceCompilationCaches.CreateInMemory();
-        using var service = new LanguageServerTestingService(
-            (_, _) => Task.FromResult(Snapshot(current)), compilationCaches: caches);
+
+        using var service =
+            new LanguageServerTestingService(
+                (_, _) => Task.FromResult(Snapshot(current)),
+                compilationCaches: caches);
+
         var initial = await service.DiscoverAsync(new(VirtualWorkspace.RootUri));
         initial.Complete.Should().BeTrue(initial.Error?.Message);
         var first = await service.RunAsync(new(VirtualWorkspace.RootUri, initial.Version, "first"));
