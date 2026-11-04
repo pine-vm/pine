@@ -2,6 +2,35 @@
 
 Run Elm tests using the [`elm-explorations/test` package](https://github.com/elm-explorations/test)
 
+Test dependency resolution supports `elm-explorations/test` versions 1.2.2, 2.2.0,
+and 2.2.1 using the bundled test engine. The legacy `Expect.true` and `Expect.false`
+helpers are included for 1.2.2 projects. Substituted packages still resolve only
+explicitly supported versions, without silently falling back to upstream kernels.
+
+The 1.2.2 compatibility implementation also provides `Test.Html.Query`,
+`Test.Html.Selector`, and `Test.Html.Event`.
+Test-scoped replacements for `elm/html` 1.0.0 and `elm/virtual-dom` 1.0.3/1.0.5 build
+inspectable pure Elm trees, including keyed children, deferred lazy views, attributes,
+styles, and mapped event handlers. Queries use the upstream selector and failure
+reporting logic. These replacements inspect views; they do not render a browser DOM.
+`Basics.pi` and `Basics.degrees` work during discovery and compiled execution.
+The existing 2.x non-HTML engine retains its dependency set, so existing application
+manifests do not need additional HTML dependency pins.
+
+`Bitwise` operations normalize operands to 32-bit two's complement before operating,
+mask shift counts to five bits, and sign-extend arithmetic right shifts. This fixes
+CSS hash differences caused by negative or overflowing intermediate values, without
+changing Pine's arbitrary-precision arithmetic outside `Bitwise`.
+
+The bundled `Json.Encode` and `Json.Decode` replacements expose all APIs from
+`elm/json` 1.1.4, including `Encode.set`, `Encode.dict`, and `Decode.oneOrMore`.
+Encoding supports indentation (clamped to 0-10 spaces), last-value-wins object
+keys, and `null` for nonfinite floats. Decoding preserves structured field/index
+errors and supports JSON fractional and exponent notation. Pine retains its
+arbitrary-precision integer and rational-float representation rather than
+JavaScript's IEEE 754 rounding. Invalid JSON errors retain the original input;
+their parser-specific diagnostic text can differ from JavaScript engines.
+
 ## Core discovery and editor navigation
 
 `Pine.Core.Elm.Testing.ElmTestDiscovery.DiscoverTests` provides syntax-interpreter

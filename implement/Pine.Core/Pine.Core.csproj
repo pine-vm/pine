@@ -32,6 +32,7 @@
     <None Include="package-icon.png" Pack="true" PackagePath="" />
     <None Update="Elm\Testing\elm-test\LICENSE" Pack="true" PackagePath="licenses\elm-explorations-test-LICENSE.txt" />
     <None Update="Elm\Testing\elm-random\LICENSE" Pack="true" PackagePath="licenses\elm-random-LICENSE.txt" />
+    <None Update="Elm\Testing\elm-html\LICENSE" Pack="true" PackagePath="licenses\elm-html-LICENSE.txt" />
   </ItemGroup>
 
   <ItemGroup>
@@ -48,7 +49,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="..\elm-in-elm\**\*.elm;..\elm-in-elm\**\*.json" Link="Elm\elm-in-elm\%(RecursiveDir)%(Filename)%(Extension)" />
-    <EmbeddedResource Include="Elm\Testing\elm-test\**;Elm\Testing\elm-random\**" />
+    <EmbeddedResource Include="Elm\Testing\elm-test\**;Elm\Testing\elm-random\**;Elm\Testing\elm-html\**;Elm\Testing\elm-virtual-dom\**" />
   </ItemGroup>
 
   <ItemGroup>

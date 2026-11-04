@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/elm/html",
+  "tag": "1.0.0",
+  "commit": "889b1a9d0e921507f78e1faeb07f0525940a4a4a",
+  "license": "BSD-3-Clause",
+  "scope": "HTML construction, attributes, events, keyed and lazy views for Pine tests; no browser renderer.",
+  "adaptations": [
+    "Route kernel node and attribute helpers through the pure Elm VirtualDom implementation.",
+    "Sanitize URI properties in VirtualDom.property instead of JavaScript helpers."
+  ]
+}

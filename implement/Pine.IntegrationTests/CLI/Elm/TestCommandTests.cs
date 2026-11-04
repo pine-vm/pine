@@ -23,6 +23,70 @@ namespace Pine.IntegrationTests.CLI.Elm;
 public class TestCommandTests
 {
     [Theory]
+    [InlineData(true, false, 0)]
+    [InlineData(false, true, 0)]
+    [InlineData(false, false, 1)]
+    public void Legacy_package_tests_resolve_and_report_real_html_query_results(
+        bool listTests,
+        bool passing,
+        int expectedExit)
+    {
+        var directory =
+            CreateTestProject(
+                $$"""
+                module Tests exposing (suite)
+                import Html
+                import Test
+                import Test.Html.Query as Query
+                import Test.Html.Selector as Selector
+                suite =
+                    Test.test "HTML query" (\_ ->
+                        Html.div [] [ Html.text "actual text" ]
+                            |> Query.fromHtml |> Query.has [ Selector.text "{{(passing ? "actual text" : "missing text")}}" ])
+                """);
+
+        File.WriteAllText(
+            Path.Combine(directory, "elm.json"),
+            """
+            {
+                "type": "package", "name": "example/html-tests", "version": "1.0.0",
+                "elm-version": "0.19.0 <= v < 0.20.0", "exposed-modules": [],
+                "dependencies": {
+                    "elm/core": "1.0.0 <= v < 2.0.0",
+                    "elm/html": "1.0.0 <= v < 2.0.0"
+                },
+                "test-dependencies": { "elm-explorations/test": "1.2.2 <= v < 2.0.0" }
+            }
+            """);
+
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            TestCommand.Execute(
+                directory,
+                listTests: listTests,
+                colorMode: CommandLineColorMode.Never,
+                console: console,
+                errorConsole: console,
+                offline: true,
+                seed: 42).Should().Be(expectedExit, output.ToString());
+
+            output.ToString().Should().NotContain("Error:").And.NotContain("\u001b");
+
+            output.ToString().Should().Contain(
+                listTests ? "Available tests (1)" : passing ? "TEST RUN PASSED" : "TEST RUN FAILED");
+
+            if (!listTests && !passing)
+                output.ToString().Should().Contain("missing text").And.Contain("Failed:   1");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Theory]
     [InlineData(true, true, 0)]
     [InlineData(false, false, 0)]
     [InlineData(false, true, 1)]

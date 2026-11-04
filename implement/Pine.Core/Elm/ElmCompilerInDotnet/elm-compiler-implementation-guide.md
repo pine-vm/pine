@@ -376,6 +376,17 @@ For example, it [exposes `Basics.add` as an infix operator `+`](https://github.c
 
 Implicit operator resolution supports both infix and prefix forms. Floating-point division `/` and `(/)` resolve to the compiler-native `Basics.fdiv`; integer division `//` resolves to `Basics.idiv`.
 
+The native boolean operations also expose curried function values: `(&&)`,
+`(||)`, and `xor` can be partially applied, captured, and passed to helpers such
+as `List.map` or `Tuple.mapSecond`. Infix `&&` and `||` retain short-circuit
+evaluation. Native function values must be registered in `GetFunctionValue`,
+`KnownDeclarationNames`, and `IdentifyFunctionValue`, not just in the direct
+application/type-information catalog.
+
+`truncate` rounds toward zero in both syntax-interpreter discovery and compiled
+Pine execution. Integral Pine numbers retain their value; rational floats divide
+their numerator by their denominator. Nonfinite values truncate to zero.
+
 For operations where we prove the type must be `Int`, we emit specialized code accordingly. In cases where the type is `Float` or an unconstrained `number`, we emit a function that works with any `number` values.
 
 Where the type is constrained to `Int`, we lower `Basics.add` and `Basics.mul` from Elm directly to the `int_add` and `int_mul` Pine builtin functions. We also lower `Basics.sub` to a combination of `int_add` and `int_mul` by multiplying the right operand by `-1` and then adding it.

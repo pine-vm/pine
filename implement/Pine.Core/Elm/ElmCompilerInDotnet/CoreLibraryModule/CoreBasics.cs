@@ -90,6 +90,12 @@ public partial class CoreBasics
         if (functionValue == IsInfinite_FunctionValue())
             return "isInfinite";
 
+        if (functionValue == Truncate_FunctionValue())
+            return "truncate";
+
+        if (functionValue == Degrees_FunctionValue())
+            return "degrees";
+
         if (functionValue == Add_FunctionValue())
         {
             return "add";
@@ -174,6 +180,15 @@ public partial class CoreBasics
         {
             return "not";
         }
+
+        if (functionValue == And_FunctionValue())
+            return "and";
+
+        if (functionValue == Or_FunctionValue())
+            return "or";
+
+        if (functionValue == Xor_FunctionValue())
+            return "xor";
 
         if (functionValue == Negate_FunctionValue())
         {
@@ -438,6 +453,16 @@ public partial class CoreBasics
                 [TypeInference.InferredType.Number(), TypeInference.InferredType.Int()],
                 args => Generic_Ceiling(args[0])),
 
+            "truncate" =>
+            new CoreFunctionInfo(
+                [TypeInference.InferredType.Number(), TypeInference.InferredType.Int()],
+                args => UnaryApplication(Truncate_FunctionValue(), args[0])),
+
+            "degrees" =>
+            new CoreFunctionInfo(
+                [TypeInference.InferredType.Float(), TypeInference.InferredType.Float()],
+                args => UnaryApplication(Degrees_FunctionValue(), args[0])),
+
             "round" =>
             new CoreFunctionInfo(
                 [TypeInference.InferredType.Number(), TypeInference.InferredType.Int()],
@@ -658,6 +683,15 @@ public partial class CoreBasics
             "ge" =>
             Ge_FunctionValue(),
 
+            "and" =>
+            And_FunctionValue(),
+
+            "or" =>
+            Or_FunctionValue(),
+
+            "xor" =>
+            Xor_FunctionValue(),
+
             "not" =>
             Not_FunctionValue(),
 
@@ -673,11 +707,14 @@ public partial class CoreBasics
             "ceiling" =>
             Ceiling_FunctionValue(),
 
+            "truncate" => Truncate_FunctionValue(),
             "round" => Round_FunctionValue(),
             "sqrt" => Sqrt_FunctionValue(),
             "isNaN" => IsNaN_FunctionValue(),
             "isInfinite" => IsInfinite_FunctionValue(),
             "e" => ElmValueEncoding.ElmValueAsPineValue(ElmValue.ElmFloat.Convert(System.Math.E)),
+            "pi" => ElmValueEncoding.ElmValueAsPineValue(ElmValue.ElmFloat.Convert(System.Math.PI)),
+            "degrees" => Degrees_FunctionValue(),
 
             "clamp" =>
             Clamp_FunctionValue(),
@@ -735,9 +772,10 @@ public partial class CoreBasics
             "idiv", "modBy", "remainderBy",
             "eq", "neq", "compare",
             "lt", "gt", "le", "ge",
-            "not", "negate",
+            "and", "or", "xor", "not", "negate",
             "abs", "clamp",
-            "floor", "ceiling", "round", "sqrt", "isNaN", "isInfinite",
+            "floor", "ceiling", "truncate", "round", "sqrt", "isNaN", "isInfinite",
+            "degrees",
             "min", "max",
             "identity",
             "always",
@@ -1330,6 +1368,18 @@ public partial class CoreBasics
     }
 
     // ========== Boolean and Utility Functions ==========
+
+    /// <summary>Returns the curried function value for (&amp;&amp;).</summary>
+    public static PineValue And_FunctionValue() =>
+        BinaryFunctionValue(Generic_And);
+
+    /// <summary>Returns the curried function value for (||).</summary>
+    public static PineValue Or_FunctionValue() =>
+        BinaryFunctionValue(Generic_Or);
+
+    /// <summary>Returns the curried function value for xor.</summary>
+    public static PineValue Xor_FunctionValue() =>
+        BinaryFunctionValue(Generic_Xor);
 
     /// <summary>
     /// (&amp;&amp;) : Bool -> Bool -> Bool
@@ -2452,6 +2502,30 @@ public partial class CoreBasics
         return
             ExpressionEncoding.EncodeExpressionAsValue(asExpr);
     }
+
+    /// <summary>
+    /// Returns the function value for truncate, rounding a Float toward zero.
+    /// </summary>
+    public static PineValue Truncate_FunctionValue()
+    {
+        var value = Expression.EnvironmentInstance;
+        var isFloat = BuiltinHelpers.ApplyBuiltinEqualBinary(ChoiceTagName(value), s_elmFloatTypeTagNameLiteral);
+
+        return
+            ExpressionEncoding.EncodeExpressionAsValue(
+                Expression.ConditionalInst(
+                    condition: isFloat,
+                    trueBranch: Internal_Int_div(ChoiceArgument(value, 0), ChoiceArgument(value, 1)),
+                    falseBranch: value));
+    }
+
+    /// <summary>Returns the function value converting degrees to radians.</summary>
+    public static PineValue Degrees_FunctionValue() =>
+        ExpressionEncoding.EncodeExpressionAsValue(
+            Generic_Mul(
+                Expression.EnvironmentInstance,
+                Expression.LitralInst(
+                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.ElmFloat.Convert(System.Math.PI / 180)))));
 
     /// <summary>
     /// clamp : number -> number -> number -> number

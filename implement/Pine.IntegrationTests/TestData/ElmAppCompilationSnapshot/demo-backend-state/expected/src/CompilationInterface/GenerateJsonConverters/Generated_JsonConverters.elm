@@ -13,7 +13,7 @@ import ListDict
 import Set
 
 
-jsonEncode_51061477 valueToEncode =
+jsonEncode_319496933 valueToEncode =
     Json.Encode.object
         [ ( "httpRequestsCount"
           , Json.Encode.int valueToEncode.httpRequestsCount
@@ -181,7 +181,7 @@ jsonEncode_51061477 valueToEncode =
         ]
 
 
-jsonDecode_51061477 =
+jsonDecode_319496933 =
     Json.Decode.succeed (\httpRequestsCount lastHttpRequests tuple2 tuple3 list_custom_type opaque_custom_type recursive_type bool maybe result set dict empty_record empty_tuple choiceTypeInstance record_instance_string record_instance_int listDict bytes array_primitive -> { httpRequestsCount = httpRequestsCount, lastHttpRequests = lastHttpRequests, tuple2 = tuple2, tuple3 = tuple3, list_custom_type = list_custom_type, opaque_custom_type = opaque_custom_type, recursive_type = recursive_type, bool = bool, maybe = maybe, result = result, set = set, dict = dict, empty_record = empty_record, empty_tuple = empty_tuple, choiceTypeInstance = choiceTypeInstance, record_instance_string = record_instance_string, record_instance_int = record_instance_int, listDict = listDict, bytes = bytes, array_primitive = array_primitive })
         |> jsonDecode_andMap
             ( jsonDecode_field_withAlternateNames "httpRequestsCount"

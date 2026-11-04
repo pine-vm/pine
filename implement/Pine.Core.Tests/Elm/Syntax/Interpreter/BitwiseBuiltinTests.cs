@@ -17,7 +17,7 @@ namespace Pine.Core.Tests.Elm.Syntax.Interpreter;
 
 /// <summary>
 /// Compares whole-function Bitwise shortcuts with the bundled Elm source, including inputs
-/// outside the signed 32-bit range and behavior that differs from host-language bitwise operators.
+/// outside the signed 32-bit range and JavaScript-compatible shift-count masking.
 /// </summary>
 public class BitwiseBuiltinTests
 {
@@ -118,7 +118,7 @@ public class BitwiseBuiltinTests
     [InlineData("shiftLeftBy")]
     [InlineData("shiftRightBy")]
     [InlineData("shiftRightZfBy")]
-    public void Shift_builtins_match_Elm_without_masking_offsets_to_five_bits(string functionName)
+    public void Shift_builtins_match_Elm_with_offsets_masked_to_five_bits(string functionName)
     {
         foreach (var offset in new[] { 0, 1, 4, 7, 8, 15, 16, 24, 31, 32, 33, 63, 64, 127, 256, int.MaxValue })
         {
@@ -206,11 +206,11 @@ public class BitwiseBuiltinTests
     }
 
     [Theory]
-    [InlineData("Bitwise.shiftLeftBy 1 -2147483648", 2048L)]
-    [InlineData("Bitwise.shiftRightBy 31 -1", 0L)]
-    [InlineData("Bitwise.shiftRightBy 4 -12345", -771L)]
+    [InlineData("Bitwise.shiftLeftBy 1 -2147483648", 0L)]
+    [InlineData("Bitwise.shiftRightBy 31 -1", -1L)]
+    [InlineData("Bitwise.shiftRightBy 4 -12345", -772L)]
     [InlineData("Bitwise.shiftRightZfBy 0 -1", 4294967295L)]
-    public void Builtins_preserve_source_specific_results(string expression, long expected)
+    public void Builtins_match_JavaScript_shift_edge_cases(string expression, long expected)
     {
         InterpreterTestHelper.EvaluateInModulesToPineValue(expression, s_prepared.Value)
             .Should().Be(IntegerEncoding.EncodeSignedInteger(expected));

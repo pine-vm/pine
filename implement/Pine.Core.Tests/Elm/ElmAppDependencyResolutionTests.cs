@@ -3,6 +3,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.Syntax;
+using Pine.Core.Elm.Testing;
 using Pine.Core.Encodings;
 using Pine.Core.Files;
 using Pine.Core.Functional;
@@ -1348,6 +1349,47 @@ public class ElmAppDependencyResolutionTests
                 .EnumerateFilesTransitive().Single().fileContent.Span);
 
         aText.Should().Contain("\"Internal.Helper.value\"").And.Contain("-- Internal.Helper.value");
+    }
+
+    [Fact]
+    public async Task Legacy_test_range_resolves_terminal_html_implementations_without_upstream_requests()
+    {
+        var provider = new Provider { RejectRequests = true };
+
+        var report =
+            await Resolve(
+                Package(
+                    Deps(("elm/core", "1.0.0 <= v < 2.0.0")),
+                    testDependencies: Deps(("elm-explorations/test", "1.2.2 <= v < 2.0.0"))),
+                provider,
+                ElmTestRunner.DefaultResolutionConfiguration.Value);
+
+        report.Succeeded.Should().BeTrue();
+        report.Packages["elm-explorations/test"].Identity.Version.ToString().Should().Be("1.2.2");
+
+        report.Packages["elm-explorations/test"].SubstitutionImplementationId.Should().Be(
+            "pine-elm-test-1.2.2-compat-v1");
+
+        report.Packages["elm-explorations/test"].ExposedModules.Should().Contain("Test.Html.Query");
+        report.Packages["elm/html"].SubstitutionImplementationId.Should().Be("pine-pure-html-1.0.0-v1");
+        report.Packages["elm/virtual-dom"].SubstitutionImplementationId.Should().Be("pine-pure-virtual-dom-v1");
+        provider.VersionQueries.Should().BeEmpty();
+        provider.MetadataQueries.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Unsupported_legacy_test_versions_remain_terminal_errors()
+    {
+        var report =
+            await Resolve(
+                Package(Deps(), testDependencies: Deps(("elm-explorations/test", "1.2.0 <= v < 1.2.2"))),
+                new Provider { RejectRequests = true },
+                ElmTestRunner.DefaultResolutionConfiguration.Value);
+
+        report.Succeeded.Should().BeFalse();
+
+        report.Failures.Should().Contain(
+            failure => failure.Kind == ElmResolutionFailureKind.UnsupportedSubstitutionVersion);
     }
 
     [Fact]

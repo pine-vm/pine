@@ -12,6 +12,50 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 
 public class KernelBitwiseFunctionTests
 {
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(16)]
+    [InlineData(31)]
+    [InlineData(32)]
+    [InlineData(33)]
+    [InlineData(63)]
+    public void Compiled_shifts_wrap_operands_and_mask_counts(int offset)
+    {
+        foreach (var value in new long[] { -4294967297, -2147483648, -12345, -1, 0, 1, 2147483648, 4294967296, 4294967297 })
+        {
+            var signed = unchecked((int)value);
+
+            ApplyBinary(GetBitwiseFunction("shiftLeftBy"), Integer(offset), Integer(value))
+                .Should().Be(Integer(signed << offset));
+
+            ApplyBinary(GetBitwiseFunction("shiftRightBy"), Integer(offset), Integer(value))
+                .Should().Be(Integer(signed >> offset));
+
+            ApplyBinary(GetBitwiseFunction("shiftRightZfBy"), Integer(offset), Integer(value))
+                .Should().Be(Integer(unchecked((uint)signed) >> offset));
+        }
+    }
+
+    [Fact]
+    public void Compiled_binary_operations_wrap_overflowing_hash_intermediates()
+    {
+        foreach (var left in new long[] { -4294967297, -2147483648, -12345, 0, 1, 4294967295, 4294967297, 2246822507L * 65535 })
+        {
+            foreach (var right in new long[] { -4294967297, -1, 0, 1, 4294967295 })
+            {
+                var a = unchecked((int)left);
+                var b = unchecked((int)right);
+                ApplyBinary(GetBitwiseFunction("and"), Integer(left), Integer(right)).Should().Be(Integer(a & b));
+                ApplyBinary(GetBitwiseFunction("or"), Integer(left), Integer(right)).Should().Be(Integer(a | b));
+                ApplyBinary(GetBitwiseFunction("xor"), Integer(left), Integer(right)).Should().Be(Integer(a ^ b));
+            }
+
+            ApplyUnary(GetBitwiseFunction("complement"), Integer(left)).Should().Be(Integer(~unchecked((int)left)));
+        }
+    }
+
     private static readonly Lazy<ElmInteractiveEnvironment.ParsedInteractiveEnvironment> s_kernelEnv =
         new(
             () =>

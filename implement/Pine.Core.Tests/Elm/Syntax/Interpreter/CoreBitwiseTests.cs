@@ -336,42 +336,27 @@ public class CoreBitwiseTests
     }
 
     // ============================================================
-    // Characterization tests for known edge cases of this
-    // Bitwise.elm implementation that diverge from a strict
-    // JavaScript-style 32-bit reference. The expected values were
-    // obtained by running the same Bitwise.elm source through the
-    // production Pine VM, so the interpreter is required to agree
-    // bit-for-bit with the production behavior.
+    // Regressions for sign extension and negative operand normalization.
     // ============================================================
 
     [Fact]
-    public void ShiftLeftBy_one_of_min_int_matches_implementation()
+    public void ShiftLeftBy_one_of_min_int_wraps_to_zero()
     {
-        // Pine's Bitwise.elm produces 2048 here (rather than the
-        // strict JS-style 0) because of how the negative-padding
-        // path interacts with the kernel bit-shift on the small
-        // intermediate blob. The production VM agrees on 2048.
         InvokeBinaryInt("shiftLeftBy", 1, unchecked((int)0x80000000))
-            .Should().Be(2048);
-    }
-
-    [Fact]
-    public void ShiftRightBy_thirtyone_of_minus_one_matches_implementation()
-    {
-        // Strict JS-style arithmetic shift would give -1, but this
-        // Bitwise.elm implementation collapses to 0 at offset 31.
-        // The production VM agrees on 0.
-        InvokeBinaryInt("shiftRightBy", 31, -1)
             .Should().Be(0);
     }
 
     [Fact]
-    public void ShiftRightBy_four_of_neg_12345_matches_implementation()
+    public void ShiftRightBy_thirtyone_of_minus_one_preserves_sign()
     {
-        // Strict JS-style arithmetic shift would give -772
-        // (sign-extending), but this Bitwise.elm implementation
-        // produces -771. The production VM agrees on -771.
+        InvokeBinaryInt("shiftRightBy", 31, -1)
+            .Should().Be(-1);
+    }
+
+    [Fact]
+    public void ShiftRightBy_four_of_neg_12345_rounds_down()
+    {
         InvokeBinaryInt("shiftRightBy", 4, -12345)
-            .Should().Be(-771);
+            .Should().Be(-772);
     }
 }

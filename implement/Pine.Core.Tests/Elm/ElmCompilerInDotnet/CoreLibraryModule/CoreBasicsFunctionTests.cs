@@ -11,6 +11,82 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 public class CoreBasicsFunctionTests
 {
     [Theory]
+    [InlineData(0)]
+    [InlineData(90)]
+    [InlineData(-180)]
+    [InlineData(360)]
+    public void Degrees_function_values_convert_angles_and_are_identifiable(long degrees)
+    {
+        var result = ApplyGeneric(CoreBasics.Degrees_FunctionValue(), [ElmValue.Integer(degrees)]);
+
+        if (degrees is 0)
+        {
+            result.Should().Be(ElmValue.Integer(0));
+        }
+        else
+        {
+            var floating = result.Should().BeOfType<ElmValue.ElmFloat>().Which;
+
+            ((double)floating.Numerator / (double)floating.Denominator)
+                .Should().BeApproximately(degrees * (System.Math.PI / 180), 1e-14);
+        }
+
+        CoreBasics.GetFunctionValue("degrees").Should().Be(CoreBasics.Degrees_FunctionValue());
+        CoreBasics.IdentifyFunctionValue(CoreBasics.Degrees_FunctionValue()).Should().Be("degrees");
+        CoreBasics.KnownDeclarationNames.Should().Contain("degrees");
+
+        CoreBasics.GetFunctionValue("pi").Should().Be(
+            ElmValueEncoding.ElmValueAsPineValue(ElmValue.ElmFloat.Convert(System.Math.PI)));
+    }
+
+    [Theory]
+    [InlineData(7, 2, 3)]
+    [InlineData(-7, 2, -3)]
+    [InlineData(7, -2, -3)]
+    [InlineData(-7, -2, 3)]
+    [InlineData(1, 2, 0)]
+    [InlineData(-1, 2, 0)]
+    [InlineData(8, 2, 4)]
+    [InlineData(0, 0, 0)]
+    [InlineData(1, 0, 0)]
+    [InlineData(-1, 0, 0)]
+    public void Truncate_rounds_toward_zero_and_maps_nonfinite_values_to_zero(
+        long numerator,
+        long denominator,
+        long expected)
+    {
+        ApplyGeneric(CoreBasics.Truncate_FunctionValue(), [ElmValue.ElmFloat.NotNormalized(numerator, denominator)])
+            .Should().Be(ElmValue.Integer(expected));
+
+        CoreBasics.GetFunctionValue("truncate").Should().Be(CoreBasics.Truncate_FunctionValue());
+        CoreBasics.IdentifyFunctionValue(CoreBasics.Truncate_FunctionValue()).Should().Be("truncate");
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Boolean_function_values_support_curried_application(bool left, bool right)
+    {
+        var arguments =
+            new ElmValue[]
+            {
+                left ? ElmValue.TrueValue : ElmValue.FalseValue,
+                right ? ElmValue.TrueValue : ElmValue.FalseValue
+            };
+
+        foreach (var (name, expected) in new[] { ("and", left && right), ("or", left || right), ("xor", left ^ right) })
+        {
+            var function = CoreBasics.GetFunctionValue(name);
+            function.Should().NotBeNull();
+            CoreBasics.KnownDeclarationNames.Should().Contain(name);
+            CoreBasics.IdentifyFunctionValue(function!).Should().Be(name);
+            ApplyGeneric(function!, arguments).Should().Be(expected ? ElmValue.TrueValue : ElmValue.FalseValue);
+        }
+    }
+
+    [Theory]
     [InlineData(1.5, 2)]
     [InlineData(-1.5, -1)]
     [InlineData(-0.5, 0)]

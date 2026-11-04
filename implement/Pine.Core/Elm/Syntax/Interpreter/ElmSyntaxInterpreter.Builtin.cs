@@ -69,7 +69,17 @@ public partial class ElmSyntaxInterpreter
         builder.Add(DeclQualifiedName.Create(["Basics"], "fdiv"), ResolveBasicsFdiv);
         builder.Add(DeclQualifiedName.Create(["Basics"], "logBase"), ResolveBasicsLogBase);
         builder.Add(DeclQualifiedName.Create(["Basics"], "ceiling"), ResolveBasicsCeiling);
+        builder.Add(DeclQualifiedName.Create(["Basics"], "truncate"), ResolveBasicsTruncate);
+        builder.Add(DeclQualifiedName.Create(["Basics"], "round"), ResolveBasicsRound);
         builder.Add(DeclQualifiedName.Create(["Basics"], "abs"), ResolveBasicsAbs);
+
+        builder.Add(
+            DeclQualifiedName.Create(["Basics"], "pi"),
+            arguments => arguments.Count is 0 ? ToProcess(ElmValue.ElmFloat.Convert(System.Math.PI)) : null);
+
+        builder.Add(
+            DeclQualifiedName.Create(["Basics"], "degrees"),
+            ResolveBasicsDegrees);
 
         builder.Add(
             DeclQualifiedName.Create(["Basics"], "toFloat"),
@@ -272,7 +282,7 @@ public partial class ElmSyntaxInterpreter
             name.DeclName switch
             {
                 "fdiv" or "logBase" or "add" or "sub" => new[] { "a", "b" },
-                "ceiling" or "abs" or "toFloat" => ["a"],
+                "ceiling" or "truncate" or "round" or "abs" or "toFloat" or "degrees" => ["a"],
 
                 _ =>
                 null
@@ -337,6 +347,52 @@ public partial class ElmSyntaxInterpreter
         var number = NumberParts(arguments[0]);
         var quotient = number.Denominator == 0 ? 0 : number.Numerator / number.Denominator;
         return PineValueInProcess.CreateInteger(quotient * number.Denominator < number.Numerator ? quotient + 1 : quotient);
+    }
+
+    private static PineValueInProcess? ResolveBasicsDegrees(IReadOnlyList<PineValueInProcess> arguments)
+    {
+        if (arguments.Count is not 1)
+            return null;
+
+        var number = NumberParts(arguments[0]);
+        var scale = ElmValue.ElmFloat.Convert(System.Math.PI / 180);
+        return RationalResult(number.Numerator * scale.Numerator, number.Denominator * scale.Denominator);
+    }
+
+    private static PineValueInProcess? ResolveBasicsRound(IReadOnlyList<PineValueInProcess> arguments)
+    {
+        if (arguments.Count is not 1)
+            return null;
+
+        var (numerator, denominator) = NumberParts(arguments[0]);
+
+        if (denominator.IsZero)
+            return PineValueInProcess.CreateInteger(0);
+
+        if (denominator.Sign < 0)
+        {
+            numerator = -numerator;
+            denominator = -denominator;
+        }
+
+        var quotient = BigInteger.DivRem(numerator, denominator, out var remainder);
+
+        return
+            PineValueInProcess.CreateInteger(
+                remainder * 2 >= denominator
+                ?
+                quotient + 1
+                :
+                remainder * 2 < -denominator ? quotient - 1 : quotient);
+    }
+
+    private static PineValueInProcess? ResolveBasicsTruncate(IReadOnlyList<PineValueInProcess> arguments)
+    {
+        if (arguments.Count is not 1)
+            return null;
+
+        var number = NumberParts(arguments[0]);
+        return PineValueInProcess.CreateInteger(number.Denominator == 0 ? 0 : number.Numerator / number.Denominator);
     }
 
     private static PineValueInProcess? ResolveBasicsAbs(IReadOnlyList<PineValueInProcess> arguments)

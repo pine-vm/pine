@@ -52,7 +52,9 @@ public static class ElmTestRunner
                 IncludeTests = true,
                 Substitutions =
                 ElmPackageSubstitutions.DefaultBuild.Value.Substitutions
-                .Add(ElmFuzzPackageSources.Test()).Add(ElmFuzzPackageSources.Random()),
+                .Add(ElmFuzzPackageSources.Test()).Add(ElmFuzzPackageSources.Test(legacy: true))
+                .Add(ElmFuzzPackageSources.Random())
+                .Add(ElmFuzzPackageSources.VirtualDom()).Add(ElmFuzzPackageSources.Html()),
             });
 
     /// <summary>

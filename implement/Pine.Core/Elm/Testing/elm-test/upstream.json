@@ -3,7 +3,7 @@
   "tag": "2.2.1",
   "commit": "81dc48ee4edcc48661b0dfa969cf44a79318a321",
   "license": "BSD-3-Clause",
-  "scope": "Non-HTML Elm source closure; no JavaScript kernels.",
+  "scope": "Elm unit, fuzz and HTML test sources; no JavaScript kernels.",
   "adaptations": [
     "Use native Debug.toString and handle evaluation errors at the Pine VM boundary.",
     "Preserve listing metadata for todo and empty groups without evaluating properties.",
@@ -13,6 +13,8 @@
     "Decode IEEE-754 bit patterns with pure Elm arithmetic instead of JavaScript byte kernels.",
     "Replace the sorted 2048-entry exponent lookup table with its exact closed-form permutation.",
     "Replace the byte-reversal lookup table with the equivalent bounded eight-step bit reversal.",
-    "Correct fuzzWithHelp handling of skipped tests."
+    "Correct fuzzWithHelp handling of skipped tests.",
+    "Support the 1.2.2 version alias and legacy Expect.true/Expect.false expectations.",
+    "Inspect pure Elm virtual DOM values directly in Test.Html.Internal.Inert instead of using HtmlAsJson.js."
   ]
 }

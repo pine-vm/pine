@@ -162,6 +162,67 @@ public class ElmTestTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
+    public void Truncate_works_during_discovery_and_in_compiled_callbacks(bool syntaxDiscovery)
+    {
+        using var project =
+            new ElmFuzzTests.Project(
+                """
+                suite =
+                    Test.describe ("truncate " ++ String.fromInt (truncate (7 / 2)))
+                        [ Test.test "direct" (\_ -> Expect.equal -3 (truncate (-7 / 2)))
+                        , Test.test "first-class" (\_ ->
+                            Expect.equal [ 3, -3, 0 ] (List.map truncate [ 7 / 2, -7 / 2, 1 / 2 ]))
+                        , Test.test "integral" (\_ -> Expect.equal 42 (truncate (toFloat 42)))
+                        ]
+                """);
+
+        var run =
+            syntaxDiscovery
+            ?
+            ElmTestRunner.DiscoverAndRunTests(project.Directory)
+            :
+            ElmTestRunner.CompileAndRunTests(project.Directory);
+
+        var completed = run.Should().BeOfType<ElmTestRun.Completed>().Which;
+        completed.Tests.Should().HaveCount(3).And.OnlyContain(test => test.Kind == CompletedTestKind.Passed);
+        completed.Tests.Should().OnlyContain(test => test.Path.Contains("truncate 3"));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Boolean_core_functions_work_as_values_and_preserve_infix_short_circuiting(bool syntaxDiscovery)
+    {
+        using var project =
+            new ElmFuzzTests.Project(
+                """
+                apply function value = function value
+                suite =
+                    Test.describe "Boolean core functions"
+                        [ Test.test "and value" (\_ -> Expect.equal [ False, False ] (List.map ((&&) False) [ False, True ]))
+                        , Test.test "or value" (\_ -> Expect.equal [ True, True ] (List.map ((||) True) [ False, True ]))
+                        , Test.test "xor value" (\_ -> Expect.equal [ True, False ] (List.map (apply xor True) [ False, True ]))
+                        , Test.test "record matching pattern" (\_ ->
+                            Expect.equal ( 42, False ) (Tuple.mapSecond ((&&) True) ( 42, False )))
+                        , Test.test "and short circuit" (\_ -> Expect.equal False (False && Debug.todo "unreachable and"))
+                        , Test.test "or short circuit" (\_ -> Expect.equal True (True || Debug.todo "unreachable or"))
+                        ]
+                """);
+
+        var run =
+            syntaxDiscovery
+            ?
+            ElmTestRunner.DiscoverAndRunTests(project.Directory)
+            :
+            ElmTestRunner.CompileAndRunTests(project.Directory);
+
+        var completed = run.Should().BeOfType<ElmTestRun.Completed>().Which;
+        completed.Tests.Should().HaveCount(6).And.OnlyContain(test => test.Kind == CompletedTestKind.Passed);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
     public void Duration_report_renders_independent_phase_and_VM_timings(bool includeTotal)
     {
         var output =

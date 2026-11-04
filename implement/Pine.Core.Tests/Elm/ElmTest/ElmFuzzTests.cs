@@ -206,7 +206,9 @@ public class ElmFuzzTests
     {
         var tree =
             ElmTestRunner.DefaultResolutionConfiguration.Value.Substitutions
-            .Single(package => package.PackageName == "elm-explorations/test").Sources;
+            .Single(
+                package => package.PackageName == "elm-explorations/test" &&
+                    package.Versions.Any(version => version.ToString() == "2.2.1")).Sources;
 
         string[] floatPath = ["src", "Fuzz", "Float.elm"];
         string[] bitwisePath = ["src", "MicroBitwiseExtra.elm"];

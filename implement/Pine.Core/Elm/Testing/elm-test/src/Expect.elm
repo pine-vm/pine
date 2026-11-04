@@ -4,6 +4,7 @@ module Expect exposing
     , FloatingPointTolerance(..), within, notWithin
     , ok, err, equalLists, equalDicts, equalSets
     , pass, fail, onFail
+    , true, false
     )
 
 {-| A library to create `Expectation`s, which describe a claim to be tested.
@@ -48,6 +49,11 @@ or both. For an in-depth look, see our [Guide to Floating Point Comparison](#gui
 These functions will let you build your own expectations.
 
 @docs pass, fail, onFail
+
+
+## Legacy Boolean Expectations
+
+@docs true, false
 
 
 ## Guide to Floating Point Comparison
@@ -574,6 +580,26 @@ equalSets expected actual =
                     |> Set.toList
         in
         reportCollectionFailure "Expect.equalSets" expected actual missingKeys extraKeys
+
+
+{-| Legacy boolean expectations from elm-explorations/test 1.2.2.
+-}
+true : String -> Bool -> Expectation
+true message bool =
+    if bool then
+        pass
+
+    else
+        fail message
+
+
+false : String -> Bool -> Expectation
+false message bool =
+    if bool then
+        fail message
+
+    else
+        pass
 
 
 {-| Always passes.
