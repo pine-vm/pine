@@ -241,11 +241,17 @@ public class ElmTestDiscoveryTests
     [Fact]
     public void Execution_settings_reuse_constructed_inventory_and_current_preparation_cancellation()
     {
-        using var project = new ElmFuzzTests.Project(
-            """suite = Test.test "captured" (let expected = 42 in \_ -> Expect.equal 42 expected)""");
+        using var project =
+            new ElmFuzzTests.Project(
+                """suite = Test.test "captured" (let expected = 42 in \_ -> Expect.equal 42 expected)""");
+
         using var discoveryCancellation = new CancellationTokenSource();
-        var discovery = ElmTestDiscovery.DiscoverTests(
-            project.Directory, cancellationToken: discoveryCancellation.Token);
+
+        var discovery =
+            ElmTestDiscovery.DiscoverTests(
+                project.Directory,
+                cancellationToken: discoveryCancellation.Token);
+
         discoveryCancellation.Cancel();
 
         discovery.WithExecutionSettings(new(0, 100)).Should().BeSameAs(discovery);
@@ -267,6 +273,7 @@ public class ElmTestDiscoveryTests
 
         var entry = configured.PrepareExecution().Single().Value;
         using var cache = new ElmTestRunCacheSession();
+
         ElmTestRunner.ExecuteDiscoveredTest(configured.Items.Single(), entry, cache)
             .Kind.Should().Be(CompletedTestKind.Passed);
     }
@@ -285,20 +292,26 @@ public class ElmTestDiscoveryTests
                     Fuzz.int "fixed" (\_ -> Expect.pass)
                 , SELECTED
                 ]
-            """.Replace("SELECTED",
+            """.Replace(
+                "SELECTED",
                 only
                 ?
                 """Test.only (Test.fuzz Fuzz.int "chosen" (\_ -> Expect.pass))"""
                 :
                 """Test.fuzz Fuzz.int "chosen" (\_ -> Expect.pass)""");
+
         using var project = new ElmFuzzTests.Project(declarations);
         var discovery = ElmTestDiscovery.DiscoverTests(project.Directory);
         var chosen = discovery.Items.Single(item => item.ListedTest.Name == "chosen");
 
         var settings = new[] { new ElmTestExecutionSettings(42, 3), new ElmTestExecutionSettings(123, 1) };
+
         var entries =
-            await Task.WhenAll(settings.Select(setting => Task.Run(() =>
-                discovery.PrepareExecution([chosen.Id], setting)[chosen.Id])));
+            await Task.WhenAll(
+                settings.Select(
+                    setting => Task.Run(
+                        () =>
+                        discovery.PrepareExecution([chosen.Id], setting)[chosen.Id])));
 
         for (var index = 0; index < settings.Length; index++)
         {
@@ -310,8 +323,11 @@ public class ElmTestDiscoveryTests
             configured.Items.Single(item => item.ListedTest.Name == "before").FuzzRuns.Should().Be(setting.FuzzRuns);
             discovery.Items.Single(item => item.ListedTest.Name == "chosen").FuzzRuns.Should().Be(100);
 
-            var fresh = ElmTestDiscovery.DiscoverTests(
-                discovery.SourceFiles, executionSettings: setting);
+            var fresh =
+                ElmTestDiscovery.DiscoverTests(
+                    discovery.SourceFiles,
+                    executionSettings: setting);
+
             var expected = fresh.PrepareExecution([chosen.Id])[chosen.Id];
             entries[index].Fuzz.Should().BeEquivalentTo(expected.Fuzz);
             entries[index].Evaluation.Should().Be(expected.Evaluation);

@@ -337,8 +337,10 @@ public sealed class LanguageServerTestingService(
                             token.ThrowIfCancellationRequested();
                             await Send("test", item.Id, "started").ConfigureAwait(false);
                             var watch = Stopwatch.StartNew();
+
                             var completed =
                                 ElmTestRunner.ExecuteDiscoveredTest(item, entries[item.Id], _cache.Value, token);
+
                             var result = ToProtocolResult(retained, item, completed, watch.Elapsed, settings);
                             results.Add(result);
                             await Send("test", item.Id, result.State, result).ConfigureAwait(false);
@@ -469,9 +471,14 @@ public sealed class LanguageServerTestingService(
                                 packageProvider: packageProvider,
                                 cancellationToken: token,
                                 manifestPath: manifestPath);
+
                         token.ThrowIfCancellationRequested();
-                        return new SnapshotDiscovery(
-                            inventory, DiscoveryId(snapshot, inventory), BuildLocations(snapshot, inventory, token));
+
+                        return
+                            new SnapshotDiscovery(
+                                inventory,
+                                DiscoveryId(snapshot, inventory),
+                                BuildLocations(snapshot, inventory, token));
                     },
                     token).ConfigureAwait(false);
 
@@ -835,6 +842,7 @@ public sealed class LanguageServerTestingService(
         {
             token.ThrowIfCancellationRequested();
             var path = group.Key.Split('/');
+
             var node =
                 discovery.SourceFiles.GetNodeAtPath(path) as FileTree.FileNode
                 ?? throw new InvalidOperationException("Missing original source for discovered test: " + group.Key);
@@ -844,7 +852,9 @@ public sealed class LanguageServerTestingService(
             var uri =
                 snapshot.Source.Files.GetNodeAtPath(path) is FileTree.FileNode
                 ?
-                new Uri(new Uri(snapshot.Source.RootUri), string.Join('/', path.Select(Uri.EscapeDataString))).AbsoluteUri
+                new Uri(
+                    new Uri(snapshot.Source.RootUri),
+                    string.Join('/', path.Select(Uri.EscapeDataString))).AbsoluteUri
                 :
                 SourceUri(snapshot.ProjectUri, snapshot.Version, group.Key);
 
@@ -852,7 +862,12 @@ public sealed class LanguageServerTestingService(
             {
                 token.ThrowIfCancellationRequested();
                 var range = item.SourceLocation.Range;
-                locations.Add(item.Id, new(uri, new ProtocolRange(ConvertPosition(range.Start), ConvertPosition(range.End))));
+
+                locations.Add(
+                    item.Id,
+                    new(
+                        uri,
+                        new ProtocolRange(ConvertPosition(range.Start), ConvertPosition(range.End))));
             }
 
             Position ConvertPosition(SyntaxLocation location)

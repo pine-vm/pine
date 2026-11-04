@@ -418,11 +418,13 @@ public static class ElmTestDiscovery
                                 skipped);
 
                         leaf.RunnerKind = currentTag == "ElmTestVariant__UnitTest" ? "unit" : "fuzz";
+
                         if (currentTag == "ElmTestVariant__FuzzTest")
                         {
                             leaf.FuzzRuns = fuzzRuns ?? executionSettings.FuzzRuns;
                             leaf.FuzzRunsOverride = fuzzRuns;
                         }
+
                         rootLeaves.Add(leaf);
                         break;
 
@@ -559,6 +561,7 @@ public static class ElmTestDiscovery
 
         var fullPathCounts = ElmTestFilter.CountFullPaths(executableLeaves.Select(leaf => leaf.ListedTest));
         var executionGate = new SemaphoreSlim(1, 1);
+
         var compilationDeclarations =
             new Lazy<ImmutableDictionary<DeclQualifiedName, Abstract.Declaration>>(
                 () => canonical.Declarations.ToImmutableDictionary(
@@ -612,8 +615,8 @@ public static class ElmTestDiscovery
                 ResolutionFingerprint = build.Resolution.Fingerprint,
                 ExecutionSettings = executionSettings,
                 FuzzRunOverrides =
-                    inventory.Where(item => item.FuzzRunsOverride is not null)
-                    .ToImmutableDictionary(item => item.Id, item => item.FuzzRunsOverride!.Value, StringComparer.Ordinal),
+                inventory.Where(item => item.FuzzRunsOverride is not null)
+                .ToImmutableDictionary(item => item.Id, item => item.FuzzRunsOverride!.Value, StringComparer.Ordinal),
                 CompileExecution =
                 (ids, settings, token) =>
                 {
@@ -643,14 +646,18 @@ public static class ElmTestDiscovery
                         if (settings != executionSettings)
                         {
                             foreach (var root in fuzzRoots.Where(
-                                root => root.Leaves.Any(item =>
+                                root => root.Leaves.Any(
+                                    item =>
                                     item.Kind == ElmTestDiscoveryItemKind.Fuzz && ids.Contains(item.Id))))
                             {
                                 // Seed the entire root to preserve sibling/skip/only seed distribution.
                                 foreach (var runner in PrepareRunners(root, settings, token).Runners)
                                 {
-                                    if (runner.Source.Kind == ElmTestDiscoveryItemKind.Fuzz && ids.Contains(runner.Source.Id))
+                                    if (runner.Source.Kind == ElmTestDiscoveryItemKind.Fuzz &&
+                                        ids.Contains(runner.Source.Id))
+                                    {
                                         runners[runner.Source.Id] = runner;
+                                    }
                                 }
                             }
                         }
@@ -669,7 +676,8 @@ public static class ElmTestDiscovery
                                 token);
 
                         return
-                            selected.Select((item, index) =>
+                            selected.Select(
+                                (item, index) =>
                                 new ElmTestExecutionEntry(item.Id, evaluations[index], runners[item.Id].Fuzz))
                             .ToImmutableDictionary(entry => entry.Id, StringComparer.Ordinal);
                     }
@@ -687,6 +695,7 @@ public static class ElmTestDiscovery
             DiscoveryRoot root, ElmTestExecutionSettings settings, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
+
             var value =
                 Interpreter.Interpret(
                     bridge,
@@ -696,20 +705,25 @@ public static class ElmTestDiscovery
                     ],
                     program,
                     Interpreter.EvaluationConfig.Default with { CancellationToken = token })
-                .Extract(error => throw new InvalidOperationException(
-                    "Failed preparing Elm tests in " + root.Name.FullName + ": " + error));
+                .Extract(
+                    error => throw new InvalidOperationException(
+                        "Failed preparing Elm tests in " + root.Name.FullName + ": " + error));
+
             var tag = ChoiceTag(value) ?? throw new InvalidOperationException("Invalid test discovery bridge result.");
 
             if (tag is not ("Plain" or "Only" or "Skipping" or "Invalid"))
                 throw new InvalidOperationException("Unsupported test discovery bridge result: " + tag);
 
             if (tag == "Invalid")
+            {
                 throw new InvalidOperationException(
                     "Invalid Elm test preparation in " + root.Name.FullName + ": " + ElmString(value.GetElementAt(2)));
+            }
 
             var sources =
                 new Queue<DiscoveryItem>(
                     root.Leaves.Where(item => !item.Skipped && (tag != "Only" || item.Only)));
+
             var runners = new List<SeededRunner>();
 
             foreach (var runner in ListItems(value.GetElementAt(2)))
@@ -736,11 +750,15 @@ public static class ElmTestDiscovery
                         .Extract(error => throw new InvalidOperationException(error))))
                     :
                     null;
+
                 runners.Add(new(source, Field(runner, "run"), fuzz));
             }
 
             if (sources.Count != 0)
-                throw new InvalidOperationException("Test discovery bridge omitted construction sources in " + root.Name.FullName);
+            {
+                throw new InvalidOperationException(
+                    "Test discovery bridge omitted construction sources in " + root.Name.FullName);
+            }
 
             return (tag, runners);
         }
@@ -978,6 +996,7 @@ public sealed record ElmTestDiscoveryResult
 
         SourceLocations =
             items.ToImmutableDictionary(item => item.Id, item => item.SourceLocation, StringComparer.Ordinal);
+
         ItemsById = items.ToImmutableDictionary(item => item.Id, StringComparer.Ordinal);
     }
 
@@ -1029,19 +1048,21 @@ public sealed record ElmTestDiscoveryResult
             throw new InvalidOperationException("This discovery result has no resolved source environment.");
 
         var items =
-            Items.Select(item =>
+            Items.Select(
+                item =>
                 item.Kind == ElmTestDiscoveryItemKind.Fuzz
                 ?
                 item with { FuzzRuns = FuzzRunOverrides.GetValueOrDefault(item.Id, settings.FuzzRuns) }
                 :
                 item).ToImmutableArray();
 
-        return this with
-        {
-            Items = items,
-            ItemsById = items.ToImmutableDictionary(item => item.Id, StringComparer.Ordinal),
-            ExecutionSettings = settings
-        };
+        return
+            this with
+            {
+                Items = items,
+                ItemsById = items.ToImmutableDictionary(item => item.Id, StringComparer.Ordinal),
+                ExecutionSettings = settings
+            };
     }
 
     /// <summary>Compiles selected runnable tests to independent Pine evaluations without replaying construction.</summary>
@@ -1061,7 +1082,8 @@ public sealed record ElmTestDiscoveryResult
         if (ids.Count == 0)
             return ImmutableDictionary<string, ElmTestExecutionEntry>.Empty;
 
-        return (CompileExecution ?? throw new InvalidOperationException("This discovery result has no prepared code."))
+        return
+            (CompileExecution ?? throw new InvalidOperationException("This discovery result has no prepared code."))
             (ids, executionSettings, cancellationToken);
     }
 
