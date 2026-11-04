@@ -41,11 +41,17 @@ public class MemoryCacheTests
     {
         MemoryCache<string, int, long>? cache = null;
         var removed = new List<(string, int)>();
-        cache = new(0, onRemoved: (key, value) =>
-        {
-            Task.Run(() => cache!.Count).Wait(TimeSpan.FromSeconds(10)).Should().BeTrue();
-            removed.Add((key, value));
-        });
+
+        cache =
+            new(
+                0,
+                onRemoved:
+                (key, value) =>
+                {
+                    Task.Run(() => cache!.Count).Wait(TimeSpan.FromSeconds(10)).Should().BeTrue();
+                    removed.Add((key, value));
+                });
+
         cache.Set("first", 1);
         await cache.TrimAsync(0, _ => new CacheRetention.Remove());
         cache.Set("second", 2);

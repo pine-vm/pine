@@ -40,7 +40,10 @@ public partial class Canonicalization
         public ICacheUsage SetMarker(long marker) => lifetime.SetMarker(marker);
 
         /// <inheritdoc/>
-        public Task TrimAsync(int budget, Func<long, CacheRetention> retention, CancellationToken cancellationToken = default) =>
+        public Task TrimAsync(
+            int budget,
+            Func<long, CacheRetention> retention,
+            CancellationToken cancellationToken = default) =>
             lifetime.TrimAsync(budget, retention, cancellationToken);
 
         private void RemoveEntry(Entry entry)
@@ -51,8 +54,10 @@ public partial class Canonicalization
                     return;
 
                 versions = versions.Remove(entry, ReferenceEqualityComparer.Instance);
+
                 if (versions.IsEmpty)
                     entries.TryRemove(entry.Key, out _);
+
                 else
                     entries[entry.Key] = versions;
             }
@@ -73,7 +78,9 @@ public partial class Canonicalization
             CanonicalizationContext context,
             out DeclarationCanonicalizationCacheEntry result)
         {
-            if (entries.TryGetValue(new(declaration, context.CurrentModuleName, context.PreserveOperatorApplications), out var versions))
+            if (entries.TryGetValue(
+                new(declaration, context.CurrentModuleName, context.PreserveOperatorApplications),
+                out var versions))
             {
                 foreach (var version in versions)
                 {
@@ -95,9 +102,11 @@ public partial class Canonicalization
             DeclarationCanonicalizationCacheEntry result,
             InputObservations inputs)
         {
-            var entry = new Entry(
-                new(declaration, context.CurrentModuleName, context.PreserveOperatorApplications),
-                [.. inputs.Values], result);
+            var entry =
+                new Entry(
+                    new(declaration, context.CurrentModuleName, context.PreserveOperatorApplications),
+                    [.. inputs.Values],
+                    result);
 
             lock (gate)
             {
@@ -105,6 +114,7 @@ public partial class Canonicalization
                     return;
 
                 lifetime.Set(entry, entry);
+
                 entries.AddOrUpdate(
                     entry.Key,
                     [entry],
@@ -136,9 +146,13 @@ public partial class Canonicalization
             private readonly CompilerModel.ValueList<string> module;
 
             private readonly int hashCode;
+
             private readonly bool preserveOperatorApplications;
 
-            public DeclarationKey(Node<Declaration> declaration, CompilerModel.ValueList<string> module, bool preserveOperatorApplications)
+            public DeclarationKey(
+                Node<Declaration> declaration,
+                CompilerModel.ValueList<string> module,
+                bool preserveOperatorApplications)
             {
                 this.declaration = declaration;
                 this.module = module;

@@ -27,8 +27,12 @@ public class DeclarationCanonicalizationCacheTests
     private static DeclarationCanonicalizationResult Run(
         Canonicalization.DeclarationCache cache, bool preserveOperators, params string[] modules) =>
         Canonicalization.CanonicalizeDeclarations(
-            [.. modules.Select(Parse)], [Root], implicitImports: null, cache,
-            canonicalizedDependencies: null, preserveOperatorApplications: preserveOperators)
+            [.. modules.Select(Parse)],
+            [Root],
+            implicitImports: null,
+            cache,
+            canonicalizedDependencies: null,
+            preserveOperatorApplications: preserveOperators)
         .Extract(error => throw new InvalidOperationException(error));
 
     [Theory]
@@ -53,7 +57,9 @@ public class DeclarationCanonicalizationCacheTests
         var same = Run(cache, preserveOperators, main, effect);
         same.Declarations[Root].Should().BeSameAs(first.Declarations[Root]);
 
-        var changed = Run(cache, preserveOperators, main, effect.Replace("value : One", "value : Two", StringComparison.Ordinal));
+        var changed =
+            Run(cache, preserveOperators, main, effect.Replace("value : One", "value : Two", StringComparison.Ordinal));
+
         changed.Declarations[Root].Should().NotBeSameAs(first.Declarations[Root]);
         changed.Declarations.Should().ContainKey(DeclQualifiedName.Create(["Effects"], "Two"));
         changed.Declarations.Should().NotContainKey(DeclQualifiedName.Create(["Effects"], "One"));
@@ -62,7 +68,8 @@ public class DeclarationCanonicalizationCacheTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Semantic_inputs_reuse_independent_equal_syntax_and_ignore_unconsulted_scope_changes(bool preserveOperators)
+    public void Semantic_inputs_reuse_independent_equal_syntax_and_ignore_unconsulted_scope_changes(
+        bool preserveOperators)
     {
         const string main = "module Main exposing (..)\nimport A exposing (..)\nimport B exposing (..)\nroot = value";
         const string a = "module A exposing (..)\nvalue = 1";

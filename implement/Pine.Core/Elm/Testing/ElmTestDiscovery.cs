@@ -62,7 +62,13 @@ public static class ElmTestDiscovery
                 .Select(file => (file.path, file.content)));
 
         return
-            DiscoverTests(tree, resolutionConfiguration, packageProvider, cancellationToken, appDirectory, caches: caches)
+            DiscoverTests(
+                tree,
+                resolutionConfiguration,
+                packageProvider,
+                cancellationToken,
+                appDirectory,
+                caches: caches)
             with
             { Duration = watch.Elapsed };
     }
@@ -214,6 +220,7 @@ public static class ElmTestDiscovery
         {
             cancellationToken.ThrowIfCancellationRequested();
             var input = PreparedDeclarationInput.FromConcrete(name, declaration);
+
             if (caches?.PreparedDeclarations.TryGetValue(input, out var cached) is true)
                 return cached;
 

@@ -7,6 +7,7 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+
 using Engine = Pine.Core.Elm.Syntax.Interpreter.ElmSyntaxInterpreter;
 
 namespace Pine.Core.Elm.Syntax.Interpreter;
@@ -19,7 +20,9 @@ namespace Pine.Core.Elm.Syntax.Interpreter;
 public sealed record PreparedDeclarationInput(DeclQualifiedName Name, Abstract.Declaration Syntax)
 {
     private sealed record Digest(ReadOnlyMemory<byte> Bytes);
+
     private static readonly ConditionalWeakTable<Abstract.Declaration, Digest> s_syntaxHashes = new();
+
     private static readonly ConditionalWeakTable<Concrete.Declaration, Abstract.Declaration> s_normalizedSyntax = new();
 
     /// <summary>
@@ -40,12 +43,22 @@ public sealed record PreparedDeclarationInput(DeclQualifiedName Name, Abstract.D
     public ReadOnlyMemory<byte> ComputeHash()
     {
         var syntaxHash =
-            s_syntaxHashes.GetValue(Syntax, syntax => new(SHA256.HashData(
-                JsonSerializer.SerializeToUtf8Bytes(syntax, Abstract.ElmSyntaxAbstractJson.JsonSerializerOptions))));
+            s_syntaxHashes.GetValue(
+                Syntax,
+                syntax => new(
+                    SHA256.HashData(
+                        JsonSerializer.SerializeToUtf8Bytes(
+                            syntax,
+                            Abstract.ElmSyntaxAbstractJson.JsonSerializerOptions))));
 
-        return SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(
-            new[] { "pine-unreduced-prepared-declaration-v1", Name.FullName,
-                Convert.ToHexStringLower(syntaxHash.Bytes.Span) }));
+        return
+            SHA256.HashData(
+                JsonSerializer.SerializeToUtf8Bytes(
+                    new[]
+                    {
+                        "pine-unreduced-prepared-declaration-v1", Name.FullName,
+                        Convert.ToHexStringLower(syntaxHash.Bytes.Span)
+                    }));
     }
 }
 
@@ -64,9 +77,12 @@ public sealed class PreparedSourceDeclaration(
     public Engine.PreparedDeclaration Prepared { get; } = prepared;
 
     private readonly Lazy<IReadOnlyList<(Engine.PreparedExpression Expression, ElmSyntaxExpressionPath Path)>> _paths =
-        new(() => prepared is Engine.PreparedDeclaration.FunctionDeclaration function
-            ? Engine.EnumerateExpressionPaths(function.Function.Declaration.Expression).ToArray()
-            : []);
+        new(
+            () => prepared is Engine.PreparedDeclaration.FunctionDeclaration function
+            ?
+            Engine.EnumerateExpressionPaths(function.Function.Declaration.Expression).ToArray()
+            :
+            []);
 
     /// <summary>Range-free paths; each run projects these onto its own current CST.</summary>
     [JsonIgnore]
@@ -91,7 +107,8 @@ public sealed class PreparedSourceDeclaration(
 
         public PreparedSourceDeclaration Decode(ReadOnlyMemory<byte> bytes) =>
             JsonSerializer.Deserialize<PreparedSourceDeclaration>(
-                bytes.Span, ElmSyntaxInterpreterPreparedJson.JsonSerializerOptions) ??
+                bytes.Span,
+                ElmSyntaxInterpreterPreparedJson.JsonSerializerOptions) ??
             throw new JsonException("Expected a prepared source declaration.");
     }
 }

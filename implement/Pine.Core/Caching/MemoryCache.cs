@@ -109,6 +109,7 @@ public sealed class MemoryCache<TKey, TValue, TMarker>(
     public void Clear()
     {
         KeyValuePair<TKey, Entry>[] removed;
+
         lock (_gate)
         {
             removed = onRemoved is null ? [] : [.. _entries];
@@ -142,7 +143,8 @@ public sealed class MemoryCache<TKey, TValue, TMarker>(
                         {
                             snapshot =
                                 [
-                                    .. _entries.Select(entry =>
+                                    .. _entries.Select(
+                                        entry =>
                                         new Snapshot(entry.Key, entry.Value, entry.Value.Marker, entry.Value.Access))
                                 ];
                         }

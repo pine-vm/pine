@@ -27,16 +27,24 @@ public sealed record ElmTestDiscoveryCaches(
         IFileStore? backingStore = null, IImmutableList<string>? directory = null)
     {
         var prepared = new MemoryCache<PreparedDeclarationInput, PreparedSourceDeclaration, long>(0);
-        return new(
-            new(),
-            backingStore is null ? prepared :
-            new LayeredCache<PreparedDeclarationInput, PreparedSourceDeclaration>(
-                prepared, new FileStoreCache<PreparedDeclarationInput, PreparedSourceDeclaration>(
-                    backingStore, (directory ?? ImmutableList<string>.Empty).Add("prepared-declarations-v1"),
-                    input => input.ComputeHash(), PreparedSourceDeclaration.Codec)))
-        {
-            PreparedLifetime = prepared
-        };
+
+        return
+            new(
+                new(),
+                backingStore is null
+                ?
+                prepared
+                :
+                new LayeredCache<PreparedDeclarationInput, PreparedSourceDeclaration>(
+                    prepared,
+                    new FileStoreCache<PreparedDeclarationInput, PreparedSourceDeclaration>(
+                        backingStore,
+                        (directory ?? ImmutableList<string>.Empty).Add("prepared-declarations-v1"),
+                        input => input.ComputeHash(),
+                        PreparedSourceDeclaration.Codec)))
+            {
+                PreparedLifetime = prepared
+            };
     }
 
     /// <summary>Starts independent marker/working-set accounting for one discovery, including retries.</summary>

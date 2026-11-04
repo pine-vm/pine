@@ -132,6 +132,7 @@ public sealed class ElmTestRunCacheSession(
     {
         CacheLearning?.Dispose();
         WaitForCompilationMaintenanceAsync().GetAwaiter().GetResult();
+
         if (_discoveryCaches.IsValueCreated)
             _discoveryCaches.Value.WaitForMaintenanceAsync().GetAwaiter().GetResult();
     }
@@ -143,6 +144,7 @@ public sealed class ElmTestRunCacheSession(
             await CacheLearning.DisposeAsync().ConfigureAwait(false);
 
         await WaitForCompilationMaintenanceAsync().ConfigureAwait(false);
+
         if (_discoveryCaches.IsValueCreated)
             await _discoveryCaches.Value.WaitForMaintenanceAsync().ConfigureAwait(false);
     }

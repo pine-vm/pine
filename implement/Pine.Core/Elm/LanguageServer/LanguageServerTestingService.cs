@@ -1056,6 +1056,7 @@ public sealed class LanguageServerTestingService(
 
         if (_cache.IsValueCreated)
             _cache.Value.Dispose();
+
         if (_discoveryCaches.IsValueCreated)
             _discoveryCaches.Value.WaitForMaintenanceAsync().GetAwaiter().GetResult();
 
