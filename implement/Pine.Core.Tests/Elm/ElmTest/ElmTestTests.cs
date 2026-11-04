@@ -25,6 +25,60 @@ public class ElmTestTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
+    public void Json_1_1_4_APIs_work_with_resolved_packages_and_both_discovery_paths(bool syntaxDiscovery)
+    {
+        using var project =
+            new ElmFuzzTests.Project(
+                """
+                import Array
+                import Dict
+                import Json.Decode as Decode
+                import Json.Encode as Encode
+                import Set
+
+                suite =
+                    Test.describe "Json APIs"
+                        [ Test.test "set encoder" (\_ ->
+                            Encode.set Encode.int (Set.fromList [ 3, 1, 2, 1 ])
+                                |> Encode.encode 0
+                                |> Expect.equal "[1,2,3]"
+                          )
+                        , Test.test "dict encoder" (\_ ->
+                            Encode.dict String.fromInt Encode.int (Dict.fromList [ ( 2, 20 ), ( 1, 10 ) ])
+                                |> Encode.encode 0
+                                |> Expect.equal "{\"1\":10,\"2\":20}"
+                          )
+                        , Test.test "array decoder" (\_ ->
+                            Decode.decodeString (Decode.array Decode.int) "[3,1,2]"
+                                |> Result.map Array.toList
+                                |> Expect.equal (Ok [ 3, 1, 2 ])
+                          )
+                        , Test.test "oneOrMore decoder" (\_ ->
+                            Decode.decodeString (Decode.oneOrMore (\first rest -> first :: rest) Decode.int) "[3,1,2]"
+                                |> Expect.equal (Ok [ 3, 1, 2 ])
+                          )
+                        ]
+                """);
+
+        var manifestPath = Path.Combine(project.Directory, "elm.json");
+        var manifest = JsonNode.Parse(File.ReadAllText(manifestPath))!.AsObject();
+        manifest["dependencies"]!["direct"]!["elm/json"] = "1.1.4";
+        File.WriteAllText(manifestPath, manifest.ToJsonString());
+
+        var run =
+            syntaxDiscovery
+            ?
+            ElmTestRunner.DiscoverAndRunTests(project.Directory)
+            :
+            ElmTestRunner.CompileAndRunTests(project.Directory);
+
+        var completed = run.Should().BeOfType<ElmTestRun.Completed>().Subject;
+        completed.Tests.Should().HaveCount(4).And.OnlyContain(test => test.Kind == CompletedTestKind.Passed);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
     public void Duration_report_renders_independent_phase_and_VM_timings(bool includeTotal)
     {
         var output =

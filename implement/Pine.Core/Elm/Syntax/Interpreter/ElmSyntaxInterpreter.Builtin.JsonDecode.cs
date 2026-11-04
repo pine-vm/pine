@@ -233,7 +233,12 @@ public partial class ElmSyntaxInterpreter
         var codePoint =
             (span[0] << 24) | (span[1] << 16) | (span[2] << 8) | span[3];
 
-        return char.ConvertFromUtf32(codePoint);
+        return
+            codePoint <= 0xFFFF
+            ?
+            ((char)codePoint).ToString()
+            :
+            char.ConvertFromUtf32(codePoint);
     }
 
     /// <summary>Decodes a UTF-32 big-endian bytes blob into a .NET string (used for object keys in errors).</summary>
@@ -248,7 +253,12 @@ public partial class ElmSyntaxInterpreter
             var codePoint =
                 (span[i] << 24) | (span[i + 1] << 16) | (span[i + 2] << 8) | span[i + 3];
 
-            builder.Append(char.ConvertFromUtf32(codePoint));
+            builder.Append(
+                codePoint <= 0xFFFF
+                ?
+                ((char)codePoint).ToString()
+                :
+                char.ConvertFromUtf32(codePoint));
         }
 
         return builder.ToString();
@@ -447,28 +457,54 @@ public partial class ElmSyntaxInterpreter
             return new JsonValueParse(null, intErr, offset1);
         }
 
-        var nextChar = JsonNextChar(src, offset1);
+        var end = offset1;
+        var hasFraction = false;
+        var nextChar = JsonNextChar(src, end);
 
         if (JsonCharIs(nextChar, '.'))
         {
-            var (denominator, denomErr, offset2) = JsonParseUnsignedInt(src, offset1 + 4);
+            var (_, fractionError, fractionEnd) = JsonParseDigits(src, end + 4);
 
-            if (denomErr is not null)
+            if (fractionError is not null)
             {
-                return new JsonValueParse(null, denomErr, offset2);
+                return new JsonValueParse(null, fractionError, fractionEnd);
             }
 
-            // The float is kept as the raw source slice (matching the Elm implementation, which
-            // takes the substring from the start of the number through the fractional part).
-            var sliceLength = offset2 - offset0;
+            hasFraction = true;
+            end = fractionEnd;
+            nextChar = JsonNextChar(src, end);
+        }
 
-            var sliceBytes = JsonTake(sliceLength, JsonSkip(offset0, src));
+        if (JsonCharIs(nextChar, 'e') || JsonCharIs(nextChar, 'E'))
+        {
+            var digitsStart = end + 4;
+            var sign = JsonNextChar(src, digitsStart);
 
+            if (JsonCharIs(sign, '+') || JsonCharIs(sign, '-'))
+            {
+                digitsStart += 4;
+            }
+
+            var (_, exponentError, exponentEnd) = JsonParseDigits(src, digitsStart);
+
+            if (exponentError is not null)
+            {
+                return new JsonValueParse(null, exponentError, exponentEnd);
+            }
+
+            hasFraction = true;
+            end = exponentEnd;
+        }
+
+        if (hasFraction)
+        {
             return
                 new JsonValueParse(
-                    ElmValueInProcess.CreateChoice(s_jsonFloatValueTagName, [MakeElmString(sliceBytes)]),
+                    ElmValueInProcess.CreateChoice(
+                        s_jsonFloatValueTagName,
+                        [MakeElmString(JsonTake(end - offset0, JsonSkip(offset0, src)))]),
                     null,
-                    offset2);
+                    end);
         }
 
         return
@@ -479,6 +515,13 @@ public partial class ElmSyntaxInterpreter
                 null,
                 offset1);
     }
+
+    private static JsonIntParse JsonParseDigits(System.ReadOnlyMemory<byte> src, int offset) =>
+        JsonIsDigit(JsonNextChar(src, offset))
+        ?
+        JsonParseUnsignedIntRec(BigInteger.Zero, src, offset)
+        :
+        new JsonIntParse(null, "Expecting a digit", offset);
 
     private static JsonIntParse JsonParseInt(System.ReadOnlyMemory<byte> src, int offset0)
     {
@@ -628,7 +671,12 @@ public partial class ElmSyntaxInterpreter
 
             if (JsonCharIs(nextChar, '}'))
             {
-                return (fieldsBefore, null, offset1 + 4);
+                return
+                    fieldsBefore.Count is 0
+                    ?
+                    (fieldsBefore, null, offset1 + 4)
+                    :
+                    (null, "Expecting an object key after ','", offset1);
             }
 
             if (!JsonCharIs(nextChar, '"'))
@@ -733,7 +781,14 @@ public partial class ElmSyntaxInterpreter
                 continue;
             }
 
-            return (null, "Unexpected end of input while reading JSON string", simpleEnd);
+            return
+                (null,
+                nextChar.Length is 0
+                ?
+                "Unexpected end of input while reading JSON string"
+                :
+                "Unescaped control character in JSON string",
+                simpleEnd);
         }
     }
 
@@ -749,6 +804,13 @@ public partial class ElmSyntaxInterpreter
             }
 
             if (JsonCharIs(nextChar, '"') || JsonCharIs(nextChar, '\\'))
+            {
+                return offset;
+            }
+
+            if (nextChar.Length is 4 &&
+                nextChar.Span[0] is 0 && nextChar.Span[1] is 0 && nextChar.Span[2] is 0 &&
+                nextChar.Span[3] < 0x20)
             {
                 return offset;
             }

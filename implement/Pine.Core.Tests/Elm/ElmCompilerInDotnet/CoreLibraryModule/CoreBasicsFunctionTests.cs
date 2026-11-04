@@ -181,6 +181,21 @@ public class CoreBasicsFunctionTests
     }
 
     [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(-1)]
+    public void Float_div_by_zero_preserves_nonfinite_components(long numerator)
+    {
+        CoreLibraryTestHelper.ApplyGenericPine(
+            CoreBasics.Float_div_FunctionValue(),
+            [
+                ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(numerator)),
+                ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(0))
+            ])
+            .Should().Be(ElmValueEncoding.ElmValueAsPineValue(ElmValue.ElmFloat.NotNormalized(numerator, 0)));
+    }
+
+    [Theory]
     [InlineData(2, 0, 1)]
     [InlineData(2, 10, 1024)]
     [InlineData(-2, 2, 4)]

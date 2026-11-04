@@ -3217,7 +3217,7 @@ public partial class CoreBasics
     /// <summary>
     /// Normalizes a float result by reducing it to an integer if the denominator divides evenly into the numerator.
     /// When numerator % denominator == 0, returns numerator / denominator as an integer.
-    /// Otherwise, returns the float structure [Elm_Float, [numerator, denominator]].
+    /// Otherwise, including a zero denominator, retains the float structure and its nonfinite components.
     /// </summary>
     private static Expression NormalizeFloatResult(Expression numerator, Expression denominator)
     {
@@ -3233,6 +3233,7 @@ public partial class CoreBasics
         var quotient = Int_div(numerator, denominator);
 
         var floatResult = BuildChoice(s_elmFloatTypeTagNameLiteral, [numerator, denominator]);
+        var denominatorIsZero = BuiltinHelpers.ApplyBuiltinEqualBinary(denominator, LiteralInt(0));
 
         // If denominator is 1, just return numerator as integer
         // If it divides evenly, return the quotient as integer
@@ -3243,9 +3244,13 @@ public partial class CoreBasics
                 trueBranch: numerator,
                 falseBranch:
                 Expression.ConditionalInst(
-                    condition: dividesEvenly,
-                    trueBranch: quotient,
-                    falseBranch: floatResult));
+                    condition: denominatorIsZero,
+                    trueBranch: floatResult,
+                    falseBranch:
+                    Expression.ConditionalInst(
+                        condition: dividesEvenly,
+                        trueBranch: quotient,
+                        falseBranch: floatResult)));
     }
 
     private static Expression.Eval ApplyUnary(

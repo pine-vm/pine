@@ -1,6 +1,8 @@
 module Json.Encode exposing (..)
 
 import Array
+import Dict
+import Set
 
 
 type String
@@ -47,14 +49,126 @@ array encodeItem items =
     ArrayValue (List.map encodeItem (Array.toList items))
 
 
+set : (a -> Value) -> Set.Set a -> Value
+set encodeItem items =
+    list encodeItem (Set.toList items)
+
+
+dict : (k -> String) -> (v -> Value) -> Dict.Dict k v -> Value
+dict encodeKey encodeValue dictionary =
+    object (List.map (\( key, val ) -> ( encodeKey key, encodeValue val )) (Dict.toList dictionary))
+
+
 object : List ( String, Value ) -> Value
-object =
-    ObjectValue
+object fields =
+    ObjectValue (normalizeObjectFields fields)
+
+
+{-| JavaScript objects keep the last value for a key, retaining its first position,
+and enumerate array-index keys before other keys.
+-}
+normalizeObjectFields : List ( String, Value ) -> List ( String, Value )
+normalizeObjectFields fields =
+    List.sortWith compareObjectFields (List.foldl insertObjectField [] fields)
+
+
+insertObjectField : ( String, Value ) -> List ( String, Value ) -> List ( String, Value )
+insertObjectField (( key, _ ) as entry) fields =
+    case fields of
+        [] ->
+            [ entry ]
+
+        (( existingKey, _ ) as existing) :: rest ->
+            if key == existingKey then
+                entry :: rest
+
+            else
+                existing :: insertObjectField entry rest
+
+
+objectKeyIndex : String -> Maybe Int
+objectKeyIndex key =
+    case String.toInt key of
+        Just number ->
+            if number >= 0 && number < 4294967295 && String.fromInt number == key then
+                Just number
+
+            else
+                Nothing
+
+        Nothing ->
+            Nothing
+
+
+compareObjectFields : ( String, Value ) -> ( String, Value ) -> Order
+compareObjectFields ( keyA, _ ) ( keyB, _ ) =
+    case ( objectKeyIndex keyA, objectKeyIndex keyB ) of
+        ( Just a, Just b ) ->
+            compare a b
+
+        ( Just _, Nothing ) ->
+            LT
+
+        ( Nothing, Just _ ) ->
+            GT
+
+        ( Nothing, Nothing ) ->
+            EQ
 
 
 encode : Int -> Value -> String
 encode indent value =
-    String (Pine_builtin.concat (encodeUtf32ChunksWithoutIndent value))
+    if indent <= 0 then
+        String (Pine_builtin.concat (encodeUtf32ChunksWithoutIndent value))
+
+    else
+        encodeWithIndent (min 10 indent) 0 value
+
+
+encodeWithIndent : Int -> Int -> Value -> String
+encodeWithIndent step depth value =
+    case value of
+        ArrayValue values ->
+            encodeIndentedItems step
+                depth
+                "["
+                "]"
+                (List.map (encodeWithIndent step (depth + step)) values)
+
+        ObjectValue fields ->
+            encodeIndentedItems step
+                depth
+                "{"
+                "}"
+                (List.map
+                    (\( key, val ) ->
+                        encode 0 (string key) ++ ": " ++ encodeWithIndent step (depth + step) val
+                    )
+                    (normalizeObjectFields fields)
+                )
+
+        _ ->
+            String (Pine_builtin.concat (encodeUtf32ChunksWithoutIndent value))
+
+
+encodeIndentedItems : Int -> Int -> String -> String -> List String -> String
+encodeIndentedItems step depth opening closing items =
+    case items of
+        [] ->
+            opening ++ closing
+
+        _ ->
+            let
+                padding =
+                    String.repeat (depth + step) " "
+            in
+            opening
+                ++ "\n"
+                ++ padding
+                ++ String.join (",\n" ++ padding) items
+                ++ "\n"
+                ++ String.repeat depth " "
+                ++ closing
 
 
 encodeUtf32ChunksWithoutIndent : Value -> List Int
@@ -86,12 +200,16 @@ encodeUtf32ChunksWithoutIndent value =
 
         ObjectValue fields ->
             [ '{'
-            , Pine_builtin.concat (encodeFieldsUtf32ChunksWithoutIndent 0 [] fields)
+            , Pine_builtin.concat (encodeFieldsUtf32ChunksWithoutIndent 0 [] (normalizeObjectFields fields))
             , '}'
             ]
 
-        FloatValue (String utf32Bytes) ->
-            [ utf32Bytes ]
+        FloatValue ((String utf32Bytes) as rendered) ->
+            if rendered == "NaN" || rendered == "Infinity" || rendered == "-Infinity" then
+                [ Pine_builtin.concat [ 'n', 'u', 'l', 'l' ] ]
+
+            else
+                [ utf32Bytes ]
 
 
 encodeArrayItemsUtf32ChunksWithoutIndent : Int -> List Value -> List Int -> List Int
@@ -305,6 +423,13 @@ advanceUtf32OffsetForSimpleChars sourceBytes offset =
                         , Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], nextChar ]
                         , 0x0010FFFF
                         ]
+                        && not
+                            (Pine_builtin.int_is_sorted_asc
+                                [ 0xD800
+                                , Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], nextChar ]
+                                , 0xDFFF
+                                ]
+                            )
                 then
                     advanceUtf32OffsetForSimpleChars
                         sourceBytes
@@ -316,7 +441,11 @@ advanceUtf32OffsetForSimpleChars sourceBytes offset =
 
 float : Float -> Value
 float floatVal =
-    FloatValue (String.fromFloat floatVal)
+    if isNaN floatVal then
+        FloatValue "NaN"
+
+    else
+        FloatValue (String.fromFloat floatVal)
 
 
 hex4 : Int -> List Int

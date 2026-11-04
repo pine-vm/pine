@@ -260,8 +260,11 @@ public partial class ElmSyntaxInterpreter
 
     private static ApplicationResolution? ResolveNativeFunction(Application application)
     {
-        if (application.FunctionName.Namespaces.Count != 1 || application.FunctionName.Namespaces[0] != "Basics")
+        if (application.FunctionName.Namespaces.Count is not 1 ||
+            application.FunctionName.Namespaces[0] is not "Basics")
+        {
             return null;
+        }
 
         var name = application.FunctionName;
 
@@ -306,8 +309,8 @@ public partial class ElmSyntaxInterpreter
     {
         if (denominator.Sign < 0)
             (numerator, denominator) = (-numerator, -denominator);
-        // Match native NormalizeFloatResult, which also reduces arithmetic 0/0 to integer zero.
-        if (numerator == 0)
+
+        if (numerator == 0 && denominator != 0)
             return PineValueInProcess.CreateInteger(0);
 
         if (denominator == 1 || denominator != 0 && numerator % denominator == 0)
@@ -328,7 +331,7 @@ public partial class ElmSyntaxInterpreter
 
     private static PineValueInProcess? ResolveBasicsCeiling(IReadOnlyList<PineValueInProcess> arguments)
     {
-        if (arguments.Count != 1)
+        if (arguments.Count is not 1)
             return null;
 
         var number = NumberParts(arguments[0]);
@@ -338,7 +341,7 @@ public partial class ElmSyntaxInterpreter
 
     private static PineValueInProcess? ResolveBasicsAbs(IReadOnlyList<PineValueInProcess> arguments)
     {
-        if (arguments.Count != 1)
+        if (arguments.Count is not 1)
             return null;
 
         var number = NumberParts(arguments[0]);
@@ -368,7 +371,7 @@ public partial class ElmSyntaxInterpreter
         // Match CoreBasics' 48-bit, quantized binary logarithm, including its integral-result snap.
         static BigInteger BinaryLog(BigInteger numerator, BigInteger denominator)
         {
-            BigInteger scale = BigInteger.One << 48;
+            var scale = BigInteger.One << 48;
             BigInteger result = 0;
 
             while (numerator < denominator)
@@ -583,7 +586,7 @@ public partial class ElmSyntaxInterpreter
         return true;
     }
 
-    private static System.Numerics.BigInteger? AsPlainInteger(
+    private static BigInteger? AsPlainInteger(
         PineValueInProcess value) =>
         value.IsBlob() ? value.AsInteger() : null;
 
@@ -703,7 +706,7 @@ public partial class ElmSyntaxInterpreter
         }
 
         // modBy 1 _ == 0 (matches the explicit guard in the Elm implementation).
-        if (divisor == System.Numerics.BigInteger.One)
+        if (divisor == BigInteger.One)
         {
             return PineValueInProcess.CreateInteger(0);
         }
@@ -1086,7 +1089,7 @@ public partial class ElmSyntaxInterpreter
             return s_maybeNothingValue;
         }
 
-        System.Numerics.BigInteger accumulator = 0;
+        BigInteger accumulator = 0;
 
         for (; index < charCount; ++index)
         {
@@ -1119,7 +1122,7 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     private static System.ReadOnlyMemory<byte> TakeBytes(
         System.ReadOnlyMemory<byte> bytes,
-        System.Numerics.BigInteger count)
+        BigInteger count)
     {
         if (count >= bytes.Length)
         {
@@ -1141,7 +1144,7 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     private static System.ReadOnlyMemory<byte> SkipBytes(
         System.ReadOnlyMemory<byte> bytes,
-        System.Numerics.BigInteger count)
+        BigInteger count)
     {
         if (count <= 0)
         {
@@ -1191,7 +1194,7 @@ public partial class ElmSyntaxInterpreter
         // Resolve a (byte) index that may be relative to the end of the string.
         var length = charsBytes.Length;
 
-        System.Numerics.BigInteger AbsoluteIndex(System.Numerics.BigInteger relativeIndex) =>
+        BigInteger AbsoluteIndex(BigInteger relativeIndex) =>
             relativeIndex < 0 ? relativeIndex + length : relativeIndex;
 
         var absoluteStart = AbsoluteIndex(start * 4);
@@ -1472,8 +1475,8 @@ public partial class ElmSyntaxInterpreter
 
     /// <summary>Wraps an <c>Elm_Float numerator denominator</c> in a <c>Just</c>.</summary>
     private static PineValueInProcess MakeJustElmFloat(
-        System.Numerics.BigInteger numerator,
-        System.Numerics.BigInteger denominator) =>
+        BigInteger numerator,
+        BigInteger denominator) =>
         ElmValueInProcess.CreateChoice(
             s_maybeJustTagNameValue,
             [
@@ -1493,7 +1496,7 @@ public partial class ElmSyntaxInterpreter
     /// numerator/denominator components, mirroring <c>toRationalComponentsLessSign</c> from
     /// <c>elm-kernel-modules/String.elm</c>. Returns <c>(0, null)</c> to signal a parse failure.
     /// </summary>
-    private static (System.Numerics.BigInteger Numerator, System.Numerics.BigInteger? Denominator) ToRationalComponentsLessSign(
+    private static (BigInteger Numerator, BigInteger? Denominator) ToRationalComponentsLessSign(
         System.ReadOnlyMemory<byte> charsBytes)
     {
         var lower = ParseWithExponent(charsBytes, 'e');
@@ -1517,7 +1520,7 @@ public partial class ElmSyntaxInterpreter
     /// Implements the exponent branch of <c>toRationalComponentsLessSign</c>: splits on the given
     /// exponent character and combines the mantissa with the power-of-ten exponent.
     /// </summary>
-    private static (System.Numerics.BigInteger Numerator, System.Numerics.BigInteger? Denominator) ParseWithExponent(
+    private static (BigInteger Numerator, BigInteger? Denominator) ParseWithExponent(
         System.ReadOnlyMemory<byte> charsBytes,
         uint exponentChar)
     {
@@ -1552,7 +1555,7 @@ public partial class ElmSyntaxInterpreter
 
         var exponentMagnitude = exponentIsNonPositive ? -exponentInt : exponentInt;
 
-        var powTen = System.Numerics.BigInteger.Pow(10, (int)exponentMagnitude);
+        var powTen = BigInteger.Pow(10, (int)exponentMagnitude);
 
         if (exponentIsNonPositive)
         {
@@ -1567,7 +1570,7 @@ public partial class ElmSyntaxInterpreter
     /// <c>elm-kernel-modules/String.elm</c>: parses an unsigned decimal with an optional fractional
     /// part into numerator/denominator components. Returns <c>(0, null)</c> on failure.
     /// </summary>
-    private static (System.Numerics.BigInteger Numerator, System.Numerics.BigInteger? Denominator) ToRationalComponentsWithoutExponent(
+    private static (BigInteger Numerator, BigInteger? Denominator) ToRationalComponentsWithoutExponent(
         System.ReadOnlyMemory<byte> charsBytes)
     {
         var segments = SplitOnCodePoint(charsBytes, '.');
@@ -1605,7 +1608,7 @@ public partial class ElmSyntaxInterpreter
             return (beforeOnly, 1);
         }
 
-        if ((beforeSep.Length is 0 ? System.Numerics.BigInteger.Zero : ParseUnsignedInt(beforeSep)) is not { } beforeSepInt ||
+        if ((beforeSep.Length is 0 ? BigInteger.Zero : ParseUnsignedInt(beforeSep)) is not { } beforeSepInt ||
             ParseUnsignedInt(afterSep) is not { } afterSepInt)
         {
             return (0, null);
@@ -1618,9 +1621,9 @@ public partial class ElmSyntaxInterpreter
         var denom =
             fractionalDigits is >= 1 and <= 10
             ?
-            System.Numerics.BigInteger.Pow(10, fractionalDigits)
+            BigInteger.Pow(10, fractionalDigits)
             :
-            System.Numerics.BigInteger.One;
+            BigInteger.One;
 
         var numerator = (beforeSepInt * denom) + afterSepInt;
 
@@ -1660,7 +1663,7 @@ public partial class ElmSyntaxInterpreter
     /// <c>parseInt</c> from <c>elm-kernel-modules/String.elm</c>. Returns <see langword="null"/> on
     /// malformed input.
     /// </summary>
-    private static System.Numerics.BigInteger? ParseInt(System.ReadOnlyMemory<byte> charsBytes)
+    private static BigInteger? ParseInt(System.ReadOnlyMemory<byte> charsBytes)
     {
         if (charsBytes.Length is 0)
         {
@@ -1692,7 +1695,7 @@ public partial class ElmSyntaxInterpreter
     /// <c>parseUnsignedInt</c> from <c>elm-kernel-modules/String.elm</c>: at least one decimal digit
     /// must be present and every character must be a digit. Returns <see langword="null"/> otherwise.
     /// </summary>
-    private static System.Numerics.BigInteger? ParseUnsignedInt(System.ReadOnlyMemory<byte> charsBytes)
+    private static BigInteger? ParseUnsignedInt(System.ReadOnlyMemory<byte> charsBytes)
     {
         if (charsBytes.Length is 0)
         {
@@ -1701,7 +1704,7 @@ public partial class ElmSyntaxInterpreter
 
         var span = charsBytes.Span;
 
-        System.Numerics.BigInteger accumulator = 0;
+        BigInteger accumulator = 0;
 
         for (var offset = 0; offset + 4 <= charsBytes.Length; offset += 4)
         {
@@ -1766,8 +1769,8 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     private static string FromFloatDecimal(
         int decimalPlacesMax,
-        System.Numerics.BigInteger numerator,
-        System.Numerics.BigInteger denom)
+        BigInteger numerator,
+        BigInteger denom)
     {
         if (denom == 1)
         {
@@ -1783,7 +1786,7 @@ public partial class ElmSyntaxInterpreter
 
         var signStr = isNegative ? "-" : "";
 
-        var absNum = System.Numerics.BigInteger.Abs(numerator);
+        var absNum = BigInteger.Abs(numerator);
 
         var intPart = absNum / denom;
 
@@ -1794,7 +1797,7 @@ public partial class ElmSyntaxInterpreter
             return signStr + intPart.ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
 
-        var scale = System.Numerics.BigInteger.Pow(10, decimalPlacesMax);
+        var scale = BigInteger.Pow(10, decimalPlacesMax);
 
         var scaledVal = remainder * scale;
 
@@ -1809,7 +1812,7 @@ public partial class ElmSyntaxInterpreter
 
         var overflowed = scale <= scaledIntRounded;
 
-        System.Numerics.BigInteger newIntPart;
+        BigInteger newIntPart;
         string fractionDigits;
 
         if (overflowed)
@@ -2268,9 +2271,9 @@ public partial class ElmSyntaxInterpreter
         return PineValueInProcess.CreateInteger(accumulator + CountDictNodes(arguments[1]));
     }
 
-    private static System.Numerics.BigInteger CountDictNodes(PineValueInProcess dict)
+    private static BigInteger CountDictNodes(PineValueInProcess dict)
     {
-        System.Numerics.BigInteger count = 0;
+        BigInteger count = 0;
 
         var pending = new Stack<PineValueInProcess>();
 

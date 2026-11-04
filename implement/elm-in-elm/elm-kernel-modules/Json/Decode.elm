@@ -67,13 +67,13 @@ type String
     | AnyOtherKind_String
 
 
+type Elm_Float
+    = Elm_Float Int Int
+    | AnyOtherKind_Float
+
+
 type alias Decoder a =
     Value -> Result Error a
-
-
-temporaryStubErrorNotImplemented : Value -> Error
-temporaryStubErrorNotImplemented =
-    Failure "Json.Decode error not implemented yet"
 
 
 decodeValue : Decoder a -> Value -> Result Error a
@@ -107,7 +107,7 @@ null ok jsonValue =
         Ok ok
 
     else
-        Err (temporaryStubErrorNotImplemented jsonValue)
+        Err (Failure "Expecting null" jsonValue)
 
 
 bool : Decoder Bool
@@ -117,7 +117,7 @@ bool jsonValue =
             Ok boolVal
 
         _ ->
-            Err (temporaryStubErrorNotImplemented jsonValue)
+            Err (Failure "Expecting a BOOL" jsonValue)
 
 
 int : Decoder Int
@@ -126,8 +126,27 @@ int jsonValue =
         Json.Encode.IntValue intVal ->
             Ok intVal
 
+        Json.Encode.FloatValue floatAsString ->
+            case jsonNumberToFloat floatAsString of
+                Just number ->
+                    let
+                        ( numerator, denominator ) =
+                            jsonFloatComponents number
+
+                        quotient =
+                            numerator // denominator
+                    in
+                    if denominator /= 0 && Pine_builtin.equal [ Pine_builtin.int_mul [ quotient, denominator ], numerator ] then
+                        Ok quotient
+
+                    else
+                        Err (Failure "Expecting an INT" jsonValue)
+
+                Nothing ->
+                    Err (Failure "Expecting an INT" jsonValue)
+
         _ ->
-            Err (temporaryStubErrorNotImplemented jsonValue)
+            Err (Failure "Expecting an INT" jsonValue)
 
 
 string : Decoder String
@@ -137,7 +156,7 @@ string jsonValue =
             Ok stringVal
 
         _ ->
-            Err (temporaryStubErrorNotImplemented jsonValue)
+            Err (Failure "Expecting a STRING" jsonValue)
 
 
 list : Decoder a -> Decoder (List a)
@@ -147,7 +166,7 @@ list decoder jsonValue =
             decodeListRecursively [] decoder values
 
         _ ->
-            Err (temporaryStubErrorNotImplemented jsonValue)
+            Err (Failure "Expecting a LIST" jsonValue)
 
 
 array : Decoder a -> Decoder (Array.Array a)
@@ -162,7 +181,7 @@ array decoder jsonValue =
                     Err err
 
         _ ->
-            Err (temporaryStubErrorNotImplemented jsonValue)
+            Err (Failure "Expecting an ARRAY" jsonValue)
 
 
 decodeListRecursively : List a -> Decoder a -> List Value -> Result Error (List a)
@@ -177,62 +196,120 @@ decodeListRecursively result decoder values =
                     decodeListRecursively (a :: result) decoder rest
 
                 Err err ->
-                    Err err
+                    Err (Index (List.length result) err)
 
 
 field : String -> Decoder a -> Decoder a
 field key decoder jsonValue =
     case jsonValue of
         Json.Encode.ObjectValue fields ->
-            case List.filter (\( k, _ ) -> k == key) fields of
-                [ ( _, fieldValue ) ] ->
-                    decoder fieldValue
+            case List.filter (\( k, _ ) -> k == key) (List.reverse fields) of
+                ( _, fieldValue ) :: _ ->
+                    Result.mapError (Field key) (decoder fieldValue)
 
                 _ ->
-                    Err (Failure ("Expecting an object with a field named `" ++ key ++ "`") jsonValue)
+                    Err (Failure ("Expecting an OBJECT with a field named `" ++ key ++ "`") jsonValue)
 
         _ ->
-            Err (temporaryStubErrorNotImplemented jsonValue)
+            Err (Failure ("Expecting an OBJECT with a field named `" ++ key ++ "`") jsonValue)
 
 
 float : Decoder Float
 float jsonValue =
     case jsonValue of
         Json.Encode.FloatValue floatAsString ->
-            case String.toFloat floatAsString of
+            case jsonNumberToFloat floatAsString of
                 Just floatVal ->
                     Ok floatVal
 
                 Nothing ->
-                    Err (Failure ("Expecting a float, but got: " ++ floatAsString) jsonValue)
+                    Err (Failure "Expecting a FLOAT" jsonValue)
 
         Json.Encode.IntValue intVal ->
             Ok (toFloat intVal)
 
         _ ->
-            Err (temporaryStubErrorNotImplemented jsonValue)
+            Err (Failure "Expecting a FLOAT" jsonValue)
+
+
+jsonNumberToFloat : String -> Maybe Float
+jsonNumberToFloat source =
+    case source of
+        "NaN" ->
+            Just (Elm_Float 0 0)
+
+        "Infinity" ->
+            Just (Elm_Float 1 0)
+
+        "-Infinity" ->
+            Just (Elm_Float -1 0)
+
+        _ ->
+            jsonFiniteNumberToFloat source
+
+
+jsonFiniteNumberToFloat : String -> Maybe Float
+jsonFiniteNumberToFloat source =
+    case String.split "e" (String.toLower source) of
+        [ mantissa ] ->
+            String.toFloat mantissa
+
+        [ mantissa, exponent ] ->
+            Maybe.map2
+                (\number power ->
+                    let
+                        ( numerator, denominator ) =
+                            jsonFloatComponents number
+                    in
+                    if power < 0 then
+                        Elm_Float numerator (Pine_builtin.int_mul [ denominator, 10 ^ negate power ])
+
+                    else
+                        Elm_Float (Pine_builtin.int_mul [ numerator, 10 ^ power ]) denominator
+                )
+                (String.toFloat mantissa)
+                (String.toInt exponent)
+
+        _ ->
+            Nothing
+
+
+jsonFloatComponents : Float -> ( Int, Int )
+jsonFloatComponents number =
+    case number of
+        Elm_Float numerator denominator ->
+            ( numerator, denominator )
+
+        _ ->
+            ( number, 1 )
 
 
 index : Int -> Decoder a -> Decoder a
 index targetIndex decoder jsonValue =
     case jsonValue of
         Json.Encode.ArrayValue values ->
-            case List.drop targetIndex values of
-                indexedValue :: _ ->
-                    decoder indexedValue
-
-                [] ->
-                    Err
-                        (Failure
-                            ("Expecting an array with at least "
-                                ++ String.fromInt (Pine_builtin.int_add [ targetIndex, 1 ])
-                                ++ " entries"
-                            )
-                            jsonValue
+            if targetIndex < 0 || targetIndex >= List.length values then
+                Err
+                    (Failure
+                        ("Expecting a LONGER array. Need index "
+                            ++ String.fromInt targetIndex
+                            ++ " but only see "
+                            ++ String.fromInt (List.length values)
+                            ++ " entries"
                         )
+                        jsonValue
+                    )
+
+            else
+                case List.drop targetIndex values of
+                    indexedValue :: _ ->
+                        Result.mapError (Index targetIndex) (decoder indexedValue)
+
+                    [] ->
+                        Err (Failure "Expecting an ARRAY" jsonValue)
 
         _ ->
-            Err (temporaryStubErrorNotImplemented jsonValue)
+            Err (Failure "Expecting an ARRAY" jsonValue)
 
 
 map : (a -> b) -> Decoder a -> Decoder b
@@ -251,15 +328,12 @@ map2 :
     -> Decoder b
     -> Decoder value
 map2 func decoderA decoderB jsonValue =
-    case ( decoderA jsonValue, decoderB jsonValue ) of
-        ( Ok a, Ok b ) ->
-            Ok (func a b)
-
-        ( Err err, _ ) ->
+    case decoderA jsonValue of
+        Err err ->
             Err err
 
-        ( _, Err err ) ->
-            Err err
+        Ok a ->
+            map (func a) decoderB jsonValue
 
 
 map3 :
@@ -269,18 +343,7 @@ map3 :
     -> Decoder c
     -> Decoder value
 map3 func decoderA decoderB decoderC jsonValue =
-    case ( decoderA jsonValue, decoderB jsonValue, decoderC jsonValue ) of
-        ( Ok a, Ok b, Ok c ) ->
-            Ok (func a b c)
-
-        ( Err err, _, _ ) ->
-            Err err
-
-        ( _, Err err, _ ) ->
-            Err err
-
-        ( _, _, Err err ) ->
-            Err err
+    map2 (<|) (map2 func decoderA decoderB) decoderC jsonValue
 
 
 map4 :
@@ -291,21 +354,7 @@ map4 :
     -> Decoder d
     -> Decoder value
 map4 func decoderA decoderB decoderC decoderD jsonValue =
-    case ( ( decoderA jsonValue, decoderB jsonValue ), ( decoderC jsonValue, decoderD jsonValue ) ) of
-        ( ( Ok a, Ok b ), ( Ok c, Ok d ) ) ->
-            Ok (func a b c d)
-
-        ( ( Err err, _ ), _ ) ->
-            Err err
-
-        ( ( _, Err err ), _ ) ->
-            Err err
-
-        ( _, ( Err err, _ ) ) ->
-            Err err
-
-        ( _, ( _, Err err ) ) ->
-            Err err
+    map2 (<|) (map3 func decoderA decoderB decoderC) decoderD jsonValue
 
 
 map5 :
@@ -504,19 +553,14 @@ andThen callback decoder jsonValue =
 
 oneOf : List (Decoder a) -> Decoder a
 oneOf decoders jsonValue =
-    case decoders of
-        [] ->
-            Err (Failure "oneOf used with an empty list of decoders" jsonValue)
-
-        _ ->
-            oneOfRecursively [] decoders jsonValue
+    oneOfRecursively [] decoders jsonValue
 
 
 oneOfRecursively : List Error -> List (Decoder a) -> Value -> Result Error a
 oneOfRecursively errors decoders jsonValue =
     case decoders of
         [] ->
-            Err (OneOf errors)
+            Err (OneOf (List.reverse errors))
 
         decoder :: rest ->
             case decoder jsonValue of
@@ -528,18 +572,8 @@ oneOfRecursively errors decoders jsonValue =
 
 
 nullable : Decoder a -> Decoder (Maybe a)
-nullable decoder jsonValue =
-    case jsonValue of
-        Json.Encode.NullValue ->
-            Ok Nothing
-
-        _ ->
-            case decoder jsonValue of
-                Ok a ->
-                    Ok (Just a)
-
-                Err err ->
-                    Err err
+nullable decoder =
+    oneOf [ null Nothing, map Just decoder ]
 
 
 lazy : (() -> Decoder a) -> Decoder a
@@ -585,7 +619,7 @@ decodeString : Decoder a -> String -> Result Error a
 decodeString decoder jsonString =
     case parseJsonStringToValue jsonString of
         Err parseErr ->
-            Err (Failure ("Bad JSON: " ++ parseErr) Json.Encode.NullValue)
+            Err (Failure ("This is not valid JSON! " ++ parseErr) (Json.Encode.string jsonString))
 
         Ok jsonValue ->
             decodeValue decoder jsonValue
@@ -637,7 +671,7 @@ parseJsonStringToValue (String jsonStringBytes) =
                     )
 
         ( Err err, consumed ) ->
-            Err ("Error at character " ++ String.fromInt consumed ++ ": " ++ err)
+            Err ("Error at character " ++ String.fromInt (consumed // 4) ++ ": " ++ err)
 
 
 type alias Parser a =
@@ -761,56 +795,85 @@ parseFalse srcBytes offset0 =
 
 parseNumber : Int -> Int -> ( Result String Value, Int )
 parseNumber srcBytes offset0 =
-    -- We need to parse a number, which could be an integer or a float.
-    -- We'll start by parsing an integer, then look for a decimal point.
     case parseInt srcBytes offset0 of
         ( Ok intVal, offset1 ) ->
-            -- If we successfully parsed an integer, look for a decimal point
             let
                 nextChar =
-                    Pine_builtin.take
-                        [ 4
-                        , Pine_builtin.skip [ offset1, srcBytes ]
-                        ]
+                    Pine_builtin.take [ 4, Pine_builtin.skip [ offset1, srcBytes ] ]
             in
             if Pine_builtin.equal [ nextChar, '.' ] then
-                -- If we see a decimal point, parse the fractional part
-                let
-                    ( denominatorResult, offset2 ) =
-                        parseUnsignedInt
-                            srcBytes
-                            (Pine_builtin.int_add [ offset1, 4 ])
-                in
-                case denominatorResult of
-                    Ok _ ->
-                        -- For now we just take the string as is
-                        let
-                            sliceLength : Int
-                            sliceLength =
-                                Pine_builtin.int_add
-                                    [ offset2
-                                    , Pine_builtin.int_mul [ offset0, -1 ]
-                                    ]
+                case parseDigits srcBytes (Pine_builtin.int_add [ offset1, 4 ]) of
+                    ( Ok _, offset2 ) ->
+                        parseNumberExponent srcBytes offset0 offset2 True intVal
 
-                            sliceBytes =
-                                Pine_builtin.take
-                                    [ sliceLength
-                                    , Pine_builtin.skip [ offset0, srcBytes ]
-                                    ]
-                        in
-                        ( Ok (Json.Encode.FloatValue (String sliceBytes))
-                        , offset2
-                        )
-
-                    Err err ->
+                    ( Err err, offset2 ) ->
                         ( Err err, offset2 )
 
             else
-                -- If no decimal point, we're done: it's an integer
-                ( Ok (Json.Encode.IntValue intVal), offset1 )
+                parseNumberExponent srcBytes offset0 offset1 False intVal
 
         ( Err err, offset1 ) ->
             ( Err err, offset1 )
+
+
+parseNumberExponent : Int -> Int -> Int -> Bool -> Int -> ( Result String Value, Int )
+parseNumberExponent srcBytes start offset hasFraction intVal =
+    let
+        nextChar =
+            Pine_builtin.take [ 4, Pine_builtin.skip [ offset, srcBytes ] ]
+    in
+    if nextChar == 'e' || nextChar == 'E' then
+        let
+            afterE =
+                Pine_builtin.int_add [ offset, 4 ]
+
+            sign =
+                Pine_builtin.take [ 4, Pine_builtin.skip [ afterE, srcBytes ] ]
+
+            digitsStart =
+                if sign == '+' || sign == '-' then
+                    Pine_builtin.int_add [ afterE, 4 ]
+
+                else
+                    afterE
+        in
+        case parseDigits srcBytes digitsStart of
+            ( Ok _, end ) ->
+                parsedFloatValue srcBytes start end
+
+            ( Err err, end ) ->
+                ( Err err, end )
+
+    else if hasFraction then
+        parsedFloatValue srcBytes start offset
+
+    else
+        ( Ok (Json.Encode.IntValue intVal), offset )
+
+
+parsedFloatValue : Int -> Int -> Int -> ( Result String Value, Int )
+parsedFloatValue srcBytes start end =
+    ( Ok
+        (Json.Encode.FloatValue
+            (String
+                (Pine_builtin.take
+                    [ Pine_builtin.int_add [ end, Pine_builtin.int_mul [ start, -1 ] ]
+                    , Pine_builtin.skip [ start, srcBytes ]
+                    ]
+                )
+            )
+        )
+    , end
+    )
+
+
+parseDigits : Int -> Int -> ( Result String Int, Int )
+parseDigits srcBytes offset =
+    if Char.isDigit (Pine_builtin.take [ 4, Pine_builtin.skip [ offset, srcBytes ] ]) then
+        parseUnsignedIntRec 0 srcBytes offset
+
+    else
+        ( Err "Expecting a digit", offset )
 
 
 {-|
@@ -910,7 +973,11 @@ parseObjectRec fieldsBefore srcBytes offset0 =
         case nextChar of
             -- If it's a '}', that means an empty object: "{}"
             '}' ->
-                ( Ok fieldsBefore, Pine_builtin.int_add [ offset1, 4 ] )
+                if List.isEmpty fieldsBefore then
+                    ( Ok fieldsBefore, Pine_builtin.int_add [ offset1, 4 ] )
+
+                else
+                    ( Err "Expecting an object key after ','", offset1 )
 
             -- Otherwise, parse one or more key-value pairs
             '"' ->
@@ -987,19 +1054,79 @@ parseObjectRec fieldsBefore srcBytes offset0 =
 
 errorToString : Error -> String
 errorToString err =
+    errorToStringHelp err []
+
+
+errorToStringHelp : Error -> List String -> String
+errorToStringHelp err context =
     case err of
         Field key subError ->
-            "Field `" ++ key ++ "`: " ++ errorToString subError
+            let
+                isSimple =
+                    case String.uncons key of
+                        Just ( first, rest ) ->
+                            Char.isAlpha first && String.all Char.isAlphaNum rest
+
+                        Nothing ->
+                            False
+
+                name =
+                    if isSimple then
+                        "." ++ key
+
+                    else
+                        "['" ++ key ++ "']"
+            in
+            errorToStringHelp subError (name :: context)
 
         Index offset subError ->
-            "Index " ++ String.fromInt offset ++ ": " ++ errorToString subError
+            errorToStringHelp subError (("[" ++ String.fromInt offset ++ "]") :: context)
 
         OneOf errors ->
-            "One of the following errors occurred:\\n\\n"
-                ++ String.join "\n\n" (List.map errorToString errors)
+            case errors of
+                [] ->
+                    "Ran into a Json.Decode.oneOf with no possibilities"
+                        ++ (if List.isEmpty context then
+                                "!"
+
+                            else
+                                " at json" ++ String.join "" (List.reverse context)
+                           )
+
+                [ single ] ->
+                    errorToStringHelp single context
+
+                _ ->
+                    let
+                        starter =
+                            if List.isEmpty context then
+                                "Json.Decode.oneOf"
+
+                            else
+                                "The Json.Decode.oneOf at json" ++ String.join "" (List.reverse context)
+                    in
+                    String.join "\n\n"
+                        ((starter ++ " failed in the following " ++ String.fromInt (List.length errors) ++ " ways:")
+                            :: List.indexedMap
+                                (\i error -> "\n\n(" ++ String.fromInt (i + 1) ++ ") " ++ indentError (errorToString error))
+                                errors
+                        )
 
         Failure message failValue ->
-            message ++ "\\n\\n" ++ Json.Encode.encode 4 failValue
+            let
+                introduction =
+                    if List.isEmpty context then
+                        "Problem with the given value:\n\n"
+
+                    else
+                        "Problem with the value at json" ++ String.join "" (List.reverse context) ++ ":\n\n    "
+            in
+            introduction ++ indentError (Json.Encode.encode 4 failValue) ++ "\n\n" ++ message
+
+
+indentError : String -> String
+indentError source =
+    String.join "\n    " (String.split "\n" source)
 
 
 parseJsonStringLiteral : Int -> Int -> ( Result String String, Int )
@@ -1063,7 +1190,15 @@ parseJsonStringSegments sourceBytes offset slicesSoFar =
                 )
 
     else
-        ( Err "Unexpected end of input while reading JSON string", simpleSegmentEndOffset )
+        ( Err
+            (if Pine_builtin.equal [ Pine_builtin.length nextChar, 0 ] then
+                "Unexpected end of input while reading JSON string"
+
+             else
+                "Unescaped control character in JSON string"
+            )
+        , simpleSegmentEndOffset
+        )
 
 
 {-| Advance the pointer up to the next char that needs special treatment, like a quote or start of an escape sequence
@@ -1089,11 +1224,19 @@ parseJsonStringSimpleChars sourceBytes offset =
         -- Found a backslash escape, stop here
         offset
 
-    else
+    else if
+        Pine_builtin.int_is_sorted_asc
+            [ 0x20
+            , Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], nextChar ]
+            ]
+    then
         -- Keep going to the next character
         parseJsonStringSimpleChars
             sourceBytes
             (Pine_builtin.int_add [ offset, 4 ])
+
+    else
+        offset
 
 
 parseEscape : Int -> Int -> ( Result String Int, Int )
@@ -1651,10 +1794,10 @@ keyValuePairs : Decoder a -> Decoder (List ( String, a ))
 keyValuePairs decoder jsonValue =
     case jsonValue of
         Json.Encode.ObjectValue fields ->
-            decodeKeyValuePairsRecursively [] decoder fields
+            decodeKeyValuePairsRecursively [] decoder (Json.Encode.normalizeObjectFields fields)
 
         _ ->
-            Err (temporaryStubErrorNotImplemented jsonValue)
+            Err (Failure "Expecting an OBJECT" jsonValue)
 
 
 decodeKeyValuePairsRecursively : List ( String, a ) -> Decoder a -> List ( String, Value ) -> Result Error (List ( String, a ))
@@ -1669,7 +1812,7 @@ decodeKeyValuePairsRecursively result decoder fields =
                     decodeKeyValuePairsRecursively (( key, a ) :: result) decoder rest
 
                 Err err ->
-                    Err err
+                    Err (Field key err)
 
 
 dict : Decoder a -> Decoder (Dict.Dict String a)

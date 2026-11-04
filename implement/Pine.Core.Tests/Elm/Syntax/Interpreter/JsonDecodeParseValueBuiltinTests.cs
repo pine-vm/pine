@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Pine.Core.Elm;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Elm.Syntax.Interpreter;
 using Pine.Core.Encodings;
@@ -152,6 +153,46 @@ public class JsonDecodeParseValueBuiltinTests
         return withBuiltin;
     }
 
+    [Theory]
+    [InlineData("Json.Encode.encode 0 (Json.Encode.set Json.Encode.int (Set.fromList [3,1,2,1]))", "[1,2,3]")]
+    [InlineData("Json.Encode.encode 0 (Json.Encode.dict identity Json.Encode.int (Dict.fromList [(\"b\",2),(\"a\",1)]))",
+        "{\"a\":1,\"b\":2}")]
+    [InlineData("Json.Encode.encode 2 (Json.Encode.object [(\"x\",Json.Encode.list Json.Encode.int [1,2])])",
+        "{\n  \"x\": [\n    1,\n    2\n  ]\n}")]
+    [InlineData("Json.Encode.encode 0 (Json.Encode.float 1.5)", "1.5")]
+    [InlineData("Json.Encode.encode 0 (Json.Encode.FloatValue \"NaN\")", "null")]
+    [InlineData("Json.Encode.encode 0 (Json.Encode.FloatValue \"Infinity\")", "null")]
+    [InlineData("Json.Encode.encode 0 (Json.Encode.FloatValue \"-Infinity\")", "null")]
+    [InlineData("Json.Decode.decodeString Json.Decode.int \"1.0\" |> Result.map String.fromInt |> Result.withDefault \"failed\"", "1")]
+    [InlineData("Json.Decode.decodeString Json.Decode.float \"1.25E+02\" |> Result.map String.fromFloat |> Result.withDefault \"failed\"", "125")]
+    [InlineData("Json.Decode.decodeString Json.Decode.float \"1.25e-2\" |> Result.map String.fromFloat |> Result.withDefault \"failed\"", "0.0125")]
+    [InlineData("Json.Decode.decodeValue Json.Decode.float (Json.Encode.FloatValue \"NaN\") |> Result.map (isNaN >> Json.Encode.bool >> Json.Encode.encode 0) |> Result.withDefault \"failed\"", "true")]
+    [InlineData("Json.Decode.decodeString (Json.Decode.field \"x\" Json.Decode.int) \"{\\\"x\\\":1,\\\"x\\\":2}\" |> Result.map String.fromInt |> Result.withDefault \"failed\"", "2")]
+    [InlineData("Json.Decode.errorToString (Json.Decode.Field \"x\" (Json.Decode.Index 1 (Json.Decode.Failure \"custom\" (Json.Encode.int 42))))",
+        "Problem with the value at json.x[1]:\n\n    42\n\ncustom")]
+    public void Json_public_APIs_match_expected_results_with_and_without_builtins(string expression, string expected)
+    {
+        var withBuiltins = InterpreterTestHelper.EvaluateInModulesToPineValue(expression, s_prepared.Value);
+
+        var withoutBuiltins =
+            InterpreterTestHelper.EvaluateInModulesWithoutBuiltinsToPineValue(expression, s_prepared.Value);
+
+        withBuiltins.Should().Be(withoutBuiltins);
+        withBuiltins.Should().Be(ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance(expected)));
+    }
+
+    [Theory]
+    [InlineData("0 / 0")]
+    [InlineData("1 / 0")]
+    [InlineData("-1 / 0")]
+    public void Json_float_encodes_nonfinite_arithmetic_as_null(string number)
+    {
+        InterpreterTestHelper.EvaluateInModulesToPineValue(
+            "Json.Encode.encode 0 (Json.Encode.float (" + number + "))",
+            s_prepared.Value)
+            .Should().Be(ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("null")));
+    }
+
     // ============================================================
     // Primitive and simple composite values.
     // ============================================================
@@ -166,6 +207,12 @@ public class JsonDecodeParseValueBuiltinTests
     [InlineData("123456789012345678901234567890")]
     [InlineData("3.14")]
     [InlineData("-0.5")]
+    [InlineData("1.01")]
+    [InlineData("-0.005")]
+    [InlineData("12e2")]
+    [InlineData("1.25E+02")]
+    [InlineData("12e-2")]
+    [InlineData("[0.001,1e+02,-2E-03]")]
     [InlineData("\"\"")]
     [InlineData("\"hello\"")]
     [InlineData("[]")]
@@ -173,6 +220,7 @@ public class JsonDecodeParseValueBuiltinTests
     [InlineData("[true, false, null]")]
     [InlineData("{}")]
     [InlineData("{\"a\": 1}")]
+    [InlineData("{\"a\":1,\"a\":2}")]
     [InlineData("{\"a\": 1, \"b\": [2, 3], \"c\": {\"d\": null}}")]
     [InlineData("  \t\n  42  ")]
     [InlineData("[ 1 , 2 , 3 ]")]
@@ -196,6 +244,18 @@ public class JsonDecodeParseValueBuiltinTests
     [InlineData("xyz")]
     [InlineData("[1,]")]
     [InlineData("\"unterminated")]
+    [InlineData("{\"a\":1,}")]
+    [InlineData("{\"a\":1, }")]
+    [InlineData("01")]
+    [InlineData("-01")]
+    [InlineData("1.")]
+    [InlineData("1e")]
+    [InlineData("1e+")]
+    [InlineData("1e-")]
+    [InlineData("1.01e")]
+    [InlineData("\"unescaped\nnewline\"")]
+    [InlineData("\"unescaped\ttab\"")]
+    [InlineData("\"unescaped\u001Fcontrol\"")]
     public void Builtin_matches_Elm_for_malformed_json(string jsonText) =>
         AssertBuiltinMatchesElm(jsonText);
 
@@ -289,6 +349,8 @@ public class JsonDecodeParseValueBuiltinTests
     // Surrogate-pair escapes combining into an astral code point (e.g. U+1F332 🌲).
     [InlineData("\"tree \\uD83C\\uDF32\"")]
     [InlineData("\"face \\uD83D\\uDE00 done\"")]
+    [InlineData("\"\\uD800\"")]
+    [InlineData("\"\\uDC00\"")]
     // Mixed escapes and simple characters.
     [InlineData("\"line1\\nline2\\ttabbed \\u0021\"")]
     public void Builtin_matches_Elm_for_string_escape_encodings(string jsonText) =>

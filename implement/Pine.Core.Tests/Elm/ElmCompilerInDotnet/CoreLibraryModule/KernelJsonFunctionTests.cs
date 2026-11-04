@@ -14,7 +14,7 @@ using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 
-public class KernelJsonFunctionTests
+public partial class KernelJsonFunctionTests
 {
     /// <summary>
     /// Elm test module that imports Json.Encode and Json.Decode and provides
@@ -26,8 +26,10 @@ public class KernelJsonFunctionTests
         module JsonTest exposing (..)
 
         import Dict
+        import Array
         import Json.Decode
         import Json.Encode
+        import Set
 
 
         -- ====== parseJsonStringToValue wrapper ======
@@ -458,7 +460,7 @@ public class KernelJsonFunctionTests
         decodeValueString : Json.Encode.Value -> Result Json.Decode.Error String
         decodeValueString val =
             Json.Decode.decodeValue Json.Decode.string val
-        """";
+        """" + JsonApiRegressionDeclarations;
 
     private static readonly Lazy<ElmInteractiveEnvironment.ParsedInteractiveEnvironment> s_env =
         new(
@@ -1421,15 +1423,15 @@ public class KernelJsonFunctionTests
 
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
-            InvocationCount: 36
-            BuildListCount: 73
-            BuildListItemCount: 200
-            LoopIterationCount: 25
-            InstructionCount: 1_132
-            DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 26
+            InvocationCount: 34
+            BuildListCount: 80
+            BuildListItemCount: 224
+            LoopIterationCount: 23
+            InstructionCount: 1_136
+            DeferredTemplateValueAllocationCount: 2
+            TemplateDirectInvocationCount: 16
             DeferredTemplateValueMaterializationCount: 0
-            TemplateConsolidatedEvalCount: 28
+            TemplateConsolidatedEvalCount: 19
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -1456,15 +1458,15 @@ public class KernelJsonFunctionTests
 
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
-            InvocationCount: 15
-            BuildListCount: 44
-            BuildListItemCount: 117
+            InvocationCount: 17
+            BuildListCount: 53
+            BuildListItemCount: 143
             LoopIterationCount: 21
-            InstructionCount: 668
+            InstructionCount: 791
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 9
+            TemplateDirectInvocationCount: 8
             DeferredTemplateValueMaterializationCount: 0
-            TemplateConsolidatedEvalCount: 9
+            TemplateConsolidatedEvalCount: 8
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -1526,15 +1528,15 @@ public class KernelJsonFunctionTests
 
         formattedCounts.ShouldBeWithDiff(
             """
-            InvocationCount: 19
-            BuildListCount: 52
-            BuildListItemCount: 141
+            InvocationCount: 15
+            BuildListCount: 55
+            BuildListItemCount: 152
             LoopIterationCount: 24
-            InstructionCount: 766
-            DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 13
+            InstructionCount: 824
+            DeferredTemplateValueAllocationCount: 1
+            TemplateDirectInvocationCount: 9
             DeferredTemplateValueMaterializationCount: 0
-            TemplateConsolidatedEvalCount: 14
+            TemplateConsolidatedEvalCount: 10
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -1562,15 +1564,15 @@ public class KernelJsonFunctionTests
 
         formattedCounts.ShouldBeWithDiff(
             """
-            InvocationCount: 43
-            BuildListCount: 124
-            BuildListItemCount: 340
+            InvocationCount: 35
+            BuildListCount: 130
+            BuildListItemCount: 362
             LoopIterationCount: 40
-            InstructionCount: 1_519
-            DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 29
+            InstructionCount: 1_597
+            DeferredTemplateValueAllocationCount: 1
+            TemplateDirectInvocationCount: 21
             DeferredTemplateValueMaterializationCount: 0
-            TemplateConsolidatedEvalCount: 31
+            TemplateConsolidatedEvalCount: 23
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -1598,11 +1600,11 @@ public class KernelJsonFunctionTests
 
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
-            InvocationCount: 14
-            BuildListCount: 56
-            BuildListItemCount: 149
+            InvocationCount: 16
+            BuildListCount: 65
+            BuildListItemCount: 176
             LoopIterationCount: 21
-            InstructionCount: 761
+            InstructionCount: 879
             DeferredTemplateValueAllocationCount: 0
             TemplateDirectInvocationCount: 6
             DeferredTemplateValueMaterializationCount: 0
@@ -1632,15 +1634,15 @@ public class KernelJsonFunctionTests
 
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
-            InvocationCount: 14
-            BuildListCount: 56
-            BuildListItemCount: 149
+            InvocationCount: 17
+            BuildListCount: 66
+            BuildListItemCount: 178
             LoopIterationCount: 21
-            InstructionCount: 761
+            InstructionCount: 883
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 6
+            TemplateDirectInvocationCount: 5
             DeferredTemplateValueMaterializationCount: 0
-            TemplateConsolidatedEvalCount: 6
+            TemplateConsolidatedEvalCount: 5
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -1708,15 +1710,15 @@ public class KernelJsonFunctionTests
 
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
-            InvocationCount: 18
-            BuildListCount: 56
-            BuildListItemCount: 182
-            LoopIterationCount: 13
-            InstructionCount: 773
+            InvocationCount: 35
+            BuildListCount: 77
+            BuildListItemCount: 239
+            LoopIterationCount: 15
+            InstructionCount: 1_156
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 5
+            TemplateDirectInvocationCount: 7
             DeferredTemplateValueMaterializationCount: 0
-            TemplateConsolidatedEvalCount: 5
+            TemplateConsolidatedEvalCount: 9
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -1741,15 +1743,15 @@ public class KernelJsonFunctionTests
 
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
-            InvocationCount: 15
-            BuildListCount: 48
-            BuildListItemCount: 152
-            LoopIterationCount: 15
-            InstructionCount: 725
+            InvocationCount: 32
+            BuildListCount: 69
+            BuildListItemCount: 209
+            LoopIterationCount: 17
+            InstructionCount: 1_108
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 3
+            TemplateDirectInvocationCount: 5
             DeferredTemplateValueMaterializationCount: 0
-            TemplateConsolidatedEvalCount: 3
+            TemplateConsolidatedEvalCount: 7
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -1802,15 +1804,15 @@ public class KernelJsonFunctionTests
 
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
-            InvocationCount: 26
-            BuildListCount: 56
-            BuildListItemCount: 158
+            InvocationCount: 34
+            BuildListCount: 60
+            BuildListItemCount: 166
             LoopIterationCount: 2
-            InstructionCount: 690
+            InstructionCount: 746
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 6
+            TemplateDirectInvocationCount: 2
             DeferredTemplateValueMaterializationCount: 0
-            TemplateConsolidatedEvalCount: 6
+            TemplateConsolidatedEvalCount: 2
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
@@ -1860,15 +1862,15 @@ public class KernelJsonFunctionTests
 
         EvalWorkCountersFormatting.FormatCounts(report).ShouldBeWithDiff(
             """
-            InvocationCount: 11
-            BuildListCount: 44
-            BuildListItemCount: 121
-            LoopIterationCount: 23
-            InstructionCount: 902
+            InvocationCount: 33
+            BuildListCount: 69
+            BuildListItemCount: 190
+            LoopIterationCount: 24
+            InstructionCount: 1_413
             DeferredTemplateValueAllocationCount: 0
-            TemplateDirectInvocationCount: 2
+            TemplateDirectInvocationCount: 11
             DeferredTemplateValueMaterializationCount: 0
-            TemplateConsolidatedEvalCount: 2
+            TemplateConsolidatedEvalCount: 11
             DirectInterpreterInvocationCount: 0
             DirectInterpreterExpressionCount: 0
             DirectInterpreterLiteralCount: 0
