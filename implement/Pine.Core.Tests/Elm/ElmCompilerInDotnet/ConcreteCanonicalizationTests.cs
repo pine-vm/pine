@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.Syntax;
 using System.Linq;
@@ -11,6 +12,154 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
 public class ConcreteCanonicalizationTests
 {
+    [Theory]
+    [InlineData("Status(..)", "Status", "type alias Status = First.Status")]
+    [InlineData("Status", "Status", "type alias Status = First.Status")]
+    [InlineData("Status(..)", "Status(..)", "type Status = OtherStatus")]
+    [InlineData("Status", "Status", "type alias Status = { value : Int }")]
+    [InlineData("..", "Status", "type alias Status = First.Status")]
+    [InlineData("..", "Status(..)", "type Status = OtherStatus")]
+    public void Later_explicit_type_import_replaces_earlier_type_import(
+        string firstExposing,
+        string secondExposing,
+        string secondDeclaration)
+    {
+        var files =
+            new[]
+            {
+                Parse("module First exposing (Status(..))\ntype Status = Status"),
+                Parse($"module Second exposing (..)\nimport First\n{secondDeclaration}"),
+                Parse(
+                    $$"""
+                    module Main exposing (root)
+                    import First exposing ({{firstExposing}})
+                    import Second exposing ({{secondExposing}})
+                    root : Status -> Status
+                    root value = value
+                    """)
+            };
+
+        var canonicalized =
+            Canonicalization.Canonicalize(files)
+            .Extract(error => throw new System.Exception(error))
+            [["Main"]];
+
+        canonicalized.Errors.Should().BeEmpty();
+
+        var function = FunctionNamed(canonicalized.File, "root");
+
+        var signature =
+            function.Signature!.Value.TypeAnnotation.Value
+            .Should().BeOfType<ConcreteSyntax.TypeAnnotation.FunctionTypeAnnotation>().Which;
+
+        signature.ArgumentType.Value.Should().BeOfType<ConcreteSyntax.TypeAnnotation.Typed>()
+            .Which.TypeName.Value.ModuleName.Should().Equal("Second");
+
+        signature.ReturnType.Value.Should().BeOfType<ConcreteSyntax.TypeAnnotation.Typed>()
+            .Which.TypeName.Value.ModuleName.Should().Equal("Second");
+
+        var root = DeclQualifiedName.Create(["Main"], "root");
+
+        var demanded =
+            Canonicalization.CanonicalizeDeclarations(files, [root])
+            .Extract(error => throw new System.Exception(error));
+
+        demanded.Declarations.Values.SelectMany(declaration => declaration.Errors).Should().BeEmpty();
+        demanded.Declarations[root].Value.Should().Be(canonicalized.File.Declarations.Single());
+        var expectedType = DeclQualifiedName.Create(["Second"], "Status");
+        demanded.References[root].Should().HaveCount(2);
+
+        demanded.References[root].Should().OnlyContain(
+            reference => reference.ReferencedName == expectedType && reference.IsTypeReference);
+    }
+
+    [Theory]
+    [InlineData("..", "..")]
+    [InlineData("Status", "..")]
+    [InlineData("Status(..)", "..")]
+    public void Later_wildcard_type_import_preserves_ambiguity(string firstExposing, string secondExposing)
+    {
+        var files =
+            new[]
+            {
+                Parse("module First exposing (Status(..))\ntype Status = Status"),
+                Parse("module Second exposing (Status(..))\ntype Status = OtherStatus"),
+                Parse(
+                    $$"""
+                    module Main exposing (root)
+                    import First exposing ({{firstExposing}})
+                    import Second exposing ({{secondExposing}})
+                    root : Status
+                    root = First.Status
+                    """)
+            };
+
+        var canonicalized =
+            Canonicalization.Canonicalize(files)
+            .Extract(error => throw new System.Exception(error))
+            [["Main"]];
+
+        var error =
+            canonicalized.Errors.Should().ContainSingle()
+            .Which.Should().BeOfType<CanonicalizationError.AmbiguousImport>().Which;
+
+        error.Name.Should().Be("Status");
+        error.ImportingModules.Should().Equal("First", "Second");
+
+        var root = DeclQualifiedName.Create(["Main"], "root");
+
+        var demanded =
+            Canonicalization.CanonicalizeDeclarations(files, [root])
+            .Extract(failure => throw new System.Exception(failure));
+
+        demanded.Declarations[root].Errors.Should().BeEquivalentTo(canonicalized.Errors);
+    }
+
+    [Theory]
+    [InlineData("Status(..)", "type Status = Status", "root _ = Status")]
+    [InlineData("Status(..)", "type Status = Status", "root Status = First.Status")]
+    [InlineData("Status", "type alias Status = { value : Int }", "root _ = Status 1")]
+    public void Explicit_type_imports_do_not_hide_ambiguous_value_constructors(
+        string exposing,
+        string declaration,
+        string definition)
+    {
+        var files =
+            new[]
+            {
+                Parse($"module First exposing (..)\n{declaration}"),
+                Parse($"module Second exposing (..)\n{declaration}"),
+                Parse(
+                    $$"""
+                    module Main exposing (root)
+                    import First exposing ({{exposing}})
+                    import Second exposing ({{exposing}})
+                    root : Status -> Status
+                    {{definition}}
+                    """)
+            };
+
+        var canonicalized =
+            Canonicalization.Canonicalize(files)
+            .Extract(error => throw new System.Exception(error))
+            [["Main"]];
+
+        var error =
+            canonicalized.Errors.Should().ContainSingle()
+            .Which.Should().BeOfType<CanonicalizationError.AmbiguousImport>().Which;
+
+        error.Name.Should().Be("Status");
+        error.ImportingModules.Should().Equal("First", "Second");
+
+        var root = DeclQualifiedName.Create(["Main"], "root");
+
+        var demanded =
+            Canonicalization.CanonicalizeDeclarations(files, [root])
+            .Extract(failure => throw new System.Exception(failure));
+
+        demanded.Declarations[root].Errors.Should().BeEquivalentTo(canonicalized.Errors);
+    }
+
     [Fact]
     public void Preserves_concrete_source_structure_and_ranges()
     {

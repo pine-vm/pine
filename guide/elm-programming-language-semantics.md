@@ -82,6 +82,25 @@ The error message identifies:
 - The name that caused the conflict (`shared`)
 - All modules that expose this name (`Alfa`, `Beta`)
 
+#### Explicit Type Imports Replace Earlier Type Imports
+
+For type names, an explicit exposure such as `exposing (Status)` or
+`exposing (Status(..))` replaces earlier imports of that type name. The last
+explicit exposure wins, even if an earlier import used `exposing (..)`.
+A later wildcard import still merges names and can make the type ambiguous.
+
+This affects only the type namespace, not value constructors:
+
+```elm
+import Review.Error.ReviewError exposing (ReviewError(..))
+import Review.Rule exposing (ReviewError)
+```
+
+Here, the unqualified type `ReviewError` resolves to `Review.Rule.ReviewError`,
+while the constructor `ReviewError` still comes from `Review.Error.ReviewError`.
+If both imports expose a constructor with that name, using it unqualified
+remains ambiguous.
+
 #### Resolving Overlapping Names
 
 To resolve this ambiguity, you can:
@@ -291,4 +310,3 @@ usesPatternShadow x =
 ```
 
 Each of these produces a shadowing error.
-

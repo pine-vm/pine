@@ -105,6 +105,17 @@ public class DeclarationCanonicalizationCacheTests
                 ]
             },
             {
+                "later explicit type import changes with import order",
+                [
+                "module Main exposing (..)\nimport A exposing (Item)\nimport B exposing (Item)\nroot : Item -> Item\nroot item = item",
+                "module A exposing (..)\ntype Item = First", "module B exposing (..)\ntype Item = Second"
+                ],
+                [
+                "module Main exposing (..)\nimport B exposing (Item)\nimport A exposing (Item)\nroot : Item -> Item\nroot item = item",
+                "module A exposing (..)\ntype Item = First", "module B exposing (..)\ntype Item = Second"
+                ]
+            },
+            {
                 "qualified exposure is removed",
                 ["module Main exposing (..)\nimport A\nroot = A.value", "module A exposing (..)\nvalue = 1"],
                 [

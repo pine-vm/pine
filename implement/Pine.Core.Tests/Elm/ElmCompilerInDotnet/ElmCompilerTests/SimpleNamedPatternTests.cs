@@ -11,6 +11,39 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 
 public class SimpleNamedPatternTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Later_type_alias_import_preserves_earlier_choice_constructor(bool disableInlining)
+    {
+        var (parsedEnv, _) =
+            ElmCompilerTestHelper.CompileElmModules(
+                [
+                    """
+                    module Review.Error.ReviewError exposing (ReviewError(..))
+                    type ReviewError = ReviewError Int
+                    """,
+                    """
+                    module Review.Rule exposing (ReviewError)
+                    import Review.Error.ReviewError
+                    type alias ReviewError = Review.Error.ReviewError.ReviewError
+                    """,
+                    """
+                    module Test exposing (value)
+                    import Review.Error.ReviewError exposing (ReviewError(..))
+                    import Review.Rule exposing (ReviewError)
+                    check : ReviewError -> Int
+                    check (ReviewError number) = number
+                    value = check (ReviewError 42)
+                    """
+                ],
+                disableInlining);
+
+        parsedEnv.Modules.Single(module => module.moduleName is "Test")
+            .moduleContent.FunctionDeclarations["value"]
+            .Should().Be(IntegerEncoding.EncodeSignedInteger(42));
+    }
+
     [Fact]
     public void Case_of_maybe_tuple_patterns()
     {

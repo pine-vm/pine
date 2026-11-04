@@ -1022,17 +1022,8 @@ public partial class Canonicalization
 
                     foreach (var name in typeNames)
                     {
-                        if (!typeImportMap.TryGetValue(name, out var value))
-                        {
-                            value = [];
-                            typeImportMap[name] = value;
-                        }
-
-                        // Avoid adding the same module name multiple times for the same name
-                        if (!value.Any(m => m.SequenceEqual(moduleName)))
-                        {
-                            typeImportMap[name] = value.Add(moduleName);
-                        }
+                        // Elm replaces earlier type imports for explicit exposures, but merges value constructors.
+                        typeImportMap[name] = [moduleName];
                     }
 
                     foreach (var name in valueNames)
