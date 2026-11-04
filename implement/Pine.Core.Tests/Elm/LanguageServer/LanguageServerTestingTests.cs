@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core.Addressing;
+using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.LanguageServer;
 using Pine.Core.Encodings;
 using Pine.Core.Files;
@@ -47,6 +48,46 @@ public class LanguageServerTestingTests
 
     private static ElmTestSourceSnapshot Snapshot(FileTree tree) =>
         new(VirtualWorkspace.RootUri, tree, new Dictionary<string, int>());
+
+    [Fact]
+    public async Task Testing_reuses_injected_transformation_caches_without_stale_productive_code()
+    {
+        const string declarations =
+            """
+            answer : Int -> Int
+            answer _ = 42
+            suite = Test.test "answer" (\_ -> Expect.equal 42 (answer 0))
+            """;
+
+        var current = Tree(declarations);
+        var caches = SourceCompilationCaches.CreateInMemory();
+
+        using var service =
+            new LanguageServerTestingService(
+                (_, _) => Task.FromResult(Snapshot(current)),
+                compilationCaches: caches);
+
+        var initial = await service.DiscoverAsync(new(VirtualWorkspace.RootUri));
+        initial.Complete.Should().BeTrue(initial.Error?.Message);
+        var first = await service.RunAsync(new(VirtualWorkspace.RootUri, initial.Version, "first"));
+        first.Results.Single().State.Should().Be("passed");
+        var operatorEntries = caches.OperatorLifetime!.Count;
+        var semanticEntries = caches.SemanticLifetime!.Count;
+        operatorEntries.Should().BeGreaterThan(0);
+        semanticEntries.Should().BeGreaterThan(0);
+        var repeated = await service.RunAsync(new(VirtualWorkspace.RootUri, initial.Version, "repeated"));
+        repeated.Results.Single().State.Should().Be("passed");
+        caches.OperatorLifetime.Count.Should().Be(operatorEntries);
+        caches.SemanticLifetime.Count.Should().Be(semanticEntries);
+
+        current = Tree(declarations.Replace("answer _ = 42", "answer _ = 43", StringComparison.Ordinal));
+        var updated = await service.DiscoverAsync(new(VirtualWorkspace.RootUri));
+        updated.Complete.Should().BeTrue(updated.Error?.Message);
+        var edited = await service.RunAsync(new(VirtualWorkspace.RootUri, updated.Version, "edited"));
+        edited.Results.Single().State.Should().Be("failed");
+        caches.OperatorLifetime.Count.Should().Be(operatorEntries + 1);
+        caches.SemanticLifetime.Count.Should().Be(semanticEntries + 1);
+    }
 
     [Fact]
     public async Task Testing_versions_are_immutable_and_different_versions_run_independently()

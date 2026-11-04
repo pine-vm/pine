@@ -53,7 +53,8 @@ public sealed class LanguageServerTestingService(
     IElmTestCommitSource? commitSource = null,
     IElmPackageProvider? packageProvider = null,
     Func<PineTestsEvent, Task>? publishEvent = null,
-    Action<string>? log = null) : IDisposable
+    Action<string>? log = null,
+    SourceCompilationCaches? compilationCaches = null) : IDisposable
 {
     /// <summary>Maximum number of immutable versions retained per source root by one server connection.</summary>
     public const int RetainedVersions = 16;
@@ -73,7 +74,8 @@ public sealed class LanguageServerTestingService(
 
     private readonly CancellationTokenSource _lifetime = new();
 
-    private readonly Lazy<ElmTestRunCacheSession> _cache = new(() => new(generationOptions: new()));
+    private readonly Lazy<ElmTestRunCacheSession> _cache =
+        new(() => new(generationOptions: new(), compilationCaches: compilationCaches));
 
     private long _accessSequence;
 
@@ -317,8 +319,16 @@ public sealed class LanguageServerTestingService(
                 await Task.Run(
                     () =>
                     {
-                        var prepared = discovery.PrepareExecution(executable.Select(item => item.Id), settings, token);
-                        _ = _cache.Value;
+                        var cache = _cache.Value;
+                        using var invocation = cache.BeginCompilationInvocation();
+
+                        var prepared =
+                            discovery.PrepareExecution(
+                                executable.Select(item => item.Id),
+                                settings,
+                                token,
+                                cache.CompilationCaches);
+
                         token.ThrowIfCancellationRequested();
                         return prepared;
                     },
