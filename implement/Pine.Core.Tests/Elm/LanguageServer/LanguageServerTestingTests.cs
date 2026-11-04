@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.Addressing;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.LanguageServer;
+using Pine.Core.Elm.Testing;
 using Pine.Core.Encodings;
 using Pine.Core.Files;
 using Pine.Core.Functional;
@@ -61,11 +62,13 @@ public class LanguageServerTestingTests
 
         var current = Tree(declarations);
         var caches = SourceCompilationCaches.CreateInMemory();
+        var discoveryCaches = ElmTestDiscoveryCaches.CreateInMemory();
 
         using var service =
             new LanguageServerTestingService(
                 (_, _) => Task.FromResult(Snapshot(current)),
-                compilationCaches: caches);
+                compilationCaches: caches,
+                discoveryCaches: discoveryCaches);
 
         var initial = await service.DiscoverAsync(new(VirtualWorkspace.RootUri));
         initial.Complete.Should().BeTrue(initial.Error?.Message);
@@ -73,6 +76,8 @@ public class LanguageServerTestingTests
         first.Results.Single().State.Should().Be("passed");
         var operatorEntries = caches.OperatorLifetime!.Count;
         var semanticEntries = caches.SemanticLifetime!.Count;
+        var canonicalEntries = discoveryCaches.CanonicalDeclarations.Count;
+        var preparedEntries = discoveryCaches.PreparedLifetime!.Count;
         operatorEntries.Should().BeGreaterThan(0);
         semanticEntries.Should().BeGreaterThan(0);
         var repeated = await service.RunAsync(new(VirtualWorkspace.RootUri, initial.Version, "repeated"));
@@ -87,6 +92,8 @@ public class LanguageServerTestingTests
         edited.Results.Single().State.Should().Be("failed");
         caches.OperatorLifetime.Count.Should().Be(operatorEntries + 1);
         caches.SemanticLifetime.Count.Should().Be(semanticEntries + 1);
+        discoveryCaches.CanonicalDeclarations.Count.Should().Be(canonicalEntries + 1);
+        discoveryCaches.PreparedLifetime.Count.Should().Be(preparedEntries + 1);
     }
 
     [Fact]

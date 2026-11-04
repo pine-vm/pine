@@ -568,7 +568,8 @@ public static class ElmTestRunner
                     build,
                     testDeclarationNames,
                     instrumentation?.CancellationToken ?? default,
-                    executionSettings);
+                    executionSettings,
+                    cacheSession?.DiscoveryCaches);
 
             hasOnly = syntaxDiscovery.HasOnly;
             hasSkipped = syntaxDiscovery.HasSkipped;

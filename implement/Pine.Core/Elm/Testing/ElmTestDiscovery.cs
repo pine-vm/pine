@@ -46,7 +46,8 @@ public static class ElmTestDiscovery
         string appDirectory,
         ElmDependencyResolutionConfiguration? resolutionConfiguration = null,
         IElmPackageProvider? packageProvider = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ElmTestDiscoveryCaches? caches = null)
     {
         if (!Directory.Exists(appDirectory))
             throw new DirectoryNotFoundException("Elm project directory not found: " + appDirectory);
@@ -61,7 +62,13 @@ public static class ElmTestDiscovery
                 .Select(file => (file.path, file.content)));
 
         return
-            DiscoverTests(tree, resolutionConfiguration, packageProvider, cancellationToken, appDirectory)
+            DiscoverTests(
+                tree,
+                resolutionConfiguration,
+                packageProvider,
+                cancellationToken,
+                appDirectory,
+                caches: caches)
             with
             { Duration = watch.Elapsed };
     }
@@ -74,7 +81,8 @@ public static class ElmTestDiscovery
         CancellationToken cancellationToken = default,
         string? projectDirectory = null,
         IReadOnlyList<string>? manifestPath = null,
-        ElmTestExecutionSettings? executionSettings = null)
+        ElmTestExecutionSettings? executionSettings = null,
+        ElmTestDiscoveryCaches? caches = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var watch = Stopwatch.StartNew();
@@ -146,7 +154,7 @@ public static class ElmTestDiscovery
         var sourcePreparationDuration = watch.Elapsed;
 
         return
-            DiscoverTests(build, declarations, cancellationToken, executionSettings) with
+            DiscoverTests(build, declarations, cancellationToken, executionSettings, caches) with
             {
                 SourcePreparationDuration = sourcePreparationDuration,
                 Duration = watch.Elapsed
@@ -161,9 +169,11 @@ public static class ElmTestDiscovery
         ElmResolvedBuild build,
         IReadOnlyList<DeclQualifiedName> testRoots,
         CancellationToken cancellationToken = default,
-        ElmTestExecutionSettings? executionSettings = null)
+        ElmTestExecutionSettings? executionSettings = null,
+        ElmTestDiscoveryCaches? caches = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        using var invocation = caches?.BeginInvocation();
 
         if (!build.Resolution.Succeeded)
             throw new ElmDependencyResolutionException(build.Resolution);
@@ -198,19 +208,33 @@ public static class ElmTestDiscovery
                 [.. modules.Values],
                 [.. testRoots, bridge, .. nativeRoots],
                 implicitImports: null,
-                cache: null,
+                cache: caches?.CanonicalDeclarations,
                 canonicalizedDependencies: null,
                 preserveOperatorApplications: true)
             .Extract(error => throw new InvalidOperationException("Failed preparing test discovery: " + error));
 
         var prepared = new Dictionary<DeclQualifiedName, Interpreter.PreparedDeclaration>();
+        var sourceDeclarations = new Dictionary<DeclQualifiedName, Abstract.Declaration>();
+
+        PreparedSourceDeclaration PrepareSource(DeclQualifiedName name, Concrete.Declaration declaration)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var input = PreparedDeclarationInput.FromConcrete(name, declaration);
+
+            if (caches?.PreparedDeclarations.TryGetValue(input, out var cached) is true)
+                return cached;
+
+            var source = PreparedSourceDeclaration.Prepare(input.Syntax);
+            cancellationToken.ThrowIfCancellationRequested();
+            caches?.PreparedDeclarations.Set(input, source);
+            return source;
+        }
 
         foreach (var type in modules["Basics"].Declarations.Select(node => node.Value)
             .OfType<Concrete.Declaration.ChoiceTypeDeclaration>())
         {
-            prepared.Add(
-                DeclQualifiedName.Create(["Basics"], type.TypeDeclaration.Name.Value),
-                Interpreter.PrepareDeclaration(Abstract.ConvertFromConcrete.FromDeclaration(type)));
+            var name = DeclQualifiedName.Create(["Basics"], type.TypeDeclaration.Name.Value);
+            prepared.Add(name, PrepareSource(name, type).Prepared);
         }
 
         var sourceBodies = new Dictionary<DeclQualifiedName, Concrete.Node<Concrete.Expression>>();
@@ -251,10 +275,11 @@ public static class ElmTestDiscovery
             }
 
             // Keep the AST shape: lowering/reduction would invalidate its paths into the original CST.
-            var declaration =
-                Interpreter.PrepareDeclaration(Abstract.ConvertFromConcrete.FromDeclaration(result.Value.Value));
+            var source = PrepareSource(name, result.Value.Value);
+            var declaration = source.Prepared;
 
             prepared.Add(name, declaration);
+            sourceDeclarations.Add(name, source.Syntax);
 
             if (declaration is not Interpreter.PreparedDeclaration.FunctionDeclaration function)
                 continue;
@@ -290,7 +315,7 @@ public static class ElmTestDiscovery
                 continue;
             }
 
-            foreach (var (expression, path) in Interpreter.EnumerateExpressionPaths(function.Function.Declaration.Expression))
+            foreach (var (expression, path) in source.ExpressionPaths)
             {
                 var site = new SourceSite(name, path);
 
@@ -564,9 +589,7 @@ public static class ElmTestDiscovery
 
         var compilationDeclarations =
             new Lazy<ImmutableDictionary<DeclQualifiedName, Abstract.Declaration>>(
-                () => canonical.Declarations.ToImmutableDictionary(
-                    entry => entry.Key,
-                    entry => Abstract.ConvertFromConcrete.FromDeclaration(entry.Value.Value.Value)));
+                () => sourceDeclarations.ToImmutableDictionary());
 
         return
             new(

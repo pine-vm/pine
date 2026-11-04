@@ -996,7 +996,7 @@ public class TestWatchCommandTests
         var watcher = new FakeTestWatcher();
 
         var sessions =
-            Channel.CreateUnbounded<(ElmTestRunCacheSession Session, int Encoded, int Reduced, int Parsed, int Compiled, int Templates, int Sources, int Canonical, ContinuousInvocationCacheLearningSnapshot Learning)>();
+            Channel.CreateUnbounded<(ElmTestRunCacheSession Session, int Encoded, int Reduced, int Parsed, int Compiled, int Templates, int Sources, int Canonical, int Prepared, ContinuousInvocationCacheLearningSnapshot Learning)>();
 
         var factoryCalls = 0;
 
@@ -1025,6 +1025,7 @@ public class TestWatchCommandTests
                         session.VmCaches.ExpressionTemplatePlans.Count,
                         session.SourceParsing.Count,
                         session.DeclarationCanonicalization.Count,
+                        session.DiscoveryCaches.PreparedLifetime!.Count,
                         session.CacheLearning!.GetSnapshot())),
                     createWatchCacheSession:
                     () =>
@@ -1043,7 +1044,8 @@ public class TestWatchCommandTests
             first.Compiled.Should().BeGreaterThan(0);
             first.Templates.Should().BeGreaterThan(0);
             first.Sources.Should().BeGreaterThan(0);
-            first.Canonical.Should().Be(0, "syntax discovery does not use the compiler canonicalization cache");
+            first.Canonical.Should().BeGreaterThan(0, "syntax discovery retains mode-aware canonical declarations");
+            first.Prepared.Should().BeGreaterThan(0);
             first.Session.GenerationalInvocations.Should().NotBeNull();
             first.Session.InvocationCache.Should().BeSameAs(first.Session.GenerationalInvocations);
             first.Session.InvocationResults.Count.Should().Be(0);
@@ -1067,6 +1069,7 @@ public class TestWatchCommandTests
             second.Templates.Should().Be(first.Templates);
             second.Sources.Should().Be(first.Sources);
             second.Canonical.Should().Be(first.Canonical);
+            second.Prepared.Should().Be(first.Prepared);
             second.Session.CompilationCaches.OperatorLifetime!.Count.Should().Be(operatorEntries);
             second.Session.CompilationCaches.SemanticLifetime!.Count.Should().Be(semanticEntries);
             second.Session.InvocationResults.Count.Should().Be(0);

@@ -54,7 +54,8 @@ public sealed class LanguageServerTestingService(
     IElmPackageProvider? packageProvider = null,
     Func<PineTestsEvent, Task>? publishEvent = null,
     Action<string>? log = null,
-    SourceCompilationCaches? compilationCaches = null) : IDisposable
+    SourceCompilationCaches? compilationCaches = null,
+    ElmTestDiscoveryCaches? discoveryCaches = null) : IDisposable
 {
     /// <summary>Maximum number of immutable versions retained per source root by one server connection.</summary>
     public const int RetainedVersions = 16;
@@ -76,6 +77,9 @@ public sealed class LanguageServerTestingService(
 
     private readonly Lazy<ElmTestRunCacheSession> _cache =
         new(() => new(generationOptions: new(), compilationCaches: compilationCaches));
+
+    private readonly Lazy<ElmTestDiscoveryCaches> _discoveryCaches =
+        new(() => discoveryCaches ?? ElmTestDiscoveryCaches.CreateInMemory());
 
     private long _accessSequence;
 
@@ -480,7 +484,8 @@ public sealed class LanguageServerTestingService(
                                 snapshot.Source.Files,
                                 packageProvider: packageProvider,
                                 cancellationToken: token,
-                                manifestPath: manifestPath);
+                                manifestPath: manifestPath,
+                                caches: _discoveryCaches.Value);
 
                         token.ThrowIfCancellationRequested();
 
@@ -1051,6 +1056,9 @@ public sealed class LanguageServerTestingService(
 
         if (_cache.IsValueCreated)
             _cache.Value.Dispose();
+
+        if (_discoveryCaches.IsValueCreated)
+            _discoveryCaches.Value.WaitForMaintenanceAsync().GetAwaiter().GetResult();
 
         lock (_snapshotLock)
         {
