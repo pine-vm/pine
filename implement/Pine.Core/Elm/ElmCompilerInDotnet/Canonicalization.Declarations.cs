@@ -79,13 +79,6 @@ public partial class Canonicalization
         bool useSourceModuleTypeInterfaces = true,
         bool preserveOperatorApplications = false)
     {
-        if (preserveOperatorApplications && cache is not null)
-        {
-            throw new ArgumentException(
-                "Syntax-preserving canonicalization requires a separate, uncached preparation.",
-                nameof(cache));
-        }
-
         if (roots.Count is 0)
         {
             return

@@ -2,13 +2,44 @@
 
 Date: 2026-11-04.
 
-## Summary and recommended order
+## Current branch status
+
+The branch now implements the discovery bookkeeping fixes, removal of settings-triggered
+LSP rediscovery, operator/semantic transformation reuse and pruning, and
+**syntax-preserving canonical/prepared-declaration caching**. Historical measurements
+below deliberately retain their original baselines; descriptions of the original
+`cache: null` path and canonicalization guard are not descriptions of the current code.
+
+| Scope | Implementation status |
+|---|---|
+| Immutable discovery snapshot and linear selector index | Implemented; section D |
+| LSP settings/preparation/empty-selection overhead | Implemented; language-service follow-up |
+| Operator lowering and reachable semantic IR conversion | Implemented; memory defaults and opt-in file-store cascade |
+| Syntax-preserving canonical/prepared declarations | Implemented; measured follow-up below |
+| Canonical observed-input manifests on disk | Not implemented; memory entries validate observations |
+| Prepared-declaration persistence | Implemented opt-in, using versioned SHA-256 and existing codecs |
+| Root construction, captured executable graphs, SCC emission and test-result caches | Still future work |
+| Retained-byte budgets, persistent reclamation, long-session p95 | Still future work / not established by these measurements |
+
+Fresh three-edit comparisons against the preceding transformation-cache implementation
+measured median core latency **14.69 -> 12.48 s (15.0%)**, and actual LSP
+discover-plus-run **15.62 -> 13.51 s (13.5%)**. Median allocation fell
+**6.29 -> 5.73 GB** and **6.92 -> 6.33 GB**, respectively. Core interpreter
+preparation fell **1.749 -> 0.669 s (61.8%)**. Each edit published just one new
+canonical entry and one new prepared entry. These are sequential, shared-host
+measurements, not a long-session p95 or a randomized causal estimate.
+
+The remaining high-value discovery opportunity is **root-construction reuse**, with
+explicit construction-versus-execution dependencies and fresh source provenance.
+Prepared syntax reuse does not cache test-tree evaluation or executable captures.
+
+## Original profiling summary and recommended order (historical)
 
 **Optimize discovery bookkeeping before optimizing assertion execution or adding a
 large persistent cache.** Retained VM caches do not avoid rebuilding the discovery
 program, evaluating candidate roots, generating selectors, or exporting closures.
 
-In three unprofiled, same-process edited reruns, discovery took **33.1-38.2 seconds**
+In the original three unprofiled, same-process edited reruns, discovery took **33.1-38.2 seconds**
 and allocated **27.83 GB per rerun**. Compiling the 79 selected runners then took
 7.2-10.9 seconds and allocated another 5.58 GB. Execution took 4.9-8.6 seconds.
 Every measured edit produced **78 passes and exactly one expected failure**.
@@ -38,7 +69,8 @@ invalidates too much or, worse, reuses stale executable closures.
 
 ## Workload, edit, and scope
 
-Pine baseline: `20b86958052e5fdf4f595d67154b8ab434ef3993`.
+Original profiling baseline, not the current branch:
+`20b86958052e5fdf4f595d67154b8ab434ef3993`.
 The workload is the pinned elm-review source at
 `https://github.com/jfmengels/elm-review/tree/73dfa9a03352a19fde51ffe3e6ea02bdb0f7010f`.
 Its checkout contains 370 tracked files.
@@ -98,6 +130,11 @@ The environment is shared; three repetitions show the scale of the problem,
 not a statistically established latency distribution or a long-session p95.
 
 ## Measurements
+
+Sections A-C describe the original baseline and temporary experiment. Section D
+and the subsequent implemented follow-ups describe successive interventions, not
+one pooled benchmark. The latest canonical/prepared-cache comparison has its own
+fresh baseline and samples below.
 
 ### A. Actual CLI watch session, including its background learner
 
@@ -317,7 +354,7 @@ duplicate ordinals, single-pass frequency construction, global-only exclusion,
 skips, and empty groups. Existing discovery/navigation, compiler-vs-syntax fixture,
 runner/instrumentation, and language-service testing coverage also passed.
 
-## Where preparation time goes
+## Where preparation time went in the original captured baseline
 
 ### Phase names conceal important work
 
@@ -401,7 +438,10 @@ append/concatenation iterators, string arrays, and enumerators account for much
 of the remainder. Resolver setup allocates candidate arrays, resolver
 dictionaries, immutable-map nodes, function candidates, and enumerators.
 
-### Root causes in the current implementation
+### Root causes in the original profiling baseline
+
+These are the captured causes before the implemented follow-ups, with links to
+the files that now contain their replacements.
 
 **Resolver-cache identity is lost.**
 [`BuildResolvers`](../../implement/Pine.Core/Elm/Syntax/Interpreter/ElmSyntaxInterpreter.cs)
@@ -444,7 +484,7 @@ the larger canonical environment. The profile suggests optimizing/caching these
 earlier transformations before expecting SCC-emission caching alone to remove
 most of the remaining 7-11 seconds.
 
-## What survives edits today
+## What survived edits in the original baseline
 
 The harness observed:
 
@@ -464,11 +504,13 @@ The harness observed:
 Candidate roots are not all Test values: exposed zero-argument helper values
 are also evaluated to find out whether they are tests.
 
-The source-text parsing cache does reuse unchanged sources. But syntax discovery
-explicitly calls canonicalization with `cache: null`. Merely passing the existing
-session declaration cache is not currently valid:
+The source-text parsing cache reused unchanged sources. But original syntax discovery
+explicitly called canonicalization with `cache: null`. Merely passing the then-existing
+session declaration cache was not valid:
 [`Canonicalization.Declarations.cs`](../../implement/Pine.Core/Elm/ElmCompilerInDotnet/Canonicalization.Declarations.cs)
-rejects a cache when `preserveOperatorApplications` is true.
+rejected a cache when `preserveOperatorApplications` was true. The current branch
+replaces that restriction with mode-aware keys and marker-budgeted discovery
+caches; the zero-entry row above is strictly historical.
 
 VM invocation statistics are execution statistics, **not discovery cache hits**:
 
@@ -491,29 +533,28 @@ discovery. They do not prove why each VM lookup missed. Record expression/input
 identity changes, eviction, and admission decisions separately before changing
 the cache policy.
 
-### Extra language-service work
+### Extra language-service work in the original baseline
 
 [`LanguageServerTestingService`](../../implement/Pine.Core/Elm/LanguageServer/LanguageServerTestingService.cs)
-caches `Snapshot.Discovery` within a snapshot. A new edited snapshot does not
+cached `Snapshot.Discovery` within a snapshot. A new edited snapshot did not
 reuse another snapshot's discovery artifacts.
 
-Moreover, the run path obtains that inventory and then calls
+Moreover, the run path obtained that inventory and then called
 `inventory.WithExecutionSettings(settings, token)`. Its implementation in
 [`ElmTestDiscoveryResult`](../../implement/Pine.Core/Elm/Testing/ElmTestDiscovery.cs)
-calls `DiscoverTests(build, testRoots, token, settings)` again. It avoids source
-resolution on this second pass, but repeats canonicalization, preparation, root
+called `DiscoverTests(build, testRoots, token, settings)` again. It avoided source
+resolution on this second pass, but repeated canonicalization, preparation, root
 construction, seeding, and inventory projection.
 
-Thus a newly discovered edited LSP snapshot can incur **two discovery passes**
-before preparing execution. Even a previously discovered snapshot repeats the
-settings pass when run. This is a code-path finding, not a separately measured
+Thus a newly discovered edited LSP snapshot could incur **two discovery passes**
+before preparing execution. Even a previously discovered snapshot repeated the
+settings pass when run. This was a code-path finding, not a separately measured
 LSP duration. Avoid estimating end-to-end LSP time by simply copying the harness
 numbers.
 
-Store the execution settings used by a result, reuse identical settings, and
-separate seed/run-count-dependent runner preparation from settings-independent
-inventory construction. Seed changes should not automatically replay all
-canonicalization and construction.
+The implemented follow-up below retains execution settings and separates
+seed/run-count-dependent preparation from settings-independent inventory.
+Seed changes no longer replay canonicalization and construction of every root.
 
 #### Implemented follow-up and language-service measurements
 
@@ -590,8 +631,8 @@ No profiler was attached. Protocol calls and event handling were in-process:
 JSON-RPC transport, editor rendering, and real filesystem-watcher latency are
 not measured. This remains a sequential three-edit comparison, not a long-session
 p95 or a randomized benchmark. Remaining discovery, closure-compilation, and VM
-work are real costs; the broader declaration/compiled-artifact cache designs
-below remain future work.
+work are real costs. Canonical/prepared reuse is now implemented below;
+root-construction and compiled-callable cache designs remain future work.
 
 ### Implemented operator-lowering and semantic-IR reuse
 
@@ -659,8 +700,9 @@ latency and long-session p95 are not measured.
 
 All six measured edits retained the same inventory, selected 79 tests, and
 produced the expected 78-pass/1-failure outcome. Source parsing, discovery and VM
-execution remain material costs. No declaration-construction/discovery-result
-cache has been introduced.
+execution remain material costs. Root construction and cross-edit discovery
+inventories are not cached; the following intervention adds canonical/prepared
+declaration reuse rather than caching live constructed tests.
 
 #### Lifetime and persistence boundary
 
@@ -717,6 +759,159 @@ Future observed-input manifests could narrow this without weakening correctness.
 The present body-only productive edit preserves this environment and gets the
 intended reuse.
 
+### Implemented syntax-preserving canonical and prepared-declaration reuse
+
+This intervention caches the **declaration preparation** boundary, not constructed
+test trees, executable closures or test outcomes. It is wired through
+`ElmTestRunCacheSession.DiscoveryCaches`, CLI watch's retained session, the actual
+`LanguageServerTestingService`, all `DiscoverTests` overloads and the retained
+profiling driver. Hosts can also supply `ElmTestDiscoveryCaches` directly.
+
+#### Models and invalidation
+
+Canonicalization extends the existing observation-based `DeclarationCache` rather
+than introducing a second dependency/version engine. Its key now includes
+**syntax-preserving versus lowered mode**, module identity and range-bearing CST.
+Entries still contain canonical syntax, direct dependencies, reference provenance,
+diagnostics and the resolution queries actually observed. Hits validate those
+queries, including negative/ambiguous results, then re-demand dependencies from
+the current build. A body-only callee edit therefore reuses its unchanged callers,
+including callers inside the static reverse tree, without reusing the old callee.
+Mode-isolation and the existing changed-resolution matrix are exercised in both modes.
+
+Prepared storage uses
+`ICache<PreparedDeclarationInput, PreparedSourceDeclaration>`. Its exact input is
+the qualified owner plus **range-free canonical abstract syntax**. A weak
+CST-identity normalization memo avoids repeated conversion on canonical hits;
+source movement can miss the canonical tier yet still hit prepared storage.
+Including the owner is necessary: otherwise identical functions in different
+modules could share prepared-expression identities and overwrite each other's
+per-run navigation observers.
+
+The prepared artifact retains abstract syntax for closure compilation, pure
+**unreduced** interpreter syntax, and lazily derived structural expression paths.
+It reuses the interpreter's existing preparation and codecs; contextual closed-expression
+reduction and operator lowering are not part of this transformation. Closure
+compilation now consumes the retained abstract syntax instead of converting the
+canonical CST a second time.
+
+Each discovery still builds its own immutable program, observers, source bodies,
+provenance, constructed values, runners and cancellation configuration. Cached
+expression paths are projected onto the current CST. Range-bearing canonical
+artifacts invalidate on movement rather than retaining stale diagnostic locations;
+range-free prepared artifacts can survive that movement. Persistent restoration
+rebuilds paths from the decoded prepared expressions, preserving their reference
+identities rather than deserializing unrelated observer-map keys.
+
+#### Shared retention policy and persistence boundary
+
+Both tiers use the existing marker-managed memory storage. Canonicalization keeps
+its resolution-query secondary index, but eviction removes the corresponding
+observation version and drops empty syntax buckets. Versions count individually,
+so changing imports repeatedly cannot accumulate an unbudgeted list behind one key.
+The common `CacheInvocationLifetime` controller is extracted from the transformation
+session and reused for discovery: strictly above **3x the last nonempty working
+set**, cleanup targets **2x**, pins active markers and coalesces newer budgets.
+The workload uses 6,345 canonical and 6,352 prepared entries per invocation:
+trigger counts are above 19,035 / 19,056 and target budgets are 12,690 / 12,704.
+
+Memory hits update mutable lifetime metadata under the storage lock without
+allocating replacement entry records. Cleanup snapshots the access sequence as
+well as the entry identity, so later touches/replacements remain protected.
+Usage accounting retains numeric entry identities, not syntax keys/results:
+an old invocation's usage counter cannot keep evicted canonical artifacts alive.
+Removal observers run outside the storage lock, avoiding lock inversion with the
+canonical index. Existing storage/lifetime regressions and explicit release tests
+cover these invariants.
+
+Watch/LSP defaults remain memory-only. Prepared declarations additionally support
+the existing `IFileStore` cascade, with a versioned SHA-256 key over owner and
+normalized syntax, weakly memoized syntax digests and the interpreter's lossless
+prepared/abstract codec. There are no omitted environment/reducer options: this
+preparation stage is deliberately context-free. Algorithm/encoding/native
+preparation-semantics changes require a version bump. **Canonical observation
+manifests remain memory-only**; no disk codec or persistent retention policy is
+claimed for them.
+
+The extended `cache-check` was run in separate writer/reader processes. The reader
+restored all **three prepared, two operator and two semantic entries**, with zero
+misses, matching input hashes and outputs equal to fresh conversion. This checks
+restart reuse, not a disk-cache benchmark.
+
+#### Fresh three-edit comparison
+
+The comparison baseline is `a81216eec7dcdf12e25cbf0e2b4d4fcf093de499`, with the
+previous transformation caches already enabled. Baseline and final implementations
+each received a new process, one excluded passing priming round and the same three
+distinct productive edits. Settings, fixture, one-worker execution, package cache
+and generational execution policy were unchanged. No profiler or forced GC was used.
+
+| Core phase, seconds / decimal GB | Baseline median | With declaration caches median |
+|---|---:|---:|
+| Canonical/interpreter preparation, seconds | 1.749 | 0.669 |
+| Complete discovery, seconds | 5.858 | 4.744 |
+| Discovery allocation, GB | 2.244 | 1.739 |
+| Selected closure preparation, seconds | 2.220 | 1.804 |
+| Selected closure allocation, GB | 1.006 | 0.954 |
+| Execution, seconds | 5.627 | 5.402 |
+| Complete edited rerun, seconds | **14.693** | **12.484** |
+| Complete-run allocation, GB | **6.292** | **5.731** |
+| Summed phase GC pause, seconds | 2.181 | 1.417 |
+
+Core preparation improved **61.8%**; median total latency improved **15.0%** and
+allocation **8.9%**. The principal repeatable allocation savings are approximately
+**0.505 GB in discovery** and **0.053 GB in closure preparation** per edit.
+The actual language-server comparison measured:
+
+| LSP phase / metric | Baseline median | With declaration caches median |
+|---|---:|---:|
+| Capture/resolve/discover/protocol inventory, seconds | 8.696 | 6.510 |
+| Selected run, seconds | 7.211 | 6.979 |
+| Empty selection on retained inventory, milliseconds | 0.400 | 0.746 |
+| Discover-plus-run, seconds | **15.617** | **13.507** |
+| Complete measured allocation, GB | **6.920** | **6.326** |
+| Summed phase GC pause, seconds | 2.793 | 2.005 |
+
+Actual LSP median latency improved **13.5%**, allocation **8.6%**. Empty selections
+remained sub-millisecond in the final three samples and used 0-8,200 measured bytes;
+these tiny values include allocation-counter sampling noise and do not establish
+an empty-selection speedup. They still bypass execution-cache initialization and
+compilation/reseeding.
+
+Per-edit totals, retained to make the variation visible:
+
+| Mode / implementation | Edit 1, seconds / GB | Edit 2, seconds / GB | Edit 3, seconds / GB |
+|---|---:|---:|---:|
+| Core baseline | 14.693 / 6.293 | 13.502 / 6.264 | 16.906 / 6.292 |
+| Core declaration caches | 12.484 / 5.736 | 12.292 / 5.703 | 15.398 / 5.731 |
+| Actual LSP baseline | 19.421 / 6.920 | 15.275 / 6.910 | 15.617 / 6.927 |
+| Actual LSP declaration caches | 18.094 / 6.326 | 13.507 / 6.310 | 12.638 / 6.336 |
+
+Both modes primed **6,345 canonical / 6,352 prepared entries**; the seven extra
+prepared entries are native Basics choice declarations. After each edit the
+counts were **6,346 / 6,353**, **6,347 / 6,354**, **6,348 / 6,355**:
+exactly **one new publication in each tier per edit**. Operator and semantic
+tiers likewise still added just one entry each. Every measured edit preserved
+422 modules, 1,009 roots, 5,214 inventory entries, 79 selected tests, and the
+expected **78 passes / one specified failure**. A separate `--dependencies`
+check reproduced 6,345 declarations, 37,087 edges, 248 statically affected
+declarations, 37 affected roots and 972 unaffected roots.
+
+Final regression runs passed **271 core tests and 48 actual watch tests**.
+Coverage includes changed-resolution inputs in both modes, callee-body edits,
+mode isolation, memory/disk reuse after source movement, identical functions in
+different modules, codec variants and expression identities, error diagnostics,
+fuzz settings, concurrent snapshots, cancellation/retry, exact cleanup thresholds,
+active-marker retention, secondary-index eviction and released usage references.
+
+These are sequential samples on the same shared two-CPU host, not randomized
+pairs, a long-session p95, or a retained-byte census. End-of-execution managed
+heap samples varied substantially; count budgets cannot be equated to byte caps.
+Source resolution, module-context/index construction, fresh observers, root
+interpretation/bridge seeding, and execution still run. The third cached core
+sample spent 6.284 seconds after interpreter preparation, illustrating that
+root construction remains a substantial uncached and variable cost.
+
 ## Dependency-aware discovery caches
 
 ### How much lies outside this edit's static dependency tree?
@@ -738,6 +933,9 @@ whole root affected even though only one assertion outcome changes.
 
 ### Recommended cache layers
 
+The canonical/prepared rows are implemented. The remaining rows describe future
+cross-edit/persistent artifacts, not the existing within-snapshot settings views.
+
 | Layer | Reusable artifact | Key / validation inputs |
 |---|---|---|
 | Source parsing | CST plus parse result | Exact source content and parser/schema identity |
@@ -749,37 +947,37 @@ whole root affected even though only one assertion outcome changes.
 | Execution preparation | Lowered IR / compiled callable / selected Pine evaluation | Callback code, captured data, code dependencies, compilation configuration |
 | Result reuse, later | Test outcome and diagnostics | Complete executable artifact, inputs, fuzz settings, native semantics |
 
-The first useful implementation can use **conservative static dependencies**.
+The first root-construction cache can use **conservative static dependencies**.
 It need not solve dynamic dependency tracking before providing reuse outside
-the changed reverse dependency tree.
+the changed reverse dependency tree; canonical/prepared reuse already does so.
 
-### 1. Reuse canonical and prepared declarations
+### 1. Reuse canonical and prepared declarations (implemented)
 
-Extend the existing observation-based
+The branch extends the existing observation-based
 [`Canonicalization.DeclarationCache`](../../implement/Pine.Core/Elm/ElmCompilerInDotnet/Canonicalization.Cache.cs),
-or introduce an explicitly separate syntax-preserving cache. Its existing
-entries already retain dependencies and reference provenance, and its
+with a syntax-mode identity and bounded lifetime. Its
+entries retain dependencies and reference provenance, and its
 observations include imports, aliases, operators, symbols, and unavailable names.
-Reuse that mechanism rather than inventing invalidation based only on filenames.
+The implementation reuses that mechanism rather than inventing invalidation based only on filenames.
 
-The syntax-preserving mode must have a distinct key or cache instance:
+The syntax-preserving mode has a distinct key:
 normal canonicalization can lower operators, while discovery requires the
-original AST shape for navigation. The current safety guard must not simply be
-removed without replacing that invariant.
+original AST shape for navigation. The old safety guard has been replaced by
+that identity invariant, not simply removed without mode separation.
 
-On a cache hit, retain the direct dependency list and demand those declarations
+On a cache hit, the implementation retains the direct dependency list and demands those declarations
 against the **current** build. Canonicalizing a caller resolves a callee's
 identity; it need not reprocess the caller's body merely because the callee's
 implementation changed. Execution artifacts depending on that implementation
 are a different cache layer.
 
-For unchanged declaration artifacts, reuse `PreparedDeclaration` and structural
-expression paths. Assemble one immutable program from the reused and changed
-entries. An incremental module-scope index can avoid rebuilding all 422 module
+For unchanged declaration artifacts, it reuses `PreparedDeclaration` and structural
+expression paths, assembling one immutable program from reused and changed
+entries. An incremental module-scope index could avoid rebuilding all 422 module
 contexts, but the measured canonicalization cost makes this secondary to the
 large bookkeeping fixes.
 
-### 2. Cache root construction, including non-Test results
+### 2. Cache root construction, including non-Test results (future)
 
 Maintain forward dependency edges and their reverse index. Detect changed
 declarations using semantic content identities, then recompute only affected
@@ -806,7 +1004,7 @@ groups, source declaration/expression paths, and callback/capture references.
 Caching only the displayed inventory would still force reconstruction to obtain
 executable runners.
 
-### 3. Distinguish construction reads from callback code dependencies
+### 3. Distinguish construction reads from callback code dependencies (future)
 
 The larger opportunity for a productive-code edit is to avoid invalidating test
 construction just because a callback mentions changed code.
@@ -840,7 +1038,7 @@ This narrower dynamic graph was **not collected in this profile**, so its exact
 hit rate is not established. The 96% static counts must not be advertised as a
 96% reduction in discovery time or a measured dynamic cache hit rate.
 
-### 4. Never cache stale live closures
+### 4. Never cache stale live closures (future capture-graph design)
 
 Current `ElmClosureInProcess` values retain prepared function/lambda bodies and
 captured bindings. They are opaque interpreter values, not ordinary fully
@@ -868,7 +1066,7 @@ must not hide executable code inside an unversioned captured object.
 Do not share mutable materialization state, expression-observer dictionaries,
 cancellation tokens, VMs, or snapshot-bound delegates as durable cache values.
 
-### 5. Recompose global selection and navigation cheaply
+### 5. Preserve global selection/navigation when adding root reuse (future integration)
 
 Per-root reuse must still preserve whole-suite semantics:
 
@@ -888,7 +1086,7 @@ Preserve the complete `Items` inventory, not merely `Tests`: skipped and
 only-excluded leaves, groups, todos, empty groups, duplicate labels, and imported
 factory locations all matter to the language-service UI.
 
-### 6. Reuse execution transformations, not just VM calls
+### 6. Reuse execution transformations (lowering implemented; SCC cache future)
 
 Memoize declaration-level operator lowering and semantic IR conversion over
 their actual type/interface observations. Restrict transformations to reachable
@@ -916,7 +1114,12 @@ traversal-local counter. Persistent or cross-selection reuse needs stable
 lambda/application identities or deterministic graph normalization; unrelated
 test insertion or a changed selection must not rename every later artifact.
 
-## Persistence: design the in-process cache as a front end to durable artifacts
+## Remaining persistence roadmap beyond implemented transformation stores
+
+Versioned input hashes, operator/semantic/prepared codecs, the generic file-store
+cascade and count-based memory cleanup are implemented above. Canonical observation
+manifests, root recipes, executable captures, SCC artifacts, byte-based budgets
+and persistent reclamation still need the broader contracts in this section.
 
 Use one typed artifact/key model for in-process and persisted storage, with
 in-memory dictionaries serving as the hot tier. Persist detached immutable
@@ -945,7 +1148,9 @@ Important properties:
   Seed and fuzz count belong only to layers they actually affect.
 - **Atomic, validated storage.** Write complete artifacts atomically, verify
   length/digest/schema and referenced objects on read, and handle corruption with
-  an explicit diagnostic plus recomputation, not a success-shaped empty inventory.
+  explicit diagnostics, not a success-shaped empty inventory. The current file-store
+  adapter propagates corruption/storage errors; a future recovery policy may explicitly
+  invalidate and recompute after reporting them.
 - **Bounded lifetime.** Budget retained bytes, not just entry counts. Pin artifacts
   for active snapshots/runs; use generational/LRU hot storage and reachability-based
   disk reclamation. Historical source texts, VM compilation caches, and
@@ -963,27 +1168,28 @@ reuse granularity needed by the intended long-running developer workflow.
 
 | Priority | Improvement | Evidence / expected benefit | Main correctness concern |
 |---|---|---|---|
-| P0 | Linear exact-selector generation and reuse/precompute full paths | 21.36 GB sampled allocation; 20.79 s inventory projection; combined experiment in section C | Preserve duplicate ordinals and exact path semantics |
-| P0 | One immutable prepared program and resolver context per discovery | 23.16 s default resolver setup; index-cache identity mismatch; combined experiment | Program immutability; isolate observers/cancellation |
-| P1 | Avoid LSP's full settings-triggered rediscovery | Code path repeats discovery after obtaining inventory | Seed/fuzz settings and frozen snapshot identity |
+| P0, implemented | Linear exact-selector generation and reuse/precompute full paths | Historical 21.36 GB sampled allocation; eliminated quadratic projection | Preserve duplicate ordinals and exact path semantics |
+| P0, implemented | One immutable prepared program and resolver index per discovery | Historical 23.16 s resolver setup; stable dictionary identity now reused | Program immutability; isolate observers/cancellation |
+| P1, implemented | Avoid LSP's full settings-triggered rediscovery | Inventory/runners retained; only selected fuzz roots reseeded | Seed/fuzz settings and frozen snapshot identity |
 | P1, implemented | Cache/prune operator lowering and semantic IR conversion | Closure allocation 5.58 -> 1.02 GB; actual LSP median 23.35 -> 15.90 s | Complete type/name context, short-circuit/pipe semantics, constructor metadata |
-| P1 | Syntax-preserving canonical/prepared-declaration caches | 6,097 declarations outside this edit's reverse tree; current discovery cache is null | Observed resolution inputs and navigation AST shape |
+| P1, implemented | Syntax-preserving canonical/prepared-declaration caches | Core preparation 1.749 -> 0.669 s; one new entry per tier per edit | Observed resolution inputs, owner identity and current CST navigation |
 | P1/P2 | Root-construction and non-Test caches, initially static | 972 unaffected candidate roots; persistent-friendly reuse boundary | Retain recipes and provenance, not stale live closures |
 | P2 | Dynamic construction-vs-execution dependency manifests | Static graph unnecessarily invalidates callback-containing roots | Lazy forcing and captured code/data dependencies |
 | P2 | SCC compiled-callable cache and stable exported closure identities | Existing pure memoization seam and structural-identity tests | Whole closure graph/capture identity; not just declaration name |
 | P2 | Foreground-aware learning schedule, budget, and benefit telemetry | 25.76 s sampled learner coverage; 8.30 GB sampled allocation in capture | Do not remove learning benefits based on one workload |
-| P2 | Improve execution hit-rate diagnostics and result-level reuse | Warm invocation hit rate about 13.5%; execution still 4.9-8.6 s | Dependency/input changes versus eviction/admission |
+| P2 | Improve execution hit-rate diagnostics and result-level reuse | Warm invocation hit rate about 13.5%; latest core execution median 5.40 s | Dependency/input changes versus eviction/admission |
 | P2 | Stream outcomes and prioritize affected/previously failing tests | Developer feedback need not wait for final suite rendering | Preserve requested coverage and cancel/stale-run identity |
-| P3 | Reuse unchanged package/module resolution and scope artifacts | Warm source stage still allocates about 414 MB, but usually under 1 s | Manifest/lock/package refresh and substitution identity |
+| P3 | Reuse unchanged package/module resolution and scope artifacts | Latest warm core source stage allocates about 412 MB, usually under 1 s | Manifest/lock/package refresh and substitution identity |
 
-The first two changes do not require a disk cache and remove large amounts of
+The implemented first two changes required no disk cache and removed large amounts of
 work rather than retaining their allocations. More workers, lock replacement,
 filesystem-watcher tuning, and remote-download optimization are not supported
 as the leading priorities by this warm-run evidence.
 
 ## Follow-up measurement and correctness plan
 
-Add low-overhead phase events and counters for: source loading/resolution,
+The retained driver already records coarse phase metrics and retained/new entry
+counts. Add finer low-overhead events and hit/miss-reason counters for: source loading/resolution,
 canonicalization hits/misses, prepared declarations, resolver/index creation,
 root construction, bridge seeding, inventory projection/selectors, operator
 lowering, semantic IR conversion, lambda lifting, SCC emission, and execution.
@@ -1000,8 +1206,10 @@ retained memory, artifact bytes, and per-layer hit rates. Also test a larger
 machine and a real LSP client. This report's three edits do not establish those
 long-session characteristics.
 
-Before enabling persistent reuse, require differential tests against a fresh
-uncached run for:
+For future persistent root/construction/SCC/result caches, require differential
+tests against a fresh uncached run for the cases below. Existing canonical,
+prepared and lowering cache regressions cover their respective boundaries;
+they do not establish correctness of those unimplemented higher-level caches.
 
 - A productive function body changing one assertion outcome while labels remain
   unchanged; the failing result must not be incorrectly reused as a pass.
@@ -1024,10 +1232,11 @@ edited run's exact failing test, and restores the workload even on cooperative
 cancellation or exceptions.
 
 The reusable harness adds safety and artifact-handling checks around the same
-measured core boundaries. It is not the temporary optimization from section C,
-and does not introduce discovery caches into production.
+measured core boundaries. It now supplies the ordinary retained discovery and
+compilation caches; their production watch/LSP wiring lives in Pine.Core.
+It does not depend on the temporary optimization from section C.
 
-As an independent reproducibility check, the retained project was built and run
+As an independent original-baseline reproducibility check, the retained project was built and run
 through successful priming and two distinct edited reruns. Both edits produced
 the specified 78/1 outcome and the same inventory and dependency counts.
 Their totals were 55.82 and 54.32 seconds; these additional samples are not pooled
@@ -1069,13 +1278,17 @@ var settings = new ElmTestExecutionSettings(12345, 100);
 // Load files and exposed zero-argument roots exactly as ElmTestRunner does.
 // Retain session.SourceParsing during PrepareForDeclarationDemandAsync.
 // Resolve offline after the package cache has been primed.
-var discovery = ElmTestDiscovery.DiscoverTests(build, roots, executionSettings: settings);
+var discovery = ElmTestDiscovery.DiscoverTests(
+    build, roots, executionSettings: settings, caches: session.DiscoveryCaches);
 var filter = new ElmTestFilter("TaskTest.elm");
 var selected = discovery.Items.Where(item =>
     item.Selection == ElmTestDiscoverySelection.Included &&
     item.Kind is ElmTestDiscoveryItemKind.Unit or ElmTestDiscoveryItemKind.Fuzz &&
     filter.Matches(item.ListedTest, item.DiscoveryIndex ?? 0)).ToArray();
-var entries = discovery.PrepareExecution(selected.Select(item => item.Id));
+IReadOnlyDictionary<string, ElmTestExecutionEntry> entries;
+using (session.BeginCompilationInvocation())
+    entries = discovery.PrepareExecution(
+        selected.Select(item => item.Id), compilationCaches: session.CompilationCaches);
 var results = selected.Select(item =>
     ElmTestRunner.ExecuteDiscoveredTest(item, entries[item.Id], session)).ToArray();
 ```
@@ -1112,6 +1325,15 @@ the session's `files/` directory:
   lsp-optimized-runs/{metadata.json,harness-results.json}
   lsp-baseline-runs.log
   lsp-optimized-runs.log
+  transform-core-runs/{metadata.json,harness-results.json}
+  transform-lsp-runs/{metadata.json,harness-results.json}
+  syntax-baseline-core/{metadata.json,harness-results.json}
+  syntax-baseline-lsp/{metadata.json,harness-results.json}
+  syntax-final-core/{metadata.json,harness-results.json}
+  syntax-final-lsp/{metadata.json,harness-results.json}
+  syntax-dependencies-check/{metadata.json,harness-results.json}
+  persistent-syntax-final-write.json
+  persistent-syntax-final-read.json
 ```
 
 The raw NetTrace is about 109 MiB and the speedscope export about 158 MiB;
@@ -1146,4 +1368,16 @@ lsp-baseline-runs/harness-results.json
 
 lsp-optimized-runs/harness-results.json
 4043f809ef4412b88031636d44e25be542f6a32402357d6ba15c7c274caf9329
+
+syntax-baseline-core/harness-results.json
+2987ab712d565b7a4d2ee2878db9ab5aa685d733435649195cf536c4f7f5fbb0
+
+syntax-baseline-lsp/harness-results.json
+5fca83f29d9c1e89320dd392cd8891b4065fd22a02eda52ba029ef5797c67942
+
+syntax-final-core/harness-results.json
+840430ba57a38b58694a6a70f49dc18cdae9cb7f1ee0533956f16ccadd92af96
+
+syntax-final-lsp/harness-results.json
+a3c9fd6bd37fb533e3da5bf94ce8a3af411f8eb8d793c5bb3a5dec576788ab4e
 ```

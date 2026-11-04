@@ -2,7 +2,7 @@
 
 Reproduces productive rule edits after priming one long-lived test-cache session.
 See the [analysis and baseline](../internal-analysis/2026-11-04-elm-review-tasktest-warm-rerun-profile.md)
-for measured bottlenecks, limitations, and the proposed incremental cache design.
+for historical bottlenecks, implemented improvements, measurements, and remaining cache design.
 This project is intentionally outside the main solution and normal test runs.
 
 ## Prepare
@@ -49,7 +49,10 @@ more distinct edits. Priming must pass all 79 tests.
 GC mode, core assembly hash/MVID, settings, and cache policy.
 `harness-results.json` retains phase wall time, process CPU, allocation, GC,
 inventory sizes, package versions, failure messages, and cache snapshots.
-Core runs also retain operator-lowering and semantic-function cache entry counts.
+Core runs also retain canonical, prepared, operator-lowering and semantic-function entry counts.
+Both modes report new canonical/prepared entries per round; these are publications, not
+VM invocation hits, and should not be interpreted as miss counts during concurrent eviction.
+Discovery uses the retained syntax-preserving caches in the same way as watch/LSP hosts.
 The closure-preparation phase uses the session's marker-managed transformation
 caches and the same working-set cleanup policy as watch/LSP preparation.
 Select records with `"Measured": true`; do not include `"warmup"` in comparisons.
@@ -61,11 +64,11 @@ execution. This is not an end-to-end LSP or CLI-watch benchmark. For the actual
 watch learner, use `pine elm test --watch` and attach diagnostics after its first
 passing run as described in the report.
 
-`--dependencies` adds the baseline's declaration/reverse-dependency counts.
-It uses explicit reflection into discovery's captured canonical result and is
-optional so ordinary profiling survives internal layout changes. If that option
-fails after a refactor, update its introspection instead of treating absent
-counts as cache hits. Root enumeration also reuses the runner's internal exposure
+`--dependencies` adds declaration/reverse-dependency counts by rebuilding the same
+reference graph with the public canonicalizer, outside all timed phases. It does not
+require discovery to retain diagnostic CSTs just for profiling. Do not mix samples
+using this option with ordinary runs: its extra allocations can affect subsequent GC.
+Root enumeration reuses the runner's internal exposure
 predicate via a checked delegate; a changed API produces an explicit error.
 
 ## Measure the language-server path
@@ -77,7 +80,7 @@ retained inventory with a different seed. This records `lsp-discover`, `lsp-run`
 and `lsp-empty-selection` phases, including CPU, allocation, and GC measurements.
 The empty selection checks overhead independently of callback execution.
 
-The service and its execution caches are retained across productive edits.
+The service and its discovery/execution caches are retained across productive edits.
 Snapshot capture uses the disposable checkout; protocol calls and event handling
 are in-process, without JSON-RPC transport or editor rendering. Dependency resolution
 uses the service's normal configuration and already warm package caches.
@@ -91,6 +94,9 @@ Run the following twice as separate processes. The first command populates an
 `IFileStore`-backed cache using a small canonical Elm program with a typed helper,
 a closure and generic record access. The second requires every model lookup to
 hit disk; a miss or a difference from uncached conversion fails explicitly.
+This covers operator syntax, semantic functions, and pure prepared declarations,
+including restored expression paths. Canonical observed-input manifests are memory-only.
+Declaration naming uses a checked delegate to the compiler's internal naming helper.
 The output includes SHA-256 input addresses, hit/miss counts and elapsed time.
 Use a new directory when intentionally changing the cache algorithm/schema version.
 

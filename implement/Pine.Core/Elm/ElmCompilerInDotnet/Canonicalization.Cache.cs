@@ -1,3 +1,4 @@
+using Pine.Core.Caching;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.Syntax.Concrete;
 using System;
@@ -5,6 +6,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Threading;
+using System.Threading.Tasks;
 
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
@@ -14,18 +16,47 @@ public partial class Canonicalization
 {
     /// <summary>
     /// Caller-owned memoization of declarations over their consulted resolution inputs.
-    /// Retaining this object controls cache lifetime. Historical input versions are retained until cleared.
+    /// Historical input versions are retained until cleared or marker-budget trimming removes them.
+    /// Lowered and syntax-preserving canonicalization occupy separate identities.
     /// </summary>
-    public sealed class DeclarationCache
+    public sealed class DeclarationCache : IMarkerCacheLifetime<long>
     {
         private readonly ConcurrentDictionary<DeclarationKey, ImmutableList<Entry>> entries = new();
 
-        private int count;
+        private readonly MemoryCache<Entry, Entry, long> lifetime;
 
         private readonly object gate = new();
 
+        /// <summary>Creates independently owned, thread-safe storage and its resolution-query index.</summary>
+        public DeclarationCache()
+        {
+            lifetime = new(0, ReferenceEqualityComparer.Instance, (_, entry) => RemoveEntry(entry));
+        }
+
         /// <summary>Number of retained declaration/input combinations.</summary>
-        public int Count => Volatile.Read(ref count);
+        public int Count => lifetime.Count;
+
+        /// <inheritdoc/>
+        public ICacheUsage SetMarker(long marker) => lifetime.SetMarker(marker);
+
+        /// <inheritdoc/>
+        public Task TrimAsync(int budget, Func<long, CacheRetention> retention, CancellationToken cancellationToken = default) =>
+            lifetime.TrimAsync(budget, retention, cancellationToken);
+
+        private void RemoveEntry(Entry entry)
+        {
+            lock (gate)
+            {
+                if (!entries.TryGetValue(entry.Key, out var versions))
+                    return;
+
+                versions = versions.Remove(entry, ReferenceEqualityComparer.Instance);
+                if (versions.IsEmpty)
+                    entries.TryRemove(entry.Key, out _);
+                else
+                    entries[entry.Key] = versions;
+            }
+        }
 
         /// <summary>Releases retained entries. In-flight compilations may subsequently add their results.</summary>
         public void Clear()
@@ -33,7 +64,7 @@ public partial class Canonicalization
             lock (gate)
             {
                 entries.Clear();
-                Volatile.Write(ref count, 0);
+                lifetime.Clear();
             }
         }
 
@@ -42,11 +73,11 @@ public partial class Canonicalization
             CanonicalizationContext context,
             out DeclarationCanonicalizationCacheEntry result)
         {
-            if (entries.TryGetValue(new(declaration, context.CurrentModuleName), out var versions))
+            if (entries.TryGetValue(new(declaration, context.CurrentModuleName, context.PreserveOperatorApplications), out var versions))
             {
                 foreach (var version in versions)
                 {
-                    if (version.InputsMatch(context))
+                    if (version.InputsMatch(context) && lifetime.TryGetValue(version, out _))
                     {
                         result = version.Result;
                         return true;
@@ -64,23 +95,25 @@ public partial class Canonicalization
             DeclarationCanonicalizationCacheEntry result,
             InputObservations inputs)
         {
-            var entry = new Entry([.. inputs.Values], result);
+            var entry = new Entry(
+                new(declaration, context.CurrentModuleName, context.PreserveOperatorApplications),
+                [.. inputs.Values], result);
 
             lock (gate)
             {
                 if (TryGet(declaration, context, out _))
                     return;
 
+                lifetime.Set(entry, entry);
                 entries.AddOrUpdate(
-                    new(declaration, context.CurrentModuleName),
+                    entry.Key,
                     [entry],
                     (_, versions) => versions.Insert(0, entry));
-
-                Interlocked.Increment(ref count);
             }
         }
 
         private sealed record Entry(
+            DeclarationKey Key,
             ImmutableArray<InputObservation> Inputs,
             DeclarationCanonicalizationCacheEntry Result)
         {
@@ -103,15 +136,18 @@ public partial class Canonicalization
             private readonly CompilerModel.ValueList<string> module;
 
             private readonly int hashCode;
+            private readonly bool preserveOperatorApplications;
 
-            public DeclarationKey(Node<Declaration> declaration, CompilerModel.ValueList<string> module)
+            public DeclarationKey(Node<Declaration> declaration, CompilerModel.ValueList<string> module, bool preserveOperatorApplications)
             {
                 this.declaration = declaration;
                 this.module = module;
-                hashCode = HashCode.Combine(declaration, module);
+                this.preserveOperatorApplications = preserveOperatorApplications;
+                hashCode = HashCode.Combine(declaration, module, preserveOperatorApplications);
             }
 
             public bool Equals(DeclarationKey other) =>
+                preserveOperatorApplications == other.preserveOperatorApplications &&
                 declaration.Equals(other.declaration) && module.Equals(other.module);
 
             public override bool Equals(object? obj) => obj is DeclarationKey other && Equals(other);

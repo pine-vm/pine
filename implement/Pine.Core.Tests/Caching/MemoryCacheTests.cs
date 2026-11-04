@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.Caching;
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -10,6 +11,48 @@ namespace Pine.Core.Tests.Caching;
 
 public class MemoryCacheTests
 {
+    [Fact]
+    public void Clearing_releases_keys_and_values_even_with_a_retained_invocation_usage()
+    {
+        var cache = new MemoryCache<object, object, long>(0);
+        var usage = cache.SetMarker(1);
+        var (key, value) = PublishAndClear(cache);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        key.IsAlive.Should().BeFalse();
+        value.IsAlive.Should().BeFalse();
+        usage.EntryCount.Should().Be(1);
+        GC.KeepAlive(cache);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (WeakReference Key, WeakReference Value) PublishAndClear(MemoryCache<object, object, long> cache)
+    {
+        var key = new object();
+        var value = new object();
+        cache.Set(key, value);
+        cache.Clear();
+        return (new(key), new(value));
+    }
+
+    [Fact]
+    public async Task Removal_observers_update_secondary_indexes_outside_the_storage_lock()
+    {
+        MemoryCache<string, int, long>? cache = null;
+        var removed = new List<(string, int)>();
+        cache = new(0, onRemoved: (key, value) =>
+        {
+            Task.Run(() => cache!.Count).Wait(TimeSpan.FromSeconds(10)).Should().BeTrue();
+            removed.Add((key, value));
+        });
+        cache.Set("first", 1);
+        await cache.TrimAsync(0, _ => new CacheRetention.Remove());
+        cache.Set("second", 2);
+        cache.Clear();
+        removed.Should().Equal([("first", 1), ("second", 2)]);
+    }
+
     [Fact]
     public async Task Lookups_update_last_marker_and_count_distinct_entries()
     {

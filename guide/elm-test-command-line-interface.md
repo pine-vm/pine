@@ -104,6 +104,42 @@ of the token used for the earlier discovery. Concurrent preparations of the same
 inventory are serialized to protect interpreter-backed values.
 The older `CompileAndRunTests` API retains compiler/PineVM discovery for compatibility and comparisons.
 
+### Reusable discovery declarations
+
+`ElmTestRunCacheSession.DiscoveryCaches` and the optional `discoveryCaches` configuration on
+`LanguageServerTestingService` retain syntax-preserving canonical and prepared declarations
+across edited snapshots. `ElmTestDiscovery.DiscoverTests(..., caches: caches)` exposes the same
+boundary to other hosts. Without supplied caches, discovery remains uncached.
+
+Canonicalization reuses the existing observed-resolution-input cache, with separate identities
+for lowered and syntax-preserving modes. Hits validate consulted imports, aliases, operator
+targets, symbols and missing/ambiguous inputs, then demand dependencies from the current build.
+Changing a callee body does not force recanonicalization of an unchanged caller. Range-bearing
+canonical entries include source ranges, so diagnostics and reference locations cannot go stale.
+
+Prepared storage uses `ICache<PreparedDeclarationInput, PreparedSourceDeclaration>`.
+Its key is the qualified owner and range-free canonical syntax; weak identity memoization avoids
+reconverting unchanged canonical CSTs. The value retains abstract syntax for later compilation,
+unreduced interpreter syntax, and lazily derived expression paths. Owner identity prevents
+identical functions in different modules from sharing source-observer identities. Every discovery
+builds fresh observers, closures, settings, cancellation and source provenance, projecting cached
+paths onto its current CST. Test-root construction and executable captures are **not** cached.
+
+`ElmTestDiscoveryCaches.CreateInMemory()` supplies thread-safe, session-owned memory tiers.
+Discovery brackets its own marker scope and applies the same 3x-trigger/2x-target policy described
+below, counting canonical observation versions individually. Eviction removes their secondary
+resolution-query index entries too. The shared `CacheInvocationLifetime` controller coalesces
+cleanup and protects active invocations. `WaitForMaintenanceAsync()` awaits discovery cleanup;
+watch/LSP hosts await it when disposed. Entry counts, not bytes, determine these budgets.
+
+An optional `IFileStore` and subtree passed to `ElmTestDiscoveryCaches.CreateInMemory` back
+**prepared declarations** with the generic file-store cascade. `PreparedDeclarationInput.ComputeHash()`
+uses versioned SHA-256 over owner and normalized canonical syntax; preparation has no contextual
+reducer or lowering configuration. `PreparedSourceDeclaration.Codec` reuses existing abstract/
+prepared syntax codecs and rebuilds identity-bound expression paths after loading. Both memory and
+disk reuse survive range-only changes. Canonical observation manifests do not yet have a disk codec.
+Do not share a marker-managed memory tier between independently controlled sessions.
+
 ### Reusable source transformations
 
 `ElmTestRunCacheSession.CompilationCaches` retains operator-lowered syntax and resolved

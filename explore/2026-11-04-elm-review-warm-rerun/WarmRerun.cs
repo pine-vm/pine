@@ -1,6 +1,7 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Elm.LanguageServer;
 using Pine.Core.Elm.Syntax;
 using Pine.Core.Elm.Testing;
@@ -92,7 +93,9 @@ internal static class WarmRerun
             Cache = "Generational defaults, core native leaves, no background learner"
         });
 
-        using var session = languageServer ? null : new ElmTestRunCacheSession(generationOptions: new());
+        var discoveryCaches = ElmTestDiscoveryCaches.CreateInMemory();
+        using var session = languageServer ? null :
+            new ElmTestRunCacheSession(generationOptions: new(), discoveryCaches: discoveryCaches);
         var projectUri = new Uri(checkout + Path.DirectorySeparatorChar).AbsoluteUri;
         using var languageService =
             languageServer
@@ -107,7 +110,8 @@ internal static class WarmRerun
                         .Select(file => (file.path, file.content)));
                     return Task.FromResult(new ElmTestSourceSnapshot(projectUri, tree, new Dictionary<string, int>()));
                 },
-                log: Console.Error.WriteLine)
+                log: Console.Error.WriteLine,
+                discoveryCaches: discoveryCaches)
             :
             null;
         using var process = Process.GetCurrentProcess();
@@ -190,6 +194,8 @@ internal static class WarmRerun
         void RunRound(string label, bool measured)
         {
             var phases = new List<object>();
+            var canonicalBefore = discoveryCaches.CanonicalDeclarations.Count;
+            var preparedBefore = discoveryCaches.PreparedLifetime?.Count;
             var totalWatch = Stopwatch.StartNew();
             Console.WriteLine($"BEGIN {label} {DateTime.UtcNow:O}");
             if (languageService is not null)
@@ -241,6 +247,10 @@ internal static class WarmRerun
                     Items = protocolItems.Count,
                     Selected = selectedItems.Length,
                     Failures = failed,
+                    CanonicalCacheEntries = discoveryCaches.CanonicalDeclarations.Count,
+                    PreparedCacheEntries = discoveryCaches.PreparedLifetime?.Count,
+                    CanonicalCacheNewEntries = discoveryCaches.CanonicalDeclarations.Count - canonicalBefore,
+                    PreparedCacheNewEntries = discoveryCaches.PreparedLifetime?.Count - preparedBefore,
                     inventory.Version,
                     inventory.ResolutionFingerprint,
                     inventory.DiscoveryId
@@ -256,7 +266,7 @@ internal static class WarmRerun
             var (build, roots) = Measure("load-resolve-parse", LoadBuild);
             var discovery =
                 Measure("discover", () =>
-                    ElmTestDiscovery.DiscoverTests(build, roots, cancellation.Token, settings));
+                    ElmTestDiscovery.DiscoverTests(build, roots, cancellation.Token, settings, coreSession.DiscoveryCaches));
             var selected =
                 discovery.Items.Where(item =>
                     item.Selection == ElmTestDiscoverySelection.Included &&
@@ -309,7 +319,10 @@ internal static class WarmRerun
                     Message = test.Failure is MessageFailure message ? message.Message : test.Failure?.ToString()
                 }).ToArray(),
                 ParseEntries = coreSession.SourceParsing.Count,
-                CanonicalCacheEntries = coreSession.DeclarationCanonicalization.Count,
+                CanonicalCacheEntries = coreSession.DiscoveryCaches.CanonicalDeclarations.Count,
+                PreparedCacheEntries = coreSession.DiscoveryCaches.PreparedLifetime?.Count,
+                CanonicalCacheNewEntries = discoveryCaches.CanonicalDeclarations.Count - canonicalBefore,
+                PreparedCacheNewEntries = discoveryCaches.PreparedLifetime?.Count - preparedBefore,
                 OperatorCacheEntries = coreSession.CompilationCaches.OperatorLifetime?.Count,
                 SemanticCacheEntries = coreSession.CompilationCaches.SemanticLifetime?.Count,
                 CacheBefore = new { before.Totals, before.SharedCacheGenerations },
@@ -322,7 +335,7 @@ internal static class WarmRerun
                     pair.Value.Identity.Version,
                     pair.Value.SubstitutionImplementationId
                 }).ToArray(),
-                DependencyAnalysis = analyzeDependencies ? AnalyzeDependencies(discovery, roots) : null
+                DependencyAnalysis = analyzeDependencies ? AnalyzeDependencies(build, roots) : null
             });
             Save("harness-results.json", records);
             Console.WriteLine("RESULT " + JsonSerializer.Serialize(records[^1]));
@@ -410,15 +423,26 @@ internal static class WarmRerun
             File.WriteAllText(Path.Combine(outputDirectory, filename), JsonSerializer.Serialize(value, s_json));
     }
 
-    private static object AnalyzeDependencies(ElmTestDiscoveryResult discovery, DeclQualifiedName[] roots)
+    private static object AnalyzeDependencies(ElmResolvedBuild build, DeclQualifiedName[] roots)
     {
-        // Optional introspection, not a production dependency on the current closure layout.
-        var property = typeof(ElmTestDiscoveryResult).GetProperty(
-            "CompileExecution", BindingFlags.Instance | BindingFlags.NonPublic);
-        var target = (property?.GetValue(discovery) as Delegate)?.Target
-            ?? throw new InvalidOperationException("Update --dependencies for the current discovery implementation.");
-        var canonical = target.GetType().GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
-            .Select(field => field.GetValue(target)).OfType<DeclarationCanonicalizationResult>().Single();
+        // Rebuild only the reference graph, outside every timed phase, without retaining diagnostic CSTs in discovery.
+        var modules = build.CompilerModuleSyntax;
+        if (!modules.ContainsKey("Basics"))
+        {
+            var basics = BundledFiles.ElmKernelModulesDefault.Value.EnumerateFilesTransitive()
+                .Single(file => file.path[^1] == "Basics.elm");
+            modules = modules.Add("Basics", ElmSyntaxParser.ParseModuleText(Encoding.UTF8.GetString(basics.fileContent.Span))
+                .Extract(error => throw new InvalidOperationException(error.ToString())));
+        }
+
+        var nativeRoots = modules["Basics"].Declarations.Select(node => node.Value)
+            .OfType<Concrete.Declaration.FunctionDeclaration>()
+            .Select(function => DeclQualifiedName.Create(["Basics"], function.Function.Declaration.Value.Name.Value));
+        var bridge = DeclQualifiedName.Create(
+            build.CompilerModuleNames["elm-packages/elm-explorations/test/src/PineTestBridge.elm"].Split('.'), "prepare");
+        var canonical = Canonicalization.CanonicalizeDeclarations(
+            [.. modules.Values], [.. roots, bridge, .. nativeRoots])
+            .Extract(error => throw new InvalidOperationException(error));
         var changed = canonical.Declarations.Keys.Single(name =>
             name.FullName == "Simplify.listOfWrapperSequenceChecks");
         var affected = new HashSet<DeclQualifiedName> { changed };
