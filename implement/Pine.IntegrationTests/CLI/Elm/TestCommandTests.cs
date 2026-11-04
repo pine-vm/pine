@@ -168,8 +168,14 @@ public class TestCommandTests
 
             output.ToString().Should().Contain("(skipped)").And.NotContain("Running");
 
+            output.ToString().Should().Contain($"tests/Tests.elm ({expectedCount})")
+                .And.Contain($"suite ({expectedCount})");
+
             if (filter is null)
-                output.ToString().Should().Contain("active").And.Contain("skipped unit").And.Contain("hidden");
+            {
+                output.ToString().Should().Contain("active").And.Contain("skipped unit").And.Contain("hidden")
+                    .And.Contain("skipped group (1)");
+            }
 
             if (color)
                 output.ToString().Should().Contain("\u001b[2m");
@@ -2634,8 +2640,8 @@ public class TestCommandTests
                 :
                 $"Tests remaining after filtering ({expectedTestCount})");
 
-            rendered.Should().Contain("tests/Tests.elm");
-            rendered.Should().Contain("Root");
+            rendered.Should().Contain($"tests/Tests.elm ({expectedTestCount})");
+            rendered.Should().Contain($"Root ({expectedTestCount})");
             rendered.Should().Contain("└──");
             rendered.Contains('\u001b').Should().BeFalse();
 
@@ -3025,15 +3031,15 @@ public class TestCommandTests
             output.ToString().Replace("\r\n", "\n").Trim().Should().Be(
                 """
                 Tests remaining after filtering (1)
-                ├── tests/ExcludedFile.elm
-                │   ├── Excluded File Group
+                ├── tests/ExcludedFile.elm (0)
+                │   ├── Excluded File Group (0)
                 │   │   └── 1 test filtered out
                 │   └── 1 test filtered out
-                └── tests/Tests.elm
-                    ├── Root
-                    │   ├── Other Group
+                └── tests/Tests.elm (1)
+                    ├── Root (1)
+                    │   ├── Other Group (0)
                     │   │   └── 1 test filtered out
-                    │   ├── Selected Group
+                    │   ├── Selected Group (1)
                     │   │   ├── First
                     │   │   └── 1 test filtered out
                     │   └── 2 tests filtered out
@@ -3068,7 +3074,18 @@ public class TestCommandTests
                     listTests: true);
 
             exitCode.Should().Be(0);
-            output.ToString().Should().Contain(expectedHeading).And.NotContain("filtered out");
+
+            output.ToString().ReplaceLineEndings("\n").Trim().Should().Be(
+                $$"""
+                {{expectedHeading}}
+                └── tests/Tests.elm (3)
+                    └── Root (3)
+                        ├── Other Group (1)
+                        │   └── Unique Test
+                        └── Selected Group (2)
+                            ├── First
+                            └── Second
+                """);
         }
         finally
         {
@@ -3125,7 +3142,9 @@ public class TestCommandTests
 
             exitCode.Should().Be(0);
             rendered.Should().Contain("\u001b[1mAvailable tests (3)");
-            rendered.Should().Contain("\u001b[93mRoot");
+            rendered.Should().Contain("tests/Tests.elm (3)");
+            rendered.Should().Contain("\u001b[93mRoot (3)");
+            rendered.Should().Contain("\u001b[93mSelected Group (2)");
             rendered.Should().Contain("\u001b[32mFirst");
         }
         finally

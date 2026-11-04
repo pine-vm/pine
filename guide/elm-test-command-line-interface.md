@@ -24,7 +24,10 @@ records effective focus selection across roots.
 
 `result.Tests` is the backwards-compatible selected, nonempty leaf view,
 not the complete inventory. CLI listings also include skipped leaves from `Items`,
-with a ` (skipped)` suffix and dim styling when color is enabled. Selected leaves also have
+with a ` (skipped)` suffix and dim styling when color is enabled. Each file and group
+in the `--list-tests` tree shows the number of included descendant tests in parentheses,
+including skipped leaves. When filtering, these counts exclude filtered-out tests,
+which are reported separately under each file and group. Selected leaves also have
 their existing runner discovery index and exact execution filter. Phase timings
 are available on the result.
 
@@ -129,9 +132,9 @@ Unexposed declarations and exposed non-test values are not included:
 ```console
 Loaded 2 project files in 2.01 seconds. Resolving dependencies and compiling Elm tests.
 Available tests (2)
-└── tests/Tests.elm
+└── tests/Tests.elm (2)
     ├── first test
-    └── second group
+    └── second group (1)
         └── second test
 ```
 

@@ -26,9 +26,9 @@ public class RemoteTestCommandTests
     private const string ExpectedList =
         """
         Available tests (2)
-        └── tests/Tests.elm
+        └── tests/Tests.elm (2)
             ├── first test
-            └── second group
+            └── second group (1)
                 └── second test
         """;
 

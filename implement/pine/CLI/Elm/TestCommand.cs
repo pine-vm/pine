@@ -1186,7 +1186,7 @@ public static class TestCommand
             var fileNode =
                 tree.AddNode(
                     new Text(
-                        testsInFile.Key,
+                        $"{testsInFile.Key} ({testsInFile.Count(entry => !entry.filteredOut)})",
                         ListStyle(TestCommandTheme.ListFile)));
 
             AddDescriptionNodes(
@@ -1236,7 +1236,7 @@ public static class TestCommand
             var descriptionNode =
                 parent.AddNode(
                     new Text(
-                        testsInDescription.Key,
+                        $"{testsInDescription.Key} ({testsInDescription.Count(entry => !entry.filteredOut)})",
                         ListStyle(TestCommandTheme.ListDescription)));
 
             AddDescriptionNodes(
