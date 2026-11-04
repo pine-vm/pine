@@ -593,6 +593,130 @@ p95 or a randomized benchmark. Remaining discovery, closure-compilation, and VM
 work are real costs; the broader declaration/compiled-artifact cache designs
 below remain future work.
 
+### Implemented operator-lowering and semantic-IR reuse
+
+The next follow-up retains pure source transformations without caching discovery
+inventories across edits:
+
+- Operator lowering caches each source declaration using its complete canonical
+  syntax, qualified identity, both lowering switches, algorithm version, and a
+  SHA-256 fingerprint of the type/name environment. That environment contains
+  signatures, arities, aliases, constructors and all declaration names, not
+  unrelated function bodies.
+- Semantic lowering additionally fingerprints all inferred function types.
+  An unannotated helper's body can change types used when lowering an unchanged
+  caller, so syntax-only or signature-only keys would be unsound.
+- Reachability now precedes semantic body conversion and lambda lifting.
+  The traversal includes exported application bodies, generated closures,
+  captured-function references, canonical identifiers, and implicit record-update
+  receivers. Non-function source metadata is retained in full. Final resolved-IR
+  pruning still removes unused local/lifted functions.
+- A semantic entry retains the resolved function, binding-name provenance, and
+  type evidence. Captured runtime values, interpreter closures, per-run
+  cancellation and compiled application-specific bodies are not cached under
+  source keys.
+
+The same retained driver measured three further productive edits, without a
+profiler attached. Core closure preparation and allocation were:
+
+| Core phase | Edit 1 | Edit 2 | Edit 3 |
+|---|---:|---:|---:|
+| Closure preparation | 2.524 s | 2.404 s | 1.923 s |
+| Closure-preparation allocation | 1.019 GB | 1.019 GB | 1.019 GB |
+| Complete edited rerun | 15.536 s | 14.797 s | 12.911 s |
+| Complete-run allocation | 6.306 GB | 6.274 GB | 6.305 GB |
+
+Median closure allocation fell from the earlier **5.58 GB to 1.02 GB**
+(approximately **81.8%**). The new core median is **14.80 s / 6.30 GB**;
+earlier core three-edit bookkeeping-only results were **19.86 s / 10.87 GB**.
+These are sequential measurements from separate profiling passes, not a randomized
+paired benchmark. A later one-edit pre-transformation check also allocated
+5.575 GB in closure preparation; allocation reduction is more stable than the
+wall-clock comparison on this shared host.
+
+The operator tier contained 7,270 entries after priming, then 7,271 / 7,272 /
+7,273 after the edits. The semantic tier contained 3,970, then 3,971 / 3,972 /
+3,973. Each edit introduced **one new exact input in each tier**, instead of
+retransforming the unchanged declarations. These counts include generated syntax;
+they are not discovery-root counts or VM invocation-cache statistics.
+
+The actual language-server mode measured:
+
+| LSP phase, milliseconds | Edit 1 | Edit 2 | Edit 3 |
+|---|---:|---:|---:|
+| Discover/capture version and protocol inventory | 9,273 | 8,338 | 7,859 |
+| Run selected 79 tests | 7,463 | 7,196 | 8,045 |
+| Empty selection on retained inventory | 0.24 | 0.18 | 0.15 |
+
+Compared with the preceding language-service follow-up, median discover-plus-run
+latency fell from **23.35 s to 15.90 s (31.9%)**, and allocation from
+**11.50 GB to 6.93 GB (39.7%)**. Median selected-run allocation fell from
+8.20 GB to 3.66 GB. Empty selections remained at 8,200 bytes. The baseline
+is the preceding implementation with only subsequent formatting changes pulled;
+this measures the transformation change on top of removal of rediscovery, not
+against the original double-discovery path. As before, transport/editor/watcher
+latency and long-session p95 are not measured.
+
+All six measured edits retained the same inventory, selected 79 tests, and
+produced the expected 78-pass/1-failure outcome. Source parsing, discovery and VM
+execution remain material costs. No declaration-construction/discovery-result
+cache has been introduced.
+
+#### Lifetime and persistence boundary
+
+Both data models use separately configurable `ICache<TKey, TValue>` storage.
+The optional `IMarkerCacheLifetime<TMarker>` interface is independent of model
+storage, allowing synchronized or single-threaded stores and memory/disk cascades.
+The supplied thread-safe memory implementation associates each entry with its
+last lookup/publication marker and counts distinct entries per invocation.
+Async cleanup accepts mandatory removal, mandatory retention, or ranked
+budget competition, with higher ranks retained first. Application callbacks run
+outside storage locks, and cleanup cannot remove entries touched or replaced
+after its snapshot.
+
+Watch and LSP preparation use increasing session markers and retain the memory
+tiers across edits. Above three times a nonempty invocation's distinct working
+set, a tier is trimmed asynchronously toward twice that set. All configuration
+variants accessed during the invocation count toward the working set; no
+one-configuration budget is imposed on a multi-configuration workload. Active
+last-touch markers are pinned, and each tier has at most one scheduled cleanup.
+Empty selections do not create or evict these caches. Cleanup is observed and
+awaited on session disposal.
+
+Persistent-cache prerequisites are implemented, but disk persistence is opt-in:
+`SourceTransformationInput.ComputeHash()` derives a domain-separated SHA-256
+address from syntax, identity, environment and complete configuration/version.
+It weakly memoizes syntax digests and hashes shared environment data once per
+pass. Lossless codecs retain syntax, structural IR identities, binding names,
+and generic-access evidence. Evidence is encoded by deterministic expression
+traversal position and rebound to the decoded expression instances rather than
+deserialized as unrelated dictionary keys.
+
+Generic `FileStoreCache<TKey, TValue>` uses `IFileStore`, accepts a caller-selected
+subtree and codec, and verifies input and payload digests. `LayeredCache` promotes
+backing hits into memory and writes the backing store before publishing a front
+entry. `SourceCompilationCaches.CreateInMemory(store, directory)` composes these
+layers for both models. File-store, corruption and codec errors are explicit;
+atomic replacement and cross-process coordination follow the selected store's
+guarantees. Algorithm/builtin-semantics/schema changes must bump the versioned
+keys and encodings. Persistent retention policy is deliberately not prescribed.
+
+The retained profiler's `cache-check` command verifies restart reuse independently
+of the large benchmark. A writer process populated two operator and two semantic
+entries; a separate reader process with `--require-hits` obtained all four from
+disk with zero misses and identical SHA-256 addresses. Both processes compared
+the restored program and evidence count against fresh uncached conversion.
+Regression coverage also checks nested inferred-type codecs, binding/evidence
+identity, payload corruption, storage failures, active-marker retention,
+single-flight cleanup with a newer pending budget, and the exact 3x/2x boundary.
+
+Conservative whole-type-environment invalidation is still a limitation:
+signature/constructor/name-set changes, inferred-type changes, or a changed
+generated-closure shape can invalidate otherwise reusable function results.
+Future observed-input manifests could narrow this without weakening correctness.
+The present body-only productive edit preserves this environment and gets the
+intended reuse.
+
 ## Dependency-aware discovery caches
 
 ### How much lies outside this edit's static dependency tree?
@@ -771,6 +895,10 @@ their actual type/interface observations. Restrict transformations to reachable
 code earlier where correctness permits; do not discard constructor/type metadata
 that those transformations require.
 
+The implemented follow-up above now caches both transformations using conservative
+type-environment fingerprints and prunes semantic body conversion before lambda
+lifting. Narrower observed-input manifests remain a possible refinement.
+
 There is already a useful emission seam:
 `CompilerModel.Compilation.Compile` accepts a memoized `compileScc` worker, and
 [`SccCompilationInput`](../../implement/Pine.Core/Elm/ElmCompilerInDotnet/CompilerModel/Compilation.cs)
@@ -838,7 +966,7 @@ reuse granularity needed by the intended long-running developer workflow.
 | P0 | Linear exact-selector generation and reuse/precompute full paths | 21.36 GB sampled allocation; 20.79 s inventory projection; combined experiment in section C | Preserve duplicate ordinals and exact path semantics |
 | P0 | One immutable prepared program and resolver context per discovery | 23.16 s default resolver setup; index-cache identity mismatch; combined experiment | Program immutability; isolate observers/cancellation |
 | P1 | Avoid LSP's full settings-triggered rediscovery | Code path repeats discovery after obtaining inventory | Seed/fuzz settings and frozen snapshot identity |
-| P1 | Cache/prune operator lowering and semantic IR conversion | 4.59 s + 3.76 s nested sampled paths; 5.58 GB per warm closure-preparation phase | Type dependencies, short-circuit/pipe semantics, constructor metadata |
+| P1, implemented | Cache/prune operator lowering and semantic IR conversion | Closure allocation 5.58 -> 1.02 GB; actual LSP median 23.35 -> 15.90 s | Complete type/name context, short-circuit/pipe semantics, constructor metadata |
 | P1 | Syntax-preserving canonical/prepared-declaration caches | 6,097 declarations outside this edit's reverse tree; current discovery cache is null | Observed resolution inputs and navigation AST shape |
 | P1/P2 | Root-construction and non-Test caches, initially static | 972 unaffected candidate roots; persistent-friendly reuse boundary | Retain recipes and provenance, not stale live closures |
 | P2 | Dynamic construction-vs-execution dependency manifests | Static graph unnecessarily invalidates callback-containing roots | Lazy forcing and captured code/data dependencies |

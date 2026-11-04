@@ -49,6 +49,9 @@ more distinct edits. Priming must pass all 79 tests.
 GC mode, core assembly hash/MVID, settings, and cache policy.
 `harness-results.json` retains phase wall time, process CPU, allocation, GC,
 inventory sizes, package versions, failure messages, and cache snapshots.
+Core runs also retain operator-lowering and semantic-function cache entry counts.
+The closure-preparation phase uses the session's marker-managed transformation
+caches and the same working-set cleanup policy as watch/LSP preparation.
 Select records with `"Measured": true`; do not include `"warmup"` in comparisons.
 Completed rounds are saved as they finish, including when a later round fails.
 
@@ -81,6 +84,24 @@ uses the service's normal configuration and already warm package caches.
 `--online` and `--dependencies` are not applicable in this mode.
 Compare this mode only with the same mode on another implementation, not with
 core-only phase timings.
+
+## Check persistent transformation models across processes
+
+Run the following twice as separate processes. The first command populates an
+`IFileStore`-backed cache using a small canonical Elm program with a typed helper,
+a closure and generic record access. The second requires every model lookup to
+hit disk; a miss or a difference from uncached conversion fails explicitly.
+The output includes SHA-256 input addresses, hit/miss counts and elapsed time.
+Use a new directory when intentionally changing the cache algorithm/schema version.
+
+```sh
+dotnet run --no-build -c Release \
+  --project explore/2026-11-04-elm-review-warm-rerun/ElmReviewProfiling.csproj -- \
+  cache-check /tmp/pine-source-model-cache
+dotnet run --no-build -c Release \
+  --project explore/2026-11-04-elm-review-warm-rerun/ElmReviewProfiling.csproj -- \
+  cache-check /tmp/pine-source-model-cache --require-hits
+```
 
 ## Attach diagnostics only after priming
 

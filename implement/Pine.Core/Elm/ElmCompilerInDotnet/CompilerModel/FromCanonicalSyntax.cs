@@ -1,3 +1,4 @@
+using Pine.Core.Caching;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.Syntax.Abstract;
 using Pine.Core.PineLanguage;
@@ -5,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Threading;
 
 using AST = Pine.Core.Elm.Syntax.Abstract;
 using Type = Pine.Core.Elm.ElmCompilerInDotnet.TypeInference.InferredType;
@@ -22,11 +24,19 @@ public static class FromCanonicalSyntax
         ImmutableHashSet<string> Parameters, FunctionId Owner, ImmutableDictionary<string, BindingId> Scope);
 
     /// <summary>Converts canonical source declarations into resolved compiler expressions.</summary>
-    public static Program Convert(IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations) =>
-        Lower(declarations).Program;
+    public static Program Convert(
+        IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations,
+        ICache<SourceTransformationInput, LoweredSourceFunction>? cache = null,
+        IReadOnlySet<DeclQualifiedName>? selectedFunctions = null,
+        CancellationToken cancellationToken = default) =>
+        Lower(declarations, cache, selectedFunctions, cancellationToken).Program;
 
     /// <summary>Converts canonical declarations and retains type evidence for analysis.</summary>
-    public static SourceLoweringResult Lower(IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations)
+    public static SourceLoweringResult Lower(
+        IReadOnlyDictionary<DeclQualifiedName, Declaration> declarations,
+        ICache<SourceTransformationInput, LoweredSourceFunction>? cache = null,
+        IReadOnlySet<DeclQualifiedName>? selectedFunctions = null,
+        CancellationToken cancellationToken = default)
     {
         var aliasTypes =
             declarations.Where(entry => entry.Value is Declaration.AliasDeclaration)
@@ -46,6 +56,8 @@ public static class FromCanonicalSyntax
 
         foreach (var (name, declaration) in declarations)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             if (ElmCompiler.GetDeclarationName(declaration) != name.DeclName)
             {
                 throw new ArgumentException(
@@ -93,6 +105,8 @@ public static class FromCanonicalSyntax
 
         foreach (var (name, declaration) in sourceFunctions)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var function = ((Declaration.FunctionDeclaration)declaration).Function;
 
             if (function.Signature is not null)
@@ -126,31 +140,61 @@ public static class FromCanonicalSyntax
                     ]);
         }
 
-        var rewriter =
-            new Rewriter(
-                aliasTypes,
-                functionTypes.ToImmutable(),
-                constructorTypes.ToImmutable(),
-                environment,
-                sourceFunctions.Select(entry => entry.Key).ToHashSet(),
-                constructorNames);
+        var immutableFunctionTypes = functionTypes.ToImmutable();
+        var immutableConstructorTypes = constructorTypes.ToImmutable();
+        var functionNames = sourceFunctions.Select(entry => entry.Key).ToHashSet();
+        var environmentHash = cache is null ? null :
+            SourceCompilationCaches.EnvironmentHash(declarations, immutableFunctionTypes);
+        var functions = ImmutableDictionary.CreateBuilder<FunctionId, Function>();
+        var bindingNames = ImmutableDictionary.CreateBuilder<BindingId, string>();
+        var evidence = ImmutableDictionary.CreateBuilder<Expression, GenericRecordAccessEvidence>(
+            ReferenceEqualityComparer.Instance);
 
-        var functions =
-            sourceFunctions.OrderBy(entry => entry.Key).ToImmutableDictionary(
-                entry => (FunctionId)new FunctionId.Source(entry.Key),
-                entry =>
-                rewriter.RewriteFunction(((Declaration.FunctionDeclaration)entry.Value).Function, entry.Key));
+        foreach (var (name, declaration) in sourceFunctions.OrderBy(entry => entry.Key))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (selectedFunctions is not null && !selectedFunctions.Contains(name))
+                continue;
+
+            var input = environmentHash is null ? null :
+                new SourceTransformationInput(name, declaration, environmentHash, "canonical-semantic-function-v1");
+
+            LoweredSourceFunction lowered;
+
+            if (input is not null && cache!.TryGetValue(input, out var cached))
+            {
+                lowered = cached;
+            }
+            else
+            {
+                var rewriter = new Rewriter(aliasTypes, immutableFunctionTypes, immutableConstructorTypes,
+                    environment, functionNames, constructorNames);
+                var function = rewriter.RewriteFunction(((Declaration.FunctionDeclaration)declaration).Function, name);
+                lowered = new(function, rewriter.BindingNames.ToImmutable(), rewriter.Evidence.ToImmutable());
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (input is not null)
+                    cache!.Set(input, lowered);
+            }
+
+            functions.Add(new FunctionId.Source(name), lowered.Function);
+            bindingNames.AddRange(lowered.BindingNames);
+
+            foreach (var item in lowered.Evidence)
+                evidence[item.Key] = item.Value;
+        }
 
         return
             new(
                 new Program(
-                    functions,
+                    functions.ToImmutable(),
                     declarations.Where(entry => entry.Value is not Declaration.FunctionDeclaration)
                     .ToImmutableDictionary())
                 {
-                    BindingNames = rewriter.BindingNames.ToImmutable()
+                    BindingNames = bindingNames.ToImmutable()
                 },
-                rewriter.Evidence.ToImmutable());
+                evidence.ToImmutable());
     }
 
     private sealed class Rewriter(

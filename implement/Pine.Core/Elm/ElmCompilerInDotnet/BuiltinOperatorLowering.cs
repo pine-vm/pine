@@ -1,3 +1,4 @@
+using Pine.Core.Caching;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.Syntax.Abstract;
 using Pine.Core.Encodings;
@@ -7,6 +8,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Numerics;
+using System.Threading;
 
 using AbstractSyntax = Pine.Core.Elm.Syntax.Abstract;
 
@@ -25,7 +27,8 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// </summary>
 public static class BuiltinOperatorLowering
 {
-    internal sealed record Configuration(
+    /// <summary>All operator-lowering switches; both participate in cache identity.</summary>
+    public sealed record Configuration(
         bool LowerBuiltinOperators,
         bool LowerElmCoreBasics);
 
@@ -66,14 +69,20 @@ public static class BuiltinOperatorLowering
     /// (in the abstract syntax model) that have already passed earlier syntax optimization stages.
     /// </summary>
     /// <param name="declarations">The flat declaration dictionary to rewrite.</param>
+    /// <param name="cache">Optional caller-owned pure transformation storage.</param>
+    /// <param name="cancellationToken">Cancellation for this pass, never retained in cached values.</param>
     /// <returns>The rewritten declarations, or an error message.</returns>
     public static Result<string, ImmutableDictionary<DeclQualifiedName, Declaration>> Apply(
-        ImmutableDictionary<DeclQualifiedName, Declaration> declarations) =>
+        ImmutableDictionary<DeclQualifiedName, Declaration> declarations,
+        ICache<SourceTransformationInput, Declaration>? cache = null,
+        CancellationToken cancellationToken = default) =>
         Apply(
             declarations,
             new Configuration(
                 LowerBuiltinOperators: true,
-                LowerElmCoreBasics: false));
+                LowerElmCoreBasics: false),
+            cache,
+            cancellationToken);
 
     internal static Result<string, ImmutableDictionary<DeclQualifiedName, Declaration>> ApplyElmCoreBasics(
         ImmutableDictionary<DeclQualifiedName, Declaration> declarations) =>
@@ -83,10 +92,15 @@ public static class BuiltinOperatorLowering
                 LowerBuiltinOperators: false,
                 LowerElmCoreBasics: true));
 
-    internal static Result<string, ImmutableDictionary<DeclQualifiedName, Declaration>> Apply(
+    /// <summary>Applies an explicit lowering configuration with optional exact-input storage.</summary>
+    public static Result<string, ImmutableDictionary<DeclQualifiedName, Declaration>> Apply(
         ImmutableDictionary<DeclQualifiedName, Declaration> declarations,
-        Configuration configuration)
+        Configuration configuration,
+        ICache<SourceTransformationInput, Declaration>? cache = null,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (!configuration.LowerBuiltinOperators &&
             !configuration.LowerElmCoreBasics)
         {
@@ -108,8 +122,29 @@ public static class BuiltinOperatorLowering
         var resultBuilder =
             ImmutableDictionary.CreateBuilder<DeclQualifiedName, Declaration>();
 
+        var environmentHash = cache is null ? null : SourceCompilationCaches.EnvironmentHash(declarations);
+        var configurationKey =
+            $"builtin-operator-lowering-v1/{configuration.LowerBuiltinOperators}/{configuration.LowerElmCoreBasics}";
+
         foreach (var (key, decl) in declarations)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (decl is not Declaration.FunctionDeclaration)
+            {
+                resultBuilder[key] = decl;
+                continue;
+            }
+
+            var input = environmentHash is null ? null :
+                new SourceTransformationInput(key, decl, environmentHash, configurationKey);
+
+            if (input is not null && cache!.TryGetValue(input, out var cached))
+            {
+                resultBuilder[key] = cached;
+                continue;
+            }
+
             var moduleNameString = string.Join(".", key.Namespaces);
 
             var rewritten =
@@ -124,6 +159,11 @@ public static class BuiltinOperatorLowering
                     inferenceEnvironment);
 
             resultBuilder[key] = rewritten;
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (input is not null)
+                cache!.Set(input, rewritten);
         }
 
         return resultBuilder.ToImmutable();

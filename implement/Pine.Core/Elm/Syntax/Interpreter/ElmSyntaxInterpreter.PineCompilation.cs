@@ -25,9 +25,10 @@ public partial class ElmSyntaxInterpreter
     internal static IReadOnlyList<PineEvaluation> CompileApplicationsToPine(
         IReadOnlyList<(PineValueInProcess Function, IReadOnlyList<PineValueInProcess> Arguments)> applications,
         IReadOnlyDictionary<DeclQualifiedName, AST.Declaration> canonicalDeclarations,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        SourceCompilationCaches? compilationCaches = null)
     {
-        var export = new PineClosureCompiler(canonicalDeclarations, cancellationToken);
+        var export = new PineClosureCompiler(canonicalDeclarations, cancellationToken, compilationCaches);
 
         var roots =
             applications.Select(
@@ -39,7 +40,8 @@ public partial class ElmSyntaxInterpreter
 
     private sealed class PineClosureCompiler(
         IReadOnlyDictionary<DeclQualifiedName, AST.Declaration> canonicalDeclarations,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        SourceCompilationCaches? compilationCaches)
     {
         private static readonly DeclQualifiedName s_ignoredDebugLog =
             DeclQualifiedName.Create(["Debug"], "log");
@@ -128,23 +130,80 @@ public partial class ElmSyntaxInterpreter
 
             // Preserve source compilation's pipe and short-circuit semantics before creating resolved IR.
             declarations =
-                BuiltinOperatorLowering.Apply(declarations)
+                BuiltinOperatorLowering.Apply(declarations, compilationCaches?.OperatorLowering, cancellationToken)
                 .Extract(
                     error => throw new ElmCompilationException("Failed lowering discovered Elm test closures: " + error));
 
-            var program = Model.FromCanonicalSyntax.Convert(declarations);
+            var sourceReachable = new HashSet<DeclQualifiedName>();
+            var pendingSource = new Stack<DeclQualifiedName>(roots);
+
+            while (pendingSource.TryPop(out var name))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (!sourceReachable.Add(name))
+                    continue;
+
+                if (m_bodies.TryGetValue(name, out var body))
+                {
+                    foreach (var reference in Model.Compilation.References(body).OfType<Model.Reference.Function>())
+                    {
+                        if (reference.Id is Model.FunctionId.Source source)
+                            pendingSource.Push(source.Name);
+                    }
+                }
+                else if (declarations.TryGetValue(name, out var declaration) &&
+                    declaration is AST.Declaration.FunctionDeclaration function)
+                {
+                    _ = Visit(function.Function.Declaration.Expression);
+
+                    AST.Expression Visit(AST.Expression expression)
+                    {
+                        if (expression is AST.Expression.Identifier identifier)
+                            PushReference(AST.SyntaxAnalysis.ResolveReference(identifier, name.Namespaces));
+
+                        if (expression is AST.Expression.RecordUpdateExpression update)
+                            PushReference(DeclQualifiedName.Create(name.Namespaces, update.RecordName));
+
+                        return ElmSyntaxAbstractTransformations.MapChildExpressions(expression, Visit);
+                    }
+
+                    void PushReference(DeclQualifiedName reference)
+                    {
+                        if (declarations.TryGetValue(reference, out var target) &&
+                            target is AST.Declaration.FunctionDeclaration)
+                            pendingSource.Push(reference);
+                    }
+                }
+
+                if (m_captures.TryGetValue(name, out var captures))
+                {
+                    foreach (var capture in captures)
+                        foreach (var reference in Model.Compilation.References(capture.Value).OfType<Model.Reference.Function>())
+                        {
+                            if (reference.Id is Model.FunctionId.Source source)
+                                pendingSource.Push(source.Name);
+                        }
+                }
+            }
+
+            var program = Model.FromCanonicalSyntax.Convert(
+                declarations, compilationCaches?.SemanticFunctions, sourceReachable, cancellationToken);
             var functions = program.Functions.ToBuilder();
 
             foreach (var (name, body) in m_bodies)
             {
                 var id = new Model.FunctionId.Source(name);
-                functions[id] = functions[id] with { Body = body };
+
+                if (functions.TryGetValue(id, out var function))
+                    functions[id] = function with { Body = body };
             }
 
             foreach (var (name, captures) in m_captures)
             {
                 var id = new Model.FunctionId.Source(name);
-                var function = functions[id];
+                if (!functions.TryGetValue(id, out var function))
+                    continue;
                 // Substitute binding identities, not names, so nested shadowing remains lexical.
                 var replacements =
                     captures.Select(

@@ -43,6 +43,8 @@ public class TestWatchCommandTests
         session.GenerationalInvocations.Options.RotationEntryCount.Should().Be(5_000);
         session.InvocationResults.Count.Should().Be(0);
         session.CacheLearning.Should().NotBeNull();
+        session.CompilationCaches.OperatorLifetime.Should().NotBeNull();
+        session.CompilationCaches.SemanticLifetime.Should().NotBeNull();
         session.CacheLearning!.CurrentPolicy.Should().BeSameAs(InvocationCachePolicy.Empty);
         var snapshot = session.CacheLearning.GetSnapshot();
         snapshot.AcceptedCount.Should().Be(0);
@@ -1049,6 +1051,10 @@ public class TestWatchCommandTests
             first.Learning.PendingCount.Should().BeLessThanOrEqualTo(16);
             first.Learning.SampleCount.Should().BeLessThanOrEqualTo(8);
             first.Learning.IsDisposed.Should().BeFalse();
+            var operatorEntries = first.Session.CompilationCaches.OperatorLifetime!.Count;
+            var semanticEntries = first.Session.CompilationCaches.SemanticLifetime!.Count;
+            operatorEntries.Should().BeGreaterThan(0);
+            semanticEntries.Should().BeGreaterThan(0);
             File.WriteAllText(Path.Combine(directory.Path, "unrelated.txt"), "trigger without changing tests");
             watcher.RaiseChange();
             var second = await sessions.Reader.ReadAsync().AsTask().WaitAsync(s_wait);
@@ -1061,6 +1067,8 @@ public class TestWatchCommandTests
             second.Templates.Should().Be(first.Templates);
             second.Sources.Should().Be(first.Sources);
             second.Canonical.Should().Be(first.Canonical);
+            second.Session.CompilationCaches.OperatorLifetime!.Count.Should().Be(operatorEntries);
+            second.Session.CompilationCaches.SemanticLifetime!.Count.Should().Be(semanticEntries);
             second.Session.InvocationResults.Count.Should().Be(0);
             second.Learning.AcceptedCount.Should().BeGreaterThanOrEqualTo(first.Learning.AcceptedCount);
 

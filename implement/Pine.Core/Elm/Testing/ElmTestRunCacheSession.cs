@@ -1,3 +1,4 @@
+using Pine.Core.Caching;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.Syntax;
 using Pine.Core.Elm.Syntax.Concrete;
@@ -10,6 +11,8 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 using IPineVM = Pine.Core.Runtime.IPineVM;
@@ -27,8 +30,149 @@ namespace Pine.Core.Elm.Testing;
 public sealed class ElmTestRunCacheSession(
     IReadOnlyDictionary<PineValue, PrecompiledLeaf>? precompiledLeaves = null,
     InvocationCacheGenerationOptions? generationOptions = null,
-    ContinuousInvocationCacheLearning? cacheLearning = null) : IDisposable, IAsyncDisposable
+    ContinuousInvocationCacheLearning? cacheLearning = null,
+    SourceCompilationCaches? compilationCaches = null) : IDisposable, IAsyncDisposable
 {
+    /// <summary>
+    /// Retained pure source transformations. Supply alternate stores or cascades here;
+    /// concurrent hosts require thread-safe implementations.
+    /// </summary>
+    public SourceCompilationCaches CompilationCaches { get; } =
+        compilationCaches ?? SourceCompilationCaches.CreateInMemory();
+
+    private readonly Lock _compilationGate = new();
+    private readonly HashSet<long> _activeCompilations = [];
+    private readonly Dictionary<IMarkerCacheLifetime<long>, CompilationMaintenance> _compilationMaintenance = [];
+    private long _compilationMarker;
+
+    private sealed class CompilationMaintenance(int budget)
+    {
+        public int? PendingBudget = budget;
+        public TaskCompletionSource Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    /// <summary>
+    /// Begins a host invocation with an increasing marker. Dispose in the same execution context
+    /// after preparation, including failed/cancelled preparation. Async children inherit the marker.
+    /// </summary>
+    public IDisposable BeginCompilationInvocation()
+    {
+        var marker = Interlocked.Increment(ref _compilationMarker);
+        lock (_compilationGate)
+            _activeCompilations.Add(marker);
+
+        try
+        {
+            var caches =
+                new[] { CompilationCaches.OperatorLifetime, CompilationCaches.SemanticLifetime }
+                .OfType<IMarkerCacheLifetime<long>>().Distinct()
+                .Select(cache => (Cache: cache, Usage: cache.SetMarker(marker))).ToArray();
+
+            return new CompilationInvocation(this, marker, caches);
+        }
+        catch
+        {
+            lock (_compilationGate)
+                _activeCompilations.Remove(marker);
+            throw;
+        }
+    }
+
+    private sealed class CompilationInvocation(
+        ElmTestRunCacheSession owner,
+        long marker,
+        (IMarkerCacheLifetime<long> Cache, ICacheUsage Usage)[] caches) : IDisposable
+    {
+        private int _disposed;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+                return;
+
+            lock (owner._compilationGate)
+                owner._activeCompilations.Remove(marker);
+
+            foreach (var (cache, usage) in caches)
+            {
+                var used = usage.EntryCount;
+
+                if (used == 0)
+                    continue;
+
+                var budget = (int)Math.Min(int.MaxValue, 2L * used);
+                CompilationMaintenance maintenance;
+                lock (owner._compilationGate)
+                {
+                    if (owner._compilationMaintenance.TryGetValue(cache, out var existing))
+                    {
+                        existing.PendingBudget = budget;
+                        continue;
+                    }
+
+                    if (cache.Count <= 3L * used)
+                        continue;
+
+                    maintenance = new(budget);
+                    owner._compilationMaintenance.Add(cache, maintenance);
+                }
+
+                _ = owner.MaintainCompilationCacheAsync(cache, maintenance);
+            }
+        }
+    }
+
+    private async Task MaintainCompilationCacheAsync(
+        IMarkerCacheLifetime<long> cache, CompilationMaintenance maintenance)
+    {
+        try
+        {
+            while (true)
+            {
+                int budget;
+                lock (_compilationGate)
+                {
+                    if (maintenance.PendingBudget is not { } pending)
+                    {
+                        _compilationMaintenance.Remove(cache);
+                        maintenance.Completion.SetResult();
+                        return;
+                    }
+
+                    budget = pending;
+                    maintenance.PendingBudget = null;
+                }
+
+                await cache.TrimAsync(budget, Retention).ConfigureAwait(false);
+            }
+        }
+        catch (Exception exception)
+        {
+            lock (_compilationGate)
+                _compilationMaintenance.Remove(cache);
+            maintenance.Completion.SetException(exception);
+            _ = maintenance.Completion.Task.Exception;
+            Trace.TraceError("Source-transformation cache maintenance failed: " + exception);
+        }
+
+        CacheRetention Retention(long entryMarker)
+        {
+            lock (_compilationGate)
+            {
+                return _activeCompilations.Contains(entryMarker)
+                    ? new CacheRetention.Retain()
+                    : new CacheRetention.Ranked(entryMarker);
+            }
+        }
+    }
+
+    /// <summary>Awaits currently scheduled transformation cleanup, propagating storage/policy failures.</summary>
+    public Task WaitForCompilationMaintenanceAsync()
+    {
+        lock (_compilationGate)
+            return Task.WhenAll(_compilationMaintenance.Values.Select(item => item.Completion.Task));
+    }
+
     /// <summary>Compilation, parsing, encoding and reduction caches shared by preparation and workers.</summary>
     public PineVMSharedCaches VmCaches { get; } = new();
 
@@ -100,10 +244,20 @@ public sealed class ElmTestRunCacheSession(
     }
 
     /// <summary>Stops session-owned learning without retaining a run's instrumentation.</summary>
-    public void Dispose() => CacheLearning?.Dispose();
+    public void Dispose()
+    {
+        CacheLearning?.Dispose();
+        WaitForCompilationMaintenanceAsync().GetAwaiter().GetResult();
+    }
 
     /// <summary>Stops and awaits session-owned background learning.</summary>
-    public ValueTask DisposeAsync() => CacheLearning?.DisposeAsync() ?? ValueTask.CompletedTask;
+    public async ValueTask DisposeAsync()
+    {
+        if (CacheLearning is not null)
+            await CacheLearning.DisposeAsync().ConfigureAwait(false);
+
+        await WaitForCompilationMaintenanceAsync().ConfigureAwait(false);
+    }
 
     /// <summary>Source parsing keyed by complete source text, never by path or timestamp.</summary>
     public IDictionary<string, Result<ParseError, File>> SourceParsing { get; } =

@@ -267,7 +267,11 @@ internal static class WarmRerun
                 throw new InvalidOperationException($"Expected 79 selected tests, got {selected.Length}.");
 
             var entries = Measure("compile-selected-closures", () =>
-                discovery.PrepareExecution(selected.Select(item => item.Id), cancellationToken: cancellation.Token));
+            {
+                using var invocation = coreSession.BeginCompilationInvocation();
+                return discovery.PrepareExecution(selected.Select(item => item.Id),
+                    cancellationToken: cancellation.Token, compilationCaches: coreSession.CompilationCaches);
+            });
             var completed = Measure("execute", () =>
                 selected.Select(item =>
                     ElmTestRunner.ExecuteDiscoveredTest(
@@ -306,6 +310,8 @@ internal static class WarmRerun
                 }).ToArray(),
                 ParseEntries = coreSession.SourceParsing.Count,
                 CanonicalCacheEntries = coreSession.DeclarationCanonicalization.Count,
+                OperatorCacheEntries = coreSession.CompilationCaches.OperatorLifetime?.Count,
+                SemanticCacheEntries = coreSession.CompilationCaches.SemanticLifetime?.Count,
                 CacheBefore = new { before.Totals, before.SharedCacheGenerations },
                 CacheAfter = new { after.Totals, after.SharedCacheGenerations },
                 VmReducedEntries = coreSession.VmCaches.ReducedExpressions.Count,

@@ -4,6 +4,12 @@ internal static class Program
 {
     public static int Main(string[] args)
     {
+        if (args is ["cache-check", var directory])
+            return PersistentCacheCheck.Run(directory, requireHits: false);
+
+        if (args is ["cache-check", var hitDirectory, "--require-hits"])
+            return PersistentCacheCheck.Run(hitDirectory, requireHits: true);
+
         if (args is ["run", var checkout, var output, .. var options])
         {
             var rounds = 3;
@@ -64,6 +70,7 @@ internal static class Program
               ElmReviewProfiling run <elm-review-checkout> <new-output-directory>
                 [--rounds N] [--wait-for-profiler] [--dependencies] [--online] [--language-server]
               ElmReviewProfiling trace <file.nettrace> [--allocation-stacks]
+              ElmReviewProfiling cache-check <cache-directory> [--require-hits]
             """);
 
         return args is ["--help"] or [] ? 0 : 1;

@@ -618,7 +618,7 @@ public static class ElmTestDiscovery
                 inventory.Where(item => item.FuzzRunsOverride is not null)
                 .ToImmutableDictionary(item => item.Id, item => item.FuzzRunsOverride!.Value, StringComparer.Ordinal),
                 CompileExecution =
-                (ids, settings, token) =>
+                (ids, settings, token, caches) =>
                 {
                     executionGate.Wait(token);
 
@@ -673,7 +673,8 @@ public static class ElmTestDiscovery
                                         ]))
                                 ],
                                 compilationDeclarations.Value,
-                                token);
+                                token,
+                                caches);
 
                         return
                             selected.Select(
@@ -1020,7 +1021,7 @@ public sealed record ElmTestDiscoveryResult
     [JsonIgnore]
     public string? ResolutionFingerprint { get; init; }
 
-    internal Func<IReadOnlySet<string>, ElmTestExecutionSettings, CancellationToken,
+    internal Func<IReadOnlySet<string>, ElmTestExecutionSettings, CancellationToken, SourceCompilationCaches?,
         ImmutableDictionary<string, ElmTestExecutionEntry>>? CompileExecution
     { get; init; }
 
@@ -1069,7 +1070,8 @@ public sealed record ElmTestDiscoveryResult
     public ImmutableDictionary<string, ElmTestExecutionEntry> PrepareExecution(
         IEnumerable<string>? testIds = null,
         ElmTestExecutionSettings? executionSettings = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        SourceCompilationCaches? compilationCaches = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         executionSettings ??= ExecutionSettings;
@@ -1084,7 +1086,7 @@ public sealed record ElmTestDiscoveryResult
 
         return
             (CompileExecution ?? throw new InvalidOperationException("This discovery result has no prepared code."))
-            (ids, executionSettings, cancellationToken);
+            (ids, executionSettings, cancellationToken, compilationCaches);
     }
 
     /// <summary>The selected nonempty leaves. CLI listings also show skipped leaves from <see cref="Items"/>.</summary>

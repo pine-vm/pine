@@ -69,6 +69,11 @@ public class ElmTestDiscoveryTests
             Test.test "shadowing" (\_ -> Expect.equal 2 (add changed.answer))
         """)]
     [InlineData("""
+        original = { answer = 7 }
+        updated = { original | answer = 42 }
+        suite = Test.test "global update receiver" (\_ -> Expect.equal 42 updated.answer)
+        """)]
+    [InlineData("""
         suite = Test.test "direct log" (\_ -> Expect.equal 42 (Debug.log "ignored" 42))
         """)]
     [InlineData("""

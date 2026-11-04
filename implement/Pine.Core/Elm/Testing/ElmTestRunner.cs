@@ -842,10 +842,12 @@ public static class ElmTestRunner
 
         if (syntaxDiscovery is not null)
         {
+            using var compilationInvocation = cacheSession?.BeginCompilationInvocation();
             var entries =
                 syntaxDiscovery.PrepareExecution(
                     discoveredTests.Where(test => test.Kind == DiscoveredTestKind.Runnable).Select(test => test.Id!),
-                    cancellationToken: instrumentation?.CancellationToken ?? default);
+                    cancellationToken: instrumentation?.CancellationToken ?? default,
+                    compilationCaches: cacheSession?.CompilationCaches);
 
             foreach (var test in discoveredTests.Where(test => test.Kind == DiscoveredTestKind.Runnable))
             {
