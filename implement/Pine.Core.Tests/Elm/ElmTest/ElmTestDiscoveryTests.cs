@@ -734,9 +734,11 @@ public class ElmTestDiscoveryTests
                 """);
 
         var file = Path.Combine(project.Directory, "tests", "Tests.elm");
+
         File.WriteAllText(
             file,
             File.ReadAllText(file).Replace("exposing (suite)", "exposing (suite, second, third, fourth, fifth)"));
+
         var discovery = ElmTestDiscovery.DiscoverTests(project.Directory);
 
         discovery.Tests.Select(test => test.DiscoveryIndex).Should().Equal(2, 3);
@@ -745,10 +747,13 @@ public class ElmTestDiscoveryTests
 
         discovery.Items.Single(item => item.RootDeclarationName == "suite").Selection.Should().Be(
             ElmTestDiscoverySelection.ExcludedByOnly);
+
         discovery.Items.Single(item => item.RootDeclarationName == "fourth").Selection.Should().Be(
             ElmTestDiscoverySelection.Skipped);
-        discovery.Items.Where(item => item.Kind == ElmTestDiscoveryItemKind.Group ||
-            item.Selection != ElmTestDiscoverySelection.Included)
+
+        discovery.Items.Where(
+            item => item.Kind == ElmTestDiscoveryItemKind.Group ||
+                item.Selection != ElmTestDiscoverySelection.Included)
             .Should().OnlyContain(item => item.ExecutionFilter == null);
     }
 

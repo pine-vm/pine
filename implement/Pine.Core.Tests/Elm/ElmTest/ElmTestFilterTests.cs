@@ -67,6 +67,7 @@ public class ElmTestFilterTests
     public void Exact_path_frequencies_enumerate_the_inventory_once_for_all_selectors()
     {
         var enumerations = 0;
+
         var tests =
             Enumerable.Range(0, 2048)
             .Select(index => new ListedTest("tests/Tests.elm", ["group"], "test " + index)).ToArray();
