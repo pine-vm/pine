@@ -306,7 +306,7 @@ public sealed class LanguageServerTestingService(
                 await Send("test", item.Id, result.State, result).ConfigureAwait(false);
             }
 
-            await Send("phase", state: "preparation").ConfigureAwait(false);
+            await Send("phase", state: "runner-compilation").ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
 
             var executable =

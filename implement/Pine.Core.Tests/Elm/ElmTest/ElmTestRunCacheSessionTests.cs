@@ -238,7 +238,7 @@ public class ElmTestRunCacheSessionTests(ITestOutputHelper output)
             .Should().HaveCount(2).And.OnlyContain(test => test.Kind == CompletedTestKind.Passed);
 
         learning.GetSnapshot().AcceptedCount.Should().BeGreaterThanOrEqualTo(beforeBudget + preparationSamples + 2);
-        budget.GetSummary().CountersByPhase["preparation"].Total.InstructionCount.Should().BeGreaterThan(0);
+        budget.GetSummary().CountersByPhase["discovery"].Total.InstructionCount.Should().BeGreaterThan(0);
         budget.GetSummary().CountersByPhase["execution"].Total.LoopIterationCount.Should().BeGreaterThanOrEqualTo(201);
         learning.State.Should().BeSameAs(InvocationCacheLearningState.Initial);
 
@@ -449,8 +449,8 @@ public class ElmTestRunCacheSessionTests(ITestOutputHelper output)
         invocations.Count.Should().BeGreaterThanOrEqualTo(invocationCount);
         secondBudget.GetSummary().Counters.InstructionCount.Should().BeLessThan(firstCounters.Counters.InstructionCount);
 
-        secondBudget.GetSummary().CountersByPhase["preparation"].Total.InstructionCount
-            .Should().BeLessThan(firstCounters.CountersByPhase["preparation"].Total.InstructionCount);
+        secondBudget.GetSummary().CountersByPhase["discovery"].Total.InstructionCount
+            .Should().BeLessThan(firstCounters.CountersByPhase["discovery"].Total.InstructionCount);
 
         secondBudget.GetSummary().CountersByPhase["execution"].Total.LoopIterationCount
             .Should().BeLessThan(firstCounters.CountersByPhase["execution"].Total.LoopIterationCount);
@@ -464,8 +464,8 @@ public class ElmTestRunCacheSessionTests(ITestOutputHelper output)
         output.WriteLine(
             $"Workers={workers}; instructions cold={firstCounters.Counters.InstructionCount}, warm={secondCounters.Counters.InstructionCount}; " +
             $"loops cold={firstCounters.Counters.LoopIterationCount}, warm={secondCounters.Counters.LoopIterationCount}; " +
-            $"preparation instructions cold={firstCounters.CountersByPhase["preparation"].Total.InstructionCount}, " +
-            $"warm={secondCounters.CountersByPhase["preparation"].Total.InstructionCount}; " +
+            $"discovery instructions cold={firstCounters.CountersByPhase["discovery"].Total.InstructionCount}, " +
+            $"warm={secondCounters.CountersByPhase["discovery"].Total.InstructionCount}; " +
             $"execution instructions cold={firstCounters.CountersByPhase["execution"].Total.InstructionCount}, " +
             $"warm={secondCounters.CountersByPhase["execution"].Total.InstructionCount}; " +
             $"total milliseconds cold={first.Duration.TotalMilliseconds:F2}, warm={second.Duration.TotalMilliseconds:F2}");

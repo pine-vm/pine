@@ -171,6 +171,10 @@ public class LanguageServerTestingTests
                 Enumerable.Range(1, notifications.Length).Select(i => (long)i));
 
             notifications.Select(item => item.Version).Distinct().Should().ContainSingle();
+
+            notifications.Where(item => item.Kind == "phase").Select(item => item.State)
+                .Should().Equal("waiting", "discovery", "runner-compilation", "running");
+
             notifications.Last().Kind.Should().Be("end");
         }
     }
@@ -360,7 +364,7 @@ public class LanguageServerTestingTests
                 publishEvent:
                 notification =>
                 {
-                    if (notification.RunId == "cancel-prepare" && notification.State == "preparation")
+                    if (notification.RunId == "cancel-prepare" && notification.State == "runner-compilation")
                         cancellation.Cancel();
 
                     return Task.CompletedTask;

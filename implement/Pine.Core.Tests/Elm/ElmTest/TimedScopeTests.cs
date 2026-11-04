@@ -44,7 +44,7 @@ public class TimedScopeTests
         var vm = instrumentation.CreateVm(new ConcurrentInvocationCache(), new PineVMSharedCaches());
 
         using var preparation =
-            new TimedScope(() => instrumentation.EnterScope("preparation", "suite"));
+            new TimedScope(() => instrumentation.EnterScope("discovery", "suite"));
 
         preparation.Dispose();
 
@@ -59,7 +59,7 @@ public class TimedScopeTests
         instrumentation.GetSummary().CountersByPhase["execution"].Total.InstructionCount
             .Should().BeGreaterThan(0);
 
-        instrumentation.GetSummary().CountersByPhase["preparation"].Total.InstructionCount
+        instrumentation.GetSummary().CountersByPhase["discovery"].Total.InstructionCount
             .Should().Be(0);
     }
 

@@ -1221,7 +1221,10 @@ public class TestCommandTests
 
             output.ToString().Should().Contain("Running 1 test").And.Contain("Effective execution limits:");
 
-            output.ToString().Should().Contain("Phase: preparation; context:")
+            output.ToString().Should().Contain("Phase: discovery; context:")
+                .And.Contain("Phase: source-resolution; context:")
+                .And.Contain("Phase: runner-compilation; context:")
+                .And.NotContain("Phase: environment-compilation; context:")
                 .And.Contain("Phase: execution; context:")
                 .And.Contain("Overall run stats (excluding serialization).")
                 .And.NotContain("CurriedFunction")
@@ -1253,7 +1256,7 @@ public class TestCommandTests
                 output.ToString().Should().NotContain(property.Name + ":");
 
                 var preparation =
-                    phases.GetProperty("preparation").GetProperty("Total").GetProperty(property.Name).GetInt64();
+                    phases.GetProperty("discovery").GetProperty("Total").GetProperty(property.Name).GetInt64();
 
                 var execution =
                     phases.GetProperty("execution").GetProperty("Total").GetProperty(property.Name).GetInt64();
@@ -1261,7 +1264,7 @@ public class TestCommandTests
                 (preparation + execution).Should().Be(
                     summary.GetProperty("Counters").GetProperty(property.Name).GetInt64());
 
-                foreach (var phase in new[] { "preparation", "execution" })
+                foreach (var phase in new[] { "discovery", "execution" })
                 {
                     var origins = phases.GetProperty(phase);
 
@@ -1276,7 +1279,7 @@ public class TestCommandTests
             var cached = summary.GetProperty("CachedWorkCounters");
 
             var cachedPhases =
-                new[] { "preparation", "execution" }
+                new[] { "discovery", "execution" }
                 .Select(phase => phases.GetProperty(phase).GetProperty("CachedWorkCounters")).ToArray();
 
             cachedPhases.Sum(c => c.GetProperty("ExpressionTemplatePlanParseCount").GetInt64())
@@ -1332,7 +1335,7 @@ public class TestCommandTests
 
             text.Should().Contain("TEST RUN PASSED")
                 .And.NotContain("Evaluation work counters by phase and work origin:")
-                .And.NotContain("Phase: preparation")
+                .And.NotContain("Phase: discovery")
                 .And.NotContain("Phase: execution");
 
             foreach (var property in typeof(EvalWorkCounters).GetProperties())
@@ -1853,7 +1856,7 @@ public class TestCommandTests
 
             var preparation = Run(null, workers: 4, listTests: true);
             preparation.Summary.CountersByPhase["execution"].Total.Should().Be(default(EvalWorkCounters));
-            preparation.Summary.Counters.Should().Be(all.Summary.CountersByPhase["preparation"].Total);
+            preparation.Summary.Counters.Should().Be(all.Summary.CountersByPhase["discovery"].Total);
             preparation.SelectedTests.Should().HaveCount(3);
 
             var selected = new[] { Run("first", 4), Run("second", 1), Run("property", 4) };
@@ -1873,7 +1876,7 @@ public class TestCommandTests
             foreach (var report in selected)
             {
                 report.SelectedTests.Should().ContainSingle().Which.Should().Be(report.SelectedTest);
-                report.Summary.CountersByPhase["preparation"].Should().Be(all.Summary.CountersByPhase["preparation"]);
+                report.Summary.CountersByPhase["discovery"].Should().Be(all.Summary.CountersByPhase["discovery"]);
             }
 
             var preparationExpressions = preparation.Expressions.ToDictionary(row => row.Hash, StringComparer.Ordinal);
@@ -1910,7 +1913,7 @@ public class TestCommandTests
             stopped.Summary.Phase.Should().Be("execution");
             stopped.Summary.Context.Should().EndWith("/second");
             stopped.Summary.Counters.InvocationCount.Should().Be(budget + 1);
-            stopped.Summary.CountersByPhase["preparation"].Should().Be(all.Summary.CountersByPhase["preparation"]);
+            stopped.Summary.CountersByPhase["discovery"].Should().Be(all.Summary.CountersByPhase["discovery"]);
         }
         finally
         {
@@ -2514,10 +2517,18 @@ public class TestCommandTests
             rendered.LastIndexOf("Running 3 tests", StringComparison.Ordinal).Should().Be(runningMessageIndex);
             runningMessageIndex.Should().BeLessThan(rendered.IndexOf("TEST RUN", StringComparison.Ordinal));
             rendered.Should().Contain("Duration:");
-            rendered.Should().Contain("  compilation:");
-            rendered.Should().Contain("  preparation:");
-            rendered.Should().Contain("  execution:");
-            rendered.Split("VM calls (sum):").Should().HaveCount(3);
+            rendered.Should().Contain("  source loading and resolution:");
+            rendered.Should().Contain("  test discovery and selection:");
+            rendered.Should().Contain("    declaration preparation:");
+            rendered.Should().Contain("    test construction and seeding:");
+            rendered.Should().Contain("    inventory and source mapping:");
+            rendered.Should().Contain("  runner compilation:");
+            rendered.Should().Contain("  test execution:");
+
+            rendered.Should().NotContain("  compilation:").And.NotContain("  preparation:")
+                .And.NotContain("environment compilation:");
+
+            rendered.Split("PineVM calls (sum):").Should().HaveCount(2);
             rendered.Should().Contain("Passed:   2");
             rendered.Should().Contain("Failed:   1");
         }

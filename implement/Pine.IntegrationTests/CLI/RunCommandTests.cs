@@ -242,8 +242,34 @@ public sealed class RunCommandTests : IDisposable
 
         result.Error.Should().Contain("Select a declaration explicitly")
             .And.Contain("runRoot : String -> String")
-            .And.Contain("compilation:")
+            .And.Contain("source loading:")
+            .And.Contain("dependency resolution and compilation:")
+            .And.NotContain("execution:")
             .And.NotContain("Batch mode was selected");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Run_duration_report_omits_stages_not_reached(bool loadingStarted)
+    {
+        var result =
+            loadingStarted
+            ?
+            Run(source: Path.Combine(_directory, "missing.elm") + "/runRoot", input: "x", durations: true)
+            :
+            Run(input: "x", transformFile: "input", durations: true);
+
+        result.Exit.Should().Be(1, result.Error);
+
+        result.Error.Should().NotContain("dependency resolution and compilation:")
+            .And.NotContain("execution:");
+
+        if (loadingStarted)
+            result.Error.Should().Contain("source loading:");
+
+        else
+            result.Error.Should().NotContain("source loading:");
     }
 
     [Theory]
@@ -1055,7 +1081,8 @@ public sealed class RunCommandTests : IDisposable
 
         error.ToString().Should().Contain("Batch mode was selected because")
             .And.Contain("size : String -> Int")
-            .And.Contain("compilation:")
+            .And.Contain("source loading:")
+            .And.Contain("dependency resolution and compilation:")
             .And.Contain("execution:")
             .And.NotContain("Input> ");
     }

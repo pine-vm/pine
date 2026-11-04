@@ -61,16 +61,23 @@ public static class ElmTestDiscovery
                     filterByRelativeName: path => !path.Any(segment => segment is ".git" or "elm-stuff"))
                 .Select(file => (file.path, file.content)));
 
-        return
+        var sourceLoadingDuration = watch.Elapsed;
+
+        var discovery =
             DiscoverTests(
                 tree,
                 resolutionConfiguration,
                 packageProvider,
                 cancellationToken,
                 appDirectory,
-                caches: caches)
-            with
-            { Duration = watch.Elapsed };
+                caches: caches);
+
+        return
+            discovery with
+            {
+                SourceResolutionDuration = sourceLoadingDuration + discovery.SourceResolutionDuration,
+                Duration = watch.Elapsed
+            };
     }
 
     /// <summary>Discovers an in-memory project. Resolution and source errors are reported, not empty successes.</summary>
@@ -113,7 +120,15 @@ public static class ElmTestDiscovery
         {
             var manifest = ElmDependencyResolver.ReadManifest(projectTree, manifestPath);
             ElmDependencyResolver.ValidateManifestShape(manifest, string.Join('/', manifestPath));
-            return new([], hasOnly: false) { Duration = watch.Elapsed, SourceFiles = projectTree };
+            var duration = watch.Elapsed;
+
+            return
+                new([], hasOnly: false)
+                {
+                    SourceResolutionDuration = duration,
+                    Duration = duration,
+                    SourceFiles = projectTree
+                };
         }
 
         resolutionConfiguration ??= ElmTestRunner.DefaultResolutionConfiguration.Value;
@@ -151,12 +166,12 @@ public static class ElmTestDiscovery
                         declaration.Function.Declaration.Value.Name.Value)))
             .ToArray();
 
-        var sourcePreparationDuration = watch.Elapsed;
+        var sourceResolutionDuration = watch.Elapsed;
 
         return
             DiscoverTests(build, declarations, cancellationToken, executionSettings, caches) with
             {
-                SourcePreparationDuration = sourcePreparationDuration,
+                SourceResolutionDuration = sourceResolutionDuration,
                 Duration = watch.Elapsed
             };
     }
@@ -338,7 +353,7 @@ public static class ElmTestDiscovery
                 CancellationToken = cancellationToken
             };
 
-        var interpreterPreparationDuration = watch.Elapsed;
+        var declarationPreparationDuration = watch.Elapsed;
         var inventory = new List<DiscoveryItem>();
         var executableLeaves = new List<DiscoveryItem>();
         var fuzzRoots = new List<DiscoveryRoot>();
@@ -557,6 +572,8 @@ public static class ElmTestDiscovery
             }
         }
 
+        var constructionCompleted = watch.Elapsed;
+
         // Selection is aggregated bottom-up so a group with only skipped children also has a skipped icon.
         foreach (var item in inventory.AsEnumerable().Reverse())
         {
@@ -591,8 +608,8 @@ public static class ElmTestDiscovery
             new Lazy<ImmutableDictionary<DeclQualifiedName, Abstract.Declaration>>(
                 () => sourceDeclarations.ToImmutableDictionary());
 
-        return
-            new(
+        var discovery =
+            new ElmTestDiscoveryResult(
                 [
                     .. inventory.Select(
                         item =>
@@ -709,10 +726,18 @@ public static class ElmTestDiscovery
                     {
                         executionGate.Release();
                     }
-                },
-                InterpreterPreparationDuration = interpreterPreparationDuration,
-                DiscoveryDuration = watch.Elapsed - interpreterPreparationDuration,
-                Duration = watch.Elapsed
+                }
+            };
+
+        var duration = watch.Elapsed;
+
+        return
+            discovery with
+            {
+                DeclarationPreparationDuration = declarationPreparationDuration,
+                TestConstructionDuration = constructionCompleted - declarationPreparationDuration,
+                InventoryProjectionDuration = duration - constructionCompleted,
+                Duration = duration
             };
 
         (string Tag, IReadOnlyList<SeededRunner> Runners) PrepareRunners(
@@ -1124,13 +1149,16 @@ public sealed record ElmTestDiscoveryResult
     public TimeSpan Duration { get; init; }
 
     /// <summary>Project loading, parsing and dependency resolution.</summary>
-    public TimeSpan SourcePreparationDuration { get; init; }
+    public TimeSpan SourceResolutionDuration { get; init; }
 
-    /// <summary>Demand canonicalization and unlowered interpreter preparation.</summary>
-    public TimeSpan InterpreterPreparationDuration { get; init; }
+    /// <summary>Demand canonicalization, unlowered interpreter preparation and source-observer setup.</summary>
+    public TimeSpan DeclarationPreparationDuration { get; init; }
 
-    /// <summary>Test construction, runner preparation and location association, excluding assertion execution.</summary>
-    public TimeSpan DiscoveryDuration { get; init; }
+    /// <summary>Root interpretation, test-tree traversal and runner seeding, excluding assertion execution.</summary>
+    public TimeSpan TestConstructionDuration { get; init; }
+
+    /// <summary>Global selection, selector generation, source navigation and inventory indexing.</summary>
+    public TimeSpan InventoryProjectionDuration { get; init; }
 
     /// <summary>Gets navigation for a discovered ID. Unknown IDs fail explicitly.</summary>
     public ElmTestSourceLocation GetSourceLocation(string testId) =>

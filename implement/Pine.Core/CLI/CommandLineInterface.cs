@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace Pine.Core.CLI;
 
@@ -7,6 +8,14 @@ namespace Pine.Core.CLI;
 /// </summary>
 public class CommandLineInterface
 {
+    /// <summary>Formats subsecond durations in milliseconds and longer durations in seconds.</summary>
+    public static string FormatDuration(TimeSpan duration) =>
+        duration.TotalSeconds < 1
+        ?
+        Math.Round(duration.TotalMilliseconds).ToString(CultureInfo.InvariantCulture) + " ms"
+        :
+        duration.TotalSeconds.ToString("F2", CultureInfo.InvariantCulture) + " s";
+
     /// <summary>
     /// Converts the specified 64-bit signed <paramref name="integer"/> to its
     /// decimal string representation, inserting underscores every three digits

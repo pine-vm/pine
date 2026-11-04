@@ -230,20 +230,34 @@ public class ElmTestTests
                 [],
                 includeTestDetails: false,
                 duration: includeTotal ? TimeSpan.FromMilliseconds(100) : null,
-                compilationDuration: TimeSpan.FromMilliseconds(2),
-                preparationDuration: TimeSpan.FromMilliseconds(3),
-                executionDuration: TimeSpan.FromMilliseconds(5),
-                preparationVmDuration: TimeSpan.FromMilliseconds(1),
-                executionVmDuration: TimeSpan.FromMilliseconds(11))
+                phaseDurations:
+                new()
+                {
+                    SourceResolution = TimeSpan.FromMilliseconds(2),
+                    EnvironmentCompilation = TimeSpan.FromMilliseconds(4),
+                    Discovery = TimeSpan.FromMilliseconds(3),
+                    DeclarationPreparation = TimeSpan.FromMilliseconds(1),
+                    TestConstruction = TimeSpan.FromMilliseconds(1),
+                    InventoryProjection = TimeSpan.FromMilliseconds(1),
+                    DiscoveryVm = TimeSpan.FromMilliseconds(1),
+                    RunnerCompilation = TimeSpan.FromMilliseconds(6),
+                    Execution = TimeSpan.FromMilliseconds(5),
+                    ExecutionVm = TimeSpan.FromMilliseconds(11)
+                })
             .PlainText;
 
         output.Should().Contain(
             """
-              compilation: 2 ms
-              preparation: 3 ms
-                VM calls (sum): 1 ms
-              execution:   5 ms
-                VM calls (sum): 11 ms
+              source loading and resolution: 2 ms
+              environment compilation: 4 ms
+              test discovery and selection: 3 ms
+                declaration preparation: 1 ms
+                test construction and seeding: 1 ms
+                inventory and source mapping: 1 ms
+                PineVM calls (sum): 1 ms
+              runner compilation: 6 ms
+              test execution: 5 ms
+                PineVM calls (sum): 11 ms
             """);
 
         if (includeTotal)
@@ -261,13 +275,91 @@ public class ElmTestTests
                 [],
                 includeTestDetails: false,
                 duration: TimeSpan.FromMilliseconds(100),
-                compilationDuration: TimeSpan.FromMilliseconds(2))
+                phaseDurations: new() { SourceResolution = TimeSpan.FromMilliseconds(2) })
             .PlainText;
 
-        output.Should().Contain("  compilation: 2 ms")
-            .And.NotContain("preparation:")
+        output.Should().Contain("  source loading and resolution: 2 ms")
+            .And.NotContain("discovery")
+            .And.NotContain("compilation:")
             .And.NotContain("execution:")
             .And.NotContain("VM calls");
+    }
+
+    [Fact]
+    public void Duration_report_formats_total_phases_subphases_and_parallel_VM_sums_consistently()
+    {
+        var durations =
+            new ElmTestRunDurations
+            {
+                SourceResolution = TimeSpan.FromMilliseconds(500),
+                Discovery = TimeSpan.FromSeconds(1.25),
+                DeclarationPreparation = TimeSpan.FromMilliseconds(200),
+                TestConstruction = TimeSpan.FromSeconds(1.01),
+                InventoryProjection = TimeSpan.FromMilliseconds(40),
+                RunnerCompilation = TimeSpan.FromSeconds(1.5),
+                Execution = TimeSpan.FromSeconds(2),
+                ExecutionVm = TimeSpan.FromSeconds(3.5)
+            };
+
+        var output =
+            ElmTestRunner.RenderTestResults(
+                [],
+                includeTestDetails: false,
+                duration: durations.Total,
+                phaseDurations: durations).PlainText;
+
+        output.Should().Contain(
+            """
+            Duration: 5.25 s
+              source loading and resolution: 500 ms
+              test discovery and selection: 1.25 s
+                declaration preparation: 200 ms
+                test construction and seeding: 1.01 s
+                inventory and source mapping: 40 ms
+              runner compilation: 1.50 s
+              test execution: 2.00 s
+                PineVM calls (sum): 3.50 s
+            """);
+
+        output.Should().NotContain("environment compilation:");
+        output.Split("PineVM calls (sum):").Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void Syntax_run_reports_actual_phases_without_a_discovery_VM_timer()
+    {
+        using var project = new ElmFuzzTests.Project("""suite = Test.test "pass" (\_ -> Expect.pass)""");
+        var phases = new List<string>();
+
+        using var instrumentation =
+            new ElmTestInstrumentation(new(), recordDiagnostics: false)
+            {
+                OnProgress = summary => phases.Add(summary.Phase)
+            };
+
+        var completed =
+            ElmTestRunner.DiscoverAndRunTests(project.Directory, instrumentation: instrumentation)
+            .Should().BeOfType<ElmTestRun.Completed>().Which;
+
+        var durations = completed.Durations;
+
+        phases.Distinct().Should().Equal("source-resolution", "discovery", "runner-compilation", "execution");
+        durations.SourceResolution.Should().BeGreaterThan(TimeSpan.Zero);
+        durations.Discovery.Should().BeGreaterThan(TimeSpan.Zero);
+        durations.DeclarationPreparation.Should().BeGreaterThan(TimeSpan.Zero);
+        durations.TestConstruction.Should().BeGreaterThan(TimeSpan.Zero);
+        durations.InventoryProjection.Should().BeGreaterThan(TimeSpan.Zero);
+
+        durations.Discovery.Should().BeGreaterThanOrEqualTo(
+            durations.DeclarationPreparation!.Value + durations.TestConstruction!.Value +
+            durations.InventoryProjection!.Value);
+
+        durations.RunnerCompilation.Should().BeGreaterThan(TimeSpan.Zero);
+        durations.Execution.Should().BeGreaterThan(TimeSpan.Zero);
+        durations.ExecutionVm.Should().BeGreaterThan(TimeSpan.Zero);
+        durations.DiscoveryVm.Should().BeNull();
+        durations.EnvironmentCompilation.Should().BeNull();
+        completed.Duration.Should().Be(durations.Total);
     }
 
     [Fact]
@@ -516,14 +608,18 @@ public class ElmTestTests
                 });
 
         var completed = testRun.Should().BeOfType<ElmTestRun.Completed>().Which;
-        completed.CompilationDuration.Should().BeGreaterThan(TimeSpan.Zero);
-        completed.PreparationVmDuration.Should().BeGreaterThan(TimeSpan.Zero);
-        completed.PreparationDuration.Should().BeGreaterThanOrEqualTo(completed.PreparationVmDuration);
-        completed.ExecutionVmDuration.Should().BeGreaterThan(TimeSpan.Zero);
-        completed.ExecutionDuration.Should().BeGreaterThanOrEqualTo(completed.ExecutionVmDuration);
-
-        completed.Duration.Should().Be(
-            completed.CompilationDuration + completed.PreparationDuration + completed.ExecutionDuration);
+        var durations = completed.Durations;
+        durations.SourceResolution.Should().BeGreaterThan(TimeSpan.Zero);
+        durations.EnvironmentCompilation.Should().BeGreaterThan(TimeSpan.Zero);
+        durations.RunnerCompilation.Should().BeNull();
+        durations.DeclarationPreparation.Should().BeNull();
+        durations.TestConstruction.Should().BeNull();
+        durations.InventoryProjection.Should().BeNull();
+        durations.DiscoveryVm.Should().BeGreaterThan(TimeSpan.Zero);
+        durations.Discovery.Should().BeGreaterThanOrEqualTo(durations.DiscoveryVm!.Value);
+        durations.ExecutionVm.Should().BeGreaterThan(TimeSpan.Zero);
+        durations.Execution.Should().BeGreaterThanOrEqualTo(durations.ExecutionVm!.Value);
+        completed.Duration.Should().Be(durations.Total);
 
         factoryCalls.Should().Be(expectedTestCount);
         sharedCaches.Distinct(ReferenceEqualityComparer.Instance).Should().HaveCount(1);
@@ -743,9 +839,10 @@ public class ElmTestTests
                     // Snapshot the complete semantic model; elapsed times are the only nondeterministic fields.
                     var json = JsonSerializer.SerializeToNode(discovery, options)!.AsObject();
                     json.Remove(nameof(ElmTestDiscoveryResult.Duration));
-                    json.Remove(nameof(ElmTestDiscoveryResult.SourcePreparationDuration));
-                    json.Remove(nameof(ElmTestDiscoveryResult.InterpreterPreparationDuration));
-                    json.Remove(nameof(ElmTestDiscoveryResult.DiscoveryDuration));
+                    json.Remove(nameof(ElmTestDiscoveryResult.SourceResolutionDuration));
+                    json.Remove(nameof(ElmTestDiscoveryResult.DeclarationPreparationDuration));
+                    json.Remove(nameof(ElmTestDiscoveryResult.TestConstructionDuration));
+                    json.Remove(nameof(ElmTestDiscoveryResult.InventoryProjectionDuration));
                     var actual = json.ToJsonString(options);
                     var expectationPath = Path.Combine(caseDirectory, "expected-discovery.json");
 

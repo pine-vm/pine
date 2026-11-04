@@ -1253,8 +1253,17 @@ public class TestWatchCommandTests
     private static void AssertSingleDuration(string rendered)
     {
         rendered.Split("Duration:").Should().HaveCount(2);
-        rendered.Should().Contain("  compilation:").And.Contain("  preparation:").And.Contain("  execution:");
-        rendered.Split("VM calls (sum):").Should().HaveCount(3);
+
+        rendered.Should().Contain("  source loading and resolution:")
+            .And.Contain("  test discovery and selection:")
+            .And.Contain("    declaration preparation:")
+            .And.Contain("    test construction and seeding:")
+            .And.Contain("    inventory and source mapping:")
+            .And.Contain("  runner compilation:")
+            .And.Contain("  test execution:");
+
+        rendered.Should().NotContain("  compilation:").And.NotContain("  preparation:");
+        rendered.Split("PineVM calls (sum):").Should().HaveCount(2);
     }
 
     private static ElmTestRunCacheSession CreateSmallWatchCacheSession() =>

@@ -211,10 +211,14 @@ public sealed class RunWatchCommandTests : IDisposable
             if (reportDurations)
             {
                 var latest =
-                    Regex.Matches(error.ToString(), @"(?m)^execution: ([0-9.]+) s")
-                    .Last().Groups[1].Value;
+                    Regex.Matches(error.ToString(), @"(?m)^execution: ([0-9.]+) (ms|s)")
+                    .Last();
 
-                double.Parse(latest, System.Globalization.CultureInfo.InvariantCulture).Should().BeLessThan(2);
+                var seconds =
+                    double.Parse(latest.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) /
+                    (latest.Groups[2].Value == "ms" ? 1000 : 1);
+
+                seconds.Should().BeLessThan(2);
             }
 
             File.WriteAllText(Module, "not an Elm module");
@@ -277,10 +281,16 @@ public sealed class RunWatchCommandTests : IDisposable
 
         void AssertDurations(int compilations, int executions)
         {
-            Regex.Matches(error.ToString(), @"(?m)^compilation: [0-9.]+ s").Count.Should()
+            Regex.Matches(error.ToString(), @"(?m)^source loading: (?:[0-9]+ ms|[0-9]+\.[0-9]{2} s)\r?$").Count.Should()
                 .Be(reportDurations ? compilations : 0);
 
-            Regex.Matches(error.ToString(), @"(?m)^execution: [0-9.]+ s").Count.Should()
+            Regex.Matches(
+                error.ToString(),
+                @"(?m)^dependency resolution and compilation: (?:[0-9]+ ms|[0-9]+\.[0-9]{2} s)\r?$")
+                .Count.Should()
+                .Be(reportDurations ? compilations : 0);
+
+            Regex.Matches(error.ToString(), @"(?m)^execution: (?:[0-9]+ ms|[0-9]+\.[0-9]{2} s)\r?$").Count.Should()
                 .Be(reportDurations ? executions : 0);
         }
     }

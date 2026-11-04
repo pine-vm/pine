@@ -7,6 +7,7 @@ using Pine.Core.Elm.Syntax.Interpreter;
 using Pine.Core.Elm.Testing;
 using Pine.Core.Files;
 using Pine.Core.PineLanguage;
+using Pine.Core.Tests.Elm.LanguageServer;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -24,6 +25,31 @@ namespace Pine.Core.Tests.Elm.ElmTest;
 
 public class ElmTestDiscoveryTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Discovery_timings_partition_source_declarations_construction_and_inventory(bool fromDirectory)
+    {
+        using var project = new ElmFuzzTests.Project("""suite = Test.test "pass" (\_ -> Expect.pass)""");
+
+        var discovery =
+            fromDirectory
+            ?
+            ElmTestDiscovery.DiscoverTests(project.Directory)
+            :
+            ElmTestDiscovery.DiscoverTests(
+                LanguageServerTestingTests.Tree("""suite = Test.test "pass" (\_ -> Expect.pass)"""));
+
+        discovery.SourceResolutionDuration.Should().BeGreaterThan(TimeSpan.Zero);
+        discovery.DeclarationPreparationDuration.Should().BeGreaterThan(TimeSpan.Zero);
+        discovery.TestConstructionDuration.Should().BeGreaterThan(TimeSpan.Zero);
+        discovery.InventoryProjectionDuration.Should().BeGreaterThan(TimeSpan.Zero);
+
+        discovery.Duration.Should().BeGreaterThanOrEqualTo(
+            discovery.SourceResolutionDuration + discovery.DeclarationPreparationDuration +
+            discovery.TestConstructionDuration + discovery.InventoryProjectionDuration);
+    }
+
     [Theory]
     [InlineData("""suite = Test.test "pass" (\_ -> Expect.pass)""")]
     [InlineData("""suite = Test.describe "generated" (List.map (\n -> Test.test (String.fromInt n) (\_ -> Expect.equal n n)) [ 1, 2 ])""")]
