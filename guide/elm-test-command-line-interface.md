@@ -59,6 +59,11 @@ The older `CompileAndRunTests` API retains compiler/PineVM discovery for compati
 `Debug.log` is currently silent during test discovery and execution: its value is preserved
 without producing log output. This also applies to captured, partially applied and higher-order loggers.
 
+`Debug.todo` is supported in compiled test code, including first-class function values.
+It fails only if execution reaches the call. A call reached while running a unit test,
+fuzz property, or fuzz generator is reported as a failure of that test, including the
+`Debug.todo` message; other tests continue running. Unexecuted branches do not fail tests.
+
 Every scenario under `Pine.Core.Tests/TestData/Elm/CommandElmTest` has an
 `expected-discovery.json` expectation. The scenario test compares the complete semantic
 inventory and navigation data, excluding only elapsed times, and checks selected-listing

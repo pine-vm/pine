@@ -10,6 +10,20 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 public static class CoreDebug
 {
     /// <summary>
+    /// Builds an expression that fails evaluation with the supplied Debug.todo message.
+    /// </summary>
+    public static Expression Todo(Expression message) =>
+        ElmRuntimeFailure.Emit(
+            BuiltinHelpers.ApplyBuiltinConcat(
+                [LiteralText("Debug.todo: \""), UnwrapString(message), LiteralText("\"")]));
+
+    /// <summary>
+    /// Returns the encoded Pine function value for Debug.todo.
+    /// </summary>
+    public static PineValue Todo_FunctionValue() =>
+        ExpressionEncoding.EncodeExpressionAsValue(Todo(Expression.EnvironmentInstance));
+
+    /// <summary>
     /// Builds an expression that renders an Elm value with the native Debug.toString implementation.
     /// </summary>
     public static Expression ToString(Expression value) =>

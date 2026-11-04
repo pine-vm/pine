@@ -18,6 +18,70 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 public class RuntimeErrorParityTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Debug_todo_fails_only_when_reached_and_preserves_dynamic_messages(bool disableInlining)
+    {
+        var compiled =
+            ElmCompilerTestHelper.CompileElmModules(
+                [
+                    """
+                    module Test exposing (..)
+
+                    crash = Debug.todo
+
+                    apply function argument = function argument
+
+                    direct shouldCrash message =
+                        if shouldCrash then
+                            Debug.todo message
+                        else
+                            42
+
+                    indirect shouldCrash message =
+                        if shouldCrash then
+                            apply crash message
+                        else
+                            42
+                    """
+                ],
+                disableInlining).parsedEnv;
+
+        var message = ElmValueEncoding.StringAsPineValue("unfinished\n\"details\": \u03bb");
+        const string expected = "Debug.todo: \"unfinished\n\"details\": \u03bb\"";
+
+        foreach (var vm in new IPineVM[]
+        {
+            DirectInterpreter.WithoutEvalCaching(new PineVMParseCache()),
+            ElmCompilerTestHelper.PineVMForProfiling(_ => { }),
+        })
+        {
+            foreach (var name in new[] { "direct", "indirect" })
+            {
+                var function =
+                    compiled.Modules.Single(module => module.moduleName is "Test")
+                    .moduleContent.FunctionDeclarations[name];
+
+                var record =
+                    FunctionRecord.ParseFunctionRecordTagged(function, new PineVMParseCache())
+                    .Extract(error => throw new Exception(error));
+
+                ElmInteractiveEnvironment.ApplyFunction(vm, record, [PineKernelValues.FalseValue, message])
+                    .IsOkOrNull().Should().Be(IntegerEncoding.EncodeSignedInteger(42));
+
+                Failure(
+                    () => ElmInteractiveEnvironment.ApplyFunction(vm, record, [PineKernelValues.TrueValue, message]))
+                    .Should().Contain(expected);
+            }
+        }
+
+        ElmInterpreterEnvironment.Create(Array.Empty<string>())
+            .Extract(error => throw new Exception(error))
+            .Evaluate("Debug.todo \"unfinished\\n\\\"details\\\": \\u{03BB}\"")
+            .IsErrOrNull()!.Message.Should().Contain(expected);
+    }
+
+    [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]
     [InlineData(true, false)]

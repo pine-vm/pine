@@ -24,6 +24,70 @@ public class TestCommandTests
 {
     [Theory]
     [InlineData(true, true, 0)]
+    [InlineData(false, false, 0)]
+    [InlineData(false, true, 1)]
+    public void Debug_todo_reports_a_failed_test_only_when_reached(bool listTests, bool reached, int expectedExit)
+    {
+        var directory =
+            CreateTestProject(
+                $$"""
+                module Tests exposing (suite)
+                import Debug as Diagnostic
+                import Expect
+                import Test
+                helper shouldCrash =
+                    if shouldCrash then
+                        Diagnostic.todo "a missing implementation"
+                    else
+                        Expect.pass
+                suite =
+                    Test.describe "suite"
+                        [ Test.test "unfinished" (\_ -> helper {{(reached ? "True" : "False")}})
+                        , Test.test "still runs" (\_ -> Expect.pass)
+                        ]
+                """);
+
+        var (console, output) = CreateConsole(AnsiSupport.No);
+
+        try
+        {
+            TestCommand.Execute(
+                directory,
+                listTests: listTests,
+                colorMode: CommandLineColorMode.Never,
+                console: console,
+                errorConsole: console,
+                offline: true,
+                seed: 0).Should().Be(expectedExit, output.ToString());
+
+            var text = output.ToString();
+            text.Should().NotContain("Error:").And.NotContain("\u001b");
+
+            if (listTests)
+            {
+                text.Should().Contain("Available tests (2)").And.NotContain("a missing implementation");
+            }
+            else
+            {
+                text.Should().Contain(reached ? "TEST RUN FAILED" : "TEST RUN PASSED")
+                    .And.Contain(reached ? "Passed:   1" : "Passed:   2")
+                    .And.Contain(reached ? "Failed:   1" : "Failed:   0");
+
+                if (reached)
+                {
+                    text.Should().Contain("unfinished").And.Contain("Debug.todo:").And.Contain(
+                        "a missing implementation");
+                }
+            }
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(true, true, 0)]
     [InlineData(false, true, 0)]
     [InlineData(false, false, 1)]
     public void Debug_log_is_silent_and_preserves_test_values(bool listTests, bool passing, int expectedExit)

@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.Testing;
 using Pine.Core.Files;
@@ -22,6 +23,88 @@ namespace Pine.Core.Tests.Elm.ElmTest;
 
 public class ElmTestTests
 {
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    public void Debug_todo_is_a_test_failure_and_does_not_abort_other_tests(bool syntaxDiscovery, bool directVm)
+    {
+        using var project =
+            new ElmFuzzTests.Project(
+                """
+                apply function message = function message
+
+                choose shouldCrash =
+                    if shouldCrash then
+                        Debug.todo "unreachable"
+                    else
+                        Expect.pass
+
+                suite =
+                    Test.describe "Runtime failures"
+                        [ Test.test "direct crash" (\_ -> Debug.todo "unit crash")
+                        , Test.test "first-class crash" (\_ -> apply Debug.todo "first-class crash message")
+                        , Test.fuzz (Fuzz.constant "property crash") "fuzz crash" (\message -> Debug.todo message)
+                        , Test.fuzz (Fuzz.map Debug.todo (Fuzz.constant "generator crash")) "generator crash" (\_ -> Expect.pass)
+                        , Test.test "unreachable crash" (\_ -> choose False)
+                        , Test.test "still runs" (\_ -> Expect.pass)
+                        ]
+                """);
+
+        IPineVM? vm = directVm ? DirectInterpreter.WithoutEvalCaching(new PineVMParseCache()) : null;
+        var fuzzOptions = new ElmFuzzOptions { Seed = 42, Runs = 1 };
+
+        var run =
+            syntaxDiscovery
+            ?
+            ElmTestRunner.DiscoverAndRunTests(project.Directory, workers: 2, pineVm: vm, fuzzOptions: fuzzOptions)
+            :
+            ElmTestRunner.CompileAndRunTests(
+                project.Directory,
+                workers: 2,
+                pineVmFactory:
+                (_, _) =>
+                directVm
+                ?
+                DirectInterpreter.WithoutEvalCaching(new PineVMParseCache())
+                :
+                ElmCompilerTestHelper.PineVMForProfiling(_ => { }),
+                fuzzOptions: fuzzOptions);
+
+        var completed = run.Should().BeOfType<ElmTestRun.Completed>().Which;
+        completed.Tests.Should().HaveCount(6);
+
+        foreach (var (name, message) in new[]
+        {
+            ("direct crash", "unit crash"),
+            ("first-class crash", "first-class crash message"),
+            ("fuzz crash", "property crash"),
+            ("generator crash", "generator crash"),
+        })
+        {
+            var test = completed.Tests.Single(test => test.Path.Last() == name);
+            test.Kind.Should().Be(CompletedTestKind.Failed);
+
+            test.Failure.Should().BeOfType<MessageFailure>().Which.Message
+                .Should().Contain("Debug.todo:").And.Contain(message);
+
+            if (test.Fuzz is { } fuzz)
+            {
+                fuzz.EvaluationError.Should().Contain("Debug.todo:").And.Contain(message);
+                fuzz.ShrinkingCompleted.Should().BeFalse();
+            }
+        }
+
+        completed.Tests.Where(test => test.Path.Last() is "unreachable crash" or "still runs")
+            .Should().OnlyContain(test => test.Kind == CompletedTestKind.Passed);
+
+        ElmTestRunner.RenderTestResults(completed.Tests, includeTestDetails: true).PlainText
+            .Should().Contain("TEST RUN FAILED").And.Contain("Debug.todo:").And.Contain("unit crash");
+
+        completed.ToDebugJson().Should().Contain("MessageFailure").And.Contain("unit crash");
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

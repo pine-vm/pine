@@ -47,6 +47,9 @@ public partial class ExpressionCompiler
         if (name.Namespaces is ["Debug"] && name.DeclName is "toString")
             return Expression.LitralInst(CoreLibraryModule.CoreDebug.ToString_FunctionValue());
 
+        if (name.Namespaces is ["Debug"] && name.DeclName is "todo")
+            return Expression.LitralInst(CoreLibraryModule.CoreDebug.Todo_FunctionValue());
+
         if (name.Namespaces is ["List"] && name.DeclName is "cons")
             return Expression.LitralInst(s_consFunction.Value);
 
@@ -124,6 +127,9 @@ public partial class ExpressionCompiler
 
         if (name.Namespaces is ["Debug"] && name.DeclName is "toString" && compiled.Count is 1)
             return CoreLibraryModule.CoreDebug.ToString(compiled[0]);
+
+        if (name.Namespaces is ["Debug"] && name.DeclName is "todo" && compiled.Count is 1)
+            return CoreLibraryModule.CoreDebug.Todo(compiled[0]);
 
         if (context.ModuleCompilationContext.TryGetRecordConstructorFieldNames(name) is { } fields)
         {

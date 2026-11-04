@@ -1127,22 +1127,31 @@ public static class ElmTestRunner
                     failure: null);
         }
 
-        var expectationResult =
-            discoveredTest.Evaluation is { } evaluation
-            ?
-            pineVm is ICancellablePineVM cancellableVm
-            ?
-            cancellableVm.EvaluateExpression(evaluation.Expression, evaluation.Environment, cancellationToken)
-            :
-            pineVm.EvaluateExpression(evaluation.Expression, evaluation.Environment)
-            :
-            ElmInteractiveEnvironment.ApplyFunction(
-                pineVm,
-                FunctionRecord.ParseFunctionRecordTagged(
-                    discoveredTest.Thunk ?? throw new InvalidOperationException("Runnable test has no entry point"),
-                    parseCache)
-                .Extract(error => throw new InvalidOperationException("Failed parsing test thunk: " + error)),
-                [PineValue.EmptyList]);
+        Result<string, PineValue> expectationResult;
+
+        try
+        {
+            expectationResult =
+                discoveredTest.Evaluation is { } evaluation
+                ?
+                pineVm is ICancellablePineVM cancellableVm
+                ?
+                cancellableVm.EvaluateExpression(evaluation.Expression, evaluation.Environment, cancellationToken)
+                :
+                pineVm.EvaluateExpression(evaluation.Expression, evaluation.Environment)
+                :
+                ElmInteractiveEnvironment.ApplyFunction(
+                    pineVm,
+                    FunctionRecord.ParseFunctionRecordTagged(
+                        discoveredTest.Thunk ?? throw new InvalidOperationException("Runnable test has no entry point"),
+                        parseCache)
+                    .Extract(error => throw new InvalidOperationException("Failed parsing test thunk: " + error)),
+                    [PineValue.EmptyList]);
+        }
+        catch (ParseExpressionException exception)
+        {
+            expectationResult = exception.Message;
+        }
 
         cancellationToken.ThrowIfCancellationRequested();
 
