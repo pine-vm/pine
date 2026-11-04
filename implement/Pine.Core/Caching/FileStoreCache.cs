@@ -51,18 +51,18 @@ public sealed class FileStoreCache<TKey, TValue>(
             return false;
         }
 
-        const int headerLength = 2 * SHA256.HashSizeInBytes;
+        const int HeaderLength = 2 * SHA256.HashSizeInBytes;
 
-        if (bytes.Length < headerLength ||
+        if (bytes.Length < HeaderLength ||
             !bytes.Span[..SHA256.HashSizeInBytes].SequenceEqual(hash.Span) ||
             !CryptographicOperations.FixedTimeEquals(
                 bytes.Span.Slice(SHA256.HashSizeInBytes, SHA256.HashSizeInBytes),
-                SHA256.HashData(bytes.Span[headerLength..])))
+                SHA256.HashData(bytes.Span[HeaderLength..])))
         {
             throw new InvalidDataException("Invalid content-addressed cache entry: " + string.Join("/", path));
         }
 
-        value = codec.Decode(bytes[headerLength..]);
+        value = codec.Decode(bytes[HeaderLength..]);
         return true;
     }
 
