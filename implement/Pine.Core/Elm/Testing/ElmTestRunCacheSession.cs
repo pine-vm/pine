@@ -40,6 +40,7 @@ public sealed class ElmTestRunCacheSession(
         compilationCaches ?? SourceCompilationCaches.CreateInMemory();
 
     private readonly CacheInvocationLifetime _compilationLifetime = new();
+
     private readonly Lazy<ElmTestDiscoveryCaches> _discoveryCaches =
         new(() => discoveryCaches ?? ElmTestDiscoveryCaches.CreateInMemory());
 

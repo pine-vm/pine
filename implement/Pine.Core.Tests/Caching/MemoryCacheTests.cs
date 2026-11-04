@@ -78,18 +78,24 @@ public class MemoryCacheTests
     public async Task Mandatory_retention_consumes_budget_and_mandatory_removal_ignores_rank()
     {
         var cache = new MemoryCache<int, int, int>(0);
+
         for (var marker = 0; marker < 6; marker++)
         {
             cache.SetMarker(marker);
             cache.Set(marker, marker);
         }
 
-        await cache.TrimAsync(2, marker => marker switch
-        {
-            0 => new CacheRetention.Retain(),
-            5 => new CacheRetention.Remove(),
-            _ => new CacheRetention.Ranked(marker)
-        });
+        await cache.TrimAsync(
+            2,
+            marker => marker switch
+            {
+                0 => new CacheRetention.Retain(),
+                5 => new CacheRetention.Remove(),
+
+                _ =>
+                new CacheRetention.Ranked(marker)
+            });
+
         cache.Count.Should().Be(2);
         cache.TryGetValue(0, out _).Should().BeTrue();
         cache.TryGetValue(4, out _).Should().BeTrue();
@@ -108,35 +114,51 @@ public class MemoryCacheTests
         var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        var first = Task.Run(async () =>
-        {
-            var usage = cache.SetMarker(1);
-            ready.SetResult();
-            await start.Task;
-            cache.Set("first", 1);
-            usage.EntryCount.Should().Be(1);
-        });
+        var first =
+            Task.Run(
+                async () =>
+                {
+                    var usage = cache.SetMarker(1);
+                    ready.SetResult();
+                    await start.Task;
+                    cache.Set("first", 1);
+                    usage.EntryCount.Should().Be(1);
+                });
 
         await ready.Task;
-        var second = Task.Run(async () =>
-        {
-            cache.SetMarker(2);
-            await Task.Yield();
-            cache.Set("second", 2);
-            start.SetResult();
-        });
+
+        var second =
+            Task.Run(
+                async () =>
+                {
+                    cache.SetMarker(2);
+                    await Task.Yield();
+                    cache.Set("second", 2);
+                    start.SetResult();
+                });
 
         await Task.WhenAll(first, second);
-        await cache.TrimAsync(2, marker => marker == 1
-            ? new CacheRetention.Remove() : new CacheRetention.Retain());
+
+        await cache.TrimAsync(
+            2,
+            marker => marker == 1
+            ?
+            new CacheRetention.Remove()
+            :
+            new CacheRetention.Retain());
+
         cache.TryGetValue("first", out _).Should().BeFalse();
         cache.Set("parent", 3);
         var markers = new HashSet<long>();
-        await cache.TrimAsync(10, marker =>
-        {
-            markers.Add(marker);
-            return new CacheRetention.Retain();
-        });
+
+        await cache.TrimAsync(
+            10,
+            marker =>
+            {
+                markers.Add(marker);
+                return new CacheRetention.Retain();
+            });
+
         markers.Should().BeEquivalentTo([2L, 100L]);
         cache.TryGetValue("second", out _).Should().BeTrue();
     }
@@ -150,22 +172,31 @@ public class MemoryCacheTests
         cache.Set("a", 1);
         using var entered = new ManualResetEventSlim();
         using var release = new ManualResetEventSlim();
-        var cleanup = cache.TrimAsync(0, _ =>
-        {
-            entered.Set();
-            if (!release.Wait(TimeSpan.FromSeconds(10)))
-                throw new TimeoutException("Test did not release cleanup.");
-            return new CacheRetention.Remove();
-        });
+
+        var cleanup =
+            cache.TrimAsync(
+                0,
+                _ =>
+                {
+                    entered.Set();
+
+                    if (!release.Wait(TimeSpan.FromSeconds(10)))
+                        throw new TimeoutException("Test did not release cleanup.");
+
+                    return new CacheRetention.Remove();
+                });
 
         try
         {
             entered.Wait(TimeSpan.FromSeconds(10)).Should().BeTrue();
             cache.SetMarker(2);
+
             if (replace)
                 cache.Set("a", 2);
+
             else
                 cache.TryGetValue("a", out _).Should().BeTrue();
+
             cache.Set("new", 3);
         }
         finally

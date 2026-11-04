@@ -325,8 +325,14 @@ public sealed class LanguageServerTestingService(
                     {
                         var cache = _cache.Value;
                         using var invocation = cache.BeginCompilationInvocation();
-                        var prepared = discovery.PrepareExecution(
-                            executable.Select(item => item.Id), settings, token, cache.CompilationCaches);
+
+                        var prepared =
+                            discovery.PrepareExecution(
+                                executable.Select(item => item.Id),
+                                settings,
+                                token,
+                                cache.CompilationCaches);
+
                         token.ThrowIfCancellationRequested();
                         return prepared;
                     },

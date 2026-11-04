@@ -24,6 +24,7 @@ public sealed record SourceTransformationInput(
     DeclQualifiedName Name, Declaration Syntax, string EnvironmentHash, string Configuration)
 {
     private sealed record Digest(ReadOnlyMemory<byte> Bytes);
+
     private static readonly ConditionalWeakTable<Declaration, Digest> s_syntaxHashes = new();
 
     /// <summary>
@@ -35,12 +36,18 @@ public sealed record SourceTransformationInput(
         var syntaxHash =
             s_syntaxHashes.GetValue(
                 Syntax,
-                syntax => new(SHA256.HashData(
-                    JsonSerializer.SerializeToUtf8Bytes(syntax, ElmSyntaxAbstractJson.JsonSerializerOptions))));
+                syntax => new(
+                    SHA256.HashData(
+                        JsonSerializer.SerializeToUtf8Bytes(syntax, ElmSyntaxAbstractJson.JsonSerializerOptions))));
 
-        return SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(
-            new[] { "pine-source-transformation-v1", Configuration, Name.FullName, EnvironmentHash,
-                Convert.ToHexStringLower(syntaxHash.Bytes.Span) }));
+        return
+            SHA256.HashData(
+                JsonSerializer.SerializeToUtf8Bytes(
+                    new[]
+                    {
+                        "pine-source-transformation-v1", Configuration, Name.FullName, EnvironmentHash,
+                        Convert.ToHexStringLower(syntaxHash.Bytes.Span)
+                    }));
     }
 }
 
@@ -72,21 +79,34 @@ public sealed record SourceCompilationCaches(
         var semantic = new MemoryCache<SourceTransformationInput, LoweredSourceFunction, long>(0);
         directory ??= ImmutableList<string>.Empty;
 
-        return new(
-            backingStore is null ? operators :
-            new LayeredCache<SourceTransformationInput, Declaration>(
-                operators, new FileStoreCache<SourceTransformationInput, Declaration>(
-                    backingStore, directory.Add("operator-lowering-v1"),
-                    input => input.ComputeHash(), OperatorCodec)),
-            backingStore is null ? semantic :
-            new LayeredCache<SourceTransformationInput, LoweredSourceFunction>(
-                semantic, new FileStoreCache<SourceTransformationInput, LoweredSourceFunction>(
-                    backingStore, directory.Add("semantic-functions-v1"),
-                    input => input.ComputeHash(), SemanticCodec)))
-        {
-            OperatorLifetime = operators,
-            SemanticLifetime = semantic
-        };
+        return
+            new(
+                backingStore is null
+                ?
+                operators
+                :
+                new LayeredCache<SourceTransformationInput, Declaration>(
+                    operators,
+                    new FileStoreCache<SourceTransformationInput, Declaration>(
+                        backingStore,
+                        directory.Add("operator-lowering-v1"),
+                        input => input.ComputeHash(),
+                        OperatorCodec)),
+                backingStore is null
+                ?
+                semantic
+                :
+                new LayeredCache<SourceTransformationInput, LoweredSourceFunction>(
+                    semantic,
+                    new FileStoreCache<SourceTransformationInput, LoweredSourceFunction>(
+                        backingStore,
+                        directory.Add("semantic-functions-v1"),
+                        input => input.ComputeHash(),
+                        SemanticCodec)))
+            {
+                OperatorLifetime = operators,
+                SemanticLifetime = semantic
+            };
     }
 
     /// <summary>Lossless codec for lowered abstract declarations.</summary>
@@ -123,8 +143,11 @@ public sealed record SourceCompilationCaches(
             declarations.OrderBy(entry => entry.Key).Select(
                 entry => entry.Value is Declaration.FunctionDeclaration function
                 ?
-                new EnvironmentEntry(entry.Key, function.Function.Signature,
-                    function.Function.Declaration.Arguments.Count, null)
+                new EnvironmentEntry(
+                    entry.Key,
+                    function.Function.Signature,
+                    function.Function.Declaration.Arguments.Count,
+                    null)
                 :
                 new EnvironmentEntry(entry.Key, null, 0, entry.Value)).ToArray();
 
@@ -132,8 +155,10 @@ public sealed record SourceCompilationCaches(
             functionTypes?.OrderBy(entry => entry.Key)
             .Select(entry => new FunctionTypeEntry(entry.Key, entry.Value)).ToArray();
 
-        return Convert.ToHexStringLower(SHA256.HashData(
-            JsonSerializer.SerializeToUtf8Bytes(new { Entries = entries, Types = types }, s_options)));
+        return
+            Convert.ToHexStringLower(
+                SHA256.HashData(
+                    JsonSerializer.SerializeToUtf8Bytes(new { Entries = entries, Types = types }, s_options)));
     }
 
     private sealed class DeclarationCodec : ICacheCodec<Declaration>
@@ -147,7 +172,9 @@ public sealed record SourceCompilationCaches(
     }
 
     private sealed record BindingEntry(Model.BindingId Id, string Name);
+
     private sealed record EvidenceEntry(int Index, GenericRecordAccessEvidence Evidence);
+
     private sealed record FunctionDocument(Model.Function Function, BindingEntry[] Bindings, EvidenceEntry[] Evidence);
 
     private sealed class FunctionCodec : ICacheCodec<LoweredSourceFunction>
@@ -155,39 +182,55 @@ public sealed record SourceCompilationCaches(
         public ReadOnlyMemory<byte> Encode(LoweredSourceFunction value)
         {
             var evidence = new List<EvidenceEntry>();
-            Visit(value.Function.Body, (expression, index) =>
-            {
-                if (value.Evidence.TryGetValue(expression, out var item))
-                    evidence.Add(new(index, item));
-            });
 
-            return JsonSerializer.SerializeToUtf8Bytes(
-                new FunctionDocument(value.Function,
-                    [.. value.BindingNames.OrderBy(entry => entry.Key, Model.IdentityComparer.Instance)
-                    .Select(entry => new BindingEntry(entry.Key, entry.Value))], [.. evidence]), s_options);
+            Visit(
+                value.Function.Body,
+                (expression, index) =>
+                {
+                    if (value.Evidence.TryGetValue(expression, out var item))
+                        evidence.Add(new(index, item));
+                });
+
+            return
+                JsonSerializer.SerializeToUtf8Bytes(
+                    new FunctionDocument(
+                        value.Function,
+                        [
+                            .. value.BindingNames.OrderBy(entry => entry.Key, Model.IdentityComparer.Instance)
+                            .Select(entry => new BindingEntry(entry.Key, entry.Value))
+                        ],
+                        [.. evidence]),
+                    s_options);
         }
 
         public LoweredSourceFunction Decode(ReadOnlyMemory<byte> bytes)
         {
-            var document = JsonSerializer.Deserialize<FunctionDocument>(bytes.Span, s_options) ??
+            var document =
+                JsonSerializer.Deserialize<FunctionDocument>(bytes.Span, s_options) ??
                 throw new JsonException("Expected a lowered source function.");
+
             var remaining = document.Evidence.ToDictionary(entry => entry.Index, entry => entry.Evidence);
+
             var evidence =
                 ImmutableDictionary.CreateBuilder<Model.Expression, GenericRecordAccessEvidence>(
                     ReferenceEqualityComparer.Instance);
 
-            Visit(document.Function.Body, (expression, index) =>
-            {
-                if (remaining.Remove(index, out var item))
-                    evidence.Add(expression, item);
-            });
+            Visit(
+                document.Function.Body,
+                (expression, index) =>
+                {
+                    if (remaining.Remove(index, out var item))
+                        evidence.Add(expression, item);
+                });
 
             if (remaining.Count != 0)
                 throw new JsonException("Cached evidence refers to a nonexistent expression.");
 
-            return new(document.Function,
-                document.Bindings.ToImmutableDictionary(entry => entry.Id, entry => entry.Name),
-                evidence.ToImmutable());
+            return
+                new(
+                    document.Function,
+                    document.Bindings.ToImmutableDictionary(entry => entry.Id, entry => entry.Name),
+                    evidence.ToImmutable());
         }
 
         private static void Visit(Model.Expression root, Action<Model.Expression, int> visitor)

@@ -845,6 +845,11 @@ previous transformation caches already enabled. Baseline and final implementatio
 each received a new process, one excluded passing priming round and the same three
 distinct productive edits. Settings, fixture, one-worker execution, package cache
 and generational execution policy were unchanged. No profiler or forced GC was used.
+Two upstream formatting/constant-naming-only commits arrived during implementation
+and were integrated after sampling. All 319 core/watch regressions and the seven
+persisted-model reads were rechecked on that merged tree; those validation runs
+are not pooled with the performance samples. Prepared-model hashes also remained
+stable across the subsequent formatted rebuild.
 
 | Core phase, seconds / decimal GB | Baseline median | With declaration caches median |
 |---|---:|---:|
@@ -1334,6 +1339,7 @@ the session's `files/` directory:
   syntax-dependencies-check/{metadata.json,harness-results.json}
   persistent-syntax-final-write.json
   persistent-syntax-final-read.json
+  persistent-syntax-merged-read.json
 ```
 
 The raw NetTrace is about 109 MiB and the speedscope export about 158 MiB;

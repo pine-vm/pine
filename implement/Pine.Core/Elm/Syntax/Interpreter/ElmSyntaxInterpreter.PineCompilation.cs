@@ -172,23 +172,32 @@ public partial class ElmSyntaxInterpreter
                     {
                         if (declarations.TryGetValue(reference, out var target) &&
                             target is AST.Declaration.FunctionDeclaration)
+                        {
                             pendingSource.Push(reference);
+                        }
                     }
                 }
 
                 if (m_captures.TryGetValue(name, out var captures))
                 {
                     foreach (var capture in captures)
+                    {
                         foreach (var reference in Model.Compilation.References(capture.Value).OfType<Model.Reference.Function>())
                         {
                             if (reference.Id is Model.FunctionId.Source source)
                                 pendingSource.Push(source.Name);
                         }
+                    }
                 }
             }
 
-            var program = Model.FromCanonicalSyntax.Convert(
-                declarations, compilationCaches?.SemanticFunctions, sourceReachable, cancellationToken);
+            var program =
+                Model.FromCanonicalSyntax.Convert(
+                    declarations,
+                    compilationCaches?.SemanticFunctions,
+                    sourceReachable,
+                    cancellationToken);
+
             var functions = program.Functions.ToBuilder();
 
             foreach (var (name, body) in m_bodies)
@@ -202,6 +211,7 @@ public partial class ElmSyntaxInterpreter
             foreach (var (name, captures) in m_captures)
             {
                 var id = new Model.FunctionId.Source(name);
+
                 if (!functions.TryGetValue(id, out var function))
                     continue;
                 // Substitute binding identities, not names, so nested shadowing remains lexical.
