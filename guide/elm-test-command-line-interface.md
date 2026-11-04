@@ -85,6 +85,13 @@ Editor hosts must manage document freshness.
 discovery-ordinal selector for a selected leaf; groups and unselected items are rejected.
 It must be used with the same project sources.
 
+`result.WithExecutionSettings(settings)` changes the default seed/run count without
+repeating canonicalization or test construction; identical settings return the same
+result. `Test.fuzzWith` count overrides remain effective. Alternatively, pass
+`executionSettings` directly to `PrepareExecution`. Only roots containing selected
+fuzz tests are reseeded, preserving the test library's sibling/skip/only seed
+distribution; selected unit tests reuse their constructed runners.
+
 `result.PrepareExecution(testIds)` compiles selected runnable closures and their captured values
 into independent Pine evaluations: an expression plus its environment value for each test ID.
 Omitting IDs selects all runnable leaves; TODOs have no executable entry. Suite construction is
@@ -92,6 +99,9 @@ not replayed on PineVM. The CLI uses `ElmTestRunner.DiscoverAndRunTests` to disc
 compile these entry points and run them with the existing worker, fuzz and result-rendering machinery.
 Closure compilation uses the source compiler's operator lowering, including pipelines and
 short-circuit Boolean operators, before creating resolved compiler IR.
+Its optional `cancellationToken` applies to the current preparation, independently
+of the token used for the earlier discovery. Concurrent preparations of the same
+inventory are serialized to protect interpreter-backed values.
 The older `CompileAndRunTests` API retains compiler/PineVM discovery for compatibility and comparisons.
 
 `Debug.log` is currently silent during test discovery and execution: its value is preserved

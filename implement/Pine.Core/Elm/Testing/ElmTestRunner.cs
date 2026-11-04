@@ -844,7 +844,8 @@ public static class ElmTestRunner
         {
             var entries =
                 syntaxDiscovery.PrepareExecution(
-                    discoveredTests.Where(test => test.Kind == DiscoveredTestKind.Runnable).Select(test => test.Id!));
+                    discoveredTests.Where(test => test.Kind == DiscoveredTestKind.Runnable).Select(test => test.Id!),
+                    cancellationToken: instrumentation?.CancellationToken ?? default);
 
             foreach (var test in discoveredTests.Where(test => test.Kind == DiscoveredTestKind.Runnable))
             {

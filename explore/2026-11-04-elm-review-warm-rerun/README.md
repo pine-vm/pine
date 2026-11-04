@@ -65,6 +65,23 @@ fails after a refactor, update its introspection instead of treating absent
 counts as cache hits. Root enumeration also reuses the runner's internal exposure
 predicate via a checked delegate; a changed API produces an explicit error.
 
+## Measure the language-server path
+
+Add `--language-server` to exercise the actual `LanguageServerTestingService`
+instead of the core-only pipeline. Each round captures/discovers a new immutable
+version, runs the same 79 selected tests, and requests an empty selection on that
+retained inventory with a different seed. This records `lsp-discover`, `lsp-run`,
+and `lsp-empty-selection` phases, including CPU, allocation, and GC measurements.
+The empty selection checks overhead independently of callback execution.
+
+The service and its execution caches are retained across productive edits.
+Snapshot capture uses the disposable checkout; protocol calls and event handling
+are in-process, without JSON-RPC transport or editor rendering. Dependency resolution
+uses the service's normal configuration and already warm package caches.
+`--online` and `--dependencies` are not applicable in this mode.
+Compare this mode only with the same mode on another implementation, not with
+core-only phase timings.
+
 ## Attach diagnostics only after priming
 
 Add `--wait-for-profiler`. After printing `READY`, the harness waits until

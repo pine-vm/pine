@@ -1,6 +1,7 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Elm.LanguageServer;
 using Pine.Core.Elm.Syntax;
 using Pine.Core.Elm.Testing;
 using Pine.Core.Files;
@@ -31,8 +32,11 @@ internal static class WarmRerun
 
     public static int Run(
         string checkout, string outputDirectory, int rounds, bool waitForProfiler,
-        bool analyzeDependencies, bool offline)
+        bool analyzeDependencies, bool offline, bool languageServer)
     {
+        if (languageServer && (analyzeDependencies || !offline))
+            throw new ArgumentException("--language-server cannot be combined with --dependencies or --online.");
+
         checkout = Path.TrimEndingDirectorySeparator(Path.GetFullPath(checkout));
         outputDirectory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(outputDirectory));
         var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
@@ -83,11 +87,29 @@ internal static class WarmRerun
             Seed = 12345,
             FuzzRuns = 100,
             Rounds = rounds,
-            Offline = offline,
+            Mode = languageServer ? "language-server" : "core",
+            Offline = languageServer ? (bool?)null : offline,
             Cache = "Generational defaults, core native leaves, no background learner"
         });
 
-        using var session = new ElmTestRunCacheSession(generationOptions: new());
+        using var session = languageServer ? null : new ElmTestRunCacheSession(generationOptions: new());
+        var projectUri = new Uri(checkout + Path.DirectorySeparatorChar).AbsoluteUri;
+        using var languageService =
+            languageServer
+            ?
+            new LanguageServerTestingService(
+                (_, token) =>
+                {
+                    token.ThrowIfCancellationRequested();
+                    var tree = FileTree.FromSetOfFilesWithStringPath(
+                        Filesystem.GetFilesFromDirectory(
+                            checkout, filterByRelativeName: path => !path.Any(p => p is ".git" or "elm-stuff"))
+                        .Select(file => (file.path, file.content)));
+                    return Task.FromResult(new ElmTestSourceSnapshot(projectUri, tree, new Dictionary<string, int>()));
+                },
+                log: Console.Error.WriteLine)
+            :
+            null;
         using var process = Process.GetCurrentProcess();
         using var cancellation = new CancellationTokenSource();
         var records = new List<object>();
@@ -170,7 +192,67 @@ internal static class WarmRerun
             var phases = new List<object>();
             var totalWatch = Stopwatch.StartNew();
             Console.WriteLine($"BEGIN {label} {DateTime.UtcNow:O}");
-            var before = session.GetCacheStatisticsSnapshot();
+            if (languageService is not null)
+            {
+                var inventory = Measure("lsp-discover", () => languageService.DiscoverAsync(
+                    new(projectUri), cancellation.Token).GetAwaiter().GetResult());
+                if (!inventory.Complete)
+                    throw new InvalidOperationException("Language-service discovery failed: " + inventory.Error);
+
+                var protocolItems = inventory.Items ??
+                    throw new InvalidOperationException("Complete language-service inventory has no items.");
+                var selectedItems = protocolItems.Where(item =>
+                    item.Selection == ElmTestDiscoverySelection.Included &&
+                    item.Kind is ElmTestDiscoveryItemKind.Unit or ElmTestDiscoveryItemKind.Fuzz &&
+                    filter.Matches(new(item.FilePath, item.DescriptionPath, item.Label))).ToArray();
+                if (selectedItems.Length != 79)
+                    throw new InvalidOperationException($"Expected 79 selected tests, got {selectedItems.Length}.");
+
+                var run = Measure("lsp-run", () => languageService.RunAsync(
+                    new(projectUri, inventory.Version, label,
+                        Include: selectedItems.Select(item => item.Id).ToArray(),
+                        Seed: settings.Seed, FuzzRuns: settings.FuzzRuns, DiscoveryId: inventory.DiscoveryId),
+                    cancellation.Token).GetAwaiter().GetResult());
+                var failed = run.Results.Where(result => result.State != "passed").ToArray();
+                if (run.Status != "completed" || run.Results.Count != 79 || failed.Length != (measured ? 1 : 0) ||
+                    failed.Any(result =>
+                        result.State != "failed" ||
+                        !selectedItems.Where(item => item.Id == result.TestId).Any(item =>
+                            item.DescriptionPath.Append(item.Label).SequenceEqual(s_failurePath))))
+                {
+                    throw new InvalidOperationException("Unexpected language-service outcomes: " +
+                        JsonSerializer.Serialize(run));
+                }
+
+                var empty = Measure("lsp-empty-selection", () => languageService.RunAsync(
+                    new(projectUri, inventory.Version, label + "-empty", Include: [],
+                        Seed: settings.Seed + 1, FuzzRuns: settings.FuzzRuns, DiscoveryId: inventory.DiscoveryId),
+                    cancellation.Token).GetAwaiter().GetResult());
+                if (empty.Status != "completed" || empty.Results.Count != 0)
+                    throw new InvalidOperationException("Unexpected empty-selection result: " + JsonSerializer.Serialize(empty));
+
+                records.Add(new
+                {
+                    Label = label,
+                    Measured = measured,
+                    Mode = "language-server",
+                    WallMs = totalWatch.Elapsed.TotalMilliseconds,
+                    Phases = phases,
+                    Items = protocolItems.Count,
+                    Selected = selectedItems.Length,
+                    Failures = failed,
+                    inventory.Version,
+                    inventory.ResolutionFingerprint,
+                    inventory.DiscoveryId
+                });
+                Save("harness-results.json", records);
+                Console.WriteLine("RESULT " + JsonSerializer.Serialize(records[^1]));
+                Console.WriteLine($"END {label} {DateTime.UtcNow:O}");
+                return;
+            }
+
+            var coreSession = session ?? throw new InvalidOperationException("No core cache session.");
+            var before = coreSession.GetCacheStatisticsSnapshot();
             var (build, roots) = Measure("load-resolve-parse", LoadBuild);
             var discovery =
                 Measure("discover", () =>
@@ -185,11 +267,11 @@ internal static class WarmRerun
                 throw new InvalidOperationException($"Expected 79 selected tests, got {selected.Length}.");
 
             var entries = Measure("compile-selected-closures", () =>
-                discovery.PrepareExecution(selected.Select(item => item.Id)));
+                discovery.PrepareExecution(selected.Select(item => item.Id), cancellationToken: cancellation.Token));
             var completed = Measure("execute", () =>
                 selected.Select(item =>
                     ElmTestRunner.ExecuteDiscoveredTest(
-                        item, entries[item.Id], session, cancellation.Token)).ToArray());
+                        item, entries[item.Id], coreSession, cancellation.Token)).ToArray());
             var failures = completed.Where(test => test.Kind != CompletedTestKind.Passed).ToArray();
 
             if (failures.Length != (measured ? 1 : 0) ||
@@ -202,7 +284,7 @@ internal static class WarmRerun
                         failures.Select(test => new { test.Path, test.Kind, test.EvaluationError })));
             }
 
-            var after = session.GetCacheStatisticsSnapshot();
+            var after = coreSession.GetCacheStatisticsSnapshot();
             records.Add(new
             {
                 Label = label,
@@ -222,11 +304,11 @@ internal static class WarmRerun
                     test.Kind,
                     Message = test.Failure is MessageFailure message ? message.Message : test.Failure?.ToString()
                 }).ToArray(),
-                ParseEntries = session.SourceParsing.Count,
-                CanonicalCacheEntries = session.DeclarationCanonicalization.Count,
+                ParseEntries = coreSession.SourceParsing.Count,
+                CanonicalCacheEntries = coreSession.DeclarationCanonicalization.Count,
                 CacheBefore = new { before.Totals, before.SharedCacheGenerations },
                 CacheAfter = new { after.Totals, after.SharedCacheGenerations },
-                VmReducedEntries = session.VmCaches.ReducedExpressions.Count,
+                VmReducedEntries = coreSession.VmCaches.ReducedExpressions.Count,
                 build.Resolution.Fingerprint,
                 Packages = build.Resolution.Packages.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => new
                 {
@@ -272,6 +354,7 @@ internal static class WarmRerun
 
         (ElmResolvedBuild Build, DeclQualifiedName[] Roots) LoadBuild()
         {
+            var coreSession = session ?? throw new InvalidOperationException("No core cache session.");
             var files = Filesystem.GetFilesFromDirectory(
                 checkout, filterByRelativeName: path => !path.Any(p => p is ".git" or "elm-stuff"))
                 .Select(file => (file.path, file.content)).ToArray();
@@ -286,12 +369,12 @@ internal static class WarmRerun
                 {
                     var text = Encoding.UTF8.GetString(file.content.Span);
 
-                    if (!session.SourceParsing.TryGetValue(text, out var result))
+                    if (!coreSession.SourceParsing.TryGetValue(text, out var result))
                     {
                         result = ElmSyntaxParser.ParseModuleText(text);
 
                         if (result.IsOkOrNull() is not null)
-                            session.SourceParsing[text] = result;
+                            coreSession.SourceParsing[text] = result;
                     }
 
                     var parsed = result.Extract(error => throw new InvalidOperationException(error.ToString()));
@@ -310,7 +393,7 @@ internal static class WarmRerun
                 tree, ["elm.json"], modules.Select(module => module.path).ToArray(),
                 ElmTestRunner.DefaultResolutionConfiguration.Value with { Offline = offline },
                 provider: null, cancellationToken: cancellation.Token, projectDirectory: checkout,
-                sourceParseCache: session.SourceParsing).GetAwaiter().GetResult();
+                sourceParseCache: coreSession.SourceParsing).GetAwaiter().GetResult();
             var roots = modules.SelectMany(module => module.names.Select(name =>
                 DeclQualifiedName.Create(
                     build.CompilerModuleNames[string.Join('/', module.path)].Split('.'), name))).ToArray();

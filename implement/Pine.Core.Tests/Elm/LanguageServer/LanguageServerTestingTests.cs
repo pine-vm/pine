@@ -255,6 +255,74 @@ public class LanguageServerTestingTests
     }
 
     [Fact]
+    public async Task Testing_runs_reuse_inventory_identity_and_locations_after_discovery_cancellation()
+    {
+        var tree = Tree("""suite = Test.test "failure" (\_ -> Expect.fail "expected")""");
+        var captures = 0;
+        using var service = new LanguageServerTestingService((_, _) =>
+        {
+            captures++;
+            return Task.FromResult(Snapshot(tree));
+        });
+        using var cancellation = new CancellationTokenSource();
+        var discovered = await service.DiscoverAsync(new(VirtualWorkspace.RootUri), cancellation.Token);
+        discovered.Complete.Should().BeTrue(discovered.Error?.Message);
+        cancellation.Cancel();
+        var item = discovered.Items!.Single();
+
+        for (var index = 0; index < 2; index++)
+        {
+            var run = await service.RunAsync(new(
+                VirtualWorkspace.RootUri, discovered.Version, "reuse-" + index,
+                Include: [item.Id], Seed: (uint)index, FuzzRuns: 3, DiscoveryId: discovered.DiscoveryId));
+            run.Status.Should().Be("completed", run.Error?.Message);
+            run.DiscoveryId.Should().BeSameAs(discovered.DiscoveryId);
+            run.Results.Single().Messages.Single().Location.Should().BeSameAs(item.Location);
+        }
+
+        var repeated = await service.DiscoverAsync(new(VirtualWorkspace.RootUri, discovered.Version));
+        repeated.DiscoveryId.Should().BeSameAs(discovered.DiscoveryId);
+        repeated.Items!.Single().Location.Should().BeSameAs(item.Location);
+        captures.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Testing_cancelled_preparation_does_not_poison_a_retained_inventory(bool emptySelection)
+    {
+        var tree = Tree("""suite = Test.fuzz Fuzz.int "property" (\_ -> Expect.pass)""");
+        using var cancellation = new CancellationTokenSource();
+        using var service = new LanguageServerTestingService(
+            (_, _) => Task.FromResult(Snapshot(tree)),
+            publishEvent: notification =>
+            {
+                if (notification.RunId == "cancel-prepare" && notification.State == "preparation")
+                    cancellation.Cancel();
+
+                return Task.CompletedTask;
+            });
+        var discovery = await service.DiscoverAsync(new(VirtualWorkspace.RootUri));
+        var cancelled = await service.RunAsync(
+            new(VirtualWorkspace.RootUri, discovery.Version, "cancel-prepare",
+                Include: emptySelection ? [] : null, Seed: 42, FuzzRuns: 3, DiscoveryId: discovery.DiscoveryId),
+            cancellation.Token);
+        cancelled.Status.Should().Be("cancelled");
+
+        if (emptySelection)
+            cancelled.Results.Should().BeEmpty();
+        else
+            cancelled.Results.Single().State.Should().Be("skipped");
+
+        var retry = await service.RunAsync(
+            new(VirtualWorkspace.RootUri, discovery.Version, "retry", Seed: 123, FuzzRuns: 2));
+        retry.Status.Should().Be("completed", retry.Error?.Message);
+        retry.Results.Single().State.Should().Be("passed");
+        retry.Results.Single().Fuzz!.Settings.Seed.Should().Be(123);
+        retry.Results.Single().Fuzz!.RunsRequested.Should().Be(2);
+    }
+
+    [Fact]
     public async Task Testing_cancellation_terminates_the_run_and_all_queued_tests()
     {
         var tree =

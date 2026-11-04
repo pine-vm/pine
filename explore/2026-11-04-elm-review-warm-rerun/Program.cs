@@ -10,6 +10,7 @@ internal static class Program
             var wait = false;
             var dependencies = false;
             var offline = true;
+            var languageServer = false;
 
             for (var index = 0; index < options.Length; index++)
             {
@@ -33,12 +34,16 @@ internal static class Program
                         offline = false;
                         break;
 
+                    case "--language-server":
+                        languageServer = true;
+                        break;
+
                     default:
                         throw new ArgumentException("Unknown or invalid option: " + options[index]);
                 }
             }
 
-            return WarmRerun.Run(checkout, output, rounds, wait, dependencies, offline);
+            return WarmRerun.Run(checkout, output, rounds, wait, dependencies, offline, languageServer);
         }
 
         if (args is ["trace", var trace])
@@ -57,7 +62,7 @@ internal static class Program
             """
             Usage:
               ElmReviewProfiling run <elm-review-checkout> <new-output-directory>
-                [--rounds N] [--wait-for-profiler] [--dependencies] [--online]
+                [--rounds N] [--wait-for-profiler] [--dependencies] [--online] [--language-server]
               ElmReviewProfiling trace <file.nettrace> [--allocation-stacks]
             """);
 

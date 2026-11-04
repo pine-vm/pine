@@ -515,6 +515,84 @@ separate seed/run-count-dependent runner preparation from settings-independent
 inventory construction. Seed changes should not automatically replay all
 canonicalization and construction.
 
+#### Implemented follow-up and language-service measurements
+
+The preceding paragraphs describe the original code path. The follow-up
+implementation removes that second discovery pass rather than merely caching
+another complete discovery result for every seed:
+
+- The constructed inventory retains its original runners and the Test values
+  for fuzz-bearing roots. Settings changes do not repeat resolution,
+  canonicalization, suite construction, source association, or selector projection.
+- `WithExecutionSettings` returns the same result for identical settings and
+  shares preparation code when settings differ. `PrepareExecution` also accepts
+  per-run settings and a current-operation cancellation token directly; the LSP
+  uses this path without constructing a second inventory view.
+- Only roots containing selected fuzz leaves are reseeded. The complete root is
+  passed to the existing test-library bridge so that sibling, skipped, and
+  focused tests retain exactly the same random-seed distribution.
+  Unit runners are independent of seed/run count and are reused.
+- Explicit `Test.fuzzWith` counts remain unchanged. Configuration views and
+  concurrent preparations do not mutate the retained inventory's runners.
+  A per-inventory preparation gate protects interpreter-backed values.
+- ID lookup is indexed, including `GetExecutionFilter`; preparation no longer
+  scans every inventory entry for each requested ID.
+- Discovery identity and converted protocol locations are computed once.
+  Source text is decoded/split once per source file, instead of once for each
+  inventory item and again for every result. Successful results reuse these locations.
+- Empty selections bypass compilation and execution-cache initialization.
+  Sequential execution uses one worker task, not a separate `Task.Run` per test.
+  The immutable canonical declaration conversion is shared within the inventory;
+  compiled evaluations are not cached across runs.
+
+The retained profiler now supports `--language-server`, invoking the actual
+`LanguageServerTestingService` discover/run APIs. It captures each edited source
+version, discovers it, runs the same 79 selected TaskTest leaves, then requests an
+empty selection on that inventory with a different seed. Both implementations
+were primed independently and then measured on three successive productive edits.
+The baseline is upstream `209856c` (including the earlier immutable-program and
+selector improvements plus the pulled formatting commit); the same profiler
+driver was built against that baseline in an isolated worktree.
+
+| Phase, milliseconds | Baseline edit 1 / 2 / 3 | Follow-up edit 1 / 2 / 3 |
+|---|---:|---:|
+| Discover/capture version and protocol inventory | 14,030 / 13,374 / 10,868 | 11,867 / 8,028 / 8,846 |
+| Run selected 79 tests on discovered inventory | 18,663 / 21,439 / 18,347 | 13,057 / 12,792 / 14,507 |
+| Empty selection, changed seed, same inventory | 5,701 / 6,225 / 5,612 | 0.21 / 0.20 / 5.86 |
+
+| Median across three edited reruns | Baseline LSP | Follow-up LSP |
+|---|---:|---:|
+| Discover + selected run | 32.69 s | **23.35 s** |
+| Allocation: discover + selected run | 17.35 GB | **11.50 GB** |
+| Discovery/protocol-inventory allocation | 6.87 GB | **3.30 GB** |
+| Selected-run allocation | 10.48 GB | **8.20 GB** |
+| Empty-selection duration | 5.70 s | **0.21 ms** |
+| Empty-selection allocation | 2.26 GB | **8,200 bytes** |
+
+Discover-plus-run median latency fell **28.6%**, and median allocation fell
+**33.7%**, relative to the already optimized baseline. The empty-selection phase
+is reported separately and is not included in those totals. These LSP results
+must not be compared directly to the earlier core-only phase tables.
+
+All six measured edited runs retained 5,214 inventory entries, selected all 79
+tests, and produced the same expected 78-pass/1-failure outcome and failing ID.
+Corresponding source-version hashes matched across implementations. Resolution
+fingerprints and discovery tokens differ as expected because they include the
+compiler assembly's module identity. Regression tests also compare reseeded fuzz
+evaluations and metadata against fresh discovery, including focus/skip siblings,
+explicit run-count overrides, concurrent settings, cancellation/retry, and reuse
+of discovery tokens and UTF-16 locations.
+
+The host, serial execution, seed 12345, 100 fuzz runs, and generational execution
+cache defaults are unchanged. The service uses its normal dependency-resolution
+configuration with already warm package caches and no background learner.
+No profiler was attached. Protocol calls and event handling were in-process:
+JSON-RPC transport, editor rendering, and real filesystem-watcher latency are
+not measured. This remains a sequential three-edit comparison, not a long-session
+p95 or a randomized benchmark. Remaining discovery, closure-compilation, and VM
+work are real costs; the broader declaration/compiled-artifact cache designs
+below remain future work.
+
 ## Dependency-aware discovery caches
 
 ### How much lies outside this edit's static dependency tree?
@@ -902,6 +980,10 @@ the session's `files/` directory:
   combined-experiment/{harness.log,harness-results.json}
   implemented-fast-path/{metadata.json,harness-results.json}
   implemented-fast-path.log
+  lsp-baseline-runs/{metadata.json,harness-results.json}
+  lsp-optimized-runs/{metadata.json,harness-results.json}
+  lsp-baseline-runs.log
+  lsp-optimized-runs.log
 ```
 
 The raw NetTrace is about 109 MiB and the speedscope export about 158 MiB;
@@ -930,4 +1012,10 @@ implemented-fast-path/harness-results.json
 
 implemented-fast-path/metadata.json
 cd19976aaa4fbd8786e2a6b89d265c765890c534e609043c323f5f6d5376988b
+
+lsp-baseline-runs/harness-results.json
+3a0c96581d125a2fcf5f4ba5b8baa5e10464656c2f050b014276380c8c7cec80
+
+lsp-optimized-runs/harness-results.json
+4043f809ef4412b88031636d44e25be542f6a32402357d6ba15c7c274caf9329
 ```

@@ -117,6 +117,16 @@ and an opaque `discoveryId`. The retained inventory freezes its resolved build;
 runs with different seeds reuse that environment rather than re-resolving package
 constraints.
 
+Runs reuse the retained construction inventory directly, including when the seed
+or fuzz count changes. Only selected fuzz-test roots need new seeded runners;
+unit tests do not trigger seeding, and empty selections do not initialize execution
+caches or compile code. No second canonicalization or suite-construction pass is
+performed. Each inventory retains its discovery token, ID lookup, and converted
+UTF-16 locations; source files are decoded once per inventory rather than once per
+test or result. Execution uses the current run's cancellation token, not a discovery
+request's token. These are within-snapshot reuse boundaries, not cross-version
+declaration caches or persistent compiled-test storage.
+
 Selections require the `discoveryId` from the corresponding inventory. A mismatch
 returns `staleDiscovery`, never execution against different meanings for the same
 IDs. After snapshot eviction or server restart, rediscover: package constraints or
