@@ -738,10 +738,10 @@ public static class ElmTestRunner
                 allFound[index].DiscoveryIndex = index + 1;
         }
 
-        var allFoundListed = allFound.Select(ToListedTest).ToArray();
+        var fullPathCounts = ElmTestFilter.CountFullPaths(allFound.Select(ToListedTest));
 
         string ExactFilter(DiscoveredTest test) =>
-            ElmTestFilter.ExactSelector(ToListedTest(test), test.DiscoveryIndex, allFoundListed);
+            ElmTestFilter.ExactSelector(ToListedTest(test), test.DiscoveryIndex, fullPathCounts);
 
         if (hasOnly && !useSyntaxDiscovery)
             discoveredTests.RemoveAll(test => !test.Only && test.Kind != DiscoveredTestKind.Invalid);

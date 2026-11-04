@@ -94,11 +94,33 @@ public sealed class ElmTestFilter
     /// Returns a literal full-path filter, or a stable discovery ordinal for duplicate paths.
     /// </summary>
     public static string ExactSelector(ListedTest test, int discoveryIndex, IEnumerable<ListedTest> discovered) =>
-        discovered.Count(item => string.Equals(item.FullPath, test.FullPath, StringComparison.Ordinal)) == 1
-        ?
-        "=" + test.FullPath
-        :
-        "#" + discoveryIndex.ToString(CultureInfo.InvariantCulture);
+        ExactSelector(test, discoveryIndex, CountFullPaths(discovered));
+
+    internal static IReadOnlyDictionary<string, int> CountFullPaths(IEnumerable<ListedTest> discovered)
+    {
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        foreach (var test in discovered)
+        {
+            var fullPath = test.FullPath;
+            counts[fullPath] = counts.GetValueOrDefault(fullPath) + 1;
+        }
+
+        return counts;
+    }
+
+    internal static string ExactSelector(
+        ListedTest test, int discoveryIndex, IReadOnlyDictionary<string, int> fullPathCounts)
+    {
+        var fullPath = test.FullPath;
+
+        return
+            fullPathCounts.TryGetValue(fullPath, out var count) && count == 1
+            ?
+            "=" + fullPath
+            :
+            "#" + discoveryIndex.ToString(CultureInfo.InvariantCulture);
+    }
 
     /// <summary>
     /// Ranks existing tests by their distance from the filter.

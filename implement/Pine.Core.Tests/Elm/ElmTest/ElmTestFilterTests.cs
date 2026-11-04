@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.Testing;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
@@ -24,6 +25,74 @@ public class ElmTestFilterTests
         selector.Should().Be("#2");
         new ElmTestFilter(selector).Matches(test, 1).Should().BeFalse();
         new ElmTestFilter(selector).Matches(test, 2).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Indexed_exact_selectors_preserve_literal_paths_case_and_duplicate_ordinals()
+    {
+        ListedTest[] tests =
+            [
+                new(@"tests\Tests.elm", ["group"], "same"),
+                new("tests/Tests.elm", ["group"], "same"),
+                new("tests/Tests.elm", ["group/with"], "separators"),
+                new("tests/Tests.elm", ["group"], "with/separators"),
+                new("tests/Tests.elm", ["group"], "Same"),
+                new("tests/Tests.elm", ["group/with\\separators"], "literal * name")
+            ];
+
+        var counts = ElmTestFilter.CountFullPaths(tests);
+
+        counts.Should().HaveCount(4);
+        counts[tests[0].FullPath].Should().Be(2);
+        counts[tests[2].FullPath].Should().Be(2);
+
+        for (var index = 0; index < tests.Length; index++)
+        {
+            var selector = ElmTestFilter.ExactSelector(tests[index], index + 1, counts);
+            selector.Should().Be(index < 4 ? "#" + (index + 1) : "=" + tests[index].FullPath);
+            selector.Should().Be(ElmTestFilter.ExactSelector(tests[index], index + 1, tests));
+
+            var matches =
+                tests.Select(
+                    (test, ordinal) => new ElmTestFilter(selector).Matches(test, ordinal + 1));
+
+            matches.Should().Equal(Enumerable.Range(0, tests.Length).Select(ordinal => ordinal == index));
+        }
+
+        ElmTestFilter.ExactSelector(tests[0] with { Name = "missing" }, 7, counts).Should().Be("#7");
+        ElmTestFilter.ExactSelector(tests[0], 1, ElmTestFilter.CountFullPaths([])).Should().Be("#1");
+    }
+
+    [Fact]
+    public void Exact_path_frequencies_enumerate_the_inventory_once_for_all_selectors()
+    {
+        var enumerations = 0;
+
+        var tests =
+            Enumerable.Range(0, 2048)
+            .Select(index => new ListedTest("tests/Tests.elm", ["group"], "test " + index)).ToArray();
+
+        IEnumerable<ListedTest> Inventory()
+        {
+            enumerations++;
+
+            if (enumerations > 1)
+                throw new InvalidOperationException("The inventory must only be enumerated once.");
+
+            foreach (var test in tests)
+                yield return test;
+        }
+
+        var counts = ElmTestFilter.CountFullPaths(Inventory());
+
+        for (var index = 0; index < tests.Length; index++)
+        {
+            ElmTestFilter.ExactSelector(tests[index], index + 1, counts)
+                .Should().Be("=" + tests[index].FullPath);
+        }
+
+        enumerations.Should().Be(1);
+        counts.Should().HaveCount(tests.Length);
     }
 
     private static readonly ListedTest s_test =
