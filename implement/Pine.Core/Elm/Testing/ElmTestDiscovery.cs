@@ -260,6 +260,7 @@ public static class ElmTestDiscovery
 
         var valueSources = new Dictionary<PineValueInProcess, SourceSite>(ReferenceEqualityComparer.Instance);
         var describeValues = new HashSet<PineValueInProcess>(ReferenceEqualityComparer.Instance);
+        var testTags = new TestTagClassifier();
         var sourcePaths = build.CompilerModuleOrigins.ToDictionary(entry => entry.Key, entry => entry.Value.SourcePath);
         var sourceModules = modules.Values.ToArray();
 
@@ -337,7 +338,7 @@ public static class ElmTestDiscovery
                 observers[expression] =
                     value =>
                     {
-                        if (TestTag(value) is not null)
+                        if (testTags.Classify(value) is not null)
                             valueSources.TryAdd(value, site);
                     };
             }
@@ -371,7 +372,7 @@ public static class ElmTestDiscovery
                     error =>
                     throw new InvalidOperationException("Failed constructing Elm tests in " + root.FullName + ": " + error));
 
-            if (TestTag(value) is null)
+            if (testTags.Classify(value) is null)
                 continue;
 
             var rootOrigin = build.CompilerModuleOrigins[string.Join('.', root.Namespaces)];
@@ -426,7 +427,9 @@ public static class ElmTestDiscovery
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var source = valueSources.GetValueOrDefault(current) ?? inherited;
-                var currentTag = TestTag(current) ?? throw new InvalidOperationException("Invalid Elm Test value.");
+
+                var currentTag =
+                    testTags.Classify(current) ?? throw new InvalidOperationException("Invalid Elm Test value.");
 
                 if (describeValues.Contains(current) && currentTag != "PineEmptyGroup")
                 {
@@ -867,21 +870,55 @@ public static class ElmTestDiscovery
         public ElmFuzzResult? Fuzz { get; set; }
     }
 
-    private static string? TestTag(PineValueInProcess value)
+    internal sealed class TestTagClassifier
     {
-        var tag = ChoiceTag(value);
+        private static readonly ImmutableDictionary<PineValue, string?> s_knownTags =
+            new[]
+            {
+                "ElmTestVariant__UnitTest",
+                "ElmTestVariant__FuzzTest",
+                "ElmTestVariant__Labeled",
+                "ElmTestVariant__Batch",
+                "ElmTestVariant__Skipped",
+                "ElmTestVariant__Only",
+                "PineTodo",
+                "PineEmptyGroup",
+                "PineFuzzCount"
+            }
+            .ToImmutableDictionary(StringEncoding.ValueFromString, name => (string?)name);
 
-        return
-            tag is not null &&
-            (tag.StartsWith("ElmTestVariant__", StringComparison.Ordinal) ||
-            tag is "PineTodo" or "PineEmptyGroup" or "PineFuzzCount")
-            ?
-            tag
-            :
-            null;
+        // Cache tag encodings, not observed values, and keep negative results local to one discovery.
+        private readonly Dictionary<PineValue, string?> _tags = new(s_knownTags);
+
+        public string? Classify(PineValueInProcess value)
+        {
+            if (ChoiceTagValue(value) is not { } encodedTag)
+                return null;
+
+            if (_tags.TryGetValue(encodedTag, out var cached))
+                return cached;
+
+            var tag = DecodeChoiceTag(encodedTag);
+
+            var classification =
+                tag.StartsWith("ElmTestVariant__", StringComparison.Ordinal) ||
+                tag is "PineTodo" or "PineEmptyGroup" or "PineFuzzCount"
+                ?
+                tag
+                :
+                null;
+
+            _tags.Add(encodedTag, classification);
+            return classification;
+        }
     }
 
     private static string? ChoiceTag(PineValueInProcess value)
+    {
+        return ChoiceTagValue(value) is { } encodedTag ? DecodeChoiceTag(encodedTag) : null;
+    }
+
+    private static PineValue? ChoiceTagValue(PineValueInProcess value)
     {
         if (value.UnevaluatedStructuralItemsOrNull() is not { Count: >= 2 } items)
             return null;
@@ -889,10 +926,12 @@ public static class ElmTestDiscovery
         if (items[0].EvaluatedOrNull != ElmValue.ElmChoiceTypeTagNameAsValue)
             return null;
 
-        return
-            StringEncoding.StringFromValue(items[1].Evaluate())
-            .Extract(error => throw new InvalidOperationException("Invalid choice tag: " + error));
+        return items[1].Evaluate();
     }
+
+    private static string DecodeChoiceTag(PineValue encodedTag) =>
+        StringEncoding.StringFromValue(encodedTag)
+        .Extract(error => throw new InvalidOperationException("Invalid choice tag: " + error));
 
     private static IEnumerable<PineValueInProcess> ListItems(PineValueInProcess list)
     {
