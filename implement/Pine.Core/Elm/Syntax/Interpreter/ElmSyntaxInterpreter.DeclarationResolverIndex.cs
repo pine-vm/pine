@@ -50,8 +50,8 @@ public partial class ElmSyntaxInterpreter
 
             hash.Add(value.Name, System.StringComparer.Ordinal);
 
-            foreach (var namespacePart in value.Namespaces)
-                hash.Add(namespacePart, System.StringComparer.Ordinal);
+            for (var index = 0; index < value.Namespaces.Count; index++)
+                hash.Add(value.Namespaces[index], System.StringComparer.Ordinal);
 
             return hash.ToHashCode();
         }
@@ -229,9 +229,9 @@ public partial class ElmSyntaxInterpreter
             Application application,
             IReadOnlyList<DeclarationResolverCandidate> candidates)
         {
-            foreach (var candidate in candidates)
+            for (var index = 0; index < candidates.Count; index++)
             {
-                if (ResolveCandidate(application, candidate) is { } resolution)
+                if (ResolveCandidate(application, candidates[index]) is { } resolution)
                     return resolution;
             }
 

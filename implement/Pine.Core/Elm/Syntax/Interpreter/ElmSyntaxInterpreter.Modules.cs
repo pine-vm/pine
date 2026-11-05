@@ -201,7 +201,8 @@ public partial class ElmSyntaxInterpreter
                 resolveApplication: combined,
                 infixOperators: BuildInfixOperatorMap(prepared.Declarations),
                 invocationLogger: invocationCounter,
-                evaluationConfig: evaluationConfig);
+                evaluationConfig: evaluationConfig,
+                memoizeNullaryValues: true);
 
         return (result, invocationCounter.ToReadOnly());
     }
