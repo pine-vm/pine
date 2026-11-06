@@ -939,7 +939,8 @@ public partial class ElmSyntaxInterpreter
                 resolveApplication: combined,
                 infixOperators: BuildInfixOperatorMap(declarations),
                 invocationLogger: invocationCounter,
-                evaluationConfig: evaluationConfig);
+                evaluationConfig: evaluationConfig,
+                memoizeNullaryValues: true);
 
         return (result, invocationCounter.ToReadOnly());
     }
@@ -1030,7 +1031,8 @@ public partial class ElmSyntaxInterpreter
                 resolveApplication: combined,
                 infixOperators: BuildInfixOperatorMap(declarations),
                 invocationLogger: invocationCounter,
-                evaluationConfig: evaluationConfig);
+                evaluationConfig: evaluationConfig,
+                memoizeNullaryValues: true);
 
         return (result, invocationCounter.ToReadOnly());
     }
@@ -1098,6 +1100,8 @@ public partial class ElmSyntaxInterpreter
     private abstract record Kont
     {
         public sealed record ObserveResult(Action<PineValueInProcess> Observer) : Kont;
+
+        public sealed record MemoizeResult(NullaryValueCache.Entry Entry) : Kont;
 
         /// <summary>Apply integer negation to the returned value.</summary>
         public sealed record Negate : Kont;
@@ -1273,11 +1277,22 @@ public partial class ElmSyntaxInterpreter
         Func<Application, ApplicationResolution> resolveApplication,
         IReadOnlyDictionary<string, DeclQualifiedName>? infixOperators,
         IInvocationLogger? invocationLogger = null,
-        EvaluationConfig? evaluationConfig = null)
+        EvaluationConfig? evaluationConfig = null,
+        bool memoizeNullaryValues = false)
     {
         var kstack = new Stack<Kont>();
         invocationLogger ??= s_ambientInvocationLogger.Value ?? new InvocationCounter();
         evaluationConfig ??= EvaluationConfig.Default;
+
+        var nullaryValues =
+            memoizeNullaryValues ||
+            resolveApplication.Target is DefaultApplicationResolver &&
+            resolveApplication.GetInvocationList().Length is 1
+            ?
+            new NullaryValueCache(evaluationConfig.CancellationToken)
+            :
+            null;
+
         long instructionCount = 0;
 
         // Either: (currentExpr, currentEnv) is the next thing to evaluate ("Eval" mode),
@@ -1298,7 +1313,8 @@ public partial class ElmSyntaxInterpreter
                     application: initialApplication,
                     resolveApplication: resolveApplication,
                     kstack: kstack,
-                    invocationLogger: invocationLogger);
+                    invocationLogger: invocationLogger,
+                    nullaryValues: nullaryValues);
 
             if (applyCallResult.IsOkOrNull() is { } applyOk)
             {
@@ -1493,7 +1509,8 @@ public partial class ElmSyntaxInterpreter
                                     env: currentEnv,
                                     resolveApplication: resolveApplication,
                                     kstack: kstack,
-                                    invocationLogger: invocationLogger);
+                                    invocationLogger: invocationLogger,
+                                    nullaryValues: nullaryValues);
 
                             if (applyResult.IsOkOrNull() is { } outcome)
                             {
@@ -1833,7 +1850,16 @@ public partial class ElmSyntaxInterpreter
                 switch (top)
                 {
                     case Kont.ObserveResult observe:
-                        observe.Observer(value);
+                        if (nullaryValues is null)
+                            observe.Observer(value);
+
+                        else
+                            nullaryValues.Observe(observe.Observer, value);
+
+                        break;
+
+                    case Kont.MemoizeResult memoize:
+                        nullaryValues!.Complete(memoize.Entry, value);
                         break;
 
                     case Kont.Negate:
@@ -2007,7 +2033,8 @@ public partial class ElmSyntaxInterpreter
                                     env: buildArgs.Env,
                                     resolveApplication: resolveApplication,
                                     kstack: kstack,
-                                    invocationLogger: invocationLogger);
+                                    invocationLogger: invocationLogger,
+                                    nullaryValues: nullaryValues);
 
                             if (applyResult.IsOkOrNull() is { } outcome)
                             {
@@ -2458,7 +2485,7 @@ public partial class ElmSyntaxInterpreter
                         }
 
                     default:
-                        throw new InvalidOperationException(
+                        throw new NotImplementedException(
                             "Unknown continuation kind: " + top.GetType().FullName);
                 }
             }
@@ -2565,7 +2592,8 @@ public partial class ElmSyntaxInterpreter
         ApplicationContext env,
         Func<Application, ApplicationResolution> resolveApplication,
         Stack<Kont> kstack,
-        IInvocationLogger invocationLogger)
+        IInvocationLogger invocationLogger,
+        NullaryValueCache? nullaryValues)
     {
         var application =
             new Application(
@@ -2579,15 +2607,19 @@ public partial class ElmSyntaxInterpreter
 
         invocationLogger.OnDirectFunctionApplication(application);
 
-        return ApplyResolvedCall(application, resolveApplication, kstack, invocationLogger);
+        return ApplyResolvedCall(application, resolveApplication, kstack, invocationLogger, nullaryValues);
     }
 
     private static Result<ElmInterpretationError, ApplyCallOutcome> ApplyResolvedCall(
         Application application,
         Func<Application, ApplicationResolution> resolveApplication,
         Stack<Kont> kstack,
-        IInvocationLogger invocationLogger)
+        IInvocationLogger invocationLogger,
+        NullaryValueCache? nullaryValues)
     {
+        if (application.FunctionName.Namespaces is ["Debug"])
+            nullaryValues?.RejectPending();
+
         ApplicationResolution resolution;
 
         try
@@ -2614,6 +2646,18 @@ public partial class ElmSyntaxInterpreter
                     var functionImpl = continueWithFunction.Function;
                     var expectedArity = functionImpl.Arguments.Count;
                     var providedCount = application.Arguments.Count;
+
+                    var memoize =
+                        expectedArity is 0 && providedCount is 0 &&
+                        continueWithFunction.ResolvedName is not null && nullaryValues is not null;
+
+                    var memoEntry = memoize ? nullaryValues!.Find(continueWithFunction) : null;
+
+                    if (memoEntry?.Value is { } cachedValue)
+                    {
+                        nullaryValues!.Replay(memoEntry);
+                        return new ApplyCallOutcome.ResolvedValue(cachedValue);
+                    }
 
                     // The top-level scope to evaluate the body under. Prefer the resolved
                     // declaration's own module-qualified name so that unqualified references inside
@@ -2696,6 +2740,11 @@ public partial class ElmSyntaxInterpreter
                             localBindings: innerBindings);
 
                     ReplaceTailCallFrame(kstack);
+
+                    // Pending entries are not reusable: recursive nullary declarations still run
+                    // normally under the evaluation's cancellation and quota checks.
+                    if (memoize && memoEntry is null && nullaryValues!.Begin(continueWithFunction) is { } pendingValue)
+                        kstack.Push(new Kont.MemoizeResult(pendingValue));
 
                     if (extraArgs is not null)
                     {
@@ -4556,11 +4605,12 @@ public partial class ElmSyntaxInterpreter
             ?? declarations.ToImmutableDictionary();
 
         return
-            BuildResolvers(
+            BuildDefaultResolvers(
                 declarationSnapshot,
                 ExtendBuiltinFunctionResolversWithAliases(
                     declarationSnapshot,
-                    s_builtinFunctionResolvers));
+                    s_builtinFunctionResolvers),
+                allowMemoization: true);
     }
 
     /// <summary>
@@ -4568,11 +4618,17 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     public static Func<Application, ApplicationResolution> BuildResolvers(
         IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> declarations,
-        IReadOnlyDictionary<DeclQualifiedName, Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>? customFunctionResolvers)
+        IReadOnlyDictionary<DeclQualifiedName, Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>? customFunctionResolvers) =>
+        BuildDefaultResolvers(declarations, customFunctionResolvers, allowMemoization: customFunctionResolvers is null);
+
+    private static Func<Application, ApplicationResolution> BuildDefaultResolvers(
+        IReadOnlyDictionary<DeclQualifiedName, PreparedDeclaration> declarations,
+        IReadOnlyDictionary<DeclQualifiedName, Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>? customFunctionResolvers,
+        bool allowMemoization)
     {
         var resolverIndex = GetDeclarationResolverIndex(declarations);
 
-        return
+        var combined =
             CombineResolvers(
                 [
                 ApplicationResolver(customFunctionResolvers ?? ImmutableDictionary<DeclQualifiedName, Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>.Empty),
@@ -4582,6 +4638,8 @@ public partial class ElmSyntaxInterpreter
                 PineBuiltinResolver,
                 app => UserDefinedResolver(app, resolverIndex)
                 ]);
+
+        return allowMemoization ? new DefaultApplicationResolver(combined).Resolve : combined;
     }
 
     /// <summary>
@@ -4594,9 +4652,9 @@ public partial class ElmSyntaxInterpreter
         return
             application =>
             {
-                foreach (var resolver in resolvers)
+                for (var index = 0; index < resolvers.Count; index++)
                 {
-                    var resolution = resolver(application);
+                    var resolution = resolvers[index](application);
 
                     if (resolution is not null)
                         return resolution;
