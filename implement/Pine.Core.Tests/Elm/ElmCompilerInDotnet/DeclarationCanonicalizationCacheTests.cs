@@ -367,12 +367,14 @@ public class DeclarationCanonicalizationCacheTests
         var countedNamespaces = new CountingNamespaces();
         var counted = name with { Namespaces = countedNamespaces };
         counted.GetHashCode().Should().Be(hash);
-        countedNamespaces.Enumerations.Should().Be(1);
+        countedNamespaces.IndexReads.Should().Be(countedNamespaces.Count);
+        countedNamespaces.Enumerations.Should().Be(0);
 
         for (var repeat = 0; repeat < 100; ++repeat)
             counted.GetHashCode().Should().Be(hash);
 
-        countedNamespaces.Enumerations.Should().Be(1);
+        countedNamespaces.IndexReads.Should().Be(countedNamespaces.Count);
+        countedNamespaces.Enumerations.Should().Be(0);
     }
 
     [Fact]
@@ -457,9 +459,18 @@ public class DeclarationCanonicalizationCacheTests
 
         public int Enumerations { get; private set; }
 
+        public int IndexReads { get; private set; }
+
         public int Count => parts.Length;
 
-        public string this[int index] => parts[index];
+        public string this[int index]
+        {
+            get
+            {
+                ++IndexReads;
+                return parts[index];
+            }
+        }
 
         public IEnumerator<string> GetEnumerator()
         {

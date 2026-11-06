@@ -35,11 +35,11 @@ public record DeclQualifiedName
     public string FullName { get; init; }
 
     private DeclQualifiedName(
-        IReadOnlyList<string> namespaces,
+        string[] namespaces,
         string declName,
         string fullName)
     {
-        Namespaces = [.. namespaces];
+        Namespaces = namespaces;
         DeclName = declName;
         FullName = fullName;
     }
@@ -51,14 +51,19 @@ public record DeclQualifiedName
         IReadOnlyList<string> namespaces,
         string declName)
     {
+        var ownedNamespaces = new string[namespaces.Count];
+
+        for (var index = 0; index < ownedNamespaces.Length; index++)
+            ownedNamespaces[index] = namespaces[index];
+
         var fullName =
-            namespaces.Count > 0
+            ownedNamespaces.Length > 0
             ?
-            string.Join(".", namespaces) + "." + declName
+            string.Join(".", ownedNamespaces) + "." + declName
             :
             declName;
 
-        return new DeclQualifiedName(namespaces, declName, fullName);
+        return new DeclQualifiedName(ownedNamespaces, declName, fullName);
     }
 
     /// <inheritdoc/>
@@ -90,8 +95,8 @@ public record DeclQualifiedName
         var hash = new System.HashCode();
         hash.Add(DeclName);
 
-        foreach (var part in Namespaces)
-            hash.Add(part);
+        for (var index = 0; index < Namespaces.Count; index++)
+            hash.Add(Namespaces[index]);
 
         var value = hash.ToHashCode();
         System.Threading.Volatile.Write(ref _cachedHashCode, (long)unchecked((uint)value) + 1);
