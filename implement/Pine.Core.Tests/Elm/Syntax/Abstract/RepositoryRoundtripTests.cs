@@ -172,11 +172,12 @@ public class RepositoryRoundtripTests
 
     // Read committed blobs, not temporary projects that parallel tests create and delete.
     private static (string path, ReadOnlyMemory<byte> contents)[] LoadRepositoryElmFiles(string repositoryRoot) =>
-        GitCore.LoadFromLocalFiles.LoadSubdirectoryContentsFromHead(repositoryRoot, [])
+        [
+        .. GitCore.LoadFromLocalFiles.LoadSubdirectoryContentsFromHead(repositoryRoot, [])
         .Select(file => (path: string.Join("/", file.Key), contents: file.Value))
         .Where(file => file.path.EndsWith(".elm", StringComparison.Ordinal))
         .OrderBy(file => file.path, StringComparer.Ordinal)
-        .ToArray();
+        ];
 
     private static byte[] TreeEntry(string mode, string name, string objectId) =>
         [.. Encoding.UTF8.GetBytes(mode + " " + name + "\0"), .. Convert.FromHexString(objectId)];

@@ -269,7 +269,8 @@ public partial class ElmSyntaxInterpreter
             var parseCache = new PineVMParseCache();
 
             return
-                roots.Select(
+                [
+                .. roots.Select(
                     name =>
                     {
                         var callable = compiled[new Model.FunctionId.Source(name)];
@@ -279,7 +280,8 @@ public partial class ElmSyntaxInterpreter
                                 parseCache.ParseExpression(callable.EncodedBody).Extract(
                                     error => throw new InvalidOperationException(error)),
                                 PineValue.List([PineValue.List([.. callable.EnvFunctions])]));
-                    }).ToArray();
+                    })
+                ];
         }
 
         private static AST.Declaration LowerOperatorApplications(AST.Declaration declaration) =>

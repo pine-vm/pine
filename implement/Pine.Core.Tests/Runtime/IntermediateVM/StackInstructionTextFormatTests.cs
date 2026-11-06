@@ -36,10 +36,10 @@ public class StackInstructionTextFormatTests
             IntegerEncoding.EncodeSignedInteger(-123),
             StringEncoding.ValueFromString("quote \" slash \\ newline \n (x, y): hash 0x1234"),
             StringEncoding.ValueFromString(new string('x', 10000)),
-            PineValue.Blob(Enumerable.Repeat((byte)255, 10000).ToArray()),
+            PineValue.Blob([.. Enumerable.Repeat((byte)255, 10000)]),
             IntegerEncoding.EncodeSignedInteger(BigInteger.One << 40000),
             PineValue.List([PineValue.EmptyBlob, PineValue.List([PineValue.Blob([255])])]),
-            PineValue.List(Enumerable.Repeat<PineValue>(PineValue.EmptyList, 10000).ToArray())
+            PineValue.List([.. Enumerable.Repeat<PineValue>(PineValue.EmptyList, 10000)])
         }
         .Select(value => new object[] { value });
 
@@ -809,7 +809,7 @@ public class StackInstructionTextFormatTests
     {
         var huge = BigInteger.One << 40000;
         var manyLocals = Enumerable.Range(0, 10000).ToImmutableArray();
-        var prefix = PineValue.List(Enumerable.Repeat<PineValue>(PineValue.EmptyBlob, 10000).ToArray());
+        var prefix = PineValue.List([.. Enumerable.Repeat<PineValue>(PineValue.EmptyBlob, 10000)]);
         var expression = Expression.LitralInst(StringEncoding.ValueFromString(new string('x', 10000)));
 
         StackInstruction[] instructions =
@@ -935,7 +935,7 @@ public class StackInstructionTextFormatTests
                 [
                     StackInstruction.Local_Get(0),
                     StackInstruction.Push_Literal(
-                        PineValue.List(Enumerable.Repeat<PineValue>(PineValue.EmptyBlob, 1234).ToArray())),
+                        PineValue.List([.. Enumerable.Repeat<PineValue>(PineValue.EmptyBlob, 1234)])),
                     StackInstruction.Concat_Binary,
                     StackInstruction.Return
                 ]);

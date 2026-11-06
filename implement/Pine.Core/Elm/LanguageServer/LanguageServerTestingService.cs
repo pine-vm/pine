@@ -809,10 +809,12 @@ public sealed class LanguageServerTestingService(
             return [];
 
         return
-            discovery.Items.Where(
+            [
+            .. discovery.Items.Where(
                 item => (item.Kind is not ElmTestDiscoveryItemKind.Group || item.IsEmptyGroup) &&
                     (included is null || HasAncestor(item, included)) &&
-                    !HasAncestor(item, excluded)).ToArray();
+                    !HasAncestor(item, excluded))
+            ];
 
         bool HasAncestor(ElmTestDiscoveryItem item, IReadOnlySet<string> ids)
         {

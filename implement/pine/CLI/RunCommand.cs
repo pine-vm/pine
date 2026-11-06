@@ -125,15 +125,16 @@ public static class RunCommand
             result => Execute(
                 result.GetRequiredValue(entryPointArgument),
                 result.GetValue(inputDirectoryOption),
-                result.Tokens
-                .Select((token, index) => (token, index))
-                .Where(
-                    item => item.token.Type is TokenType.Option &&
-                        (item.token.Value == inputOption.Name || item.token.Value == inputFileOption.Name))
-                .Select(
-                    item =>
-                    new BatchInput(result.Tokens[item.index + 1].Value, item.token.Value == inputFileOption.Name))
-                .ToArray(),
+                [
+                    .. result.Tokens
+                    .Select((token, index) => (token, index))
+                    .Where(
+                        item => item.token.Type is TokenType.Option &&
+                            (item.token.Value == inputOption.Name || item.token.Value == inputFileOption.Name))
+                    .Select(
+                        item =>
+                        new BatchInput(result.Tokens[item.index + 1].Value, item.token.Value == inputFileOption.Name))
+                ],
                 result.GetValue(outputFileOption),
                 result.GetValue(transformFileOption),
                 result.GetValue(colorOption),
@@ -594,7 +595,7 @@ public static class RunCommand
                         ElmInteractiveEnvironment.ApplyFunction(
                             vm,
                             callable,
-                            encodedArguments.Skip(appliedArguments).Take(count).ToArray(),
+                            [.. encodedArguments.Skip(appliedArguments).Take(count)],
                             token)
                         .Extract(message => throw new InvalidOperationException(message));
 

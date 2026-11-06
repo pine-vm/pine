@@ -443,7 +443,7 @@ public static class StackInstructionTextFormat
                     ?
                     ParseIndices(localText)
                     :
-                    StackInstructionMetadataEncoding.DecodePath(Value(localText)).ToImmutableArray()
+                    [.. StackInstructionMetadataEncoding.DecodePath(Value(localText))]
                     :
                     default;
 

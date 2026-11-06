@@ -201,8 +201,8 @@ internal static class StackInstructionMetadataEncoding
         {
             TemplateValueRecipe.Constant constant => constant,
             TemplateValueRecipe.Slot slot => slot,
-            TemplateValueRecipe.List list => list with { Items = list.Items.ToArray() },
-            TemplateValueRecipe.ProjectedSlot slot => slot with { Path = slot.Path.ToArray() },
+            TemplateValueRecipe.List list => list with { Items = [.. list.Items] },
+            TemplateValueRecipe.ProjectedSlot slot => slot with { Path = [.. slot.Path] },
 
             _ =>
             throw new NotImplementedException("ParseRecipeNode does not handle recipe variant: " + recipe.GetType().Name)
