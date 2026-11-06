@@ -12,13 +12,18 @@ public partial class ElmSyntaxInterpreter
     /// Linked local-binding environment used by the interpreter runtime. Each layer carries only
     /// the bindings introduced at one scope boundary and points at its parent for older bindings.
     /// Lookup therefore avoids copying all parent bindings when entering <c>let</c>, <c>case</c>,
-    /// or function-call scopes.
+    /// or function-call scopes. Parameter layers share a prepared name layout and own only
+    /// their values; mutable <c>let</c> layers retain their dictionary storage.
     /// </summary>
     internal sealed class LocalBindingEnvironment : IReadOnlyDictionary<string, PineValueInProcess>
     {
         private readonly LocalBindingEnvironment? _parent;
 
-        private readonly IReadOnlyDictionary<string, PineValueInProcess> _localBindings;
+        private readonly IReadOnlyDictionary<string, PineValueInProcess>? _localBindings;
+
+        private readonly PreparedParameterBindingLayout? _bindingLayout;
+
+        private readonly PineValueInProcess[]? _bindingValues;
 
         private readonly bool _localBindingsMayMutate;
 
@@ -38,6 +43,16 @@ public partial class ElmSyntaxInterpreter
             _localBindingsMayMutate = localBindingsMayMutate;
         }
 
+        private LocalBindingEnvironment(
+            LocalBindingEnvironment parent,
+            PreparedParameterBindingLayout bindingLayout,
+            PineValueInProcess[] bindingValues)
+        {
+            _parent = parent;
+            _bindingLayout = bindingLayout;
+            _bindingValues = bindingValues;
+        }
+
         public IEnumerable<string> Keys =>
             this.Select(static binding => binding.Key);
 
@@ -47,7 +62,7 @@ public partial class ElmSyntaxInterpreter
         public int Count =>
             _parent is null
             ?
-            _localBindings.Count
+            LocalBindingCount
             :
             CountVisibleBindings();
 
@@ -87,6 +102,18 @@ public partial class ElmSyntaxInterpreter
                     localBindingsMayMutate: false);
         }
 
+        internal LocalBindingEnvironment CreateChild(
+            PreparedParameterBindingLayout bindingLayout,
+            PineValueInProcess[] bindingValues) =>
+            bindingLayout.BindingCount is 0
+            ?
+            this
+            :
+            new LocalBindingEnvironment(
+                parent: this,
+                bindingLayout: bindingLayout,
+                bindingValues: bindingValues);
+
         public LocalBindingEnvironment CreateMutableChild(
             Dictionary<string, PineValueInProcess> bindings) =>
             new(
@@ -107,15 +134,24 @@ public partial class ElmSyntaxInterpreter
             if (!_localBindingsMayMutate && ReferenceEquals(snapshottedParent, _parent))
                 return this;
 
+            if (_bindingLayout is { } layout)
+            {
+                return
+                    new LocalBindingEnvironment(
+                        parent: snapshottedParent,
+                        bindingLayout: layout,
+                        bindingValues: _bindingValues!);
+            }
+
             return
                 new LocalBindingEnvironment(
                     parent: snapshottedParent,
                     localBindings:
                     _localBindingsMayMutate
                     ?
-                    SnapshotLayer(_localBindings)
+                    SnapshotLayer(_localBindings!)
                     :
-                    _localBindings,
+                    _localBindings!,
                     localBindingsMayMutate: false);
         }
 
@@ -124,7 +160,15 @@ public partial class ElmSyntaxInterpreter
 
         public bool TryGetValue(string key, out PineValueInProcess value)
         {
-            if (_localBindings.TryGetValue(key, out var localValue))
+            if (_bindingLayout is { } layout)
+            {
+                if (layout.TryGetSlot(key, out var slot))
+                {
+                    value = _bindingValues![slot];
+                    return true;
+                }
+            }
+            else if (_localBindings!.TryGetValue(key, out var localValue))
             {
                 value = localValue;
                 return true;
@@ -142,13 +186,35 @@ public partial class ElmSyntaxInterpreter
         public IEnumerator<KeyValuePair<string, PineValueInProcess>> GetEnumerator()
         {
             if (_parent is null)
-                return _localBindings.GetEnumerator();
+                return EnumerateLocalBindings().GetEnumerator();
 
             return EnumerateVisibleBindings().GetEnumerator();
         }
 
         IEnumerator IEnumerable.GetEnumerator() =>
             GetEnumerator();
+
+        private int LocalBindingCount =>
+            _bindingLayout?.BindingCount ?? _localBindings!.Count;
+
+        private IEnumerable<KeyValuePair<string, PineValueInProcess>> EnumerateLocalBindings()
+        {
+            if (_bindingLayout is { } layout)
+            {
+                for (var slot = 0; slot < layout.BindingCount; ++slot)
+                {
+                    yield return
+                        new KeyValuePair<string, PineValueInProcess>(
+                            layout.NameAt(slot),
+                            _bindingValues![slot]);
+                }
+            }
+            else
+            {
+                foreach (var binding in _localBindings!)
+                    yield return binding;
+            }
+        }
 
         private int CountVisibleBindings()
         {
@@ -157,7 +223,7 @@ public partial class ElmSyntaxInterpreter
 
             foreach (var layer in EnumerateLayersNewestFirst())
             {
-                foreach (var binding in layer._localBindings)
+                foreach (var binding in layer.EnumerateLocalBindings())
                 {
                     if (seen.Add(binding.Key))
                         ++count;
@@ -173,7 +239,7 @@ public partial class ElmSyntaxInterpreter
 
             foreach (var layer in EnumerateLayersNewestFirst())
             {
-                foreach (var binding in layer._localBindings)
+                foreach (var binding in layer.EnumerateLocalBindings())
                 {
                     if (seen.Add(binding.Key))
                         yield return binding;

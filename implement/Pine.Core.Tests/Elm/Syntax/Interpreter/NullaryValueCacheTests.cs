@@ -274,7 +274,7 @@ public class NullaryValueCacheTests
                     [body] =
                     _ =>
                     {
-                        if (++observations == 2)
+                        if (++observations is 2)
                             cancellation.Cancel();
                     }
                 }
@@ -351,7 +351,7 @@ public class NullaryValueCacheTests
         declarations.Add(
             ("Test.root",
             new Engine.PreparedExpression.ListExpr(
-                Enumerable.Range(0, Count * 2).Select(index => Identifier("Test.value" + index % Count)).ToArray())));
+                [.. Enumerable.Range(0, Count * 2).Select(index => Identifier("Test.value" + index % Count))])));
 
         var (result, logger) = Run(Program([.. declarations]));
         var value = result.Extract(error => throw new Exception(error.ToString()));
@@ -377,7 +377,7 @@ public class NullaryValueCacheTests
         declarations.Add(
             ("Test.root",
             new Engine.PreparedExpression.ListExpr(
-                Enumerable.Range(0, Count * 2).Select(index => Identifier("Test.value" + index % Count)).ToArray())));
+                [.. Enumerable.Range(0, Count * 2).Select(index => Identifier("Test.value" + index % Count))])));
 
         var (result, logger) = Run(Program([.. declarations]));
         result.Extract(error => throw new Exception(error.ToString())).GetLength().Should().Be(Count * 2);

@@ -1087,8 +1087,8 @@ public partial class ElmSyntaxInterpreter
     //   * a Stack<DeclQualifiedName> recording the currently active Elm call
     //     frames (used to produce stack traces in ElmInterpretationException).
     //
-    // Each entry of the Kont ADT corresponds to one "hole" in the pre-refactor
-    // EvaluateExpression switch. Entering a user-defined function body pushes
+    // Each continuation tag represents pending work after a subexpression returns.
+    // Entering a user-defined function body pushes
     // a Kont.CallFrame so the trace can be captured at any point of evaluation.
     // If the top continuation is already a CallFrame, the new call is in tail
     // position and replaces it, keeping tail-recursive execution at bounded depth.
@@ -1096,172 +1096,6 @@ public partial class ElmSyntaxInterpreter
     // continuations so non-terminating programs return an Elm-level error
     // instead of exhausting process resources.
     // ------------------------------------------------------------------------
-
-    private abstract record Kont
-    {
-        public sealed record ObserveResult(Action<PineValueInProcess> Observer) : Kont;
-
-        public sealed record MemoizeResult(NullaryValueCache.Entry Entry) : Kont;
-
-        /// <summary>Apply integer negation to the returned value.</summary>
-        public sealed record Negate : Kont;
-
-        /// <summary>
-        /// Building a list or tuple: we are collecting <see cref="Elements"/> into
-        /// <see cref="Accumulated"/>. <see cref="NextIndex"/> is the slot about to be
-        /// filled by the currently-returned value.
-        /// </summary>
-        public sealed record BuildList(
-            IReadOnlyList<PreparedExpression> Elements,
-            int NextIndex,
-            PineValueInProcess[] Accumulated,
-            ApplicationContext Env) : Kont;
-
-        /// <summary>After evaluating the condition of an if-expression, pick a branch.</summary>
-        public sealed record IfBranch(
-            PreparedExpression ThenBranch,
-            PreparedExpression ElseBranch,
-            ApplicationContext Env) : Kont;
-
-        /// <summary>
-        /// Building a record literal: collecting successive field values into
-        /// <see cref="Accumulated"/>. The field name at <see cref="NextIndex"/>
-        /// is the one the currently-returned value is for.
-        /// </summary>
-        public sealed record BuildRecord(
-            IReadOnlyList<PreparedRecordSetter> Fields,
-            int NextIndex,
-            (string FieldName, PineValue FieldNameValue, PineValueInProcess Value)[] Accumulated,
-            ApplicationContext Env) : Kont;
-
-        /// <summary>
-        /// Building the argument list for an application of <see cref="FunctionOrValue"/>.
-        /// <see cref="NextIndex"/> is the argument slot the currently-returned value fills.
-        /// When all arguments are collected, the application is resolved.
-        /// </summary>
-        public sealed record BuildArgs(
-            PreparedExpression.Identifier FunctionOrValue,
-            IReadOnlyList<PreparedExpression> Arguments,
-            int NextIndex,
-            PineValueInProcess[] Accumulated,
-            ApplicationContext Env) : Kont;
-
-        /// <summary>
-        /// Building the argument list for an application whose function position is an arbitrary
-        /// expression (not a bare <see cref="Concrete.Expression.Identifier"/> name) — for
-        /// example a parenthesised lambda, an <c>if</c>-expression that yields a function, or a
-        /// record-field access. Behaves like <see cref="BuildArgs"/> for argument evaluation;
-        /// once all arguments are collected, evaluation switches to <see cref="FunctionExpr"/>
-        /// to obtain the callable value, and an <see cref="ApplyEvaluatedFunction"/> is pushed
-        /// to perform the application once the function value is in hand.
-        /// </summary>
-        public sealed record BuildArgsForValue(
-            PreparedExpression FunctionExpr,
-            IReadOnlyList<PreparedExpression> Arguments,
-            int NextIndex,
-            PineValueInProcess[] Accumulated,
-            ApplicationContext Env) : Kont;
-
-        /// <summary>
-        /// After evaluating the function expression for a <see cref="BuildArgsForValue"/>
-        /// application, apply the returned value (which must be an <see cref="ElmClosureInProcess"/>)
-        /// to the previously-collected arguments.
-        /// </summary>
-        public sealed record ApplyEvaluatedFunction(
-            IReadOnlyList<PineValueInProcess> Arguments,
-            ApplicationContext Env) : Kont;
-
-        /// <summary>
-        /// Inserted under a <see cref="CallFrame"/> when a function is over-applied: the call has
-        /// been saturated at <see cref="CallFrame.Arguments"/> and once its body returns a value
-        /// (which must itself be an <see cref="ElmClosureInProcess"/>) the <see cref="ExtraArgs"/>
-        /// will be applied to it. Surfaces as the unifying mechanism for both
-        /// <c>(f x) y z</c>-style chained applications and the case where a single application
-        /// node's argument list spans the outer function's parameters and the inner closure's
-        /// parameters.
-        /// </summary>
-        public sealed record AfterCall(
-            IReadOnlyList<PineValueInProcess> ExtraArgs,
-            ApplicationContext Env) : Kont;
-
-        /// <summary>
-        /// After evaluating the expression for a <c>let</c>'s <c>LetFunction</c>
-        /// declaration, bind the name to the returned value, then continue processing
-        /// the remaining declarations and finally the body.
-        /// </summary>
-        public sealed record LetBindFunction(
-            string BindingName,
-            IReadOnlyList<PreparedLetDeclaration> Remaining,
-            int NextIndex,
-            Dictionary<string, PineValueInProcess> Extended,
-            PreparedExpression Body,
-            ApplicationContext Outer) : Kont;
-
-        /// <summary>
-        /// After evaluating the expression of a <c>let</c>'s <c>LetDestructuring</c>
-        /// declaration, bind the pattern to the returned value, then continue.
-        /// </summary>
-        public sealed record LetBindDestructure(
-            Pattern Pattern,
-            IReadOnlyList<PreparedLetDeclaration> Remaining,
-            int NextIndex,
-            Dictionary<string, PineValueInProcess> Extended,
-            PreparedExpression Body,
-            ApplicationContext Outer) : Kont;
-
-        /// <summary>
-        /// Marker frame indicating that a call to a user-defined Elm function is
-        /// currently in progress. Contributes one entry to the Elm call stack but performs no
-        /// computation on return (the returned value simply bubbles up). <see cref="Arguments"/>
-        /// holds the values the function was called with for runtime-error diagnostics.
-        /// </summary>
-        public sealed record CallFrame(
-            DeclQualifiedName FunctionName,
-            IReadOnlyList<PineValueInProcess> Arguments) : Kont;
-
-
-        /// <summary>
-        /// After evaluating the scrutinee of a <c>case … of</c> expression, try the
-        /// arms in source order and evaluate the first one whose pattern matches the
-        /// returned value. If no arm matches, a runtime error is raised.
-        /// <para>
-        /// <see cref="ScrutineeExpr"/> is the source expression whose value is being
-        /// matched. It is retained purely to enrich the "did not match any arm" runtime
-        /// error with the originating expression, making such failures easier to locate
-        /// when debugging interpreted Elm programs.
-        /// </para>
-        /// </summary>
-        public sealed record MatchCase(
-            PreparedCaseDispatch Dispatch,
-            ApplicationContext Env,
-            PreparedExpression? ScrutineeExpr = null) : Kont;
-
-        /// <summary>
-        /// After evaluating the record-position expression of a record-access
-        /// (<c>record.field</c>), look up <see cref="FieldName"/> on the returned
-        /// value (which must be an <see cref="ElmValue.ElmRecord"/>).
-        /// </summary>
-        public sealed record AccessRecordField(
-            string FieldName,
-            PineValue FieldNameValue) : Kont;
-
-        /// <summary>
-        /// Building a record-update expression <c>{ record | f1 = e1, f2 = e2 }</c>.
-        /// First the original record value is obtained (by evaluating its name as a
-        /// <see cref="Concrete.Expression.Identifier"/>); afterwards each
-        /// field-update value expression is evaluated in source order. <see cref="OriginalRecord"/>
-        /// is <c>null</c> while the original record is still being computed; once obtained it is
-        /// captured here so the update field expressions can be collected. <see cref="NextIndex"/>
-        /// is the field-update slot the currently-returned value fills (or <c>-1</c> while waiting
-        /// for the original record).
-        /// </summary>
-        public sealed record BuildRecordUpdate(
-            PineValueInProcess? OriginalRecord,
-            IReadOnlyList<PreparedRecordSetter> Fields,
-            int NextIndex,
-            (string FieldName, PineValue FieldNameValue, PineValueInProcess FieldValue)[] Accumulated,
-            ApplicationContext Env) : Kont;
-    }
 
     /// <summary>
     /// Entry point of the trampoline. At most one of <paramref name="initialExpression"/>
@@ -1847,22 +1681,26 @@ public partial class ElmSyntaxInterpreter
                 var top = kstack.Pop();
                 var value = currentValue!;
 
-                switch (top)
+                switch (top.Tag)
                 {
-                    case Kont.ObserveResult observe:
-                        if (nullaryValues is null)
-                            observe.Observer(value);
+                    case Kont.Kind.ObserveResult:
+                        {
+                            var observe = top.AsObserveResult;
 
-                        else
-                            nullaryValues.Observe(observe.Observer, value);
+                            if (nullaryValues is null)
+                                observe.Observer(value);
 
+                            else
+                                nullaryValues.Observe(observe.Observer, value);
+
+                            break;
+                        }
+
+                    case Kont.Kind.MemoizeResult:
+                        nullaryValues!.Complete(top.AsMemoizeResult.Entry, value);
                         break;
 
-                    case Kont.MemoizeResult memoize:
-                        nullaryValues!.Complete(memoize.Entry, value);
-                        break;
-
-                    case Kont.Negate:
+                    case Kont.Kind.Negate:
                         {
                             if (!ContainsOpaque(value) && value.AsInteger() is { } intValue)
                             {
@@ -1889,8 +1727,9 @@ public partial class ElmSyntaxInterpreter
                                     kstack);
                         }
 
-                    case Kont.BuildList buildList:
+                    case Kont.Kind.BuildList:
                         {
+                            var buildList = top.AsBuildList;
                             buildList.Accumulated[buildList.NextIndex] = value;
                             var next = buildList.NextIndex + 1;
 
@@ -1907,8 +1746,9 @@ public partial class ElmSyntaxInterpreter
                             break;
                         }
 
-                    case Kont.IfBranch ifBranch:
+                    case Kont.Kind.IfBranch:
                         {
+                            var ifBranch = top.AsIfBranch;
                             var conditionIsTrue = IsElmTrue(value);
 
                             currentExpr =
@@ -1923,8 +1763,9 @@ public partial class ElmSyntaxInterpreter
                             break;
                         }
 
-                    case Kont.BuildRecord buildRecord:
+                    case Kont.Kind.BuildRecord:
                         {
+                            var buildRecord = top.AsBuildRecord;
                             /*
                              * The record expressions in the Elm syntax model must already come sorted,
                              * so we dont sort the fields here.
@@ -1950,8 +1791,9 @@ public partial class ElmSyntaxInterpreter
                             break;
                         }
 
-                    case Kont.BuildArgs buildArgs:
+                    case Kont.Kind.BuildArgs:
                         {
+                            var buildArgs = top.AsBuildArgs;
                             buildArgs.Accumulated[buildArgs.NextIndex] = value;
                             var next = buildArgs.NextIndex + 1;
 
@@ -2068,8 +1910,9 @@ public partial class ElmSyntaxInterpreter
                             }
                         }
 
-                    case Kont.BuildArgsForValue buildArgsForValue:
+                    case Kont.Kind.BuildArgsForValue:
                         {
+                            var buildArgsForValue = top.AsBuildArgsForValue;
                             buildArgsForValue.Accumulated[buildArgsForValue.NextIndex] = value;
                             var next = buildArgsForValue.NextIndex + 1;
 
@@ -2095,8 +1938,10 @@ public partial class ElmSyntaxInterpreter
                             break;
                         }
 
-                    case Kont.ApplyEvaluatedFunction applyEvaluatedFunction:
+                    case Kont.Kind.ApplyEvaluatedFunction:
                         {
+                            var applyEvaluatedFunction = top.AsApplyEvaluatedFunction;
+
                             var applyResult =
                                 ApplyFunctionValue(
                                     functionValue: value,
@@ -2132,8 +1977,9 @@ public partial class ElmSyntaxInterpreter
                                 $"ApplyFunctionValue returned a result that is neither Ok nor Err: {applyResult.GetType().FullName}");
                         }
 
-                    case Kont.AfterCall afterCall:
+                    case Kont.Kind.AfterCall:
                         {
+                            var afterCall = top.AsAfterCall;
                             // The body of a saturated call has produced a value; if extra args
                             // remain (over-application), apply them to the returned value.
                             var afterCallApplyResult =
@@ -2171,8 +2017,9 @@ public partial class ElmSyntaxInterpreter
                                 $"ApplyFunctionValue (for AfterCall) returned a result that is neither Ok nor Err: {afterCallApplyResult.GetType().FullName}");
                         }
 
-                    case Kont.LetBindFunction letBindFunction:
+                    case Kont.Kind.LetBindFunction:
                         {
+                            var letBindFunction = top.AsLetBindFunction;
                             letBindFunction.Extended[letBindFunction.BindingName] = value;
 
                             var beginNextResult =
@@ -2199,8 +2046,10 @@ public partial class ElmSyntaxInterpreter
                                 $"BeginNextLetDecl returned a result that is neither Ok nor Err: {beginNextResult.GetType().FullName}");
                         }
 
-                    case Kont.LetBindDestructure letBindDestructure:
+                    case Kont.Kind.LetBindDestructure:
                         {
+                            var letBindDestructure = top.AsLetBindDestructure;
+
                             try
                             {
                                 var patternBindings = new Dictionary<string, PineValueInProcess>();
@@ -2246,14 +2095,15 @@ public partial class ElmSyntaxInterpreter
                             break;
                         }
 
-                    case Kont.CallFrame:
+                    case Kont.Kind.CallFrame:
 
                         // The call has produced its return value. Nothing to do: simply bubble
                         // the value up to the next continuation on the stack.
                         break;
 
-                    case Kont.MatchCase matchCase:
+                    case Kont.Kind.MatchCase:
                         {
+                            var matchCase = top.AsMatchCase;
                             var matched = false;
 
                             foreach (var step in matchCase.Dispatch.Steps)
@@ -2346,8 +2196,10 @@ public partial class ElmSyntaxInterpreter
                             break;
                         }
 
-                    case Kont.AccessRecordField accessRecordField:
+                    case Kont.Kind.AccessRecordField:
                         {
+                            var accessRecordField = top.AsAccessRecordField;
+
                             try
                             {
                                 var patternBindings = new Dictionary<string, PineValueInProcess>();
@@ -2368,8 +2220,10 @@ public partial class ElmSyntaxInterpreter
 
                         break;
 
-                    case Kont.BuildRecordUpdate buildRecordUpdate:
+                    case Kont.Kind.BuildRecordUpdate:
                         {
+                            var buildRecordUpdate = top.AsBuildRecordUpdate;
+
                             if (buildRecordUpdate.NextIndex < 0)
                             {
                                 // Just received the original record value.
@@ -2486,7 +2340,7 @@ public partial class ElmSyntaxInterpreter
 
                     default:
                         throw new NotImplementedException(
-                            "Unknown continuation kind: " + top.GetType().FullName);
+                            "RunTrampoline does not handle continuation kind: " + top.Tag);
                 }
             }
         }
@@ -2714,25 +2568,18 @@ public partial class ElmSyntaxInterpreter
                         extraArgs = null;
                     }
 
-                    var bindings = new Dictionary<string, PineValueInProcess>();
+                    LocalBindingEnvironment innerBindings;
 
-                    for (var i = 0; i < expectedArity; i++)
+                    try
                     {
-                        try
-                        {
-                            BindPattern(
-                                functionImpl.Arguments[i],
-                                saturatingArgs[i],
-                                bindings);
-                        }
-                        catch (Exception ex)
-                        {
-                            return MakeRuntimeError(ex.Message, kstack);
-                        }
+                        innerBindings =
+                            PreparedParameterBindingLayout.ForPatterns(functionImpl.Arguments)
+                            .BindArguments(LocalBindingEnvironment.Empty, saturatingArgs);
                     }
-
-                    var innerBindings =
-                        LocalBindingEnvironment.Empty.CreateChild(bindings);
+                    catch (Exception ex)
+                    {
+                        return MakeRuntimeError(ex.Message, kstack);
+                    }
 
                     var innerContext =
                         new ApplicationContext(
@@ -3004,9 +2851,6 @@ public partial class ElmSyntaxInterpreter
             extraArgs = null;
         }
 
-        // Bind parameter patterns according to the closure's source.
-        var bodyBindings = new Dictionary<string, PineValueInProcess>();
-
         IReadOnlyList<Pattern> parameterPatterns;
         PreparedExpression bodyExpression;
         DeclQualifiedName callFrameName;
@@ -3022,7 +2866,7 @@ public partial class ElmSyntaxInterpreter
             case ElmClosureInProcess.SourceRef.Lambda lambdaSource:
                 parameterPatterns = lambdaSource.LambdaExpression.Arguments;
                 bodyExpression = lambdaSource.LambdaExpression.Expression;
-                callFrameName = SyntheticLambdaName(lambdaSource.LambdaExpression, closure.CapturedTopLevel);
+                callFrameName = DiagnosticNames(closure.CapturedTopLevel).LambdaName;
                 break;
 
             default:
@@ -3030,32 +2874,23 @@ public partial class ElmSyntaxInterpreter
                     "Unknown ElmClosureInProcess.SourceRef shape: " + closure.Source.GetType().FullName);
         }
 
-        for (var i = 0; i < arity; i++)
+        LocalBindingEnvironment bodyBindings;
+
+        try
         {
-            try
-            {
-                var patternBindings = new Dictionary<string, PineValueInProcess>();
-
-                BindPattern(
-                    parameterPatterns[i],
-                    saturatingArgs[i],
-                    patternBindings);
-
-                foreach (var (boundName, boundValue) in patternBindings)
-                {
-                    bodyBindings[boundName] = boundValue;
-                }
-            }
-            catch (Exception ex)
-            {
-                return MakeRuntimeError(ex.Message, kstack);
-            }
+            bodyBindings =
+                PreparedParameterBindingLayout.ForPatterns(parameterPatterns)
+                .BindArguments(closure.CapturedBindings, saturatingArgs);
+        }
+        catch (Exception ex)
+        {
+            return MakeRuntimeError(ex.Message, kstack);
         }
 
         var innerContext =
             new ApplicationContext(
                 currentTopLevel: closure.CapturedTopLevel,
-                localBindings: closure.CapturedBindings.CreateChild(bodyBindings));
+                localBindings: bodyBindings);
 
         ReplaceTailCallFrame(kstack);
 
@@ -3085,24 +2920,8 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     private static void ReplaceTailCallFrame(Stack<Kont> kstack)
     {
-        if (kstack.TryPeek(out var top) && top is Kont.CallFrame)
+        if (kstack.TryPeek(out var top) && top.Tag is Kont.Kind.CallFrame)
             kstack.Pop();
-    }
-
-    /// <summary>
-    /// Builds a synthetic <see cref="DeclQualifiedName"/> for a lambda's <see cref="Kont.CallFrame"/>.
-    /// The abstract syntax model carries no source location, so the lambda is named
-    /// <c>&lt;lambda&gt;</c> qualified by <paramref name="containingDeclaration"/> — the top-level
-    /// declaration the lambda was reached from — so that stack traces make clear which declaration
-    /// the anonymous function originated in (e.g. <c>LanguageService.listDeclarationsInDeclaration.&lt;lambda&gt;</c>).
-    /// </summary>
-    private static DeclQualifiedName SyntheticLambdaName(
-        PreparedExpression.LambdaExpression lambda,
-        DeclQualifiedName containingDeclaration)
-    {
-        _ = lambda;
-
-        return containingDeclaration.ContainedDeclName("<lambda>");
     }
 
     /// <summary>
@@ -3262,9 +3081,7 @@ public partial class ElmSyntaxInterpreter
             // declaration so two let-bound functions of the same simple name from
             // different surrounding functions don't accidentally compare equal.
             var qualifiedName =
-                DeclQualifiedName.Create(
-                    namespaces: [.. outerTopLevel.Namespaces, outerTopLevel.DeclName, "<let>"],
-                    declName: bindingName);
+                DiagnosticNames(outerTopLevel).LetName(functionImpl);
 
             extended[bindingName] =
                 new ElmClosureInProcess(
@@ -3832,8 +3649,9 @@ public partial class ElmSyntaxInterpreter
 
         foreach (var frame in kstack)
         {
-            if (frame is Kont.CallFrame callFrame)
+            if (frame.Tag is Kont.Kind.CallFrame)
             {
+                var callFrame = frame.AsCallFrame;
                 trace.Add(new ElmCallStackFrame(callFrame.FunctionName, callFrame.Arguments));
 
                 if (trace.Count >= maxFrames)
@@ -4068,10 +3886,21 @@ public partial class ElmSyntaxInterpreter
         PineValueInProcess value,
         IDictionary<string, PineValueInProcess> bindings)
     {
+        var sink = new DictionaryPatternBindingSink(bindings);
+
+        BindPattern(pattern, value, ref sink);
+    }
+
+    private static void BindPattern<TBindings>(
+        Pattern pattern,
+        PineValueInProcess value,
+        ref TBindings bindings)
+        where TBindings : struct, IPatternBindingSink
+    {
         switch (pattern)
         {
             case Pattern.VarPattern varPattern:
-                bindings[varPattern.Name] = value;
+                bindings.Bind(varPattern.Name, value);
                 break;
 
             case Pattern.AllPattern:
@@ -4085,8 +3914,8 @@ public partial class ElmSyntaxInterpreter
                 break;
 
             case Pattern.AsPattern asPattern:
-                BindPattern(asPattern.Pattern, value, bindings);
-                bindings[asPattern.Name] = value;
+                BindPattern(asPattern.Pattern, value, ref bindings);
+                bindings.Bind(asPattern.Name, value);
                 break;
 
             case Pattern.TuplePattern tuplePattern:
@@ -4097,7 +3926,7 @@ public partial class ElmSyntaxInterpreter
                     {
                         var itemValue = value.GetElementAt(i);
 
-                        BindPattern(itemPatterns[i], itemValue, bindings);
+                        BindPattern(itemPatterns[i], itemValue, ref bindings);
                     }
 
                     break;
@@ -4110,7 +3939,7 @@ public partial class ElmSyntaxInterpreter
                     for (var i = 0; i < itemPatterns.Count; i++)
                     {
                         var itemValue = value.GetElementAt(i);
-                        BindPattern(itemPatterns[i], itemValue, bindings);
+                        BindPattern(itemPatterns[i], itemValue, ref bindings);
                     }
 
                     break;
@@ -4121,8 +3950,8 @@ public partial class ElmSyntaxInterpreter
                     var headValue = value.GetElementAt(0);
                     var tailValue = PineValueInProcess.Skip(1, value);
 
-                    BindPattern(unConsPattern.Head, headValue, bindings);
-                    BindPattern(unConsPattern.Tail, tailValue, bindings);
+                    BindPattern(unConsPattern.Head, headValue, ref bindings);
+                    BindPattern(unConsPattern.Tail, tailValue, ref bindings);
 
                     break;
                 }
@@ -4145,7 +3974,7 @@ public partial class ElmSyntaxInterpreter
                                 + "' which is not present on the value.");
                         }
 
-                        bindings[field.FieldName] = fieldValue;
+                        bindings.Bind(field.FieldName, fieldValue);
                     }
 
                     break;
@@ -4174,7 +4003,7 @@ public partial class ElmSyntaxInterpreter
 
                     for (var i = 0; i < namedPattern.Arguments.Count; i++)
                     {
-                        BindPattern(namedPattern.Arguments[i], value.GetElementAt(2 + i), bindings);
+                        BindPattern(namedPattern.Arguments[i], value.GetElementAt(2 + i), ref bindings);
                     }
 
                     break;
