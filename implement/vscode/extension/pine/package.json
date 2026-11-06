@@ -3,7 +3,7 @@
 	"displayName": "Pine",
 	"description": "Elm developer tools",
 	"license": "MIT",
-	"version": "0.3.7",
+	"version": "0.3.8",
 	"author": "Michael Rätzel",
 	"repository": {
 		"type": "git",
@@ -87,23 +87,15 @@
 			"type": "object",
 			"title": "Pine",
 			"properties": {
-				"pine.testing.fuzzRuns": {
-					"scope": "resource",
-					"type": "integer",
-					"minimum": 1,
-					"maximum": 4294967295,
-					"default": 100,
-					"description": "Default number of examples per Elm fuzz test. Test.fuzzWith can override this."
-				},
-				"pine.testing.seed": {
-					"scope": "resource",
-					"type": ["integer", "null"],
-					"minimum": 0,
-					"maximum": 4294967295,
-					"default": null,
-					"description": "Elm fuzz seed. Null selects a fresh seed per run; replay uses the recorded seed."
+				"pineLanguageServer.pathToPineExecutableFile": {
+					"order": 1,
+					"scope": "window",
+					"type": "string",
+					"default": "",
+					"description": "Path to the Pine language server executable file. Empty string falls back to 'pine'"
 				},
 				"pineLanguageServer.trace.server": {
+					"order": 2,
 					"scope": "window",
 					"type": "string",
 					"enum": [
@@ -114,11 +106,23 @@
 					"default": "off",
 					"description": "Traces the communication between VS Code and the language server."
 				},
-				"pineLanguageServer.pathToPineExecutableFile": {
-					"scope": "window",
-					"type": "string",
-					"default": "",
-					"description": "Path to the Pine language server executable file. Empty string falls back to 'pine'"
+				"pine.testing.fuzzRuns": {
+					"order": 3,
+					"scope": "resource",
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 4294967295,
+					"default": 100,
+					"description": "Default number of examples per Elm fuzz test. Test.fuzzWith can override this."
+				},
+				"pine.testing.seed": {
+					"order": 4,
+					"scope": "resource",
+					"type": ["integer", "null"],
+					"minimum": 0,
+					"maximum": 4294967295,
+					"default": null,
+					"description": "Elm fuzz seed. Null selects a fresh seed per run; replay uses the recorded seed."
 				}
 			}
 		}

@@ -4,6 +4,31 @@ const { developmentManifest } = require('./package-dev.cjs');
 const { extensionIdentity, identityFromManifest, localizeCodeLens } = require('../client/out/identity');
 const release = require('../package.json');
 
+for (const manifest of [release, developmentManifest(release)]) {
+    test(`${manifest.displayName} settings place Testing last in the Settings editor`, () => {
+        const identity = identityFromManifest(manifest);
+        const settings = Object.entries(manifest.contributes.configuration.properties);
+        for (const [key, setting] of settings) {
+            assert.ok(Number.isInteger(setting.order), `${key} must have an explicit display order`);
+        }
+        settings.sort(([leftKey, left], [rightKey, right]) =>
+            left.order - right.order || leftKey.localeCompare(rightKey));
+        assert.deepEqual(settings.map(([key]) => key), [
+            `${identity.languageServerConfiguration}.pathToPineExecutableFile`,
+            `${identity.languageServerConfiguration}.trace.server`,
+            `${identity.testingConfiguration}.fuzzRuns`,
+            `${identity.testingConfiguration}.seed`
+        ]);
+    });
+}
+
+test('release, development and lockfile versions stay aligned', () => {
+    const lockfile = require('../package-lock.json');
+    assert.equal(lockfile.version, release.version);
+    assert.equal(lockfile.packages[''].version, release.version);
+    assert.equal(developmentManifest(release).version, release.version);
+});
+
 test('release runtime identity remains unchanged', () => {
     assert.deepEqual(extensionIdentity, {
         extensionId: 'Pine.pine',

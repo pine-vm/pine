@@ -55,7 +55,7 @@ The VSIX is written to `out/pine-dev-<version>.vsix`. Install it using
 **Extensions: Install from VSIX...**, or:
 
 ```shell
-code --install-extension out/pine-dev-0.3.7.vsix
+code --install-extension out/pine-dev-0.3.8.vsix
 ```
 
 This package is **Pine Dev** (`Pine.pine-dev`); the release manifest is not modified.
